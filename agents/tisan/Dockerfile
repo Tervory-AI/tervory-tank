@@ -7,7 +7,6 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && chown agent:agent /data
 COPY agents/_chassis/chassis /app/chassis
 COPY agents/tisan/app.py /app/app.py
-COPY agents/tisan/promotion.py agents/tisan/promotion_api.py /app/
 COPY ops/live_check.mjs ops/live_check_banned.txt /app/ops/
 COPY agents/tisan/scaffold.py /app/scaffold.py
 COPY agents/tisan/figma.py /app/figma.py
@@ -44,6 +43,7 @@ RUN apt-get update \
     && PLAYWRIGHT_BROWSERS_PATH=/opt/tisan-browser /opt/tisan-check/node_modules/.bin/playwright install --with-deps chromium \
     && rm -rf /tmp/npm-warm \
     && chown -R agent:agent /opt/npm-cache /data
+COPY agents/tisan/promotion.py agents/tisan/promotion_api.py /app/
 USER agent
 ENV AGENT_NAME=tisan \
     DATA_DIR=/data \
