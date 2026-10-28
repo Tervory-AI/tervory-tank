@@ -50,7 +50,10 @@ def test_staging_mode_checks_status_runtime_both_widths_and_blocks_writes(tmp_pa
     env = {'PATH': os.environ.get('PATH', ''), 'HOME': os.environ.get('HOME', '/tmp'),
         'LIVE_CHECK_PLAYWRIGHT_PATH': str(wrapper), 'TISAN_TEST_PLAYWRIGHT': module,
         'TISAN_TEST_MODE': mode, 'TISAN_TEST_TRACE': str(trace)}
-    result = subprocess.run([shutil.which('node'), str(ROOT / 'ops/live_check.mjs'),
+    if os.environ.get('PLAYWRIGHT_BROWSERS_PATH'):
+        env['PLAYWRIGHT_BROWSERS_PATH'] = os.environ['PLAYWRIGHT_BROWSERS_PATH']
+    checker = os.environ.get('TISAN_TEST_CHECKER', str(ROOT / 'ops/live_check.mjs'))
+    result = subprocess.run([shutil.which('node'), checker,
         '--site-url', 'https://stage.example.org/', '--output', str(output)],
         env=env, text=True, capture_output=True, timeout=30)
     assert result.returncode == (0 if passed else 1), result.stderr
