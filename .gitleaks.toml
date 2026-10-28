@@ -1,0 +1,10 @@
+title = "Tervory reviewed false positives"
+
+[extend]
+useDefault = true
+
+# Only the exact non-secret Clerk publishable dummy used in CI; no key-prefix exemption.
+[[allowlists]]
+description = "Claude-reviewed exact Clerk publishable CI dummy; not a credential"
+regexTarget = "secret"
+regexes = ['''^pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==$''']
