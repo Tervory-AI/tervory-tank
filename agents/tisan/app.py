@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import logging
 import os
 from pathlib import Path
@@ -63,7 +64,12 @@ async def ping(ctx: JobContext) -> dict:
 async def scaffold(ctx: JobContext) -> dict:
     """Build one site for this job's tenant. The tenant comes from the job, not the brief."""
     module = _scaffold_module()
-    return await module.execute(ctx.input, str(ctx.tenant_id))
+    result = await module.execute(ctx.input, str(ctx.tenant_id))
+    if result.get("ok") is True and result.get("slug"):
+        from chassis.events import publish
+        await publish(str(ctx.tenant_id), "tisan.build.ready", str(ctx.job_id), {
+            "job_id": str(ctx.job_id), "site_id": hashlib.sha256(result["slug"].encode()).hexdigest()})
+    return result
 
 
 async def figma(ctx: JobContext) -> dict:

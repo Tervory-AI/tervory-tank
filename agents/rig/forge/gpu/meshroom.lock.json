@@ -5,5 +5,5 @@
   "sha256": "92b81246356df3fd37ea08e1d09519392897aaa730843eb9fd4bd0582916d391",
   "size": 1244889970,
   "sha256_provenance": "Computed over official HTTPS GitHub release asset; upstream publishes no checksum. Founder-approved fallback.",
-  "cuda_image": "nvidia/cuda:12.4.1-runtime-ubuntu22.04@sha256:cff3a0d82d2c2b47bab252d67fa9b34a20ef4c50781d98501b5c7367ea9afd10"
+  "cuda_image": "nvidia/cuda:12.5.1-runtime-ubuntu24.04@sha256:447c60da64e4e18860b640289274ec0103816aa56d410041b162d48e85fb1058"
 }

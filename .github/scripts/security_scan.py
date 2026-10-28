@@ -41,6 +41,35 @@ def annotation(kind: str, text: str, path: str = "", line: int | None = None) ->
     print(f"::{kind}{suffix}::{escape(text)}")
 
 
+def finding_summary(tool: str, findings: list[dict]) -> None:
+    """Put the complete metadata list first, ahead of GitHub's annotation cap."""
+    if not findings:
+        return
+    lines = []
+    if tool == "OSV":
+        groups = {}
+        for row in findings:
+            key = (row["package"], row["version"], row["path"], row["ecosystem"])
+            group = groups.setdefault(key, {"fixes": set(), "advisories": set()})
+            group["fixes"].update(row["fixed_versions"] or ["unavailable"])
+            group["advisories"].add(row["id"])
+        for (package, version, path, _), group in sorted(groups.items()):
+            lines.append(f"{package} {version} ({path}) -> {','.join(sorted(group['fixes']))}, "
+                         f"{len(group['advisories'])} advisories")
+    elif tool == "Semgrep":
+        groups = {}
+        for row in findings:
+            groups.setdefault(row["rule"], set()).add((row["path"], row["line"]))
+        for rule, locations in sorted(groups.items()):
+            lines.append(f"{rule}: " + ", ".join(f"{path}:{line}" for path, line in sorted(locations)))
+    elif tool == "Gitleaks":
+        locations = {(row["RuleID"], row["File"], row["StartLine"]) for row in findings}
+        lines = [f"{rule}: {path}:{line}" for rule, path, line in sorted(locations)]
+    else:
+        raise ValueError("Unknown summary tool")
+    annotation("error", tool + "\n" + "\n".join(lines))
+
+
 def semgrep_error(error: dict) -> dict:
     # Tagged error variants can carry skipped source tokens. Retain only the tag.
     kind = error.get("type", "UnknownError")
@@ -77,6 +106,9 @@ def leaks(base: str | None, temp: Path, output: Path) -> bool:
     safe = [{k: row[k] for k in ("RuleID", "File", "StartLine", "Commit")}
             for row in findings]
     write(output / "gitleaks.json", safe)
+    finding_summary("Gitleaks", safe)
+    for finding in safe:
+        annotation("error", finding["RuleID"], finding["File"], finding["StartLine"])
     return code == 1 or bool(safe)
 
 
@@ -119,6 +151,7 @@ def semgrep(base: str | None, temp: Path, output: Path) -> bool:
                                     "error_count": len(errors), "fatal_error_count": fatal_count,
                                     "non_fatal_error_count": len(errors) - fatal_count,
                                     "exit_code": code})
+    finding_summary("Semgrep", findings)
     for finding in findings:
         annotation("error", f"{finding['rule']} {finding['severity']}",
                    finding["path"], finding["line"])
@@ -234,6 +267,7 @@ def osv(base: str | None, temp: Path, output: Path) -> bool:
     new = [row for key, row in current.items() if key not in previous]
     write(output / "osv.json", {"lockfiles": paths, "findings": new,
                                 "total_findings": len(current), "baseline": base})
+    finding_summary("OSV", new)
     for finding in new:
         fixes = ",".join(finding["fixed_versions"]) or "unavailable"
         annotation("error", f"{finding['package']} {finding['version']} {finding['id']} fixed-in {fixes}",

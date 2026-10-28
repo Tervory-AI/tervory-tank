@@ -55,6 +55,18 @@ CREATE TABLE IF NOT EXISTS agent_rig.products (
 
 CREATE INDEX IF NOT EXISTS products_tenant_active ON agent_rig.products (tenant_id, active);
 
+-- Append-only event history. Consumer retries never overwrite earlier prices.
+CREATE TABLE IF NOT EXISTS agent_rig.price_history (
+    tenant_id uuid NOT NULL,
+    product_id text NOT NULL,
+    price numeric NOT NULL CHECK(price >= 0 AND price < 'Infinity'::numeric),
+    currency text NOT NULL CHECK(currency ~ '^[A-Z]{3}$'),
+    observed_at timestamptz NOT NULL,
+    event_id uuid PRIMARY KEY
+);
+CREATE INDEX IF NOT EXISTS price_history_tenant_product
+    ON agent_rig.price_history(tenant_id,product_id,observed_at,event_id);
+
 -- Tiger retries are idempotent and cannot replace a newer confirmed observation.
 CREATE TABLE IF NOT EXISTS agent_rig.tiger_receipts (
     tenant_id uuid NOT NULL,

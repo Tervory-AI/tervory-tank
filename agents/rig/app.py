@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import importlib.util
 import json
@@ -385,8 +386,14 @@ async def _lifespan(app: FastAPI):
                        for tenant in await store.tenant_ids())
         async with app.state.pool.acquire() as conn:
             await ensure_schedules(conn, schema_for(AGENT), nightly)
-        async with serve_retailer(service):
-            yield
+        from rigbox.price_events import consume_loop
+        consumer = asyncio.create_task(consume_loop(service, app.state.http))
+        try:
+            async with serve_retailer(service):
+                yield
+        finally:
+            consumer.cancel()
+            await asyncio.gather(consumer, return_exceptions=True)
 
 
 app.router.lifespan_context = _lifespan

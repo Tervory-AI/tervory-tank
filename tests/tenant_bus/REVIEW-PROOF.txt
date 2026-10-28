@@ -1,0 +1,50 @@
+Amended-brief review, 28 October 2026. Local disposable stores only.
+Terminal trailing whitespace is normalized. No live or model calls.
+
+Command:
+POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/postgres /tmp/command-repo-venv/bin/python -m pytest tests/tenant_bus -q -s --disable-warnings
+Redis: the test fixture automatically started and removed redis:7.4.12.
+Result: exit 0
+...........{"ts": "2026-10-28T16:47:51.289101+00:00", "level": "info", "agent": "tiger", "msg": "job queued", "tenant_id": "11111111-1111-4111-8111-111111111111", "job_id": "2b307019-402d-45b9-9ebe-375e3cf2e1ff"}
+{"ts": "2026-10-28T16:47:51.292851+00:00", "level": "info", "agent": "tiger", "msg": "job queued", "tenant_id": "11111111-1111-4111-8111-111111111111", "job_id": "0412f49e-06fe-4477-81f5-49dc378e4429"}
+...........REAL TANK STARTUP TAIL
+INFO:     Waiting for application startup.
+Room gold response rejected: base
+Room gold response rejected: tiger
+Room gold response rejected: market_lab
+Room gold response rejected: rig
+Room gold response rejected: zenas
+Room gold response rejected: radix
+Room gold response rejected: tisan
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:51081 (Press CTRL+C to quit)
+The reference could not be loaded: The Base reference service could not be reached. (error type: ConnectError)
+INFO:     127.0.0.1:40694 - "GET /health HTTP/1.1" 200 OK
+{"ts": "2026-10-28T16:47:56.834623+00:00", "level": "info", "agent": "rig", "msg": "chassis ready"}
+OFFLINE TIGER -> TANK -> REDIS -> RIG STARTUP CONSUMER -> FOUNDER JSON
+{"has_more": false, "history": [{"currency": "USD", "event_id": "9c10142a-b9b1-5a56-812e-9821ac30050c", "observed_at": "2026-10-28T16:47:56.608595+00:00", "price": "145.00"}], "product_id": "real-catalogue-id", "tenant_id": "11111111-1111-4111-8111-111111111111"}
+..
+24 passed, 6 warnings in 11.24s
+
+
+Command:
+POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/postgres /tmp/command-repo-venv/bin/python -m pytest tests/test_agent_chassis.py tests/test_b3_base_room.py tests/test_market_lab.py tests/test_tank_boots.py tests/test_tank_one_door.py tests/test_secrets.py -q --disable-warnings
+Result: exit 0
+........................................................................ [ 97%]
+..                                                                       [100%]
+74 passed, 11 warnings in 36.99s
+
+
+Command:
+/tmp/command-repo-venv/bin/ruff check tank/event_bus.py agents/_chassis/chassis/app.py tests/tenant_bus --select E9,F
+Result: exit 0
+All checks passed!
+
+Command:
+git diff --check origin/main...HEAD
+Result: exit 0; no output
+
+Command:
+node tests/tenant_bus/workspace.cjs
+Result: exit 0
+PASS: founder-only JSON, client/forged identity refusal, trusted tenant, fixed Tank path, no-store, empty error bodies.

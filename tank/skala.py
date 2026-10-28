@@ -18,7 +18,8 @@ States: candidate -> staging -> approved -> retired
 
 Rules enforced here: agents may call `run` on approved versions only (preview runs
 are for the owner's own testing and are labelled as such in the ledger); approval
-is a separate, human-only call; a new approved version retires the previous one.
+is a separate, human-only call; superseded versions wait in staging for the
+30-day retirement gate and remain available for explicit founder rollback.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -158,6 +160,7 @@ class SkillContext:
     env: dict[str, str] = field(default_factory=dict)   # optional provider keys a skill may use
     calls: int = 0
     cost_usd: float = 0.0
+    live_evaluation: bool = False  # B3 must test the new model, not saved fixture output.
 
     async def model(self, messages: list[dict[str, str]], task_type: str, max_tokens: int | None = None) -> str:
         res = await self._model(
@@ -316,7 +319,7 @@ async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext],
     cost = 0.0
     for i, case in enumerate(pkg.cases):
         ctx = make_ctx()
-        if "model" in case:
+        if "model" in case and not getattr(ctx, "live_evaluation", False):
             from dataclasses import replace
 
             async def saved_model(**_kwargs: Any) -> dict[str, Any]:
@@ -330,7 +333,7 @@ async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext],
             if case.get("expected_error"):
                 ok, why = False, "expected refusal exception was not raised"
             if ok:
-                configured = case.get("model_configured", "model" in case or bool(pkg.task_type))
+                configured = getattr(ctx, "live_evaluation", False) or case.get("model_configured", "model" in case or bool(pkg.task_type))
                 ok, why = eval_properties(case, out, configured and getattr(ctx, "calls", 0) > 0)
         except Exception as exc:  # noqa: BLE001 — an exception is a failed case, recorded
             ok, why, out = False, f"error: {exc}", {}
@@ -503,14 +506,10 @@ async def promote(conn: Any, pkg: SkillPackage, by: str, evidence: dict[str, Any
     rows = await conn.fetch("SELECT * FROM tank.skills WHERE id=$1", pkg.id)
     previous = next((r["version"] for r in rows if r["state"] == "approved"), None)
     for row in rows:
-        older_pending = False
-        if not rollback and row["state"] in {"candidate", "staging"} and row["approved_at"] is None:
-            try:
-                older_pending = version_key(row["version"]) < version_key(pkg.version)
-            except ValueError:
-                pass
-        if row["state"] == "approved" or older_pending:
-            await conn.execute("UPDATE tank.skills SET state='retired', updated_at=now() WHERE id=$1 AND version=$2",
+        if row["state"] == "approved" and row["version"] != pkg.version:
+            # A new approval is not permission to retire the previous version.
+            # Keep its approved_at history for rollback during probation.
+            await conn.execute("UPDATE tank.skills SET state='staging', updated_at=now() WHERE id=$1 AND version=$2",
                                pkg.id, row["version"])
     await conn.execute(
         "UPDATE tank.skills SET state='approved', approved_by=$3, approved_at=now(), updated_at=now() WHERE id=$1 AND version=$2",
@@ -548,7 +547,7 @@ async def change_version(db: Any, pkg: SkillPackage, by: str, action: str, *, re
                 if not confirmed:
                     raise HTTPException(409, "Confirm the rollback first.")
                 row = await conn.fetchrow("SELECT * FROM tank.skills WHERE id=$1 AND version=$2", pkg.id, pkg.version)
-                if not row or row["state"] != "retired" or row["approved_at"] is None or not row["present"]:
+                if not row or row["state"] not in {"retired", "staging"} or row["approved_at"] is None or not row["present"]:
                     raise HTTPException(409, "Only a retired version that was previously approved can be restored.")
                 blocked = await zenas_approval_refusal(conn, pkg.id, region=region)
                 if blocked:
@@ -557,8 +556,8 @@ async def change_version(db: Any, pkg: SkillPackage, by: str, action: str, *, re
     return {"ok": True, "skill": pkg.ref, "state": "approved"}
 
 
-async def retire_version(db: Any, skill_id: str, version: str, by: str) -> dict[str, Any]:
-    """Retirement needs the registry row, even when its package is no longer on disk."""
+async def retire_version(db: Any, skill_id: str, version: str, by: str, *, now: datetime | None = None) -> dict[str, Any]:
+    """State-only retirement after a newer approval has completed probation."""
     from fastapi import HTTPException
     async with db.acquire() as conn:
         async with conn.transaction():
@@ -568,8 +567,11 @@ async def retire_version(db: Any, skill_id: str, version: str, by: str) -> dict[
                 raise HTTPException(404, "No such skill version.")
             if row["state"] not in {"candidate", "staging"}:
                 raise HTTPException(409, "Only candidate or staging versions can be retired here. The approved version stays in service.")
+            evidence = await __import__("skala_probation").evidence(conn, skill_id, version, now=now)
+            if not evidence["allowed"]:
+                raise HTTPException(409, evidence)
             await conn.execute("UPDATE tank.skills SET state='retired', updated_at=now() WHERE id=$1 AND version=$2", skill_id, version)
-            await log_action(conn, skill_id, version, by, "retire", None, {})
+            await log_action(conn, skill_id, version, by, "retire", None, evidence)
     return {"ok": True, "skill": f"{skill_id}@{version}", "state": "retired"}
 
 

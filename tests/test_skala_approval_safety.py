@@ -142,14 +142,14 @@ async def states(db, skill="base.test"):
 
 
 @pytest.mark.asyncio
-async def test_forward_approval_retires_older_candidates_only(database, tmp_path):
+async def test_forward_approval_keeps_previous_versions_during_probation(database, tmp_path):
     pkgs = [package(tmp_path, v) for v in ["1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0"]]
     for pkg, state in zip(pkgs, ["candidate", "staging", "approved", "staging", "candidate"]):
         await seed(database, pkg, state, once_approved=state == "approved")
     with pytest.raises(HTTPException, match="1.5.0 is older"):
         await skala.change_version(database, pkgs[0], "founder", "approve", region="us-east")
     await skala.change_version(database, pkgs[3], "founder", "approve", region="us-east")
-    assert await states(database) == {"1.5.0": "retired", "1.6.0": "retired", "1.7.0": "retired", "1.8.0": "approved", "1.9.0": "candidate"}
+    assert await states(database) == {"1.5.0": "candidate", "1.6.0": "staging", "1.7.0": "staging", "1.8.0": "approved", "1.9.0": "candidate"}
 
 
 @pytest.mark.asyncio
@@ -158,7 +158,8 @@ async def test_retirement_and_confirmed_rollback(database, tmp_path):
     await seed(database, old, "retired", once_approved=True)
     await seed(database, current, "approved", once_approved=True)
     await seed(database, pending)
-    await skala.change_version(database, pending, "founder", "retire", region="us-east")
+    with pytest.raises(HTTPException):  # No newer approved version exists.
+        await skala.change_version(database, pending, "founder", "retire", region="us-east")
     assert (await states(database))[current.version] == "approved"
     for pkg, action, confirm in [(current, "retire", False), (old, "rollback", False), (pending, "rollback", True)]:
         with pytest.raises(HTTPException):
@@ -290,7 +291,7 @@ async def test_superset_version_is_approved(database, tmp_path, bulk):
         await skala.bulk_confirm(database, packages, "founder", preview["token"], True, region="us-east")
     else:
         await skala.change_version(database, new, "founder", "approve", region="us-east")
-    assert await states(database) == {old.version: "retired", new.version: "approved"}
+    assert await states(database) == {old.version: "staging", new.version: "approved"}
 
 
 @pytest.mark.asyncio
@@ -359,11 +360,12 @@ async def test_retire_route_handles_missing_package(database, tmp_path, monkeypa
     monkeypatch.setenv("TANK_API_KEY", secrets.token_urlsafe(24))
     monkeypatch.setenv("LITELLM_MASTER_KEY", secrets.token_urlsafe(24))
     import main
-    current, absent = package(tmp_path, "1.7.0"), package(tmp_path)
+    current, absent = package(tmp_path, "1.9.0"), package(tmp_path)
     await seed(database, current, "approved", once_approved=True)
     await seed(database, absent, pending_state)
     async with database.acquire() as conn:
         await conn.execute("UPDATE tank.skills SET present=false WHERE id=$1 AND version=$2", absent.id, absent.version)
+        await conn.execute("UPDATE tank.skills SET approved_at=now()-interval '30 days' WHERE id=$1 AND version=$2", current.id, current.version)
     monkeypatch.setattr(main, "pool", lambda: database)
     monkeypatch.setattr(main, "_packages", {})
     result = await main.retire_skill(absent.id, absent.version, main.Approval(by="founder"))
