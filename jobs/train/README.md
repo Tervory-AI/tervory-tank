@@ -112,12 +112,17 @@ private key, contacts a database or bucket, or decrypts data. The example
 recipient exists only in the test script, never as a worker default.
 
 The backup worker requires `pg_dump`, `age`, `DATABASE_URL`, and the public
-`R2_BACKUP_RECIPIENT`. The private age identity must stay outside the worker.
-It pipes `pg_dump` directly into age; only ciphertext is written to a private
-temporary directory. Passwords are passed through the child environment, never
-arguments. `--nightly` waits until 02:00 UTC each day; any failure exits nonzero
-and must be surfaced by the cloud supervisor. Configuration is checked before
-waiting for the first night. Nothing here deploys or starts that worker. ZA client databases are refused before the dump begins. Public ZA
+`R2_BACKUP_RECIPIENT`. For Qdrant it also requires internal `QDRANT_URL`
+(`http://qdrant:6333`) and `QDRANT_API_KEY`. The private age identity must stay
+outside the worker. It pipes `pg_dump` and each Qdrant collection snapshot
+directly into age; only ciphertext is written to a private temporary directory.
+Qdrant archives land under `backups/.../qdrant/<collection>.snapshot.age/`.
+Passwords and API keys are passed through the child environment or request
+headers, never arguments or logs. `--target database|qdrant|all` selects the
+scope (default `all`). `--nightly` waits until 02:00 UTC each day; any failure
+exits nonzero and must be surfaced by the cloud supervisor. Configuration is
+checked before waiting for the first night. Nothing here deploys or starts that
+worker. ZA client databases are refused before the dump begins. Public ZA
 platform datasets may be archived; ZA client files may not leave their box.
 
 Every chassis room exposes `/storage/usage` and

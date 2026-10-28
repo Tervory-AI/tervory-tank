@@ -344,3 +344,75 @@ def test_storage_destination_cannot_be_reassigned():
                 setattr(store, field, 'foreign')
         await store.close()
     asyncio.run(scenario())
+
+
+def test_qdrant_configuration_requires_internal_url_and_recipient(monkeypatch):
+    monkeypatch.setenv('R2_BACKUP_RECIPIENT', 'age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p')
+    monkeypatch.setenv('QDRANT_URL', 'http://qdrant:6333')
+    monkeypatch.setenv('QDRANT_API_KEY', 'fixture-key')
+    monkeypatch.setattr(backup.shutil, 'which', lambda name: '/usr/bin/' + name)
+    assert backup.qdrant_configuration()[0] == 'http://qdrant:6333'
+    monkeypatch.setenv('QDRANT_URL', 'https://evil.example/qdrant')
+    with pytest.raises(StorageError, match='QDRANT_URL'):
+        backup.qdrant_configuration()
+    monkeypatch.setenv('QDRANT_URL', 'http://qdrant:6333')
+    monkeypatch.delenv('QDRANT_API_KEY')
+    with pytest.raises(StorageError, match='QDRANT_API_KEY'):
+        backup.qdrant_configuration()
+
+
+def test_qdrant_backup_writes_encrypted_dated_objects(monkeypatch, tmp_path):
+    bucket = Bucket('tervory-uploads')
+    monkeypatch.setenv('R2_BACKUP_RECIPIENT', 'age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p')
+    monkeypatch.setenv('QDRANT_URL', 'http://qdrant:6333')
+    monkeypatch.setenv('QDRANT_API_KEY', 'fixture-key')
+    monkeypatch.setattr(backup.shutil, 'which', lambda name: '/usr/bin/' + name)
+    monkeypatch.setattr(backup, 'Storage', lambda owner: Storage(owner, environ=environment(owner), transport=httpx.MockTransport(bucket.handle)))
+
+    async def encrypt(collection, path):
+        assert collection == 'mem_zenas'
+        path.write_bytes(b'age-encryption.org/v1\nqdrant fixture')
+
+    monkeypatch.setattr(backup, 'encrypted_qdrant_snapshot', encrypt)
+
+    async def collections():
+        return ['mem_zenas']
+
+    monkeypatch.setattr(backup, 'list_qdrant_collections', collections)
+    results = asyncio.run(backup.qdrant_backup_once())
+    assert len(results) == 1
+    assert results[0]['collection'] == 'mem_zenas'
+    assert '/backups/' in results[0]['key']
+    assert '/qdrant/mem_zenas.snapshot.age/' in results[0]['key']
+    assert results[0]['size_bytes'] > 0
+    assert all(b'age-encryption.org/v1' in data for key, data in bucket.data.items() if not key.endswith('manifest.json'))
+
+
+def test_qdrant_backup_failure_uploads_nothing(monkeypatch):
+    bucket = Bucket('tervory-uploads')
+    monkeypatch.setenv('R2_BACKUP_RECIPIENT', 'age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p')
+    monkeypatch.setenv('QDRANT_URL', 'http://qdrant:6333')
+    monkeypatch.setenv('QDRANT_API_KEY', 'fixture-key')
+    monkeypatch.setattr(backup.shutil, 'which', lambda name: '/usr/bin/' + name)
+    monkeypatch.setattr(backup, 'Storage', lambda owner: Storage(owner, environ=environment(owner), transport=httpx.MockTransport(bucket.handle)))
+
+    async def collections():
+        return ['mem_zenas']
+
+    async def fail(collection, path):
+        raise StorageError('Qdrant snapshot encryption failed')
+
+    monkeypatch.setattr(backup, 'list_qdrant_collections', collections)
+    monkeypatch.setattr(backup, 'encrypted_qdrant_snapshot', fail)
+    with pytest.raises(StorageError):
+        asyncio.run(backup.qdrant_backup_once())
+    assert not bucket.data
+
+
+def test_compose_r2_backup_depends_on_qdrant():
+    import yaml
+    worker = yaml.safe_load((ROOT / 'docker-compose.yml').read_text())['services']['r2-backup']
+    assert worker['environment']['QDRANT_URL'] == 'http://qdrant:6333'
+    assert worker['environment']['QDRANT_API_KEY'] == '${QDRANT_API_KEY}'
+    assert worker['depends_on']['qdrant']['condition'] == 'service_healthy'
+    assert 'qdrant_configuration' in worker['healthcheck']['test'][-1]
