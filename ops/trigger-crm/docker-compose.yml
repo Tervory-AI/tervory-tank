@@ -1,18 +1,23 @@
 # coolify: raw compose
 # Trigger CRM = BottleCRM (Django-CRM).
 # Pin: Django-CRM/Django-CRM tag v1.39.0 @ cd7c12a607df1719518fcdaf289864f6ba7d0bcd
+# Build contexts use the commit SHA (not the floating tag) so Coolify rebuilds stay pinned.
 # Coolify resource: trigger-crm
 #   Git: https://github.com/Tervory-AI/tervory-tank  (branch/PR — see overlay)
 #   OR public Git https://github.com/Django-CRM/Django-CRM ref v1.39.0 with this compose pasted
 #   base_directory: ops/trigger-crm  (when using tervory-tank overlay)
 # DB: shared Boston Postgres — database trigger_crm, role trigger_crm (never tank schema).
 #     No compose `db` service. DBHOST/DBPASSWORD Coolify names; founder fills password.
-# Redis: in-stack for Celery isolation.
+# Redis: in-stack for Celery isolation (same 7.4.12 digest as main stack).
 # Host: https://crm.tervory.com (Cloudflare Access founder-only). No seed_data. No ENV_TYPE=prod.
 
 services:
   redis:
-    image: redis:7-alpine
+    # Same pin as docker-compose.yml / docker-compose.za.yml (main stack).
+    # 7.4.12 is the current 7.4 patch. It carries the 7.4.11 fix for CVE-2026-81934
+    # and the 7.4.9 fix for CVE-2026-23479.
+    # Multi-arch index digest; keep identical to the main stack redis image.
+    image: redis:7.4.12@sha256:bd28fff4b665fdf1b73e8b5b73ec05d2f858f4fa3c8ea0d7c9bc09f7f6bf7039
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -24,7 +29,8 @@ services:
 
   backend:
     build:
-      context: https://github.com/Django-CRM/Django-CRM.git#v1.39.0
+      # tag v1.39.0 → commit cd7c12a607df1719518fcdaf289864f6ba7d0bcd
+      context: https://github.com/Django-CRM/Django-CRM.git#cd7c12a607df1719518fcdaf289864f6ba7d0bcd
       dockerfile: Dockerfile
     restart: unless-stopped
     mem_limit: 1g
@@ -90,7 +96,8 @@ services:
 
   celery-worker:
     build:
-      context: https://github.com/Django-CRM/Django-CRM.git#v1.39.0
+      # tag v1.39.0 → commit cd7c12a607df1719518fcdaf289864f6ba7d0bcd
+      context: https://github.com/Django-CRM/Django-CRM.git#cd7c12a607df1719518fcdaf289864f6ba7d0bcd
       dockerfile: Dockerfile
     restart: unless-stopped
     mem_limit: 512m
@@ -131,7 +138,8 @@ services:
 
   celery-beat:
     build:
-      context: https://github.com/Django-CRM/Django-CRM.git#v1.39.0
+      # tag v1.39.0 → commit cd7c12a607df1719518fcdaf289864f6ba7d0bcd
+      context: https://github.com/Django-CRM/Django-CRM.git#cd7c12a607df1719518fcdaf289864f6ba7d0bcd
       dockerfile: Dockerfile
     restart: unless-stopped
     mem_limit: 256m
@@ -172,7 +180,8 @@ services:
 
   frontend:
     build:
-      context: https://github.com/Django-CRM/Django-CRM.git#v1.39.0:frontend
+      # tag v1.39.0 → commit cd7c12a607df1719518fcdaf289864f6ba7d0bcd
+      context: https://github.com/Django-CRM/Django-CRM.git#cd7c12a607df1719518fcdaf289864f6ba7d0bcd:frontend
       dockerfile: Dockerfile
     restart: unless-stopped
     mem_limit: 512m
