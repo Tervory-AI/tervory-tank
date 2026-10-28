@@ -173,3 +173,35 @@ async def test_legiscan_key_parameter_and_error_redaction(monkeypatch):
         await legiscan_request({"op": "getSearch"})
     assert str(error.value) == "LEGISCAN_API_KEY" and "https://" not in str(error.value)
     assert calls == [1]
+
+
+@pytest.mark.asyncio
+async def test_legiscan_records_once_and_outage_keeps_snapshot(monkeypatch):
+    from datetime import datetime, timezone, timedelta
+    from agents.zenas.core.regulations import add_watch, run_daily
+    from agents.zenas.core.regulation_store import MemoryWatches
+    from test_alerts import TankStub
+    monkeypatch.setenv("LEGISCAN_API_KEY", "LEGISCAN_API_KEY")
+    search=json.loads((SAVED/"saved/legiscan/search.json").read_text())
+    bills=json.loads((SAVED/"saved/legiscan/bills.json").read_text())
+    failed=False
+    async def api(params):
+        if failed:
+            raise OSError("offline outage")
+        return search if params["op"]=="getSearch" else bills[str(params["id"])]
+    sent=[]
+    class Mail:
+        async def send(self,letter):
+            sent.append(letter)
+    store=MemoryWatches()
+    created=datetime(2024,1,1,tzinfo=timezone.utc)
+    await add_watch(store,tenant_id=TENANT,region="us-east",source="legiscan",
+                    topic="consumer",options={"state":"CA"},now=created)
+    source=Sources("us-east",legiscan_get=api)
+    args=dict(region="us-east",transport=Mail(),recipient="watcher@example.test")
+    for day in (100,101):
+        await run_daily(store,source,TankStub(),now=created+timedelta(days=day),**args)
+    assert len(await store.changes(TENANT))==len(sent)==2
+    failed=True
+    result=await run_daily(store,source,TankStub(),now=created+timedelta(days=102),**args)
+    assert result["unavailable"]==1 and len(await store.changes(TENANT))==len(sent)==2
