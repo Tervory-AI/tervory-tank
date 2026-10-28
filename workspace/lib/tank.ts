@@ -1065,6 +1065,7 @@ export function mootStudentMatch(body: {
 // Market Lab: the server derives tenantId from Clerk before calling this corridor.
 export type MarketFeed = {
   id: string; name: string; kind: "copy" | "linked"; rows: number;
+  url?: string; cadence?: "daily" | "weekly" | "monthly" | "annual";
   state: "on" | "off"; note: string; checked_at: string | null; document_id: string | null;
 };
 export type MarketOverview = { feeds: MarketFeed[]; on_count: number; refresh_status: string | null };
