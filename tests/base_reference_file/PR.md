@@ -50,3 +50,16 @@ git diff --check
 ```
 
 Result: removed one unused test import; whitespace check passed.
+
+## Job B implemented
+
+`BaseStore.create_campaign` now sorts state groups by `(len(groups[state]), state)` before persisting ordinals: fewest selected reference licences first, then the stored state name. Existing campaigns are not rewritten. Repeated confirmation retains the original campaign/order.
+
+```sh
+BASE_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/postgres /workspace/worker-venv/bin/python -m pytest -q tests/test_base_reference_file.py tests/test_base_database.py > tests/base_reference_file/state-tests.txt 2>&1
+```
+
+Result: **29 passed in 2.53s**. See `state-tests.txt`.
+The three-state test verifies WY (1), TX (2), CA (3), with a separate equal-count name tie and campaign idempotency check.
+
+Push checkpoints: `5f78550` (scope), `17146c7` (file source, metadata and source tests). Each was pushed with `git push -u origin codex/base-reference-file`.

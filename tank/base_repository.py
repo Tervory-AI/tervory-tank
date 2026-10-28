@@ -304,7 +304,7 @@ class BaseStore:
                     return old
                 await conn.execute("""INSERT INTO tank.base_campaigns(tenant_id,id,request_id,name,file_id,selection,created_by)
                     VALUES($1,$2,$3,$4,$5,$6::jsonb,$7)""", tenant, identity, request_id, name, file_id, encoded(selection), created_by)
-                for ordinal, state in enumerate(sorted(groups)):
+                for ordinal, state in enumerate(sorted(groups, key=lambda name: (len(groups[name]), name))):
                     batch = f"{name[:50]} · {state} · {identity}"
                     await conn.execute("""INSERT INTO tank.base_campaign_states
                         (tenant_id,campaign_id,state,ordinal,batch,records_count,csv_records)

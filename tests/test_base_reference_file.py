@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import socket
 import threading
+import uuid
 from unittest.mock import AsyncMock
 
 import httpx
@@ -16,6 +17,7 @@ import pytest
 from agents._brain import security
 from agents.base.engines.ffl import reference, reference_source
 from base_queries import reference_page
+from base_product_fixtures import TENANT, raw
 from base_reference_status import check_reference
 from base_repository import BaseStore, PLATFORM
 from test_base_atf_download import engine
@@ -232,3 +234,28 @@ async def test_missing_invalid_or_future_file_date_is_not_invented(monkeypatch, 
     with pytest.raises(ValueError, match='No dated complete'):
         await reference.refresh(None, None, date(2026, 10, 28))
     client.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('counts,expected', [
+    ({'CA': 3, 'TX': 2, 'WY': 1}, ['WY', 'TX', 'CA']),
+    ({'TX': 1, 'CA': 1, 'WY': 2}, ['CA', 'TX', 'WY']),
+])
+async def test_campaign_persists_fewest_reference_licences_first_then_name(database, counts, expected):
+    _, rt = database
+    store = BaseStore(rt)
+    rows = [reference.project(raw(i + 1, state)) for i, state in enumerate(
+        state for state, count in counts.items() for _ in range(count))]
+    file = await store.install({'published_on': '2026-09-01', 'source_url': FILE_URL,
+        'checked_at': '2026-10-28T00:00:00+00:00', 'sha256': 'offline-state-counts', 'rows': rows}, initial=True)
+    groups = {state: [row for row in rows if row['state'] == state] for state in counts}
+    request_id = uuid.uuid4()
+    campaign = await store.create_campaign(TENANT, request_id, 'Offline state test', 'fixture', file['id'], {}, groups)
+    plan = await store.campaigns(TENANT)
+    assert [row['state'] for row in plan] == expected
+    assert [row['records_count'] for row in plan] == [counts[state] for state in expected]
+    assert [row['ordinal'] for row in plan] == [0, 1, 2]
+    assert all(row['id'] == campaign for row in plan)
+    # Repeated confirmation keeps the original campaign and its persisted order.
+    assert await store.create_campaign(TENANT, request_id, 'Offline state test', 'fixture', file['id'], {}, {}) == campaign
+    assert [row['state'] for row in await store.campaigns(TENANT)] == expected
