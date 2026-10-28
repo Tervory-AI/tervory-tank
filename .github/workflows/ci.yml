@@ -1,17 +1,10 @@
 name: ci
 
-# Docs-only changes do not run CI. A change that touches only docs/** or
-# Markdown files skips this workflow on pull requests and on pushes to main.
+# Security runs on every PR, including docs-only changes. Build jobs still use ci_scope.py.
 on:
   pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
   push:
     branches: [main]
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
 
 permissions:
   contents: read
@@ -26,6 +19,45 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12.14"
+      - name: Install pinned security CLIs
+        id: tools
+        run: bash .github/scripts/install-security-tools.sh
+      - name: Gitleaks — PR commits or main push
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        env:
+          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 .github/scripts/security_scan.py gitleaks --base "$SECURITY_BASE" --output "$RUNNER_TEMP/security-results"
+      - name: Semgrep — new high findings
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        env:
+          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 .github/scripts/security_scan.py semgrep --base "$SECURITY_BASE" --output "$RUNNER_TEMP/security-results"
+      - name: OSV-Scanner — new vulnerable versions
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        env:
+          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 .github/scripts/security_scan.py osv --base "$SECURITY_BASE" --output "$RUNNER_TEMP/security-results"
+      - name: Save security results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: security-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/security-results/*.json
+          if-no-files-found: warn
+          retention-days: 14
+
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -36,7 +68,7 @@ jobs:
       tests: ${{ steps.scope.outputs.tests }}
       savings: ${{ steps.scope.outputs.savings }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - name: Select checks from changed paths
@@ -123,8 +155,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.12"
           cache: pip
@@ -154,8 +186,8 @@ jobs:
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "22"
       - name: Install
@@ -188,22 +220,22 @@ jobs:
     # 8 minutes timed out twice on 22 Oct and cancelled CI on main. Usually ~1 minute.
     timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "22"
       # This job installs npm packages and a Playwright Chromium every run, and no pip
       # packages. Cache the npm download cache and the browser. There is no
       # workspace/package-lock.json yet, so the npm key uses package.json.
       - name: Cache npm downloads
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.npm
           key: savings-page-npm-${{ runner.os }}-${{ hashFiles('workspace/package.json', 'workspace/package-lock.json') }}-esbuild0.28.2-playwright1.64.1
           restore-keys: |
             savings-page-npm-${{ runner.os }}-
       - name: Cache Playwright browsers
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
           key: savings-page-playwright-${{ runner.os }}-1.64.1-chromium
@@ -227,7 +259,7 @@ jobs:
           CORE2_PLAYWRIGHT_PATH="$RUNNER_TEMP/core2-browser/node_modules/playwright" \
           CORE2_SCREENSHOT_DIR="$RUNNER_TEMP/core2-screenshots" \
           node tests/test_core2_savings_page.mjs
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: savings-page-screenshots
