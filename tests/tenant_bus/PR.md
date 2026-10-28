@@ -5,16 +5,14 @@ Claude opens the draft PR. No GitHub API, deployment, merge, or production SQL w
 
 Rooms previously had no event corridor, and #386 updated Rig's current price without retaining history. This change adds the shared job contract and six completion events through Tank's existing Redis. Rig consumes Tiger price changes into the newly authorized append-only table. The founder can inspect a product's history as JSON in Workspace; there is no page or new page wording.
 
-The founder's latest instruction explicitly authorizes the new `price_history` table and founder JSON route. That resolves the history-source blocker recorded in the earlier documentation-only commits.
-
 ## Changes and boundaries
 
 | File and line | Change |
 | --- | --- |
 | `agents/_chassis/chassis/job_contract.py:11` | One shared Pydantic `Job`: tenant, region, agent, skill, input, priority, engine; mapping to/from existing room rows. |
-| `agents/_chassis/chassis/app.py:118`, `:198` | Accept the shared contract alongside the existing job request and construct execution context from the stored row. Reject incorrect room/region and malformed metadata. Existing job-table columns stay unchanged; priority/region/engine use reserved JSON input metadata. |
+| `agents/_chassis/chassis/app.py:118`, `:198` | Accept the shared contract alongside the existing job request and construct execution context from the stored row. The shared engine is mapped into the existing handler input at execution time, including when input omits it or names a conflicting engine. Reject incorrect room/region and malformed metadata. Existing job-table columns stay unchanged; priority/region/engine use reserved JSON input metadata. |
 | `agents/base/room.py:293`, `:324`, `:463` | Map Base's existing task shape and take tenant authority from the task row, overriding conflicting JSON input. |
-| `tank/event_bus.py:78`, `:115`, `:186` | Tenant/event stream keys, atomic deduplication, consumer group, claims, ACK/failure settlement, bounded dead letters, and authenticated private room endpoints. Strict event-specific facts reject arbitrary extra fields. |
+| `tank/event_bus.py:78`, `:115`, `:192` | Tenant/event stream keys, atomic deduplication, consumer group, claims, ACK/failure settlement, bounded dead letters, and authenticated private room endpoints. Strict event-specific facts reject arbitrary extra fields. |
 | `tank/main.py:580`, `:3845` | Permit and mount the private event corridor. Existing routing, queue, ledger and cache logic is unchanged. |
 | `agents/_chassis/chassis/events.py:19`, `:34` | Rooms publish through Tank with their existing room credential and stored tenant context. No Redis credential is given to rooms. Redis/Tank failure logs a fixed message and returns; a process backs off for 30 seconds after a failed attempt. |
 | `agents/rig/schema.sql:59` | Add only `agent_rig.price_history` and its tenant/product index. `event_id` is the primary key, satisfying uniqueness. Startup applies this through the existing `PgStore.apply_schema` helper. |
@@ -41,35 +39,45 @@ Event bodies carry identifiers and numeric/status facts, never record text, law 
 
 - The exact data stream key is `tervory:<tenant UUID>:<event>`. The consumer group is the authenticated room agent (`rig` for the only implemented subscription).
 - Tank validates the existing `TANK_KEY_<AGENT>` credential and home region. Tenant authority is the private room's trusted header, populated from a stored task or its own catalogue tenant. These are existing service-wide room credentials, not new tenant credentials. Browsers/clients/Workspace keys cannot call the bus. No message body can select a tenant, Redis key or group; added tenant fields are refused and query-string tenant overrides are ignored.
-- Delivery is at least once. ACK happens only after the history insert commits. Pending deliveries are reclaimed after 30 seconds. The fifth failed delivery is moved atomically to `<stream>:dead` and acknowledged. Abandoned deliveries also count; after five handler deliveries, the next claim dead-letters the entry instead of invoking the handler again. Settlement requires the current consumer's ownership.
+- Delivery is at least once. ACK happens only after the history insert commits. Pending deliveries are reclaimed after 30 seconds. Recovery follows every Redis scan cursor: an empty first scan page cannot hide an abandoned delivery behind 200 busy pending entries. The fifth failed delivery is moved atomically to `<stream>:dead` and acknowledged. Abandoned deliveries also count; after five handler deliveries, the next claim dead-letters the entry instead of invoking the handler again. Settlement requires the current consumer's ownership.
 - Data and dead-letter streams each use exact `MAXLEN = 10000`. Producer deduplication lasts seven days; event IDs are deterministic and include the tenant. Rig's database uniqueness prevents duplicate history permanently, including delivery after the Redis deduplication window.
 - Publication is deliberately best effort when Redis/Tank is unavailable, as required: product work stays saved, a fixed warning is logged, and that event is not durably spooled for later publication. Stream trimming can discard entries beyond the retention bound. No backfill of pre-deployment changes is claimed.
 - No new setting, provider, subscription, model route or service is required. Existing `REDIS_URL`, `TANK_URL`, room-key settings, `TANK_REGION` and `TERVORY_ADMIN_USER_IDS` are reused by name only.
 
 ## Verification
 
-[PROOF.txt](PROOF.txt) contains exact commands, real Tank startup tail, returned history JSON and build output. All data in that file belongs to disposable offline fixtures. The test starts `uvicorn main:app`, not a replacement Tank. HTTP outside loopback is blocked by a closed local proxy and LiteLLM points to a closed local port. Expected startup warnings concern unavailable gold/reference services, not a failed Tank startup.
+[REVIEW-PROOF.txt](REVIEW-PROOF.txt) contains the current amended-brief checks, exact commands, real Tank startup tail and returned history JSON. [PROOF.txt](PROOF.txt) retains the broader initial regression runs and the unchanged Workspace build output. All data in that file belongs to disposable offline fixtures. The test starts `uvicorn main:app` and runs the actual Rig lifespan. Rig startup launches the history consumer automatically and shutdown stops it. Only unrelated scheduled room work is parked in this proof; the consumer, its transport, schema helper and database writes run normally. HTTP outside loopback is blocked by a closed local proxy and LiteLLM points to a closed local port. Expected startup warnings concern unavailable gold/reference services, not a failed Tank startup.
 
 | Check | Result |
 | --- | --- |
-| `pytest tests/tenant_bus -q -s --disable-warnings` with the local store settings in `PROOF.txt` | **20 passed**. Includes real Redis ACK/claim/DLQ/trimming, two tenants, six producers, shared/legacy jobs, row-owned tenant scope, and the saved-page Tiger → real Tank → Redis → Rig → founder JSON cycle. |
-| Existing chassis, Base, Tiger/#386, Market Lab, Tisan, Radix scan, secrets, Tank startup and one-door checks (exact list in `PROOF.txt`) | **143 passed**. Tank startup test boots twice against the same disposable database. |
+| `pytest tests/tenant_bus -q -s --disable-warnings` with the local store setting in `REVIEW-PROOF.txt` | **24 passed**. Includes real Redis ACK/claim/DLQ/trimming, recovery beyond the first pending page, two tenants, six producers, shared/legacy jobs, engine execution, row-owned tenant scope, and saved-page Tiger → real Tank → Redis → Rig startup consumer → founder JSON. |
+| Current related regression run (exact list in `REVIEW-PROOF.txt`) | **74 passed**: chassis, Base, Market Lab, secrets, Tank startup and one-door checks. |
+| Earlier broader regression run (exact list in `PROOF.txt`) | **143 passed**. Tank startup test boots twice against the same disposable database. |
 | `pytest tests/test_radix_gold.py -q --disable-warnings` | **6 passed** in a separate process. |
 | Zenas corpus/version/region/load-job regressions (exact list in `PROOF.txt`) | **18 passed**. |
 | `node tests/tenant_bus/workspace.cjs` | Exit 0: `PASS: founder-only JSON, client/forged identity refusal, trusted tenant, fixed Tank path, no-store, empty error bodies.` |
 | `node node_modules/typescript/bin/tsc --noEmit` in `workspace/` | Exit 0, no output. |
 | `next build` via the exact command in `PROOF.txt` | Exit 0; `/rig/price-history` is a dynamic route. |
-| Ruff command below and `git diff --check` | Exit 0; `All checks passed!`; no whitespace errors. |
+| Ruff commands and `git diff --check origin/main...HEAD` | Exit 0; `All checks passed!`; no whitespace errors. |
 
 ```sh
 /tmp/command-repo-venv/bin/ruff check tank tests agents/_chassis/chassis agents/base/room.py agents/tiger/rig_watch.py agents/tiger/watch.py agents/rig/app.py agents/rig/rigbox/price_events.py agents/market_lab/core/jobs.py agents/zenas/pool/nightly.py agents/zenas/pool/ingest.py agents/radix/scanlib/orchestrate.py agents/tisan/app.py --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
-git diff --check
+git diff --check origin/main...HEAD
 node tests/tenant_bus/workspace.cjs
 ```
 
 Reproduction requires the repository's Python test dependencies, Workspace dependencies, and disposable local Postgres. Set `TENANT_BUS_REDIS_URL` only to a dedicated local test Redis: the harness clears its selected database. Without that setting the harness starts/removes a throwaway `redis:7.4.12` container. Postgres tests create/drop a random test database; the history schema is applied twice through the existing helper.
 
-One earlier combined regression invocation included `test_radix_gold.py` after Tiger in the same Python process. Its six Radix tests failed because the existing shared import name `gold_sources` resolved to Tiger's module. The separate Radix invocation above passes; those existing gold modules and tests are unchanged. The final 143-test group excludes that file and passes. The secret scanner also initially rejected a dummy credential label in the new browser test; the label now uses the repository's accepted placeholder, and the final scanner passes. Full CI and independent review are not claimed.
+One earlier combined regression invocation included `test_radix_gold.py` after Tiger in the same Python process. Its six Radix tests failed because the existing shared import name `gold_sources` resolved to Tiger's module. The separate Radix invocation above passes; those existing gold modules and tests are unchanged. The final 143-test group excludes that file and passes. Full CI and independent review are not claimed.
+
+### Amended-brief review findings
+
+The required branch checkout and `ls` of every named file succeeded before review. No named file was missing. Two functional gaps were reproduced and fixed on this same branch:
+
+- **Shared engine execution** — before the fix, a shared Market Lab job with `engine: "ffl"` reached the handler with no engine. `agents/_chassis/chassis/app.py:198` now maps the authoritative engine into the handler input while retaining the original stored contract. `tests/tenant_bus/test_jobs.py:75` covers omitted/conflicting input engines and legacy compatibility.
+- **Pending delivery recovery** — before the fix, `XAUTOCLAIM COUNT 20` examined only the first 200 pending entries and ignored its continuation cursor, leaving a later abandoned delivery unrecovered. `tank/event_bus.py:138` follows that cursor. `tests/tenant_bus/test_recovery.py:10` reproduces 200 busy deliveries followed by one abandoned delivery; it failed before the fix and passes now.
+
+The previous cycle proof called the consumer helper directly. `tests/tenant_bus/test_tiger_history.py:72` now also proves the normal Rig startup/shutdown wiring, rather than assuming that part works. The current proof is saved in `REVIEW-PROOF.txt`. No additional gap was found in the six completion hooks, append-only schema, tenant boundaries, founder reader or outage behavior. Live evidence remains outstanding as described below.
 
 ## Founder/assessor acceptance — still pending
 
