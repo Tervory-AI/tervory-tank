@@ -2095,3 +2095,29 @@ CREATE TABLE IF NOT EXISTS tank.trigger_feedback (
     FOREIGN KEY (tenant_id,write_id) REFERENCES tank.trigger_writes(tenant_id,id),
     UNIQUE (tenant_id,operation_id)
 );
+
+-- Explicitly deferred requests. Queue claims and all receipts remain tenant/box scoped.
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS sent_at timestamptz;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS offpeak_job_id uuid;
+CREATE TABLE IF NOT EXISTS tank.offpeak_jobs (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    request jsonb NOT NULL,
+    policy jsonb NOT NULL,
+    caller text,
+    task_id uuid,
+    model_override text,
+    status text NOT NULL DEFAULT 'queued'
+        CHECK(status IN ('queued','dispatching','batch','completed','failed','uncertain')),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    sent_at timestamptz,
+    finished_at timestamptz,
+    result jsonb,
+    error text,
+    command_context jsonb,
+    notified boolean NOT NULL DEFAULT false,
+    UNIQUE(tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS offpeak_pending ON tank.offpeak_jobs(region,status,created_at);
+CREATE INDEX IF NOT EXISTS offpeak_task ON tank.offpeak_jobs(tenant_id,task_id);
