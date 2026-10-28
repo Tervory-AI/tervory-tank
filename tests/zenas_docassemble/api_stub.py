@@ -78,12 +78,14 @@ class API:
         raise AssertionError("Unexpected Docassemble API operation")
 
 
-def install(monkeypatch):
+def install(monkeypatch, region="us-east"):
+    monkeypatch.setenv("DOCASSEMBLE_REGION", region)
     monkeypatch.setenv("DOCASSEMBLE_API_KEY", "DOCASSEMBLE_API_KEY")
     monkeypatch.setenv("DOCASSEMBLE_URL", "http://docassemble")
     apis = []
 
     def factory(region):
+        monkeypatch.setenv("DOCASSEMBLE_REGION", region)
         api = API(region)
         apis.append(api)
         return DocassembleClient(region, transport=httpx.MockTransport(api.handle))
