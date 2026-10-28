@@ -98,6 +98,7 @@ try {
   await history.getByRole("button", {name:"Roll back to 1.0.0"}).waitFor();
   for (const width of [1440, 375]) {
     await page.setViewportSize({width, height: width === 375 ? 812 : 1000});
+    if (width === 375) await failed.evaluate(el => el.scrollIntoView({block:"start"}));
     await page.screenshot({path: join(shots, `skala-b3-b4-${width}.png`), fullPage:true});
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   }
