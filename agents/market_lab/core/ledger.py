@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from core.batch_guard import Pool
+from core.calibration import prepare_prediction
 
 SCHEMA = "agent_market_lab"
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.sql"
@@ -105,7 +106,8 @@ class MemoryLedger:
         self._require_tenant(row["tenant_id"])
         if any(item["id"] == row["id"] for item in self.predictions):
             raise RuntimeError("predictions are append-only")
-        self.predictions.append(dict(row))
+        prepared = prepare_prediction(row, self.predictions_for(row["tenant_id"]), self.series_for(row["tenant_id"]))
+        self.predictions.append(prepared)
 
     def save_report(self, row: dict[str, Any]) -> None:
         self._require_tenant(row["tenant_id"])
@@ -447,13 +449,17 @@ class PostgresLedger:
         )
 
     async def save_prediction(self, row: dict[str, Any]) -> None:
+        row = prepare_prediction(row, await self.predictions_for(row["tenant_id"]),
+                                 await self.series_for(row["tenant_id"]))
         await self.conn.execute(
             f"""
             INSERT INTO {SCHEMA}.predictions (
                 id, tenant_id, made_at, statement, metric_series_id, comparator,
-                target, resolve_by, rationale, sources, outcome, resolved_at, score
+                target, resolve_by, rationale, sources, outcome, resolved_at, score,
+                kind, feed, horizon_seconds, confidence, confidence_count
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13,
+                $14, $15, $16, $17, $18
             )
             """,
             uuid.UUID(str(row["id"])),
@@ -469,6 +475,11 @@ class PostgresLedger:
             row.get("outcome"),
             _timestamp(row.get("resolved_at")),
             row.get("score"),
+            row["kind"],
+            row["feed"],
+            row["horizon_seconds"],
+            row["confidence"],
+            row["confidence_count"],
         )
 
     async def save_report(self, row: dict[str, Any]) -> None:
@@ -527,7 +538,8 @@ class PostgresLedger:
         rows = await self.conn.fetch(
             f"""
             SELECT id, tenant_id, made_at, statement, metric_series_id, comparator,
-                   target, resolve_by, rationale, sources, outcome, resolved_at, score
+                   target, resolve_by, rationale, sources, outcome, resolved_at, score,
+                   kind, feed, horizon_seconds, confidence, confidence_count
             FROM {SCHEMA}.predictions
             WHERE tenant_id = $1
             ORDER BY made_at, id
