@@ -23,7 +23,7 @@ Module._load = function(name, parent, ...rest) {
   return load.call(this, name, parent, ...rest);
 };
 process.env.TANK_URL = 'http://tank.offline.invalid';
-process.env.TANK_API_KEY = 'offline-workspace';
+process.env.TANK_API_KEY = 'dummy-offline';
 process.env.TERVORY_ADMIN_USER_IDS = 'founder';
 const calls = [];
 let fail = false;
