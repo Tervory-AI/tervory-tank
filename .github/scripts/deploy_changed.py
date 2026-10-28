@@ -90,6 +90,17 @@ def wait_for(uuid: str, name: str, timeout_s: int = 900) -> bool:
     return False
 
 
+def last_failed(uuid: str) -> bool:
+    """True when the app's most recent Coolify deployment failed, so it is retried on its own."""
+    code, body = api("GET", f"/deployments/applications/{uuid}?take=1")
+    if code != 200:
+        return False
+    rows = body.get("deployments", body) if isinstance(body, dict) else body
+    if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+        return False
+    return (rows[0].get("status") or "").lower() in ("failed", "error")
+
+
 def deploy(uuid: str, name: str) -> bool:
     code, body = api("POST", f"/deploy?uuid={uuid}&force=false")
     if not 200 <= code < 300:
@@ -113,6 +124,14 @@ def main() -> int:
     else:
         # A room folder deploys its app and any regional copy (e.g. agent-zenas-za).
         targets = {n: u for n, u in room_apps.items() if any(n == r or n.startswith(r + "-") for r in rooms)}
+    # An app whose last deployment failed is retried by itself; nothing else is redeployed for it.
+    for name, uuid in sorted(room_apps.items()):
+        if name not in targets and last_failed(uuid):
+            print(f"::notice title=retry::{name} failed last time and is retried")
+            targets[name] = uuid
+    if not want_main and last_failed(MAIN_APP):
+        print("::notice title=retry::main failed last time and is retried")
+        want_main = True
     if not want_main and not targets:
         print("::notice title=nothing to deploy::no app code changed")
         return 0
