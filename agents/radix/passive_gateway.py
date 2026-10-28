@@ -10,6 +10,7 @@ import asyncio
 import hmac
 import os
 import time
+from contextlib import suppress
 from contextlib import asynccontextmanager
 from uuid import UUID
 
@@ -80,6 +81,7 @@ class Lease:
         async with self.lock:
             if self.run == (tenant, ident):
                 self.close()
+                await self.store.fail(tenant, ident)
 
 
 class Run(BaseModel):
@@ -92,10 +94,23 @@ class Run(BaseModel):
 async def lifespan(app):
     app.state.pool = await asyncpg.create_pool(os.environ['DATABASE_URL'], min_size=1, max_size=2)
     app.state.lease = Lease(Store(app.state.pool))
+    async def maintenance():
+        while True:
+            # Explicit gateway administration, separate from any caller's tenant.
+            await app.state.lease.store.reap_expired()
+            await asyncio.sleep(15)
+    await app.state.lease.store.reap_expired()
+    task = asyncio.create_task(maintenance())
     try:
         yield
     finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+        prior = app.state.lease.run
         app.state.lease.close()
+        if prior:
+            await app.state.lease.store.fail(*prior)
         await app.state.pool.close()
 
 
