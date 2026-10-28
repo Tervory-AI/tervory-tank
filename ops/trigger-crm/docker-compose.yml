@@ -1,0 +1,202 @@
+# coolify: raw compose
+# Trigger CRM = BottleCRM (Django-CRM).
+# Pin: Django-CRM/Django-CRM tag v1.39.0 @ cd7c12a607df1719518fcdaf289864f6ba7d0bcd
+# Coolify resource: trigger-crm
+#   Git: https://github.com/Tervory-AI/tervory-tank  (branch/PR — see overlay)
+#   OR public Git https://github.com/Django-CRM/Django-CRM ref v1.39.0 with this compose pasted
+#   base_directory: ops/trigger-crm  (when using tervory-tank overlay)
+# DB: shared Boston Postgres — database trigger_crm, role trigger_crm (never tank schema).
+#     No compose `db` service. DBHOST/DBPASSWORD Coolify names; founder fills password.
+# Redis: in-stack for Celery isolation.
+# Host: https://crm.tervory.com (Cloudflare Access founder-only). No seed_data. No ENV_TYPE=prod.
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - internal
+
+  backend:
+    build:
+      context: https://github.com/Django-CRM/Django-CRM.git#v1.39.0
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1
+    environment:
+      DEBUG: ${DEBUG:-False}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-crm.tervory.com,backend,localhost}
+      DOMAIN_NAME: ${DOMAIN_NAME:-https://crm.tervory.com}
+      SECRET_KEY: ${SECRET_KEY}
+      DBNAME: ${DBNAME:-trigger_crm}
+      DBUSER: ${DBUSER:-trigger_crm}
+      DBPASSWORD: ${DBPASSWORD}
+      DBHOST: ${DBHOST}
+      DBPORT: ${DBPORT:-5432}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL:-}
+      EMAIL_TIMEOUT: ${EMAIL_TIMEOUT:-}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      TRUST_PROXY_SSL_HEADER: ${TRUST_PROXY_SSL_HEADER:-true}
+      CORS_ALLOW_ALL: ${CORS_ALLOW_ALL:-False}
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        python manage.py migrate --noinput
+        python manage.py create_default_admin
+        python manage.py collectstatic --noinput
+        exec gunicorn crm.wsgi:application --bind 0.0.0.0:8000 --workers 3 --threads 4
+    depends_on:
+      redis:
+        condition: service_healthy
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz/', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 15
+      start_period: 90s
+    networks:
+      - internal
+      - gw
+    security_opt: ["no-new-privileges:true"]
+
+  celery-worker:
+    build:
+      context: https://github.com/Django-CRM/Django-CRM.git#v1.39.0
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    environment:
+      DEBUG: ${DEBUG:-False}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-crm.tervory.com,backend,localhost}
+      DOMAIN_NAME: ${DOMAIN_NAME:-https://crm.tervory.com}
+      SECRET_KEY: ${SECRET_KEY}
+      DBNAME: ${DBNAME:-trigger_crm}
+      DBUSER: ${DBUSER:-trigger_crm}
+      DBPASSWORD: ${DBPASSWORD}
+      DBHOST: ${DBHOST}
+      DBPORT: ${DBPORT:-5432}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL:-}
+      EMAIL_TIMEOUT: ${EMAIL_TIMEOUT:-}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+    command: ["celery", "-A", "crm", "worker", "--loglevel=info"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+      - gw
+    security_opt: ["no-new-privileges:true"]
+
+  celery-beat:
+    build:
+      context: https://github.com/Django-CRM/Django-CRM.git#v1.39.0
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.25
+    environment:
+      DEBUG: ${DEBUG:-False}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-crm.tervory.com,backend,localhost}
+      DOMAIN_NAME: ${DOMAIN_NAME:-https://crm.tervory.com}
+      SECRET_KEY: ${SECRET_KEY}
+      DBNAME: ${DBNAME:-trigger_crm}
+      DBUSER: ${DBUSER:-trigger_crm}
+      DBPASSWORD: ${DBPASSWORD}
+      DBHOST: ${DBHOST}
+      DBPORT: ${DBPORT:-5432}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL:-}
+      EMAIL_TIMEOUT: ${EMAIL_TIMEOUT:-}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+    command: ["celery", "-A", "crm", "beat", "--loglevel=info"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+      - gw
+    security_opt: ["no-new-privileges:true"]
+
+  frontend:
+    build:
+      context: https://github.com/Django-CRM/Django-CRM.git#v1.39.0:frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    environment:
+      PUBLIC_DJANGO_API_URL: ${PUBLIC_DJANGO_API_URL:-http://backend:8000}
+      PORT: "3000"
+      PROTOCOL_HEADER: x-forwarded-proto
+      BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-6M}
+    depends_on:
+      backend:
+        condition: service_healthy
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+    networks:
+      - internal
+    security_opt: ["no-new-privileges:true"]
+
+networks:
+  internal:
+    driver: bridge
+  gw:
+    external: true
+    name: tervory-gw-trigger-crm

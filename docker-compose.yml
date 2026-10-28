@@ -34,6 +34,7 @@ services:
       - tervory-gw-base
       - tervory-gw-rig
       - tervory-gw-ghost
+      - tervory-gw-trigger-crm
 
   redis:
     # 7.4.12 is the current 7.4 patch. It carries the 7.4.11 fix for CVE-2026-81934
@@ -499,6 +500,11 @@ networks:
   # Ghost alone uses this corridor; no other main-stack service joins it.
   tervory-gw-ghost:
     name: tervory-gw-ghost
+  # Created once: docker network create tervory-gw-trigger-crm
+  # BottleCRM / Trigger CRM Coolify resource joins as external.
+  tervory-gw-trigger-crm:
+    external: true
+    name: tervory-gw-trigger-crm
 
   tervory-gw-trigger:
     name: tervory-gw-trigger
