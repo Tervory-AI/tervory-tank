@@ -1,0 +1,33 @@
+{
+  "ok": true,
+  "approved": [
+    {
+      "id": "tiger.playbook",
+      "version": "1.0.0"
+    },
+    {
+      "id": "trigger.agent_style",
+      "version": "1.0.0"
+    },
+    {
+      "id": "trigger.house_style",
+      "version": "1.0.0"
+    },
+    {
+      "id": "trigger.languagetool",
+      "version": "1.0.0"
+    },
+    {
+      "id": "trigger.proselint",
+      "version": "1.0.0"
+    },
+    {
+      "id": "trigger.readability",
+      "version": "1.0.0"
+    },
+    {
+      "id": "trigger.voice_check",
+      "version": "1.0.0"
+    }
+  ]
+}
