@@ -59,8 +59,9 @@ def semgrep(base: str | None, temp: Path, output: Path) -> bool:
     errors = report["errors"]
     write(output / "semgrep.json", {"findings": findings, "error_count": len(errors)})
     # ERROR is the legacy spelling of HIGH. Never treat incomplete scans as clean.
-    return bool(errors) or any(row["severity"] in {"ERROR", "HIGH", "CRITICAL"}
-                               for row in findings)
+    if errors:
+        raise RuntimeError("Semgrep reported scan errors")
+    return any(row["severity"] in {"ERROR", "HIGH", "CRITICAL"} for row in findings)
 
 
 def lockfiles(ref: str) -> list[str]:

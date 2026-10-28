@@ -100,7 +100,9 @@ class SecurityPolicyTests(unittest.TestCase):
                 self.assertFalse(self.semgrep(severity))
 
     def test_semgrep_errors_block(self):
-        self.assertTrue(self.semgrep(errors=[{"message": "private source"}]))
+        with self.assertRaises(RuntimeError):
+            self.semgrep(errors=[{"message": "private source"}])
+        self.assertEqual(self.read("semgrep.json")["error_count"], 1)
 
     def test_semgrep_artifact_has_no_source_or_messages(self):
         self.semgrep()
