@@ -63,12 +63,12 @@ def _guard_smtp(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(smtplib, "SMTP_SSL", refuse)
 
 
-def test_v5_page_serves_both_skins_with_the_archon_key() -> None:
+def test_v5_page_serves_both_skins_without_a_fixture_key() -> None:
     client = _client()
     rig = client.get("/v5")
     assert rig.status_code == 200
     assert 'data-skin="rig"' in rig.text
-    assert json.dumps(KEY) in rig.text
+    assert json.dumps(KEY) not in rig.text
     assert "__RIG_" not in rig.text
     cn = client.get("/v5/cn")
     assert 'data-skin="cn"' in cn.text
@@ -86,14 +86,14 @@ def test_root_serves_v5_product_surface() -> None:
     assert home.status_code == 200
     assert 'data-skin="rig"' in home.text
     assert "What are you building?" in home.text
-    assert "Archon Type B" in home.text  # try chip
+    assert "Archon Type B" not in home.text
     assert "Demo · fixture catalogues" not in home.text
     assert "live distributor keys are off" not in home.text
     assert "Demo · keys off" not in home.text
     assert "demo-banner" not in home.text
     assert "pill-sample" not in home.text
-    assert "Archon catalogue" in home.text
-    assert json.dumps(KEY) in home.text
+    assert "Archon catalogue" not in home.text
+    assert json.dumps(KEY) not in home.text
     assert "__RIG_" not in home.text
     assert client.get("/v5").status_code == 200
     assert 'data-skin="cn"' in client.get("/v5/cn").text
@@ -104,13 +104,13 @@ def test_v5_assets_and_traversal() -> None:
     for name, media in (
         ("rig.css", "text/css"),
         ("rig.js", "text/javascript"),
-        ("sample-suppliers.json", "application/json"),
         ("media/type-b-flr.svg", "image/svg+xml"),
         ("media/blueprint-left.svg", "image/svg+xml"),
     ):
         response = client.get(f"/page/v5/{name}")
         assert response.status_code == 200, name
         assert response.headers["content-type"].startswith(media)
+    assert client.get("/page/v5/sample-suppliers.json").status_code == 404
     assert client.get("/page/v5/index.html").status_code == 404
     assert client.get("/page/v5/../page_route.py").status_code == 404
     assert client.get("/page/v5/%2e%2e/cn/cn.js").status_code == 404
