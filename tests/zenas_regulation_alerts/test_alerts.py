@@ -701,3 +701,19 @@ async def test_ecfr_removed_section_changes_part_but_new_date_alone_does_not():
     xml = ET.tostring(root)
     after = (await sources.fetch(watch))[0]
     assert after["version"] != before["version"] and "/on/2026-10-08/" in after["link"]
+
+
+@pytest.mark.asyncio
+async def test_civil_not_yet_refusal_keeps_existing_words():
+    from agents.zenas.core.scope_rules import NOT_YET
+
+    with pytest.raises(ValueError) as refused:
+        await add_watch(
+            MemoryWatches(),
+            tenant_id=TENANT,
+            region="us-east",
+            source="federal-register",
+            topic="family law",
+            options={},
+        )
+    assert str(refused.value) == NOT_YET
