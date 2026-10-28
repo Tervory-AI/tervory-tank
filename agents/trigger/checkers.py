@@ -4,13 +4,18 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from typing import Any
+from uuid import UUID
 
 import httpx
 from proselint.checks import __register__
 from proselint.registry import CheckRegistry
 from proselint.tools import LintFile
 
-CheckRegistry().register_many(__register__)
+_registry = CheckRegistry()
+if not getattr(_registry, "_tervory_proselint_loaded", False):
+    _registry.register_many(__register__)
+    _registry._tervory_proselint_loaded = True
 
 from .voice import Voice
 
@@ -35,6 +40,14 @@ BOOK_TERMS = {
     "kubernetes-docs": ["new", "currently", "soon", "just", "simply", "easy"],
     "microsoft-writing-style": ["please"],
 }
+
+# Skala skill ids. Until the founder approves each 1.0.0, the room keeps today's local path.
+SKILL_PROSELINT = "trigger.proselint"
+SKILL_LANGUAGETOOL = "trigger.languagetool"
+SKILL_AGENT_STYLE = "trigger.agent_style"
+SKILL_HOUSE_STYLE = "trigger.house_style"
+SKILL_READABILITY = "trigger.readability"
+SKILL_VOICE = "trigger.voice_check"
 
 
 def phrase_spans(text: str, phrase: str):
@@ -97,29 +110,206 @@ def local_checks(text: str, voice: Voice | None) -> dict:
             "limitations": "Mechanical findings only; semantic accuracy, voice fit and rubric grades are not assessed."}
 
 
-async def check(text: str, voice: Voice | None, http: httpx.AsyncClient) -> dict:
-    import asyncio
-    result = await asyncio.to_thread(local_checks, text, voice)
+def _strip_skill_meta(payload: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in payload.items() if not str(key).startswith("_")}
+
+
+async def _run_approved(tank: Any, tenant_id: UUID | str, skill_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the approved Skala skill output, or None so the room keeps today's local copy."""
+    if tank is None or not hasattr(tank, "run_skill"):
+        return None
     try:
-        # Fixed internal destination, no configurable public service or cloud fallback.
-        response = await http.post("http://trigger-languagetool:8081/v2/check",
-                                   data={"text": text, "language": "en-US"}, timeout=30)
-        response.raise_for_status()
-        payload = response.json()
+        out = await tank.run_skill(str(tenant_id), skill_id, payload)
+    except (RuntimeError, AttributeError, TypeError):
+        return None
+    if not isinstance(out, dict):
+        return None
+    return _strip_skill_meta(out)
+
+
+def map_languagetool(payload: dict[str, Any] | None, *, available: bool) -> dict[str, Any]:
+    """Local LanguageTool mapper; same shape as trigger.languagetool until that skill is approved."""
+    if not available or payload is None:
+        return {
+            "issues": [],
+            "complete": False,
+            "checker_errors": ["LanguageTool is unavailable; its checks have not completed."],
+        }
+    try:
         matches = payload["matches"]
         if not isinstance(matches, list):
             raise TypeError("Invalid matches")
-        for match in matches:
-            result["issues"].append({"source": "languagetool", "rule": match["rule"]["id"],
-                                     "message": match["message"], "offset": match["offset"], "length": match["length"]})
+        issues = [
+            {
+                "source": "languagetool",
+                "rule": match["rule"]["id"],
+                "message": match["message"],
+                "offset": match["offset"],
+                "length": match["length"],
+            }
+            for match in matches
+        ]
         warnings = payload.get("warnings", {})
         if not isinstance(warnings, dict):
             raise TypeError("Invalid warnings")
-        result["complete"] = not warnings.get("incompleteResults", False)
-        result["checker_errors"] = [] if result["complete"] else ["LanguageTool returned incomplete results."]
+        complete = not warnings.get("incompleteResults", False)
+        return {
+            "issues": issues,
+            "complete": complete,
+            "checker_errors": [] if complete else ["LanguageTool returned incomplete results."],
+        }
+    except (ValueError, KeyError, TypeError):
+        return {
+            "issues": [],
+            "complete": False,
+            "checker_errors": ["LanguageTool is unavailable; its checks have not completed."],
+        }
+
+
+async def fetch_languagetool(text: str, http: httpx.AsyncClient) -> tuple[dict[str, Any] | None, bool]:
+    try:
+        # Fixed internal destination, no configurable public service or cloud fallback.
+        response = await http.post(
+            "http://trigger-languagetool:8081/v2/check",
+            data={"text": text, "language": "en-US"},
+            timeout=30,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise TypeError("Invalid LanguageTool payload")
+        return payload, True
     except (httpx.HTTPError, ValueError, KeyError, TypeError):
-        result["complete"] = False
-        result["checker_errors"] = ["LanguageTool is unavailable; its checks have not completed."]
+        return None, False
+
+
+async def check(
+    text: str,
+    voice: Voice | None,
+    http: httpx.AsyncClient,
+    tank: Any = None,
+    tenant_id: UUID | str | None = None,
+) -> dict:
+    import asyncio
+
+    lt_payload, lt_ok = await fetch_languagetool(text, http)
+
+    if tank is not None and tenant_id is not None:
+        issues: list[dict[str, Any]] = []
+        skipped = list(SKIPPED)
+        used_skala: list[str] = []
+        local: dict[str, Any] | None = None
+
+        async def fallback_local() -> dict[str, Any]:
+            nonlocal local
+            if local is None:
+                local = await asyncio.to_thread(local_checks, text, voice)
+            return local
+
+        prose = await _run_approved(tank, tenant_id, SKILL_PROSELINT, {"text": text})
+        if prose is None:
+            issues.extend(
+                item for item in (await fallback_local())["issues"] if item.get("source") == "proselint"
+            )
+        else:
+            used_skala.append(SKILL_PROSELINT)
+            issues.extend(prose.get("issues") or [])
+
+        style = await _run_approved(
+            tank,
+            tenant_id,
+            SKILL_AGENT_STYLE,
+            {
+                "text": text,
+                "max_sentence_words": voice.maxSentenceWords if voice else 30,
+            },
+        )
+        if style is None:
+            bundle = await fallback_local()
+            issues.extend(item for item in bundle["issues"] if item.get("source") == "agent-style")
+            skipped = list(bundle.get("skipped_agent_style_rules") or SKIPPED)
+        else:
+            used_skala.append(SKILL_AGENT_STYLE)
+            issues.extend(style.get("issues") or [])
+            skipped = list(style.get("skipped_rules") or SKIPPED)
+
+        house = await _run_approved(
+            tank,
+            tenant_id,
+            SKILL_HOUSE_STYLE,
+            {"text": text, "stylebook": voice.stylebook if voice else None},
+        )
+        if house is None:
+            issues.extend(
+                item for item in (await fallback_local())["issues"] if item.get("source") == "stylebook"
+            )
+        else:
+            used_skala.append(SKILL_HOUSE_STYLE)
+            issues.extend(house.get("issues") or [])
+
+        read = await _run_approved(tank, tenant_id, SKILL_READABILITY, {"text": text})
+        if read is None:
+            issues.extend(
+                item
+                for item in (await fallback_local())["issues"]
+                if item.get("source") in {"readability", "practical-prose"}
+            )
+        else:
+            used_skala.append(SKILL_READABILITY)
+            issues.extend(read.get("issues") or [])
+
+        voice_payload = {
+            "text": text,
+            "banned_terms": list(voice.bannedTerms) if voice else [],
+            "required_terms": list(voice.requiredTerms) if voice else [],
+            "max_sentence_words": voice.maxSentenceWords if voice else 30,
+        }
+        voice_out = await _run_approved(tank, tenant_id, SKILL_VOICE, voice_payload)
+        if voice_out is None:
+            issues.extend(
+                item for item in (await fallback_local())["issues"] if item.get("source") == "voice"
+            )
+        else:
+            used_skala.append(SKILL_VOICE)
+            issues.extend(voice_out.get("issues") or [])
+
+        lt_skill = await _run_approved(
+            tank,
+            tenant_id,
+            SKILL_LANGUAGETOOL,
+            {"text": text, "lt_response": lt_payload if lt_ok else None},
+        )
+        if lt_skill is None:
+            mapped = map_languagetool(lt_payload, available=lt_ok)
+        else:
+            used_skala.append(SKILL_LANGUAGETOOL)
+            mapped = {
+                "issues": list(lt_skill.get("issues") or []),
+                "complete": bool(lt_skill.get("complete")),
+                "checker_errors": list(lt_skill.get("checker_errors") or []),
+            }
+        issues.extend(mapped["issues"])
+        result = {
+            "issues": issues,
+            "skipped_agent_style_rules": skipped,
+            "checklist": {
+                "E1": "grammar/readability findings",
+                "E3": "proselint and phrase findings",
+                "F3": "fence balance only",
+            },
+            "limitations": "Mechanical findings only; semantic accuracy, voice fit and rubric grades are not assessed.",
+            "complete": mapped["complete"],
+            "checker_errors": mapped["checker_errors"],
+            "skala_skills": used_skala,
+        }
+    else:
+        result = await asyncio.to_thread(local_checks, text, voice)
+        mapped = map_languagetool(lt_payload, available=lt_ok)
+        result["issues"].extend(mapped["issues"])
+        result["complete"] = mapped["complete"]
+        result["checker_errors"] = mapped["checker_errors"]
+        result["skala_skills"] = []
+
     result["issue_count"] = len(result["issues"])
     result["issues"] = result["issues"][:200]
     result["truncated"] = result["issue_count"] > len(result["issues"])

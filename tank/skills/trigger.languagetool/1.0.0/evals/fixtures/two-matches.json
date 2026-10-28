@@ -1,0 +1,1 @@
+{"matches": [{"rule": {"id": "UPPERCASE_SENTENCE_START"}, "message": "This sentence does not start with an uppercase letter.", "offset": 0, "length": 4}, {"rule": {"id": "MORFOLOGIK_RULE_EN_US"}, "message": "Possible spelling mistake found.", "offset": 10, "length": 5}], "warnings": {}}

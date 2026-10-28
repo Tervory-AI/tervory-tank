@@ -1,0 +1,17 @@
+id: trigger.proselint
+version: 1.0.0
+agent: trigger
+rung: 3
+description: >
+  Run proselint on tenant text. Returns mechanical prose findings only.
+  No model call. Empty text is refused.
+input:
+  type: object
+  properties:
+    text: {type: string}
+output:
+  type: object
+  properties:
+    issues: {type: array}
+    error: {type: string}
+eval_threshold: 1.0

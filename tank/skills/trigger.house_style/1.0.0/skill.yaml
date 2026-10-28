@@ -1,0 +1,19 @@
+id: trigger.house_style
+version: 1.0.0
+agent: trigger
+rung: 3
+description: >
+  Mechanical stylebook Avoid-section candidates and descriptive-link checks
+  for the tenant's selected book. Book terms and stylebook files are vendored
+  package data; a new rule set is a new skill version. No model. Empty text is refused.
+input:
+  type: object
+  properties:
+    text: {type: string}
+    stylebook: {type: string}
+output:
+  type: object
+  properties:
+    issues: {type: array}
+    error: {type: string}
+eval_threshold: 1.0

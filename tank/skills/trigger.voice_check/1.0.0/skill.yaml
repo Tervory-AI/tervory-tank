@@ -1,0 +1,20 @@
+id: trigger.voice_check
+version: 1.0.0
+agent: trigger
+rung: 3
+description: >
+  Tenant voice mechanical checks: banned terms, required terms, and sentence
+  length when the voice overrides the default. No model. Empty text is refused.
+input:
+  type: object
+  properties:
+    text: {type: string}
+    banned_terms: {type: array}
+    required_terms: {type: array}
+    max_sentence_words: {type: integer}
+output:
+  type: object
+  properties:
+    issues: {type: array}
+    error: {type: string}
+eval_threshold: 1.0

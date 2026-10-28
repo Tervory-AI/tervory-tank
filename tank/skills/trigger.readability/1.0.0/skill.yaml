@@ -1,0 +1,17 @@
+id: trigger.readability
+version: 1.0.0
+agent: trigger
+rung: 3
+description: >
+  Mechanical readability candidates: possible passive voice and Practical Prose
+  F3 fence balance. Advisory only; no semantic grade and no model. Empty text is refused.
+input:
+  type: object
+  properties:
+    text: {type: string}
+output:
+  type: object
+  properties:
+    issues: {type: array}
+    error: {type: string}
+eval_threshold: 1.0

@@ -44,9 +44,9 @@ def legal_request(body: WriteIn) -> bool:
         re.search(r"\b(contract|agreement|affidavit|legal|lawsuit|pleading|last will|testament|subpoena|nda|privacy policy|terms of (?:service|use)|power of attorney|lease|deed|court filing|articles of incorporation)\b", body.text, re.IGNORECASE))
 
 
-async def check_text(body: CheckIn, store: VoiceStore, http) -> dict:
+async def check_text(body: CheckIn, store: VoiceStore, http, tank=None) -> dict:
     voice = await store.get(body.tenant_id)
-    report = await check(body.text, voice, http)
+    report = await check(body.text, voice, http, tank=tank, tenant_id=body.tenant_id)
     return {"text": body.text, "report": report, "summary": report_text(report), "model_calls": 0}
 
 
@@ -72,7 +72,7 @@ async def write(body: WriteIn, store: VoiceStore, tank, http) -> dict:
     draft = routed["content"]
     if not isinstance(draft, str) or not draft.strip() or len(draft) > 20000:
         raise ValueError("Draft is empty or exceeds the checker limit")
-    report = await check(draft, voice, http)
+    report = await check(draft, voice, http, tank=tank, tenant_id=body.tenant_id)
     return {"text": draft, "report": report, "summary": report_text(report),
             "ledger_id": routed["ledger_id"], "cost_usd": routed.get("cost_usd"),
             "model": routed.get("model"), "voice_revision": voice.revision}

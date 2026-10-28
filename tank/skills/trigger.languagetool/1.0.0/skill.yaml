@@ -1,0 +1,22 @@
+id: trigger.languagetool
+version: 1.0.0
+agent: trigger
+rung: 3
+description: >
+  Map a LanguageTool v2/check response into Trigger findings. The room fetches
+  from the pinned internal LanguageTool 6.8 service; this package pins the
+  mapping. Empty text is refused. No model call.
+input:
+  type: object
+  properties:
+    text: {type: string}
+    lt_response: {type: object}
+    lt_fixture: {type: string}
+output:
+  type: object
+  properties:
+    issues: {type: array}
+    complete: {type: boolean}
+    checker_errors: {type: array}
+    error: {type: string}
+eval_threshold: 1.0

@@ -1,0 +1,8 @@
+{
+  "trigger.proselint": 23,
+  "trigger.languagetool": 20,
+  "trigger.agent_style": 22,
+  "trigger.house_style": 22,
+  "trigger.readability": 22,
+  "trigger.voice_check": 22
+}

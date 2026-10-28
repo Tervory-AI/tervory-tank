@@ -1,0 +1,10 @@
+{
+  "18f-content": ["easy", "simple", "obvious"],
+  "apple-interface-writing": ["click here", "OK"],
+  "github-docs": ["this", "that", "it"],
+  "gitlab-docs": ["allow", "enable", "easy", "easily", "simple", "obvious"],
+  "google-developer-docs": ["simply", "easily", "obviously", "allows you to", "please"],
+  "govuk": ["please", "simply", "easy", "obvious"],
+  "kubernetes-docs": ["new", "currently", "soon", "just", "simply", "easy"],
+  "microsoft-writing-style": ["please"]
+}

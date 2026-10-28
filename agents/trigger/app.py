@@ -57,7 +57,7 @@ async def put_voice(tenant_id: UUID, voice: Voice):
 
 @app.post("/check", dependencies=[Depends(authorized)])
 async def post_check(body: CheckIn):
-    return await check_text(body, VoiceStore(app.state.pool), app.state.http)
+    return await check_text(body, VoiceStore(app.state.pool), app.state.http, app.state.tank)
 
 
 @app.post("/write", dependencies=[Depends(authorized)])

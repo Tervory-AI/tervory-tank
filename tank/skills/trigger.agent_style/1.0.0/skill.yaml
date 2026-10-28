@@ -1,0 +1,20 @@
+id: trigger.agent_style
+version: 1.0.0
+agent: trigger
+rung: 3
+description: >
+  Run the deterministic agent-style detectors on text (RULE-05, RULE-06,
+  RULE-12, RULE-A, RULE-B, RULE-C, RULE-D, RULE-E). Rules are vendored and
+  pinned; a new rule set is a new skill version. No model call. Empty text is refused.
+input:
+  type: object
+  properties:
+    text: {type: string}
+    max_sentence_words: {type: integer}
+output:
+  type: object
+  properties:
+    issues: {type: array}
+    skipped_rules: {type: array}
+    error: {type: string}
+eval_threshold: 1.0
