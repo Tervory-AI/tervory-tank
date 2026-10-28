@@ -37,6 +37,8 @@ services:
       R2_SECRET_ACCESS_KEY_RADIX: ${R2_SECRET_ACCESS_KEY_RADIX:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       DATABASE_URL: postgresql://agent_radix:${AGENT_DB_PASSWORD_RADIX}@postgres:5432/${POSTGRES_DB:-tervory}
+      CHASSIS_ADMIN_DATABASE_URL: ${CHASSIS_ADMIN_DATABASE_URL:-}
+      CHASSIS_RLS_ADMIN_ROLE: ${CHASSIS_RLS_ADMIN_ROLE:-}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_RADIX:-}
       HERMES_URL: http://hermes:8000
