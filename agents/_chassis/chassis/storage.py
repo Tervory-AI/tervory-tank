@@ -160,6 +160,10 @@ class Storage:
         key = self._prefix(tenant_id, category, public=public) + safe_name(name)
         return await self._request('GET', key)
 
+    async def delete(self, tenant_id: str, category: str, name: str, *, public: bool = False) -> None:
+        key = self._prefix(tenant_id, category, public=public) + safe_name(name)
+        await self._request('DELETE', key)
+
     async def _objects(self, prefix: str) -> AsyncIterator[dict]:
         token = ''
         seen = set()

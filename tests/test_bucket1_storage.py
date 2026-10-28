@@ -344,3 +344,21 @@ def test_storage_destination_cannot_be_reassigned():
                 setattr(store, field, 'foreign')
         await store.close()
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('owner', sorted(ROOMS))
+def test_delete_uses_only_own_bucket_and_tenant_prefix(owner):
+    async def scenario():
+        observed = []
+        def handle(request):
+            observed.append((request.method, request.url.path))
+            return httpx.Response(204)
+        store = Storage(owner, environ=environment(owner), transport=httpx.MockTransport(handle))
+        tenant = str(uuid.uuid4())
+        await store.delete(tenant, 'uploads', 'report.pdf')
+        assert observed == [('DELETE', f'/tervory-{owner.replace("_", "-")}/us-east/{tenant}/uploads/report.pdf')]
+        with pytest.raises(StorageError):
+            await store.delete(tenant, 'uploads', '../another-tenant/report.pdf')
+        assert len(observed) == 1
+        await store.close()
+    asyncio.run(scenario())

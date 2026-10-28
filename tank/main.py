@@ -4101,3 +4101,5 @@ app.include_router(__import__("rig_forge_routes").build_router(__import__("sys")
 app.include_router(__import__("rig_three_d").build_router(__import__("sys").modules[__name__]))
 
 app.include_router(__import__("market_lab_routes").build_router(__import__("sys").modules[__name__]))
+
+app.include_router(__import__("vault_routes").build_router(__import__("sys").modules[__name__]))

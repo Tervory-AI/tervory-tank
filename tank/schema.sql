@@ -1890,3 +1890,12 @@ ON CONFLICT(id) DO NOTHING;
 
 -- Count duplicate source rows without changing the platform-owned originals.
 ALTER TABLE tank.base_reference_files ADD COLUMN IF NOT EXISTS duplicate_count integer NOT NULL DEFAULT 0 CHECK (duplicate_count >= 0);
+
+-- Product plugin metadata; credential plaintext is never persisted here.
+CREATE TABLE IF NOT EXISTS tank.vault_items (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL, vault text NOT NULL, kind text NOT NULL,
+    name text NOT NULL, metadata jsonb NOT NULL, sealed text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, vault, kind, name)
+);
