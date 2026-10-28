@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 from contextlib import contextmanager, nullcontext
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -181,7 +182,9 @@ def check(env, output, *, browser=False):
         # Tenant B cannot remove A's subscription or its evidence.
         assert vault("DELETE", "links/" + ident, tenant=other).status_code == 200
         assert market("document", document_id=doc_id).status_code == 200
-        asyncio.run(storage_proof(owner, other, ident))
+        # Playwright's synchronous API runs its own event loop on this thread.
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(lambda: asyncio.run(storage_proof(owner, other, ident))).result()
         if page:
             page.get_by_role("button", name="Close", exact=True).click()
             page.get_by_text("20 stored observations", exact=True).wait_for(timeout=30000)
