@@ -162,9 +162,16 @@ class SecurityPolicyTests(unittest.TestCase):
 
     def test_semgrep_missing_report_blocks_with_safe_notice(self):
         with patch.object(scan, "run", return_value=0), redirect_stdout(io.StringIO()) as stdout:
+            with self.assertRaises(RuntimeError):
+                scan.semgrep("base", self.root, self.output)
+        self.assertEqual(stdout.getvalue(), f"::notice file={self.root}/semgrep.json::SemgrepReportMissingExit0\n")
+
+    def test_semgrep_missing_launcher_identifies_executable(self):
+        with patch.object(scan, "run", side_effect=FileNotFoundError(2, "not found", "semgrep")), \
+                redirect_stdout(io.StringIO()) as stdout:
             with self.assertRaises(FileNotFoundError):
                 scan.semgrep("base", self.root, self.output)
-        self.assertEqual(stdout.getvalue(), "::notice::FileNotFoundError\n")
+        self.assertEqual(stdout.getvalue(), "::notice file=semgrep::SemgrepExecutableMissing\n")
 
     def test_semgrep_artifact_has_no_source_or_messages(self):
         self.semgrep()

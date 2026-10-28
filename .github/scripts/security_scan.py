@@ -90,9 +90,17 @@ def semgrep(base: str | None, temp: Path, output: Path) -> bool:
         # Read findings/errors even when the CLI returns nonzero. In particular,
         # exit 3 denotes target parse errors, which are notices under this policy.
         code = run([*args, "."], tuple(range(256)))
+        if not raw.is_file():
+            annotation("notice", f"SemgrepReportMissingExit{code}", str(raw))
+            raise RuntimeError("Semgrep did not create its JSON report")
         report = json.loads(raw.read_text())
+    except FileNotFoundError as error:
+        annotation("notice", "SemgrepExecutableMissing", error.filename or "semgrep")
+        raise
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
-        annotation("notice", type(error).__name__)
+        # A missing-report notice above already identifies the path and exit code.
+        if not isinstance(error, RuntimeError) or raw.is_file():
+            annotation("notice", type(error).__name__)
         raise
     findings = [{"rule": row["check_id"], "path": row["path"],
                  "line": row["start"]["line"], "severity": row["extra"]["severity"]}
