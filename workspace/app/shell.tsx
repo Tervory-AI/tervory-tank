@@ -2,7 +2,7 @@
 
 import { OrganizationSwitcher, UserButton, useAuth } from "@clerk/nextjs";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams, useSelectedLayoutSegments } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import {
   FOUNDER_LINKS,
@@ -29,7 +29,10 @@ export function Shell({
   readAccess: () => Promise<ShellAccess>;
   children: React.ReactNode;
 }) {
-  const pathname = usePathname() ?? "";
+  const browserPathname = usePathname() ?? "";
+  const [routeRoot] = useSelectedLayoutSegments();
+  // The public host rewrites / to /autumbra without changing the browser pathname.
+  const pathname = routeRoot === "autumbra" ? "/autumbra" : browserPathname;
   const { isLoaded, userId } = useAuth();
   const [founder, setFounder] = useState(initialFounder);
   const [reviewer, setReviewer] = useState(initialReviewer);
