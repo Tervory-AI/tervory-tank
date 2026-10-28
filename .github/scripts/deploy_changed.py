@@ -37,7 +37,9 @@ ALL_ROOMS_PREFIXES = ("agents/_chassis/", "agents/_template/")
 
 
 def api(method: str, path: str) -> tuple[int, object]:
-    req = urllib.request.Request(f"{URL}/api/v1{path}", method=method,
+    if URL != "https://coolify.tervory.com":
+        raise ValueError("COOLIFY_URL must match the fixed https Coolify base")
+    req = urllib.request.Request(f"https://coolify.tervory.com/api/v1{path}", method=method,
                                  headers={"Authorization": f"Bearer {TOKEN}", "Accept": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
