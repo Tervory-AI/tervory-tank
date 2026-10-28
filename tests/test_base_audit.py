@@ -378,3 +378,90 @@ async def test_empty_histogram_is_zero_bands_for_each_state_and_region_guard(aud
     rt.box_region = lambda: "af-south"
     assert (await client.get(f"{ROOT}/{identity}/confidence-histogram", params={"tenant_id": str(TENANT)})).status_code == 403
     assert (await draw(client, identity)).status_code == 403
+
+
+# Job 6 (F8): per-source reliability from reviewed audits.
+from base_reliability import classify, prefer, scores, wilson_lower  # noqa: E402
+
+
+def test_source_kinds_from_field_urls():
+    site = "https://www.smitharms.com/"
+    assert classify("https://smitharms.com/contact", site) == "own_site"
+    assert classify("https://shop.smitharms.com/about", site) == "own_site"
+    assert classify("https://www.facebook.com/smitharms", site) == "social_profile"
+    assert classify("https://web.archive.org/web/2024/https://smitharms.com/", site) == "archive"
+    assert classify("https://maps.google.com/?cid=1", site) == "google_places"
+    assert classify("https://opencorporates.com/companies/us_nh/1", site) == "opencorporates"
+    assert classify("https://directory.example.org/smith", site) == "other_web"
+    assert classify(None, site) is None and classify("not a url", site) is None
+
+
+def test_wilson_lower_bound_keeps_small_samples_from_looking_perfect():
+    assert wilson_lower(0, 0) is None
+    assert wilson_lower(3, 3) < .5 < wilson_lower(200, 200)
+    assert wilson_lower(180, 200) == pytest.approx(.8505941875672826)
+
+
+def _record(rid, site, email_url, verified=True):
+    return {"record_id": rid, "fields": {
+        "website": {"value": site, "source_url": site, "verified": verified},
+        "email": {"value": "a@b.c", "source_url": email_url, "verified": verified},
+        "phone": {"value": None, "source_url": None, "verified": False},
+        "socials": {"value": None, "source_url": None, "verified": False}}}
+
+
+def test_scores_count_resolved_verdicts_per_source_and_field_only():
+    site = "https://smitharms.com/"
+    audit = {"records": [_record("1", site, site + "contact"), _record("2", site, "https://facebook.com/smith"),
+                         _record("3", site, site + "contact"), _record("4", site, site + "contact", verified=False)],
+             "verdicts": {"1": "correct", "2": "wrong", "3": "unsure", "4": "correct"}}
+    rows = {(row["source"], row["field"]): row for row in scores([audit, {"records": [], "verdicts": {}}])}
+    assert set(rows) == {("own_site", "website"), ("own_site", "email"), ("social_profile", "email")}
+    assert rows[("own_site", "website")] | {} == {**rows[("own_site", "website")], "correct": 1, "wrong": 1, "checked": 2, "audits": 1}
+    assert rows[("own_site", "email")]["correct"] == 1 and rows[("own_site", "email")]["wrong"] == 0
+    assert rows[("social_profile", "email")]["wrong"] == 1 and rows[("social_profile", "email")]["accuracy"] == 0
+    # Counts only: no tenant, record id, URL or value leaves the audit.
+    assert all(set(row) == {"source", "field", "correct", "wrong", "checked", "accuracy", "wilson_lower", "audits"}
+               for row in rows.values())
+
+
+def test_higher_scoring_source_wins_and_unscored_ranks_below_scored():
+    table = {("own_site", "email"): .9, ("social_profile", "email"): .4}
+    site = "https://smitharms.com/"
+    social = {"value": "x@y.z", "source_url": "https://facebook.com/smith", "website": site}
+    own = {"value": "a@b.c", "source_url": site + "contact", "website": site}
+    other = {"value": "o@p.q", "source_url": "https://directory.example.org/smith", "website": site}
+    assert prefer([social, own], "email", table) is own
+    assert prefer([other, social], "email", table) is social
+    assert prefer([other], "email", table) is other
+
+
+@pytest.mark.asyncio
+async def test_review_recomputes_platform_scores_and_route_is_guarded(audit_db):
+    pool, _, client = audit_db
+    identity, _ = await campaign(pool)
+    audit = (await draw(client, identity)).json()
+    path = f"{ROOT}/{identity}/audits/{audit['id']}"
+    params = {"tenant_id": str(TENANT)}
+    exported = (await client.get(path + "/records.csv", params=params)).text
+    verdicts = ["correct"] * 171 + ["wrong"] * 19 + ["unsure"] * 10
+    assert (await client.post(path + "/review", json={**params, "csv": checked(exported, verdicts)})).status_code == 200
+    saved = (await client.get(path, params=params)).json()
+    expected = scores([saved])
+    response = await client.get("/v1/base-product/source-reliability")
+    assert response.status_code == 200, response.text
+    got = response.json()["scores"]
+    assert {(row["source"], row["field"], row["correct"], row["wrong"]) for row in got} == \
+        {(row["source"], row["field"], row["correct"], row["wrong"]) for row in expected}
+    own = next(row for row in got if row["source"] == "own_site" and row["field"] == "website")
+    assert own["checked"] == 190 and own["correct"] == 171 and own["audits"] == 1
+    assert own["wilson_lower"] == pytest.approx(.8491030549232077)
+    # Nothing identifying is stored.
+    async with pool.acquire() as conn:
+        columns = {row["column_name"] for row in await conn.fetch(
+            "SELECT column_name FROM information_schema.columns WHERE table_schema='tank' AND table_name='base_source_reliability'")}
+    assert not columns & {"tenant_id", "record_id", "source_url", "value"}
+    # Same guards as every audit route.
+    no_admin = await client.get("/v1/base-product/source-reliability", headers={"X-Tervory-Admin": "someone-else"})
+    no_key = await client.get("/v1/base-product/source-reliability", headers={"X-Tank-Key": "wrong"})
+    assert no_admin.status_code in {403, 404} and no_key.status_code in {401, 403, 404}

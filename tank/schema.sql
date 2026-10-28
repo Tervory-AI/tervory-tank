@@ -1873,6 +1873,21 @@ CREATE TABLE IF NOT EXISTS tank.base_audits (
     UNIQUE(tenant_id,campaign_id,seed)
 );
 
+-- Job 6 (F8): Base source reliability from reviewed audits. Platform-wide counts only:
+-- source kind, field name and numbers; never a tenant, record, URL or value.
+CREATE TABLE IF NOT EXISTS tank.base_source_reliability (
+    source text NOT NULL,
+    field text NOT NULL,
+    correct integer NOT NULL CHECK(correct >= 0),
+    wrong integer NOT NULL CHECK(wrong >= 0),
+    checked integer NOT NULL CHECK(checked = correct + wrong AND checked > 0),
+    accuracy double precision NOT NULL CHECK(accuracy BETWEEN 0 AND 1),
+    wilson_lower double precision CHECK(wilson_lower BETWEEN 0 AND 1),
+    audits integer NOT NULL CHECK(audits > 0),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(source, field)
+);
+
 -- Founder decision: retain NOT NULL; a not_set amount is storage only, never spend.
 DO $$
 BEGIN

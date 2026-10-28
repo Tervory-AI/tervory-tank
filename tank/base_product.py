@@ -358,6 +358,14 @@ def build_router(rt: Any, store: BaseStore | None = None, *, background: bool = 
     async def confidence_histogram(campaign_id: uuid.UUID, tenant_id: uuid.UUID) -> dict[str, Any]:
         return clean(await audits.histogram(tenant_id, campaign_id))
 
+    @router.get("/source-reliability", dependencies=[Depends(workspace), Depends(require_admin)])
+    async def source_reliability() -> dict[str, Any]:
+        # Job 6 (F8): platform-wide scores from reviewed audits. Counts only.
+        async with rt.pool().acquire() as conn:
+            rows = await __import__("base_reliability").read(conn)
+        return clean({"scores": rows, "method": "correct / (correct + wrong) per source and field, "
+                      "from record-level audit verdicts; Wilson 95% lower bound"})
+
     @router.post("/reference/refresh", dependencies=[Depends(workspace), Depends(require_admin)])
     async def refresh() -> dict[str, Any]:
         return clean(await store.refresh())

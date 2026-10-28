@@ -171,6 +171,13 @@ class AuditStore:
                 return saved
             row = await conn.fetchrow("""UPDATE tank.base_audits SET verdicts=$4::jsonb,reviewed_at=now(),reviewed_by=$5
                 WHERE tenant_id=$1 AND campaign_id=$2 AND id=$3 RETURNING *""", tenant, campaign, audit, encoded(verdicts), actor)
+        # Job 6: every newly reviewed audit refreshes the per-source scores. A failure here
+        # never undoes the saved review; the next review recomputes from all audits.
+        try:
+            async with self.rt.pool().acquire() as conn:
+                await __import__("base_reliability").recompute(conn)
+        except Exception:  # noqa: BLE001
+            __import__("logging").getLogger(__name__).warning("Source reliability recompute failed; review saved")
         return unpack(row)
 
     async def histogram(self, tenant: uuid.UUID, campaign: uuid.UUID) -> dict[str, Any]:
