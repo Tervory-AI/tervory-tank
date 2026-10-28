@@ -270,7 +270,12 @@ async def test_publisher_links_are_human_dataset_pages_and_transport_urls_stay_s
         spec = specs[check["source_id"]]
         assert urlsplit(original["url"]).netloc == urlsplit(spec.url).netloc
         assert urlsplit(original["url"]).path == urlsplit(spec.url).path
-        assert not urlsplit(original["url"]).query
+        if spec.id == "comtrade_preview":
+            from feeds.keyless import public_link
+            assert public_link(original["url"]) == original["url"]
+            assert "maxRecords=500" in urlsplit(original["url"]).query
+        else:
+            assert not urlsplit(original["url"]).query
         target = urlsplit(page["presentation"]["publisher_url"])
         assert target.scheme == "https"
         assert not target.hostname.startswith("api.")
