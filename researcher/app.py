@@ -48,6 +48,30 @@ class Run:
     failed: asyncio.Event = field(default_factory=asyncio.Event)
 
 
+class QuietOutput:
+    """Use upstream's output sink instead of printing a client's report."""
+
+    async def send_json(self, value):
+        pass
+
+
+class LocalModelTransport(httpx.AsyncBaseTransport):
+    """An upstream environment override cannot redirect a model or its room key."""
+
+    def __init__(self, run, inner=None):
+        self.run = run
+        self.inner = inner or httpx.AsyncHTTPTransport()
+
+    async def handle_async_request(self, request):
+        if str(request.url) != "http://127.0.0.1:8000/model/v1/chat/completions":
+            self.run.failed.set()
+            raise ValueError("Model endpoint is fixed")
+        return await self.inner.handle_async_request(request)
+
+    async def aclose(self):
+        await self.inner.aclose()
+
+
 def cited_answer(report: str, run: Run) -> dict:
     value = json.loads(report)
     if not isinstance(value, dict) or not isinstance(value.get("claims"), list):
@@ -137,14 +161,15 @@ def create_app():
             return cited_answer('{"claims": []}', run)
         researcher = GPTResearcher(query=run.request.question, config_path=str(CONFIG),
             agent="Market research", role="Answer from cited public source evidence.",
-            verbose=False, mcp_strategy="disabled")
+            verbose=False, mcp_strategy="disabled", websocket=QuietOutput())
         # Pin the allowed configuration even if upstream environment overrides exist.
         for name, value in json.loads(CONFIG.read_text()).items():
             setattr(researcher.cfg, name.lower(), value)
         for tier in ("fast", "smart", "strategic"):
             setattr(researcher.cfg, f"{tier}_llm_provider", "openai")
             setattr(researcher.cfg, f"{tier}_llm_model", "tank")
-        async with httpx.AsyncClient(transport=app.state.model_transport, timeout=65) as model_client:
+        transport = LocalModelTransport(run, app.state.model_transport)
+        async with httpx.AsyncClient(transport=transport, timeout=65) as model_client:
             researcher.cfg.llm_kwargs = {
                 "api_key": key(), "openai_api_base": "http://127.0.0.1:8000/model/v1",
                 "default_headers": {"X-Research-Run": run_id}, "max_retries": 0,
@@ -187,6 +212,6 @@ def create_app():
 
 
 # Do not log questions, fetched passages, or another tenant's research to shared logs.
-for name in ("gpt_researcher", "research", "httpx", "openai"):
+for name in ("gpt_researcher", "research", "scraper", "httpx", "openai"):
     logging.getLogger(name).setLevel(logging.CRITICAL)
 app = create_app()

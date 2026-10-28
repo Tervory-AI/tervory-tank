@@ -147,7 +147,7 @@ def ledger_rows(stack):
 
 
 @pytest.mark.asyncio
-async def test_real_researcher_cites_fetched_search_page_and_tank_ledgers_every_call(stack):
+async def test_real_researcher_cites_fetched_search_page_and_tank_ledgers_every_call(stack, capsys):
     response = await ask(stack)
     assert response.status_code == 200, response.text
     result = response.json()
@@ -163,6 +163,9 @@ async def test_real_researcher_cites_fetched_search_page_and_tank_ledgers_every_
     assert all(row[6] == "market.research" and row[12] == .004 for row in rows)
     assert result["cost_usd"] == .008
     assert not stack.app.state.runs
+    output = capsys.readouterr()
+    assert TEXT_A not in output.out + output.err
+    assert "How is employment changing?" not in output.out + output.err
 
 
 @pytest.mark.asyncio
@@ -192,6 +195,14 @@ async def test_empty_search_makes_no_model_call(stack):
     response = await ask(stack)
     assert response.status_code == 200 and response.json()["facts"] == []
     assert not stack.calls and not ledger_rows(stack)
+
+
+@pytest.mark.asyncio
+async def test_upstream_model_endpoint_override_cannot_send_the_key_or_prompt_elsewhere(stack, monkeypatch):
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.org/unapproved")
+    response = await asyncio.wait_for(ask(stack), timeout=10)
+    assert response.status_code == 503 and not stack.routed and not stack.calls
+    assert not stack.app.state.runs
 
 
 @pytest.mark.asyncio
@@ -300,6 +311,67 @@ async def test_service_and_completion_require_room_key_and_active_run(stack):
         assert (await client.get("/research")).status_code == 405
         assert (await client.get("/research/" + TENANT_B)).status_code == 404
     assert not stack.calls
+
+
+@pytest.mark.asyncio
+async def test_model_payload_cannot_change_tenant_policy_or_endpoint(stack):
+    run = service.Run(service.ResearchRequest(tenant_id=TENANT_A, question="employment", home_region="us-east"))
+    stack.app.state.runs["active-offline-run"] = run
+    stack.policy["max_tokens_out"] = 32
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=stack.app), base_url="http://research") as client:
+        response = await client.post("/model/v1/chat/completions",
+            headers={"Authorization": "Bearer offline-room", "X-Research-Run": "active-offline-run"},
+            json={"model": "unapproved", "tenant_id": TENANT_B, "max_tokens": 999999,
+                  "base_url": "https://example.org/model", "messages": [{"role": "user", "content": "employment"}]})
+    assert response.status_code == 200
+    assert stack.routed[0]["tenant_id"] == TENANT_A
+    assert stack.routed[0]["task_type"] == "market.research"
+    assert stack.calls[0]["model"] == "offline-model" and stack.calls[0]["max_tokens"] == 32
+    assert ledger_rows(stack)[0][2] == UUID(TENANT_A)
+
+
+@pytest.mark.parametrize("status,body", [(403, b"denied"), (429, b"limited"),
+    (200, b"<html>Verify you are human</html>")])
+def test_blocked_pages_stop_the_host_without_retry_or_evidence(stack, monkeypatch, status, body):
+    import requests
+    calls = []
+    def blocked(url, **kwargs):
+        calls.append(url)
+        response = requests.Response()
+        response.status_code = status
+        response._content = body
+        response._content_consumed = True
+        response.headers["Content-Type"] = "text/html"
+        return response
+    monkeypatch.setattr(sources.requests, "get", blocked)
+    registry = sources.Sources()
+    sibling = "https://www.bls.gov/another"
+    registry.allowed.update((URL_A, sibling))
+    assert registry._page(URL_A) is None
+    assert registry._page(URL_A) is None
+    assert registry._page(sibling) is None
+    assert calls == [URL_A] and not registry.pages
+
+
+def test_search_and_page_redirects_never_follow_another_destination(stack, monkeypatch):
+    import requests
+    calls = []
+    def redirect(url, **kwargs):
+        assert kwargs["allow_redirects"] is False
+        calls.append(url)
+        response = requests.Response()
+        response.status_code = 302
+        response.headers["Location"] = "http://tank:8000/health"
+        response._content = b""
+        response._content_consumed = True
+        return response
+    monkeypatch.setattr(sources.requests, "get", redirect)
+    with pytest.raises(requests.RequestException):
+        sources.search_get(sources.SEARX_URL)
+    registry = sources.Sources()
+    registry.allowed.add(URL_A)
+    assert registry._page(URL_A) is None and not registry.pages
+    assert calls == [sources.SEARX_URL, URL_A]
 
 
 def test_private_sources_never_reach_page_transport(stack):
