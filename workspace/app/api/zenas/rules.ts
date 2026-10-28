@@ -210,7 +210,7 @@ export function presentReview(payload: unknown, tags: string[]): ReviewItem[] {
 }
 
 /** What the Ask Zenas box shows. Plain English only: no model, tool, cost or internal names. */
-export type AskSource = { citation: string; quote: string };
+export type AskSource = { citation: string; quote: string; url?: string };
 export type AskReply =
   | { kind: "answer"; text: string; sources: AskSource[]; matterId: string | null }
   | { kind: "in_review"; message: string; matterId: string | null }
@@ -252,13 +252,24 @@ function askSources(memo: Record<string, unknown>, card: Record<string, unknown>
     const row = item as Record<string, unknown>;
     if (typeof row.citation === "string" && typeof row.quote === "string") quotes.set(row.citation, row.quote);
   }
+  const links = new Map<string, string>();
+  for (const item of Array.isArray(memo.sources) ? memo.sources : []) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    if (typeof row.citation !== "string" || typeof row.url !== "string") continue;
+    try {
+      const url = new URL(row.url);
+      if (url.protocol === "https:" && !url.username && !url.password) links.set(row.citation, row.url);
+    } catch { /* A missing source link never becomes an invented URL. */ }
+  }
   const seen = new Set<string>();
   const sources: AskSource[] = [];
   for (const value of Array.isArray(memo.citations) ? memo.citations : []) {
     const citation = String(value ?? "").trim();
     if (!citation || seen.has(citation)) continue;
     seen.add(citation);
-    sources.push({ citation, quote: quotes.get(citation) ?? "" });
+    const url = links.get(citation);
+    sources.push({ citation, quote: quotes.get(citation) ?? "", ...(url ? { url } : {}) });
   }
   return sources;
 }
