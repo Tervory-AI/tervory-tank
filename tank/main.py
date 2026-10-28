@@ -3238,6 +3238,8 @@ _ZENAS_PATH = re.compile(
     r"|^pool/sources/[A-Za-z0-9._-]{1,80}/load$"
     r"|^moot/problems/[A-Za-z0-9._-]{1,80}/counsel/(appellant|respondent)$"
     r"|^moot/problems/[A-Za-z0-9._-]{1,80}/(edit|lock)$"
+    r"|^regulations/(watches|changes)$"
+    r"|^regulations/watches/[0-9a-fA-F-]{36}$"
     r"|^moot/matches/ai-ai$"
     r"|^moot/matches/student$"
     r"|^moot/matches/[0-9a-fA-F-]{36}/publish$"
@@ -3404,6 +3406,8 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     if _http is None:
         raise HTTPException(status_code=503, detail="Zenas room is unreachable")
     headers: dict[str, str] = {}
+    if path.startswith("regulations/"):
+        headers["X-Tank-Key"] = os.environ.get("TANK_KEY_ZENAS", "")
     content_type = request.headers.get("content-type")
     if content_type:
         headers["content-type"] = content_type
