@@ -12,7 +12,6 @@ import httpx
 import pytest
 import pytest_asyncio
 
-import main
 from case_study_templates import PRODUCTS, TANK, empty_figures
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +32,9 @@ async def api(monkeypatch):
         pytest.skip("Set POOL_SCHEMA_DATABASE_URL to a disposable local PostgreSQL")
     from urllib.parse import urlsplit
     assert urlsplit(url).hostname in {"127.0.0.1", "localhost"}
+    monkeypatch.setenv("DATABASE_URL", url)
+    monkeypatch.setenv("TANK_API_KEY", "local-fixture")
+    import main
     admin = await asyncpg.connect(url)
     name = "case_study_" + uuid.uuid4().hex
     await admin.execute(f'CREATE DATABASE "{name}"')
@@ -126,7 +128,7 @@ async def test_signup_and_added_products_register_once_before_any_work(api):
 @pytest.mark.asyncio
 async def test_every_product_report_present_including_trigger_and_autumbra(api):
     pool, client = api
-    for product in main.__import__("command").SQUADS if False else ("base", "tiger", "market_lab", "rig", "zenas", "tisan", "radix"):
+    for product in ("base", "tiger", "market_lab", "rig", "zenas", "tisan", "radix"):
         await grant(pool, A, product)
     async with pool.acquire() as conn:
         # Trigger provisioning is its own voice, not a new chat permission.
