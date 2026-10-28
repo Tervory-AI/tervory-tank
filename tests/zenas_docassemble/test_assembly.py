@@ -95,7 +95,7 @@ async def test_every_template_matches_main_word_for_word(api, region, template, 
               for row in expected["sentences"]] + [[{"kind": "plain", "text": _LEGAL_NOTICE}]]
     assert word_text(base64.b64decode(result["docx_base64"])) == word_text(docx_bytes(blocks))
     assert result["model_calls"] == 0
-    model.assert_not_called()
+    model.model.assert_not_awaited()
     assert [r.url.path for r in api[0].requests] == [
         "/api/session/new", "/api/session", "/api/session/new", "/api/session", "/api/file/1"]
 
@@ -111,7 +111,7 @@ async def test_cross_region_refused_before_docassemble_or_model(api, region, jur
                                   narrative="A civil NDA.")
     assert not result["ok"]
     assert api == []
-    model.assert_not_called()
+    model.model.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -177,7 +177,8 @@ def test_interviews_have_explicit_jurisdiction_and_no_new_copy():
 @pytest.mark.asyncio
 async def test_trigger_legal_handoff_reaches_docassemble_with_notice(api, monkeypatch):
     import command
-    import main
+    import sys
+    from types import SimpleNamespace
     import trigger_routes
     from fastapi import FastAPI
     from uuid import UUID
@@ -190,9 +191,7 @@ async def test_trigger_legal_handoff_reaches_docassemble_with_notice(api, monkey
     @app.post("/v1/zenas/drafts", status_code=201)
     async def drafts(body: dict):
         return await draft_contract(store, ladder, None, box_region="za", **body)
-    monkeypatch.setattr(main, "app", app)
-    monkeypatch.setattr(main, "box_region", lambda: "za")
-    monkeypatch.setattr(main, "TANK_API_KEY", "TANK_API_KEY")
+    monkeypatch.setitem(sys.modules, "main", SimpleNamespace(app=app, box_region=lambda: "za", TANK_API_KEY="TANK_API_KEY"))
     response = await trigger_routes.zenas_draft(
         {"template": "nda", "jurisdiction": "za", "text": "Draft a civil NDA.",
          "terms": {"party": "A", "term": "two years", "amount": 2500}},
