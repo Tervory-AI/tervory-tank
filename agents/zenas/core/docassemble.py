@@ -83,8 +83,14 @@ class DocassembleClient:
             raise AssemblyUnavailable() from None
 
     async def assemble(self, *, template, jurisdiction, clauses, terms, prior):
+        # PostgreSQL prior rows also carry timestamps and IDs. Only the existing
+        # fact pattern/policy fields belong in the interview, not the whole row.
+        rows = [{key: row.get(key) for key in ("id", "region", "jurisdiction", "status", "template", "kind", "text")}
+                for row in clauses]
+        previous = ({key: prior.get(key) for key in ("region", "jurisdiction", "source", "fact_pattern")}
+                    if prior else None)
         return await self._run({"mode": "assemble", "template": template, "jurisdiction": jurisdiction,
-                                "clauses": clauses, "terms": terms, "prior": prior})
+                                "clauses": rows, "terms": terms, "prior": previous})
 
     async def finish(self, *, template, jurisdiction, assembled, notice):
         return await self._run({"mode": "finish", "template": template, "jurisdiction": jurisdiction,
