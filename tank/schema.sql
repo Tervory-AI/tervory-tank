@@ -2121,3 +2121,4 @@ CREATE TABLE IF NOT EXISTS tank.offpeak_jobs (
 );
 CREATE INDEX IF NOT EXISTS offpeak_pending ON tank.offpeak_jobs(region,status,created_at);
 CREATE INDEX IF NOT EXISTS offpeak_task ON tank.offpeak_jobs(tenant_id,task_id);
+ALTER TABLE tank.offpeak_jobs ADD COLUMN IF NOT EXISTS checked_at timestamptz;
