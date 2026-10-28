@@ -49,8 +49,8 @@ ______________ test_email_copy_matches_actual_workspace_formatter ______________
             check=True,
         )
 
-tests/test_tiger_alert_email.py:399: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_tiger_alert_email.py:399:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 input = '[{"alert": {"id": "79bff66e-a790-4535-b504-ed71453fa122", "kind": "price", "before": "120", "after": "115", "url": "h..."product_name": "Raspberry Pi 4 Model B - 4 GB RAM", "price": "120", "method": "jsonld", "availability": "in_stock"}}]'
 capture_output = True, timeout = None, check = True
@@ -64,45 +64,45 @@ retcode = 1
     def run(*popenargs,
             input=None, capture_output=False, timeout=None, check=False, **kwargs):
         """Run command with arguments and return a CompletedProcess instance.
-    
+
         The returned instance will have attributes args, returncode, stdout and
         stderr. By default, stdout and stderr are not captured, and those attributes
         will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
         or pass capture_output=True to capture both.
-    
+
         If check is True and the exit code was non-zero, it raises a
         CalledProcessError. The CalledProcessError object will have the return code
         in the returncode attribute, and output & stderr attributes if those streams
         were captured.
-    
+
         If timeout (seconds) is given and the process takes too long,
          a TimeoutExpired exception will be raised.
-    
+
         There is an optional argument "input", allowing you to
         pass bytes or a string to the subprocess's stdin.  If you use this argument
         you may not also use the Popen constructor's "stdin" argument, as
         it will be used internally.
-    
+
         By default, all communication is in bytes, and therefore any "input" should
         be bytes, and the stdout and stderr will be bytes. If in text mode, any
         "input" should be a string, and stdout and stderr will be strings decoded
         according to locale encoding, or by "encoding" if set. Text mode is
         triggered by setting any of text, encoding, errors or universal_newlines.
-    
+
         The other arguments are the same as for the Popen constructor.
         """
         if input is not None:
             if kwargs.get('stdin') is not None:
                 raise ValueError('stdin and input arguments may not both be used.')
             kwargs['stdin'] = PIPE
-    
+
         if capture_output:
             if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
                 raise ValueError('stdout and stderr arguments may not be used '
                                  'with capture_output.')
             kwargs['stdout'] = PIPE
             kwargs['stderr'] = PIPE
-    
+
         with Popen(*popenargs, **kwargs) as process:
             try:
                 stdout, stderr = process.communicate(input, timeout=timeout)
@@ -134,12 +134,12 @@ E               subprocess.CalledProcessError: Command '['node', 'tests/tiger_al
 =============================== warnings summary ===============================
 tank/main.py:679
 tests/test_zenas_z12_followup.py::test_convert_prompt_extracts_each_issue_from_the_court_words
-  /workspace/zenas-regulation-alerts-main/tank/main.py:679: DeprecationWarning: 
+  /workspace/zenas-regulation-alerts-main/tank/main.py:679: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 ../.tervory-cloud/venv/lib/python3.12/site-packages/fastapi/applications.py:4495
@@ -150,22 +150,22 @@ tests/test_zenas_z12_followup.py::test_convert_prompt_extracts_each_issue_from_t
 tests/test_zenas_z12_followup.py::test_convert_prompt_extracts_each_issue_from_the_court_words
 tests/test_zenas_z12_followup.py::test_convert_prompt_extracts_each_issue_from_the_court_words
 tests/test_zenas_z12_followup.py::test_convert_prompt_extracts_each_issue_from_the_court_words
-  /workspace/.tervory-cloud/venv/lib/python3.12/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+  /workspace/.tervory-cloud/venv/lib/python3.12/site-packages/fastapi/applications.py:4495: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)
 
 tank/main.py:714
 tests/test_zenas_z12_followup.py::test_convert_prompt_extracts_each_issue_from_the_court_words
-  /workspace/zenas-regulation-alerts-main/tank/main.py:714: DeprecationWarning: 
+  /workspace/zenas-regulation-alerts-main/tank/main.py:714: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 ../.tervory-cloud/venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
@@ -174,32 +174,32 @@ tests/test_zenas_z12_followup.py::test_convert_prompt_extracts_each_issue_from_t
 
 tank/agent_skills.py:529
 tests/test_zenas_z12_followup.py::test_convert_prompt_extracts_each_issue_from_the_court_words
-  /workspace/zenas-regulation-alerts-main/tank/agent_skills.py:529: DeprecationWarning: 
+  /workspace/zenas-regulation-alerts-main/tank/agent_skills.py:529: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tank/skala_intake.py:67
 tests/test_zenas_z12_followup.py::test_convert_prompt_extracts_each_issue_from_the_court_words
-  /workspace/zenas-regulation-alerts-main/tank/skala_intake.py:67: DeprecationWarning: 
+  /workspace/zenas-regulation-alerts-main/tank/skala_intake.py:67: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tank/skala_intake.py:72
 tests/test_zenas_z12_followup.py::test_convert_prompt_extracts_each_issue_from_the_court_words
-  /workspace/zenas-regulation-alerts-main/tank/skala_intake.py:72: DeprecationWarning: 
+  /workspace/zenas-regulation-alerts-main/tank/skala_intake.py:72: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 ../.tervory-cloud/venv/lib/python3.12/site-packages/starlette/testclient.py:40
