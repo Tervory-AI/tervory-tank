@@ -31,7 +31,7 @@ services:
     cpus: 1
     environment:
       DEBUG: ${DEBUG:-False}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-crm.tervory.com,backend,localhost}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-crm.tervory.com,backend,localhost,127.0.0.1}
       DOMAIN_NAME: ${DOMAIN_NAME:-https://crm.tervory.com}
       FRONTEND_URL: ${FRONTEND_URL:-https://crm.tervory.com}
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://crm.tervory.com}
@@ -97,7 +97,7 @@ services:
     cpus: 0.5
     environment:
       DEBUG: ${DEBUG:-False}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-crm.tervory.com,backend,localhost}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-crm.tervory.com,backend,localhost,127.0.0.1}
       DOMAIN_NAME: ${DOMAIN_NAME:-https://crm.tervory.com}
       FRONTEND_URL: ${FRONTEND_URL:-https://crm.tervory.com}
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://crm.tervory.com}
@@ -138,7 +138,7 @@ services:
     cpus: 0.25
     environment:
       DEBUG: ${DEBUG:-False}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-crm.tervory.com,backend,localhost}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-crm.tervory.com,backend,localhost,127.0.0.1}
       DOMAIN_NAME: ${DOMAIN_NAME:-https://crm.tervory.com}
       FRONTEND_URL: ${FRONTEND_URL:-https://crm.tervory.com}
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://crm.tervory.com}
