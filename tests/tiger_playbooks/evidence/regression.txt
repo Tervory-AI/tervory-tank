@@ -1,0 +1,49 @@
+........................................................................ [ 34%]
+........................................................................ [ 69%]
+.......................................................s......           [100%]
+=============================== warnings summary ===============================
+tests/test_tg2_tiger_watchlist.py::test_tiger_routes_use_the_workspace_key
+  /workspace/tiger-playbooks/tank/main.py:678: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_tg2_tiger_watchlist.py::test_tiger_routes_use_the_workspace_key
+tests/test_tg2_tiger_watchlist.py::test_tiger_routes_use_the_workspace_key
+  /workspace/tervory-env/venv/lib/python3.12/site-packages/fastapi/applications.py:4599: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)
+
+tests/test_tg2_tiger_watchlist.py::test_tiger_routes_use_the_workspace_key
+  /workspace/tiger-playbooks/tank/main.py:713: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_tg2_tiger_watchlist.py::test_tiger_routes_use_the_workspace_key
+  /workspace/tiger-playbooks/tank/agent_skills.py:529: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/test_tg2_tiger_watchlist.py::test_tiger_routes_use_the_workspace_key
+  /workspace/tervory-env/venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/tiger_before_deploy/test_before_deploy.py:181: 100-page gold set is still for a person to fill
+205 passed, 1 skipped, 6 warnings in 87.05s (0:01:27)
