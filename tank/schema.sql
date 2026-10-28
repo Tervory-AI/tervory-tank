@@ -1781,6 +1781,8 @@ CREATE TABLE IF NOT EXISTS tank.base_reference_checks (
     status text NOT NULL,
     message text
 );
+-- Independent source stops; legacy rows still describe ATF until next checked.
+ALTER TABLE tank.base_reference_checks ADD COLUMN IF NOT EXISTS source_checks jsonb NOT NULL DEFAULT '{}'::jsonb;
 CREATE TABLE IF NOT EXISTS tank.base_campaigns (
     tenant_id uuid NOT NULL,
     id uuid NOT NULL DEFAULT gen_random_uuid(),
