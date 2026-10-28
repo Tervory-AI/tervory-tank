@@ -388,21 +388,9 @@ async def test_eurlex_public_sparql_no_key_and_official_celex():
     async def get(url, headers):
         assert url.startswith("https://publications.europa.eu/webapi/rdf/sparql?")
         assert "Authorization" not in headers and "X-Api-Key" not in headers
-        return json.dumps(
-            {
-                "results": {
-                    "bindings": [
-                        {
-                            "celex": {"value": "32011L0083"},
-                            "title": {
-                                "value": "Directive 2011/83/EU on consumer rights"
-                            },
-                            "date": {"value": "2011-10-25"},
-                        }
-                    ]
-                }
-            }
-        ).encode()
+        assert headers["Accept"] == "application/sparql-results+json"
+        assert "expression_belongs_to_work" in url
+        return (SAVED / "saved/eur-lex/consumer-rights.json").read_bytes()
 
     rows = await Sources("us-east", http_get=get).fetch(
         dict(
@@ -427,6 +415,7 @@ async def test_eurlex_public_sparql_no_key_and_official_celex():
         "http://www.ecfr.gov/x",
         "https://www.ecfr.gov/x?key=KEY_NAME",
         "https://www.ecfr.gov:8443/x",
+        "https://www.ecfr.gov/\nextra-line",
     ],
 )
 def test_untrusted_links_and_paging_never_escape_allowlist(url):
@@ -647,3 +636,68 @@ async def test_api_real_routes_tenant_home_auth_and_persistence(tmp_path, monkey
     finally:
         await pool.close()
         server.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_legiscan_stays_off_until_non_url_authentication_is_documented(
+    monkeypatch,
+):
+    monkeypatch.setenv("LEGISCAN_API_KEY", "LEGISCAN_API_KEY")
+
+    async def forbidden(*args):
+        pytest.fail("An undocumented authentication method must not be attempted")
+
+    with pytest.raises(FetchNotConfigured, match="LEGISCAN_API_KEY"):
+        await Sources("us-east", http_get=forbidden).fetch(
+            dict(source="legiscan", topic="consumer", options={"state": "CA"})
+        )
+
+
+@pytest.mark.asyncio
+async def test_congress_untrusted_next_cannot_receive_key(monkeypatch):
+    monkeypatch.setenv("CONGRESS_GOV_API_KEY", "CONGRESS_GOV_API_KEY")
+    calls = []
+
+    async def get(url, headers):
+        calls.append(url)
+        return b'{"bills":[],"pagination":{"next":"https://untrusted.example/bill"}}'
+
+    with pytest.raises(ValueError):
+        await Sources("us-east", http_get=get).fetch(
+            dict(
+                source="congress",
+                topic="consumer",
+                options={},
+                created_at=NOW,
+                last_success=None,
+            )
+        )
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_ecfr_removed_section_changes_part_but_new_date_alone_does_not():
+    from xml.etree import ElementTree as ET
+
+    xml = (SAVED / "saved/ecfr/19-cfr-141.xml").read_bytes()
+    on = "2026-10-07"
+
+    async def get(url, headers):
+        if url.endswith("titles.json"):
+            return json.dumps(
+                {"titles": [{"number": 19, "latest_issue_date": on}]}
+            ).encode()
+        return xml
+
+    sources = Sources("us-east", http_get=get)
+    watch = dict(source="ecfr", topic="customs", options={"title": "19", "part": "141"})
+    before = (await sources.fetch(watch))[0]
+    on = "2026-10-08"
+    assert (await sources.fetch(watch))[0]["version"] == before["version"]
+    root = ET.fromstring(xml)
+    parents = {child: parent for parent in root.iter() for child in parent}
+    section = next(node for node in root.iter() if node.attrib.get("TYPE") == "SECTION")
+    parents[section].remove(section)
+    xml = ET.tostring(root)
+    after = (await sources.fetch(watch))[0]
+    assert after["version"] != before["version"] and "/on/2026-10-08/" in after["link"]
