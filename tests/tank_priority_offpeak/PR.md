@@ -205,3 +205,35 @@ actionable correctness finding so far. Final PR/head/check review remains pendin
 Claude creating the PR. No founder screenshots exist for this continuation; the
 queued-to-sent ledger, same-thread answer/receipt and actual paid amount remain
 explicit founder-browser acceptance requirements, not offline-test claims.
+
+## Checkpoint — 2026-10-28 16:42:06 PDT (UTC-07:00) / 2026-10-28 23:42:06 UTC
+
+- Branch: `codex/tank-priority-offpeak`; local and remote head at checkpoint:
+  `8e38c4c7d327b848fe02427de0e3e378dcec40cc`. This entry is append-only; earlier evidence remains intact.
+- Tested source SHA: `98e801ea606d394377b6e7356e916ae53db7c81e`.
+  Subsequent changes through the checkpoint head affect only this report and
+  `verification.txt`. Independent reviewer confirmed that exact documentation-only
+  diff and reported no outstanding actionable code finding.
+- Settled checks: focused selection **62 passed**, 12 deprecation warnings,
+  66.75s; full affected selection **250 passed**, 12 deprecation warnings,
+  316.25s. Ruff and branch whitespace checks passed. Exact commands and captured
+  results are above and in `verification.txt`; these tests were not repeated.
+- Fresh commands: `git status --short` exited 0 with no output;
+  `git rev-parse HEAD` and
+  `git ls-remote origin refs/heads/codex/tank-priority-offpeak` exited 0 and
+  agreed on the checkpoint head;
+  `gh pr list -R Tervory-AI/tervory-tank --state all --head codex/tank-priority-offpeak --json number,state,url,headRefOid`
+  exited 0 and returned `[]`.
+- Publication: implementation and proof are pushed on the existing branch.
+  No PR exists at this checkpoint; Claude must open it using this report.
+  Exact PR-head hosted checks and final PR review remain pending. Founder merges.
+- Open code findings: none from independent branch review. Test gaps: hosted
+  PR checks and founder-browser acceptance; no new offline failure is outstanding.
+- Founder acceptance remains pending: outside the configured window submit a real
+  offpeak turn, observe queued then sent ledger evidence, actual dispatch time
+  and paid amount, and the answer/receipt in the same chat. No model calls,
+  deployment, production migration, live scan or founder screenshots were made
+  during this reporting checkpoint. Offline checks are not live acceptance.
+
+This report update is committed and pushed separately after the recorded head;
+its resulting SHA is supplied to the independent reviewer in the handoff.
