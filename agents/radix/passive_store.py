@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS agent_radix.passive_scans (
  target text NOT NULL, artifact text NOT NULL,
  status text NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','running','complete','error')),
  created_at timestamptz NOT NULL DEFAULT now(), completed_at timestamptz,
+ lease_until timestamptz,
  high integer NOT NULL DEFAULT 0, critical integer NOT NULL DEFAULT 0,
  PRIMARY KEY (tenant_id,id),
  FOREIGN KEY (tenant_id,domain) REFERENCES agent_radix.passive_domains(tenant_id,domain)
@@ -90,13 +91,24 @@ class Store:
 
     async def running(self, tenant: UUID, ident: UUID) -> bool:
         async with self.pool.acquire() as conn:
-            # Clear expired leases only; their findings never become a passing assessment.
-            await conn.execute("""UPDATE agent_radix.passive_scans SET status='error'
-              WHERE tenant_id=$1 AND status='running'
-              AND created_at<now()-interval '10 minutes'""", tenant)
-            row = await conn.fetchrow("""UPDATE agent_radix.passive_scans SET status='running'
+            row = await conn.fetchrow("""UPDATE agent_radix.passive_scans
+              SET status='running',lease_until=now()+interval '420 seconds'
               WHERE tenant_id=$1 AND id=$2 AND status='pending' RETURNING id""", tenant, ident)
         return row is not None
+
+    async def reap_expired(self) -> None:
+        """Gateway maintenance only, never invoked from a tenant HTTP request.
+
+        Discover expired lease owners, then update each row with its persisted
+        tenant/id and recheck expiry. An active lease is never touched.
+        """
+        async with self.pool.acquire() as conn:
+            owners = await conn.fetch("""SELECT tenant_id,id FROM agent_radix.passive_scans
+              WHERE status='running' AND lease_until<now()""")
+            for owner in owners:
+                await conn.execute("""UPDATE agent_radix.passive_scans SET status='error'
+                  WHERE tenant_id=$1 AND id=$2 AND status='running' AND lease_until<now()""",
+                  owner['tenant_id'], owner['id'])
 
     async def fail(self, tenant: UUID, ident: UUID) -> None:
         async with self.pool.acquire() as conn:
@@ -114,7 +126,7 @@ class Store:
                 row = await conn.fetchrow("""UPDATE agent_radix.passive_scans
                   SET status='complete',high=$3,critical=$4,completed_at=now()
                   WHERE tenant_id=$1 AND id=$2 AND status='running'
-                  AND created_at>now()-interval '10 minutes' RETURNING id""", tenant, ident, high, critical)
+                  AND lease_until>now() RETURNING id""", tenant, ident, high, critical)
                 if row is None:
                     raise RuntimeError('scan lease expired')
         from chassis.events import publish
