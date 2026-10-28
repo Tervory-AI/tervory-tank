@@ -1,0 +1,63 @@
+{
+  "tool": "CodeQL 2.27.3",
+  "query_pack": "codeql/python-queries 1.8.13",
+  "suite": "codeql-suites/python-code-scanning.qls",
+  "base_commit": "d452345",
+  "comparison": "rule ID, relative path, and primaryLocationLineHash; no findings suppressed",
+  "main_total": 91,
+  "branch_total": 83,
+  "new": [],
+  "removed": [
+    {
+      "rule": "py/polynomial-redos",
+      "path": "agents/rig/rigbox/cn.py",
+      "line": 718,
+      "fingerprint": "a41a92c08014ca48:1"
+    },
+    {
+      "rule": "py/polynomial-redos",
+      "path": "agents/rig/rigbox/cn.py",
+      "line": 728,
+      "fingerprint": "cc76d711f62603c6:1"
+    },
+    {
+      "rule": "py/polynomial-redos",
+      "path": "agents/rig/rigbox/cn.py",
+      "line": 1129,
+      "fingerprint": "2076983384ae57b8:1"
+    },
+    {
+      "rule": "py/polynomial-redos",
+      "path": "agents/rig/rigbox/cn.py",
+      "line": 1251,
+      "fingerprint": "6c1caa9b7d5e87a0:1"
+    },
+    {
+      "rule": "py/polynomial-redos",
+      "path": "agents/rig/rigbox/cn.py",
+      "line": 1348,
+      "fingerprint": "dff34689d1a9d82:1"
+    },
+    {
+      "rule": "py/polynomial-redos",
+      "path": "agents/rig/rigbox/cn.py",
+      "line": 2114,
+      "fingerprint": "1946feb226b31f74:1"
+    },
+    {
+      "rule": "py/polynomial-redos",
+      "path": "agents/rig/rigbox/recall.py",
+      "line": 37,
+      "fingerprint": "c64f2c146e6b9437:1"
+    },
+    {
+      "rule": "py/reflective-xss",
+      "path": "agents/rig/rigbox/page_route.py",
+      "line": 70,
+      "fingerprint": "821b9461723c2670:1"
+    }
+  ],
+  "remaining_existing": 83,
+  "main_sarif_sha256": "294d87f3043337d2ec59b9bdd23b71555bea5ebe1df8f1d19f83e94cfcf312ab",
+  "branch_sarif_sha256": "a96b551de0881e08a37b09a37ca57ecdfed0f0502ae9e04b4d27b95786bd4ac2"
+}

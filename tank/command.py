@@ -24,12 +24,14 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 import command_repo
+from command_stream import AnswerText, TokenSink
 
 router = APIRouter(prefix="/v1/command", tags=["command"])
 logger = logging.getLogger(__name__)
 _background: set[asyncio.Task] = set()
 SQUADS = frozenset({"base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"})
 TOOLS = {
+    "trigger": ["trigger.write", "trigger.check"],
     "base": ["base.batch", "base.search"],
     "tiger": ["tiger.watch", "tiger.read"],
     "market_lab": ["market_lab.research"],
@@ -92,7 +94,7 @@ async def worker(request: Request) -> None:
 
 
 def allowed_tools(actor: Actor) -> list[str]:
-    squads = SQUADS if actor.founder else actor.squads
+    squads = TOOLS.keys() if actor.founder else actor.squads & SQUADS
     founder_tools = [name for name in FOUNDER_TOOLS
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]] + founder_tools)
@@ -376,11 +378,17 @@ async def events(thread_id: uuid.UUID, after: int = Query(default=0, ge=0), acto
 
 
 async def route_turn(actor: Actor, messages: list[dict], model: str | None = None,
-                     *, task_id: uuid.UUID | None = None) -> Any:
+                     *, task_id: uuid.UUID | None = None, on_token: TokenSink | None = None) -> Any:
     from main import Message, RouteRequest, box_region, run_route
+    from trigger_routes import code_plan
+    planned = await code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     override = {"model_override": model} if model not in (None, "auto") else {}
     if task_id is not None:
         override["task_id"] = task_id
+    if on_token is not None:
+        override["_on_token"] = on_token
     return await run_route(RouteRequest(tenant_id=actor.tenant_id, agent="orchestrator", task_type="command.turn",
                                        home_region=box_region(), messages=[Message(**m) for m in messages]), **override)
 
@@ -401,9 +409,22 @@ async def auto_price_snapshot(conn: Any, tenant_id: uuid.UUID) -> dict:
 
 async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages: list[dict], model: str | None = None) -> None:
     answer = None
+    preview = AnswerText()
+
+    async def on_token(delta: str) -> None:
+        text = preview.feed(delta)
+        if text:
+            async with db().acquire() as conn, conn.transaction():
+                row = await owned(conn, thread_id, actor, lock=True)
+                if unpack(row["state"])["active_turn"] != turn_id:
+                    raise asyncio.CancelledError()
+                # Provisional events only: no saved assistant message or receipt yet.
+                # Do not rewrite the full conversation for every model delta.
+                await event(conn, row, "token", {"text": text, "message_id": turn_id})
+
     try:
         async with asyncio.timeout(150):
-            answer = await route_turn(actor, messages, model=model, task_id=uuid.UUID(turn_id))
+            answer = await route_turn(actor, messages, model=model, task_id=uuid.UUID(turn_id), on_token=on_token)
         async with editing(thread_id, actor) as (conn, row, state):
             await record_receipts(conn, row, state, turn_id, [answer.ledger_id])
             repeatable = True
@@ -415,8 +436,10 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
                 await event(conn, row, "error", {"message": plan.text})
             state["messages"].append({"message_id": turn_id, "role": "assistant", "content": plan.text,
                                       "repeatable": repeatable and not plan.actions})
-            # The router buffers output; this is available answer text, not provider deltas.
-            await event(conn, row, "token", {"text": plan.text})
+            if plan.text != preview.shown or not preview.raw:
+                # Cache/code hits arrive whole. A validated plan may correct an
+                # incomplete/invalid preview without appending a second answer.
+                await event(conn, row, "token", {"text": plan.text, "message_id": turn_id, "replace": True})
             for action in plan.actions:
                 await propose_action(conn, row, state, action)
             await conn.execute(
@@ -519,7 +542,20 @@ async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity
     task = asyncio.create_task(finish_turn(thread_id, actor, turn_id, messages, model=body.model))
     _background.add(task)
     task.add_done_callback(_background.discard)
-    return StreamingResponse(replay(thread_id, actor, after, turn_id=turn_id), media_type="text/event-stream",
+
+    async def stream_turn():
+        finished = False
+        try:
+            async for update in replay(thread_id, actor, after, turn_id=turn_id):
+                yield update
+            finished = True
+        finally:
+            # Closing the owner's turn connection closes the SDK stream too.
+            # finish_turn retains the existing failed-step/receipt reconciliation.
+            if not finished and not task.done():
+                task.cancel()
+
+    return StreamingResponse(stream_turn(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
@@ -861,6 +897,27 @@ class ReviewArgs(Body):
     matter_id: uuid.UUID | None = None
 
 
+class TriggerCheckArgs(Body):
+    text: str = Field(min_length=1, max_length=20000)
+
+
+class TriggerWriteArgs(TriggerCheckArgs):
+    document_type: Literal["copy", "article", "document", "legal"] = "copy"
+    register: str | None = Field(default=None, max_length=100)
+    template: str | None = Field(default=None, max_length=100)
+    jurisdiction: str | None = Field(default=None, max_length=80)
+    terms: dict[str, Any] = Field(default_factory=dict)
+    matter_id: uuid.UUID | None = None
+    voice: dict[str, Any] | None = Field(default=None, description=(
+        "Founder-supplied Brand Voice Spec, only when setting/updating this tenant's voice. "
+        "Required: brand (string), status='live', revision (positive increasing integer). "
+        "Optional: registers (name-to-description object), tone (string array), guidelines "
+        "(objects with rule), doAndDont, surfaceDoDont, promptKit, vocabulary, "
+        "bannedTerms, preferredTerms, requiredTerms, signaturePhrases, changelog, voiceQueue, "
+        "stylebook and maxSentenceWords. Never invent a brand voice or include sample brand content. "
+        "Omit voice on later writes to use the saved file."))
+
+
 class SavingsArgs(Body):
     days: int = Field(default=30, ge=1, le=365)
 
@@ -886,6 +943,8 @@ class Adapter:
 
 
 ADAPTERS = {
+    "trigger.write": Adapter("POST", "/v1/trigger/write", TriggerWriteArgs, "trigger.write", True, "paid_run"),
+    "trigger.check": Adapter("POST", "/v1/trigger/check", TriggerCheckArgs, "trigger.check"),
     "repo.prs": Adapter("GET", "/v1/command/repo/prs", RepoPRsArgs, "open PRs on Tervory-AI/tervory-tank"),
     "repo.pr": Adapter("GET", "/v1/command/repo/pr", RepoPRArgs, "one PR's changed files and check results"),
     "repo.file": Adapter("GET", "/v1/command/repo/file", RepoFileArgs, "read one file from main"),
@@ -1020,6 +1079,8 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
     if action.tool == "ledger.savings":
         end = datetime.now(timezone.utc)
         args = {"start": (end - timedelta(days=args["days"])).isoformat(), "end": end.isoformat()}
+    if action.tool.startswith("trigger."):
+        return adapter.method, path, {}, {**args, **scope}
     if adapter.method == "GET":
         return adapter.method, path, {**args, **scope}, None
     return adapter.method, path, scope, {**args, **scope}

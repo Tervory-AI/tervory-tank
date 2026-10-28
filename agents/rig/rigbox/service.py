@@ -289,6 +289,8 @@ class Service:
         limit: int | None,
         filters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        # Both /v1/rig/search entry paths share Workspace's 200-character limit.
+        query = " ".join((query or "").split())[:200]
         result = await self._search(tenant_id, query, limit, filters)
         if (query or "").strip() and not result.get("results"):
             # Include cached misses: each completed search is a distinct event.
@@ -754,7 +756,24 @@ class Service:
         async with self.store.atomic(tenant_id) as store:
             if await store.is_feed_product(tenant_id, sku):
                 return False
-            return await store.update_price(tenant_id, sku, patch)
+            url, stamp = update.get("url"), update.get("observed_at")
+            if url is not None or stamp is not None:
+                from datetime import datetime
+                if not isinstance(url, str) or not isinstance(stamp, str):
+                    raise ValueError("A page and observation time are required.")
+                stamp = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+                if stamp.tzinfo is None:
+                    raise ValueError("An observation timezone is required.")
+                eligible = await store.watch_products(tenant_id)
+                if not any(row["sku"] == sku and row["url"] == url for row in eligible):
+                    return False
+                applied = await store.watch_applied_at(tenant_id, sku, url)
+                if applied is not None and stamp <= applied:
+                    return True  # An acknowledged retry cannot regress a newer observation.
+            changed = await store.update_price(tenant_id, sku, patch)
+            if changed and url is not None:
+                await store.mark_watch_applied(tenant_id, sku, url, stamp)
+            return changed
 
     async def load_catalogues(self, root: Path) -> list[dict[str, Any]]:
         if not root.is_dir():
@@ -830,12 +849,15 @@ class Service:
                 reports.append({"format": fmt, "added": 0, "updated": 0, "rejected": mapped["rejected"]})
                 continue
             added = updated = 0
-            for row in mapped["rows"]:
-                action = await self.store.upsert_product(tenant_id, row)
-                if action == "added":
-                    added += 1
-                elif action == "updated":
-                    updated += 1
+            async with self.store.atomic(tenant_id) as store:
+                for row in mapped["rows"]:
+                    action = await store.upsert_product(tenant_id, row)
+                    if action == "added":
+                        added += 1
+                    elif action == "updated":
+                        updated += 1
+                await store.index_feed_products(tenant_id, str(feed["url"]), [row["sku"] for row in mapped["rows"]],
+                                                complete=not mapped["rejected"])
             reports.append({"format": fmt, "added": added, "updated": updated, "rejected": mapped["rejected"]})
         return reports
 

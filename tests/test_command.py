@@ -975,7 +975,7 @@ async def test_auto_comparison_prices_same_tokens_with_frozen_tenant_policy(api,
         await conn.execute("INSERT INTO tank.policy(tenant_id,task_type,model) VALUES(NULL,'command.turn','fixture-platform'),($1,'command.turn','fixture-auto')", TENANT)
     ledger_id = await seed_ledger(pool)
 
-    async def answer(actor, messages, model=None, *, task_id=None):
+    async def answer(actor, messages, model=None, *, task_id=None, on_token=None):
         assert model == 'fixture-pin'
         # A price or policy edit during the call must not rewrite its comparison.
         async with pool.acquire() as conn:

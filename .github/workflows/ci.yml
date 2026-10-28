@@ -143,7 +143,7 @@ jobs:
       - name: Secret scan and Tank starts
         # Founder, 27 Oct: the full suite no longer gates merges (it took ~15 minutes).
         # This job checks only lint, the secret scan, and that the real Tank starts on an empty database.
-        run: python3 -m pytest -q tests/test_secrets.py tests/test_tank_boots.py
+        run: python3 -m pytest -q tests/test_secrets.py tests/test_tank_boots.py tests/test_tank_one_door.py
         env:
           PYTHONPATH: tank
           POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
@@ -152,22 +152,20 @@ jobs:
     needs: [changes, runner]
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: workspace/package-lock.json
       - name: Install
         working-directory: workspace
-        # npm ci when a lockfile is committed. This lane cannot add one, so install
-        # from package.json until workspace/package-lock.json exists.
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --no-audit --no-fund
-          else
-            npm install --no-package-lock --no-audit --no-fund
-          fi
+        run: npm ci --no-audit --no-fund
+      - name: typecheck
+        working-directory: workspace
+        run: npx tsc --noEmit
       - name: Build
         working-directory: workspace
         run: npx next build

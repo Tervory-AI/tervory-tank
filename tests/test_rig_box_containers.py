@@ -5,6 +5,7 @@ RIG2_CONTAINER_IMAGES=1. No host ports, host namespaces or production credential
 """
 import json
 import os
+import shutil
 import subprocess
 import time
 import uuid
@@ -17,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_rig_real_box_public_api_and_sealed_execution(tmp_path):
+    offline = tmp_path / "offline-catalogues"
+    shutil.copytree(ROOT / "agents/rig/catalogues", offline)
     executable = os.environ.get("RIG2_DOCKER", "docker")
     project = "rig2-box-" + uuid.uuid4().hex[:10]
     # The live checker requires literal corridor/proxy names. Use isolated
@@ -68,7 +71,8 @@ def test_rig_real_box_public_api_and_sealed_execution(tmp_path):
                "-e", "POSTGRES_HOST_AUTH_METHOD=trust", "postgres:16")
         for _ in range(40):
             probe = subprocess.run([executable, "exec", postgres, "pg_isready", "-U", "postgres"], capture_output=True)
-            if probe.returncode == 0: break
+            if probe.returncode == 0:
+                break
             time.sleep(.5)
         assert probe.returncode == 0
         sandbox = create("rig-sandbox", "sandbox", [sandbox_net], "--read-only", "--pids-limit", "64",
@@ -85,7 +89,8 @@ def test_rig_real_box_public_api_and_sealed_execution(tmp_path):
         api = create("agent-rig", "api", [corridor, proxy_net], "-e", "TANK_KEY", "-e", "AGENT_NAME=rig",
             "-e", "DATABASE_URL=postgresql://postgres@postgres:5432/postgres",
             "-e", "RIG_TRUSTED_PROXY_CIDRS=" + proxy_subnet,
-            "-e", "CATALOGUE_DIR=/app/catalogues", "-e", "DATA_DIR=/data", "-v", volumes[0] + ":/data")
+            "-e", "CATALOGUE_DIR=/offline-catalogues", "-v", str(offline) + ":/offline-catalogues:ro",
+            "-e", "DATA_DIR=/data", "-v", volumes[0] + ":/data")
         for name, port in ((api, 8000), (brain, 8001), (browser, 3000), (gateway, 3000), (sandbox, 8002)):
             ready(name, port)
         proxy_probe = r'''import httpx
@@ -106,7 +111,7 @@ print('PASS proxy reaches only public API')
 from pathlib import Path
 with httpx.Client(base_url='http://127.0.0.1:8000',trust_env=False) as client:
  assert client.get('/health').json()['ok'] is True
- config=json.loads(Path('/app/catalogues/second/publish.json').read_text())
+ config=json.loads(Path('/offline-catalogues/second/publish.json').read_text())
  headers={'X-Rig-Key':config['keys'][0]['key'],'Origin':config['keys'][0]['origins'][0]}
  result=client.get('/v1/rig/search',params={'q':'lamp'},headers=headers)
  assert result.status_code==200 and 'Second Desk Lamp' in result.text
