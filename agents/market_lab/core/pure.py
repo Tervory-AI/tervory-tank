@@ -141,8 +141,6 @@ def make_prediction(
     rationale: str,
     sources: list[dict[str, Any]] | None = None,
     prediction_id: str | None = None,
-    kind: str | None = None,
-    feed: str | None = None,
 ) -> dict[str, Any]:
     return {
         "id": prediction_id or _new_id(),
@@ -154,8 +152,6 @@ def make_prediction(
         "target": float(target),
         "resolve_by": _stamp(resolve_by),
         "rationale": rationale,
-        "kind": kind,
-        "feed": feed,
         "sources": list(sources or []),
         "outcome": None,
         "resolved_at": None,
@@ -183,7 +179,6 @@ def resolve_prediction(
     sources = list(prediction.get("sources") or [])
     sources.append({"resolves": prediction["id"]})
     return {
-        **prediction,
         "id": _new_id(),
         "tenant_id": prediction["tenant_id"],
         "made_at": prediction["made_at"],
