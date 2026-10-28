@@ -1,6 +1,8 @@
 """Founder-only, tenant-scoped evidence and exports. No prompts or secrets."""
 from __future__ import annotations
 
+from tenant_db import tenant_transaction
+
 from tenant_db import tenant_scope
 
 import csv
@@ -148,7 +150,7 @@ async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
         raise HTTPException(422, 'Start must precede end.')
     args = (tenant, region, task, start, end)
     where = f"{SCOPE} AND {WINDOW} AND {LIVE}"
-    async with runtime().pool().acquire(isolation='repeatable_read', readonly=True) as conn:
+    async with runtime()tenant_transaction(.pool(), isolation='repeatable_read', readonly=True) as conn:
         tasks = [dict(r) for r in await conn.fetch(f"SELECT task_type,{TOTALS} FROM {receipt_source('$1','$2','$5',clients_only)} receipts WHERE {where} GROUP BY task_type ORDER BY task_type", *args)]
         all_total = dict(await conn.fetchrow(f"SELECT {TOTALS} FROM {receipt_source(None,'$1','$2',clients_only)} receipts WHERE region=$1 AND ts < $2 AND {LIVE}", region, end))
         tenants = [str(r['tenant_id']) for r in await conn.fetch("SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1 UNION SELECT '00000000-0000-0000-0000-000000000001'::uuid ORDER BY tenant_id", region)]
@@ -412,7 +414,7 @@ async def savings_snapshot(tenant: uuid.UUID | None, end: datetime | None = None
     cte = savings_cte(clients_only)
     end = savings_end(end)
     args = (tenant, runtime().box_region(), end)
-    async with runtime().pool().acquire(isolation='repeatable_read', readonly=True) as conn:
+    async with runtime()tenant_transaction(.pool(), isolation='repeatable_read', readonly=True) as conn:
         total = dict(await conn.fetchrow(cte+f'SELECT {SAVINGS_TOTALS} FROM eligible', *args))
         month = dict(await conn.fetchrow(cte+f"SELECT {SAVINGS_TOTALS} FROM eligible WHERE ts >= $4",
                                         *args, end.replace(day=1,hour=0,minute=0,second=0,microsecond=0)))
@@ -451,7 +453,7 @@ async def savings_rows(tenant: uuid.UUID | None, end: datetime, page: int = 0,
     condition = ' AND excluded_reason IS NOT NULL' if population=='excluded' else ''
     where = f"FROM {source} WHERE ($4::timestamptz IS NULL OR ts >= $4) AND ($5::timestamptz IS NULL OR ts < $5) AND ($6::text IS NULL OR member=$6) AND (NOT $7::boolean OR free_work){condition}"
     args = (tenant, runtime().box_region(), end, start, until, member, free_only)
-    async with runtime().pool().acquire(isolation='repeatable_read', readonly=True) as conn:
+    async with runtime()tenant_transaction(.pool(), isolation='repeatable_read', readonly=True) as conn:
         total = dict(await conn.fetchrow(cte+f'SELECT {SAVINGS_TOTALS} '+where, *args))
         fields = """job_id,job_title,member,(ts AT TIME ZONE 'UTC')::date::text AS day,
             CASE WHEN (research_cost_status='unknown' OR cost_status='not_set') THEN NULL ELSE cost_usd END AS spent,
