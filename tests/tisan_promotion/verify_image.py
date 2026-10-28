@@ -20,6 +20,6 @@ paths = app.app.openapi()['paths']
 assert all('/promotion/' + name in paths for name in ('sites', 'promote', 'rollback', 'status', 'history'))
 print('Packaged room mount passed; Python', sys.version.split()[0], 'httpx', httpx.__version__, 'pydantic', pydantic.__version__, flush=True)
 raise SystemExit(subprocess.call([sys.executable, '-m', 'pytest', '-p', 'no:cacheprovider', '-q',
-    'tests/tisan_promotion/test_promotion.py', 'tests/tisan_promotion/test_api.py',
+    'tests/tisan_promotion/test_promotion.py', 'tests/tisan_promotion/test_tisan_promotion_api.py',
     'tests/tisan_promotion/test_browser.py', 'tests/test_tisan_figma.py',
     'tests/test_tisan_scaffold.py', 'tests/test_tisan_page.py', '--tb=short'], cwd=root))
