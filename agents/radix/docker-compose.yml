@@ -106,6 +106,8 @@ services:
     security_opt: ["no-new-privileges:true"]
     environment:
       DATABASE_URL: postgresql://agent_radix:${AGENT_DB_PASSWORD_RADIX}@postgres:5432/${POSTGRES_DB:-tervory}
+      RADIX_GATEWAY_ADMIN_DATABASE_URL: ${RADIX_GATEWAY_ADMIN_DATABASE_URL:-}
+      RADIX_GATEWAY_RLS_ADMIN_ROLE: ${RADIX_GATEWAY_RLS_ADMIN_ROLE:-}
       PYTHONDONTWRITEBYTECODE: "1"
     networks:
       gw: {}
