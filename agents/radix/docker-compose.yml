@@ -109,6 +109,7 @@ services:
       gw: {}
       proxy-link:
         interface_name: radix-link
+        aliases: [radix-passive-proxy]
       egress: {}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3)"]
