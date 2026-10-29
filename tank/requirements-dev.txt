@@ -30,4 +30,4 @@ docxtpl==0.20.2
 pgserver==0.1.4
 
 # Radix passive-scan DNS proof tests; same pin as the Radix image.
-dnspython==2.8.0
+dnspython==2.9.0
