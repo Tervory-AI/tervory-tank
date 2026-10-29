@@ -43,6 +43,55 @@ async def tiger_tables(conn):
     await watch.ensure_tables(conn, "agent_tiger")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("room", ["rig", "zenas"])
+async def test_room_schema_recovery_with_restricted_scoped_pool(room):
+    """Real room DDL survives expected permission errors, including on reapply."""
+    import importlib
+    from chassis.tenant_db import TenantPool as RoomPool, tenant_scope as room_scope
+
+    url = os.environ.get("RLS_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("RLS_TEST_DATABASE_URL explicitly opts into disposable Postgres tests")
+    name = "room_startup_" + uuid4().hex
+    role = name + "_agent"
+    admin = await asyncpg.connect(url_for(url, "postgres"))
+    try:
+        await admin.execute(f'CREATE DATABASE "{name}"')
+        await admin.execute(f'CREATE ROLE "{role}" LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE')
+        owner = await asyncpg.connect(url_for(url, name))
+        try:
+            await owner.execute(f'REVOKE CREATE ON DATABASE "{name}" FROM PUBLIC')
+            await owner.execute(f'CREATE SCHEMA "agent_{room}" AUTHORIZATION "{role}"')
+        finally:
+            await owner.close()
+        raw = await asyncpg.create_pool(url_for(url, name, role), min_size=1, max_size=1)
+        try:
+            assert not await raw.fetchval("SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname=current_user")
+            assert not await raw.fetchval("SELECT has_database_privilege(current_database(), 'CREATE')")
+            # This exact denied statement aborts an enclosing checkout transaction.
+            with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                await raw.execute(f'CREATE SCHEMA IF NOT EXISTS "agent_{room}"')
+            if room == "rig":
+                sys.path.insert(0, str(ROOT / "agents/rig"))
+                module = importlib.import_module("rigbox.store")
+            else:
+                module = importlib.import_module("agents.zenas.core.store")
+            store = module.PgStore(RoomPool(raw))
+            with room_scope(None, administrative=True):
+                await store.apply_schema()
+                await store.apply_schema()
+            table = "products" if room == "rig" else "matters"
+            assert await raw.fetchval(f'SELECT count(*) FROM "agent_{room}"."{table}"') == 0
+            assert await raw.fetchval("SELECT current_setting('app.tenant_id', true)") in (None, "")
+        finally:
+            await raw.close()
+    finally:
+        await admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        await admin.execute(f'DROP ROLE IF EXISTS "{role}"')
+        await admin.close()
+
+
 @pytest_asyncio.fixture
 async def database():
     url = os.environ.get("RLS_TEST_DATABASE_URL")
