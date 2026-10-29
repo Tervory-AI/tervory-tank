@@ -1,0 +1,348 @@
+Radix passive gate offline proof
+Captured: 2026-10-28 16:46:15 PDT (UTC-07:00) / 2026-10-28 23:46:15 UTC
+Branch: codex/radix-passive-gate
+Capture head: 441775ab217db37d9ab78c2b2f6e7fbd69824871
+Application code: ce44c65a4b94107ce8008998d2aa3c9d53d3bc04 (unchanged through capture head)
+New outage tests: 9824fcd3
+
+No hosted CI or live/founder proof is asserted. All targets were fake/loopback.
+
+--- Recovered combined suite ---
+COMMAND: RADIX_PASSIVE_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32768/radix_passive_test PYTHONPATH=agents/_chassis /tmp/radix-passive-py312/bin/python -m pytest -q tests/test_radix_passive.py agents/radix/tests tests/test_bucket1_radix.py
+EXIT: 0
+OUTPUT SHA256: d6171568c597daa5b1d030cecd89081988b742ff044829b3139b365fb7bc3bc3
+........................................................................ [ 45%]
+........................................................................ [ 91%]
+..............                                                           [100%]
+158 passed in 9.72s
+
+--- Direct maintenance retry at committed 9824fcd3 ---
+COMMAND: /tmp/radix-passive-py312/bin/python -m pytest -q tests/test_radix_passive.py -k gateway_maintenance
+EXIT: 0
+OUTPUT SHA256: 2f8264dc4709d3f5aba07a8e82d7193b68e952d2f1c676dd18a282750a1b0d3b
+..                                                                       [100%]
+2 passed, 37 deselected in 0.57s
+
+--- Recovered guard checks ---
+COMMAND: PYTHONPATH=agents/_chassis /tmp/radix-passive-py312/bin/python -m pytest -q tests/test_tank_one_door.py tests/test_secrets.py
+EXIT: 0
+OUTPUT SHA256: b3571fe09f2018bd8ef2ca5ff29de6b427aed0da5fead5b9eeba04e3d6302729
+.............................                                            [100%]
+29 passed in 24.53s
+
+--- Final lint ---
+COMMAND: /tmp/radix-passive-py312/bin/ruff check agents/radix/passive_*.py agents/radix/egress.py tank/radix_passive_routes.py tests/test_radix_passive.py tests/radix_passive/local_cli_smoke.py --select E9,F
+EXIT: 0
+OUTPUT SHA256: 82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18
+All checks passed!
+
+--- Recovered full image build (raw build log) ---
+COMMAND: docker build --pull=false --progress=plain -f agents/radix/Dockerfile -t radix-passive-proof:recovered agents
+EXIT: 0
+OUTPUT SHA256: 4bf240a8cade3edf56d67331b811d15f35dfb5ac8c63a63dbc8de9a262b63bd3
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 4.07kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.12-slim
+#2 DONE 0.1s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [internal] load build context
+#4 DONE 0.0s
+
+#5 [osv 1/6] FROM docker.io/library/python:3.12-slim@sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a72aeb34f30d159
+#5 resolve docker.io/library/python:3.12-slim@sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a72aeb34f30d159 0.0s done
+#5 DONE 0.0s
+
+#4 [internal] load build context
+#4 transferring context: 25.66kB 0.0s done
+#4 DONE 0.0s
+
+#6 [stage-1  6/21] RUN sh /tmp/install-passive-tools.sh     && ln -s /opt/bin/nuclei /usr/local/bin/nuclei     && pip install --no-cache-dir dnspython==2.8.0 PyYAML==6.0.3     && rm /tmp/install-passive-tools.sh
+#6 CACHED
+
+#7 [stage-1  2/21] WORKDIR /app
+#7 CACHED
+
+#8 [stage-1  7/21] COPY _chassis/chassis /app/chassis
+#8 CACHED
+
+#9 [stage-1  3/21] COPY _chassis/requirements.txt .
+#9 CACHED
+
+#10 [stage-1  5/21] COPY radix/install-passive-tools.sh /tmp/install-passive-tools.sh
+#10 CACHED
+
+#11 [stage-1 11/21] COPY radix/net.py /app/net.py
+#11 CACHED
+
+#12 [stage-1  8/21] COPY radix/app.py /app/app.py
+#12 CACHED
+
+#13 [stage-1  9/21] COPY radix/gold_sources.py /app/gold_sources.py
+#13 CACHED
+
+#14 [stage-1  4/21] RUN apt-get update     && apt-get install -y --no-install-recommends ca-certificates curl git tar unzip default-jre-headless     && pip install --no-cache-dir -r requirements.txt     && python -m venv /opt/semgrep     && /opt/semgrep/bin/pip install --no-cache-dir "semgrep==1.182.1"     && python -m venv /opt/audit     && /opt/audit/bin/pip install --no-cache-dir "pip-audit==2.10.1"     && arch="amd64"     && case "$arch" in          amd64) gl_arch=x64; gl_sha="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb" ;;          arm64) gl_arch=arm64; gl_sha="e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080" ;;          *) echo "unsupported arch: $arch" >&2; exit 1 ;;        esac     && curl -fsSL -o /tmp/gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_${gl_arch}.tar.gz"     && echo "${gl_sha}  /tmp/gitleaks.tar.gz" | sha256sum -c -     && tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks     && chmod 755 /usr/local/bin/gitleaks     && rm -rf /tmp/gitleaks.tar.gz /var/lib/apt/lists/*     && useradd --create-home --uid 1000 agent     && mkdir -p /data /opt/osv     && chown agent:agent /data /opt/osv
+#14 CACHED
+
+#15 [stage-1 10/21] COPY radix/evals/gold /app/evals/gold
+#15 CACHED
+
+#16 [stage-1 12/21] COPY radix/live.py /app/live.py
+#16 CACHED
+
+#17 [stage-1 13/21] COPY radix/egress.py /app/egress.py
+#17 DONE 0.1s
+
+#18 [osv 3/6] ADD https://osv-vulnerabilities.storage.googleapis.com/npm/all.zip /osv/npm.zip
+#18 ...
+
+#19 [osv 2/6] ADD https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip /osv/PyPI.zip
+#19 DONE 0.3s
+
+#20 [stage-1 14/21] COPY radix/egress-policy.json /app/egress-policy.json
+#20 DONE 0.1s
+
+#21 [stage-1 15/21] COPY radix/passive_*.py /app/
+#21 DONE 0.1s
+
+#22 [stage-1 16/21] COPY radix/verify /app/verify
+#22 DONE 0.0s
+
+#18 [osv 3/6] ADD https://osv-vulnerabilities.storage.googleapis.com/npm/all.zip /osv/npm.zip
+#18 ...
+
+#23 [stage-1 17/21] COPY radix/schema.sql /app/schema.sql
+#23 DONE 0.0s
+
+#24 [stage-1 18/21] COPY radix/scanlib /app/scanlib
+#24 DONE 0.1s
+
+#25 [stage-1 19/21] COPY radix/scanlib/osv/ /opt/osv/
+#25 DONE 0.0s
+
+#26 [stage-1 20/21] RUN chown -R agent:agent /app /opt/osv
+#26 DONE 0.4s
+
+#18 [osv 3/6] ADD https://osv-vulnerabilities.storage.googleapis.com/npm/all.zip /osv/npm.zip
+#18 DONE 4.4s
+
+#18 [osv 3/6] ADD https://osv-vulnerabilities.storage.googleapis.com/npm/all.zip /osv/npm.zip
+#18 DONE 4.4s
+
+#27 [osv 2/6] ADD https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip /osv/PyPI.zip
+#27 CACHED
+
+#28 [osv 3/6] ADD https://osv-vulnerabilities.storage.googleapis.com/npm/all.zip /osv/npm.zip
+#28 DONE 0.4s
+
+#29 [osv 4/6] COPY radix/scanlib /bake/scanlib
+#29 DONE 1.0s
+
+#30 [osv 5/6] COPY radix/osv_bake.py /bake/osv_bake.py
+#30 DONE 0.1s
+
+#31 [osv 6/6] RUN mkdir -p /out     && python /bake/osv_bake.py /out/osv.sqlite PyPI=/osv/PyPI.zip npm=/osv/npm.zip
+#31 20.49 {"out": "/out/osv.sqlite", "bytes": 35225600, "ecosystems": {"PyPI": {"records": 26726, "rows": 31236, "sha256": "ea75803254efddb864a5d93c2231938df2c89e5899f48e0329dfccbf10e70abb", "baked_at": "2026-10-28T23:43:40Z"}, "npm": {"records": 230906, "rows": 233098, "sha256": "219fcd7ead5d27ab7534ed6347cb513ae41eadade3006b49e1a61d38f3917d35", "baked_at": "2026-10-28T23:43:40Z"}}}
+#31 DONE 20.6s
+
+#32 [stage-1 21/21] COPY --from=osv /out/osv.sqlite /opt/osv/osv.sqlite
+#32 DONE 0.6s
+
+#33 exporting to image
+#33 exporting layers
+#33 exporting layers 4.3s done
+#33 exporting manifest sha256:b15ad1bd8cd08d0fbf4a24f533328000b32278aed1a9d0be12a860f8b31f6c08 0.0s done
+#33 exporting config sha256:c5b3b30e863c48ba92ebd97e9d4da483bff03664d1b26b53ca492c9903a853fa 0.0s done
+#33 exporting attestation manifest sha256:2dc0bcbdc53f72595772fc25b254273e4d811ab53f29b7740c405857ef59448b 0.0s done
+#33 exporting manifest list sha256:3ade8f2eb16f980abf0e499f508201c6d685abb2704b630fb9418c3b6fe7defe 0.0s done
+#33 naming to docker.io/library/radix-passive-proof:recovered
+#33 naming to docker.io/library/radix-passive-proof:recovered done
+#33 unpacking to docker.io/library/radix-passive-proof:recovered
+#33 unpacking to docker.io/library/radix-passive-proof:recovered 0.8s done
+#33 DONE 5.3s
+
+--- Real pinned CLIs, network-disabled synthetic HTTP loopback ONLY ---
+COMMAND: docker run --rm --network none --memory 1g --cpus 1 --cap-drop ALL --security-opt no-new-privileges:true -e PYTHONPATH=/app -v /tmp/tervory-radix-passive-gate-20261028/tests/radix_passive/local_cli_smoke.py:/tmp/local-smoke.py:ro radix-passive-proof:recovered python /tmp/local-smoke.py
+EXIT: 0
+OUTPUT SHA256: 811da5f31630c51e3e146545631dc2618e895b5951b1f8db1e6a2ae7974bbf93
+ZAP exit: 0
+ZAP parsed findings: 4
+Nuclei exit: 0
+Nuclei confirmed requests: 1; errors: 0; parsed findings: 10
+PASS: real passive CLIs against synthetic loopback; no live scan
+
+--- Recovered image imports and OpenAPI schema ---
+COMMAND: docker run --rm --network none --memory 256m --cpus 0.5 radix-passive-proof:recovered python -c 'import app,passive_gateway; print("Radix passive API:", sorted(p for p in app.app.openapi()["paths"] if p.startswith("/passive"))); print("Gateway API:", sorted(passive_gateway.app.openapi()["paths"])); print("Image imports and route schemas: PASS")'
+EXIT: 0
+OUTPUT SHA256: a77970f6bad03eba3b55afe02b2f3f6351f37459dd6e8610425dfe9097024510
+Radix passive API: ['/passive/domains', '/passive/gate', '/passive/scans', '/passive/scans/{scan_id}/findings']
+Gateway API: ['/health', '/lease', '/release']
+Image imports and route schemas: PASS
+
+--- Broader seal regressions, preserved failure ---
+COMMAND: PYTHONPATH=agents/_chassis /tmp/radix-passive-py312/bin/python -m pytest -q tests/test_room_seal.py
+EXIT: 1
+OUTPUT SHA256: f92198f2bd39d88d0a702800ebdf8ae3a77a19fd952993aefcc62fb9632d3830
+..........FF............................................................ [ 97%]
+..                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.yml] _
+
+path = PosixPath('/tmp/tervory-radix-passive-gate-20261028/agents/zenas/docker-compose.docassemble.yml')
+
+    @pytest.mark.parametrize("path", ROOM_FILES, ids=lambda p: str(p.relative_to(ROOT)))
+    def test_no_room_service_would_leak_when_coolify_deploys_it(path: Path) -> None:
+>       assert leaks(path.read_text(encoding="utf-8")) == []
+E       AssertionError: assert ['docassemble...app network>'] == []
+E         
+E         Left contains one more item: 'docassemble would join non-internal <coolify app network>'
+E         Use -v to get more diff
+
+tests/test_room_seal.py:93: AssertionError
+_ test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.za.yml] _
+
+path = PosixPath('/tmp/tervory-radix-passive-gate-20261028/agents/zenas/docker-compose.docassemble.za.yml')
+
+    @pytest.mark.parametrize("path", ROOM_FILES, ids=lambda p: str(p.relative_to(ROOT)))
+    def test_no_room_service_would_leak_when_coolify_deploys_it(path: Path) -> None:
+>       assert leaks(path.read_text(encoding="utf-8")) == []
+E       AssertionError: assert ['docassemble...app network>'] == []
+E         
+E         Left contains one more item: 'docassemble would join non-internal <coolify app network>'
+E         Use -v to get more diff
+
+tests/test_room_seal.py:93: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_room_seal.py::test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.yml]
+FAILED tests/test_room_seal.py::test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.za.yml]
+2 failed, 72 passed in 39.35s
+
+--- Fresh main 7a13687 baseline, same unchanged Zenas failures ---
+COMMAND: cd /tmp/radix-passive-main-baseline && /tmp/radix-passive-py312/bin/python -m pytest -q tests/test_room_seal.py -k "docassemble and test_no_room_service_would_leak"
+EXIT: 1
+OUTPUT SHA256: 2c9704c82e6b4726e1718c716c8fba082b9b53ab140dab5214dc44c5efa95c86
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.yml] _
+
+path = PosixPath('/tmp/radix-passive-main-baseline/agents/zenas/docker-compose.docassemble.yml')
+
+    @pytest.mark.parametrize("path", ROOM_FILES, ids=lambda p: str(p.relative_to(ROOT)))
+    def test_no_room_service_would_leak_when_coolify_deploys_it(path: Path) -> None:
+>       assert leaks(path.read_text(encoding="utf-8")) == []
+E       AssertionError: assert ['docassemble...app network>'] == []
+E         
+E         Left contains one more item: 'docassemble would join non-internal <coolify app network>'
+E         Use -v to get more diff
+
+tests/test_room_seal.py:93: AssertionError
+_ test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.za.yml] _
+
+path = PosixPath('/tmp/radix-passive-main-baseline/agents/zenas/docker-compose.docassemble.za.yml')
+
+    @pytest.mark.parametrize("path", ROOM_FILES, ids=lambda p: str(p.relative_to(ROOT)))
+    def test_no_room_service_would_leak_when_coolify_deploys_it(path: Path) -> None:
+>       assert leaks(path.read_text(encoding="utf-8")) == []
+E       AssertionError: assert ['docassemble...app network>'] == []
+E         
+E         Left contains one more item: 'docassemble would join non-internal <coolify app network>'
+E         Use -v to get more diff
+
+tests/test_room_seal.py:93: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_room_seal.py::test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.yml]
+FAILED tests/test_room_seal.py::test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.za.yml]
+2 failed, 72 deselected in 0.31s
+
+--- Initial local tool-contract diagnostic, corrected before final image ---
+COMMAND: docker run --rm --network none --memory 1g --cpus 1 --cap-drop ALL --security-opt no-new-privileges:true -e PYTHONPATH=/app -v /tmp/radix-passive-local-smoke.py:/tmp/local-smoke.py:ro radix-passive-proof:branch python /tmp/local-smoke.py
+EXIT: 0
+OUTPUT SHA256: 543b3464bda214dce3f2e65ce3c293080ee8a3af9f763b0cb633a710be733c50
+ZAP_EXIT 2 JSON_EXISTS True
+Job passiveScan-config set scanOnlyInScope = true
+Job spider set context = verified
+Job spider set maxChildren = 5
+Job spider set maxDepth = 2
+Job spider set maxDuration = 1
+Job spider set parseRobotsTxt = false
+Job spider set parseSitemapXml = false
+Job spider set postForm = false
+Job spider set processForm = false
+Job spider set requestWaitTime = 1,000
+Job spider set threadCount = 1
+Job spider set url = http://127.0.0.1:8090/
+Job spider the field requestWaitTime is deprecated and non-functional. If the functionality is required use the Rate Limit from Network add-on.
+Job passiveScan-wait set maxDuration = 1
+Job report set reportDir = /tmp/tmpiq5bj34h
+Job report set reportFile = zap.json
+Job report set reportTitle = Radix passive baseline
+Job report set template = traditional-json
+Job passiveScan-config started
+Job passiveScan-config finished, time taken: 00:00:00
+Job spider started
+Job spider requesting URL http://127.0.0.1:8090/
+Job spider found 1 URLs
+Job spider finished, time taken: 00:00:01
+Job passiveScan-wait started
+Job passiveScan-wait finished, time taken: 00:00:02
+Job report started
+Job report invalid site http://127.0.0.1:8090/, valid sites: [http://127.0.0.1:8090]
+Job report generated report /tmp/tmpiq5bj34h/zap.json
+Job report finished, time taken: 00:00:00
+Automation plan warnings:
+	Job spider the field requestWaitTime is deprecated and non-functional. If the functionality is required use the Rate Limit from Network add-on.
+	Job report invalid site http://127.0.0.1:8090/, valid sites: [http://127.0.0.1:8090]
+ZAP_SITES []
+NUCLEI_EXIT 0 JSONL_EXISTS True
+NUCLEI_STATS [{'duration': '0:00:00', 'errors': '0', 'hosts': '1', 'matched': '10', 'percent': '100', 'requests': '1', 'rps': '3', 'startedAt': '2026-10-28T23:19:17.917040618Z', 'templates': '1', 'total': '1'}, {'duration': '0:00:00', 'errors': '0', 'hosts': '1', 'matched': '10', 'percent': '100', 'requests': '1', 'rps': '3', 'startedAt': '2026-10-28T23:19:17.917040618Z', 'templates': '1', 'total': '1'}]
+NUCLEI_FINDINGS 10
+
+--- Initial guard regex rejection in new dummy auth test; corrected, no suppression ---
+COMMAND: PYTHONPATH=agents/_chassis /tmp/radix-passive-py312/bin/python -m pytest -q tests/test_tank_one_door.py tests/test_secrets.py
+EXIT: 1
+OUTPUT SHA256: c92af850772e3d3aabe58e8d36e4bfc951b920f87b07e06145a454c44d0eb8c6
+...........................F.                                            [100%]
+=================================== FAILURES ===================================
+__________________________ test_no_committed_secrets ___________________________
+
+    def test_no_committed_secrets() -> None:
+        problems: list[str] = []
+        for path in _tracked_files():
+            if path.suffix.lower() in _SKIP_SUFFIXES or not path.is_file():
+                continue
+            data = path.read_bytes()
+            if b"\0" in data[:1024]:
+                continue
+            problems.extend(findings_in_text(str(path.relative_to(ROOT)), data.decode("utf-8", errors="ignore")))
+>       assert not problems, "\n".join(problems)
+E       AssertionError: tests/test_radix_passive.py:267: assigned secret is not a placeholder
+E       assert not ['tests/test_radix_passive.py:267: assigned secret is not a placeholder']
+
+tests/test_secrets.py:82: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_secrets.py::test_no_committed_secrets - AssertionError: tes...
+1 failed, 28 passed in 25.53s
+
+--- Initial image-route introspection helper error; imports succeeded, helper corrected to OpenAPI above ---
+COMMAND: docker run --rm --network none --memory 256m --cpus 0.5 radix-passive-proof:recovered python -c 'import app,passive_gateway; print("Radix passive API:", sorted(r.path for r in app.app.routes if r.path.startswith("/passive"))); print("Gateway imports: PASS")'
+EXIT: 1
+OUTPUT SHA256: 41dc7335ba236e23cfa4375b844f4fe28a1b9244bbaa0361cf053bcded0ca6c5
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "<string>", line 1, in <genexpr>
+AttributeError: '_IncludedRouter' object has no attribute 'path'
+
+--- Other exact checks / lifecycle ---
+sh -n agents/radix/install-passive-tools.sh => exit 0 (no output)
+git diff --check => exit 0 (no output)
+git diff --exit-code ce44c65a -- agents/radix tank/main.py tank/radix_passive_routes.py tank/requirements-dev.txt => exit 0 (no output)
+docker stop radix-passive-proof-pg => exit 0; output radix-passive-proof-pg (owned --rm disposable database removed)
+
+The initial CLI diagnostic wrapper exited 0 while recording ZAP_EXIT 2 and an empty site list; that is a failing ZAP diagnostic, not a passing baseline. The committed smoke now asserts tool exit codes, report parsing and confirmed Nuclei requests. No raw scanner traffic or actual customer data appears here.
