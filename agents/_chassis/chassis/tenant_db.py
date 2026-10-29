@@ -132,6 +132,41 @@ def tenant_path(parameter: str):
     return decorate
 
 
+class TenantConnection:
+    """Preserve statement commits on durable workers while using SET LOCAL."""
+
+    def __init__(self, connection, tenant):
+        self.connection = connection
+        self.tenant = tenant
+
+    @asynccontextmanager
+    async def transaction(self, **options):
+        async with self.connection.transaction(**options):
+            await self.connection.execute("SELECT set_config('app.tenant_id', $1, true)", self.tenant)
+            yield
+
+    async def _query(self, method, *args, **kwargs):
+        if self.connection.is_in_transaction():
+            return await getattr(self.connection, method)(*args, **kwargs)
+        async with self.transaction():
+            return await getattr(self.connection, method)(*args, **kwargs)
+
+    async def execute(self, *args, **kwargs):
+        return await self._query("execute", *args, **kwargs)
+
+    async def executemany(self, *args, **kwargs):
+        return await self._query("executemany", *args, **kwargs)
+
+    async def fetch(self, *args, **kwargs):
+        return await self._query("fetch", *args, **kwargs)
+
+    async def fetchrow(self, *args, **kwargs):
+        return await self._query("fetchrow", *args, **kwargs)
+
+    async def fetchval(self, *args, **kwargs):
+        return await self._query("fetchval", *args, **kwargs)
+
+
 class TenantPool:
     """Each checkout owns a short transaction; no transaction spans a model call.
 
@@ -145,9 +180,14 @@ class TenantPool:
         self.admin_pool = admin_pool
 
     @asynccontextmanager
-    async def acquire(self, *, isolation=None, readonly=False, deferrable=False, **kwargs):
+    async def acquire(self, *, isolation=None, readonly=False, deferrable=False, autocommit=False, **kwargs):
         source = self.admin_pool if administrative() and self.admin_pool is not None else self.raw
         async with source.acquire(**kwargs) as conn:
+            if autocommit:
+                if isolation is not None or readonly or deferrable:
+                    raise ValueError("Autocommit checkout cannot set transaction-wide options")
+                yield TenantConnection(conn, _tenant.get())
+                return
             async with conn.transaction(isolation=isolation, readonly=readonly, deferrable=deferrable):
                 await conn.execute("SELECT set_config('app.tenant_id', $1, true)", _tenant.get())
                 yield conn
