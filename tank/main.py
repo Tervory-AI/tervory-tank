@@ -2823,7 +2823,7 @@ async def process_batches_once() -> None:
                         # Startup refuses this configuration when RLS is active.
                         await _process_batch(conn, batch)
                     else:
-                        async with pool().acquire() as tenant_conn:
+                        async with pool().acquire(autocommit=True) as tenant_conn:
                             await _process_batch(tenant_conn, batch)
             except (httpx.HTTPError, ValueError, KeyError):
                 # Poll failures are retriable; submission ambiguity is surfaced
