@@ -375,7 +375,9 @@ def test_room_compose_wires_only_the_proxy_outward():
     assert proxy["networks"]["egress"] == {}
     passive = box["services"]["passive-egress"]
     assert set(passive["networks"]) == {"gw", "proxy-link", "egress"}
-    assert passive["networks"]["proxy-link"] == {"interface_name": "radix-link"}
+    assert passive["networks"]["proxy-link"] == {
+        "interface_name": "radix-link", "aliases": ["radix-passive-proxy"]}
+    assert passive["networks"]["gw"] == {} and passive["networks"]["egress"] == {}
     assert "gw" not in proxy["networks"]
     assert box["networks"]["gw"]["external"] is True
     assert box["networks"]["gw"]["name"] == "tervory-gw-radix"
