@@ -52,15 +52,16 @@ async def server():
         static.close()
 
 
-def client():
-    with socket.create_connection(('radix-proxy-bind-proof', 8080), timeout=5) as conn:
+def client(passive=False):
+    host = 'radix-passive-proxy' if passive else 'radix-proxy-bind-proof'
+    with socket.create_connection((host, 8080), timeout=5) as conn:
         conn.sendall(b'GET /health HTTP/1.1\r\nHost: radix-proxy-bind-proof\r\n\r\n')
         assert b'200 OK' in conn.recv(1024)
     for host in ('other.example', 'lokd.co.za', '127.0.0.1'):
-        with socket.create_connection(('radix-proxy-bind-proof', 8082), timeout=5) as conn:
+        with socket.create_connection(('radix-passive-proxy' if passive else 'radix-proxy-bind-proof', 8082), timeout=5) as conn:
             conn.sendall(f'CONNECT {host}:443 HTTP/1.1\r\nHost: {host}:443\r\n\r\n'.encode())
             assert b'403' in conn.recv(1024)
-    with socket.create_connection(('radix-proxy-bind-proof', 8082), timeout=5) as conn:
+    with socket.create_connection(('radix-passive-proxy' if passive else 'radix-proxy-bind-proof', 8082), timeout=5) as conn:
         conn.sendall(b'CONNECT owned.example:443 HTTP/1.1\r\nHost: owned.example:443\r\n\r\n')
         assert b'200 Connection Established' in conn.recv(1024)
         conn.sendall(b'ping')
@@ -71,8 +72,9 @@ def client():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--server', action='store_true')
+    parser.add_argument('--passive', action='store_true')
     args = parser.parse_args()
     if args.server:
         asyncio.run(server())
     else:
-        client()
+        client(args.passive)
