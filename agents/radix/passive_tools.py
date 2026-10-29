@@ -16,7 +16,7 @@ import yaml
 
 from passive_store import target_url
 
-PROXY = 'http://passive-egress:8082'
+PROXY = 'http://radix-passive-proxy:8082'
 TEMPLATE = '/opt/radix-passive/http-missing-security-headers.yaml'
 
 
@@ -44,7 +44,7 @@ def zap_plan(target: str, directory: Path) -> dict:
 def zap_command(plan: Path, home: Path) -> list[str]:
     # Network add-on's official connection/rate-limit options. No proxy exclusions.
     config = {'network.connection.httpProxy.enabled': 'true',
-              'network.connection.httpProxy.host': 'passive-egress',
+              'network.connection.httpProxy.host': 'radix-passive-proxy',
               'network.connection.httpProxy.port': '8082',
               'network.ratelimit.rules.rule(0).description': 'verified-only',
               'network.ratelimit.rules.rule(0).enabled': 'true',
