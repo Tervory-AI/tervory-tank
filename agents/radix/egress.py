@@ -13,11 +13,13 @@ not read a proxy address or a resolver from the request.
 from __future__ import annotations
 
 import ipaddress
+import fcntl
 import json
 import os
 import re
 import socket
 import ssl
+import struct
 import sys
 import threading
 import time
@@ -81,18 +83,16 @@ class ProxyError(Exception):
 
 
 def private_bind_address() -> str:
-    """One explicit container interface, never a wildcard or request address.
+    """The designated shared proxy-link NIC, never a wildcard/hostname guess.
 
-    Docker writes its primary interface to the container hostname mapping.
-    Fail closed if that mapping is absent, ambiguous, or not RFC1918 IPv4.
+    Compose names this interface radix-link on both proxy services. Read its
+    IPv4 address with Linux's read-only SIOCGIFADDR; no privilege or secret.
+    Multiple other NICs/hostname addresses cannot change the selected binding.
     """
     try:
-        answers = socket.getaddrinfo(socket.gethostname(), None, family=socket.AF_INET,
-                                     type=socket.SOCK_STREAM)
-        addresses = {str(answer[4][0]) for answer in answers}
-        if len(addresses) != 1:
-            raise ValueError
-        address = addresses.pop()
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            reply = fcntl.ioctl(probe.fileno(), 0x8915, struct.pack('256s', b'radix-link'))
+        address = socket.inet_ntoa(reply[20:24])
         ip = ipaddress.IPv4Address(address)
         if not any(ip in ipaddress.ip_network(network) for network in
                    ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')):
