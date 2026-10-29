@@ -24,6 +24,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 import command_repo
+from tenant_db import tenant_path
 from command_stream import AnswerText, TokenSink
 
 router = APIRouter(prefix="/v1/command", tags=["command"])
@@ -1108,6 +1109,7 @@ def current_actor(actor: Actor) -> Actor:
     return Actor(actor.tenant_id, actor.user_id, actor.user_id in admins, actor.squads, actor.tenant_admin)
 
 
+@tenant_path("actor")
 async def authorized_actor(actor: Actor, conn: Any = None) -> Actor:
     actor = current_actor(actor)
     if actor.founder:

@@ -7,3 +7,9 @@
 FROM ghcr.io/berriai/litellm:v1.106.4
 COPY config.yaml /app/config.yaml
 COPY config.za.yaml /app/config.za.yaml
+RUN addgroup -S -g 10001 tervory \
+    && adduser -S -D -u 10001 -G tervory -h /home/tervory tervory \
+    && mkdir -p /home/tervory \
+    && chown -R tervory:tervory /app /home/tervory
+ENV HOME=/home/tervory
+USER 10001:10001

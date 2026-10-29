@@ -773,7 +773,9 @@ class PgStore(RetailerPgStore):
             )
 
     async def key(self, key_hash: str) -> dict[str, Any] | None:
-        async with self.pool.acquire() as conn:
+        # Authentication must identify the tenant before tenant-scoped checkout.
+        bootstrap_pool = getattr(self.pool, "admin_pool", None) or self.pool
+        async with bootstrap_pool.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT tenant_id, kind, origins FROM agent_rig.keys WHERE key_hash = $1",
                 key_hash,

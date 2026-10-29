@@ -1,6 +1,8 @@
 """Base reference, work, evidence, comparison and expense routes."""
 from __future__ import annotations
 
+from tenant_db import tenant_transaction
+
 import asyncio
 from collections import defaultdict
 from contextlib import asynccontextmanager, suppress
@@ -235,7 +237,7 @@ def build_router(rt: Any, store: BaseStore | None = None, *, background: bool = 
             async def stream():
                 # A stable read snapshot prevents new completed rows from
                 # shifting pages while a client downloads a large list.
-                async with rt.pool().acquire() as conn, conn.transaction(isolation="repeatable_read", readonly=True):
+                async with tenant_transaction(rt.pool(), isolation="repeatable_read", readonly=True) as conn:
                     from contextlib import asynccontextmanager
                     class SnapshotPool:
                         @asynccontextmanager

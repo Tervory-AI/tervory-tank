@@ -1,5 +1,6 @@
 """Tenant-scoped immutable versions and optimistic confirmation; no models."""
 import json
+from chassis.tenant_db import tenant_transaction
 from uuid import UUID
 
 from .voice import Voice, VoiceStore
@@ -12,7 +13,7 @@ def obj(value):
 
 class VoiceHistory(VoiceStore):
     async def show(self, tenant: UUID, offset: int = 0, target: int | None = None) -> dict:
-        async with self.pool.acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
+        async with tenant_transaction(self.pool, isolation='repeatable_read', readonly=True) as conn:
             current = await conn.fetchval('SELECT voice FROM agent_trigger.voices WHERE tenant_id=$1', tenant)
             history = await conn.fetch('SELECT revision,restored_from,created_at FROM agent_trigger.voice_versions WHERE tenant_id=$1 ORDER BY revision DESC LIMIT 20 OFFSET $2', tenant, offset)
             selected = await conn.fetchval('SELECT voice FROM agent_trigger.voice_versions WHERE tenant_id=$1 AND revision=$2', tenant, target) if target else None

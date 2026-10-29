@@ -102,7 +102,8 @@ class Store:
         Discover expired lease owners, then update each row with its persisted
         tenant/id and recheck expiry. An active lease is never touched.
         """
-        async with self.pool.acquire() as conn:
+        maintenance = getattr(self.pool, "admin_pool", None) or self.pool
+        async with maintenance.acquire() as conn:
             owners = await conn.fetch("""SELECT tenant_id,id FROM agent_radix.passive_scans
               WHERE status='running' AND lease_until<now()""")
             for owner in owners:

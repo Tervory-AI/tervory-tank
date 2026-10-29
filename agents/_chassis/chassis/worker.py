@@ -10,6 +10,7 @@ from typing import Any, Awaitable, Callable
 
 from chassis.cron import is_due
 from chassis.db import as_json, schema_for
+from chassis.tenant_db import tenant_scope
 from chassis.jobs import JobContext, decide_retry, decide_timeout, timeout_for
 from chassis.logs import log_line
 
@@ -254,15 +255,16 @@ async def enqueue_due(
         log_line(agent, "schedule enqueued", tenant_id=str(tenant_id))
 
 
-async def job_loop(pool: Any, agent: str, handlers: dict[str, Handler], ctx_for: Callable[[Any], JobContext]) -> None:
+async def job_loop(pool: Any, agent: str, handlers: dict[str, Handler], ctx_for: Callable[[Any], JobContext], *, discovery_pool: Any = None) -> None:
     while True:
         try:
-            async with pool.acquire() as conn:
+            async with (discovery_pool or pool).acquire() as conn:
                 await reclaim_timed_out(conn, agent)
                 job = await claim_next(conn, agent)
             if job is not None:
-                async with pool.acquire() as conn:
-                    await run_claimed(conn, agent, job, handlers, ctx_for)
+                with tenant_scope(job["tenant_id"]):
+                    async with pool.acquire() as conn:
+                        await run_claimed(conn, agent, job, handlers, ctx_for)
         except Exception:  # noqa: BLE001
             log_line(agent, "job tick failed", level="error")
         await asyncio.sleep(JOB_POLL_S)

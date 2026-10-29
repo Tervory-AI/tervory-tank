@@ -130,6 +130,8 @@ services:
     environment:
       TANK_REGION: za
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      TANK_ADMIN_DATABASE_URL: ${TANK_ADMIN_DATABASE_URL:-}
+      TANK_RLS_ADMIN_ROLE: ${TANK_RLS_ADMIN_ROLE:-}
       REDIS_URL: redis://redis:6379/0
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY}

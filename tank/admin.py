@@ -784,7 +784,7 @@ def graduation_rows(logs: list[dict[str, Any]], shadows: list[dict[str, Any]], t
 # ---------- database ----------
 
 def _pool() -> asyncpg.Pool:
-    from main import pool as get_pool
+    from main import admin_pool as get_pool
     return get_pool()
 
 

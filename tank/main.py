@@ -67,6 +67,7 @@ import batch_providers
 import priority_queue
 import graduate
 import semantic_cache
+from tenant_db import TenantContextMiddleware, TenantPool, tenant_path, tenant_scope, administrative, bind_tenant_endpoints
 import routellm_shadow
 import skala
 import skill_costs
@@ -88,7 +89,9 @@ _pii_detect = None
 _skill_home: contextvars.ContextVar[str | None] = contextvars.ContextVar("zenas_skill_home", default=None)
 
 app = FastAPI(title="Tervory Tank", version="0.2.0")
-_pool: asyncpg.Pool | None = None
+app.add_middleware(TenantContextMiddleware)
+_pool: Any = None
+_admin_pool: asyncpg.Pool | None = None
 _background: set[asyncio.Task[None]] = set()
 _batch_task: asyncio.Task[None] | None = None
 _http: httpx.AsyncClient | None = None
@@ -103,7 +106,17 @@ SKILL_ENV = {k: v for k, v in {"BRAVE_API_KEY": os.environ.get("BRAVE_API_KEY", 
 
 def pool() -> asyncpg.Pool:
     assert _pool is not None, "database pool not ready"
-    return _pool
+    return _admin_pool if administrative() and _admin_pool is not None else _pool
+
+
+def admin_pool():
+    """Explicit platform/founder DB corridor; never selected by a tenant value."""
+    if _admin_pool is not None:
+        return _admin_pool
+    # Pre-activation maintenance (e.g. concurrent indexes) must stay autocommit.
+    # Startup rejects this fallback when RLS is active.
+    legacy_pool = pool()
+    return getattr(legacy_pool, "raw", legacy_pool)
 
 
 def normalize_home(value: str | None) -> str:
@@ -666,7 +679,7 @@ SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 
 async def _warn_unapproved_policy_pins() -> None:
-    async with pool().acquire() as conn:
+    async with admin_pool().acquire() as conn:
         rows = await conn.fetch("""SELECT p.task_type,p.tenant_id,p.model,s.state
             FROM tank.policy p LEFT JOIN tank.skills s
               ON s.id=split_part(substr(btrim(p.model),7),'@',1)
@@ -685,11 +698,27 @@ async def _startup() -> None:
     every start and means the database can never be missing Tank's tables."""
     if not os.environ.get("TANK_API_KEY", "").strip():
         raise RuntimeError("TANK_API_KEY is empty")
-    global _pool
-    _pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
+    global _pool, _admin_pool
+    raw_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
+    _pool = TenantPool(raw_pool)
+    admin_url = os.environ.get("TANK_ADMIN_DATABASE_URL", "")
+    _admin_pool = await asyncpg.create_pool(admin_url, min_size=1, max_size=2) if admin_url else None
+    _pool.admin_pool = _admin_pool
+    if _admin_pool is not None:
+        async with _admin_pool.acquire() as admin_conn:
+            configured_role = os.environ.get("TANK_RLS_ADMIN_ROLE", "")
+            role = await admin_conn.fetchrow("SELECT rolname, rolbypassrls FROM pg_roles WHERE rolname=current_user")
+            if not configured_role or role["rolname"] != configured_role or not role["rolbypassrls"]:
+                raise RuntimeError("TANK_ADMIN_DATABASE_URL must use the configured BYPASSRLS admin role")
+    async with raw_pool.acquire() as tenant_conn:
+        enforced = await tenant_conn.fetchval("SELECT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relrowsecurity AND (n.nspname='tank' OR n.nspname='base' OR n.nspname LIKE 'agent_%'))")
+        if enforced is True:
+            role = await tenant_conn.fetchrow("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user")
+            if role["rolsuper"] or role["rolbypassrls"] or _admin_pool is None:
+                raise RuntimeError("RLS requires a non-bypass tenant database role and a separate configured admin pool")
     with open(SCHEMA_PATH, encoding="utf-8") as f:
         ddl = f.read()
-    async with _pool.acquire() as conn:
+    async with (_admin_pool or raw_pool).acquire() as conn:
         await conn.execute(ddl)
         # A one-shot task (chat, draft) that was mid-flight when Tank restarted did not finish.
         # Base batches are not in this list: Base resumes them in its own room.
@@ -727,6 +756,8 @@ async def _shutdown() -> None:
         await _http.aclose()
     if _pool:
         await _pool.close()
+    if _admin_pool:
+        await _admin_pool.close()
 
 
 def tank_sha() -> str:
@@ -745,7 +776,7 @@ async def health() -> dict[str, Any]:
 
 async def load_policy(task_type: str, tenant_id: uuid.UUID) -> dict[str, Any]:
     """Tenant-specific row first, then the platform default."""
-    async with pool().acquire() as conn:
+    async with admin_pool().acquire() as conn:
         row = await conn.fetchrow(
             """
             SELECT * FROM tank.policy
@@ -764,7 +795,7 @@ async def load_policy(task_type: str, tenant_id: uuid.UUID) -> dict[str, Any]:
 @app.get("/v1/policy", dependencies=[Depends(require_key)])
 async def list_policy(tenant_id: uuid.UUID) -> list[dict[str, Any]]:
     """This tenant's rows, plus platform defaults. Not another tenant's prompt."""
-    async with pool().acquire() as conn:
+    async with admin_pool().acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT * FROM tank.policy
@@ -1022,6 +1053,7 @@ def _cache_identity(req: RouteRequest, policy: dict[str, Any], messages: list[di
     return context_hash, exact, graduate.semantic_form(messages)
 
 
+@tenant_path("req")
 async def _cache_read(req: RouteRequest, policy: dict[str, Any], identity: tuple[str, str, str]) -> str | None:
     if (policy.get("cache_scope") not in {"tenant", "platform", "region"}
             or (policy.get("matter_matching") and not req.case_ref)):
@@ -1049,6 +1081,7 @@ async def _cache_read(req: RouteRequest, policy: dict[str, Any], identity: tuple
     return hit["content"] if hit else None
 
 
+@tenant_path("req")
 async def _cache_write(req: RouteRequest, policy: dict[str, Any], identity: tuple[str, str, str], ledger_id: uuid.UUID) -> None:
     if (policy.get("cache_scope") not in {"tenant", "platform", "region"}
             or (policy.get("matter_matching") and not req.case_ref)):
@@ -1065,6 +1098,7 @@ async def _cache_write(req: RouteRequest, policy: dict[str, Any], identity: tupl
         )
 
 
+@tenant_path("req")
 async def run_route(
     req: RouteRequest,
     task_id: uuid.UUID | None = None,
@@ -2419,6 +2453,7 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
 
 
 @app.post("/v1/route", response_model=RouteResponse | priority_queue.QueuedResponse, response_model_exclude_none=True)
+@tenant_path("body")
 async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     if caller:
         body = body.model_copy(update={"agent": caller})
@@ -2458,6 +2493,10 @@ class _DeferredRoute(Exception):
 class BatchRequest(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     requests: list[RouteRequest] = Field(min_length=1, max_length=1000)
+
+    @property
+    def tenant_id(self) -> uuid.UUID:
+        return self.requests[0].tenant_id
 
 
 def _batch_min() -> int:
@@ -2499,6 +2538,7 @@ async def _batch_gateway(method: str, path: str, *, model: str | None = None, **
 
 
 @app.post("/v1/route/batch")
+@tenant_path("body")
 async def route_batch(body: BatchRequest, caller: str | None = Depends(require_key)) -> dict[str, Any]:
     tenant = body.requests[0].tenant_id
     task = body.requests[0].task_type
@@ -2767,7 +2807,7 @@ async def _process_batch(conn: Any, batch: Any) -> None:
 
 
 async def process_batches_once() -> None:
-    async with pool().acquire() as conn:
+    async with admin_pool().acquire() as conn:
         rows = await conn.fetch("SELECT id,tenant_id FROM tank.batches WHERE region=$1 AND status IN ('queued','submitting','submitted','retrying') ORDER BY created_at LIMIT 20", box_region())
         for row in rows:
             lock = int.from_bytes(row["id"].bytes[:8], "big", signed=True)
@@ -2777,7 +2817,14 @@ async def process_batches_once() -> None:
                 batch = await conn.fetchrow("SELECT * FROM tank.batches WHERE id=$1 AND tenant_id=$2", row["id"], row["tenant_id"])
                 if batch["status"] not in {"queued", "submitting", "submitted", "retrying"}:
                     continue
-                await _process_batch(conn, batch)
+                with tenant_scope(batch["tenant_id"]):
+                    if _admin_pool is None:
+                        # Before opt-in RLS, retain the existing single-pool path.
+                        # Startup refuses this configuration when RLS is active.
+                        await _process_batch(conn, batch)
+                    else:
+                        async with pool().acquire(autocommit=True) as tenant_conn:
+                            await _process_batch(tenant_conn, batch)
             except (httpx.HTTPError, ValueError, KeyError):
                 # Poll failures are retriable; submission ambiguity is surfaced
                 # on the next pass, with no second provider submission.
@@ -2808,6 +2855,7 @@ def task_dict(row: asyncpg.Record, ledger: asyncpg.Record | None = None) -> dict
     return d
 
 
+@tenant_path("req")
 async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
     async with pool().acquire() as conn:
         await conn.execute("UPDATE tank.tasks SET status='running', started_at=now() WHERE id=$1", task_id)
@@ -2833,6 +2881,7 @@ async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
 
 
 @app.post("/v1/tasks", dependencies=[Depends(require_key)], status_code=202)
+@tenant_path("body")
 async def create_task(body: TaskCreate) -> dict[str, Any]:
     box = box_region()
     home = call_home(body.home_region, box)
@@ -4312,3 +4361,6 @@ app.include_router(memory_router)
 
 # B3: process committed model changes through the existing skill-eval handler.
 __import__("skala_revalidation").install(app, __import__("sys").modules[__name__])
+
+# Bind only accepted endpoint arguments after existing authentication dependencies.
+bind_tenant_endpoints(app)

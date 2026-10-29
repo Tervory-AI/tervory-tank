@@ -12,6 +12,7 @@ from typing import Any
 
 from chassis.events import publish
 from chassis.job_contract import Job
+from chassis.tenant_db import tenant_scope
 
 from pipeline import (
     SkillCall,
@@ -449,14 +450,15 @@ async def _run_batch(pool: Any, task_id: uuid.UUID, cfg: dict[str, Any], call: S
 
 async def base_loop(pool: Any, skills: SkillClient) -> None:
     """One batch at a time, oldest queued first."""
-    async with pool.acquire() as conn:
+    discovery_pool = getattr(pool, "admin_pool", None) or pool
+    async with discovery_pool.acquire() as conn:
         await ensure_tables(conn)
     while True:
         try:
             if models_paused():
                 await asyncio.sleep(min(60.0, max(1.0, _model_pause["until"] - time.time())))
                 continue
-            async with pool.acquire() as conn:
+            async with discovery_pool.acquire() as conn:
                 row = await conn.fetchrow(
                     "SELECT id, tenant_id, input FROM agent_base.tasks "
                     "WHERE task_type='base.enrich' AND status='queued' ORDER BY created_at LIMIT 1"
@@ -468,35 +470,36 @@ async def base_loop(pool: Any, skills: SkillClient) -> None:
                 except asyncio.TimeoutError:
                     pass
                 continue
-            cfg = _load(row["input"])
-            if not isinstance(cfg, dict):
-                cfg = {}
-            # The room row owns the tenant; JSON input cannot redirect work
-            # or the resulting event stream to a different tenant.
-            cfg["tenant_id"] = str(row["tenant_id"])
-            try:
-                versions, refs = await skills.pin(bool(cfg.get("preview")), cfg.get("engine"))
-                cfg["refs"] = refs
-                # Word lists come only from the approved engine profile, even on a preview batch.
-                cfg["engine_data_version"] = (
-                    await skills.approved(f"{cfg['engine']}.profile") if cfg.get("engine") else None
-                )
-                call = skills.bind(versions, bool(cfg.get("preview")), str(row["tenant_id"]))
-                if os.environ.get("BASE_BRAIN_URL"):
-                    from base_brain import run_code_first
-                    await run_code_first(pool, skills, row["id"], cfg, call)
-                else:
-                    await _run_batch(pool, row["id"], cfg, call)
-            except Exception as exc:  # noqa: BLE001 — one bad batch must not stop the queue
-                log.error("base worker: %s", type(exc).__name__)
-                async with pool.acquire() as conn:
-                    await conn.execute(
-                        "UPDATE agent_base.tasks SET status='failed', error=$2, finished_at=now() "
-                        "WHERE id=$1 AND tenant_id=$3",
-                        row["id"],
-                        str(exc)[:1000],
-                        row["tenant_id"],
+            with tenant_scope(row["tenant_id"]):
+                cfg = _load(row["input"])
+                if not isinstance(cfg, dict):
+                    cfg = {}
+                # The room row owns the tenant; JSON input cannot redirect work
+                # or the resulting event stream to a different tenant.
+                cfg["tenant_id"] = str(row["tenant_id"])
+                try:
+                    versions, refs = await skills.pin(bool(cfg.get("preview")), cfg.get("engine"))
+                    cfg["refs"] = refs
+                    # Word lists come only from the approved engine profile, even on a preview batch.
+                    cfg["engine_data_version"] = (
+                        await skills.approved(f"{cfg['engine']}.profile") if cfg.get("engine") else None
                     )
+                    call = skills.bind(versions, bool(cfg.get("preview")), str(row["tenant_id"]))
+                    if os.environ.get("BASE_BRAIN_URL"):
+                        from base_brain import run_code_first
+                        await run_code_first(pool, skills, row["id"], cfg, call)
+                    else:
+                        await _run_batch(pool, row["id"], cfg, call)
+                except Exception as exc:  # noqa: BLE001 — one bad batch must not stop the queue
+                    log.error("base worker: %s", type(exc).__name__)
+                    async with pool.acquire() as conn:
+                        await conn.execute(
+                            "UPDATE agent_base.tasks SET status='failed', error=$2, finished_at=now() "
+                            "WHERE id=$1 AND tenant_id=$3",
+                            row["id"],
+                            str(exc)[:1000],
+                            row["tenant_id"],
+                        )
         except Exception as exc:  # noqa: BLE001 — the database blinked; back off and carry on
             log.error("base worker: %s", type(exc).__name__)
             await asyncio.sleep(5)
