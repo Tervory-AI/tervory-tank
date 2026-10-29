@@ -22,6 +22,9 @@ for role in ['egress-proxy', 'passive-egress']:
     attachments = production['services'][role]['networks']
     shared = [net for net in production['services']['agent-radix']['networks'] if net in attachments]
     assert attachments['proxy-link']['interface_name'] == 'radix-link'
+    if role == 'passive-egress':
+        assert attachments['proxy-link']['aliases'] == ['radix-passive-proxy']
+        assert all('aliases' not in spec for net, spec in attachments.items() if net != 'proxy-link')
     common = {'image': args.image, 'pull_policy': 'never', 'mem_limit': '256m', 'cpus': 0.5,
               'cap_drop': ['ALL'], 'security_opt': ['no-new-privileges:true'],
               'environment': {'PYTHONPATH': '/app'},
@@ -30,7 +33,8 @@ for role in ['egress-proxy', 'passive-egress']:
               'networks': attachments, 'healthcheck': {
                   'test': production['services']['egress-proxy']['healthcheck']['test'],
                   'interval': '1s', 'timeout': '3s', 'retries': 20}}
-    client = {**common, 'command': ['python', '/tmp/private-proxy-smoke.py'], 'networks': shared,
+    client = {**common, 'command': ['python', '/tmp/private-proxy-smoke.py'] +
+              (['--passive'] if role == 'passive-egress' else []), 'networks': shared,
               'depends_on': {'radix-proxy-bind-proof': {'condition': 'service_healthy'}}}
     config = {'services': {'radix-proxy-bind-proof': server, 'client': client},
               'networks': {name: {'internal': True} for name in attachments}}
