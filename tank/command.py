@@ -130,6 +130,7 @@ class UploadRef(Body):
 
 
 class Turn(Body):
+    priority: Literal["urgent", "standard", "offpeak"] | None = None
     text: str = Field(min_length=1, max_length=20000)
     attachments: list[Attachment | UploadRef] = Field(default_factory=list, max_length=10)
     model: str | None = Field(default="auto", max_length=200)
@@ -380,7 +381,8 @@ async def events(thread_id: uuid.UUID, after: int = Query(default=0, ge=0), acto
 
 
 async def route_turn(actor: Actor, messages: list[dict], model: str | None = None,
-                     *, task_id: uuid.UUID | None = None, on_token: TokenSink | None = None) -> Any:
+                     *, task_id: uuid.UUID | None = None, on_token: TokenSink | None = None,
+                     priority: str | None = None) -> Any:
     from main import Message, RouteRequest, box_region, run_route
     from memory_routes import remember_turn
     remembered = await remember_turn(actor, messages, task_id)
@@ -396,7 +398,7 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
     if on_token is not None:
         override["_on_token"] = on_token
     return await run_route(RouteRequest(tenant_id=actor.tenant_id, agent="orchestrator", task_type="command.turn",
-                                       home_region=box_region(), messages=[Message(**m) for m in messages]), **override)
+                                       home_region=box_region(), messages=[Message(**m) for m in messages], priority=priority), **override)
 
 
 async def auto_price_snapshot(conn: Any, tenant_id: uuid.UUID) -> dict:
@@ -413,8 +415,8 @@ async def auto_price_snapshot(conn: Any, tenant_id: uuid.UUID) -> dict:
             "priced_at": row["updated_at"].isoformat() if row and row["updated_at"] else None}
 
 
-async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages: list[dict], model: str | None = None) -> None:
-    answer = None
+async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages: list[dict], model: str | None = None,
+                      *, priority: str | None = None, answer=None, deferred_error=None) -> None:
     preview = AnswerText()
 
     async def on_token(delta: str) -> None:
@@ -429,9 +431,31 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
                 await event(conn, row, "token", {"text": text, "message_id": turn_id})
 
     try:
-        async with asyncio.timeout(150):
-            answer = await route_turn(actor, messages, model=model, task_id=uuid.UUID(turn_id), on_token=on_token)
+        if deferred_error is not None:
+            raise deferred_error
+        if answer is None:
+            async with asyncio.timeout(150):
+                answer = await route_turn(actor, messages, model=model, task_id=uuid.UUID(turn_id), on_token=on_token,
+                                          **({"priority": priority} if priority is not None else {}))
+        from priority_queue import QueuedResponse
+        if isinstance(answer, QueuedResponse):
+            async with editing(thread_id, actor) as (conn, row, state):
+                await conn.execute("""UPDATE tank.offpeak_jobs SET command_context=$3::jsonb
+                    WHERE id=$1 AND tenant_id=$2 AND task_id=$4""", answer.id, actor.tenant_id,
+                    dump({"thread_id": str(thread_id), "user_id": actor.user_id, "tenant_admin": actor.tenant_admin}), uuid.UUID(turn_id))
+                await step(conn, row, state, {**state["steps"][turn_id], "status": "planned",
+                                              "priority": "offpeak", "job_id": str(answer.id)})
+                if state["active_turn"] == turn_id:
+                    state["active_turn"] = None
+            # The browser stream may close now. Durable worker completion uses
+            # this same answer/receipt path and the existing saved thread events.
+            import main
+            from priority_queue import kick
+            kick(main, answer.id, actor.tenant_id)
+            return
         async with editing(thread_id, actor) as (conn, row, state):
+            if any(m.get("message_id") == turn_id and m.get("role") == "assistant" for m in state["messages"]):
+                return  # worker restarted after saving an answer but before acknowledging it
             await record_receipts(conn, row, state, turn_id, [answer.ledger_id])
             repeatable = True
             try:
@@ -545,7 +569,8 @@ async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity
             "INSERT INTO tank.tasks(id,tenant_id,created_by,agent,task_type,title,input,status,started_at) "
             "VALUES($1,$2,$3,'orchestrator','command.turn',$4,$5::jsonb,'running',now())",
             uuid.UUID(turn_id), actor.tenant_id, actor.user_id, body.text[:200], dump({"messages": messages}))
-    task = asyncio.create_task(finish_turn(thread_id, actor, turn_id, messages, model=body.model))
+    task = asyncio.create_task(finish_turn(thread_id, actor, turn_id, messages, model=body.model,
+                                            **({"priority": body.priority} if body.priority is not None else {})))
     _background.add(task)
     task.add_done_callback(_background.discard)
 
@@ -556,9 +581,9 @@ async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity
                 yield update
             finished = True
         finally:
-            # Closing the owner's turn connection closes the SDK stream too.
-            # finish_turn retains the existing failed-step/receipt reconciliation.
-            if not finished and not task.done():
+            # Foreground disconnects close the SDK stream. An explicitly deferred
+            # turn must finish saving its queue/thread link even if the browser closes.
+            if not finished and not task.done() and body.priority != "offpeak":
                 task.cancel()
 
     return StreamingResponse(stream_turn(), media_type="text/event-stream",

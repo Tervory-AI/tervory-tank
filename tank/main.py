@@ -64,6 +64,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 import batch_providers
+import priority_queue
 import graduate
 import semantic_cache
 import routellm_shadow
@@ -596,7 +597,7 @@ class RouteRequest(BaseModel):
     tenant_id: uuid.UUID
     agent: str = "tier0"
     task_type: str = "tier0.answer"
-    priority: str | None = None          # overrides the policy's priority if set
+    priority: Literal["urgent", "standard", "offpeak", "batch"] | None = None          # overrides the policy's priority if set
     skill: str | None = None
     region: str | None = None
     home_region: str | None = None
@@ -694,7 +695,10 @@ async def _startup() -> None:
         # Base batches are not in this list: Base resumes them in its own room.
         await conn.execute(
             "UPDATE tank.tasks SET status='failed', error='Tank restarted mid-task', finished_at=now() "
-            "WHERE status IN ('queued','running') AND task_type <> 'base.enrich'"
+            "WHERE status IN ('queued','running') AND task_type <> 'base.enrich' "
+            "AND NOT EXISTS(SELECT 1 FROM tank.offpeak_jobs j WHERE j.task_id=tank.tasks.id "
+            "AND j.tenant_id=tank.tasks.tenant_id AND (j.status IN ('queued','dispatching','batch') "
+            "OR (j.command_context IS NOT NULL AND NOT j.notified)))"
         )
     global _http, _packages
     _http = httpx.AsyncClient(headers={"User-Agent": "Tervory/1.0 (+https://tervory.com)"}, timeout=15, event_hooks={"request": [__import__("controls").paid_host_hook], "response": [__import__("controls").paid_response_hook]})
@@ -1072,7 +1076,10 @@ async def run_route(
     _prior_escalation: list[dict[str, Any]] | None = None,
     _paid_limit: float | None = None,
     _on_token: TokenSink | None = None,
-) -> RouteResponse:
+    _offpeak_dispatch: bool = False,
+    _receipt_id: uuid.UUID | None = None,
+    _deferred_snapshot: dict | None = None,
+) -> RouteResponse | priority_queue.QueuedResponse:
     """Pick the model from policy, call it through LiteLLM, write the ledger row.
     Used directly by /v1/route and in the background by tasks."""
     await _check_route_task(req, task_id)
@@ -1164,7 +1171,7 @@ async def run_route(
     transcript_messages = await _preflight_mask(req, policy, messages, task_id)
     identity = _cache_identity(req, policy, messages, max_tokens, route_seat)
     cache_policy, cache_probe = dict(policy), None
-    if not holds_identifier and code_problem is None:
+    if priority != "urgent" and not _offpeak_dispatch and not holds_identifier and code_problem is None:
         hit = await _cache_read(req, policy, identity)
         if hit is not None:
             await _check_route_task(req, task_id)
@@ -1200,8 +1207,9 @@ async def run_route(
                                          latency_ms=int((time.perf_counter()-started_code)*1000))
             if not holds_identifier and _storage_mask(content) == content:
                 await _cache_write(req, policy, identity, result.ledger_id)
-                semantic_cache.schedule(__import__("sys").modules[__name__], req, cache_policy, identity,
-                                        messages, cache_probe, result.ledger_id, content, 0.0)
+                if priority != "urgent":
+                    semantic_cache.schedule(__import__("sys").modules[__name__], req, cache_policy, identity,
+                                            messages, cache_probe, result.ledger_id, content, 0.0)
             return result
         escalation.append({"from_rung": 3, "to_rung": 2, "reason": reason, "model": model})
         attempt = await _record_local(req, policy, model=model, rung=3, content=content, task_id=task_id,
@@ -1223,7 +1231,12 @@ async def run_route(
     if blocked:
         raise HTTPException(403, blocked)
     await _check_route_task(req, task_id)
-    if _defer_paid and not holds_identifier:
+    if priority == "offpeak" and not _offpeak_dispatch:
+        item = _DeferredRoute(req, policy, messages, max_tokens, generation, escalation,
+                              semantic_cache.batch_snapshot(cache_policy, identity, cache_probe))
+        return await priority_queue.enqueue(__import__("sys").modules[__name__], item,
+                                             caller=caller, task_id=task_id, model_override=model_override)
+    if _defer_paid and priority != "urgent" and not holds_identifier:
         raise _DeferredRoute(req, policy, messages, max_tokens, generation, escalation,
                              semantic_cache.batch_snapshot(cache_policy, identity, cache_probe))
     if _paid_limit is not None:
@@ -1232,6 +1245,14 @@ async def run_route(
             raise HTTPException(409, "Task cost cap prevents another call")
         generation = {**generation, "disable_fallbacks": True}
     await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
+    price_info = await priority_queue.model_info(__import__("sys").modules[__name__], model) if priority == "offpeak" else None
+    sent_at = priority_queue.now()
+    if _offpeak_dispatch and not priority_queue.window_open(price_info.get("offpeak"), sent_at):
+        raise priority_queue.WindowClosed()
+    if _receipt_id is not None:
+        async with pool().acquire() as conn:
+            await conn.execute("""UPDATE tank.ledger SET outcome='sent',sent_at=$3
+                WHERE id=$1 AND tenant_id=$2 AND offpeak_job_id=$1""", _receipt_id, req.tenant_id, sent_at)
     started = time.perf_counter()
     try:
         if _on_token is not None and req.task_type == "command.turn":
@@ -1250,30 +1271,34 @@ async def run_route(
             await conn.execute(
                 "INSERT INTO tank.ledger "
                 "(id,tenant_id,region,agent,skill,task_type,rung,model,priority,tokens_in,tokens_out,cost_usd,"
-                "latency_ms,cache_hit,outcome,task_id,error,route_seat,escalation,cost_status) "
-                "VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,'failed',$14,$15,$16,$17::jsonb,$18)",
+                "latency_ms,cache_hit,outcome,task_id,error,route_seat,escalation,cost_status,sent_at) "
+                "VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,'failed',$14,$15,$16,$17::jsonb,$18,$19)",
                 ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill, req.task_type,
                 policy["rung"], exc.model, priority, exc.tokens_in, exc.tokens_out, exc.cost_usd or 0,
                 int((time.perf_counter() - started) * 1000), task_id, "incomplete stream", route_seat, json.dumps(escalation),
                 # Existing NOT NULL storage convention: not_set is never shown as zero spend.
-                "not_set" if exc.cost_usd is None else "set",
+                "not_set" if exc.cost_usd is None else "set", sent_at,
             )
         raise HTTPException(502, {"ledger_id": str(ledger_id)}) from None
     except httpx.HTTPError as exc:
         # The gateway never answered. Still a call on the books, so the failure rate is honest.
         latency_ms = int((time.perf_counter() - started) * 1000)
-        ledger_id = uuid.uuid4()
+        ledger_id = _receipt_id or uuid.uuid4()
         err = f"no answer: {type(exc).__name__}: {str(exc)[:200]}"
         async with pool().acquire() as conn:
             await conn.execute(
                 """
                 INSERT INTO tank.ledger
                   (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-                   tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat, escalation)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,0,$10,false,'failed',$11,$12,$13,$14::jsonb)
+                   tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat, escalation,sent_at,offpeak_job_id,cost_status)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,0,$10,false,'failed',$11,$12,$13,$14::jsonb,$15,$16,$17)
+                ON CONFLICT(id) DO UPDATE SET outcome='failed',error=EXCLUDED.error,
+                    sent_at=EXCLUDED.sent_at,latency_ms=EXCLUDED.latency_ms,cost_status=EXCLUDED.cost_status
+                WHERE tank.ledger.tenant_id=EXCLUDED.tenant_id AND tank.ledger.offpeak_job_id=EXCLUDED.id
                 """,
                 ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
                 req.task_type, policy["rung"], model, priority, latency_ms, task_id, err, route_seat, json.dumps(escalation),
+                sent_at, _receipt_id, "not_set" if _receipt_id else "set",
             )
         raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "upstream": err}) from exc
     latency_ms = int((time.perf_counter() - started) * 1000)
@@ -1294,26 +1319,46 @@ async def run_route(
     tokens_out = int(usage.get("completion_tokens") or 0)
     # LiteLLM reports the cost it computed from config.yaml prices in this header.
     cost_usd = float(r.headers.get("x-litellm-response-cost") or 0.0)
+    cost_status = "set"
+    if priority == "offpeak":
+        cost = (priority_queue.usage_cost(price_info, usage, sent_at) if price_info.get("offpeak") else
+                float(r.headers["x-litellm-response-cost"]) if "x-litellm-response-cost" in r.headers else None)
+        cost_usd, cost_status = cost or 0.0, "set" if cost is not None else "not_set"
     # The gateway picks the cheapest model with funds (litellm/config.yaml); the ledger records the
     # roster model that actually answered, so spend is booked to the right provider.
     answered = r.headers.get("x-litellm-model-group") or model
+    if priority == "offpeak" and answered != model:
+        # A gateway violating disable_fallbacks is not evidence for our booked rate.
+        cost_usd, cost_status = 0.0, "not_set"
     content = ""
     finish_reason = ""
     if outcome == "delivered":
         content, finish_reason = _choice_answer(data)
 
-    ledger_id = uuid.uuid4()
+    ledger_id = _receipt_id or uuid.uuid4()
     async with pool().acquire() as conn:
         await conn.execute(
             """
             INSERT INTO tank.ledger
               (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat,escalation,accept_after)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16,$17,$18::jsonb,now()+make_interval(secs=>$19))
+               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat,escalation,accept_after,sent_at,offpeak_job_id,cost_status)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16,$17,$18::jsonb,now()+make_interval(secs=>$19),$20,$21,$22)
+            ON CONFLICT(id) DO UPDATE SET model=EXCLUDED.model,rung=EXCLUDED.rung,
+              tokens_in=EXCLUDED.tokens_in,tokens_out=EXCLUDED.tokens_out,cost_usd=EXCLUDED.cost_usd,
+              latency_ms=EXCLUDED.latency_ms,outcome=EXCLUDED.outcome,error=EXCLUDED.error,
+              route_seat=EXCLUDED.route_seat,escalation=EXCLUDED.escalation,accept_after=EXCLUDED.accept_after,
+              sent_at=EXCLUDED.sent_at,cost_status=EXCLUDED.cost_status,
+              baseline_model=EXCLUDED.baseline_model,baseline_cost_usd=EXCLUDED.baseline_cost_usd,
+              baseline_status=EXCLUDED.baseline_status,baseline_priced_at=EXCLUDED.baseline_priced_at,
+              standard_model=EXCLUDED.standard_model,standard_cost_usd=EXCLUDED.standard_cost_usd,
+              top_model=EXCLUDED.top_model,top_cost_usd=EXCLUDED.top_cost_usd,
+              comparison_revision=EXCLUDED.comparison_revision
+            WHERE tank.ledger.tenant_id=EXCLUDED.tenant_id AND tank.ledger.offpeak_job_id=EXCLUDED.id
             """,
             ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
             req.task_type, policy["rung"], answered, priority, tokens_in, tokens_out, cost_usd,
             latency_ms, outcome, task_id, error, route_seat, json.dumps(escalation), int(policy.get("acceptance_window_s", 86400)),
+            sent_at, _receipt_id, cost_status,
         )
 
     if outcome == "failed":
@@ -1322,12 +1367,12 @@ async def run_route(
 
     # Graduation: shadow the candidate on a share of calls; it never affects this answer.
     # An identifier prompt is not copied to a second provider or into the transcript.
-    if not holds_identifier and policy.get("candidate_model") and float(policy.get("shadow_rate") or 0) > random.random():
+    if priority != "urgent" and cost_status == "set" and not holds_identifier and policy.get("candidate_model") and float(policy.get("shadow_rate") or 0) > random.random():
         t = asyncio.create_task(_shadow(req, policy, messages, max_tokens, ledger_id, content, cost_usd))
         _background.add(t)
         t.add_done_callback(_background.discard)
 
-    if not holds_identifier and model_override is None and routellm_shadow.configuration(policy):
+    if priority != "urgent" and cost_status == "set" and not holds_identifier and model_override is None and routellm_shadow.configuration(policy):
         t = asyncio.create_task(routellm_shadow.observe(
             __import__("sys").modules[__name__], req, policy, messages, max_tokens,
             ledger_id, content, cost_usd, answered, "x-litellm-response-cost" in r.headers))
@@ -1345,11 +1390,16 @@ async def run_route(
             )
     if content and not holds_identifier and masked_content == content:
         await _cache_write(req, policy, identity, ledger_id)
-        semantic_cache.schedule(__import__("sys").modules[__name__], req, cache_policy, identity,
-                                messages, cache_probe, ledger_id, content, cost_usd)
+        if priority != "urgent" and cost_status == "set":
+            if _deferred_snapshot is not None:
+                semantic_cache.schedule_batch(__import__("sys").modules[__name__], req, _deferred_snapshot,
+                                               ledger_id, content, cost_usd)
+            else:
+                semantic_cache.schedule(__import__("sys").modules[__name__], req, cache_policy, identity,
+                                        messages, cache_probe, ledger_id, content, cost_usd)
     return RouteResponse(
         ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
-        tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd, latency_ms=latency_ms,
+        tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd if cost_status == "set" else None, latency_ms=latency_ms,
         finish_reason=finish_reason, escalation=escalation,
     )
 
@@ -1436,6 +1486,7 @@ def _roster_row(item: Any) -> dict[str, Any] | None:
         "model_info": {
             "input_cost_per_token": price("input_cost_per_token"),
             "output_cost_per_token": price("output_cost_per_token"),
+            **({"offpeak": info["offpeak"]} if isinstance(info.get("offpeak"), dict) else {}),
         },
     }
 
@@ -2367,7 +2418,7 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
     return {"ok": True, "skipped": False, "research_due": due, **result.as_dict()}
 
 
-@app.post("/v1/route", response_model=RouteResponse, response_model_exclude_none=True)
+@app.post("/v1/route", response_model=RouteResponse | priority_queue.QueuedResponse, response_model_exclude_none=True)
 async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     if caller:
         body = body.model_copy(update={"agent": caller})
@@ -2377,11 +2428,21 @@ async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     if "#moa." in body.task_type:
         raise HTTPException(403, "Submit the original task; MoA seats are internal")
     row = await load_policy(body.task_type, body.tenant_id)
+    if (body.priority or row["priority"]) == "offpeak" and row.get("moa_enabled"):
+        raise HTTPException(422, "MoA policies require the foreground route")
     if not row.get("moa_enabled") or int(row.get("rung", 1)) in {3, 4} or graduate.is_skill(row.get("model")):
-        return await run_route(body, caller=caller)
+        result = await run_route(body, caller=caller)
+        if isinstance(result, priority_queue.QueuedResponse):
+            priority_queue.kick(__import__("sys").modules[__name__], result.id, body.tenant_id)
+        return result
     return await __import__("moa").routed_request(
         body, caller, row=row, complex_request=body.complex_request, interactive=body.interactive
     )
+
+
+@app.get("/v1/route/jobs/{job_id}", dependencies=[Depends(require_key)])
+async def route_job(job_id: uuid.UUID, tenant_id: uuid.UUID):
+    return await priority_queue.status(__import__("sys").modules[__name__], job_id, tenant_id)
 
 
 # ---------- provider batches (independent of the task queue worker) ----------
@@ -2453,6 +2514,10 @@ async def route_batch(body: BatchRequest, caller: str | None = Depends(require_k
             raise HTTPException(409, "Batch id already has different requests")
         return await batch_status(body.id, tenant)
     policy = await load_policy(task, tenant)
+    if any((r.priority or policy["priority"]) == "offpeak" for r in body.requests):
+        # This endpoint owns one batch id. Deferred single requests own a job id;
+        # never misreport an unsubmitted offpeak job as a completed batch item.
+        raise HTTPException(422, {"priority": "offpeak", "route": "/v1/route"})
     eligible = bool(policy.get("batch_eligible")) and not policy.get("moa_enabled")
     eligible = eligible and len(body.requests) >= _batch_min() and not any(r.interactive for r in body.requests)
     local, deferred = [], []
@@ -2468,6 +2533,11 @@ async def route_batch(body: BatchRequest, caller: str | None = Depends(require_k
             deferred.append(item)
     if not deferred:
         return {"id": str(body.id), "status": "completed", "results": local, "batch": False}
+    return await _enqueue_batch(body, caller, local, deferred, fingerprint)
+
+
+async def _enqueue_batch(body, caller, local, deferred, fingerprint):
+    tenant, task = body.requests[0].tenant_id, body.requests[0].task_type
     # Free/code/cache results have already finished. Only work still needing a
     # model is submitted; no interactive request enters this durable queue.
     prices = await _batch_price(deferred[0].policy["model"])
@@ -2491,7 +2561,8 @@ async def route_batch(body: BatchRequest, caller: str | None = Depends(require_k
                 for item, reservation in zip(deferred, reservations):
                     snapshot = {"routing": item.policy, "messages": item.messages, "max_tokens": item.max_tokens,
                                 "generation": item.generation, "escalation": item.escalation,
-                                "semantic_cache": item.cache_snapshot}
+                                "semantic_cache": item.cache_snapshot,
+                                "offpeak_job_id": str(item.offpeak_job_id) if getattr(item, "offpeak_job_id", None) else None}
                     clean_req = item.req.model_copy(update={"messages": [Message(**m) for m in _plain_messages([m.model_dump() for m in item.req.messages])]})
                     await conn.execute(
                         """INSERT INTO tank.batch_items(batch_id,tenant_id,item_id,request,policy,prices,reserved_usd,position)
@@ -2519,7 +2590,8 @@ async def batch_status(batch_id: uuid.UUID, tenant_id: uuid.UUID) -> dict[str, A
         if row is None:
             raise HTTPException(404, "No batch for this tenant")
         items = await conn.fetch(
-            """SELECT i.item_id,i.position,i.status,i.error,l.id AS ledger_id,l.model,l.rung,l.cost_usd,
+            """SELECT i.item_id,i.position,i.status,i.error,l.id AS ledger_id,l.model,l.rung,
+            CASE WHEN l.cost_status='not_set' THEN NULL ELSE l.cost_usd END AS cost_usd,
             coalesce(l.batch_baseline_cost_usd,l.baseline_cost_usd) AS baseline_cost_usd,
             l.tokens_in,l.tokens_out,l.latency_ms,l.batch,l.escalation,t.content
             FROM tank.batch_items i LEFT JOIN tank.ledger l ON l.id=i.ledger_id AND l.tenant_id=i.tenant_id
@@ -2557,7 +2629,10 @@ async def _batch_fallback(conn: Any, batch: Any, item: Any) -> None:
             raise HTTPException(409, "Policy changed before retry")
         remaining = min(remaining, float(current["max_cost_usd"])-float(item["reserved_usd"]))
         result = await run_route(req, caller=batch["caller"], _paid_policy=snapshot["routing"],
-                                 _prior_escalation=snapshot["escalation"], _paid_limit=remaining)
+                                 _prior_escalation=snapshot["escalation"], _paid_limit=remaining,
+                                 _offpeak_dispatch=bool(snapshot.get("offpeak_job_id")),
+                                 _receipt_id=uuid.UUID(snapshot["offpeak_job_id"]) if snapshot.get("offpeak_job_id") else None,
+                                 _deferred_snapshot=snapshot if snapshot.get("offpeak_job_id") else None)
         await conn.execute("""UPDATE tank.ledger SET batch=true,batch_id=$3,
             batch_baseline_cost_usd=cost_usd,batch_discount_usd=0 WHERE id=$1 AND tenant_id=$2""",
             result.ledger_id, req.tenant_id, batch["id"])
@@ -2592,7 +2667,7 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
     baseline = Decimal(tokens_in)*Decimal(str(prices["input"])) + Decimal(tokens_out)*Decimal(str(prices["output"]))
     actual = baseline*Decimal(str(prices["discount"]))
     req = RouteRequest.model_validate(_batch_obj(item["request"]))
-    ledger_id = uuid.uuid4()
+    ledger_id = uuid.UUID(snapshot["offpeak_job_id"]) if snapshot.get("offpeak_job_id") else uuid.uuid4()
     async with conn.transaction():
         # Item lock plus unique ledger assignment makes repeated provider polls idempotent.
         locked = await conn.fetchrow("SELECT ledger_id,status FROM tank.batch_items WHERE batch_id=$1 AND tenant_id=$2 AND item_id=$3 FOR UPDATE", batch["id"], req.tenant_id, item["item_id"])
@@ -2601,12 +2676,26 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
         await conn.execute(
             """INSERT INTO tank.ledger(id,tenant_id,region,agent,skill,task_type,rung,model,priority,
             tokens_in,tokens_out,cost_usd,latency_ms,outcome,batch,batch_id,baseline_model,baseline_cost_usd,
-            baseline_status,escalation,accept_after,batch_baseline_cost_usd,batch_discount_usd)
-            VALUES($1,$2,$3,$4,$5,$6,$7,$8,'batch',$9,$10,$11,0,'delivered',true,$12,$8,$13,'measured',$14::jsonb,
-                   now()+make_interval(secs=>$15),$13,$13::numeric-$11::numeric)""",
+            baseline_status,escalation,accept_after,batch_baseline_cost_usd,batch_discount_usd,sent_at,offpeak_job_id)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$16,$9,$10,$11,0,'delivered',true,$12,$8,$13,'measured',$14::jsonb,
+                   now()+make_interval(secs=>$15),$13,$13::numeric-$11::numeric,$17,$18)
+            ON CONFLICT(id) DO UPDATE SET model=EXCLUDED.model,rung=EXCLUDED.rung,
+              tokens_in=EXCLUDED.tokens_in,tokens_out=EXCLUDED.tokens_out,cost_usd=EXCLUDED.cost_usd,
+              latency_ms=EXCLUDED.latency_ms,outcome=EXCLUDED.outcome,cost_status='set',
+              escalation=EXCLUDED.escalation,accept_after=EXCLUDED.accept_after,sent_at=EXCLUDED.sent_at,
+              batch=EXCLUDED.batch,batch_id=EXCLUDED.batch_id,
+              batch_baseline_cost_usd=EXCLUDED.batch_baseline_cost_usd,batch_discount_usd=EXCLUDED.batch_discount_usd,
+              baseline_model=EXCLUDED.baseline_model,baseline_cost_usd=EXCLUDED.baseline_cost_usd,
+              baseline_status=EXCLUDED.baseline_status,baseline_priced_at=EXCLUDED.baseline_priced_at,
+              standard_model=EXCLUDED.standard_model,standard_cost_usd=EXCLUDED.standard_cost_usd,
+              top_model=EXCLUDED.top_model,top_cost_usd=EXCLUDED.top_cost_usd,
+              comparison_revision=EXCLUDED.comparison_revision
+            WHERE tank.ledger.tenant_id=EXCLUDED.tenant_id AND tank.ledger.offpeak_job_id=EXCLUDED.id""",
             ledger_id, req.tenant_id, box_region(), req.agent, req.skill, req.task_type,
             snapshot["routing"]["rung"], batch["model"], tokens_in, tokens_out, actual,
             batch["id"], baseline, json.dumps(snapshot["escalation"]), int(snapshot["routing"]["acceptance_window_s"]),
+            "offpeak" if snapshot.get("offpeak_job_id") else "batch", batch["submitted_at"],
+            ledger_id if snapshot.get("offpeak_job_id") else None,
         )
         await conn.execute("""INSERT INTO tank.transcripts(ledger_id,tenant_id,task_type,messages,content)
             VALUES($1,$2,$3,$4::jsonb,$5)""", ledger_id, req.tenant_id, req.task_type,
@@ -2636,6 +2725,9 @@ async def _process_batch(conn: Any, batch: Any) -> None:
                 raise ValueError("provider_not_allowed")
             lines.append(json.dumps({"custom_id": str(item["item_id"]), "method": "POST", "url": "/v1/chat/completions",
                 "body": {"model": prices["native"], "messages": snapshot["messages"], "max_tokens": snapshot["max_tokens"], **snapshot["generation"]}}))
+        await conn.execute("""UPDATE tank.offpeak_jobs SET sent_at=now() WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"])
+        await conn.execute("""UPDATE tank.ledger SET outcome='sent',sent_at=now()
+            WHERE offpeak_job_id=$1 AND tenant_id=$2 AND outcome='queued'""", batch["id"], batch["tenant_id"])
         provider_id, file_id = await batch_providers.submit(_batch_gateway, batch, lines)
         await conn.execute("""UPDATE tank.batches SET status='submitted',provider_id=$3,input_file_id=$4
             WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"], provider_id, file_id)
@@ -2697,7 +2789,9 @@ async def process_batches_once() -> None:
 async def _batch_loop() -> None:
     while True:
         try:
+            await priority_queue.process_once(__import__("sys").modules[__name__])
             await process_batches_once()
+            await priority_queue.notify_commands(__import__("sys").modules[__name__])
         except Exception:
             log.warning("Batch maintenance failed; retrying")
         await asyncio.sleep(10)
