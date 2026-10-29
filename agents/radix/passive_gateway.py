@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict
 
 from egress import Proxy, Server, env_revoked, private_bind_address, system_resolve
 from passive_store import Store
+from chassis.tenant_db import TenantPool, tenant_path, tenant_scope
 
 
 async def proof(domain: str, challenge: str) -> bool:
@@ -47,6 +48,7 @@ class Lease:
             self.proxy_server.close()
             self.proxy_server = None
 
+    @tenant_path("tenant")
     async def start(self, tenant: UUID, ident: UUID):
         async with self.lock:
             if self.run is not None and self.now() < self.until:
@@ -78,6 +80,7 @@ class Lease:
                 raise HTTPException(503, 'scan egress unavailable') from None
             return {'ready': True}
 
+    @tenant_path("tenant")
     async def release(self, tenant: UUID, ident: UUID):
         async with self.lock:
             if self.run == (tenant, ident):
@@ -93,7 +96,25 @@ class Run(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app):
-    app.state.pool = await asyncpg.create_pool(os.environ['DATABASE_URL'], min_size=1, max_size=2)
+    raw = await asyncpg.create_pool(os.environ['DATABASE_URL'], min_size=1, max_size=2)
+    admin_url = os.environ.get('RADIX_GATEWAY_ADMIN_DATABASE_URL', '')
+    admin = await asyncpg.create_pool(admin_url, min_size=1, max_size=1) if admin_url else None
+    try:
+        if admin is not None:
+            role = await admin.fetchrow('SELECT rolname,rolbypassrls FROM pg_roles WHERE rolname=current_user')
+            if not os.environ.get('RADIX_GATEWAY_RLS_ADMIN_ROLE') or role['rolname'] != os.environ['RADIX_GATEWAY_RLS_ADMIN_ROLE'] or not role['rolbypassrls']:
+                raise RuntimeError('Gateway admin connection must use the configured BYPASSRLS role')
+        enforced = await raw.fetchval("SELECT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='agent_radix' AND c.relrowsecurity)")
+        if enforced:
+            role = await raw.fetchrow('SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user')
+            if role['rolsuper'] or role['rolbypassrls'] or admin is None:
+                raise RuntimeError('Gateway RLS requires a non-bypass tenant role and separate admin connection')
+    except BaseException:
+        await raw.close()
+        if admin is not None:
+            await admin.close()
+        raise
+    app.state.pool = TenantPool(raw, admin)
     app.state.lease = Lease(Store(app.state.pool))
     async def maintenance():
         while True:
@@ -114,8 +135,11 @@ async def lifespan(app):
         prior = app.state.lease.run
         app.state.lease.close()
         if prior:
-            await app.state.lease.store.fail(*prior)
+            with tenant_scope(prior[0]):
+                await app.state.lease.store.fail(*prior)
         await app.state.pool.close()
+        if admin is not None:
+            await admin.close()
 
 
 app = FastAPI(lifespan=lifespan)
