@@ -317,3 +317,17 @@ Additional concrete merged integration: the passive egress gateway has its own p
 New real-RLS gateway lifespan/lease test on653d28b: **1passed,18.96s**. It uses separate tenant/founder roles, reaps an expired foreign owner, proves next owner-only pending/running reads and context reset, releases correctly; DNS proof and proxy server are stubbed, no socket/scan. A later combined targeted rerun exposed two old maintenance fixtures without new metadata-query support;11ef2f2 adds an explicit pre-activation relrowsecurity=False stub and clears optional admin URL, retaining all transport-failure/recovery assertions. Final rerun in progress; no current-head all-green/clearance claim.
 
 Current checks/reviewer pending. Fatal lint and diff checks passed before latest test-only fix; final recheck to follow. New queue commit mode preserves statement durability and explicit rollback; default scoped checkout unchanged. Production RLS/migrations remain opt-in/unapplied, no role changes/live scans/model calls. Source checkpoint is concrete integration work, not a status-only poll commit.
+
+## 2026-10-28 18:44:56 PDT (UTC-07:00) / 2026-10-29 01:44:56 UTC — stable merged-source local proof checkpoint
+
+Source/fixture head **11ef2f2**; previous7537bb4 changed report only. Final local rerun with RLS_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55439/postgres and RADIX_PASSIVE_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55439/radix_passive_test:
+
+```sh
+/tmp/tervory-rls-merge-python/bin/python -m pytest -q tests/test_radix_passive.py tests/test_tenant_rls.py::test_durable_statement_checkout_keeps_commits_and_explicit_rollback tests/test_tenant_rls.py::test_offpeak_admin_discovery_then_owner_and_durable_marker tests/test_tenant_rls.py::test_radix_gateway_scopes_lease_and_admin_reaps_expired_owner
+```
+
+**49passed,12warnings,39.26s,zero skipped**. The prior same targeted run was **2failed,47passed,12warnings,36.28s** solely because old maintenance mocks lacked fetchval metadata support;11ef2f2 correction preserves all original recovery assertions and now passes. New queue markers are observed committed from another connection before checkout/provider boundary and survive simulated interruption; explicit rollback still removes its uncommitted change. Gateway uses real RLS roles, stubbed DNS proof/proxy server, no outbound scan. Full Radix file executes all6previously-skipped DB cases.
+
+All other bounded evidence remains above:210actualtenanttables/13schemas matrix,97merged focused passes plus the corrected chassis policy fixture test1pass. Current expanded exact-head hosted suite and independent reviewer clearance are still required; no current-head all-green claim yet. Production migrations/role/grants remain entirely manual and unapplied. Dedicated gateway admin connection must receive only Radix passive-scan maintenance grants, not founder-wide schema privileges.
+
+This is the final local evidence checkpoint for the merged integration. Keep source stable absent an actual finding; record remaining hosted/review status in dated PR428 description entries. Disposable merge database remains only until remaining checks settle; no production connection.
