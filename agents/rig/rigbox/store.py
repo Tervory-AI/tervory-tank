@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from chassis.tenant_db import TenantPool
+
 from rigbox.logic import public_product
 from rigbox.recall import SEARCH_RECALL_CAP
 from rigbox.retailer_store import RetailerMemoryStore, RetailerPgStore
@@ -568,7 +570,10 @@ class PgStore(RetailerPgStore):
         Statements are classified after leading blank lines and ``--`` comments
         are removed, because those comments ride along on the first statement.
         """
-        async with self.pool.acquire() as conn:
+        # Optional DDL errors must roll back before the existing-schema fallback
+        # or next statement. Keep SET LOCAL per statement on scoped pools.
+        checkout = self.pool.acquire(autocommit=True) if isinstance(self.pool, TenantPool) else self.pool.acquire()
+        async with checkout as conn:
             for statement in schema_statements():
                 sql = _classified_sql(statement)
                 if not sql:
