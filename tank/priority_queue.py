@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 import json
 import uuid
 from datetime import datetime, timezone
@@ -13,6 +14,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 import batch_providers
+from tenant_db import tenant_scope
 
 
 _worker_locks = WeakKeyDictionary()
@@ -206,8 +208,20 @@ async def process_once(tank, *, job_id=None, tenant_id=None):
         await _process_once(tank, job_id=job_id, tenant_id=tenant_id)
 
 
+@asynccontextmanager
+async def owner_connection(tank, discovery, tenant):
+    with tenant_scope(tenant):
+        source = tank.pool()
+        if getattr(tank, "_admin_pool", None) is not None or getattr(source, "admin_pool", None) is not None:
+            async with source.acquire(autocommit=True) as conn:
+                yield conn
+        else:
+            # Legacy pre-activation/native test pools retain their checkout count.
+            yield discovery
+
+
 async def _process_once(tank, *, job_id=None, tenant_id=None):
-    async with tank.pool().acquire() as conn:
+    async with getattr(tank, "admin_pool", tank.pool)().acquire() as conn:
         # Platform worker discovers work across tenants, then every operation is
         # scoped by that row's tenant and box, as in the existing batch worker.
         rows = await conn.fetch("""SELECT id,tenant_id FROM tank.offpeak_jobs WHERE region=$1
@@ -220,13 +234,15 @@ async def _process_once(tank, *, job_id=None, tenant_id=None):
             if not await conn.fetchval('SELECT pg_try_advisory_lock($1)', lock):
                 continue
             try:
-                job = await conn.fetchrow('SELECT * FROM tank.offpeak_jobs WHERE id=$1 AND tenant_id=$2', row['id'], row['tenant_id'])
-                if job['status'] in {'queued', 'dispatching', 'batch'}:
-                    await conn.execute('UPDATE tank.offpeak_jobs SET checked_at=now() WHERE id=$1 AND tenant_id=$2', row['id'], row['tenant_id'])
-                    await _process(tank, conn, job)
+                async with owner_connection(tank, conn, row['tenant_id']) as owned:
+                    job = await owned.fetchrow('SELECT * FROM tank.offpeak_jobs WHERE id=$1 AND tenant_id=$2', row['id'], row['tenant_id'])
+                    if job['status'] in {'queued', 'dispatching', 'batch'}:
+                        await owned.execute('UPDATE tank.offpeak_jobs SET checked_at=now() WHERE id=$1 AND tenant_id=$2', row['id'], row['tenant_id'])
+                        await _process(tank, owned, job)
             except HTTPException as exc:
                 if exc.status_code < 500:
-                    await _finish(tank, conn, row, error='route_refused')
+                    async with owner_connection(tank, conn, row['tenant_id']) as owned:
+                        await _finish(tank, owned, row, error='route_refused')
                 else:
                     tank.log.warning('Offpeak maintenance will retry status')
             except Exception:
@@ -244,7 +260,7 @@ async def _notify_commands(tank):
     """Resume an existing Command turn after a durable job completes, without a model call."""
     import command
     from types import SimpleNamespace
-    async with tank.pool().acquire() as conn:
+    async with getattr(tank, "admin_pool", tank.pool)().acquire() as conn:
         rows = await conn.fetch("""SELECT id,tenant_id FROM tank.offpeak_jobs WHERE region=$1
             AND status IN ('completed','failed','uncertain') AND command_context IS NOT NULL
             AND NOT notified ORDER BY created_at LIMIT 100""", tank.box_region())
@@ -253,18 +269,19 @@ async def _notify_commands(tank):
             if not await conn.fetchval('SELECT pg_try_advisory_lock($1)', lock):
                 continue
             try:
-                job = await conn.fetchrow('SELECT * FROM tank.offpeak_jobs WHERE id=$1 AND tenant_id=$2', row['id'], row['tenant_id'])
-                if job['notified']:
-                    continue
-                context = unpack(job['command_context'])
-                actor = await command.authorized_actor(command.Actor(job['tenant_id'], context['user_id'], False,
-                                                      tenant_admin=context.get('tenant_admin', False)))
-                result = unpack(job['result'])
-                answer = SimpleNamespace(content=result['content'], ledger_id=uuid.UUID(str(result['ledger_id']))) if job['status'] == 'completed' else None
-                error = HTTPException(502, {'ledger_id': str(job['id'])}) if answer is None else None
-                await command.finish_turn(uuid.UUID(context['thread_id']), actor, str(job['task_id']), [],
-                                          model=job['model_override'], answer=answer, deferred_error=error)
-                await conn.execute('UPDATE tank.offpeak_jobs SET notified=true WHERE id=$1 AND tenant_id=$2', job['id'], job['tenant_id'])
+                async with owner_connection(tank, conn, row['tenant_id']) as owned:
+                    job = await owned.fetchrow('SELECT * FROM tank.offpeak_jobs WHERE id=$1 AND tenant_id=$2', row['id'], row['tenant_id'])
+                    if job['notified']:
+                        continue
+                    context = unpack(job['command_context'])
+                    actor = await command.authorized_actor(command.Actor(job['tenant_id'], context['user_id'], False,
+                                                          tenant_admin=context.get('tenant_admin', False)))
+                    result = unpack(job['result'])
+                    answer = SimpleNamespace(content=result['content'], ledger_id=uuid.UUID(str(result['ledger_id']))) if job['status'] == 'completed' else None
+                    error = HTTPException(502, {'ledger_id': str(job['id'])}) if answer is None else None
+                    await command.finish_turn(uuid.UUID(context['thread_id']), actor, str(job['task_id']), [],
+                                              model=job['model_override'], answer=answer, deferred_error=error)
+                    await owned.execute('UPDATE tank.offpeak_jobs SET notified=true WHERE id=$1 AND tenant_id=$2', job['id'], job['tenant_id'])
             finally:
                 await conn.execute('SELECT pg_advisory_unlock($1)', lock)
 
