@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
 COPY agents/_chassis/chassis /app/chassis
 COPY agents/base/app.py /app/app.py
 COPY agents/base/pipeline.py /app/pipeline.py
+COPY tank/base_source_scores.py /app/base_source_scores.py
 COPY agents/base/room.py /app/room.py
 COPY agents/base/base_brain.py /app/base_brain.py
 COPY agents/base/browser_evidence.py /app/browser_evidence.py

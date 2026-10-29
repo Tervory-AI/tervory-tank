@@ -1873,6 +1873,28 @@ CREATE TABLE IF NOT EXISTS tank.base_audits (
     UNIQUE(tenant_id,campaign_id,seed)
 );
 
+-- Explicit field checks are additive; legacy record verdicts stay unchanged.
+ALTER TABLE tank.base_audits ADD COLUMN IF NOT EXISTS field_verdicts jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+-- Job 6 (F8): Base source reliability from reviewed audits. Platform-wide counts only:
+-- source kind, field name and numbers; never a tenant, record, URL or value.
+CREATE TABLE IF NOT EXISTS tank.base_source_reliability (
+    source text NOT NULL,
+    field text NOT NULL,
+    correct integer NOT NULL CHECK(correct >= 0),
+    wrong integer NOT NULL CHECK(wrong >= 0),
+    checked integer NOT NULL CHECK(checked = correct + wrong AND checked > 0),
+    accuracy double precision NOT NULL CHECK(accuracy BETWEEN 0 AND 1),
+    wilson_lower double precision CHECK(wilson_lower BETWEEN 0 AND 1),
+    audits integer NOT NULL CHECK(audits > 0),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(source, field)
+);
+-- Additive ownership for branches that already installed the initial score table.
+ALTER TABLE tank.base_source_reliability ADD COLUMN IF NOT EXISTS owner_id uuid NOT NULL
+    DEFAULT '00000000-0000-0000-0000-000000000001'
+    CHECK (owner_id='00000000-0000-0000-0000-000000000001'::uuid);
+
 -- Founder decision: retain NOT NULL; a not_set amount is storage only, never spend.
 DO $$
 BEGIN
