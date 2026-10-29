@@ -10,6 +10,9 @@ COPY config.za.yaml /app/config.za.yaml
 RUN addgroup -S -g 10001 tervory \
     && adduser -S -D -u 10001 -G tervory -h /home/tervory tervory \
     && mkdir -p /home/tervory \
-    && chown -R tervory:tervory /app /home/tervory
+    && chown tervory:tervory /home/tervory
+# Application code and baked-in rosters remain readable and root-owned. Recursively
+# chowning /app copies the upstream dependency tree into a new image layer and can
+# exceed the production deployment timeout. Runtime state belongs in HOME or /tmp.
 ENV HOME=/home/tervory
 USER 10001:10001
