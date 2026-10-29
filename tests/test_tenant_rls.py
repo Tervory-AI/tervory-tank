@@ -87,7 +87,7 @@ async def database():
                 assert await raw.fetchval("SELECT current_user") == tenant_role
                 assert not await raw.fetchval("SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname=current_user")
                 assert await founder.fetchval("SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user")
-                yield SimpleNamespace(owner=owner, raw=raw, pool=TenantPool(raw), founder=founder, tables=tables, tenant_url=url_for(url, name, tenant_role))
+                yield SimpleNamespace(owner=owner, raw=raw, pool=TenantPool(raw), founder=founder, tables=tables, tenant_url=url_for(url, name, tenant_role), founder_url=url_for(url, name, founder_role))
             finally:
                 await raw.close()
                 await founder.close()
@@ -518,3 +518,42 @@ async def test_merged_radix_domain_route_uses_accepted_tenant_without_scan(datab
     with room_scope(b):
         assert await app.state.pool.fetchval("SELECT count(*) FROM agent_radix.passive_domains") == 0
     assert await app.state.pool.fetchval("SELECT count(*) FROM agent_radix.passive_domains") == 0
+
+
+@pytest.mark.asyncio
+async def test_radix_gateway_scopes_lease_and_admin_reaps_expired_owner(database, monkeypatch):
+    from fastapi import FastAPI
+    sys.path.insert(0, str(ROOT / "agents/radix"))
+    import passive_gateway as gateway
+    a, b, expired, pending = uuid4(), uuid4(), uuid4(), uuid4()
+    for tenant in (a, b):
+        await database.owner.execute("INSERT INTO agent_radix.passive_domains(tenant_id,domain,challenge) VALUES($1,'offline.invalid','public-offline-proof')", tenant)
+    await database.owner.execute("""INSERT INTO agent_radix.passive_scans(tenant_id,id,domain,target,artifact,status,lease_until)
+        VALUES($1,$2,'offline.invalid','https://offline.invalid/','commit:offline','running',now()-interval '1 minute')""", a, expired)
+    await database.owner.execute("""INSERT INTO agent_radix.passive_scans(tenant_id,id,domain,target,artifact)
+        VALUES($1,$2,'offline.invalid','https://offline.invalid/','commit:offline')""", b, pending)
+    monkeypatch.setenv("DATABASE_URL", database.tenant_url)
+    monkeypatch.setenv("RADIX_GATEWAY_ADMIN_DATABASE_URL", database.founder_url)
+    monkeypatch.setenv("RADIX_GATEWAY_RLS_ADMIN_ROLE", await database.founder.fetchval("SELECT current_user"))
+    monkeypatch.setattr(gateway, "private_bind_address", lambda: "127.0.0.1")
+    class NoSocketServer:
+        def __init__(self, *args, **kwargs):
+            pass
+        def start(self):
+            return self
+        def close(self):
+            pass
+    app = FastAPI()
+    async with gateway.lifespan(app):
+        assert await database.owner.fetchval("SELECT status FROM agent_radix.passive_scans WHERE id=$1", expired) == "error"
+        async def accepted_local_proof(domain, challenge):
+            assert domain == "offline.invalid" and challenge == "public-offline-proof"
+            assert await app.state.pool.fetchval("SELECT current_setting('app.tenant_id',true)") == str(b)
+            assert await app.state.pool.fetchval("SELECT count(*) FROM agent_radix.passive_scans") == 1
+            return True
+        app.state.lease.check = accepted_local_proof
+        app.state.lease.server = NoSocketServer
+        assert await app.state.lease.start(b, pending) == {"ready": True}
+        assert await app.state.pool.fetchval("SELECT count(*) FROM agent_radix.passive_scans") == 0
+        await app.state.lease.release(b, pending)
+        assert await database.owner.fetchval("SELECT status FROM agent_radix.passive_scans WHERE id=$1", pending) == "error"
