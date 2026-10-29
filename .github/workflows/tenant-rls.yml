@@ -40,6 +40,7 @@ jobs:
       RLS_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/postgres
       POOL_SCHEMA_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/postgres
       RIG_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/postgres
+      RADIX_PASSIVE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/radix_passive_test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -49,6 +50,18 @@ jobs:
           python-version: '3.12'
       - run: pip install -r tank/requirements.txt -r tank/requirements-dev.txt -r agents/trigger/requirements.txt
       - run: npm ci --prefix workspace --ignore-scripts
+      - name: Prepare isolated Radix fixture database
+        run: |
+          python - <<'PY'
+          import asyncio, os, asyncpg
+          async def prepare():
+              conn = await asyncpg.connect(os.environ["POOL_SCHEMA_DATABASE_URL"])
+              try:
+                  await conn.execute("CREATE DATABASE radix_passive_test")
+              finally:
+                  await conn.close()
+          asyncio.run(prepare())
+          PY
       - name: Disposable database isolation and affected regressions
         shell: bash
         run: |
