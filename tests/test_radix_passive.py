@@ -365,6 +365,9 @@ async def test_gateway_maintenance_recovers_after_transport_failure(monkeypatch,
     recovered=asyncio.Event()
     class Pool:
         closed=False
+        async def fetchval(self, query):
+            assert 'relrowsecurity' in query
+            return False  # This fixture models the pre-activation native pool.
         async def close(self):self.closed=True
     class Maintenance:
         calls=0
@@ -380,6 +383,7 @@ async def test_gateway_maintenance_recovers_after_transport_failure(monkeypatch,
         if maintenance.calls>=3:await asyncio.Event().wait()
         await original_sleep(0)
     monkeypatch.setenv('DATABASE_URL','postgresql://unused/radix_passive_test')
+    monkeypatch.delenv('RADIX_GATEWAY_ADMIN_DATABASE_URL',raising=False)
     monkeypatch.setattr(gateway.asyncpg,'create_pool',create_pool)
     monkeypatch.setattr(gateway,'Store',lambda pool:maintenance)
     monkeypatch.setattr(gateway.asyncio,'sleep',sleep)
