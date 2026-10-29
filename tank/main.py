@@ -110,7 +110,12 @@ def pool() -> asyncpg.Pool:
 
 def admin_pool():
     """Explicit platform/founder DB corridor; never selected by a tenant value."""
-    return _admin_pool if _admin_pool is not None else pool()
+    if _admin_pool is not None:
+        return _admin_pool
+    # Pre-activation maintenance (e.g. concurrent indexes) must stay autocommit.
+    # Startup rejects this fallback when RLS is active.
+    legacy_pool = pool()
+    return getattr(legacy_pool, "raw", legacy_pool)
 
 
 def normalize_home(value: str | None) -> str:
