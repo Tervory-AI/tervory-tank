@@ -673,7 +673,7 @@ SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 
 async def _warn_unapproved_policy_pins() -> None:
-    async with pool().acquire() as conn:
+    async with admin_pool().acquire() as conn:
         rows = await conn.fetch("""SELECT p.task_type,p.tenant_id,p.model,s.state
             FROM tank.policy p LEFT JOIN tank.skills s
               ON s.id=split_part(substr(btrim(p.model),7),'@',1)
