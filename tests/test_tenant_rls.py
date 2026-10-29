@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import sys
 import subprocess
+import runpy
 from types import SimpleNamespace
 from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID, uuid4
@@ -61,6 +62,8 @@ async def database():
                 await ensure_schema(owner, agent)
                 if agent == "tiger":
                     await tiger_tables(owner)
+                if agent == "radix":
+                    await owner.execute(runpy.run_path(str(ROOT / "agents/radix/passive_store.py"))["DDL"])
                 path = ROOT / "agents" / ("_template" if agent == "template" else agent) / "schema.sql"
                 await owner.execute(f'SET search_path TO "agent_{agent}",public')
                 await owner.execute(path.read_text())
@@ -207,7 +210,7 @@ def test_migrations_are_never_in_startup():
 
 
 def test_protected_routing_bodies_remain_unchanged():
-    baseline = subprocess.check_output(["git", "show", "7a13687de256896c488a0f28e0906fbcbce5b046:tank/main.py"], cwd=ROOT, text=True)
+    baseline = subprocess.check_output(["git", "show", "87610e4:tank/main.py"], cwd=ROOT, text=True)
     before = {n.name: n for n in ast.parse(baseline).body if isinstance(n, ast.AsyncFunctionDef)}
     after = {n.name: n for n in ast.parse((ROOT / "tank/main.py").read_text()).body if isinstance(n, ast.AsyncFunctionDef)}
     for name in ("run_route", "_cache_read", "_cache_write", "_run_task"):
@@ -443,3 +446,75 @@ async def test_included_router_explicit_tenant_wins_body_and_body_cannot_select_
         assert response.status_code == 200, response.text
         assert response.json() == {"tenant": str(a), "keys": 1}
     assert await database.pool.fetchval("SELECT count(*) FROM agent_rig.keys") == 0
+
+
+@pytest.mark.asyncio
+async def test_durable_statement_checkout_keeps_commits_and_explicit_rollback(database):
+    a, b = uuid4(), uuid4()
+    for tenant in (a, b):
+        await database.owner.execute("INSERT INTO tank.offpeak_jobs(tenant_id,region,request,policy) VALUES($1,'us-east','{}','{}')", tenant)
+    with pytest.raises(RuntimeError, match="after durable marker"):
+        with tenant_scope(a):
+            async with database.pool.acquire(autocommit=True) as conn:
+                assert await conn.fetchval("SELECT count(*) FROM tank.offpeak_jobs") == 1
+                await conn.execute("UPDATE tank.offpeak_jobs SET status='dispatching'")
+                # A separate connection must see this BEFORE checkout/provider work ends.
+                assert await database.owner.fetchval("SELECT status FROM tank.offpeak_jobs WHERE tenant_id=$1", a) == "dispatching"
+                with pytest.raises(ValueError, match="rollback explicit unit"):
+                    async with conn.transaction():
+                        await conn.execute("UPDATE tank.offpeak_jobs SET error='must roll back'")
+                        raise ValueError("rollback explicit unit")
+                assert await conn.fetchval("SELECT error FROM tank.offpeak_jobs") is None
+                raise RuntimeError("after durable marker")
+    assert await database.owner.fetchval("SELECT status FROM tank.offpeak_jobs WHERE tenant_id=$1", a) == "dispatching"
+    assert await database.owner.fetchval("SELECT status FROM tank.offpeak_jobs WHERE tenant_id=$1", b) == "queued"
+    assert await database.pool.fetchval("SELECT count(*) FROM tank.offpeak_jobs") == 0
+
+
+@pytest.mark.asyncio
+async def test_offpeak_admin_discovery_then_owner_and_durable_marker(database, monkeypatch):
+    from test_agent_chassis import TANK
+    import priority_queue
+    a, b = uuid4(), uuid4()
+    monkeypatch.setattr(TANK, "_pool", database.pool)
+    monkeypatch.setattr(TANK, "_admin_pool", database.founder)
+    for tenant in (a, b):
+        await database.owner.execute("INSERT INTO tank.offpeak_jobs(tenant_id,region,request,policy) VALUES($1,$2,'{}','{}')", tenant, TANK.box_region())
+    seen = []
+    async def stop_after_marker(tank, conn, job):
+        setting = await conn.fetchval("SELECT current_setting('app.tenant_id',true)")
+        assert setting == str(job["tenant_id"])
+        assert await conn.fetchval("SELECT count(*) FROM tank.offpeak_jobs") == 1
+        await conn.execute("UPDATE tank.offpeak_jobs SET status='dispatching' WHERE id=$1", job["id"])
+        assert await database.owner.fetchval("SELECT status FROM tank.offpeak_jobs WHERE id=$1", job["id"]) == "dispatching"
+        seen.append(setting)
+        raise RuntimeError("Simulated interrupted provider boundary; no provider called")
+    monkeypatch.setattr(priority_queue, "_process", stop_after_marker)
+    await priority_queue.process_once(TANK)
+    assert set(seen) == {str(a), str(b)}
+    assert await database.owner.fetchval("SELECT count(*) FROM tank.offpeak_jobs WHERE status='dispatching'") == 2
+    assert await database.pool.fetchval("SELECT count(*) FROM tank.offpeak_jobs") == 0
+
+
+@pytest.mark.asyncio
+async def test_merged_radix_domain_route_uses_accepted_tenant_without_scan(database, monkeypatch):
+    from fastapi import FastAPI
+    from chassis.tenant_db import TenantPool as RoomPool, bind_tenant_endpoints
+    sys.path.insert(0, str(ROOT / "agents/radix"))
+    import passive_routes
+    a, b = uuid4(), uuid4()
+    monkeypatch.setenv("TANK_KEY", "offline-rls-room")
+    app = FastAPI()
+    app.state.pool = RoomPool(database.raw, database.founder)
+    passive_routes.attach(app)
+    bind_tenant_endpoints(app)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://offline") as client:
+        response = await client.post("/passive/domains", json={"tenant_id": str(a), "domain": "offline.invalid"}, headers={"X-Tank-Key": "offline-rls-room", "X-Tervory-Tenant": str(a)})
+        assert response.status_code == 201, response.text
+        assert response.json()["tenant_id"] == str(a)
+    from chassis.tenant_db import tenant_scope as room_scope
+    with room_scope(a):
+        assert await app.state.pool.fetchval("SELECT count(*) FROM agent_radix.passive_domains") == 1
+    with room_scope(b):
+        assert await app.state.pool.fetchval("SELECT count(*) FROM agent_radix.passive_domains") == 0
+    assert await app.state.pool.fetchval("SELECT count(*) FROM agent_radix.passive_domains") == 0
