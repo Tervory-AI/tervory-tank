@@ -52,7 +52,7 @@ RUN apt-get update \
 COPY radix/install-passive-tools.sh /tmp/install-passive-tools.sh
 RUN sh /tmp/install-passive-tools.sh \
     && ln -s /opt/bin/nuclei /usr/local/bin/nuclei \
-    && pip install --no-cache-dir dnspython==2.8.0 PyYAML==6.0.3 \
+    && pip install --no-cache-dir dnspython==2.9.0 PyYAML==6.0.3 \
     && rm /tmp/install-passive-tools.sh
 COPY _chassis/chassis /app/chassis
 COPY radix/app.py /app/app.py
