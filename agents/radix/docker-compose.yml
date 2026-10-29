@@ -24,7 +24,8 @@ services:
       context: ..
       dockerfile: radix/Dockerfile
     restart: unless-stopped
-    mem_limit: 256m
+    # ZAP's JVM is capped at 512 MiB; one passive scan runs at a time.
+    mem_limit: 1g
     cpus: 0.25
     cap_drop:
       - NET_ADMIN
@@ -78,15 +79,46 @@ services:
       RADIX_EGRESS_POLICY: /app/egress-policy.json
       PYTHONDONTWRITEBYTECODE: "1"
     networks:
-      - proxy-link
-      - egress
+      proxy-link:
+        interface_name: radix-link
+      egress: {}
     healthcheck:
-      test: ["CMD", "python", "-c", "import socket; c=chr(13)+chr(10); s=socket.create_connection(('127.0.0.1',8080),3); s.sendall(('GET /health HTTP/1.1'+c+'Host: egress-proxy'+c+c).encode()); d=s.recv(80); s.close(); raise SystemExit(0 if b'200' in d else 1)"]
+      test: ["CMD", "python", "-c", "import socket; from egress import private_bind_address; c=chr(13)+chr(10); s=socket.create_connection((private_bind_address(),8080),3); s.sendall(('GET /health HTTP/1.1'+c+'Host: egress-proxy'+c+c).encode()); d=s.recv(80); s.close(); raise SystemExit(0 if b'200' in d else 1)"]
       interval: 10s
       timeout: 5s
       retries: 10
     expose:
       - "8080"
+
+  # DNS verification/control and ephemeral single-host scan tunnels. The scan
+  # CLIs remain in agent-radix, which has no internet route. No published port.
+  passive-egress:
+    build:
+      context: ..
+      dockerfile: radix/Dockerfile
+    command: ["uvicorn", "passive_gateway:app", "--host", "0.0.0.0", "--port", "8081"]
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      DATABASE_URL: postgresql://agent_radix:${AGENT_DB_PASSWORD_RADIX}@postgres:5432/${POSTGRES_DB:-tervory}
+      PYTHONDONTWRITEBYTECODE: "1"
+    networks:
+      gw: {}
+      proxy-link:
+        interface_name: radix-link
+        aliases: [radix-passive-proxy]
+      egress: {}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    expose: ["8081", "8082"]
 
 # The volume the room used before the raw-compose switch, by its live name, so
 # the data survives. external: compose reuses it and never recreates it. On a new

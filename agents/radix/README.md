@@ -110,3 +110,23 @@ leave room for TLS and HTTP overhead. `lokd.co.za` keeps its original 2
 concurrent / 6 per minute / 1,000,000 response bytes / 20 second limits.
 Missing account configuration refuses proxy startup; missing room credentials
 refuse storage before any request. The proxy never receives the R2 keys.
+# Verified-domain passive assessment deployment requirements
+
+Job 8 adds a DNS-verified, tenant-bound passive assessment API and staging gate.
+Deployment requires **Docker Compose 2.36.0 or later** for `interface_name`.
+Both egress services name their shared `proxy-link` interface `radix-link`;
+the Python proxy binds only that interface's RFC1918 IPv4 address. A missing or
+invalid interface fails closed. Other NICs and hostname-address ordering are
+not fallbacks. The original 8080 healthcheck uses the same designated address.
+Check the Compose version on each deployment host; the proof host's 5.6.0
+does not establish compatibility elsewhere. Do not remove the interface mapping.
+
+The scanner container remains on internal networks only. Its limit is 1 GiB
+for ZAP's capped JVM, with one passive run at a time. ZAP checks the root GET
+response through the DNS-authorized lease; non-200/redirect warnings fail the
+assessment before a clean receipt. Nuclei uses one pinned header-only template.
+The existing settings are referenced by name only; no new credentials are needed.
+Offline command/image/topology proof and dated acceptance status are in
+`tests/radix_passive/PR.md` and `tests/radix_passive/PROOF.txt`. No live scan or
+production deployment is implied by those offline results.
+

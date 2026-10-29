@@ -1,0 +1,283 @@
+"""Explicit off-peak jobs; only the existing Tank router/batch gateway sends work."""
+from __future__ import annotations
+
+import asyncio
+import json
+import uuid
+from datetime import datetime, timezone
+from decimal import Decimal
+from zoneinfo import ZoneInfo
+from weakref import WeakKeyDictionary
+
+from fastapi import HTTPException
+from pydantic import BaseModel
+
+import batch_providers
+
+
+_worker_locks = WeakKeyDictionary()
+
+
+def worker_lock():
+    # Keep one maintenance operation per process: it holds an advisory-lock
+    # connection while the existing router acquires its own short-lived ones.
+    # Per-loop locks also allow isolated application/test lifespans.
+    loop = asyncio.get_running_loop()
+    return _worker_locks.setdefault(loop, asyncio.Lock())
+
+
+class WindowClosed(Exception):
+    """The clock crossed a window boundary during preflight; nothing was sent."""
+
+
+class QueuedResponse(BaseModel):
+    id: uuid.UUID
+    ledger_id: uuid.UUID
+    status: str = 'queued'
+    priority: str = 'offpeak'
+
+
+def now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def unpack(value):
+    return json.loads(value) if isinstance(value, str) else value
+
+
+def window_open(settings: dict | None, at: datetime) -> bool:
+    if settings is None:
+        return True
+    local = at.astimezone(ZoneInfo(settings['timezone']))
+    if local.date().isoformat() in settings.get('dates', []):
+        return True
+    minute = local.hour * 60 + local.minute
+    for window in settings['windows']:
+        start, end = (sum(int(n) * scale for n, scale in zip(window[key].split(':'), (60, 1)))
+                      for key in ('start', 'end'))
+        if not 0 <= start < end <= 1440:
+            raise ValueError('Invalid offpeak window; split windows crossing midnight')
+        if local.weekday() in window['days'] and start <= minute < end:
+            return True
+    return False
+
+
+async def model_info(tank, model: str) -> dict:
+    row = next((r for r in await tank._roster_models() if r['model_name'] == model), None)
+    if row is None:
+        raise HTTPException(409, 'Selected model is unavailable')
+    return row['model_info']
+
+
+def usage_cost(info: dict, usage: dict, at: datetime) -> float | None:
+    """Configured provider rates × reported usage, including DeepSeek cache hits.
+
+    LiteLLM's static peak-rate header cannot prove a time-of-day discount.
+    Missing/invalid usage remains unknown; never turn missing evidence into zero.
+    """
+    settings = info.get('offpeak')
+    if settings is None:
+        return None
+    try:
+        count_in, count_out = int(usage['prompt_tokens']), int(usage['completion_tokens'])
+        cached = usage.get('prompt_cache_hit_tokens', (usage.get('prompt_tokens_details') or {}).get('cached_tokens'))
+        if cached is None:
+            return None
+        cached = int(cached)
+        if min(count_in, count_out, cached) < 0 or cached > count_in:
+            return None
+        multiplier = Decimal(str(settings['charge_multiplier'])) if window_open(settings, at) else Decimal(1)
+        if not 0 < multiplier <= 1:
+            return None
+        return float(multiplier * (
+            (count_in-cached)*Decimal(str(info['input_cost_per_token']))
+            + cached*Decimal(str(settings['cache_read_input_cost_per_token']))
+            + count_out*Decimal(str(info['output_cost_per_token']))))
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+async def enqueue(tank, item, *, caller=None, task_id=None, model_override=None) -> QueuedResponse:
+    req, policy = item.req, item.policy
+    prices = await tank._batch_price(policy['model'])
+    # Reserve/check with peak prices; a window closing must not circumvent a cap.
+    batched = not policy.get('moa_enabled') and batch_providers.compatible(prices, item.messages, item.generation)
+    reserve = tank._call_upper(item.messages, item.max_tokens, prices) * (prices['discount'] if batched else 1)
+    if reserve > float(policy['max_cost_usd']):
+        raise HTTPException(409, 'Task cost cap prevents this request')
+    # Validate scheduling metadata before storing a request, including deployed
+    # /model/info metadata rather than assuming a config file exists in Tank.
+    info = await model_info(tank, policy['model'])
+    window_open(info.get('offpeak'), now())
+    job_id = uuid.uuid4()
+    snapshot = {'routing': policy, 'messages': item.messages, 'max_tokens': item.max_tokens,
+                'generation': item.generation, 'escalation': item.escalation,
+                'semantic_cache': item.cache_snapshot}
+    async with tank.pool().acquire() as conn, conn.transaction():
+        await conn.execute("""INSERT INTO tank.offpeak_jobs
+            (id,tenant_id,region,request,policy,caller,task_id,model_override)
+            VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6,$7,$8)""",
+            job_id, req.tenant_id, tank.box_region(), req.model_dump_json(), json.dumps(snapshot, default=str),
+            caller, task_id, model_override)
+        await conn.execute("""INSERT INTO tank.ledger
+            (id,tenant_id,region,agent,skill,task_type,rung,model,priority,outcome,cost_status,task_id,offpeak_job_id)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,'offpeak','queued','not_set',$9,$1)""",
+            job_id, req.tenant_id, tank.box_region(), req.agent, req.skill, req.task_type,
+            policy['rung'], policy['model'], task_id)
+    return QueuedResponse(id=job_id, ledger_id=job_id)
+
+
+async def status(tank, job_id, tenant_id) -> dict:
+    async with tank.pool().acquire() as conn:
+        row = await conn.fetchrow("""SELECT id,status,created_at,sent_at,finished_at,result,error
+            FROM tank.offpeak_jobs WHERE id=$1 AND tenant_id=$2 AND region=$3""", job_id, tenant_id, tank.box_region())
+    if row is None:
+        raise HTTPException(404, 'No job for this tenant')
+    return {**dict(row), 'result': unpack(row['result']), 'ledger_id': job_id, 'priority': 'offpeak'}
+
+
+async def _finish(tank, conn, job, result=None, *, error=None, uncertain=False):
+    state = 'uncertain' if uncertain else 'failed' if error else 'completed'
+    await conn.execute("""UPDATE tank.offpeak_jobs SET status=$3,result=$4::jsonb,error=$5,finished_at=now()
+        WHERE id=$1 AND tenant_id=$2""", job['id'], job['tenant_id'], state,
+        json.dumps(result, default=str) if result is not None else None, error)
+    if error:
+        await conn.execute("""UPDATE tank.ledger SET outcome=$3,error=$4
+            WHERE id=$1 AND tenant_id=$2 AND outcome IN ('queued','sent')""",
+            job['id'], job['tenant_id'], 'unverified' if uncertain else 'failed', error)
+
+
+async def _process(tank, conn, job):
+    if job['status'] == 'dispatching':
+        # Only a new lock holder can reach this. Do not replay a possibly charged call.
+        await _finish(tank, conn, job, error='interrupted_dispatch', uncertain=True)
+        return
+    if job['status'] == 'batch':
+        batch = await tank.batch_status(job['id'], job['tenant_id'])
+        if batch['status'] in {'completed', 'failed'}:
+            result = batch['results'][0] if batch['results'] else None
+            await _finish(tank, conn, job, result, error='batch_failed' if batch['status'] == 'failed' else None)
+        return
+    req = tank.RouteRequest.model_validate(unpack(job['request']))
+    snapshot = unpack(job['policy'])
+    policy = snapshot['routing']
+    current = await tank.load_policy(req.task_type.partition('#moa.')[0], req.tenant_id)
+    if str(current['updated_at']) != str(policy['updated_at']):
+        await _finish(tank, conn, job, error='policy_changed')
+        return
+    prices = await tank._batch_price(policy['model'])
+    batched = not policy.get('moa_enabled') and batch_providers.compatible(prices, snapshot['messages'], snapshot['generation'])
+    info = await model_info(tank, policy['model'])
+    if not batched and not window_open(info.get('offpeak'), now()):
+        return
+    if job['task_id']:
+        await tank._check_route_task(req, job['task_id'])
+    if batched:
+        # Queue an already-screened item through the SAME reservation/submission
+        # implementation as /route/batch. Explicit offpeak is consent to wait;
+        # foreground batch eligibility/minimums are otherwise untouched.
+        item = tank._DeferredRoute(req, policy, snapshot['messages'], snapshot['max_tokens'],
+                                   snapshot['generation'], snapshot['escalation'], snapshot.get('semantic_cache'))
+        item.position, item.offpeak_job_id = 0, job['id']
+        body = tank.BatchRequest(id=job['id'], requests=[req])
+        await tank._enqueue_batch(body, job['caller'], [], [item], str(job['id']))
+        await conn.execute("UPDATE tank.offpeak_jobs SET status='batch' WHERE id=$1 AND tenant_id=$2",
+                           job['id'], job['tenant_id'])
+        return
+    sent_at = now()
+    await conn.execute("""UPDATE tank.offpeak_jobs SET status='dispatching',sent_at=$3
+        WHERE id=$1 AND tenant_id=$2""", job['id'], job['tenant_id'], sent_at)
+    try:
+        result = await tank.run_route(req, caller=job['caller'], task_id=job['task_id'],
+            model_override=job['model_override'], _paid_policy=policy, _prior_escalation=snapshot['escalation'],
+            _paid_limit=float(policy['max_cost_usd']), _offpeak_dispatch=True, _receipt_id=job['id'], _deferred_snapshot=snapshot)
+        await _finish(tank, conn, job, result.model_dump(mode='json'))
+    except WindowClosed:
+        await conn.execute("UPDATE tank.offpeak_jobs SET status='queued',sent_at=NULL WHERE id=$1 AND tenant_id=$2", job['id'], job['tenant_id'])
+    except Exception as exc:
+        detail = exc.detail if isinstance(exc, HTTPException) else None
+        known = isinstance(detail, dict) and detail.get('ledger_id')
+        await _finish(tank, conn, job, error='dispatch_failed', uncertain=not isinstance(exc, HTTPException) or
+                      (exc.status_code >= 500 and not known))
+
+
+async def process_once(tank, *, job_id=None, tenant_id=None):
+    async with worker_lock():
+        await _process_once(tank, job_id=job_id, tenant_id=tenant_id)
+
+
+async def _process_once(tank, *, job_id=None, tenant_id=None):
+    async with tank.pool().acquire() as conn:
+        # Platform worker discovers work across tenants, then every operation is
+        # scoped by that row's tenant and box, as in the existing batch worker.
+        rows = await conn.fetch("""SELECT id,tenant_id FROM tank.offpeak_jobs WHERE region=$1
+            AND ($2::uuid IS NULL OR id=$2) AND ($3::uuid IS NULL OR tenant_id=$3)
+            AND status IN ('queued','dispatching','batch') ORDER BY checked_at NULLS FIRST,created_at LIMIT 100""",
+            tank.box_region(), job_id, tenant_id)
+        for row in rows:
+            # Separate advisory namespace from provider batches (which share id).
+            lock = int.from_bytes(uuid.uuid5(row['id'], 'offpeak').bytes[:8], 'big', signed=True)
+            if not await conn.fetchval('SELECT pg_try_advisory_lock($1)', lock):
+                continue
+            try:
+                job = await conn.fetchrow('SELECT * FROM tank.offpeak_jobs WHERE id=$1 AND tenant_id=$2', row['id'], row['tenant_id'])
+                if job['status'] in {'queued', 'dispatching', 'batch'}:
+                    await conn.execute('UPDATE tank.offpeak_jobs SET checked_at=now() WHERE id=$1 AND tenant_id=$2', row['id'], row['tenant_id'])
+                    await _process(tank, conn, job)
+            except HTTPException as exc:
+                if exc.status_code < 500:
+                    await _finish(tank, conn, row, error='route_refused')
+                else:
+                    tank.log.warning('Offpeak maintenance will retry status')
+            except Exception:
+                tank.log.warning('Offpeak maintenance will retry status')
+            finally:
+                await conn.execute('SELECT pg_advisory_unlock($1)', lock)
+
+
+async def notify_commands(tank):
+    async with worker_lock():
+        await _notify_commands(tank)
+
+
+async def _notify_commands(tank):
+    """Resume an existing Command turn after a durable job completes, without a model call."""
+    import command
+    from types import SimpleNamespace
+    async with tank.pool().acquire() as conn:
+        rows = await conn.fetch("""SELECT id,tenant_id FROM tank.offpeak_jobs WHERE region=$1
+            AND status IN ('completed','failed','uncertain') AND command_context IS NOT NULL
+            AND NOT notified ORDER BY created_at LIMIT 100""", tank.box_region())
+        for row in rows:
+            lock = int.from_bytes(uuid.uuid5(row['id'], 'offpeak').bytes[:8], 'big', signed=True)
+            if not await conn.fetchval('SELECT pg_try_advisory_lock($1)', lock):
+                continue
+            try:
+                job = await conn.fetchrow('SELECT * FROM tank.offpeak_jobs WHERE id=$1 AND tenant_id=$2', row['id'], row['tenant_id'])
+                if job['notified']:
+                    continue
+                context = unpack(job['command_context'])
+                actor = await command.authorized_actor(command.Actor(job['tenant_id'], context['user_id'], False,
+                                                      tenant_admin=context.get('tenant_admin', False)))
+                result = unpack(job['result'])
+                answer = SimpleNamespace(content=result['content'], ledger_id=uuid.UUID(str(result['ledger_id']))) if job['status'] == 'completed' else None
+                error = HTTPException(502, {'ledger_id': str(job['id'])}) if answer is None else None
+                await command.finish_turn(uuid.UUID(context['thread_id']), actor, str(job['task_id']), [],
+                                          model=job['model_override'], answer=answer, deferred_error=error)
+                await conn.execute('UPDATE tank.offpeak_jobs SET notified=true WHERE id=$1 AND tenant_id=$2', job['id'], job['tenant_id'])
+            finally:
+                await conn.execute('SELECT pg_advisory_unlock($1)', lock)
+
+
+def kick(tank, job_id, tenant_id):
+    # Independent of the request connection; a browser closing cannot cancel a
+    # paid dispatch. The durable maintenance loop recovers jobs after a restart.
+    async def work():
+        try:
+            await process_once(tank, job_id=job_id, tenant_id=tenant_id)
+            await notify_commands(tank)
+        except Exception:
+            tank.log.warning('Offpeak job remains available to maintenance')
+    task = asyncio.create_task(work())
+    tank._background.add(task)
+    task.add_done_callback(tank._background.discard)
