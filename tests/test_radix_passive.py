@@ -391,20 +391,24 @@ async def test_gateway_maintenance_recovers_after_transport_failure(monkeypatch,
     assert 'will retry' in caplog.text and 'dummy transport detail' not in caplog.text
 
 
-@pytest.mark.parametrize('answers',[
-    [],['0.0.0.0'],['127.0.0.1'],['8.8.8.8'],['169.254.1.1'],['172.22.0.2','172.23.0.2']])
-def test_private_listener_refuses_missing_wildcard_public_and_ambiguous(monkeypatch,answers):
-    monkeypatch.setattr(socket,'getaddrinfo',lambda *a,**kw:[(2,1,6,'',(ip,0)) for ip in answers])
+@pytest.mark.parametrize('address',[None,'0.0.0.0','127.0.0.1','8.8.8.8','169.254.1.1'])
+def test_private_listener_refuses_missing_wildcard_and_public_interface(monkeypatch,address):
+    def ioctl(*args):
+        if address is None:raise OSError('interface missing')
+        return bytes(20)+socket.inet_aton(address)+bytes(232)
+    monkeypatch.setattr(egress.fcntl,'ioctl',ioctl)
     with pytest.raises(egress.ProxyError):egress.private_bind_address()
 
 
 def test_private_listener_uses_exact_container_interface(monkeypatch):
     seen=[]
-    monkeypatch.setattr(socket,'gethostname',lambda:'own-container')
-    def resolve(name,*args,**kwargs):
-        seen.append(name);return [(2,1,6,'',('172.22.0.2',0))]
-    monkeypatch.setattr(socket,'getaddrinfo',resolve)
-    assert egress.private_bind_address()=='172.22.0.2' and seen==['own-container']
+    def ioctl(fd,operation,interface):
+        seen.append((operation,interface.rstrip(b'\x00')))
+        return bytes(20)+socket.inet_aton('172.22.0.2')+bytes(232)
+    monkeypatch.setattr(egress.fcntl,'ioctl',ioctl)
+    # Other NICs/ambiguous hostname DNS cannot influence designated radix-link.
+    monkeypatch.setattr(socket,'getaddrinfo',lambda *a,**kw: (_ for _ in ()).throw(AssertionError('must not resolve hostname')))
+    assert egress.private_bind_address()=='172.22.0.2' and seen==[(0x8915,b'radix-link')]
 
 
 @pytest.mark.asyncio
