@@ -108,3 +108,9 @@ def test_workflow_uses_fixed_scope_operation_and_excludes_generic_body_logging()
     assert repair["run"] == "python3 .github/scripts/backup_runtime_scope.py --apply"
     generic = next(s for s in steps if s.get("name") == "Run")
     assert "inputs.op != 'backup-scope'" in generic["if"]
+    gate = next(s for s in steps if s.get("name") == "Verify main backup scope before manual deploy")
+    assert gate["if"] == "inputs.op == 'deploy' && inputs.app == 'xnmc0jkz8j9i5jh1jwanbsfv'"
+    assert gate["run"] == "python3 .github/scripts/backup_runtime_scope.py"
+    assert not gate.get("continue-on-error", False)
+    assert steps.index(gate) < steps.index(generic)
+    assert "always()" not in generic["if"]
