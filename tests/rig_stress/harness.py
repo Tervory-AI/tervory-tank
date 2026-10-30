@@ -172,6 +172,26 @@ async def traffic(stores: list[dict], rps: float, concurrency: int, duration: fl
     return output
 
 
+def report(traffic_result: dict, samples: list[dict], queue_waits: list[float]) -> dict:
+    """Require measured host/queue inputs; no idle or absent sample can prove capacity."""
+    latency = traffic_result['latency']
+    metrics = {
+        'errors': traffic_result['errors'], 'dropped': traffic_result['dropped'],
+        'search_p95_s': quantile(latency['search'], .95),
+        'quote_p95_s': quantile(latency['quote'], .95),
+        'memory_fraction': max((s['memory_used_bytes'] / s['memory_total_bytes']
+                                for s in samples), default=None),
+        'forge_queue_wait_s': max(queue_waits, default=None),
+    }
+    result = {'metrics': metrics, 'failed_limits': failures(metrics),
+              'latency_seconds': {kind: {'p50': quantile(values, .5),
+                                        'p95': quantile(values, .95), 'count': len(values)}
+                                  for kind, values in latency.items()},
+              'samples': samples, 'capacity_valid': False}
+    # A wiring report is deliberately never a saturation/clients-per-box result.
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('config', type=Path)
