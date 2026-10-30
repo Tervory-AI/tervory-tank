@@ -46,7 +46,7 @@ def test_za_compose_is_a_tank_stack_with_its_own_stores() -> None:
         "postgres", "redis", "qdrant", "hermes", "litellm", "tank", "agent-roles",
         "r2-backup-za",
     }
-    assert data["services"]["r2-backup-za"]["profiles"] == ["r2-backup-za"]
+    assert not data["services"]["r2-backup-za"].get("profiles")
     for name, service in data["services"].items():
         assert service["environment"]["TANK_REGION"] == "za", name
     assert data["networks"]["default"]["name"] == "tervory-za"

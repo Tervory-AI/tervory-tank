@@ -56,8 +56,9 @@ def test_compose_only_passes_own_pairs_and_boston_backup_is_persistent():
     za_root = yaml.safe_load((ROOT / 'docker-compose.za.yml').read_text())
     assert 'r2-backup' not in za_root['services']
     za_worker = za_root['services']['r2-backup-za']
-    assert za_worker['profiles'] == ['r2-backup-za']
-    assert za_worker['restart'] == 'no'
+    assert not za_worker.get('profiles')
+    assert za_worker['restart'] == 'unless-stopped'
+    assert not za_worker.get('env_file')
     assert za_worker['environment']['TANK_REGION'] == 'za'
     assert za_worker['environment']['AGENT_NAME'] == 'zenas'
     assert za_worker['environment']['R2_BUCKET'] == '${R2_BUCKET_ZENAS_ZA:-}'
@@ -66,7 +67,9 @@ def test_compose_only_passes_own_pairs_and_boston_backup_is_persistent():
         'R2_ACCOUNT_ID', 'R2_BUCKET', 'R2_BUCKET_ZENAS_ZA',
         'R2_ACCESS_KEY_ID_ZENAS', 'R2_SECRET_ACCESS_KEY_ZENAS', 'R2_BACKUP_RECIPIENT'}
     assert za_worker['command'] == [
-        'python', 'jobs/train/backup.py', '--owner', 'zenas', '--nightly']
+        'python', 'jobs/train/backup.py', '--owner', 'zenas', '--target', 'all', '--nightly']
+    assert za_worker['environment']['QDRANT_URL'] == 'http://qdrant:6333'
+    assert za_worker['depends_on']['qdrant']['condition'] == 'service_healthy'
     for room in storage.ROOMS - {'ghost'}:
         for path in (ROOT / 'agents' / room).glob('docker-compose*.yml'):
             box = yaml.safe_load(path.read_text())

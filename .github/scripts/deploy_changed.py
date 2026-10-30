@@ -33,6 +33,9 @@ ZA_OFFLINE = os.environ.get("ZA_OFFLINE", "").strip().lower() == "true"
 MAIN_PREFIXES = (
     "tank/", "workspace/", "litellm/", "hermes/", "db/", "searxng/", "tiger/", "site/", "tor/",
     "docker-compose.yml",
+    # Backup workers live in the main and ZA stacks (r2-backup, r2-backup-za).
+    "docker-compose.za.yml", "jobs/train/backup.py", "jobs/train/r2_archive.py",
+    "jobs/train/Dockerfile.backup",
 )
 # Shared room code: a change here redeploys every room.
 ALL_ROOMS_PREFIXES = ("agents/_chassis/", "agents/_template/")

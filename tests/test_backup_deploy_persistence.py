@@ -42,5 +42,36 @@ def test_boston_backup_survives_default_deployment_composition(tmp_path, directo
     assert worker["build"]["dockerfile"] == "jobs/train/Dockerfile.backup"
     assert worker["environment"]["R2_BACKUP_RECIPIENT"] == "${R2_BACKUP_RECIPIENT:-}"
     assert not any("identity" in name.lower() for name in worker["environment"])
-    za = yaml.safe_load((ROOT / "docker-compose.za.yml").read_text())
-    assert za["services"]["r2-backup-za"]["profiles"] == ["r2-backup-za"]
+
+
+# Coolify rewrites every service's env_file to its own .env on each deploy, so a
+# backup worker that read a side file (.env.r2-backup) lost its R2 settings.
+# Both workers must take every value from compose interpolation of Coolify env.
+@pytest.mark.parametrize("path,name", [("docker-compose.yml", "r2-backup"),
+                                       ("docker-compose.za.yml", "r2-backup-za")])
+def test_backup_worker_needs_only_coolify_env(path, name):
+    worker = yaml.safe_load((ROOT / path).read_text())["services"][name]
+    assert not worker.get("profiles"), "a profile drops the worker on ordinary redeploys"
+    assert worker["restart"] == "unless-stopped"
+    assert not worker.get("env_file")
+    for key in ("R2_ACCOUNT_ID", "R2_BACKUP_RECIPIENT", "DATABASE_URL", "QDRANT_API_KEY"):
+        assert "${" in str(worker["environment"][key]), key
+    assert "--nightly" in (worker.get("command") or ["--nightly"])
+    assert "qdrant_configuration()" in worker["healthcheck"]["test"][-1]
+
+
+def test_za_backup_survives_default_deployment_composition(tmp_path):
+    if shutil.which("docker") is None:
+        pytest.skip("Docker Compose CLI is unavailable")
+    compose = yaml.safe_load((ROOT / "docker-compose.za.yml").read_text())
+    for service in compose["services"].values():
+        service.pop("exclude_from_hc", None)
+        service["env_file"] = [".env"]  # what Coolify writes on every deploy
+    (tmp_path / ".env").write_text("")
+    source = tmp_path / "docker-compose.yaml"
+    source.write_text(yaml.safe_dump(compose))
+    env = {name: os.environ[name] for name in ("PATH", "HOME") if name in os.environ}
+    command = ["docker", "compose", "--project-name", "za-backup-regression", "--dry-run",
+               "-f", str(source), "up", "-d", "--no-build", "--pull", "never", "--no-deps"]
+    out = subprocess.run(command, env=env, capture_output=True, text=True, check=True, cwd=tmp_path)
+    assert "Container za-backup-regression-r2-backup-za-1" in out.stdout + out.stderr

@@ -227,11 +227,13 @@ async def list_qdrant_collections() -> list[str]:
 
 
 async def qdrant_backup_once(owner: str = 'uploads') -> list[dict]:
-    if owner != 'uploads':
-        raise StorageError('Qdrant backups use UPLOADS only')
+    # Boston UPLOADS stays private; ZA Zenas (TANK_REGION=za) uses the platform
+    # prefix in tervory-zenas-za, the same as its database dump.
+    assert_backup_owner(owner)
+    public = backup_public(owner)
     store = Storage(owner)
     try:
-        store._prefix(PLATFORM_TENANT, 'backups', public=False)
+        store._prefix(PLATFORM_TENANT, 'backups', public=public)
         collections = await list_qdrant_collections()
         results = []
         with tempfile.TemporaryDirectory(prefix='tervory-encrypted-qdrant-') as directory:
@@ -241,7 +243,7 @@ async def qdrant_backup_once(owner: str = 'uploads') -> list[dict]:
                 await encrypted_qdrant_snapshot(name, path)
                 archived = await archive_file(
                     store, path, 'backups', tenant_id=PLATFORM_TENANT,
-                    label=f'qdrant/{name}.snapshot.age')
+                    public=public, label=f'qdrant/{name}.snapshot.age')
                 results.append({
                     'collection': name,
                     'bucket': archived['bucket'],
@@ -263,11 +265,6 @@ async def main(owner: str, nightly: bool, target: str = 'all') -> None:
     public = backup_public(owner)
     if target not in {'database', 'qdrant', 'all'}:
         raise StorageError('Backup target is invalid')
-    if owner == 'zenas':
-        # ZA Zenas backs up its database to tervory-zenas-za. Qdrant snapshots are Boston (UPLOADS) only for now.
-        if target == 'qdrant':
-            raise StorageError('Qdrant backups use UPLOADS only')
-        target = 'database'
     # Fail at worker start, not silently after waiting for the first night.
     store = Storage(owner)
     try:
