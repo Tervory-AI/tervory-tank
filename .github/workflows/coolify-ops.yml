@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       op:
-        description: "status | env-refs | create-room | deploy | room-setup | backup-scope"
+        description: "status | env-refs | create-room | deploy | room-setup | backup-scope | nightly-status"
         required: true
       app:
         description: "Application uuid (env-refs, deploy)"
@@ -52,7 +52,7 @@ jobs:
         run: |
           case "$COOLIFY_URL" in https://*) ;; *) echo "::error::COOLIFY_URL must be an https:// address"; exit 1 ;; esac
           test -n "$COOLIFY_TOKEN" || { echo "::error::COOLIFY_TOKEN secret is missing"; exit 1; }
-          case "$OP" in status|env-refs|create-room|deploy|room-setup|backup-scope) ;; *) echo "::error::unknown op $OP"; exit 1 ;; esac
+          case "$OP" in status|env-refs|create-room|deploy|room-setup|backup-scope|nightly-status) ;; *) echo "::error::unknown op $OP"; exit 1 ;; esac
           for v in "$APP" "$ROOM"; do
             case "$v" in *[!A-Za-z0-9_-]*) echo "::error::bad id: $v"; exit 1 ;; esac
           done
@@ -60,6 +60,14 @@ jobs:
           if [ "$OP" = backup-scope ]; then
             test -z "$APP$ROOM$NAMES" || { echo "::error::backup-scope uses only its fixed main app and two existing names"; exit 1; }
           fi
+
+      - name: Check nightly metadata scope
+        if: inputs.op == 'nightly-status'
+        run: test -z "$APP$ROOM$NAMES"
+
+      - name: Read existing US and ZA nightly execution metadata
+        if: inputs.op == 'nightly-status'
+        run: python3 .github/scripts/zenas_nightly_status.py
 
       - name: Repair main backup runtime scope (metadata only, no deploy)
         if: inputs.op == 'backup-scope'
@@ -74,7 +82,7 @@ jobs:
         run: python3 .github/scripts/backup_runtime_scope.py
 
       - name: Run
-        if: inputs.op != 'room-setup' && inputs.op != 'backup-scope'
+        if: inputs.op != 'room-setup' && inputs.op != 'backup-scope' && inputs.op != 'nightly-status'
         run: |
           api() {  # method path [json-body-file]
             if [ -n "${3:-}" ]; then
