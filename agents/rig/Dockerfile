@@ -7,6 +7,8 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && chown agent:agent /data
 COPY _chassis/chassis /app/chassis
 COPY rig/rigbox /app/rigbox
+# Refuse an image whose current page assets were not published as retained objects.
+RUN python -c 'import hashlib; from pathlib import Path; root = Path("rigbox/page/v5"); names = ("rig.css", "rig.js"); assert all((root / "assets" / (hashlib.sha256((root / name).read_bytes()).hexdigest() + "-" + name)).read_bytes() == (root / name).read_bytes() for name in names)'
 COPY rig/app.py /app/app.py
 COPY rig/gold_sources.py /app/gold_sources.py
 COPY rig/schema.sql /app/schema.sql
