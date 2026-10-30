@@ -2,6 +2,8 @@
 import asyncio
 import json
 import threading
+import tempfile
+from pathlib import Path
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import patch
@@ -72,6 +74,47 @@ class Wiring(unittest.TestCase):
                 h.preflight(config)
         with self.assertRaises(ValueError):
             h.preflight({**config, 'network': 'coolify'})
+
+    def test_spare_confirmation_requires_boolean_true(self):
+        network = {'Internal': True, 'Labels': {h.LABEL: 'true'}, 'Containers': {'id': {}}}
+        container = {'Config': {'Labels': {h.LABEL: 'true'}}, 'Mounts': [],
+                     'HostConfig': {'NetworkMode': 'rigstress-smoke'},
+                     'NetworkSettings': {'Networks': {'rigstress-smoke': {'IPAddress': '10.1.2.3'}}}}
+        for value in (False, 'false', 'true', 0, 1, None):
+            with self.subTest(value=value), patch.object(h, 'docker', side_effect=[[network], [container]]):
+                with self.assertRaises(ValueError):
+                    h.preflight({'network': 'rigstress-smoke', 'dedicated_spare_host': value})
+
+    def test_config_binds_exact_operation_routes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'private-fixture').write_text('offline wiring only')
+            operations = {'search': {'method': 'GET', 'path': '/v1/rig/search'},
+                          'setup': {'method': 'POST', 'path': '/v1/rig/setups'},
+                          'quote': {'method': 'POST', 'path': '/v1/rig/quote'}}
+            config = {'rps_per_store': 1, 'concurrency_per_store': 1,
+                      'catalogue_fixture': 'private-fixture', 'forge_fixture': 'private-fixture',
+                      'target_allowlist': ['http://10.1.2.3:8000'],
+                      'network': 'rigstress-smoke', 'dedicated_spare_host': True,
+                      'stores': [{'target': 'http://10.1.2.3:8000', 'operations': operations}] * 30}
+            path = root / 'config.json'
+            path.write_text(json.dumps(config))
+            self.assertEqual(len(h.load_config(path)['stores']), 30)
+            for kind, method, route in (
+                ('search', 'GET', '/v1/rig/../../v1/controls/workers-paused'),
+                ('search', 'GET', '/v1/rig/%2e%2e/%2e%2e/v1/controls'),
+                ('search', 'GET', '/v1/rig/search?path=/v1/controls'),
+                ('search', 'GET', '/v1/rig/search#fragment'),
+                ('search', 'GET', '/v1/rig//search'),
+                ('search', 'POST', '/v1/rig/search'),
+                ('quote', 'POST', '/v1/rig/setups'),
+                ('setup', 'GET', '/v1/rig/setups'),
+            ):
+                changed = json.loads(json.dumps(config))
+                changed['stores'][0]['operations'][kind] = {'method': method, 'path': route}
+                path.write_text(json.dumps(changed))
+                with self.subTest(route=route, method=method), self.assertRaises(ValueError):
+                    h.load_config(path)
 
     def test_fake_http_errors_and_reports(self):
         server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
