@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createTask, listTasks, type ChatMessage } from "@/lib/tank";
+import { createTask, getTask, listTasks, type ChatMessage } from "@/lib/tank";
 import { currentTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
@@ -7,9 +7,14 @@ export const runtime = "nodejs";
 const ALLOWED_TASK_TYPES = new Set(["tier0.answer", "tier0.draft", "reason.brief"]);
 
 // GET: the board for the signed-in tenant.
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { tenantId } = await currentTenant();
+    const taskId = new URL(request.url).searchParams.get("task");
+    if (taskId !== null) {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId)) return new Response(null, { status: 404 });
+      return NextResponse.json([await getTask(tenantId, taskId)]);
+    }
     return NextResponse.json(await listTasks(tenantId, 50));
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Tank unavailable" }, { status: 502 });
