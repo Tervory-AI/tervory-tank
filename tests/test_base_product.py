@@ -302,7 +302,7 @@ def test_unpriced_cost_is_excluded_and_comparison_uses_same_record():
               {"id": uuid.uuid4(), "record_id": row["id"], "ts": AT, "rung": 1, "cost_usd": Decimal("0.000792"), "cost_status": "set"}]
     amount = cost_rows([row], ledger)[0]
     assert amount["known_cost_usd"] == "0.000792"
-    assert amount["cost_usd"] is None and Decimal(amount["cost_per_verified_record"]) == Decimal("0.000792")
+    assert amount["cost_usd"] is None and amount["cost_per_verified_record"] is None
     assert amount["status"] == "price not set"
     comparison = compare([row], [{"licence_key": row["licence_key"], "fields": {"website": row["profile"]["website"]["value"], "phone": "2125550199"}}])
     assert comparison["states"][0]["website"]["matches"] == 1
