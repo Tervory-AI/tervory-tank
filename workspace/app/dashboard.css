@@ -155,3 +155,25 @@
 .app-shell:has(.client-dashboard) > .shell-dim { display: none; }
 .app-shell:has(.client-dashboard) > .shell-main,
 .app-shell:has(.client-dashboard) > .shell-main > main { width: 100%; max-width: none; margin: 0; padding: 0; }
+
+/* Preserve the existing client home's narrow-screen reflow without adding UI. */
+@media (max-width: 1100px) {
+  .client-dashboard-main { padding: 32px; }
+  .client-dashboard-sidebar { flex-basis: 180px; }
+}
+@media (max-width: 650px) {
+  .client-dashboard { display: block; }
+  .client-dashboard-sidebar { width: 100%; padding: 16px; flex-direction: row; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .client-dashboard-logo { padding: 0; margin-right: 10px; }
+  .client-dashboard-logo img { width: 88px; height: auto; }
+  .client-dashboard-sidebar > a { width: auto; padding: 8px; font-size: 13px; }
+  .client-dashboard-main { padding: 24px 16px; gap: 18px; }
+  .client-dashboard-header { flex-wrap: wrap; }
+  .client-dashboard h1 { font-size: 28px; white-space: normal; }
+  .client-dashboard-totals { flex-direction: column; }
+  .client-dashboard-card { padding: 18px; }
+  .client-dashboard-number { font-size: 36px; }
+  .client-dashboard-team { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .client-dashboard-ask { padding: 14px; flex-wrap: wrap; }
+  .client-dashboard-ask input { flex-basis: 100%; }
+}
