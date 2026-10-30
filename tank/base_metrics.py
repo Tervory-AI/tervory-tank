@@ -103,7 +103,7 @@ def cost_rows(results: list[dict[str, Any]], ledger: list[dict[str, Any]]) -> li
         total = None if item["unpriced"] else known
         out.append({**item, "verified_records": n, "known_cost_usd": str(known),
                     "cost_usd": str(total) if total is not None else None,
-                    "cost_per_verified_record": str(known / n) if n else None,
+                    "cost_per_verified_record": str(total / n) if n and total is not None else None,
                     "vendors": sorted(item["vendors"]),
                     "status": "price not set" if item["unpriced"] else "no verified records" if not n else "priced"})
     return out
