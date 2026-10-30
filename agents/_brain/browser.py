@@ -93,6 +93,9 @@ class Page(BaseModel):
     price_reader: bool = False
     settle_ms: int = Field(default=2000, ge=0, le=10000)
     max_ms: int = Field(default=90000, ge=1000, le=150000)
+    # Navigation's max_ms excludes admission, evidence and extraction. Callers
+    # with a shorter transport deadline must expire that whole operation here.
+    request_timeout_ms: int | None = Field(default=None, ge=1000, le=150000)
 
 
 def human_check(html: str) -> bool:
@@ -295,15 +298,27 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
         site = site_origin(body.url)
     except (ValueError, OSError):
         raise HTTPException(403, "Private or internal web address refused.") from None
-    if access_configured():
-        async with access_locks.setdefault((tenant, site), asyncio.Lock()):
-            task = asyncio.current_task()
-            active_visits[(tenant, site)] = task
-            try:
-                return await visit(body, tenant, x_task_id, site)
-            finally:
-                if active_visits.get((tenant, site)) is task: active_visits.pop((tenant, site), None)
-    return await visit(body, tenant, x_task_id, site)
+    async def scoped_visit():
+        if access_configured():
+            async with access_locks.setdefault((tenant, site), asyncio.Lock()):
+                task = asyncio.current_task()
+                active_visits[(tenant, site)] = task
+                try:
+                    return await visit(body, tenant, x_task_id, site)
+                finally:
+                    if active_visits.get((tenant, site)) is task: active_visits.pop((tenant, site), None)
+        return await visit(body, tenant, x_task_id, site)
+
+    if body.request_timeout_ms is None:
+        return await scoped_visit()
+    try:
+        # Include the tenant/site lock wait: an expired queued visit must never
+        # start later ahead of the caller's retry. Cancellation propagates into
+        # visit's existing browser/context cleanup before releasing admission.
+        async with asyncio.timeout(body.request_timeout_ms / 1000):
+            return await scoped_visit()
+    except TimeoutError:
+        raise HTTPException(503, "The browser could not read this page; no result is claimed.") from None
 
 
 async def visit(body, tenant, task, origin, *, run=None):
