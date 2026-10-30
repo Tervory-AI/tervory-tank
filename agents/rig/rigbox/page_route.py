@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -43,6 +44,11 @@ async def _published_page(request: Request) -> tuple[str, str]:
         return "", ""
 
 
+def _v5_asset_url(name: str) -> str:
+    digest = hashlib.sha256((_V5 / name).read_bytes()).hexdigest()
+    return f"/page/v5/assets/{digest}/{name}"
+
+
 async def _v5_html(request: Request, skin: str) -> HTMLResponse:
     html = (_V5 / "index.html").read_text(encoding="utf-8")
     key, shop = await _published_page(request)
@@ -50,7 +56,9 @@ async def _v5_html(request: Request, skin: str) -> HTMLResponse:
     html = html.replace("__RIG_SKIN__", safe_skin)
     html = html.replace("__RIG_KEY__", json.dumps(key).replace("<", "\\u003c"))
     html = html.replace("__RIG_SHOP__", json.dumps(shop).replace("<", "\\u003c"))
-    return HTMLResponse(html)
+    for name in ("rig.css", "rig.js"):
+        html = html.replace(f"/page/v5/{name}", _v5_asset_url(name))
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 
 async def _shopper_html(request: Request) -> HTMLResponse:
@@ -88,6 +96,13 @@ def mount_page(application: FastAPI) -> None:
     async def v5_cn_page(request: Request) -> HTMLResponse:
         return await _v5_html(request, "cn")
 
+    @application.get("/page/v5/assets/{digest}/{name}", include_in_schema=False)
+    async def v5_versioned_asset(digest: str, name: str) -> FileResponse:
+        if name not in ("rig.css", "rig.js") or _v5_asset_url(name) != f"/page/v5/assets/{digest}/{name}":
+            raise HTTPException(status_code=404, detail="Not found")
+        return FileResponse(_V5 / name, media_type=_V5_MEDIA[Path(name).suffix],
+                            headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
     @application.get("/page/v5/{name:path}", include_in_schema=False)
     async def v5_asset(name: str) -> FileResponse:
         media = _V5_MEDIA.get(Path(name).suffix.lower())
@@ -95,7 +110,7 @@ def mount_page(application: FastAPI) -> None:
         root = _V5.resolve()
         if media is None or root not in path.parents or not path.is_file():
             raise HTTPException(status_code=404, detail="Not found")
-        return FileResponse(path, media_type=media)
+        return FileResponse(path, media_type=media, headers={"Cache-Control": "no-cache"})
 
     @application.get("/admin", include_in_schema=False)
     async def admin_page() -> HTMLResponse:
