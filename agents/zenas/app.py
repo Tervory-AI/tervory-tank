@@ -282,6 +282,10 @@ async def _pool_store():
 # Feeds switchboard: pool status and "Load now" per source (Tank proxies /v1/zenas/pool/*).
 register_pool_routes(app, _pool_store, _box_region)
 
+from agents.zenas.core.regulation_api import register_routes as register_regulation_routes  # noqa: E402
+
+register_regulation_routes(app, _pool_store, _store, _box_region)
+
 _inner_lifespan = app.router.lifespan_context
 
 
@@ -959,7 +963,8 @@ async def post_answer(body: AnswerIn) -> dict[str, Any]:
         box_region=_box_region(),
         jurisdiction=body.jurisdiction,
         question=body.question,
-        passages=body.passages,
+        # Ask uses this box's stored law only. Caller-supplied passages cannot establish a citation.
+        passages=[],
         features=body.features,
         matter_id=str(body.matter_id) if body.matter_id else None,
         provider=body.provider,

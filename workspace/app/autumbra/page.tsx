@@ -1,4 +1,3 @@
-import Link from "next/link";
 import "./public.css";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +32,6 @@ export default function AutumbraPublicPage() {
       </section>
 
       <footer className="autumbra-public-foot">
-        <p>Founder console (private): <Link href="/admin/autumbra">/admin/autumbra</Link></p>
       </footer>
     </main>
   );

@@ -10,6 +10,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
+from chassis.tenant_db import TenantContextMiddleware, activate_tenant
+
 from rigbox.service import RigError
 from rigbox.quotes.privacy import shopper_body
 from rigbox.quotes.limits import QUOTE_ROUTES, client_address
@@ -68,6 +70,8 @@ class FitDecision(BaseModel):
 
 
 def mount(app: FastAPI) -> None:
+    if not any(item.cls is TenantContextMiddleware for item in app.user_middleware):
+        app.add_middleware(TenantContextMiddleware)
     app.include_router(router)
     app.add_exception_handler(RigError, _on_rig_error)
     app.add_exception_handler(RequestValidationError, _on_invalid)
@@ -107,6 +111,7 @@ async def _auth(request: Request) -> dict[str, Any]:
     request.state.rig_origin = origin
     request.state.rig_origin_ok = bool(origin)
     request.state.tenant_id = row["tenant_id"]
+    activate_tenant(row["tenant_id"])
     decision = await _service(request).public_limits.consume(str(row["tenant_id"]), address, route)
     request.state.rig_hold_quote = decision.hold
     if decision.retry_after:
@@ -123,6 +128,7 @@ async def _admin(request: Request) -> dict[str, Any]:
     raw = request.headers.get("x-rig-key") or ""
     row = await _service(request).authenticate_admin(raw)
     request.state.tenant_id = row["tenant_id"]
+    activate_tenant(row["tenant_id"])
     request.state.rig_origin_ok = False
     return row
 

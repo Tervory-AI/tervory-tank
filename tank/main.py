@@ -57,12 +57,18 @@ from urllib.parse import urlparse
 
 import asyncpg
 import httpx
+from command_stream import StreamFailure, TokenSink, completion as stream_completion
 import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+import batch_providers
+import priority_queue
 import graduate
+import semantic_cache
+from tenant_db import TenantContextMiddleware, TenantPool, tenant_path, tenant_scope, administrative, bind_tenant_endpoints
+import routellm_shadow
 import skala
 import skill_costs
 
@@ -83,7 +89,9 @@ _pii_detect = None
 _skill_home: contextvars.ContextVar[str | None] = contextvars.ContextVar("zenas_skill_home", default=None)
 
 app = FastAPI(title="Tervory Tank", version="0.2.0")
-_pool: asyncpg.Pool | None = None
+app.add_middleware(TenantContextMiddleware)
+_pool: Any = None
+_admin_pool: asyncpg.Pool | None = None
 _background: set[asyncio.Task[None]] = set()
 _batch_task: asyncio.Task[None] | None = None
 _http: httpx.AsyncClient | None = None
@@ -98,7 +106,17 @@ SKILL_ENV = {k: v for k, v in {"BRAVE_API_KEY": os.environ.get("BRAVE_API_KEY", 
 
 def pool() -> asyncpg.Pool:
     assert _pool is not None, "database pool not ready"
-    return _pool
+    return _admin_pool if administrative() and _admin_pool is not None else _pool
+
+
+def admin_pool():
+    """Explicit platform/founder DB corridor; never selected by a tenant value."""
+    if _admin_pool is not None:
+        return _admin_pool
+    # Pre-activation maintenance (e.g. concurrent indexes) must stay autocommit.
+    # Startup rejects this fallback when RLS is active.
+    legacy_pool = pool()
+    return getattr(legacy_pool, "raw", legacy_pool)
 
 
 def normalize_home(value: str | None) -> str:
@@ -573,7 +591,8 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
     ghost_route = matched == "ghost" and (request.method, path) in __import__("ghost_routes").ROOM_METHODS
     vendor_write = request.method == "POST" and path == "/v1/ledger/vendor"
     batch_route = path == "/v1/route/batch" or (request.method == "GET" and path.startswith("/v1/route/batch/"))
-    if path not in {"/health", "/v1/route"} and not batch_route and not skill_run and not vendor_write and not ghost_route:
+    event_route = request.method == "POST" and path in {"/v1/events/publish", "/v1/events/receive", "/v1/events/settle"}
+    if path not in {"/health", "/v1/route"} and not batch_route and not skill_run and not vendor_write and not ghost_route and not event_route:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
 
@@ -591,7 +610,7 @@ class RouteRequest(BaseModel):
     tenant_id: uuid.UUID
     agent: str = "tier0"
     task_type: str = "tier0.answer"
-    priority: str | None = None          # overrides the policy's priority if set
+    priority: Literal["urgent", "standard", "offpeak", "batch"] | None = None          # overrides the policy's priority if set
     skill: str | None = None
     region: str | None = None
     home_region: str | None = None
@@ -660,7 +679,7 @@ SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 
 async def _warn_unapproved_policy_pins() -> None:
-    async with pool().acquire() as conn:
+    async with admin_pool().acquire() as conn:
         rows = await conn.fetch("""SELECT p.task_type,p.tenant_id,p.model,s.state
             FROM tank.policy p LEFT JOIN tank.skills s
               ON s.id=split_part(substr(btrim(p.model),7),'@',1)
@@ -679,17 +698,36 @@ async def _startup() -> None:
     every start and means the database can never be missing Tank's tables."""
     if not os.environ.get("TANK_API_KEY", "").strip():
         raise RuntimeError("TANK_API_KEY is empty")
-    global _pool
-    _pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
+    global _pool, _admin_pool
+    raw_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
+    _pool = TenantPool(raw_pool)
+    admin_url = os.environ.get("TANK_ADMIN_DATABASE_URL", "")
+    _admin_pool = await asyncpg.create_pool(admin_url, min_size=1, max_size=2) if admin_url else None
+    _pool.admin_pool = _admin_pool
+    if _admin_pool is not None:
+        async with _admin_pool.acquire() as admin_conn:
+            configured_role = os.environ.get("TANK_RLS_ADMIN_ROLE", "")
+            role = await admin_conn.fetchrow("SELECT rolname, rolbypassrls FROM pg_roles WHERE rolname=current_user")
+            if not configured_role or role["rolname"] != configured_role or not role["rolbypassrls"]:
+                raise RuntimeError("TANK_ADMIN_DATABASE_URL must use the configured BYPASSRLS admin role")
+    async with raw_pool.acquire() as tenant_conn:
+        enforced = await tenant_conn.fetchval("SELECT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relrowsecurity AND (n.nspname='tank' OR n.nspname='base' OR n.nspname LIKE 'agent_%'))")
+        if enforced is True:
+            role = await tenant_conn.fetchrow("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user")
+            if role["rolsuper"] or role["rolbypassrls"] or _admin_pool is None:
+                raise RuntimeError("RLS requires a non-bypass tenant database role and a separate configured admin pool")
     with open(SCHEMA_PATH, encoding="utf-8") as f:
         ddl = f.read()
-    async with _pool.acquire() as conn:
+    async with (_admin_pool or raw_pool).acquire() as conn:
         await conn.execute(ddl)
         # A one-shot task (chat, draft) that was mid-flight when Tank restarted did not finish.
         # Base batches are not in this list: Base resumes them in its own room.
         await conn.execute(
             "UPDATE tank.tasks SET status='failed', error='Tank restarted mid-task', finished_at=now() "
-            "WHERE status IN ('queued','running') AND task_type <> 'base.enrich'"
+            "WHERE status IN ('queued','running') AND task_type <> 'base.enrich' "
+            "AND NOT EXISTS(SELECT 1 FROM tank.offpeak_jobs j WHERE j.task_id=tank.tasks.id "
+            "AND j.tenant_id=tank.tasks.tenant_id AND (j.status IN ('queued','dispatching','batch') "
+            "OR (j.command_context IS NOT NULL AND NOT j.notified)))"
         )
     global _http, _packages
     _http = httpx.AsyncClient(headers={"User-Agent": "Tervory/1.0 (+https://tervory.com)"}, timeout=15, event_hooks={"request": [__import__("controls").paid_host_hook], "response": [__import__("controls").paid_response_hook]})
@@ -718,6 +756,8 @@ async def _shutdown() -> None:
         await _http.aclose()
     if _pool:
         await _pool.close()
+    if _admin_pool:
+        await _admin_pool.close()
 
 
 def tank_sha() -> str:
@@ -736,7 +776,7 @@ async def health() -> dict[str, Any]:
 
 async def load_policy(task_type: str, tenant_id: uuid.UUID) -> dict[str, Any]:
     """Tenant-specific row first, then the platform default."""
-    async with pool().acquire() as conn:
+    async with admin_pool().acquire() as conn:
         row = await conn.fetchrow(
             """
             SELECT * FROM tank.policy
@@ -755,7 +795,7 @@ async def load_policy(task_type: str, tenant_id: uuid.UUID) -> dict[str, Any]:
 @app.get("/v1/policy", dependencies=[Depends(require_key)])
 async def list_policy(tenant_id: uuid.UUID) -> list[dict[str, Any]]:
     """This tenant's rows, plus platform defaults. Not another tenant's prompt."""
-    async with pool().acquire() as conn:
+    async with admin_pool().acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT * FROM tank.policy
@@ -1013,6 +1053,7 @@ def _cache_identity(req: RouteRequest, policy: dict[str, Any], messages: list[di
     return context_hash, exact, graduate.semantic_form(messages)
 
 
+@tenant_path("req")
 async def _cache_read(req: RouteRequest, policy: dict[str, Any], identity: tuple[str, str, str]) -> str | None:
     if (policy.get("cache_scope") not in {"tenant", "platform", "region"}
             or (policy.get("matter_matching") and not req.case_ref)):
@@ -1028,7 +1069,7 @@ async def _cache_read(req: RouteRequest, policy: dict[str, Any], identity: tuple
               AND (c.input_hash=$5 OR ($6 AND c.semantic_form=$7))
             ORDER BY (c.input_hash=$5) DESC LIMIT 1""",
             req.tenant_id, box_region(), req.task_type, context, exact,
-            bool(policy.get("semantic_cache")) and (not policy.get("matter_matching") or bool(req.case_ref)), form,
+            bool(policy.get("semantic_cache")) and req.task_type != "command.turn" and (not policy.get("matter_matching") or bool(req.case_ref)), form,
         )
     if not rows:
         return None
@@ -1040,6 +1081,7 @@ async def _cache_read(req: RouteRequest, policy: dict[str, Any], identity: tuple
     return hit["content"] if hit else None
 
 
+@tenant_path("req")
 async def _cache_write(req: RouteRequest, policy: dict[str, Any], identity: tuple[str, str, str], ledger_id: uuid.UUID) -> None:
     if (policy.get("cache_scope") not in {"tenant", "platform", "region"}
             or (policy.get("matter_matching") and not req.case_ref)):
@@ -1056,6 +1098,7 @@ async def _cache_write(req: RouteRequest, policy: dict[str, Any], identity: tupl
         )
 
 
+@tenant_path("req")
 async def run_route(
     req: RouteRequest,
     task_id: uuid.UUID | None = None,
@@ -1066,7 +1109,11 @@ async def run_route(
     _paid_policy: dict[str, Any] | None = None,
     _prior_escalation: list[dict[str, Any]] | None = None,
     _paid_limit: float | None = None,
-) -> RouteResponse:
+    _on_token: TokenSink | None = None,
+    _offpeak_dispatch: bool = False,
+    _receipt_id: uuid.UUID | None = None,
+    _deferred_snapshot: dict | None = None,
+) -> RouteResponse | priority_queue.QueuedResponse:
     """Pick the model from policy, call it through LiteLLM, write the ledger row.
     Used directly by /v1/route and in the background by tasks."""
     await _check_route_task(req, task_id)
@@ -1157,11 +1204,17 @@ async def run_route(
             raise HTTPException(409, "A skill policy must start at rung 3")
     transcript_messages = await _preflight_mask(req, policy, messages, task_id)
     identity = _cache_identity(req, policy, messages, max_tokens, route_seat)
-    if not holds_identifier and code_problem is None:
+    cache_policy, cache_probe = dict(policy), None
+    if priority != "urgent" and not _offpeak_dispatch and not holds_identifier and code_problem is None:
         hit = await _cache_read(req, policy, identity)
         if hit is not None:
             await _check_route_task(req, task_id)
             return await _record_local(req, policy, model=model, rung=4, content=hit, task_id=task_id, route_seat=route_seat)
+        cache_probe = await semantic_cache.lookup(__import__("sys").modules[__name__], req, cache_policy, identity, messages)
+        if await semantic_cache.may_serve(__import__("sys").modules[__name__], req, cache_policy, cache_probe):
+            await _check_route_task(req, task_id)
+            return await _record_local(req, policy, model=semantic_cache.CANDIDATE, rung=4,
+                                       content=cache_probe.content, task_id=task_id, route_seat=route_seat)
 
     escalation: list[dict[str, Any]] = list(_prior_escalation or [])
     if int(policy["rung"]) == 4:
@@ -1188,6 +1241,9 @@ async def run_route(
                                          latency_ms=int((time.perf_counter()-started_code)*1000))
             if not holds_identifier and _storage_mask(content) == content:
                 await _cache_write(req, policy, identity, result.ledger_id)
+                if priority != "urgent":
+                    semantic_cache.schedule(__import__("sys").modules[__name__], req, cache_policy, identity,
+                                            messages, cache_probe, result.ledger_id, content, 0.0)
             return result
         escalation.append({"from_rung": 3, "to_rung": 2, "reason": reason, "model": model})
         attempt = await _record_local(req, policy, model=model, rung=3, content=content, task_id=task_id,
@@ -1209,37 +1265,74 @@ async def run_route(
     if blocked:
         raise HTTPException(403, blocked)
     await _check_route_task(req, task_id)
-    if _defer_paid and not holds_identifier:
-        raise _DeferredRoute(req, policy, messages, max_tokens, generation, escalation)
+    if priority == "offpeak" and not _offpeak_dispatch:
+        item = _DeferredRoute(req, policy, messages, max_tokens, generation, escalation,
+                              semantic_cache.batch_snapshot(cache_policy, identity, cache_probe))
+        return await priority_queue.enqueue(__import__("sys").modules[__name__], item,
+                                             caller=caller, task_id=task_id, model_override=model_override)
+    if _defer_paid and priority != "urgent" and not holds_identifier:
+        raise _DeferredRoute(req, policy, messages, max_tokens, generation, escalation,
+                             semantic_cache.batch_snapshot(cache_policy, identity, cache_probe))
     if _paid_limit is not None:
         prices = await _batch_price(model)
         if _call_upper(messages, max_tokens, prices) > _paid_limit:
             raise HTTPException(409, "Task cost cap prevents another call")
         generation = {**generation, "disable_fallbacks": True}
     await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
+    price_info = await priority_queue.model_info(__import__("sys").modules[__name__], model) if priority == "offpeak" else None
+    sent_at = priority_queue.now()
+    if _offpeak_dispatch and not priority_queue.window_open(price_info.get("offpeak"), sent_at):
+        raise priority_queue.WindowClosed()
+    if _receipt_id is not None:
+        async with pool().acquire() as conn:
+            await conn.execute("""UPDATE tank.ledger SET outcome='sent',sent_at=$3
+                WHERE id=$1 AND tenant_id=$2 AND offpeak_job_id=$1""", _receipt_id, req.tenant_id, sent_at)
     started = time.perf_counter()
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
-            r = await client.post(
-                f"{LITELLM_URL}/v1/chat/completions",
-                headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-                json={"model": model, "messages": messages, "max_tokens": max_tokens, **generation},
+        if _on_token is not None and req.task_type == "command.turn":
+            r = await stream_completion(LITELLM_URL, LITELLM_MASTER_KEY,
+                                        {"model": model, "messages": messages, "max_tokens": max_tokens, **generation}, _on_token)
+        else:
+            async with httpx.AsyncClient(timeout=120) as client:
+                r = await client.post(
+                    f"{LITELLM_URL}/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
+                    json={"model": model, "messages": messages, "max_tokens": max_tokens, **generation},
+                )
+    except StreamFailure as exc:
+        ledger_id = uuid.uuid4()
+        async with pool().acquire() as conn:
+            await conn.execute(
+                "INSERT INTO tank.ledger "
+                "(id,tenant_id,region,agent,skill,task_type,rung,model,priority,tokens_in,tokens_out,cost_usd,"
+                "latency_ms,cache_hit,outcome,task_id,error,route_seat,escalation,cost_status,sent_at) "
+                "VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,'failed',$14,$15,$16,$17::jsonb,$18,$19)",
+                ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill, req.task_type,
+                policy["rung"], exc.model, priority, exc.tokens_in, exc.tokens_out, exc.cost_usd or 0,
+                int((time.perf_counter() - started) * 1000), task_id, "incomplete stream", route_seat, json.dumps(escalation),
+                # Existing NOT NULL storage convention: not_set is never shown as zero spend.
+                "not_set" if exc.cost_usd is None else "set", sent_at,
             )
+        raise HTTPException(502, {"ledger_id": str(ledger_id)}) from None
     except httpx.HTTPError as exc:
         # The gateway never answered. Still a call on the books, so the failure rate is honest.
         latency_ms = int((time.perf_counter() - started) * 1000)
-        ledger_id = uuid.uuid4()
+        ledger_id = _receipt_id or uuid.uuid4()
         err = f"no answer: {type(exc).__name__}: {str(exc)[:200]}"
         async with pool().acquire() as conn:
             await conn.execute(
                 """
                 INSERT INTO tank.ledger
                   (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-                   tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat, escalation)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,0,$10,false,'failed',$11,$12,$13,$14::jsonb)
+                   tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat, escalation,sent_at,offpeak_job_id,cost_status)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,0,$10,false,'failed',$11,$12,$13,$14::jsonb,$15,$16,$17)
+                ON CONFLICT(id) DO UPDATE SET outcome='failed',error=EXCLUDED.error,
+                    sent_at=EXCLUDED.sent_at,latency_ms=EXCLUDED.latency_ms,cost_status=EXCLUDED.cost_status
+                WHERE tank.ledger.tenant_id=EXCLUDED.tenant_id AND tank.ledger.offpeak_job_id=EXCLUDED.id
                 """,
                 ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
                 req.task_type, policy["rung"], model, priority, latency_ms, task_id, err, route_seat, json.dumps(escalation),
+                sent_at, _receipt_id, "not_set" if _receipt_id else "set",
             )
         raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "upstream": err}) from exc
     latency_ms = int((time.perf_counter() - started) * 1000)
@@ -1260,26 +1353,46 @@ async def run_route(
     tokens_out = int(usage.get("completion_tokens") or 0)
     # LiteLLM reports the cost it computed from config.yaml prices in this header.
     cost_usd = float(r.headers.get("x-litellm-response-cost") or 0.0)
+    cost_status = "set"
+    if priority == "offpeak":
+        cost = (priority_queue.usage_cost(price_info, usage, sent_at) if price_info.get("offpeak") else
+                float(r.headers["x-litellm-response-cost"]) if "x-litellm-response-cost" in r.headers else None)
+        cost_usd, cost_status = cost or 0.0, "set" if cost is not None else "not_set"
     # The gateway picks the cheapest model with funds (litellm/config.yaml); the ledger records the
     # roster model that actually answered, so spend is booked to the right provider.
     answered = r.headers.get("x-litellm-model-group") or model
+    if priority == "offpeak" and answered != model:
+        # A gateway violating disable_fallbacks is not evidence for our booked rate.
+        cost_usd, cost_status = 0.0, "not_set"
     content = ""
     finish_reason = ""
     if outcome == "delivered":
         content, finish_reason = _choice_answer(data)
 
-    ledger_id = uuid.uuid4()
+    ledger_id = _receipt_id or uuid.uuid4()
     async with pool().acquire() as conn:
         await conn.execute(
             """
             INSERT INTO tank.ledger
               (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat,escalation,accept_after)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16,$17,$18::jsonb,now()+make_interval(secs=>$19))
+               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat,escalation,accept_after,sent_at,offpeak_job_id,cost_status)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16,$17,$18::jsonb,now()+make_interval(secs=>$19),$20,$21,$22)
+            ON CONFLICT(id) DO UPDATE SET model=EXCLUDED.model,rung=EXCLUDED.rung,
+              tokens_in=EXCLUDED.tokens_in,tokens_out=EXCLUDED.tokens_out,cost_usd=EXCLUDED.cost_usd,
+              latency_ms=EXCLUDED.latency_ms,outcome=EXCLUDED.outcome,error=EXCLUDED.error,
+              route_seat=EXCLUDED.route_seat,escalation=EXCLUDED.escalation,accept_after=EXCLUDED.accept_after,
+              sent_at=EXCLUDED.sent_at,cost_status=EXCLUDED.cost_status,
+              baseline_model=EXCLUDED.baseline_model,baseline_cost_usd=EXCLUDED.baseline_cost_usd,
+              baseline_status=EXCLUDED.baseline_status,baseline_priced_at=EXCLUDED.baseline_priced_at,
+              standard_model=EXCLUDED.standard_model,standard_cost_usd=EXCLUDED.standard_cost_usd,
+              top_model=EXCLUDED.top_model,top_cost_usd=EXCLUDED.top_cost_usd,
+              comparison_revision=EXCLUDED.comparison_revision
+            WHERE tank.ledger.tenant_id=EXCLUDED.tenant_id AND tank.ledger.offpeak_job_id=EXCLUDED.id
             """,
             ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
             req.task_type, policy["rung"], answered, priority, tokens_in, tokens_out, cost_usd,
             latency_ms, outcome, task_id, error, route_seat, json.dumps(escalation), int(policy.get("acceptance_window_s", 86400)),
+            sent_at, _receipt_id, cost_status,
         )
 
     if outcome == "failed":
@@ -1288,8 +1401,15 @@ async def run_route(
 
     # Graduation: shadow the candidate on a share of calls; it never affects this answer.
     # An identifier prompt is not copied to a second provider or into the transcript.
-    if not holds_identifier and policy.get("candidate_model") and float(policy.get("shadow_rate") or 0) > random.random():
+    if priority != "urgent" and cost_status == "set" and not holds_identifier and policy.get("candidate_model") and float(policy.get("shadow_rate") or 0) > random.random():
         t = asyncio.create_task(_shadow(req, policy, messages, max_tokens, ledger_id, content, cost_usd))
+        _background.add(t)
+        t.add_done_callback(_background.discard)
+
+    if priority != "urgent" and cost_status == "set" and not holds_identifier and model_override is None and routellm_shadow.configuration(policy):
+        t = asyncio.create_task(routellm_shadow.observe(
+            __import__("sys").modules[__name__], req, policy, messages, max_tokens,
+            ledger_id, content, cost_usd, answered, "x-litellm-response-cost" in r.headers))
         _background.add(t)
         t.add_done_callback(_background.discard)
 
@@ -1304,14 +1424,21 @@ async def run_route(
             )
     if content and not holds_identifier and masked_content == content:
         await _cache_write(req, policy, identity, ledger_id)
+        if priority != "urgent" and cost_status == "set":
+            if _deferred_snapshot is not None:
+                semantic_cache.schedule_batch(__import__("sys").modules[__name__], req, _deferred_snapshot,
+                                               ledger_id, content, cost_usd)
+            else:
+                semantic_cache.schedule(__import__("sys").modules[__name__], req, cache_policy, identity,
+                                        messages, cache_probe, ledger_id, content, cost_usd)
     return RouteResponse(
         ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
-        tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd, latency_ms=latency_ms,
+        tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd if cost_status == "set" else None, latency_ms=latency_ms,
         finish_reason=finish_reason, escalation=escalation,
     )
 
 
-async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int) -> tuple[str, float]:
+async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int, *, receipt: dict | None = None) -> tuple[str, float]:
     messages = _plain_messages(messages)
     if _contains_html(messages):
         raise ValueError("HTML is not model input; supply extracted text")
@@ -1321,11 +1448,19 @@ async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int) -> t
         r = await client.post(
             f"{LITELLM_URL}/v1/chat/completions",
             headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-            json={"model": model, "messages": messages, "max_tokens": max_tokens},
+            json={"model": model, "messages": messages, "max_tokens": max_tokens,
+                  **({"disable_fallbacks": True} if receipt is not None else {})},
         )
     if r.status_code != 200:
         raise RuntimeError(f"{model}: {r.status_code} {r.text[:200]}")
     data = r.json()
+    if receipt is not None:
+        usage = data.get("usage") or {}
+        receipt.update(model=r.headers.get("x-litellm-model-group") or model,
+                       cost=float(r.headers["x-litellm-response-cost"]) if "x-litellm-response-cost" in r.headers else None,
+                       tokens_in=int(usage.get("prompt_tokens") or 0), tokens_out=int(usage.get("completion_tokens") or 0))
+        if receipt["model"] != model:
+            raise RuntimeError("shadow provider returned a different model")
     content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
     return content, float(r.headers.get("x-litellm-response-cost") or 0.0)
 
@@ -1385,6 +1520,7 @@ def _roster_row(item: Any) -> dict[str, Any] | None:
         "model_info": {
             "input_cost_per_token": price("input_cost_per_token"),
             "output_cost_per_token": price("output_cost_per_token"),
+            **({"offpeak": info["offpeak"]} if isinstance(info.get("offpeak"), dict) else {}),
         },
     }
 
@@ -1505,30 +1641,41 @@ async def _run_code_candidate(req: RouteRequest, cand: str, messages: list[dict[
 
 
 async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict[str, str]], max_tokens: int,
-                  ledger_id: uuid.UUID, primary: str, primary_cost: float) -> None:
+                  ledger_id: uuid.UUID, primary: str, primary_cost: float, *,
+                  routellm: tuple | None = None, cache_content: str | None = None) -> dict | None:
     """Run the candidate on the same input, score agreement with the primary, record both.
     The client already has the primary answer. Spend lands on the platform tenant.
     Code skills cost nothing and are not subject to the daily shadow budget."""
-    cand = policy["candidate_model"]
-    if graduate.is_semantic_cache(cand):
+    cache = cache_content is not None
+    cand = semantic_cache.CANDIDATE if cache else policy["candidate_model"]
+    if not cache and graduate.is_semantic_cache(cand):
         # Proved by graduate.semantic_lookup (local vectors, no paid call) before it is switched on.
         return
     if graduate.is_tool(cand):
         log.warning("shadow %s skipped %s: a paid tool is not started from here", req.task_type, cand)
         return
     code = graduate.is_skill(cand)
-    if not code and not await _shadow_budget_open(req.task_type):
+    budget_open = code or await _shadow_budget_open(req.task_type)
+    if not cache and not budget_open:
         log.warning("shadow %s skipped %s: daily budget spent", req.task_type, cand)
         return
     cand_content, cand_cost, agreement, method, fields = None, 0.0, None, "failed", {}
+    receipt: dict = {}
     try:
-        if code:
+        if cache:
+            cand_content = cache_content
+        elif code:
             cand_content, cand_cost = await _run_code_candidate(req, cand, messages)
         else:
-            cand_content, cand_cost = await _llm(cand, messages, max_tokens)
+            cand_content, cand_cost = await _llm(cand, messages, max_tokens, **({"receipt": receipt} if routellm else {}))
         compared = graduate.compare(primary, cand_content, tolerance=float(policy.get("number_tolerance") or 0.01))
         if compared.method == "fields":
             agreement, method, fields = compared.agreement, "fields", compared.fields
+        elif cache and (len(primary) > 4000 or len(cand_content) > 4000):
+            # A truncated prose comparison cannot prove the entire cached answer.
+            method = "answer_too_long"
+        elif not budget_open:
+            method = "budget_exhausted"
         else:
             jp = await load_policy("tank.judge", PLATFORM_TENANT)
             jmsgs = [{"role": "system", "content": jp["system_prompt"]},
@@ -1538,7 +1685,13 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
             found = re.search(r"\d{1,3}", verdict)
             agreement, method = (min(100, int(found.group())) / 100 if found else None), "judge"
     except Exception as exc:  # noqa: BLE001
-        log.warning("shadow %s→%s failed: %s", policy["model"], cand, exc)
+        log.warning("shadow %s→%s failed: %s", policy["model"], cand, type(exc).__name__ if routellm else exc)
+    if routellm:
+        config, primary_known = routellm
+        await routellm_shadow.save(__import__("sys").modules[__name__], req, config, ledger_id,
+            primary, primary_cost, primary_known, cand_content, max(cand_cost, receipt.get("cost") or 0),
+            receipt, agreement, method, fields)
+        return
     async with pool().acquire() as conn:
         await conn.execute(
             """
@@ -1564,7 +1717,9 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
                 shadow_ledger, req.tenant_id, req.task_type+"#shadow", json.dumps(_storage_mask(_plain_messages(messages))),
                 _storage_mask(cand_content or "")[:20000])
         await _add_spend(conn, req.task_type, cand_cost)
-    await _move_task(req.task_type)
+    if not cache:
+        await _move_task(req.task_type)
+    return {"agreement": agreement, "method": method, "evaluation_cost_usd": cand_cost}
 
 
 # ---------- graduation: the ladder ----------
@@ -1968,6 +2123,7 @@ async def graduation(
             """
         )
         code_quotes = await _code_quotes(conn)
+    router_steps = await routellm_shadow.ladder(__import__("sys").modules[__name__], tenant_id, founder_mix)
     price_quotes = await _live_price_quotes()
     roster_fp, price_fp = graduate.fingerprints([*price_quotes, *code_quotes])
     by_rank: dict[str, list[Any]] = {}
@@ -2038,6 +2194,7 @@ async def graduation(
             shadow_agreement=agr,
             ranked=ranked_view,
         )
+        steps.extend(router_steps.get(d["task_type"], []))
         state = by_state.get(d["task_type"])
         due = graduate.research_reason(
             state["searched_at"] if state else None,
@@ -2295,7 +2452,8 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
     return {"ok": True, "skipped": False, "research_due": due, **result.as_dict()}
 
 
-@app.post("/v1/route", response_model=RouteResponse, response_model_exclude_none=True)
+@app.post("/v1/route", response_model=RouteResponse | priority_queue.QueuedResponse, response_model_exclude_none=True)
+@tenant_path("body")
 async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     if caller:
         body = body.model_copy(update={"agent": caller})
@@ -2305,25 +2463,40 @@ async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     if "#moa." in body.task_type:
         raise HTTPException(403, "Submit the original task; MoA seats are internal")
     row = await load_policy(body.task_type, body.tenant_id)
+    if (body.priority or row["priority"]) == "offpeak" and row.get("moa_enabled"):
+        raise HTTPException(422, "MoA policies require the foreground route")
     if not row.get("moa_enabled") or int(row.get("rung", 1)) in {3, 4} or graduate.is_skill(row.get("model")):
-        return await run_route(body, caller=caller)
+        result = await run_route(body, caller=caller)
+        if isinstance(result, priority_queue.QueuedResponse):
+            priority_queue.kick(__import__("sys").modules[__name__], result.id, body.tenant_id)
+        return result
     return await __import__("moa").routed_request(
         body, caller, row=row, complex_request=body.complex_request, interactive=body.interactive
     )
 
 
+@app.get("/v1/route/jobs/{job_id}", dependencies=[Depends(require_key)])
+async def route_job(job_id: uuid.UUID, tenant_id: uuid.UUID):
+    return await priority_queue.status(__import__("sys").modules[__name__], job_id, tenant_id)
+
+
 # ---------- provider batches (independent of the task queue worker) ----------
 
 class _DeferredRoute(Exception):
-    def __init__(self, req, policy, messages, max_tokens, generation, escalation):
+    def __init__(self, req, policy, messages, max_tokens, generation, escalation, cache_snapshot=None):
         self.req, self.policy = req, policy
         self.messages, self.max_tokens = messages, max_tokens
         self.generation, self.escalation = generation, escalation
+        self.cache_snapshot = cache_snapshot
 
 
 class BatchRequest(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     requests: list[RouteRequest] = Field(min_length=1, max_length=1000)
+
+    @property
+    def tenant_id(self) -> uuid.UUID:
+        return self.requests[0].tenant_id
 
 
 def _batch_min() -> int:
@@ -2340,7 +2513,8 @@ async def _batch_price(model: str) -> dict[str, Any]:
     native = row["litellm_params"]["model"]
     provider, _, name = native.partition("/")
     return {"input": float(info["input_cost_per_token"]), "output": float(info["output_cost_per_token"]),
-            "provider": provider, "native": name, "discount": 0.5}
+            "provider": provider, "native": name,
+            "discount": batch_providers.charge_multiplier(provider, name) or 1.0}
 
 
 def _call_upper(messages: list[dict[str, str]], max_tokens: int, prices: dict[str, Any]) -> float:
@@ -2354,6 +2528,8 @@ async def _batch_gateway(method: str, path: str, *, model: str | None = None, **
     await __import__("controls").refuse_paid(path="route/batch")
     async with httpx.AsyncClient(timeout=60) as client:
         headers = {"Authorization": f"Bearer {LITELLM_MASTER_KEY}"}
+        if path.startswith("/anthropic/"):
+            headers["anthropic-version"] = "2023-06-01"
         if model:
             headers["x-litellm-model"] = model
         response = await client.request(method, f"{LITELLM_URL}{path}", headers=headers, **kwargs)
@@ -2362,6 +2538,7 @@ async def _batch_gateway(method: str, path: str, *, model: str | None = None, **
 
 
 @app.post("/v1/route/batch")
+@tenant_path("body")
 async def route_batch(body: BatchRequest, caller: str | None = Depends(require_key)) -> dict[str, Any]:
     tenant = body.requests[0].tenant_id
     task = body.requests[0].task_type
@@ -2377,6 +2554,10 @@ async def route_batch(body: BatchRequest, caller: str | None = Depends(require_k
             raise HTTPException(409, "Batch id already has different requests")
         return await batch_status(body.id, tenant)
     policy = await load_policy(task, tenant)
+    if any((r.priority or policy["priority"]) == "offpeak" for r in body.requests):
+        # This endpoint owns one batch id. Deferred single requests own a job id;
+        # never misreport an unsubmitted offpeak job as a completed batch item.
+        raise HTTPException(422, {"priority": "offpeak", "route": "/v1/route"})
     eligible = bool(policy.get("batch_eligible")) and not policy.get("moa_enabled")
     eligible = eligible and len(body.requests) >= _batch_min() and not any(r.interactive for r in body.requests)
     local, deferred = [], []
@@ -2392,10 +2573,15 @@ async def route_batch(body: BatchRequest, caller: str | None = Depends(require_k
             deferred.append(item)
     if not deferred:
         return {"id": str(body.id), "status": "completed", "results": local, "batch": False}
+    return await _enqueue_batch(body, caller, local, deferred, fingerprint)
+
+
+async def _enqueue_batch(body, caller, local, deferred, fingerprint):
+    tenant, task = body.requests[0].tenant_id, body.requests[0].task_type
     # Free/code/cache results have already finished. Only work still needing a
     # model is submitted; no interactive request enters this durable queue.
     prices = await _batch_price(deferred[0].policy["model"])
-    if prices["provider"] not in {"openai"}:
+    if not all(batch_providers.compatible(prices, item.messages, item.generation) for item in deferred):
         for item in deferred:
             result = await run_route(item.req, caller=caller, _paid_policy=item.policy,
                                      _prior_escalation=item.escalation, _paid_limit=float(item.policy["max_cost_usd"]))
@@ -2414,7 +2600,9 @@ async def route_batch(body: BatchRequest, caller: str | None = Depends(require_k
             if inserted:
                 for item, reservation in zip(deferred, reservations):
                     snapshot = {"routing": item.policy, "messages": item.messages, "max_tokens": item.max_tokens,
-                                "generation": item.generation, "escalation": item.escalation}
+                                "generation": item.generation, "escalation": item.escalation,
+                                "semantic_cache": item.cache_snapshot,
+                                "offpeak_job_id": str(item.offpeak_job_id) if getattr(item, "offpeak_job_id", None) else None}
                     clean_req = item.req.model_copy(update={"messages": [Message(**m) for m in _plain_messages([m.model_dump() for m in item.req.messages])]})
                     await conn.execute(
                         """INSERT INTO tank.batch_items(batch_id,tenant_id,item_id,request,policy,prices,reserved_usd,position)
@@ -2442,7 +2630,8 @@ async def batch_status(batch_id: uuid.UUID, tenant_id: uuid.UUID) -> dict[str, A
         if row is None:
             raise HTTPException(404, "No batch for this tenant")
         items = await conn.fetch(
-            """SELECT i.item_id,i.position,i.status,i.error,l.id AS ledger_id,l.model,l.rung,l.cost_usd,
+            """SELECT i.item_id,i.position,i.status,i.error,l.id AS ledger_id,l.model,l.rung,
+            CASE WHEN l.cost_status='not_set' THEN NULL ELSE l.cost_usd END AS cost_usd,
             coalesce(l.batch_baseline_cost_usd,l.baseline_cost_usd) AS baseline_cost_usd,
             l.tokens_in,l.tokens_out,l.latency_ms,l.batch,l.escalation,t.content
             FROM tank.batch_items i LEFT JOIN tank.ledger l ON l.id=i.ledger_id AND l.tenant_id=i.tenant_id
@@ -2480,7 +2669,10 @@ async def _batch_fallback(conn: Any, batch: Any, item: Any) -> None:
             raise HTTPException(409, "Policy changed before retry")
         remaining = min(remaining, float(current["max_cost_usd"])-float(item["reserved_usd"]))
         result = await run_route(req, caller=batch["caller"], _paid_policy=snapshot["routing"],
-                                 _prior_escalation=snapshot["escalation"], _paid_limit=remaining)
+                                 _prior_escalation=snapshot["escalation"], _paid_limit=remaining,
+                                 _offpeak_dispatch=bool(snapshot.get("offpeak_job_id")),
+                                 _receipt_id=uuid.UUID(snapshot["offpeak_job_id"]) if snapshot.get("offpeak_job_id") else None,
+                                 _deferred_snapshot=snapshot if snapshot.get("offpeak_job_id") else None)
         await conn.execute("""UPDATE tank.ledger SET batch=true,batch_id=$3,
             batch_baseline_cost_usd=cost_usd,batch_discount_usd=0 WHERE id=$1 AND tenant_id=$2""",
             result.ledger_id, req.tenant_id, batch["id"])
@@ -2515,7 +2707,7 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
     baseline = Decimal(tokens_in)*Decimal(str(prices["input"])) + Decimal(tokens_out)*Decimal(str(prices["output"]))
     actual = baseline*Decimal(str(prices["discount"]))
     req = RouteRequest.model_validate(_batch_obj(item["request"]))
-    ledger_id = uuid.uuid4()
+    ledger_id = uuid.UUID(snapshot["offpeak_job_id"]) if snapshot.get("offpeak_job_id") else uuid.uuid4()
     async with conn.transaction():
         # Item lock plus unique ledger assignment makes repeated provider polls idempotent.
         locked = await conn.fetchrow("SELECT ledger_id,status FROM tank.batch_items WHERE batch_id=$1 AND tenant_id=$2 AND item_id=$3 FOR UPDATE", batch["id"], req.tenant_id, item["item_id"])
@@ -2524,18 +2716,33 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
         await conn.execute(
             """INSERT INTO tank.ledger(id,tenant_id,region,agent,skill,task_type,rung,model,priority,
             tokens_in,tokens_out,cost_usd,latency_ms,outcome,batch,batch_id,baseline_model,baseline_cost_usd,
-            baseline_status,escalation,accept_after,batch_baseline_cost_usd,batch_discount_usd)
-            VALUES($1,$2,$3,$4,$5,$6,$7,$8,'batch',$9,$10,$11,0,'delivered',true,$12,$8,$13,'measured',$14::jsonb,
-                   now()+make_interval(secs=>$15),$13,$13::numeric-$11::numeric)""",
+            baseline_status,escalation,accept_after,batch_baseline_cost_usd,batch_discount_usd,sent_at,offpeak_job_id)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$16,$9,$10,$11,0,'delivered',true,$12,$8,$13,'measured',$14::jsonb,
+                   now()+make_interval(secs=>$15),$13,$13::numeric-$11::numeric,$17,$18)
+            ON CONFLICT(id) DO UPDATE SET model=EXCLUDED.model,rung=EXCLUDED.rung,
+              tokens_in=EXCLUDED.tokens_in,tokens_out=EXCLUDED.tokens_out,cost_usd=EXCLUDED.cost_usd,
+              latency_ms=EXCLUDED.latency_ms,outcome=EXCLUDED.outcome,cost_status='set',
+              escalation=EXCLUDED.escalation,accept_after=EXCLUDED.accept_after,sent_at=EXCLUDED.sent_at,
+              batch=EXCLUDED.batch,batch_id=EXCLUDED.batch_id,
+              batch_baseline_cost_usd=EXCLUDED.batch_baseline_cost_usd,batch_discount_usd=EXCLUDED.batch_discount_usd,
+              baseline_model=EXCLUDED.baseline_model,baseline_cost_usd=EXCLUDED.baseline_cost_usd,
+              baseline_status=EXCLUDED.baseline_status,baseline_priced_at=EXCLUDED.baseline_priced_at,
+              standard_model=EXCLUDED.standard_model,standard_cost_usd=EXCLUDED.standard_cost_usd,
+              top_model=EXCLUDED.top_model,top_cost_usd=EXCLUDED.top_cost_usd,
+              comparison_revision=EXCLUDED.comparison_revision
+            WHERE tank.ledger.tenant_id=EXCLUDED.tenant_id AND tank.ledger.offpeak_job_id=EXCLUDED.id""",
             ledger_id, req.tenant_id, box_region(), req.agent, req.skill, req.task_type,
             snapshot["routing"]["rung"], batch["model"], tokens_in, tokens_out, actual,
             batch["id"], baseline, json.dumps(snapshot["escalation"]), int(snapshot["routing"]["acceptance_window_s"]),
+            "offpeak" if snapshot.get("offpeak_job_id") else "batch", batch["submitted_at"],
+            ledger_id if snapshot.get("offpeak_job_id") else None,
         )
         await conn.execute("""INSERT INTO tank.transcripts(ledger_id,tenant_id,task_type,messages,content)
             VALUES($1,$2,$3,$4::jsonb,$5)""", ledger_id, req.tenant_id, req.task_type,
             json.dumps(_storage_mask(_plain_messages([m.model_dump() for m in req.messages]))), _storage_mask(content)[:20000])
         await conn.execute("""UPDATE tank.batch_items SET status='completed',ledger_id=$4,reserved_usd=$5
             WHERE batch_id=$1 AND tenant_id=$2 AND item_id=$3""", batch["id"], req.tenant_id, item["item_id"], ledger_id, actual)
+    semantic_cache.schedule_batch(__import__("sys").modules[__name__], req, snapshot, ledger_id, content, float(actual))
 
 
 async def _process_batch(conn: Any, batch: Any) -> None:
@@ -2558,32 +2765,28 @@ async def _process_batch(conn: Any, batch: Any) -> None:
                 raise ValueError("provider_not_allowed")
             lines.append(json.dumps({"custom_id": str(item["item_id"]), "method": "POST", "url": "/v1/chat/completions",
                 "body": {"model": prices["native"], "messages": snapshot["messages"], "max_tokens": snapshot["max_tokens"], **snapshot["generation"]}}))
-        uploaded = await _batch_gateway("POST", "/v1/files", model=batch["model"], data={"purpose": "batch", "custom_llm_provider": batch["provider"]},
-            files={"file": ("requests.jsonl", ("\n".join(lines)+"\n").encode(), "application/jsonl")})
-        file_id = uploaded.json()["id"]
-        created = await _batch_gateway("POST", "/v1/batches", model=batch["model"], json={"input_file_id": file_id,
-            "endpoint": "/v1/chat/completions", "completion_window": "24h", "custom_llm_provider": batch["provider"],
-            "metadata": {"tank_batch_id": str(batch["id"])}})
+        await conn.execute("""UPDATE tank.offpeak_jobs SET sent_at=now() WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"])
+        await conn.execute("""UPDATE tank.ledger SET outcome='sent',sent_at=now()
+            WHERE offpeak_job_id=$1 AND tenant_id=$2 AND outcome='queued'""", batch["id"], batch["tenant_id"])
+        provider_id, file_id = await batch_providers.submit(_batch_gateway, batch, lines)
         await conn.execute("""UPDATE tank.batches SET status='submitted',provider_id=$3,input_file_id=$4
-            WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"], created.json()["id"], file_id)
+            WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"], provider_id, file_id)
         return
     if batch["status"] in {"submitting", "retrying"}:
         # Only a restarted process can see these states while holding the batch
         # advisory lock. Surface uncertainty, and never repeat a submitted call.
         await conn.execute("UPDATE tank.batch_items SET status='failed',error='interrupted_attempt' WHERE batch_id=$1 AND tenant_id=$2 AND ledger_id IS NULL", batch["id"], batch["tenant_id"])
     else:
-        response = await _batch_gateway("GET", f"/v1/batches/{batch['provider_id']}", model=batch["model"], params={"custom_llm_provider": batch["provider"]})
-        state = response.json()
+        state = await batch_providers.status(_batch_gateway, batch)
         if state["status"] not in {"completed", "failed", "expired", "cancelled"}:
             if (datetime.now(timezone.utc)-batch["submitted_at"]).total_seconds() >= 86400:
                 if batch["error"] != "24h deadline exceeded; awaiting provider cancellation":
-                    await _batch_gateway("POST", f"/v1/batches/{batch['provider_id']}/cancel", model=batch["model"], json={"custom_llm_provider": batch["provider"]})
+                    await batch_providers.cancel(_batch_gateway, batch)
                     await conn.execute("UPDATE tank.batches SET error='24h deadline exceeded; awaiting provider cancellation' WHERE id=$1 AND tenant_id=$2", batch["id"], batch["tenant_id"])
             return
         outputs = {}
         if state.get("output_file_id"):
-            raw = await _batch_gateway("GET", f"/v1/files/{state['output_file_id']}/content", model=batch["model"], params={"custom_llm_provider": batch["provider"]})
-            outputs = {row["custom_id"]: row for row in (json.loads(line) for line in raw.text.splitlines() if line.strip())}
+            outputs = await batch_providers.results(_batch_gateway, batch, state["output_file_id"])
         await conn.execute("UPDATE tank.batches SET status='retrying' WHERE id=$1 AND tenant_id=$2", batch["id"], batch["tenant_id"])
         for item in items:
             if item["ledger_id"] is not None or item["status"] == "failed":
@@ -2604,7 +2807,7 @@ async def _process_batch(conn: Any, batch: Any) -> None:
 
 
 async def process_batches_once() -> None:
-    async with pool().acquire() as conn:
+    async with admin_pool().acquire() as conn:
         rows = await conn.fetch("SELECT id,tenant_id FROM tank.batches WHERE region=$1 AND status IN ('queued','submitting','submitted','retrying') ORDER BY created_at LIMIT 20", box_region())
         for row in rows:
             lock = int.from_bytes(row["id"].bytes[:8], "big", signed=True)
@@ -2614,7 +2817,14 @@ async def process_batches_once() -> None:
                 batch = await conn.fetchrow("SELECT * FROM tank.batches WHERE id=$1 AND tenant_id=$2", row["id"], row["tenant_id"])
                 if batch["status"] not in {"queued", "submitting", "submitted", "retrying"}:
                     continue
-                await _process_batch(conn, batch)
+                with tenant_scope(batch["tenant_id"]):
+                    if _admin_pool is None:
+                        # Before opt-in RLS, retain the existing single-pool path.
+                        # Startup refuses this configuration when RLS is active.
+                        await _process_batch(conn, batch)
+                    else:
+                        async with pool().acquire(autocommit=True) as tenant_conn:
+                            await _process_batch(tenant_conn, batch)
             except (httpx.HTTPError, ValueError, KeyError):
                 # Poll failures are retriable; submission ambiguity is surfaced
                 # on the next pass, with no second provider submission.
@@ -2626,7 +2836,9 @@ async def process_batches_once() -> None:
 async def _batch_loop() -> None:
     while True:
         try:
+            await priority_queue.process_once(__import__("sys").modules[__name__])
             await process_batches_once()
+            await priority_queue.notify_commands(__import__("sys").modules[__name__])
         except Exception:
             log.warning("Batch maintenance failed; retrying")
         await asyncio.sleep(10)
@@ -2643,6 +2855,7 @@ def task_dict(row: asyncpg.Record, ledger: asyncpg.Record | None = None) -> dict
     return d
 
 
+@tenant_path("req")
 async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
     async with pool().acquire() as conn:
         await conn.execute("UPDATE tank.tasks SET status='running', started_at=now() WHERE id=$1", task_id)
@@ -2668,6 +2881,7 @@ async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
 
 
 @app.post("/v1/tasks", dependencies=[Depends(require_key)], status_code=202)
+@tenant_path("body")
 async def create_task(body: TaskCreate) -> dict[str, Any]:
     box = box_region()
     home = call_home(body.home_region, box)
@@ -2923,9 +3137,14 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
         raise HTTPException(status_code=400, detail="package has no eval cases; a skill without evals cannot leave candidate")
     here = box_region()
     result = await skala.run_evals(
-        pkg, lambda: make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here),
+        pkg, lambda: __import__("skala_revalidation").eval_context(
+            __import__("sys").modules[__name__], pkg,
+            make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here)),
         execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold"} else None,
     )
+    if __import__("skala_revalidation").ACTIVE.get() is not None:
+        return await __import__("skala_revalidation").record(
+            __import__("sys").modules[__name__], result, body.by if body else None)
     passed_gate = result["score"] >= pkg.eval_threshold and result["eligible"]
     async with pool().acquire() as conn:
         await conn.execute(
@@ -2936,6 +3155,8 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
         state = await conn.fetchval("SELECT state FROM tank.skills WHERE id=$1 AND version=$2", skill_id, version)
         new_state = state
         if state == "candidate" and passed_gate:
+            new_state = "staging"
+        elif state == "approved" and not passed_gate:
             new_state = "staging"
         elif state == "staging" and not passed_gate:
             new_state = "candidate"   # it regressed; back it goes
@@ -3053,6 +3274,7 @@ async def _run_one_skill(
     body: SkillRun,
     caller: str | None,
 ) -> dict[str, Any]:
+    __import__("skala_intake").guard_preview(skill_id, caller, body.preview)
     version = body.version or await _pick_version(skill_id, body.preview)
     pkg = get_package(skill_id, version)
     await __import__("agent_skills").guard_submission_owner(
@@ -3167,6 +3389,8 @@ _ZENAS_PATH = re.compile(
     r"|^pool/sources/[A-Za-z0-9._-]{1,80}/load$"
     r"|^moot/problems/[A-Za-z0-9._-]{1,80}/counsel/(appellant|respondent)$"
     r"|^moot/problems/[A-Za-z0-9._-]{1,80}/(edit|lock)$"
+    r"|^regulations/(watches|changes)$"
+    r"|^regulations/watches/[0-9a-fA-F-]{36}$"
     r"|^moot/matches/ai-ai$"
     r"|^moot/matches/student$"
     r"|^moot/matches/[0-9a-fA-F-]{36}/publish$"
@@ -3333,6 +3557,8 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     if _http is None:
         raise HTTPException(status_code=503, detail="Zenas room is unreachable")
     headers: dict[str, str] = {}
+    if path.startswith("regulations/"):
+        headers["X-Tank-Key"] = os.environ.get("TANK_KEY_ZENAS", "")
     content_type = request.headers.get("content-type")
     if content_type:
         headers["content-type"] = content_type
@@ -3624,10 +3850,24 @@ async def tiger_create_watch(request: Request) -> Response:
     body = await _tiger_body(request)
     tenant_id = _tiger_tenant(request, body)
     forwarded: dict[str, Any] = {"tenant_id": str(tenant_id)}
-    for key in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock"):
+    for key in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock",
+                "alert_new_product", "alert_below_cost", "alert_market_gap"):
         if key in body:
             forwarded[key] = body[key]
     resp = await _tiger_call("POST", "/watchlist", [], json.dumps(forwarded).encode())
+    return _tiger_response(resp, tenant_id)
+
+
+@app.patch("/v1/tiger/watchlist/{watch_id}", dependencies=[Depends(require_key)])
+async def tiger_update_watch(watch_id: uuid.UUID, request: Request) -> Response:
+    body = await _tiger_body(request)
+    tenant_id = _tiger_tenant(request, body)
+    forwarded = {"tenant_id": str(tenant_id)}
+    for key in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock",
+                "alert_new_product", "alert_below_cost", "alert_market_gap"):
+        if key in body:
+            forwarded[key] = body[key]
+    resp = await _tiger_call("PATCH", f"/watchlist/{watch_id}", [], json.dumps(forwarded).encode())
     return _tiger_response(resp, tenant_id)
 
 
@@ -3768,7 +4008,10 @@ app.include_router(__import__("training").router)
 app.include_router(__import__("storage").router)
 app.include_router(__import__("bench").router)
 app.include_router(__import__("proof").router)
+app.include_router(routellm_shadow.router)
 app.include_router(__import__("proof").client_router)
+app.include_router(__import__("case_studies").router)
+app.include_router(__import__("event_bus").router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("rig_brain_routes").build_router(__import__("sys").modules[__name__]))
@@ -3781,6 +4024,34 @@ async def training_graduation(actor=Depends(__import__("gold").require_reviewer)
         raise HTTPException(404, "not found")
     async with pool().acquire() as conn:
         return await graduate.training_table(conn, actor.tenant, box_region())
+
+
+@app.api_route("/v1/tisan/promotion/{action}", methods=["GET", "POST"],
+               dependencies=[Depends(__import__("admin").require_admin)])
+async def tisan_promotion_proxy(action: str, request: Request) -> Response:
+    """Founder-only API corridor; only Tisan owns application mappings and checks."""
+    allowed = {("POST", "sites"), ("POST", "promote"), ("POST", "rollback"),
+               ("POST", "status"), ("GET", "history")}
+    if (request.method, action) not in allowed:
+        raise HTTPException(status_code=404, detail="not found")
+    key = os.environ.get("TANK_KEY_TISAN", "")
+    if _http is None or not key:
+        raise HTTPException(status_code=503, detail="Tisan room is unavailable")
+    raw = bytearray()
+    async for chunk in request.stream():
+        raw.extend(chunk)
+        if len(raw) > 8192:
+            raise HTTPException(status_code=413, detail="request too large")
+    try:
+        response = await _http.request(
+            request.method, f"http://agent-tisan:8000/promotion/{action}",
+            params=list(request.query_params.multi_items()), content=bytes(raw) or None,
+            headers={"X-Tank-Key": key, "X-Tervory-Admin": request.headers.get("x-tervory-admin", ""),
+                     "Content-Type": "application/json"}, timeout=600,
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=503, detail="Tisan operation unavailable; check its status before retrying") from None
+    return Response(content=response.content, status_code=response.status_code, media_type="application/json")
 
 
 @app.api_route("/v1/tisan/gold/{action}", methods=["GET", "POST"],
@@ -4090,6 +4361,7 @@ __import__("research").register(app, globals())
 
 # COMMAND-1A: conversation routes live in their own module.
 app.include_router(__import__("command").router)
+app.include_router(__import__("trigger_routes").router)
 
 # ACCESS-1: scoped connections and browser-only credential handoff.
 app.include_router(__import__("access").router)
@@ -4101,3 +4373,22 @@ app.include_router(__import__("rig_forge_routes").build_router(__import__("sys")
 app.include_router(__import__("rig_three_d").build_router(__import__("sys").modules[__name__]))
 
 app.include_router(__import__("market_lab_routes").build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("radix_passive_routes").build_router(__import__("sys").modules[__name__]))
+
+# Tenant-specific semantic-cache approval; no policy promotion is automatic.
+app.include_router(semantic_cache.build_router(__import__("sys").modules[__name__]))
+
+# Free room checker intake uses the existing registry, evals and founder approval.
+__import__("skala_intake").install(app, __import__("sys").modules[__name__])
+
+app.include_router(__import__("vault_routes").build_router(__import__("sys").modules[__name__]))
+
+# D1-D3 memory: founder-only record/publication corridor.
+from memory_routes import router as memory_router
+app.include_router(memory_router)
+
+# B3: process committed model changes through the existing skill-eval handler.
+__import__("skala_revalidation").install(app, __import__("sys").modules[__name__])
+
+# Bind only accepted endpoint arguments after existing authentication dependencies.
+bind_tenant_endpoints(app)

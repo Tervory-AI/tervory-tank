@@ -1,0 +1,19 @@
+$ /tmp/ci-security-tools/test-venv/bin/ruff check tank tests --select E9,F --per-file-ignores tank/skills/base.socials/1.0.0/run.py:F401
+All checks passed!
+exit 0
+
+$ /tmp/ci-security-tools/test-venv/bin/ruff check .github/scripts/security_scan.py tests/ci_security --select E9,F
+All checks passed!
+exit 0
+
+$ /tmp/ci-security-tools/actionlint -color=false -shellcheck= .github/workflows/ci.yml .github/workflows/security-weekly.yml
+
+exit 0
+
+$ bash -n .github/scripts/install-security-tools.sh
+
+exit 0
+
+$ git diff --cached --check
+
+exit 0

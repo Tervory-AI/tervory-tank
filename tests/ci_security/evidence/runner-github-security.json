@@ -1,0 +1,71 @@
+{
+  "url": "https://github.com/Tervory-AI/tervory-tank/actions/runs/40693368869/job/122833615354?pr=374",
+  "head": [
+    "2749612"
+  ],
+  "steps": [
+    {
+      "name": "Set up job",
+      "number": "1",
+      "conclusion": "success"
+    },
+    {
+      "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "number": "2",
+      "conclusion": "success"
+    },
+    {
+      "name": "Run actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+      "number": "3",
+      "conclusion": "success"
+    },
+    {
+      "name": "Install pinned security CLIs",
+      "number": "4",
+      "conclusion": "success"
+    },
+    {
+      "name": "Test security gate policy",
+      "number": "5",
+      "conclusion": "success"
+    },
+    {
+      "name": "Gitleaks \u2014 PR commits or main push",
+      "number": "6",
+      "conclusion": "success"
+    },
+    {
+      "name": "Semgrep \u2014 new high findings",
+      "number": "7",
+      "conclusion": "success"
+    },
+    {
+      "name": "OSV-Scanner \u2014 new vulnerable versions",
+      "number": "8",
+      "conclusion": "success"
+    },
+    {
+      "name": "Save security results",
+      "number": "9",
+      "conclusion": "success"
+    },
+    {
+      "name": "Post Run actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+      "number": "17",
+      "conclusion": "success"
+    },
+    {
+      "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "number": "18",
+      "conclusion": "success"
+    },
+    {
+      "name": "Complete job",
+      "number": "19",
+      "conclusion": "success"
+    }
+  ],
+  "diagnostics": [],
+  "source": "GitHub HTML job page; no GitHub API",
+  "code_commit": "27496125e8f594626461cda5becbf966e7190801"
+}

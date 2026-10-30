@@ -1,0 +1,13 @@
+{
+  "proof": "local, fixture page",
+  "tank": "real app startup and HTTP routes",
+  "worker": "real room scheduler and job worker",
+  "rss_items": 20,
+  "source_links": 20,
+  "retrieval_times": 20,
+  "tenant_isolation": "passed",
+  "private_url_rejected": true,
+  "delete_stops_subscription_and_removes_evidence": true,
+  "model_calls": 0,
+  "browser_add_link": true
+}

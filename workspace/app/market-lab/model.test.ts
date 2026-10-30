@@ -25,7 +25,7 @@ test("keys never count as fetched feeds", () => {
   flags.FRED_API_KEY = true;
   const page = buildPage(flags, { eia_diesel: { headline: "$4.102" } }, {});
   assert.equal(page.onCount, 0);
-  assert.equal(page.offCount, 14);
+  assert.equal(page.offCount, 16);
   assert.equal(page.cards.length + page.featured.length, 0);
   assert.equal(feedsToCall(emptyFlags()).includes("eia_diesel"), false);
 });
@@ -35,7 +35,7 @@ test("a successful stored feed counts once and opens its document", () => {
     eia_diesel: { rows: 25, documentId: "stored-document", headline: "25 stored observations", checkedAt: "2026-10-14" },
   }, {});
   assert.equal(page.onCount, 1);
-  assert.equal(page.offCount, 13);
+  assert.equal(page.offCount, 15);
   assert.equal(page.featured[0].sourceHref, "/market-lab/sources/stored-document");
   assert.equal(page.off.some((feed) => feed.id === "eia_diesel"), false);
 });
@@ -84,8 +84,33 @@ test("linked pages count checks without inventing a change", () => {
   assert.equal(carrier?.pages[2]?.note, "Checked 2 Oct 2026");
   const ports = page.groups.find((group) => group.id === "ports");
   assert.equal(ports?.pages[0]?.note, "Opens polb.com");
-  assert.equal(ports?.pages[1]?.note, "Opens data.ny.gov");
+  assert.equal(ports?.pages.length, 1);
   assert.equal(page.groups.find((group) => group.id === "season")?.pages[0]?.label, "California");
+});
+
+test("tenant source metadata uses the existing cards and exact stored document", () => {
+  const source = { id: "rss_tenant_feed", title: "Federal Reserve", summary: "", sourceLabel: "www.federalreserve.gov",
+    cadence: "weekly" as const, keyName: "", kind: "copy" as const };
+  const reading = { rows: 20, documentId: "tenant-document", headline: "20 stored observations", checkedAt: "2026-10-28T12:00:00Z" };
+  const page = buildPage(emptyFlags(), { [source.id]: reading }, {}, { sources: [source] });
+  assert.equal(page.cards.length, 1);
+  assert.equal(page.cards[0].title, source.title);
+  assert.equal(page.cards[0].cadence, "Weekly");
+  assert.equal(page.cards[0].sourceHref, "/market-lab/sources/tenant-document");
+  assert.equal(page.cards[0].headline, "20 stored observations");
+  assert.equal(buildPage(emptyFlags(), {}, {}, { sources: [source] }).cards.length, 0);
+  assert.equal(buildPage(emptyFlags(), { [source.id]: reading }, {}).cards.length, 0);
+});
+
+test("new official feeds open stored documents in the existing cards", () => {
+  const page = buildPage(emptyFlags(), {
+    sec_edgar: { rows: 2000, documentId: "sec-document", checkedAt: "2026-10-28" },
+    port_nynj: { rows: 384, documentId: "port-document", checkedAt: "2026-10-28" },
+  }, {});
+  assert.equal(page.onCount, 2);
+  assert.equal(page.cards.find((card) => card.id === "sec_edgar")?.sourceHref, "/market-lab/sources/sec-document");
+  assert.equal(page.cards.find((card) => card.id === "port_nynj")?.sourceHref, "/market-lab/sources/port-document");
+  assert.equal(page.groups.some((group) => group.pages.some((entry) => entry.id === "port_nynj")), false);
 });
 
 test("numbers stay exact and blank FRED values are skipped", () => {

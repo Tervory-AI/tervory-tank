@@ -1,5 +1,5 @@
 # Tisan, the developer and designer. Deploy this file as its own Coolify resource.
-# Build context is agents/ (the parent of this file), because the chassis lives there.
+# Build context is the repository root to reuse ops/live_check.mjs.
 # The only network is the external gateway. Coolify's own network for this resource
 # contains just this service, so it cannot see the main stack.
 # Created once on the server: docker network create tervory-gw-tisan
@@ -7,18 +7,22 @@
 services:
   agent-tisan:
     build:
-      context: ..
-      dockerfile: tisan/Dockerfile
+      context: ../..
+      dockerfile: agents/tisan/Dockerfile
     restart: unless-stopped
     mem_limit: 1g
     cpus: 0.25
     environment:
       AGENT_NAME: tisan
+      TISAN_COOLIFY_URL: ${TISAN_COOLIFY_URL:-}
+      TISAN_COOLIFY_TOKEN: ${TISAN_COOLIFY_TOKEN:-}
       R2_BUCKET: tervory-tisan
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_ACCESS_KEY_ID_TISAN: ${R2_ACCESS_KEY_ID_TISAN:-}
       R2_SECRET_ACCESS_KEY_TISAN: ${R2_SECRET_ACCESS_KEY_TISAN:-}
       DATABASE_URL: postgresql://agent_tisan:${AGENT_DB_PASSWORD_TISAN}@postgres:5432/${POSTGRES_DB:-tervory}
+      CHASSIS_ADMIN_DATABASE_URL: ${CHASSIS_ADMIN_DATABASE_URL:-}
+      CHASSIS_RLS_ADMIN_ROLE: ${CHASSIS_RLS_ADMIN_ROLE:-}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_TISAN:-}
       HERMES_URL: http://hermes:8000

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 from collections import Counter
@@ -12,10 +13,12 @@ from pathlib import Path
 from agents.zenas.pool.adapters import get_adapter
 from agents.zenas.pool.catalogue import sources_for_region
 from agents.zenas.pool.config import current_region
-from agents.zenas.pool.embed import Embedder, NoOpEmbedder, NoOpVectorIndex, VectorIndex
+from agents.zenas.pool.embed import Embedder, NoOpEmbedder, NoOpVectorIndex, VectorIndex, live_backends
 from agents.zenas.pool.http import RateLimited
-from agents.zenas.pool.ingest import ingest_snapshot
+from agents.zenas.pool.ingest import ingest_snapshot, version_saved
+from agents.zenas.pool.indexing import index_pending
 from agents.zenas.pool.licence import FetchNotConfigured, LicenceError, refusal_reason
+from agents.zenas.pool.laws_africa import is_laws_africa, live_sources
 from agents.zenas.pool.region import RegionError, assert_source_region, bind_store
 from agents.zenas.pool.status import pool_status
 from agents.zenas.pool.store import Store
@@ -69,33 +72,46 @@ async def run_nightly(
     bind_store(store, region)
     day = on or date.today()
     when = datetime.now(timezone.utc)
-    embedder = embedder or NoOpEmbedder()
-    index = index or NoOpVectorIndex()
+    if live and snapshots is None:
+        embedder, index = live_backends(store, region, embedder, index)
+    else:
+        embedder, index = embedder or NoOpEmbedder(), index or NoOpVectorIndex()
     getter = http_get or urllib_get
 
     sources = sources_for_region(region)
     if only is not None:
         wanted = set(only)
         sources = [source for source in sources if source.source_id in wanted]
-    for source in sources:
-        try:
-            assert_source_region(source, region)
-            await _update_source(
-                store,
-                source,
-                snapshots=snapshots,
-                on=day,
-                when=when,
-                live=live,
-                http_get=getter,
-                embedder=embedder,
-                index=index,
-                region=region,
-            )
-        except RegionError:
-            continue
-        except Exception as exc:
-            await _record_source_error(store, source, exc, when)
+    if live and snapshots is None:
+        sources = live_sources(sources)
+    async def changed(document):
+        from chassis.events import publish
+        await publish("00000000-0000-0000-0000-000000000001", "zenas.regulation.changed", document.version_id, {
+            "document_id": hashlib.sha256(document.id.encode()).hexdigest(),
+            "version_id": hashlib.sha256(document.version_id.encode()).hexdigest()})
+    token = version_saved.set(changed)
+    try:
+        for source in sources:
+            try:
+                assert_source_region(source, region)
+                await _update_source(
+                    store,
+                    source,
+                    snapshots=snapshots,
+                    on=day,
+                    when=when,
+                    live=live,
+                    http_get=getter,
+                    embedder=embedder,
+                    index=index,
+                    region=region,
+                )
+            except RegionError:
+                continue
+            except Exception as exc:
+                await _record_source_error(store, source, exc, when)
+    finally:
+        version_saved.reset(token)
     return await pool_status(store, region=region)
 
 
@@ -114,6 +130,7 @@ async def _update_source(
 ) -> None:
     assert_source_region(source, region)
     if snapshots is None and live and source.source_id == "courtlistener" and region == "us-east":
+        await index_pending(store, embedder, index, region=region, source_ids=[source.source_id])
         await courtlistener_night(
             store,
             source,
@@ -136,6 +153,15 @@ async def _update_source(
             when=when,
         )
         return
+    if snapshots is None and live and is_laws_africa(source):
+        from agents.zenas.pool.bulk import disk_cap_bytes, load_source
+        await load_source(
+            store, source, region=region, snapshots=None, on=on, when=when, live=True,
+            http_get=http_get, embedder=embedder, index=index, cap=disk_cap_bytes(),
+            data_dir=os.environ.get("DATA_DIR", ".") or ".",
+        )
+        return
+    await index_pending(store, embedder, index, region=region, source_ids=[source.source_id])
     if snapshots is None and live and source.source_id in _OFFICIAL_STATUTES:
         await _update_official(
             store,
@@ -569,6 +595,14 @@ async def _main() -> None:
             )
         else:
             report = await run_nightly(store, live=True)
+        if not use_fixtures:
+            try:
+                from agents.zenas.core.regulations import run_scheduled as regulations_scheduled
+
+                report["regulations"] = await regulations_scheduled(conn, region=current_region())
+            except Exception:
+                # No exception text: upstream failures can contain credentials or tenant data.
+                report["regulations"] = {"unavailable": 1}
         try:
             from agents.zenas.core.convert import run_scheduled as convert_scheduled
 
@@ -584,3 +618,7 @@ async def _main() -> None:
     finally:
         await conn.close()
     print(json.dumps(report, indent=2, default=str))
+
+
+if __name__ == "__main__":
+    main()

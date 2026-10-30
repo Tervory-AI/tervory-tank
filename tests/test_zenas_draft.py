@@ -250,7 +250,7 @@ async def test_draft_uses_approved_clauses_and_marks_the_rest() -> None:
     )
     assert shared["ok"] is True
     assert shared["reused"] is True
-    assert shared["text"] == "Reused supply agreement."
+    assert shared["text"] == "Reused supply agreement.\n\nZenas provides legal information, not legal advice."
     assert shared["model_calls"] == 0
 
     za = MemoryStore()
@@ -388,3 +388,9 @@ async def test_draft_and_review_skill_evals() -> None:
             if not ok:
                 failed.append(f"{name} {case['name']}: {why}")
     assert not failed, "\n".join(failed)
+
+
+@pytest.fixture(autouse=True)
+def offline_docassemble(monkeypatch):
+    from zenas_docassemble.api_stub import install
+    return install(monkeypatch)

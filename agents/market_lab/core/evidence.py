@@ -117,6 +117,10 @@ def number_label(value: Any) -> str:
 
 
 async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: int = 0, *, row: int | None = None, row_kind: str | None = None, fixtures: bool = False, engine: str | None = None) -> dict | None:
+    from core.documents import source_page
+    uploaded = await source_page(ledger, tenant_id, document_id, offset, row)
+    if uploaded is not None:
+        return uploaded
     doc = await document(ledger, tenant_id, document_id, fixtures=fixtures)
     if doc is None:
         return None
@@ -155,7 +159,9 @@ async def overview(ledger: Any, tenant_id: str, engine: str | None = None, *, fi
         raise ValueError("A feed plan is required")
     checks = {row["source_id"]: row for row in await latest_checks(ledger, tenant_id, fixtures=fixtures)}
     feeds = []
-    for source in sources(engine):
+    from core.feed_links import source_for, subscriptions
+    configured = sources(engine) + [source_for(row) for row in await subscriptions(ledger, tenant_id)]
+    for source in configured:
         spec = bind_key(source)
         check = checks.get(spec.id, {})
         rows = int(check.get("rows", 0))
@@ -163,6 +169,7 @@ async def overview(ledger: Any, tenant_id: str, engine: str | None = None, *, fi
         if rows:
             note = check.get("note") or ""
         feeds.append({"id": spec.id, "name": spec.name, "kind": "copy" if spec.allow_bulk else "linked",
+                      "url": spec.url, "cadence": spec.cadence,
                       "rows": rows, "state": "on" if spec.allow_bulk and rows > 0 else "off",
                       "note": note, "checked_at": check.get("checked_at"), "document_id": check.get("document_id")})
     return {"feeds": feeds, "on_count": sum(feed["state"] == "on" for feed in feeds)}
@@ -239,7 +246,8 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
                 continue
             if counties and point["geo"] not in counties:
                 continue
-            if states and state_for_area(point["geo"]) not in states:
+            covered_states = doc.get("presentation", {}).get("geo_states", {}).get(point["geo"], [])
+            if states and state_for_area(point["geo"]) not in states and not states.intersection(covered_states):
                 continue
             if years and point["date"][:4] not in years:
                 continue
@@ -268,6 +276,8 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
                                  source_words, area_label(event["geo"], "state", event["title"]) + " " + event["geo"], event["date"])
             if score:
                 ranked.append((score, event["date"], {"text": f'{event_label(event, doc.get("presentation"))} ({period_label(event["date"])}).', "href": f'/market-lab/sources/{doc["id"]}?row={index}&kind=event#event-{index}', "name": doc["name"]}))
+    from core.documents import matched
+    ranked.extend(await matched(ledger, tenant_id, question))
     ranked.sort(key=lambda row: (row[0], row[1]), reverse=True)
     best = ranked[0][0] if ranked else 0
     facts = [row[2] for row in ranked if row[0] == best][:5]

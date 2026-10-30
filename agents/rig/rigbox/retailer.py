@@ -75,6 +75,7 @@ class Retailer:
     async def panel(self, tenant: str) -> dict[str, Any]:
         settings = await self.store.rule(tenant)
         retailer = await self.store.retailer(tenant) or {}
+        products = await self.store.products(tenant)
         return {
             "settings": {"name": retailer.get("name", ""), "email": retailer.get("email") or "",
                          "theme": retailer.get("theme", "neutral")},
@@ -84,8 +85,22 @@ class Retailer:
             "fits": (await self.service.suggested_fits(tenant))["fits"],
             "missed_searches": await self.store.missed_searches(tenant),
             "receipts": await self.store.receipts(tenant),
-            "products": len(await self.store.products(tenant)),
+            "products": len(products),
+            "product_rows": [{"sku": row["sku"], "name": row["name"], "price": str(row["price"]), "currency": row["currency"]} for row in products],
         }
+
+    async def delete_products(self, tenant: str, data: dict[str, Any]) -> dict[str, Any]:
+        skus = data.get("skus")
+        if (not isinstance(skus, list) or not 1 <= len(skus) <= 5000
+                or any(not isinstance(sku, str) or not sku.strip() for sku in skus)):
+            raise ValueError()
+        async with self.store.atomic(tenant) as store:
+            deleted = await store.delete_products(tenant, list(dict.fromkeys(skus)))
+            # Existing receipt shape: updated counts removals for this operation.
+            receipt = {"id": str(uuid4()), "provider": "delete-products", "site": "", "feed_id": "",
+                       "added": 0, "updated": deleted, "rejected": 0}
+            await store.save_feed_receipt(tenant, receipt)
+        return {"deleted": deleted, "receipt": receipt}
 
     async def set_settings(self, tenant: str, data: dict[str, Any]) -> dict[str, bool]:
         name = data.get("name", "")
@@ -197,11 +212,18 @@ class Retailer:
                 settings = await store.rule(tenant)
                 target = (settings or {}).get("shop_currency", "ZAR")
                 existing = {row["sku"]: row for row in await store.products(tenant)}
+                suppressed = await store.deleted_skus(tenant) if data.get("refresh") is True else set()
+                removed_families = {row.get("family") for row in mapped["rows"] if row["sku"] in suppressed and row.get("family")}
+                mapped["rows"] = [row for row in mapped["rows"] if row["sku"] not in suppressed]
                 combined = {**existing, **{row["sku"]: row for row in mapped["rows"]}}
                 families = metadata.get("families", {})
                 if not isinstance(families, dict) or len(families) > 5000:
                     raise ValueError("Check the feed's families.")
                 for family, members in families.items():
+                    if isinstance(members, list):
+                        if any(isinstance(sku, str) and sku in suppressed for sku in members):
+                            removed_families.add(family)
+                        members = [sku for sku in members if not isinstance(sku, str) or sku not in suppressed]
                     if not isinstance(family, str) or not family or len(family) > 120 or not isinstance(members, list) or any(sku not in combined for sku in members):
                         raise ValueError("Every family member must be in this catalogue.")
                     for sku in members:
@@ -213,6 +235,10 @@ class Retailer:
                 for row in fits:
                     if not isinstance(row, dict) or not row.get("part_sku") or bool(row.get("fits_sku")) == bool(row.get("fits_family")):
                         raise ValueError("Each fit needs a part and exactly one target.")
+                    if row["part_sku"] in suppressed or row.get("fits_sku") in suppressed:
+                        continue
+                    if row.get("fits_family") in removed_families and not any(r.get("family") == row["fits_family"] for r in combined.values()):
+                        continue
                     note = str(row.get("note", "")).strip()
                     if not note or len(note) > 2000:
                         raise ValueError("Each supplied fit needs evidence for review.")
@@ -220,6 +246,8 @@ class Retailer:
                                     "note": note, "source": "suggested", "approved": False, "confidence": None, "rule": {}, "row": 0})
                 if check_fit_refs(checked, set(combined), set(families_from(list(combined.values())))):
                     raise ValueError("A supplied fit refers to an unknown product or family.")
+                if data.get("refresh") is not True:
+                    await store.restore_products(tenant, [row["sku"] for row in mapped["rows"]])
                 for row in mapped["rows"]:
                     sku = row["sku"]
                     # Source amounts exist only in the private cost table.

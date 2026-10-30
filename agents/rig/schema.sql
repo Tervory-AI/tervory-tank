@@ -55,6 +55,36 @@ CREATE TABLE IF NOT EXISTS agent_rig.products (
 
 CREATE INDEX IF NOT EXISTS products_tenant_active ON agent_rig.products (tenant_id, active);
 
+-- Append-only event history. Consumer retries never overwrite earlier prices.
+CREATE TABLE IF NOT EXISTS agent_rig.price_history (
+    tenant_id uuid NOT NULL,
+    product_id text NOT NULL,
+    price numeric NOT NULL CHECK(price >= 0 AND price < 'Infinity'::numeric),
+    currency text NOT NULL CHECK(currency ~ '^[A-Z]{3}$'),
+    observed_at timestamptz NOT NULL,
+    event_id uuid PRIMARY KEY
+);
+CREATE INDEX IF NOT EXISTS price_history_tenant_product
+    ON agent_rig.price_history(tenant_id,product_id,observed_at,event_id);
+
+-- Tiger retries are idempotent and cannot replace a newer confirmed observation.
+CREATE TABLE IF NOT EXISTS agent_rig.tiger_receipts (
+    tenant_id uuid NOT NULL,
+    sku text NOT NULL,
+    url text NOT NULL,
+    observed_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, sku, url),
+    FOREIGN KEY (tenant_id, sku) REFERENCES agent_rig.products(tenant_id, sku) ON DELETE CASCADE
+);
+
+-- Manual removal survives feed refresh and restart. Only a manual import clears it.
+CREATE TABLE IF NOT EXISTS agent_rig.deleted_products (
+    tenant_id uuid NOT NULL,
+    sku text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, sku)
+);
+
 CREATE INDEX IF NOT EXISTS products_search_fts ON agent_rig.products
 USING gin (to_tsvector('simple',
     coalesce(name, '') || ' ' || coalesce(brand, '') || ' ' || coalesce(sku, '') || ' ' || coalesce(attributes::text, '')
@@ -136,6 +166,15 @@ CREATE TABLE IF NOT EXISTS agent_rig.feeds (
     url        text NOT NULL,
     currency   text NOT NULL DEFAULT '',
     PRIMARY KEY (tenant_id, url)
+);
+
+-- Legacy feed rows predate supplier_costs. Until a feed refresh records its
+-- product membership, its tenant's provenance is unknown and Tiger fails closed.
+ALTER TABLE agent_rig.feeds ADD COLUMN IF NOT EXISTS watch_indexed boolean NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS agent_rig.feed_products (
+    tenant_id uuid NOT NULL, sku text NOT NULL, feed_url text NOT NULL,
+    PRIMARY KEY (tenant_id, sku, feed_url),
+    FOREIGN KEY (tenant_id, sku) REFERENCES agent_rig.products(tenant_id, sku) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS agent_rig.answers (
@@ -315,3 +354,53 @@ CREATE TABLE IF NOT EXISTS agent_rig.rig_3d_kiosks (
     PRIMARY KEY (tenant_id,id)
 );
 -- End RIG-5.
+
+-- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
+CREATE TABLE IF NOT EXISTS agent_rig.memory_records (
+    id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    agent text NOT NULL DEFAULT 'rig' CHECK (agent = 'rig'),
+    claim text NOT NULL CHECK (length(claim) BETWEEN 1 AND 8000),
+    evidence jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(evidence) = 'array'),
+    confidence double precision NOT NULL DEFAULT 0.5 CHECK (confidence BETWEEN 0 AND 1),
+    last_verified timestamptz,
+    embed_model text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    tier text NOT NULL DEFAULT 'client' CHECK (tier IN ('client','platform')),
+    kind text NOT NULL DEFAULT 'fact',
+    meta jsonb NOT NULL DEFAULT '{}',
+    seen integer NOT NULL DEFAULT 1,
+    CHECK (tier <> 'platform' OR tenant_id = '00000000-0000-0000-0000-000000000001'::uuid)
+);
+CREATE INDEX IF NOT EXISTS memory_records_scope ON agent_rig.memory_records (tenant_id, tier, created_at, id);
+CREATE INDEX IF NOT EXISTS memory_records_encoder ON agent_rig.memory_records (tenant_id, embed_model);
+CREATE TABLE IF NOT EXISTS agent_rig.memory_index_jobs (
+    row_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    target_model text NOT NULL,
+    operation text NOT NULL DEFAULT 'upsert' CHECK (operation IN ('upsert','delete')),
+    attempts integer NOT NULL DEFAULT 0,
+    run_at timestamptz NOT NULL DEFAULT now(),
+    last_error text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, row_id, target_model, operation)
+);
+CREATE INDEX IF NOT EXISTS memory_index_jobs_due ON agent_rig.memory_index_jobs (run_at);
+CREATE TABLE IF NOT EXISTS agent_rig.memory_publish_policy (
+    tenant_id uuid PRIMARY KEY,
+    enabled boolean NOT NULL DEFAULT false,
+    identifiers jsonb NOT NULL DEFAULT '{}',
+    updated_by text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS agent_rig.memory_publish_log (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    actor text NOT NULL,
+    happened_at timestamptz NOT NULL DEFAULT now(),
+    source_row uuid NOT NULL,
+    result text NOT NULL CHECK (result IN ('disabled','missing','refused','published','already_published')),
+    published_row uuid
+);
+-- END GENERATED AGENT MEMORY

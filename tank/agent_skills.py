@@ -4,6 +4,8 @@ There is deliberately no second skill runner or approval endpoint here.
 """
 from __future__ import annotations
 
+from tenant_db import tenant_scope
+
 import hashlib
 import hmac
 import json
@@ -528,7 +530,8 @@ def build_router(tank: Any) -> APIRouter:
 
     @router.on_event("startup")
     async def restore_candidates():
-        await restore(tank)
+        with tenant_scope(None, administrative=True):
+            await restore(tank)
 
     @router.get("/v1/agents/{room}/skills")
     async def approved(room: str, tenant_id: uuid.UUID, request: Request, home_region: str = "us-east"):

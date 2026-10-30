@@ -156,7 +156,7 @@ export function applyApproval(skills: LibrarySkill[], id: string, version: strin
   return skills.map((skill) => {
     if (skill.id !== id) return skill;
     if (skill.version === version) return { ...skill, state: "approved" };
-    if (skill.state === "approved") return { ...skill, state: "retired" };
+    if (skill.state === "approved") return { ...skill, state: "staging" };
     return skill;
   });
 }

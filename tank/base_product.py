@@ -1,6 +1,8 @@
 """Base reference, work, evidence, comparison and expense routes."""
 from __future__ import annotations
 
+from tenant_db import tenant_transaction
+
 import asyncio
 from collections import defaultdict
 from contextlib import asynccontextmanager, suppress
@@ -22,6 +24,7 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from admin import require_admin
+from base_audit import AuditStore, audit_csv
 from base_metrics import COUNTS, compare, cost_rows, counts, csv_text, export_records, latest, matches, selected
 from base_repository import BaseStore, encoded
 from base_reference_status import check_reference
@@ -49,6 +52,19 @@ class Upload(Selection):
 class ApolloUpload(BaseModel):
     tenant_id: uuid.UUID
     csv: str = Field(min_length=1, max_length=2_000_000)
+
+
+class AuditSample(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: uuid.UUID
+    seed: int = Field(ge=0, le=2**63 - 1, strict=True)
+
+
+class AuditReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: uuid.UUID
+    csv: str = Field(min_length=1, max_length=10_000_000)
+    field_verdicts: dict[str, dict[str, str]] | None = Field(default=None, max_length=200)
 
 
 class PriceChange(BaseModel):
@@ -221,7 +237,7 @@ def build_router(rt: Any, store: BaseStore | None = None, *, background: bool = 
             async def stream():
                 # A stable read snapshot prevents new completed rows from
                 # shifting pages while a client downloads a large list.
-                async with rt.pool().acquire() as conn, conn.transaction(isolation="repeatable_read", readonly=True):
+                async with tenant_transaction(rt.pool(), isolation="repeatable_read", readonly=True) as conn:
                     from contextlib import asynccontextmanager
                     class SnapshotPool:
                         @asynccontextmanager
@@ -320,6 +336,47 @@ def build_router(rt: Any, store: BaseStore | None = None, *, background: bool = 
             rows = await conn.fetch("""SELECT id,input,output,source,source_ref,created_at FROM tank.training_pairs
                 WHERE tenant_id=$1 AND region=$2 AND source='base_verified' ORDER BY created_at DESC LIMIT 200""", tenant_id, rt.box_region())
         return clean({"rows": [dict(row) for row in rows]})
+
+    audits = AuditStore(rt)
+
+    @router.post("/campaigns/{campaign_id}/audits", dependencies=[Depends(workspace), Depends(require_admin)])
+    async def create_audit(campaign_id: uuid.UUID, body: AuditSample,
+                           x_tervory_admin: str = Header(default="")) -> dict[str, Any]:
+        return clean(await audits.create(body.tenant_id, campaign_id, body.seed, x_tervory_admin))
+
+    @router.get("/campaigns/{campaign_id}/audits/{audit_id}", dependencies=[Depends(workspace), Depends(require_admin)])
+    async def read_audit(campaign_id: uuid.UUID, audit_id: uuid.UUID, tenant_id: uuid.UUID) -> dict[str, Any]:
+        return clean(await audits.get(tenant_id, campaign_id, audit_id))
+
+    @router.get("/campaigns/{campaign_id}/audits/{audit_id}/records.csv", dependencies=[Depends(workspace), Depends(require_admin)])
+    async def export_audit(campaign_id: uuid.UUID, audit_id: uuid.UUID, tenant_id: uuid.UUID) -> Response:
+        return download(audit_csv(await audits.get(tenant_id, campaign_id, audit_id)), f"base-audit-{audit_id}")
+
+    @router.post("/campaigns/{campaign_id}/audits/{audit_id}/review", dependencies=[Depends(workspace), Depends(require_admin)])
+    async def review_audit(campaign_id: uuid.UUID, audit_id: uuid.UUID, body: AuditReview,
+                           x_tervory_admin: str = Header(default="")) -> dict[str, Any]:
+        return clean(await audits.review(body.tenant_id, campaign_id, audit_id, body.csv, x_tervory_admin, body.field_verdicts))
+
+    @router.get("/campaigns/{campaign_id}/confidence-histogram", dependencies=[Depends(workspace), Depends(require_admin)])
+    async def confidence_histogram(campaign_id: uuid.UUID, tenant_id: uuid.UUID) -> dict[str, Any]:
+        return clean(await audits.histogram(tenant_id, campaign_id))
+
+    @router.get("/source-reliability/room", dependencies=[Depends(room)])
+    async def room_source_reliability() -> dict[str, Any]:
+        # The Base room receives aggregate scores only, never audit snapshots.
+        if rt.box_region() != "us-east":
+            raise HTTPException(403, "This public reference belongs to the US workspace.")
+        async with rt.pool().acquire() as conn:
+            rows = await __import__("base_reliability").read(conn)
+        return clean({"scores": rows})
+
+    @router.get("/source-reliability", dependencies=[Depends(workspace), Depends(require_admin)])
+    async def source_reliability() -> dict[str, Any]:
+        # Job 6 (F8): platform-wide scores from reviewed audits. Counts only.
+        async with rt.pool().acquire() as conn:
+            rows = await __import__("base_reliability").read(conn)
+        return clean({"scores": rows, "method": "correct / (correct + wrong) per source and field, "
+                      "from explicit field audit verdicts; Wilson 95% lower bound"})
 
     @router.post("/reference/refresh", dependencies=[Depends(workspace), Depends(require_admin)])
     async def refresh() -> dict[str, Any]:

@@ -15,6 +15,7 @@ from gold_sources import candidates
 from pydantic import BaseModel
 
 from alert_email import deliver_pending
+from rig_watch import RigWatches, TankRig
 from chassis.app import create_app
 from chassis.jobs import JobContext
 from watch import (
@@ -121,6 +122,13 @@ async def official_feed(tenant: str, url: str) -> dict:
 async def check(ctx: JobContext) -> dict:
     url = str(ctx.input.get("url") or "").strip()
     store = PgStore(app.state.pool, SCHEMA)
+    async def playbook(payload):
+        return await ctx.tank.approved_skill(ctx.tenant_id, "tiger.playbook", payload)
+    store.skill_runner = playbook
+    rig = RigWatches(store)
+    managed = await rig.managed(ctx.tenant_id, url)
+    if managed:
+        await rig.sync(ctx.tenant_id, TankRig(app.state.http))
     watch = await store.get_watch(ctx.tenant_id, url)
     if watch is None or not watch.get("enabled"):
         return {"status": "skipped", "url": url, "alerts": []}
@@ -134,7 +142,7 @@ async def check(ctx: JobContext) -> dict:
     async def render(url, session, agent, tenant):
         return await _render(url, session, agent, tenant, str(ctx.job_id))
 
-    return await run_check(
+    result = await run_check(
         store,
         ctx.tenant_id,
         watch,
@@ -146,20 +154,39 @@ async def check(ctx: JobContext) -> dict:
         _limiter,
         files=ctx.files,
         feed=official_feed,
+        product_context=None if managed else TankRig(app.state.http).alert_context,
+        skills=playbook,
     )
+    try:
+        await rig.deliver(ctx.tenant_id, TankRig(app.state.http))
+    except (httpx.HTTPError, ValueError):
+        log.warning("Rig watch delivery is unavailable; saved readings remain pending.")
+    return result
 
 
 async def dispatch(ctx: JobContext) -> dict:
     store = PgStore(app.state.pool, SCHEMA)
+    try:
+        await RigWatches(store).deliver(ctx.tenant_id, TankRig(app.state.http))
+    except (httpx.HTTPError, ValueError):
+        log.warning("Rig watch discovery is unavailable; managed reads will recheck eligibility.")
     result = await dispatch_tenant(store, ctx.tenant_id, datetime.now(timezone.utc))
     result["email"] = await deliver_pending(store, ctx.tenant_id)
     return result
 
 
+async def rig_discover(ctx: JobContext) -> dict:
+    if str(ctx.tenant_id) != HEARTBEAT_TENANT:
+        return {"tenants": 0}
+    count = await RigWatches(PgStore(app.state.pool, SCHEMA)).discover(TankRig(app.state.http))
+    return {"tenants": count}
+
+
 app = create_app(
     agent=AGENT,
-    handlers={"ping": ping, "check": check, "dispatch": dispatch},
+    handlers={"ping": ping, "check": check, "dispatch": dispatch, "rig_discover": rig_discover},
     schedules=[
+        {"tenant_id": HEARTBEAT_TENANT, "cron": "* * * * *", "kind": "rig_discover", "input": {}},
         {
             "tenant_id": HEARTBEAT_TENANT,
             "cron": "*/5 * * * *",
@@ -180,6 +207,9 @@ class WatchIn(BaseModel):
     threshold: float = 0
     alert_price: bool = True
     alert_stock: bool = True
+    alert_new_product: bool = True
+    alert_below_cost: bool = True
+    alert_market_gap: bool = True
 
 
 class WatchPatch(BaseModel):
@@ -192,6 +222,9 @@ class WatchPatch(BaseModel):
     threshold: float | None = None
     alert_price: bool | None = None
     alert_stock: bool | None = None
+    alert_new_product: bool | None = None
+    alert_below_cost: bool | None = None
+    alert_market_gap: bool | None = None
 
 
 def _store() -> PgStore:
@@ -222,7 +255,7 @@ def _fields(body: WatchIn | WatchPatch, partial: bool) -> dict[str, Any]:
             fields["enabled"] = True if body.enabled is None else bool(body.enabled)
         if body.threshold is not None or not partial:
             fields["threshold"] = check_threshold(0 if body.threshold is None else body.threshold)
-        for name in ("alert_price", "alert_stock"):
+        for name in ("alert_price", "alert_stock", "alert_new_product", "alert_below_cost", "alert_market_gap"):
             value = getattr(body, name)
             if value is not None or not partial:
                 fields[name] = True if value is None else value

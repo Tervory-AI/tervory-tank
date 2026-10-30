@@ -1,0 +1,44 @@
+{
+  "rss": {
+    "source": "https://www.federalreserve.gov/feeds/press_all.xml",
+    "fetched_at": "2026-10-28T16:27:11.740016+00:00",
+    "bytes": 14813,
+    "downloads": [
+      {
+        "url": "https://www.federalreserve.gov/feeds/press_all.xml",
+        "sha256": "529e889a916423a3979c1bebdd94c2b8d402889700d8c85cc4d125b7f538d327"
+      }
+    ],
+    "parsed_rows": 20,
+    "fixture": "fixtures/feed.xml",
+    "encoding": "publisher bytes, including BOM and CRLF"
+  },
+  "atom": {
+    "source": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_month.atom",
+    "recorded_at": "2026-10-28T16:28:42.792012+00:00",
+    "sha256": "43be2ec94f842b426c940fb4b387c94324e4da282e6dd074bed5983b864eab6c",
+    "parsed_rows": 18,
+    "fixture": "fixtures/atom.xml"
+  },
+  "comtrade": {
+    "source": "https://comtradeapi.un.org/public/v1/preview/C/A/HS?period=2025&reporterCode=842&cmdCode=930630%2C930621%2C360100%2C360300%2C930599&flowCode=M%2CX&partnerCode=0&partner2Code=0&customsCode=C00&motCode=0&maxRecords=500&breakdownMode=classic&includeDesc=true",
+    "fetched_at": "2026-10-28T16:30:42.403657+00:00",
+    "bytes": 7947,
+    "downloads": [
+      {
+        "url": "https://comtradeapi.un.org/public/v1/preview/C/A/HS?period=2025&reporterCode=842&cmdCode=930630%2C930621%2C360100%2C360300%2C930599&flowCode=M%2CX&partnerCode=0&partner2Code=0&customsCode=C00&motCode=0&maxRecords=500&breakdownMode=classic&includeDesc=true",
+        "sha256": "e574179b06b12cdfe0e77093cc110a37bbe0fe813c75b1844f2bcf4da7b5bec6"
+      }
+    ],
+    "parsed_rows": 8,
+    "fixture": "../fixtures/feeds/engines/ffl/comtrade_preview.json",
+    "encoding": "JSON formatted; values unchanged",
+    "limit": 500
+  },
+  "searxng": {
+    "kind": "offline response stub with two public URLs and titles from the RSS recording",
+    "fixture": "../fixtures/feeds/searxng.json",
+    "parsed_rows": 2,
+    "live_search_claimed": false
+  }
+}

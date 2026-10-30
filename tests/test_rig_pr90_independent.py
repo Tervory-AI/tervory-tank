@@ -888,10 +888,10 @@ def test_diff_secrets_feeds_and_admin_key() -> None:
     archon_key = _key(ARCHON) if ARCHON.exists() else "rk_pub_archon"
     if example_key in shop.text or example_key in classic.text:
         admin_leaks.append("shopper page embeds the example catalogue key")
-    if archon_key not in shop.text:
-        admin_leaks.append("root product page did not embed the archon catalogue key")
-    if demo_key not in classic.text:
-        admin_leaks.append("classic shopper page did not embed the demo catalogue key")
+    if archon_key in shop.text:
+        admin_leaks.append("root product page embeds an offline fixture key")
+    if demo_key in classic.text:
+        admin_leaks.append("classic shopper page embeds an offline fixture key")
     if "Custom Nation" in classic.text:
         admin_leaks.append("classic shopper page shows Custom Nation")
     feeds = asyncio.run(_feeds(service))
@@ -966,9 +966,10 @@ def _shot(page: Any, name: str) -> str:
     return str(path)
 
 
-def test_browser_search_accessories_compare_admin() -> None:
+def test_browser_search_accessories_compare_admin(monkeypatch) -> None:
     """Click the shopper path, then approve and reject on the dealer page."""
     playwright_sync = pytest.importorskip("playwright.sync_api")
+    monkeypatch.setenv("RIG_WIDGET_PUBLISHABLE_KEY", _key(CN))
     service = asyncio.run(_loaded(rate_limit=5000))
     _seed_review_fits(service)
     app = _app(service)

@@ -16,6 +16,7 @@
 > **Updated 21 Oct, 04:15 PT.** The founder has created all the buckets and put a scoped key on each room's Coolify app, tested (each key lists its own bucket and is refused on another). Tank holds only `R2_ACCOUNT_ID`, its own uploads key, and Ghost's keys until Ghost's app exists.
 
 1. **One bucket per agent, shared with no one.** Each room gets a storage client for **its own bucket only**, through a scoped R2 token per bucket. Add `tervory-rig`, `tervory-zenas` and `tervory-ghost` (the founder creates them). Tank keeps `tervory-uploads` for files people upload in the window.
+   - ZA Zenas additionally uses founder bucket `tervory-zenas-za` via env name `R2_BUCKET_ZENAS_ZA` (see `docs/cursor/ZA-R2-BACKUP-PROVE-RESTORE.md`). US `tervory-zenas` is unchanged.
 2. **What goes in:**
    - test datasets: the full ATF list snapshots, the CourtListener bulk slices, SA judgment PDFs as fetched;
    - agents' working files and browser artefacts (screenshots of what they read);

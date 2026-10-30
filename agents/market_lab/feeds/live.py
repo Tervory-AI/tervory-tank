@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import time
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -18,6 +19,11 @@ DEFAULT_DELAY = 2.0
 DEFAULT_TIMEOUT = 60.0
 DEFAULT_RETRIES = 3
 DEFAULT_BACKOFF = 1.0
+# SEC allows at most ten requests/second across its hosts. Keep a conservative
+# five/second ceiling shared by all clients in this worker, even with delay=0.
+_SEC_INTERVAL = 0.2
+_SEC_LOCK = threading.Lock()
+_SEC_LAST: float | None = None
 
 _ANCHOR = re.compile(
     r"<a\s[^>]*href=(['\"])(.*?)\1[^>]*>(.*?)</a>",
@@ -91,6 +97,7 @@ class PoliteClient:
         opener: Callable[..., object] | None = None,
         sleep: Callable[[float], None] | None = None,
         clock: Callable[[], float] | None = None,
+        max_bytes: int | None = None,
     ) -> None:
         self.delay = delay
         self.timeout = timeout
@@ -99,6 +106,7 @@ class PoliteClient:
         self.opener = opener or urllib.request.urlopen
         self.sleep = sleep or time.sleep
         self.clock = clock or time.monotonic
+        self.max_bytes = max_bytes
         self._last: dict[str, float] = {}
         self.blocked_hosts: set[str] = set()
 
@@ -133,9 +141,7 @@ class PoliteClient:
         return merged
 
     def _wait(self, host: str) -> None:
-        if self.delay <= 0:
-            self._last[host] = self.clock()
-            return
+        global _SEC_LAST
         previous = self._last.get(host)
         now = self.clock()
         if previous is not None:
@@ -144,6 +150,14 @@ class PoliteClient:
                 self.sleep(gap)
                 now = self.clock()
         self._last[host] = now
+        if host == "sec.gov" or host.endswith(".sec.gov"):
+            with _SEC_LOCK:
+                now = time.monotonic()
+                if _SEC_LAST is not None:
+                    gap = _SEC_INTERVAL - (now - _SEC_LAST)
+                    if gap > 0:
+                        time.sleep(gap)
+                _SEC_LAST = time.monotonic()
 
     def get(self, url: str, headers: dict[str, str] | None = None) -> bytes:
         self.ensure_open(url)
@@ -158,7 +172,9 @@ class PoliteClient:
                     self._check_block(url, status=status)
                     if status >= 400:
                         raise urllib.error.HTTPError(url, status, "bad status", None, None)
-                    body = response.read()
+                    body = response.read() if self.max_bytes is None else response.read(self.max_bytes + 1)
+                    if self.max_bytes is not None and len(body) > self.max_bytes:
+                        raise ValueError("response exceeds the feed limit")
                     self._check_block(url, body=body)
                 return body
             except Exception as exc:

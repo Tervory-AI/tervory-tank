@@ -1,0 +1,13 @@
+.github/workflows/live-check.yml parsed; jobs: ['check']
+Shell syntax passed: Install browser test packages
+Shell syntax passed: Offline checker regression tests
+Shell syntax passed: Wait for Coolify to report the public apps healthy
+Python compiled: Wait for Coolify to report the public apps healthy
+Shell syntax passed: Open every live host signed out
+Shell syntax passed: Publish host results in the run summary
+Python compiled: Publish host results in the run summary
+Shell syntax passed: Open or update one issue per failed host
+Python compiled: Open or update one issue per failed host
+.github/workflows/deploy-on-merge.yml parsed; jobs: ['deploy', 'live-check']
+Shell syntax passed: Find the previous deployed commit
+Shell syntax passed: Deploy changed apps

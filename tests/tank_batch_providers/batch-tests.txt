@@ -1,0 +1,41 @@
+................................................                         [100%]
+=============================== warnings summary ===============================
+tests/test_tank_batch_providers.py::test_fifty_requests_one_batch_poll_and_discounted_ledger[openai]
+  /workspace/tervory-tank/tank/main.py:676: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/test_tank_batch_providers.py::test_fifty_requests_one_batch_poll_and_discounted_ledger[openai]
+tests/test_tank_batch_providers.py::test_fifty_requests_one_batch_poll_and_discounted_ledger[openai]
+  /workspace/worker-venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_tank_batch_providers.py::test_fifty_requests_one_batch_poll_and_discounted_ledger[openai]
+  /workspace/tervory-tank/tank/main.py:711: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tests/test_tank_batch_providers.py::test_fifty_requests_one_batch_poll_and_discounted_ledger[openai]
+  /workspace/tervory-tank/tank/agent_skills.py:529: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+48 passed, 5 warnings in 36.30s

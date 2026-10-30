@@ -4,6 +4,50 @@
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
+/** Founder memory inspection; identity comes from the server's goldIdentity check. */
+export function memoryRecord(identity: { tenantId: string; userId: string; role: string }, id: string): Promise<Response> {
+  return fetch(new URL(`/v1/memory/records/${encodeURIComponent(id)}`, TANK_URL), {
+    method: "GET", cache: "no-store", redirect: "error",
+    headers: {
+      "X-Tank-Key": TANK_API_KEY, "X-Tervory-User": identity.userId,
+      "X-Tervory-Tenant": identity.tenantId, "X-Tervory-Role": identity.role,
+    },
+  });
+}
+
+/** Founder JSON inspection only; caller identity is resolved by Workspace. */
+export function rigPriceHistory(identity: { tenantId: string; userId: string }, query: URLSearchParams): Promise<Response> {
+  const url = new URL("/v1/agents/rig/price-history", TANK_URL);
+  for (const key of ["tenant_id", "product_id", "offset", "limit"]) {
+    const value = query.get(key);
+    if (value !== null) url.searchParams.set(key, value);
+  }
+  if (!url.searchParams.has("tenant_id")) url.searchParams.set("tenant_id", identity.tenantId);
+  return fetch(url, { cache: "no-store", redirect: "error", headers: {
+    "X-Tank-Key": TANK_API_KEY, "X-Tervory-User": identity.userId, "X-Tervory-Tenant": identity.tenantId,
+  } });
+}
+
+/** API-only reports. Identity is supplied by Clerk on the server, never the browser. */
+export async function caseStudyRequest(identity: { tenantId: string; userId: string }, path = "", query = new URLSearchParams()): Promise<Response> {
+  const allowed = ["", "ensure", "clients", "base", "tiger", "market_lab", "rig", "zenas", "trigger", "tisan", "radix", "autumbra"];
+  if (!allowed.includes(path)) throw new Error("Unknown request.");
+  const url = new URL(`/v1/case-studies${path ? `/${path}` : ""}`, TANK_URL);
+  for (const key of ["tenant_id", "start", "end", "offset", "limit"]) {
+    const value = query.get(key);
+    if (value !== null) url.searchParams.set(key, value);
+  }
+  return fetch(url, {
+    method: path === "ensure" ? "POST" : "GET", cache: "no-store", redirect: "error",
+    headers: { "X-Tank-Key": TANK_API_KEY, "X-Tervory-User": identity.userId, "X-Tervory-Tenant": identity.tenantId },
+  });
+}
+
+export async function ensureCaseStudyReports(identity: { tenantId: string; userId: string }): Promise<void> {
+  const response = await caseStudyRequest(identity, "ensure");
+  if (!response.ok) throw new Error();
+}
+
 /** Base product only. Identity and allowed operations are resolved server-side. */
 export async function baseProductRequest(tenantId: string, path: string, query: URLSearchParams = new URLSearchParams(), body?: Record<string, unknown>): Promise<Response> {
   const parameters = new URLSearchParams(query);
@@ -476,7 +520,7 @@ export type VaultPlugins = {
   enabled: boolean;
   message: string | null;
   secrets: { name: string; purpose: string; mask: string; saved_at: string }[];
-  files: { id: string; name: string; type: string; size: number; rows: number | null; pages: number | null; uploaded_at: string; status: string }[];
+  files: { id: string; name: string; type: string; size: number; rows: number | null; pages: number | null; uploaded_at: string; status: string; reason?: string }[];
   links: { id: string; url: string; label: string; frequency: string; last_checked: string | null; status: string }[];
   connections: { id: string; name: string; server_url: string; auth_type: string; status: string; last_used: string | null; has_token: boolean }[];
 };
@@ -908,7 +952,7 @@ export class CommandRequestError extends Error {
   code: string;
   constructor(status: number, code: string, message: string) { super(message); this.status = status; this.code = code; }
 }
-export async function commandRequest(identity: { tenantId: string; userId: string }, path: string, init: RequestInit = {}): Promise<Response> {
+export async function commandRequest(identity: { tenantId: string; userId: string; tenantAdmin?: boolean }, path: string, init: RequestInit = {}): Promise<Response> {
   if (!TANK_API_KEY) throw new Error("The conversation service is not configured.");
   const url = new URL(`/v1/command/${path}`, TANK_URL);
   url.searchParams.delete("tenant_id");
@@ -922,6 +966,7 @@ export async function commandRequest(identity: { tenantId: string; userId: strin
   // Lane A resolves tenant_squad from the database on each authenticated call.
   // Never turn a caller header into tool authority.
   headers.delete("x-tervory-squad");
+  headers.set("x-tervory-role", identity.tenantAdmin === true ? "org:admin" : "");
   const response = await fetch(url, { ...init, headers, cache: "no-store", redirect: "error" });
   if (!response.ok) {
     const detail = await response.json().then(body => body.detail).catch(() => undefined);
@@ -965,7 +1010,7 @@ export function rigAdminPanel<T>(actor: AccessIdentity): Promise<T> {
 }
 
 export function rigAdminAction<T>(actor: AccessIdentity, operation: string, data: Record<string, unknown>): Promise<T> {
-  if (!["connect", "import", "refresh", "mapping", "confirm-mapping", "settings", "embed-keys", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"].includes(operation)) {
+  if (!["connect", "import", "delete-products", "refresh", "mapping", "confirm-mapping", "settings", "embed-keys", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"].includes(operation)) {
     throw new Error("Unknown retailer operation.");
   }
   return accessRequest<T>(actor, `rig/admin/${operation}`, { data });
@@ -1044,12 +1089,17 @@ export function mootStudentMatch(body: {
 // Market Lab: the server derives tenantId from Clerk before calling this corridor.
 export type MarketFeed = {
   id: string; name: string; kind: "copy" | "linked"; rows: number;
+  url?: string; cadence?: "daily" | "weekly" | "monthly" | "annual";
   state: "on" | "off"; note: string; checked_at: string | null; document_id: string | null;
 };
 export type MarketOverview = { feeds: MarketFeed[]; on_count: number; refresh_status: string | null };
 export type MarketFact = { text: string; href: string; name: string };
 export type MarketAnswer = { content: string; facts: MarketFact[]; sources: { name: string; href: string }[] };
 export type MarketDocument = {
+  kind?: string;
+  passage_count?: number;
+  passages?: { index: number; text: string; label: string; page: number | null; usable: boolean }[];
+  reason?: string;
   calculation?: WarningCalculation;
   offset: number; page_size: number; point_count: number; event_count: number;
   id: string; name: string; fetched_at: string; licence: string; terms_checked_at: string;
@@ -1071,7 +1121,7 @@ export async function marketLabRequest<T>(
   payload: { question?: string; document_id?: string; offset?: number; row?: number; row_kind?: "point" | "event" } = {},
 ): Promise<T> {
   const response = await fetch(`${TANK_URL}/v1/market-lab/${operation}`, {
-    method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(35000),
+    method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(operation === "ask" ? 190000 : 35000),
     headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY },
     body: JSON.stringify({ ...payload, tenant_id: tenantId }),
   });
