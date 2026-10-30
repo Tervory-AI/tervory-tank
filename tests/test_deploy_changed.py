@@ -15,11 +15,15 @@ def _script(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("COOLIFY_URL", "https://coolify.example")
     monkeypatch.setenv("COOLIFY_TOKEN", "test-token")
     path = ROOT / ".github" / "scripts" / "deploy_changed.py"
+    monkeypatch.syspath_prepend(str(path.parent))
     spec = importlib.util.spec_from_file_location("deploy_changed_script", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules["deploy_changed_script"] = module
     spec.loader.exec_module(module)
+    # These deployment-order fixtures do not contain environment metadata.
+    # The scope gate has its own real GET/PATCH integration tests.
+    monkeypatch.setattr(module, "verify_main_scope", lambda api: True)
     return module
 
 
@@ -248,3 +252,14 @@ def test_main_that_failed_last_time_is_retried(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("ZA_OFFLINE", "true")
     mod.ZA_OFFLINE = True
     assert mod.main() == 0 and order == ["main"]
+
+
+def test_main_scope_gate_runs_before_any_deployment(monkeypatch):
+    mod = _script(monkeypatch)
+    calls = []
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["docker-compose.yml"])
+    monkeypatch.setattr(mod, "api", _api_with_failed([], set()))
+    monkeypatch.setattr(mod, "verify_main_scope", lambda api: calls.append("scope") or False)
+    monkeypatch.setattr(mod, "deploy", lambda *args: calls.append("deploy") or True)
+    assert mod.main() == 1
+    assert calls == ["scope"]
