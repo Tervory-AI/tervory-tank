@@ -19,12 +19,12 @@ proof is preserved in commit f85a9ee89ee0d61594f348779ec010f27d6cc8ba.
 
 | File:line | Behavior |
 | --- | --- |
-| agents/rig/schema.sql:131 | Additive, idempotent optional retailer quote_notice JSONB. |
-| agents/rig/rigbox/store.py:301,715,739 | Memory/Postgres tenant-scoped notice storage; omitted legacy saves preserve it; read/reload supported. |
-| agents/rig/rigbox/retailer.py:101 | Validate text/HTTPS URL on existing settings operation; reject explicit null before reporting saved. |
+| agents/rig/schema.sql:159 | Additive, idempotent optional retailer quote_notice JSONB. |
+| agents/rig/rigbox/store.py:332,798,830 | Memory/Postgres tenant-scoped notice storage; omitted legacy saves preserve it; read/reload supported. |
+| agents/rig/rigbox/retailer.py:105 | Validate text/HTTPS URL on existing settings operation; reject explicit null before reporting saved. |
 | agents/rig/rigbox/quotes/notice.py:12 | Preserve exact text/URL, derive SHA-256 version; stale/missing version yields 409 when configured; snapshot receipt with UTC time. |
 | agents/rig/rigbox/quotes/service.py:49 | Allow only name/email/phone contact fields; validate displayed notice version and persist receipt before quote delivery. |
-| agents/rig/rigbox/api.py:44,249 | Reject unknown top-level quote fields; accept notice_version; authenticated tenant-scoped no-store notice GET. |
+| agents/rig/rigbox/api.py:44,255 | Reject unknown top-level quote fields; accept notice_version; authenticated tenant-scoped no-store notice GET. |
 | agents/rig/rigbox/quotes/widget-source.patch:1 | Pinned source changes, notice rendering/client version submission, load guard, refresh on quote open/stale rejection, escaping and unit tests. |
 | agents/rig/rigbox/quotes/widget/manifest.json:1 | Select content-addressed 69d323434d149dd8324aeb2f324210ab45fe0488308e43ff8925348701890c17 UMD with integrity. Superseded bundles removed. |
 | tests/test_rig_quote_notice.py:20,67,83 | Memory/Postgres settings and receipt tests; financial fields; real Chromium shipped-widget stale recovery. |
@@ -156,3 +156,53 @@ docker rm -f -v tervory-job8-notice-test
 ```
 
 Result: exit 0. No production container or data was removed.
+
+## 30 October continuation — 07:04:30 PDT / 14:04:30 UTC
+
+The founder requested investigation and merge readiness of this existing PR,
+and confirmed #425 and #427 merged. Founder walkthrough and acceptance are
+scheduled last, after the entire build plan; missing real store configuration
+and founder screenshots are final acceptance items, not evidence of completed
+acceptance and not an artificial code-merge gate.
+
+Fetched main `a6a655fcc2aa5d43e8ae6499dcd5bd58d8b1c25c`; normal merge
+`3fccf9892ef49f63508a58a6fad8dec542a5278d` preserved both changes with no
+conflicts. The first merge attempt lacked local committer identity; rerunning
+with explicit per-command Codex identity succeeded. No push failed.
+At that source merge, security, Tank, Workspace, all non-root services and all
+CodeQL language analyses passed; isolation was still running at this checkpoint.
+The old security failure is historical and is not waived as current success.
+Current exact-head results and independent review are recorded in the PR body.
+
+A fresh offline run initially failed collection because this old isolated venv
+lacked current main's dependencies. Installed `jiter==0.18.0` and
+`openai==2.54.0`, matching main's Tank requirements; no model was called.
+The next completed run was **132 passed, 4 fixture setup errors**: main's RLS
+middleware import added a chassis dependency, but the browser API subprocess
+exposed only Rig on PYTHONPATH. Commit
+`b2c6b5ac487b0f14a99efd43e4549e92405849af` fixes
+`tests/test_rig_quotes_browser.py:24` to include the existing `_chassis` path.
+No assertion was removed, skipped or weakened; production source is unchanged
+from the main merge.
+
+Exact new commands, from this same isolated checkout:
+
+```sh
+git fetch origin main
+git fetch origin main:refs/remotes/origin/main
+git -c user.name=Codex -c user.email=codex@openai.com merge origin/main --no-edit
+git push origin HEAD:refs/heads/codex/job8-custom-nation-rig
+/tmp/tervory-job8-python/bin/pip install jiter
+/tmp/tervory-job8-python/bin/pip install openai==2.54.0
+docker run -d --name tervory-job8-notice-test --label codex.task=job8-notice --memory=384m --cpus=1 -e POSTGRES_HOST_AUTH_METHOD=trust -p 127.0.0.1:55438:5432 postgres:17
+RIG_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55438/postgres /tmp/tervory-job8-python/bin/python -m pytest -q tests/test_rig_quote_notice.py tests/test_custom_nation_rig.py tests/test_rig_store_job.py tests/test_rig_feeds_retailer.py tests/test_rig_quotes.py tests/test_rig_quotes_postgres.py tests/test_rig_quotes_hosting.py tests/test_rig_quotes_limits.py tests/test_tank_one_door.py tests/test_secrets.py
+/tmp/tervory-job8-python/bin/ruff check agents/rig/rigbox/api.py agents/rig/rigbox/quotes/keys.py agents/rig/rigbox/quotes/notice.py agents/rig/rigbox/quotes/service.py agents/rig/rigbox/retailer.py agents/rig/rigbox/store.py tests/test_rig_quote_notice.py tests/test_rig_quotes_browser.py --select E9,F
+git diff --check
+# In /tmp/tervory-job8-widget-resume:
+npm run lint && npm run build && npx vitest run
+```
+
+Ruff and whitespace checks exited 0. Widget lint/build exited 0 and all 25 tests
+in 3 files passed; sample-data bundle check passed and shipped UMD size remains
+67,143 bytes (17,750 gzip). Final Python rerun on b2c6b5a: **136 passed, 2 warnings in 56.04s**. Warnings are Starlette/httpx deprecation and the existing TriggerWriteArgs register field shadow; neither failed tests.
+No live catalogue, policy text, recipient, secret, SQL or deployment was changed.
