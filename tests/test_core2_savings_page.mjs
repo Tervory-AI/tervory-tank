@@ -43,7 +43,30 @@ try {
  assert.equal(await page.locator('.client-dashboard-member').getAttribute('href'),'/base');
  assert.equal(await page.locator('.savings-live').count(),0);
  assert(!(await page.locator('.client-dashboard-main').innerText()).includes('Credits left'));
- for(const width of [1440,375]){await page.setViewportSize({width,height:900});await page.screenshot({path:path.join(out,`dashboard-${width}.png`),fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
+ for(const width of [1440,375]){
+   await page.setViewportSize({width,height:900});
+   assert(await page.locator('.client-dashboard-main').evaluate(el=>el.getBoundingClientRect().width>=300),'dashboard main must remain usable');
+   assert(await page.locator('.client-dashboard-ask input').evaluate(el=>el.getBoundingClientRect().width>=200),'request input must remain readable');
+   for(const selector of ['.client-dashboard h1','.client-dashboard-number','.client-dashboard-member','.client-dashboard-ask input','.client-dashboard-ask button','.client-dashboard-ask a']){
+     const elements=page.locator(selector);
+     for(let index=0;index<await elements.count();index++){
+       const element=elements.nth(index);
+       await element.scrollIntoViewIfNeeded();
+       assert(await element.evaluate(el=>{
+         const rect=el.getBoundingClientRect();
+         if(rect.width<1||rect.height<1||el.scrollWidth>el.clientWidth+1)return false;
+         for(let ancestor=el.parentElement;ancestor;ancestor=ancestor.parentElement){
+           const style=getComputedStyle(ancestor),box=ancestor.getBoundingClientRect();
+           if(/hidden|clip/.test(style.overflowX)&&(rect.left<box.left-1||rect.right>box.right+1))return false;
+         }
+         const target=document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2);
+         return target===el||el.contains(target);
+       }),`${selector} must be visible and unclipped at ${width}px`);
+     }
+   }
+   await page.screenshot({path:path.join(out,`dashboard-${width}.png`),fullPage:true});
+   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ }
  await page.goto(`http://127.0.0.1:${server.address().port}/client`);
  await page.getByRole('heading',{name:'What you saved',exact:true}).waitFor();
  assert.equal(await page.locator('.savings-set').count(),1);
