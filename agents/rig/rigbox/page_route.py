@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 
+from chassis.tenant_db import tenant_scope
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
 
@@ -33,9 +34,10 @@ async def _published_page(request: Request) -> tuple[str, str]:
     try:
         owner = await service.authenticate(key)
         tenant = str(owner["tenant_id"])
-        if not await service.store.products(tenant):
-            return "", ""
-        retailer = await service.store.retailer(tenant) or {}
+        with tenant_scope(tenant):
+            if not await service.store.products(tenant):
+                return "", ""
+            retailer = await service.store.retailer(tenant) or {}
         return key, str(retailer.get("name") or "")
     except Exception:
         return "", ""

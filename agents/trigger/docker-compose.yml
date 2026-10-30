@@ -11,6 +11,8 @@ services:
     environment:
       AGENT_NAME: trigger
       DATABASE_URL: postgresql://agent_trigger:${AGENT_DB_PASSWORD_TRIGGER}@postgres:5432/${POSTGRES_DB:-tervory}
+      CHASSIS_ADMIN_DATABASE_URL: ${CHASSIS_ADMIN_DATABASE_URL:-}
+      CHASSIS_RLS_ADMIN_ROLE: ${CHASSIS_RLS_ADMIN_ROLE:-}
       TANK_KEY: ${TANK_KEY_TRIGGER:-}
       TANK_REGION: ${TANK_REGION:-us-east}
     networks: [gw, checkers]

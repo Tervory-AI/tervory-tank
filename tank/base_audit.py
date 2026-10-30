@@ -1,6 +1,8 @@
 """Saved human audits and recorded confidence counts; no models or external reads."""
 from __future__ import annotations
 
+from tenant_db import tenant_transaction
+
 from collections import Counter
 import csv
 import hashlib
@@ -66,6 +68,7 @@ def unpack(row: Any) -> dict[str, Any]:
     audit = dict(row)
     audit["records"], audit["verdicts"] = obj(audit["records"]), obj(audit["verdicts"])
     audit["measurement"] = measure(audit["verdicts"])
+    audit["field_verdicts"] = obj(audit.get("field_verdicts") or {})
     return audit
 
 
@@ -158,23 +161,35 @@ class AuditStore:
             raise HTTPException(404, "Audit not found.")
         return unpack(row)
 
-    async def review(self, tenant: uuid.UUID, campaign: uuid.UUID, audit: uuid.UUID, text: str, actor: str) -> dict[str, Any]:
+    async def review(self, tenant: uuid.UUID, campaign: uuid.UUID, audit: uuid.UUID, text: str, actor: str,
+                     field_verdicts: dict[str, dict[str, str]] | None = None) -> dict[str, Any]:
         async with self.rt.pool().acquire() as conn, conn.transaction():
             row = await conn.fetchrow("SELECT * FROM tank.base_audits WHERE tenant_id=$1 AND campaign_id=$2 AND id=$3 FOR UPDATE", tenant, campaign, audit)
             if not row:
                 raise HTTPException(404, "Audit not found.")
             saved = unpack(row)
             verdicts = checked_verdicts(text, saved)
+            fields = field_verdicts or {}
+            sampled = {record["record_id"]: record["fields"] for record in saved["records"]}
+            for record_id, checks in fields.items():
+                if record_id not in sampled or not isinstance(checks, dict) or any(
+                    name not in sampled[record_id] or not sampled[record_id][name].get("verified")
+                    or verdict not in {"correct", "wrong", "unsure"} for name, verdict in checks.items()
+                ):
+                    raise HTTPException(422, "Field verdicts must check verified fields in this saved audit.")
             if saved["reviewed_at"]:
-                if verdicts != saved["verdicts"]:
+                if verdicts != saved["verdicts"] or field_verdicts is not None and fields != saved["field_verdicts"]:
                     raise HTTPException(409, "This audit already has saved verdicts.")
                 return saved
-            row = await conn.fetchrow("""UPDATE tank.base_audits SET verdicts=$4::jsonb,reviewed_at=now(),reviewed_by=$5
-                WHERE tenant_id=$1 AND campaign_id=$2 AND id=$3 RETURNING *""", tenant, campaign, audit, encoded(verdicts), actor)
+            row = await conn.fetchrow("""UPDATE tank.base_audits SET verdicts=$4::jsonb,reviewed_at=now(),reviewed_by=$5,field_verdicts=$6::jsonb
+                WHERE tenant_id=$1 AND campaign_id=$2 AND id=$3 RETURNING *""", tenant, campaign, audit, encoded(verdicts), actor, encoded(fields))
+            # Review and aggregates commit together. A failed recompute cannot
+            # leave a successfully acknowledged batch with stale scores.
+            await __import__("base_reliability").recompute(conn)
         return unpack(row)
 
     async def histogram(self, tenant: uuid.UUID, campaign: uuid.UUID) -> dict[str, Any]:
-        async with self.rt.pool().acquire() as conn, conn.transaction(isolation="repeatable_read", readonly=True):
+        async with tenant_transaction(self.rt.pool(), isolation="repeatable_read", readonly=True) as conn:
             found = await conn.fetchval("SELECT id FROM tank.base_campaigns WHERE tenant_id=$1 AND id=$2", tenant, campaign)
             if not found:
                 raise HTTPException(404, "Campaign not found.")

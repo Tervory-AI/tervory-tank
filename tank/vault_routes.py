@@ -18,6 +18,7 @@ from starlette.datastructures import UploadFile
 
 from access import origin
 from vault import seal, open_seal
+from tenant_db import activate_tenant
 
 VAULTS = {f'{room}.vault': room for room in ('base', 'tiger', 'rig', 'tisan', 'radix', 'zenas')}
 VAULTS['lab.vault'] = 'market_lab'
@@ -66,6 +67,7 @@ def build_router(tank):
             fail(403, 'Workspace does not match.')
         if request.headers.get('x-tervory-home-region', tank.box_region()) != tank.box_region():
             fail(403, 'This request must stay on its home server.')
+        activate_tenant(owner)
         admins = {x.strip() for x in os.environ.get('TERVORY_ADMIN_USER_IDS', '').split(',') if x.strip()}
         async with tank.pool().acquire() as conn:
             if user not in admins and not await conn.fetchval('SELECT 1 FROM tank.tenant_squad WHERE tenant_id=$1 AND agent=$2', owner, room):

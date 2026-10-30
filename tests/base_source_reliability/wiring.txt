@@ -1,0 +1,52 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.16, pytest-9.2.0, pluggy-1.7.0 -- /tmp/base-reliability-venv/bin/python
+cachedir: .pytest_cache
+rootdir: /tmp/tervory-source-reliability-413
+plugins: asyncio-1.4.1, anyio-4.15.1
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 7 items
+
+tests/test_b3b_base_wiring.py::test_code_answers_stay_labelled_when_tank_stamps_a_zero_cost PASSED [ 14%]
+tests/test_b3b_base_wiring.py::test_scrape_1_2_0_returns_joined_html_capped_at_400_kb Timeout (0:00:20)!
+Thread 0x00007ae9072cf780 (most recent call first):
+  File "/tmp/tervory-source-reliability-413/tank/skills/base.scrape_site/1.2.0/run.py", line 133 in run
+  File "/tmp/tervory-source-reliability-413/tests/test_b3b_base_wiring.py", line 227 in check
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/asyncio/events.py", line 88 in _run
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 1999 in _run_once
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 645 in run_forever
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 678 in run_until_complete
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 118 in run
+  File "/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 195 in run
+  File "/tmp/tervory-source-reliability-413/tests/test_b3b_base_wiring.py", line 235 in test_scrape_1_2_0_returns_joined_html_capped_at_400_kb
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/_pytest/python.py", line 187 in pytest_pyfunc_call
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pluggy/_execution.py", line 147 in _multicall
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pluggy/_manager.py", line 183 in _hookexec
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pluggy/_caller.py", line 197 in __call__
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/_pytest/python.py", line 1798 in runtest
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/_pytest/runner.py", line 184 in pytest_runtest_call
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pluggy/_execution.py", line 147 in _multicall
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pluggy/_manager.py", line 183 in _hookexec
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pluggy/_caller.py", line 197 in __call__
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/_pytest/runner.py", line 250 in <lambda>
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/_pytest/runner.py", line 361 in from_call
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/_pytest/runner.py", line 249 in call_and_report
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/_pytest/runner.py", line 139 in runtestprotocol
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/_pytest/runner.py", line 118 in pytest_runtest_protocol
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pluggy/_execution.py", line 147 in _multicall
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pluggy/_manager.py", line 183 in _hookexec
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pluggy/_caller.py", line 197 in __call__
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/_pytest/main.py", line 411 in pytest_runtestloop
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pluggy/_execution.py", line 147 in _multicall
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pluggy/_manager.py", line 183 in _hookexec
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pluggy/_caller.py", line 197 in __call__
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/_pytest/main.py", line 387 in _main
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/_pytest/main.py", line 333 in wrap_session
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/_pytest/main.py", line 380 in pytest_cmdline_main
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pluggy/_execution.py", line 147 in _multicall
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pluggy/_manager.py", line 183 in _hookexec
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pluggy/_caller.py", line 197 in __call__
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/_pytest/config/__init__.py", line 262 in _main
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/_pytest/config/__init__.py", line 286 in _console_main
+  File "/tmp/base-reliability-venv/lib/python3.12/site-packages/pytest/__main__.py", line 9 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 198 in _run_module_as_main

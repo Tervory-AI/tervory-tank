@@ -1873,6 +1873,28 @@ CREATE TABLE IF NOT EXISTS tank.base_audits (
     UNIQUE(tenant_id,campaign_id,seed)
 );
 
+-- Explicit field checks are additive; legacy record verdicts stay unchanged.
+ALTER TABLE tank.base_audits ADD COLUMN IF NOT EXISTS field_verdicts jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+-- Job 6 (F8): Base source reliability from reviewed audits. Platform-wide counts only:
+-- source kind, field name and numbers; never a tenant, record, URL or value.
+CREATE TABLE IF NOT EXISTS tank.base_source_reliability (
+    source text NOT NULL,
+    field text NOT NULL,
+    correct integer NOT NULL CHECK(correct >= 0),
+    wrong integer NOT NULL CHECK(wrong >= 0),
+    checked integer NOT NULL CHECK(checked = correct + wrong AND checked > 0),
+    accuracy double precision NOT NULL CHECK(accuracy BETWEEN 0 AND 1),
+    wilson_lower double precision CHECK(wilson_lower BETWEEN 0 AND 1),
+    audits integer NOT NULL CHECK(audits > 0),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(source, field)
+);
+-- Additive ownership for branches that already installed the initial score table.
+ALTER TABLE tank.base_source_reliability ADD COLUMN IF NOT EXISTS owner_id uuid NOT NULL
+    DEFAULT '00000000-0000-0000-0000-000000000001'
+    CHECK (owner_id='00000000-0000-0000-0000-000000000001'::uuid);
+
 -- Founder decision: retain NOT NULL; a not_set amount is storage only, never spend.
 DO $$
 BEGIN
@@ -2096,6 +2118,32 @@ CREATE TABLE IF NOT EXISTS tank.trigger_feedback (
     UNIQUE (tenant_id,operation_id)
 );
 
+-- Explicitly deferred requests. Queue claims and all receipts remain tenant/box scoped.
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS sent_at timestamptz;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS offpeak_job_id uuid;
+CREATE TABLE IF NOT EXISTS tank.offpeak_jobs (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    request jsonb NOT NULL,
+    policy jsonb NOT NULL,
+    caller text,
+    task_id uuid,
+    model_override text,
+    status text NOT NULL DEFAULT 'queued'
+        CHECK(status IN ('queued','dispatching','batch','completed','failed','uncertain')),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    sent_at timestamptz,
+    finished_at timestamptz,
+    result jsonb,
+    error text,
+    command_context jsonb,
+    notified boolean NOT NULL DEFAULT false,
+    UNIQUE(tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS offpeak_pending ON tank.offpeak_jobs(region,status,created_at);
+CREATE INDEX IF NOT EXISTS offpeak_task ON tank.offpeak_jobs(tenant_id,task_id);
+ALTER TABLE tank.offpeak_jobs ADD COLUMN IF NOT EXISTS checked_at timestamptz;
 
 
 -- B3: transactional model-change outbox. Registry/eval work belongs to the
