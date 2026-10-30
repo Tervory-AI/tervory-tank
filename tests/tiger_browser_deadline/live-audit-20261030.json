@@ -1,0 +1,293 @@
+{
+  "as_of_utc": "2026-10-30T22:12:46.033288+00:00",
+  "tenant_id": "137bd08c-4a37-51a0-bce7-d636a196b814",
+  "watch_count": 14,
+  "observed_watch_count": 13,
+  "alert_count": 0,
+  "watches": [
+    {
+      "watch_id": "484fb656-81e4-4278-8112-78d67b1caa6e",
+      "url": "https://www.pololu.com/product/3036",
+      "label": "5:1 Micro Metal Gearmotor HPCB 12V",
+      "enabled": true,
+      "every": "1h",
+      "price_alert": true,
+      "stock_alert": true,
+      "observation_count": 1,
+      "latest": {
+        "id": "ed81f2e2-c9de-428c-bd56-50ef011cf3c4",
+        "ts": "2026-10-30T22:03:57.064251+00:00",
+        "price": "26.45",
+        "currency": "USD",
+        "availability": "InStock",
+        "method": "jsonld",
+        "issue": null
+      },
+      "next_due_derived_utc": "2026-10-30T23:03:57.064251+00:00"
+    },
+    {
+      "watch_id": "c67d0ac0-10b1-4291-849b-8d619bef8313",
+      "url": "https://www.pololu.com/product/3037",
+      "label": "10:1 Micro Metal Gearmotor HPCB 12V",
+      "enabled": true,
+      "every": "1h",
+      "price_alert": true,
+      "stock_alert": true,
+      "observation_count": 1,
+      "latest": {
+        "id": "308e7bd0-9dba-4744-884f-a58ea18129d6",
+        "ts": "2026-10-30T22:04:35.170983+00:00",
+        "price": "26.45",
+        "currency": "USD",
+        "availability": "InStock",
+        "method": "jsonld",
+        "issue": null
+      },
+      "next_due_derived_utc": "2026-10-30T23:04:35.170983+00:00"
+    },
+    {
+      "watch_id": "41ef2547-e50d-45c2-8233-b29209d440da",
+      "url": "https://www.pololu.com/product/3038",
+      "label": "30:1 Micro Metal Gearmotor HPCB 12V",
+      "enabled": true,
+      "every": "1h",
+      "price_alert": true,
+      "stock_alert": true,
+      "observation_count": 1,
+      "latest": {
+        "id": "6318dd9d-0a86-4055-81ad-1ed7e35a18cd",
+        "ts": "2026-10-30T22:09:12.280024+00:00",
+        "price": "26.45",
+        "currency": "USD",
+        "availability": "InStock",
+        "method": "jsonld",
+        "issue": null
+      },
+      "next_due_derived_utc": "2026-10-30T23:09:12.280024+00:00"
+    },
+    {
+      "watch_id": "4d75308e-66c4-4e76-bc5c-d58d68b83949",
+      "url": "https://www.pololu.com/product/3047",
+      "label": "5:1 Micro Metal Gearmotor HPCB 12V with Extended Motor Shaft",
+      "enabled": true,
+      "every": "1h",
+      "price_alert": true,
+      "stock_alert": true,
+      "observation_count": 1,
+      "latest": {
+        "id": "cef03f44-06d0-4e46-8301-0cebcb403f7d",
+        "ts": "2026-10-30T22:02:36.536687+00:00",
+        "price": "27.45",
+        "currency": "USD",
+        "availability": "InStock",
+        "method": "jsonld",
+        "issue": null
+      },
+      "next_due_derived_utc": "2026-10-30T23:02:36.536687+00:00"
+    },
+    {
+      "watch_id": "57d1005c-216e-41f7-aaa6-0be5343b75d5",
+      "url": "https://www.pololu.com/product/3048",
+      "label": "10:1 Micro Metal Gearmotor HPCB 12V with Extended Motor Shaft",
+      "enabled": true,
+      "every": "1h",
+      "price_alert": true,
+      "stock_alert": true,
+      "observation_count": 1,
+      "latest": {
+        "id": "90c74140-a554-485d-8b07-d47abe8d4219",
+        "ts": "2026-10-30T22:05:10.836730+00:00",
+        "price": "27.45",
+        "currency": "USD",
+        "availability": "InStock",
+        "method": "jsonld",
+        "issue": null
+      },
+      "next_due_derived_utc": "2026-10-30T23:05:10.836730+00:00"
+    },
+    {
+      "watch_id": "388c7eed-0125-41e8-8dff-c9912e6e1a6e",
+      "url": "https://www.pololu.com/product/3049",
+      "label": "30:1 Micro Metal Gearmotor HPCB 12V with Extended Motor Shaft",
+      "enabled": true,
+      "every": "1h",
+      "price_alert": true,
+      "stock_alert": true,
+      "observation_count": 0,
+      "latest": null
+    },
+    {
+      "watch_id": "fea0279c-9191-4b6b-8feb-bb164a33c7ca",
+      "url": "https://www.pololu.com/product/4788",
+      "label": "15:1 Micro Metal Gearmotor HPCB 12V",
+      "enabled": true,
+      "every": "1h",
+      "price_alert": true,
+      "stock_alert": true,
+      "observation_count": 1,
+      "latest": {
+        "id": "4488aae5-27e1-443c-893f-024b3f8be4c5",
+        "ts": "2026-10-30T22:05:48.651318+00:00",
+        "price": "26.45",
+        "currency": "USD",
+        "availability": "InStock",
+        "method": "jsonld",
+        "issue": null
+      },
+      "next_due_derived_utc": "2026-10-30T23:05:48.651318+00:00"
+    },
+    {
+      "watch_id": "ce71b413-f757-4290-82fc-718072a9b682",
+      "url": "https://www.pololu.com/product/4789",
+      "label": "15:1 Micro Metal Gearmotor HPCB 12V with Extended Motor Shaft",
+      "enabled": true,
+      "every": "1h",
+      "price_alert": true,
+      "stock_alert": true,
+      "observation_count": 1,
+      "latest": {
+        "id": "5d6dcc10-99a5-48da-8aee-5c71a21b58d0",
+        "ts": "2026-10-30T22:06:23.148962+00:00",
+        "price": "27.45",
+        "currency": "USD",
+        "availability": "InStock",
+        "method": "jsonld",
+        "issue": null
+      },
+      "next_due_derived_utc": "2026-10-30T23:06:23.148962+00:00"
+    },
+    {
+      "watch_id": "b011f969-bfe4-4bf5-b55d-46180b7b1678",
+      "url": "https://www.pololu.com/product/5204",
+      "label": "5:1 Micro Metal Gearmotor HPCB 12V with 12 CPR Encoder, Back Connector",
+      "enabled": true,
+      "every": "1h",
+      "price_alert": true,
+      "stock_alert": true,
+      "observation_count": 1,
+      "latest": {
+        "id": "e8d5d6e3-eb16-4993-8b15-66f06e64eecd",
+        "ts": "2026-10-30T22:03:09.476166+00:00",
+        "price": "32.45",
+        "currency": "USD",
+        "availability": "InStock",
+        "method": "jsonld",
+        "issue": null
+      },
+      "next_due_derived_utc": "2026-10-30T23:03:09.476166+00:00"
+    },
+    {
+      "watch_id": "533912ea-7258-4283-b651-005531c44f3b",
+      "url": "https://www.pololu.com/product/5205",
+      "label": "5:1 Micro Metal Gearmotor HPCB 12V with 12 CPR Encoder, Side Connector",
+      "enabled": true,
+      "every": "1h",
+      "price_alert": true,
+      "stock_alert": true,
+      "observation_count": 1,
+      "latest": {
+        "id": "ede0d3ff-5ebf-47cf-bdd9-c97c6fbd994e",
+        "ts": "2026-10-30T22:06:59.960624+00:00",
+        "price": "32.45",
+        "currency": "USD",
+        "availability": "InStock",
+        "method": "jsonld",
+        "issue": null
+      },
+      "next_due_derived_utc": "2026-10-30T23:06:59.960624+00:00"
+    },
+    {
+      "watch_id": "24b9d960-b920-4ae6-94f1-5441e982e7fc",
+      "url": "https://www.pololu.com/product/5206",
+      "label": "10:1 Micro Metal Gearmotor HPCB 12V with 12 CPR Encoder, Back Connector",
+      "enabled": true,
+      "every": "1h",
+      "price_alert": true,
+      "stock_alert": true,
+      "observation_count": 1,
+      "latest": {
+        "id": "94dbb464-1461-4bbf-aebc-6c0309b22596",
+        "ts": "2026-10-30T22:07:34.283310+00:00",
+        "price": "32.45",
+        "currency": "USD",
+        "availability": "InStock",
+        "method": "jsonld",
+        "issue": null
+      },
+      "next_due_derived_utc": "2026-10-30T23:07:34.283310+00:00"
+    },
+    {
+      "watch_id": "2a31f68d-cfdb-4b5d-9645-a00f1c31eb5c",
+      "url": "https://www.pololu.com/product/5207",
+      "label": "10:1 Micro Metal Gearmotor HPCB 12V with 12 CPR Encoder, Side Connector",
+      "enabled": true,
+      "every": "1h",
+      "price_alert": true,
+      "stock_alert": true,
+      "observation_count": 1,
+      "latest": {
+        "id": "9fa1f496-d490-4be7-8865-b6fac78403ee",
+        "ts": "2026-10-30T22:08:09.981532+00:00",
+        "price": "32.45",
+        "currency": "USD",
+        "availability": "InStock",
+        "method": "jsonld",
+        "issue": null
+      },
+      "next_due_derived_utc": "2026-10-30T23:08:09.981532+00:00"
+    },
+    {
+      "watch_id": "4591f281-883f-446a-9052-50f2411443f3",
+      "url": "https://www.pololu.com/product/5208",
+      "label": "15:1 Micro Metal Gearmotor HPCB 12V with 12 CPR Encoder, Back Connector",
+      "enabled": true,
+      "every": "1h",
+      "price_alert": true,
+      "stock_alert": true,
+      "observation_count": 1,
+      "latest": {
+        "id": "6350f99b-2781-417f-89ce-3397965f49fb",
+        "ts": "2026-10-30T22:09:45.811237+00:00",
+        "price": null,
+        "currency": null,
+        "availability": null,
+        "method": "error",
+        "issue": null
+      },
+      "next_due_derived_utc": "2026-10-30T23:09:45.811237+00:00"
+    },
+    {
+      "watch_id": "f1f1e516-216b-4a4e-810c-f5d28a16b9e3",
+      "url": "https://www.pololu.com/product/5209",
+      "label": "15:1 Micro Metal Gearmotor HPCB 12V with 12 CPR Encoder, Side Connector",
+      "enabled": true,
+      "every": "1h",
+      "price_alert": true,
+      "stock_alert": true,
+      "observation_count": 1,
+      "latest": {
+        "id": "4f4f86a0-ff69-433d-b8b3-fb692c045f1b",
+        "ts": "2026-10-30T22:09:55.819295+00:00",
+        "price": null,
+        "currency": null,
+        "availability": null,
+        "method": "error",
+        "issue": null
+      },
+      "next_due_derived_utc": "2026-10-30T23:09:55.819295+00:00"
+    }
+  ],
+  "first_check": {
+    "id": "0140a609-7a83-48da-9956-e1aeae29a74d",
+    "kind": "check",
+    "status": "failed",
+    "attempts": 3,
+    "error": "ReadTimeout",
+    "created_at": "2026-10-30T21:57:45.017027Z",
+    "started_at": "2026-10-30T22:00:53.156110Z",
+    "finished_at": "2026-10-30T22:00:53.165991Z"
+  },
+  "confirmed_reading_watch_count": 11,
+  "error_observation_watch_count": 2,
+  "unobserved_watch_count": 1
+}
