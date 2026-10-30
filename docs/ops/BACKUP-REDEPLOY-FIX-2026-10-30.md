@@ -21,7 +21,7 @@ Encryption code, age recipient handling, credential names, encrypted-only spool 
 docker ps -a --filter name=backup --format '{{.Names}} status={{.Status}}'
 ```
 
-At approximately 10:31 PDT / 17:31 UTC, the repaired `r2-backup-xnmc0jkz8j9i5jh1jwanbsfv-20261030T172113` was Up 5 minutes (healthy); the Docassemble backup sidecar was also healthy. These are runtime observations, not backup-success/restore proof.
+During this read-only inspection, the repaired `r2-backup-xnmc0jkz8j9i5jh1jwanbsfv-20261030T172113` was Up 5 minutes (healthy); the Docassemble backup sidecar was also healthy. That command did not capture a separate wall-clock timestamp. These are runtime observations, not backup-success/restore proof.
 
 ```sh
 docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.config_files" }} {{ index .Config.Labels "com.docker.compose.project.working_dir" }}' r2-backup-xnmc0jkz8j9i5jh1jwanbsfv-20261030T172113
