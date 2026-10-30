@@ -207,11 +207,11 @@ def coolify_results() -> list[Result]:
     if not token:
         return [Result("Coolify", "down", "COOLIFY_TOKEN secret is missing")]
     base = (os.environ.get("COOLIFY_URL") or "https://coolify.tervory.com").strip().rstrip("/")
-    if not base.startswith("https://"):
-        return [Result("Coolify", "down", "COOLIFY_URL must be https")]
+    if base != "https://coolify.tervory.com":
+        return [Result("Coolify", "down", "COOLIFY_URL must match the fixed https Coolify base")]
 
     request = urllib.request.Request(
-        base + "/api/v1/applications",
+        "https://coolify.tervory.com/api/v1/applications",
         headers={
             "Authorization": f"Bearer {token}",
             "Accept": "application/json",

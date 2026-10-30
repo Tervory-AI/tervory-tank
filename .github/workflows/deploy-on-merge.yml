@@ -22,24 +22,26 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 90
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
       ZA_OFFLINE: ${{ vars.ZA_OFFLINE || '' }}
       AFTER: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 50
       - name: Find the previous deployed commit
         run: |
-          # The commit before this push on main: the parent of the first commit in the push is not
-          # known here, so compare with the previous successful run of this workflow.
+          # Compare with the previous run that actually ran (success or failure), not only the last
+          # success: one app failing must not make every later merge redeploy every app (28 Oct).
+          # Cancelled runs are skipped, so their changes are still included. Apps whose last
+          # Coolify deployment failed are retried by deploy_changed.py on their own.
           prev=$(curl -sS -H "Authorization: Bearer ${{ github.token }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy-on-merge.yml/runs?branch=main&status=success&per_page=1" \
-            | jq -r '.workflow_runs[0].head_sha // empty')
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy-on-merge.yml/runs?branch=main&status=completed&per_page=20" \
+            | jq -r '[.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure")][0].head_sha // empty')
           if [ -n "$prev" ] && git cat-file -e "$prev^{commit}" 2>/dev/null; then echo "BEFORE=$prev" >> "$GITHUB_ENV"; fi
       - name: Deploy changed apps
         run: |

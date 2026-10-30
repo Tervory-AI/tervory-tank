@@ -63,6 +63,12 @@ async def refresh(ctx: JobContext) -> dict:
             await ledger.conn.execute("SELECT pg_advisory_unlock(hashtextextended($1, 0))", lock)
 
 
+async def feed_links(ctx: JobContext) -> dict:
+    from core.feed_links import refresh_links
+    async with _ledger() as ledger:
+        return await refresh_links(ledger, ctx.tenant_id, case_plan()["engine"])
+
+
 async def opportunities(ctx: JobContext) -> dict:
     async with _ledger() as ledger:
         result = await perform_opportunities(
@@ -182,12 +188,13 @@ app = create_app(
     handlers={
         "ping": ping,
         "refresh": refresh,
+        "feed_links": feed_links,
         "opportunities": opportunities,
         "resolve": resolve,
         "research": research,
     },
     schedules=_schedules(),
-    job_timeouts={"refresh": 86400},
+    job_timeouts={"refresh": 86400, "feed_links": 7200},
 )
 
 
@@ -322,3 +329,7 @@ app.include_router(warning_router(key_ok=_room_key_ok, ledger_context=_ledger, e
 from core.document_http import build_router as document_router
 
 app.include_router(document_router(key_ok=_room_key_ok, ledger_context=_ledger))
+
+from core.feed_links import build_router as feed_router
+
+app.include_router(feed_router(key_ok=_room_key_ok, ledger_context=_ledger, engine=case_plan()["engine"]))

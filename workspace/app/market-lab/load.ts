@@ -1,5 +1,5 @@
 import { marketLabRequest, type MarketOverview } from "../../lib/tank";
-import { KEY_NAMES, emptyFlags, type KeyFlags } from "./catalog";
+import { KEY_NAMES, emptyFlags, type KeyFlags, type CatalogItem } from "./catalog";
 import { buildPage, type FeedReading, type LinkCheck, type PageModel } from "./model";
 
 export function readFlags(env: NodeJS.ProcessEnv = process.env): KeyFlags {
@@ -28,7 +28,11 @@ export async function loadMarketLab(tenantId?: string): Promise<PageModel> {
       };
     }
     const refreshedAt = data.feeds.map((feed) => feed.checked_at).filter((date): date is string => Boolean(date)).sort().at(-1);
-    return { ...buildPage(emptyFlags(), readings, linkChecks, { refreshedAt }), refreshStatus: data.refresh_status };
+    const sources: CatalogItem[] = data.feeds.flatMap((feed) => feed.kind === "copy" && feed.url && feed.cadence ? [{
+      id: feed.id, title: feed.name, summary: "", sourceLabel: new URL(feed.url).hostname,
+      cadence: feed.cadence, keyName: "", kind: "copy" as const, href: feed.url,
+    }] : []);
+    return { ...buildPage(emptyFlags(), readings, linkChecks, { refreshedAt, sources }), refreshStatus: data.refresh_status };
   } catch {
     return buildPage(emptyFlags(), {}, {}, { error: true });
   }

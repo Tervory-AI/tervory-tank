@@ -502,7 +502,7 @@ function PluginsDialog({
         ) : tab === "Source links" ? (
           <div className="ml-tab-body">
             <h3 className="ml-subhead">Source links</h3>
-            <p className="ml-lead">Save useful pages here. Saved links are not included in answers from public feeds.</p>
+            <p className="ml-lead">Save useful pages here.</p>
             <form className="ml-linkform" onSubmit={onAddLink}>
               <label>
                 Link

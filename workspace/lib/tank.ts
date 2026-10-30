@@ -4,6 +4,30 @@
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
+/** Founder memory inspection; identity comes from the server's goldIdentity check. */
+export function memoryRecord(identity: { tenantId: string; userId: string; role: string }, id: string): Promise<Response> {
+  return fetch(new URL(`/v1/memory/records/${encodeURIComponent(id)}`, TANK_URL), {
+    method: "GET", cache: "no-store", redirect: "error",
+    headers: {
+      "X-Tank-Key": TANK_API_KEY, "X-Tervory-User": identity.userId,
+      "X-Tervory-Tenant": identity.tenantId, "X-Tervory-Role": identity.role,
+    },
+  });
+}
+
+/** Founder JSON inspection only; caller identity is resolved by Workspace. */
+export function rigPriceHistory(identity: { tenantId: string; userId: string }, query: URLSearchParams): Promise<Response> {
+  const url = new URL("/v1/agents/rig/price-history", TANK_URL);
+  for (const key of ["tenant_id", "product_id", "offset", "limit"]) {
+    const value = query.get(key);
+    if (value !== null) url.searchParams.set(key, value);
+  }
+  if (!url.searchParams.has("tenant_id")) url.searchParams.set("tenant_id", identity.tenantId);
+  return fetch(url, { cache: "no-store", redirect: "error", headers: {
+    "X-Tank-Key": TANK_API_KEY, "X-Tervory-User": identity.userId, "X-Tervory-Tenant": identity.tenantId,
+  } });
+}
+
 /** API-only reports. Identity is supplied by Clerk on the server, never the browser. */
 export async function caseStudyRequest(identity: { tenantId: string; userId: string }, path = "", query = new URLSearchParams()): Promise<Response> {
   const allowed = ["", "ensure", "clients", "base", "tiger", "market_lab", "rig", "zenas", "trigger", "tisan", "radix", "autumbra"];
@@ -1065,6 +1089,7 @@ export function mootStudentMatch(body: {
 // Market Lab: the server derives tenantId from Clerk before calling this corridor.
 export type MarketFeed = {
   id: string; name: string; kind: "copy" | "linked"; rows: number;
+  url?: string; cadence?: "daily" | "weekly" | "monthly" | "annual";
   state: "on" | "off"; note: string; checked_at: string | null; document_id: string | null;
 };
 export type MarketOverview = { feeds: MarketFeed[]; on_count: number; refresh_status: string | null };

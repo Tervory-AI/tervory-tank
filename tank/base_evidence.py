@@ -175,7 +175,7 @@ def row_fields(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
     if isinstance(contacts, dict) and contacts.get("domain_accepts_mail") is False:
         result["email"] = field(reason="The mail domain does not accept email.")
     social_block = passes.get("4", {}).get("access_error") or {}
-    if social_block.get("status") == "blocked":
+    if isinstance(social_block, dict) and social_block.get("status") == "blocked":
         result["socials"] = field(source=public_url(social_block.get("url")), reason="blocked")
     if not proof:
         # Legacy rows retain their actual observation, never the current time.
@@ -192,4 +192,19 @@ def row_fields(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
         for name in FIELDS:
             if not result[name]["verified"]:
                 result[name] = field(reason="A pipeline step failed before this field could be checked.")
+    # Ranking never upgrades verification. Reorder only candidates that survived
+    # the existing source/date, archive, blocking and final cross-check guards.
+    for name, decision in (passes.get("source_reliability") or {}).items():
+        if name not in result or not result[name]["verified"]:
+            continue
+        winner = decision.get("selected") or {}
+        items = result[name].get("items") or [result[name]]
+        match = next((item for item in items if item["value"] == winner.get("value")
+                      and item["source_url"] == winner.get("source_url")), None)
+        if match:
+            ordered = [match, *(item for item in items if item is not match)]
+            result[name] = {**field(match["value"] if name in {"website", "phone"}
+                                    else [item["value"] for item in ordered],
+                                    match["source_url"], match["checked_at"]), "items": ordered,
+                            "source_kind": winner.get("source_kind")}
     return result

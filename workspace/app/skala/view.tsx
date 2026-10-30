@@ -346,7 +346,7 @@ export function SkalaApp({
                                     {busyKey === `${key}:retire` ? "Retiring…" : "Retire"}
                                   </button>
                                 ) : null}
-                                {version.state === "retired" && version.approved_at && version.present ? (
+                                {(version.state === "retired" || version.state === "staging") && version.approved_at && version.present ? (
                                   <button type="button" disabled={busyKey !== null} onClick={() => openApprove(version, "rollback")}>Roll back to {version.version}</button>
                                 ) : null}
                                 {version.state === "staging" && version.reason ? <p className="sk-row-err">{version.reason}</p> : null}

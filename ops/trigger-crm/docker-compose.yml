@@ -129,6 +129,13 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
     # Celery starts one process per host CPU (8 on Boston) unless told; two is plenty for one CRM.
     command: ["celery", "-A", "crm", "worker", "--loglevel=info", "--concurrency=2"]
+    # Ping only this worker; another healthy worker must not mask its failure.
+    healthcheck:
+      test: ["CMD-SHELL", 'celery -A crm inspect ping --destination "celery@$$HOSTNAME" --timeout 5 >/dev/null 2>&1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
     depends_on:
       redis:
         condition: service_healthy
@@ -171,6 +178,13 @@ services:
       DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
     command: ["celery", "-A", "crm", "beat", "--loglevel=info"]
+    # Beat has no HTTP/RPC probe. Liveness only; this does not prove job delivery.
+    healthcheck:
+      test: ["CMD", "python", "-c", "from pathlib import Path; c=Path('/proc/1/cmdline').read_bytes().split(bytes([0])); raise SystemExit(0 if any(arg.rsplit(b'/', 1)[-1] == b'celery' for arg in c) and b'beat' in c else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       redis:
         condition: service_healthy

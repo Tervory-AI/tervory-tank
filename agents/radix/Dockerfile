@@ -29,7 +29,7 @@ ARG TARGETARCH
 WORKDIR /app
 COPY _chassis/requirements.txt .
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git tar \
+    && apt-get install -y --no-install-recommends ca-certificates curl git tar unzip default-jre-headless \
     && pip install --no-cache-dir -r requirements.txt \
     && python -m venv /opt/semgrep \
     && /opt/semgrep/bin/pip install --no-cache-dir "semgrep==${SEMGREP_VERSION}" \
@@ -49,6 +49,11 @@ RUN apt-get update \
     && useradd --create-home --uid 1000 agent \
     && mkdir -p /data /opt/osv \
     && chown agent:agent /data /opt/osv
+COPY radix/install-passive-tools.sh /tmp/install-passive-tools.sh
+RUN sh /tmp/install-passive-tools.sh \
+    && ln -s /opt/bin/nuclei /usr/local/bin/nuclei \
+    && pip install --no-cache-dir dnspython==2.9.0 PyYAML==6.0.3 \
+    && rm /tmp/install-passive-tools.sh
 COPY _chassis/chassis /app/chassis
 COPY radix/app.py /app/app.py
 COPY radix/gold_sources.py /app/gold_sources.py
@@ -57,6 +62,7 @@ COPY radix/net.py /app/net.py
 COPY radix/live.py /app/live.py
 COPY radix/egress.py /app/egress.py
 COPY radix/egress-policy.json /app/egress-policy.json
+COPY radix/passive_*.py /app/
 COPY radix/verify /app/verify
 COPY radix/schema.sql /app/schema.sql
 COPY radix/scanlib /app/scanlib

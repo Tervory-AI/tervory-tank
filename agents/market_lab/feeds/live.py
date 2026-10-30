@@ -97,6 +97,7 @@ class PoliteClient:
         opener: Callable[..., object] | None = None,
         sleep: Callable[[float], None] | None = None,
         clock: Callable[[], float] | None = None,
+        max_bytes: int | None = None,
     ) -> None:
         self.delay = delay
         self.timeout = timeout
@@ -105,6 +106,7 @@ class PoliteClient:
         self.opener = opener or urllib.request.urlopen
         self.sleep = sleep or time.sleep
         self.clock = clock or time.monotonic
+        self.max_bytes = max_bytes
         self._last: dict[str, float] = {}
         self.blocked_hosts: set[str] = set()
 
@@ -170,7 +172,9 @@ class PoliteClient:
                     self._check_block(url, status=status)
                     if status >= 400:
                         raise urllib.error.HTTPError(url, status, "bad status", None, None)
-                    body = response.read()
+                    body = response.read() if self.max_bytes is None else response.read(self.max_bytes + 1)
+                    if self.max_bytes is not None and len(body) > self.max_bytes:
+                        raise ValueError("response exceeds the feed limit")
                     self._check_block(url, body=body)
                 return body
             except Exception as exc:

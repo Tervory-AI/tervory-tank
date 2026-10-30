@@ -7,3 +7,6 @@ pydantic==2.10.6
 qdrant-client==1.20.0
 # Local embeddings. No provider key. The model is downloaded when the image is built.
 fastembed==0.9.1
+
+# Authoritative memory rows; same async driver as the agent chassis.
+asyncpg==0.30.0

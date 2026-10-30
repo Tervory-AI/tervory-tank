@@ -13,11 +13,13 @@ not read a proxy address or a resolver from the request.
 from __future__ import annotations
 
 import ipaddress
+import fcntl
 import json
 import os
 import re
 import socket
 import ssl
+import struct
 import sys
 import threading
 import time
@@ -80,6 +82,26 @@ class ProxyError(Exception):
     """A tunnel was refused or the room proxy is unavailable."""
 
 
+def private_bind_address() -> str:
+    """The designated shared proxy-link NIC, never a wildcard/hostname guess.
+
+    Compose names this interface radix-link on both proxy services. Read its
+    IPv4 address with Linux's read-only SIOCGIFADDR; no privilege or secret.
+    Multiple other NICs/hostname addresses cannot change the selected binding.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            reply = fcntl.ioctl(probe.fileno(), 0x8915, struct.pack('256s', b'radix-link'))
+        address = socket.inet_ntoa(reply[20:24])
+        ip = ipaddress.IPv4Address(address)
+        if not any(ip in ipaddress.ip_network(network) for network in
+                   ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')):
+            raise ValueError
+        return address
+    except (OSError, ValueError):
+        raise ProxyError('private container interface unavailable') from None
+
+
 def routable(raw: str) -> bool:
     """True only for a public unicast address. Private and special ranges fail."""
     try:
@@ -130,9 +152,11 @@ def env_revoked() -> bool:
     return os.environ.get("RADIX_EGRESS_REVOKED", "").strip().lower() in {"1", "true", "yes"}
 
 
-def system_resolve(host: str) -> str:
+def system_resolve(host: str, *, verified_host: str | None = None) -> str:
     """One lookup. Mixed or non-public answers are refused. The result is pinned."""
-    if host != APPROVED_HOST:
+    if verified_host is not None and host != verified_host:
+        raise ProxyError("destination not approved")
+    if verified_host is None and host != APPROVED_HOST:
         try:
             approved_storage = storage_host()
         except PolicyError:
@@ -159,7 +183,7 @@ def connect_pinned(address: str, port: int) -> socket.socket:
     return socket.create_connection((address, port), timeout=10)
 
 
-def parse_connect_target(target: str, r2_host: str = "") -> tuple[str, int] | None:
+def parse_connect_target(target: str, r2_host: str = "", *, verified_host: str = APPROVED_HOST) -> tuple[str, int] | None:
     if not target or not target.isascii() or "@" in target or "\\" in target or " " in target:
         return None
     if target.startswith("["):
@@ -168,7 +192,7 @@ def parse_connect_target(target: str, r2_host: str = "") -> tuple[str, int] | No
         return None
     host, port_text = target.split(":", 1)
     host = host.lower().removesuffix(".")
-    if port_text != "443" or not host or host not in {APPROVED_HOST, r2_host}:
+    if port_text != "443" or not host or host not in {verified_host, r2_host}:
         return None
     return host, APPROVED_PORT
 
@@ -187,6 +211,9 @@ class Proxy:
         max_requests_per_minute: int = BOUNDS["max_requests_per_minute"],
         max_response_bytes: int = BOUNDS["max_response_bytes"],
         max_duration_seconds: float = BOUNDS["max_duration_seconds"],
+        verified_host: str = APPROVED_HOST,
+        allow_storage: bool = True,
+        active: Callable[[], bool] | None = None,
     ) -> None:
         self._resolve = resolve
         self._connect = connect
@@ -196,12 +223,16 @@ class Proxy:
         self._max_per_minute = max_requests_per_minute
         self._max_bytes = max_response_bytes
         self._max_duration = max_duration_seconds
+        self._verified_host = verified_host
+        self._active_lease = active or (lambda: True)
         self._lock = threading.Lock()
         self._times: list[float] = []
         self._active = 0
         try:
             self._storage_host = storage_host()
         except PolicyError:
+            self._storage_host = ""
+        if not allow_storage:
             self._storage_host = ""
         self._storage_active = 0
         self._storage_times: list[float] = []
@@ -221,12 +252,12 @@ class Proxy:
                     b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n" + body
                 )
                 return
-            target = parse_connect_target(parts[1], self._storage_host) if len(parts) >= 2 else None
+            target = parse_connect_target(parts[1], self._storage_host, verified_host=self._verified_host) if len(parts) >= 2 else None
             if parts[0] != "CONNECT" or target is None:
                 self._refuse(conn)
                 return
             is_storage = target[0] == self._storage_host
-            if self._revoked or not self._admit(is_storage):
+            if self._revoked or not self._active_lease() or not self._admit(is_storage):
                 self._refuse(conn)
                 return
             upstream: socket.socket | None = None
@@ -319,7 +350,7 @@ class Proxy:
         sent = 0
         client.settimeout(0.2)
         upstream.settimeout(0.2)
-        while time.monotonic() < deadline and sent < limit:
+        while self._active_lease() and time.monotonic() < deadline and sent < limit:
             inbound = self._recv(client)
             if inbound is None:
                 inbound = b""
@@ -371,6 +402,10 @@ class Server:
             self._sock.close()
         except OSError:
             return
+        # A new scan lease reuses its fixed internal port. Wait for the old
+        # accept loop to relinquish it; do not race the next tenant's bind.
+        if self._thread.is_alive() and threading.current_thread() is not self._thread:
+            self._thread.join(timeout=1)
 
     def serve_forever(self) -> None:
         self._accept()
@@ -445,7 +480,7 @@ def main() -> int:
         print("egress policy refused", file=sys.stderr)
         return 1
     proxy = Proxy(revoked=env_revoked())
-    Server(proxy, host="0.0.0.0", port=8080).serve_forever()
+    Server(proxy, host=private_bind_address(), port=8080).serve_forever()
     return 0
 
 
