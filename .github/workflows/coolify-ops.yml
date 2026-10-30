@@ -69,6 +69,10 @@ jobs:
         if: inputs.op == 'room-setup'
         run: python3 .github/scripts/room_setup.py
 
+      - name: Verify main backup scope before manual deploy
+        if: inputs.op == 'deploy' && inputs.app == 'xnmc0jkz8j9i5jh1jwanbsfv'
+        run: python3 .github/scripts/backup_runtime_scope.py
+
       - name: Run
         if: inputs.op != 'room-setup' && inputs.op != 'backup-scope'
         run: |
