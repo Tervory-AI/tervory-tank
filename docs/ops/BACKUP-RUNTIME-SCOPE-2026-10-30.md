@@ -1,6 +1,6 @@
 # Boston backup: shared runtime environment drift
 
-Report prepared 30 October 2026, 11:10:27 PDT / 18:10:27 UTC. Base main `fdc45642bedcd859d803b05a61efc2b927b5bf60`.
+Report updated 30 October 2026, 11:12:23 PDT / 18:12:23 UTC. Base main `fdc45642bedcd859d803b05a61efc2b927b5bf60`.
 
 ## Post-merge result and cause
 
@@ -28,10 +28,10 @@ The installed Coolify controller supports `PATCH /api/v1/applications/{uuid}/env
 
 and the same flags for `R2_SECRET_ACCESS_KEY_GHOST`, on main UUID `xnmc0jkz8j9i5jh1jwanbsfv` only. Existing values, build flags, preview settings and the Ghost resource are preserved. PATCH response bodies are discarded without being read. GET inventory handling accesses only key/preview/runtime metadata and never accesses or emits value fields; no raw API response is printed or saved.
 
-- `.github/scripts/backup_runtime_scope.py`: fixed resource/two-key metadata repair, checks existing names and absence of main Compose consumers before writing, rejects unexpected foreign owners, preserves UPLOADS names, verifies postconditions and is idempotent. Missing/ambiguous metadata fails closed; no key is created. A partial PATCH failure stops without any deploy request.
-- `.github/workflows/coolify-ops.yml`: adds fixed `op=backup-scope`; caller cannot supply arbitrary app/key/room inputs. It never deploys. Manual main `op=deploy` first runs the read-only scope gate; room deploys are unchanged.
-- `.github/scripts/deploy_changed.py`: checks runtime credential-name scope before replacing main, blocking a future foreign pair reintroduction before any deploy call.
-- `tests/test_backup_runtime_scope.py` and `tests/test_deploy_changed.py`: mocked GET/PATCH contract, exact allowed fields/path, no value-field access, discarded mutation body, idempotence, refusal/partial-failure cases, automatic and manual deployment gate ordering.
+- `.github/scripts/backup_runtime_scope.py:22,46,61,91`: fixed resource/two-key metadata repair, checks existing names and absence of main Compose consumers before writing, rejects unexpected foreign owners, preserves UPLOADS names, verifies postconditions and is idempotent. Missing/ambiguous metadata fails closed; no key is created. A partial PATCH failure stops without any deploy request.
+- `.github/workflows/coolify-ops.yml:60–77`: adds fixed `op=backup-scope`; caller cannot supply arbitrary app/key/room inputs. It never deploys. Manual main `op=deploy` first runs the read-only scope gate; room deploys are unchanged.
+- `.github/scripts/deploy_changed.py:140–144`: checks runtime credential-name scope before replacing main, blocking a future foreign pair reintroduction before any deploy call.
+- `tests/test_backup_runtime_scope.py:47,107,122,158` and `tests/test_deploy_changed.py:257`: mocked GET/PATCH contract including the real HTTP helper against a fake controller with unchanged synthetic server-side value markers, exact allowed fields/path, no value-field access, discarded mutation body, idempotence, refusal/partial-failure cases, automatic and manual deployment gate ordering.
 
 ## Commands and evidence
 
@@ -64,7 +64,7 @@ Exit 0: image `sha256:0e09506a4ed1daa1c22fa1c3e7fdc63817634e933b7a86eda36f5209a0
 git diff --check
 ```
 
-Results: **25 passed** (0.15s); **134 passed** (5.45s), both with 13 existing environment deprecation warnings; whitespace check passed. An initial workflow assertion used a required step name on an unnamed checkout step; fixed to optional lookup before the passing runs. Independent review identified the manual-deploy bypass; it was fixed on this same branch with gate ordering assertions. Finished files were committed and pushed individually without force pushes.
+Final results: **27 passed** (0.18s); **136 passed** (6.47s), both with 13 existing environment deprecation warnings; whitespace check passed. An initial workflow assertion used a required step name on an unnamed checkout step; fixed to optional lookup before the passing runs. Independent review identified the manual-deploy bypass and requested real-transport/gate integration proof; both were fixed on this same branch. Finished files were committed and pushed individually without force pushes.
 
 ## Safe execution boundary
 
