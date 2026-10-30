@@ -110,3 +110,31 @@ existing memory-measure script remains unchanged and test-host-only. No producti
 SQL, data, settings, caps, model calls or load. Founder browser acceptance remains
 last and is not claimed by unit tests. No screenshots exist for a founder capacity
 test because that test has not run.
+
+## Independent review fixes — 2026-10-30 15:03 PDT / 22:03 UTC
+
+`preflight` now requires `dedicated_spare_host is True`; false, strings, numbers
+and null fail. `load_config` binds operation names to exactly GET
+`/v1/rig/search`, POST `/v1/rig/setups`, POST `/v1/rig/quote`. Dot segments,
+encoded traversal, duplicate slashes, query/fragment additions, wrong methods and
+cross-operation paths fail. Forge remains unimplemented and cannot be selected
+as a traffic operation; no prefix-based forge escape is enabled.
+
+RED/GREEN proof: loaded `git show ee1996f:tests/rig_stress/harness.py` into an
+in-memory module and ran the two new regression methods using unittest: original
+head produced 10 assertion failures, no test errors. Current head:
+`python3 -m unittest discover -s tests/rig_stress -q` exit0, eight tests passed in
+1.212s. Regression method names: `test_spare_confirmation_requires_boolean_true`
+and `test_config_binds_exact_operation_routes`. No network is involved in those
+mocked metadata/config checks.
+
+Reran the exact container command above with the final eight-test suite: exit0,
+eight passed in1.309s. Inspection again exit0: network=none, CPU250000000,
+RAM268435456, swap268435456, readonly=true, mounts0, ports{}. Removed container;
+label-filtered `docker ps -a` empty. One preceding capped run exposed a flaky
+assumption that CPU-constrained fake HTTP could never drop arrivals. That run
+exited1, then was cleaned up. The final test records real traffic drops but tests
+report arithmetic with deterministic inputs. All printed report latencies now
+also are unit values (.01/.02/.03 seconds), never a benchmark. The separate
+overload regression still requires dropped arrivals to be reported, and dropped
+arrivals still fail the limits.
