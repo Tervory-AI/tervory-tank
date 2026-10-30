@@ -561,4 +561,3 @@ Every list column is a property of that section's list schema above. Desktop sup
 - Four prototype entry flows start at Leads list: desktop/mobile × Zero/Filled. Submenu navigation preserves size/state. Filled rows/cards open detail. Action controls open the matching confirmation overlay. Converted-estimate links open Invoices.
 - Structural Figma audit: **64 screens, 1,602 field bindings, 28 confirmation overlays, 0 displayed public-link fields, 0 reported errors**. Case-study revision 3 preserves all 44 IDs.
 - Figma screenshots are authoring evidence only. Founder test screenshots have not been supplied; founder acceptance remains pending.
-
