@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from asyncio import CancelledError
 import base64
 import hmac
 import uuid
@@ -10,6 +11,7 @@ import hashlib
 import html as html_module
 import io
 import json
+import logging
 import os
 import re
 import socket
@@ -58,6 +60,32 @@ concurrency = asyncio.Semaphore(4)
 site_locks: dict[str, asyncio.Lock] = {}
 last_visit: dict[str, float] = {}
 QUEUE_TIMEOUT = 20
+# Three cleanup steps fit within Tiger's five-second transport margin. Each
+# step is attempted even if the preceding resource fails to close.
+CLEANUP_STEP_TIMEOUT_S = 1
+
+
+async def cleanup_visit(context, browser, manager, storage, *, save: bool, bounded: bool):
+    async def step(action):
+        if not bounded:
+            await action()
+            return
+        try:
+            async with asyncio.timeout(CLEANUP_STEP_TIMEOUT_S):
+                await action()
+        except Exception as exc:
+            # Never include exception messages, storage paths or credentials.
+            logging.getLogger(__name__).warning("Browser cleanup failed (%s)", type(exc).__name__)
+
+    try:
+        if save and context is not None:
+            await step(lambda: context.storage_state(path=str(storage)))
+    finally:
+        try:
+            if browser is not None:
+                await step(browser.close)
+        finally:
+            await step(lambda: manager.__aexit__(None, None, None))
 
 
 @asynccontextmanager
@@ -390,13 +418,14 @@ async def _visit(body, tenant, task, origin, run, directory):
         if host_stopped(run, body.url):
             return blocked_result(body.url)
         manager = async_playwright()
-        playwright = await manager.__aenter__()
         browser = None
         context = None
         retained = False
+        cancelled = False
         result = {"ok": False, "challenge": False}
         navigation = {"login": False, "human": False}
         try:
+            playwright = await manager.__aenter__()
             proxy = os.environ.get("BROWSER_PROXY_URL", "http://base-browser-gateway:3128")
             browser = await playwright.chromium.launch(headless=True, executable_path="/usr/bin/chromium",
                 proxy={"server": proxy},
@@ -514,6 +543,9 @@ async def _visit(body, tenant, task, origin, run, directory):
             return result
         except HTTPException:
             raise
+        except CancelledError:
+            cancelled = True
+            raise
         except Exception as exc:
             if isinstance(exc, HostBlocked) or 'blocked' in locals().get('denied', set()) or host_stopped(run, body.url):
                 stop_host(run, body.url)
@@ -521,13 +553,14 @@ async def _visit(body, tenant, task, origin, run, directory):
                 return result
             raise HTTPException(503, "The browser could not read this page; no result is claimed.") from None
         finally:
-            if not retained:
-                try:
-                    if context and not social: await context.storage_state(path=str(storage))
-                finally:
-                    if browser: await browser.close()
-                    await manager.__aexit__(None, None, None)
-            last_visit[site] = time.monotonic()
+            try:
+                if not retained:
+                    # Expiry never waits to save cookies. Bind the existing
+                    # storage destination only for a normally completed visit.
+                    await cleanup_visit(context, browser, manager, storage,
+                        save=not cancelled and not social, bounded=body.request_timeout_ms is not None)
+            finally:
+                last_visit[site] = time.monotonic()
 
 
 async def public_result(page, result, html, directory, task, *, price_reader: bool = False):
