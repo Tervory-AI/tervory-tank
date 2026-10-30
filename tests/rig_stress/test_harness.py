@@ -83,7 +83,9 @@ class Wiring(unittest.TestCase):
         for value in (False, 'false', 'true', 0, 1, None):
             with self.subTest(value=value), patch.object(h, 'docker', side_effect=[[network], [container]]):
                 with self.assertRaises(ValueError):
-                    h.preflight({'network': 'rigstress-smoke', 'dedicated_spare_host': value})
+                    h.preflight({'network': 'rigstress-smoke', 'dedicated_spare_host': value,
+                                 'stores': [{'target': 'http://10.1.2.3:8000'}],
+                                 'target_allowlist': ['http://10.1.2.3:8000']})
 
     def test_config_binds_exact_operation_routes(self):
         with tempfile.TemporaryDirectory() as directory:
