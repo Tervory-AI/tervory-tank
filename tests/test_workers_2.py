@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import socket
+import sqlite3
 import subprocess
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -37,11 +38,19 @@ class Conn:
         self.beat: dict | None = None
         self.writes: list[tuple[str, tuple]] = []
         self.fail = False
+        self.reads: list[tuple[str, tuple]] = []
+        self.pause_control: dict | None = None
+        self.pause_change: dict | None = None
+        self.build_counts = {"queued": 0, "running": 0, "awaiting_review": 0}
+        self.readonly_transactions: list[dict] = []
+        self.acquisitions = 0
 
     def acquire(self):
+        self.acquisitions += 1
         return self
 
-    def transaction(self):
+    def transaction(self, **options):
+        self.readonly_transactions.append(options)
         return self
 
     async def __aenter__(self):
@@ -53,6 +62,7 @@ class Conn:
         return False
 
     async def fetchval(self, sql, *args):
+        self.reads.append((sql, args))
         if "tank.workers_controls" in sql:
             return self.paused
         if "tank.controls" in sql:
@@ -60,6 +70,13 @@ class Conn:
         return None
 
     async def fetchrow(self, sql, *args):
+        self.reads.append((sql, args))
+        if "tank.workers_controls" in sql:
+            return self.pause_control
+        if "tank.control_log" in sql:
+            return self.pause_change
+        if "tank.command_builds" in sql:
+            return self.build_counts
         return self.beat
 
     async def fetch(self, sql, *args):
@@ -161,6 +178,116 @@ def test_founder_tile_shows_stale_after_three_minutes(client, conn):
     assert tile["stale_after_s"] == 180
     old = {**conn.beat, "seen_at": datetime.now(timezone.utc) - timedelta(minutes=4)}
     assert workers_status.view(old)["checking_in"] is False
+
+
+def test_founder_worker_diagnostics_are_metadata_only_and_readonly(client, conn):
+    at = datetime(2026, 10, 30, 18, 30, tzinfo=timezone.utc)
+    conn.pause_control = {"value": True, "updated_by": "founder-one", "updated_at": at,
+                          "tenant_id": "private-tenant", "private": "must-not-leak"}
+    conn.pause_change = {"by_user": "founder-one", "old_value": False, "new_value": True, "at": at,
+                         "task": "private-task", "path": "private-path"}
+    conn.build_counts = {"queued": 2, "running": 1, "awaiting_review": 3}
+    response = client.get("/v1/controls/workers", headers=FOUNDER)
+    assert response.status_code == 200
+    assert response.json() == {
+        "workers_paused": True, "worker": None, "stale_after_s": 180,
+        "pause_control": {"updated_by": "founder-one", "updated_at": at.isoformat()},
+        "last_pause_change": {"by_user": "founder-one", "old_value": False, "new_value": True,
+                              "at": at.isoformat()},
+        "build_counts": {"queued": 2, "running": 1, "awaiting_review": 3},
+    }
+    assert not conn.writes
+    assert conn.readonly_transactions == [{"readonly": True, "isolation": "repeatable_read"}]
+    assert len(conn.reads) == 4
+    assert all(sql.lstrip().startswith("SELECT") for sql, _ in conn.reads)
+    for sql, args in conn.reads:
+        assert not any(word in sql.upper() for word in ("UPDATE ", "INSERT ", "DELETE ", "FOR UPDATE", "SKIP LOCKED"))
+        if "tank.workers_controls" in sql or "tank.control_log" in sql:
+            assert args == (controls.PLATFORM,)
+            assert "tenant_id=$1" in sql and "name='workers_paused'" in sql
+        if "tank.control_log" in sql:
+            assert "ORDER BY at DESC LIMIT 1" in sql
+        if "tank.command_builds" in sql:
+            assert "t.thread_id=b.thread_id AND t.tenant_id=b.tenant_id" in sql
+            assert "b.status IN ('queued','running','awaiting_review')" in sql
+            assert not any(field in sql for field in ("brief_markdown", "user_id", "pr_url", "followup_text"))
+
+
+def test_worker_diagnostics_missing_control_and_history_are_explicit(client, conn):
+    response = client.get("/v1/controls/workers", headers=FOUNDER)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["workers_paused"] is False
+    assert body["pause_control"] is None and body["last_pause_change"] is None
+    assert body["build_counts"] == {"queued": 0, "running": 0, "awaiting_review": 0}
+    assert not conn.writes
+
+
+def test_worker_diagnostics_reject_nonfounders_before_database_reads(client, conn):
+    for headers in ({}, {**FOUNDER, "x-tervory-admin": "other"},
+                    {"x-tank-key": WORKER_KEY}, {**FOUNDER, "x-tank-key": "wrong"},
+                    {"x-tank-key": "offline-workspace-key", "x-tervory-user": "founder-one"}):
+        assert client.get("/v1/controls/workers", headers=headers).status_code == 404
+    assert conn.acquisitions == 0 and not conn.reads and not conn.writes
+
+
+def test_worker_key_pause_response_does_not_expose_diagnostics(client, conn):
+    conn.paused = True
+    assert client.get("/v1/workers/paused", headers={"x-tank-key": WORKER_KEY}).json() == {"paused": True}
+    assert not conn.writes
+
+
+def test_worker_diagnostics_database_failure_is_not_false_or_zero(client, conn):
+    conn.fail = True
+    response = client.get("/v1/controls/workers", headers=FOUNDER)
+    assert response.status_code == 503
+    assert response.json() == {"detail": "worker diagnostics unavailable"}
+    assert not conn.writes
+
+
+def test_worker_diagnostics_counts_join_both_thread_and_tenant(client, conn, monkeypatch):
+    # Execute the route's real aggregate SQL locally; a mock count cannot catch
+    # a missing tenant join or accidentally counting completed/failed builds.
+    with sqlite3.connect(":memory:", check_same_thread=False) as memory:
+        memory.row_factory = sqlite3.Row
+        memory.execute("ATTACH DATABASE ':memory:' AS tank")
+        memory.execute("CREATE TABLE tank.command_threads (thread_id text, tenant_id text)")
+        memory.execute("CREATE TABLE tank.command_builds (thread_id text, tenant_id text, status text)")
+        memory.executemany("INSERT INTO tank.command_threads VALUES (?,?)", [("thread-a", "tenant-a"), ("thread-b", "tenant-b")])
+        rows = [("thread-a", "tenant-a", "queued"), ("thread-b", "tenant-b", "queued"),
+                ("thread-a", "tenant-b", "queued"), ("missing", "tenant-a", "queued"),
+                ("thread-a", "tenant-a", "running"), ("thread-b", "tenant-b", "awaiting_review"),
+                ("thread-a", "tenant-a", "done"), ("thread-b", "tenant-b", "failed")]
+        memory.executemany("INSERT INTO tank.command_builds VALUES (?,?,?)", rows)
+        original = conn.fetchrow
+
+        async def fetchrow(sql, *args):
+            if "tank.command_builds" in sql:
+                conn.reads.append((sql, args))
+                return dict(memory.execute(sql, args).fetchone())
+            return await original(sql, *args)
+
+        monkeypatch.setattr(conn, "fetchrow", fetchrow)
+        response = client.get("/v1/controls/workers", headers=FOUNDER)
+        assert response.status_code == 200
+        assert response.json()["build_counts"] == {"queued": 2, "running": 1, "awaiting_review": 1}
+        assert [tuple(row) for row in memory.execute("SELECT * FROM tank.command_builds")] == rows
+    assert not conn.writes
+
+
+def test_worker_diagnostics_query_error_has_no_partial_or_private_response(client, conn, monkeypatch):
+    original = conn.fetchrow
+
+    async def fetchrow(sql, *args):
+        if "tank.command_builds" in sql:
+            raise RuntimeError("private database error and query contents")
+        return await original(sql, *args)
+
+    monkeypatch.setattr(conn, "fetchrow", fetchrow)
+    response = client.get("/v1/controls/workers", headers=FOUNDER)
+    assert response.status_code == 503
+    assert response.json() == {"detail": "worker diagnostics unavailable"}
+    assert not conn.writes
 
 
 def test_storage_is_additive_and_main_only_registers_routes():
