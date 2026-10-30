@@ -11,9 +11,10 @@ and UTC submission time in the existing quote payload. Existing stores without
 a configured notice keep their previous behavior; no policy or customer data
 has been invented or populated.
 
-The founder authorized this continuation without the former blanket Figma/copy
-approval gate. Original step-1 theme persistence remains on this PR; its prior
-proof is preserved in commit f85a9ee89ee0d61594f348779ec010f27d6cc8ba.
+Current founder instructions require approved Figma wording. No copy-specific
+waiver is established by this report. Original step-1 theme persistence remains
+on this PR; its prior proof is preserved in commit
+f85a9ee89ee0d61594f348779ec010f27d6cc8ba.
 
 ## Changed files and lines (continuation)
 
@@ -206,3 +207,22 @@ Ruff and whitespace checks exited 0. Widget lint/build exited 0 and all 25 tests
 in 3 files passed; sample-data bundle check passed and shipped UMD size remains
 67,143 bytes (17,750 gzip). Final Python rerun on b2c6b5a: **136 passed, 2 warnings in 56.04s**. Warnings are Starlette/httpx deprecation and the existing TriggerWriteArgs register field shadow; neither failed tests.
 No live catalogue, policy text, recipient, secret, SQL or deployment was changed.
+
+
+## 2026-10-30 09:39:09 PDT / 2026-10-30 16:39:09 UTC — independent review wording correction
+
+Independent exact-head review found no functional blocker at 0eb1f811, but flagged new error wording without copy-specific approval evidence. This supersedes the unsupported blanket-waiver statement above. Reused the existing main `agents/rig/rigbox/api.py:158` message, "The request is not valid.", unchanged in notice.py:16,19,24,28,37, service.py:82 and retailer.py:119. Status 409, notice_changed code, stale refresh, receipt validation and financial-field rejection remain unchanged. No widget rebuild or customer copy was added.
+
+Each completed source file was committed and pushed: 0700cc2, 3c5940f, d105495. All pushes exited 0. Source head d105495d5c5be641a9b5e46de2c1d7b8337e5843. Commands from this checkout:
+
+```sh
+docker run -d --name tervory-job8-copy-test --label codex.task=job8-copy --memory=384m --cpus=1 -e POSTGRES_HOST_AUTH_METHOD=trust -p 127.0.0.1:55439:5432 postgres:17
+RIG_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55439/postgres /tmp/tervory-job8-python/bin/python -m pytest -q tests/test_rig_quote_notice.py
+docker exec tervory-job8-copy-test pg_isready -U postgres
+RIG_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55439/postgres /tmp/tervory-job8-python/bin/python -m pytest -q tests/test_rig_quote_notice.py
+/tmp/tervory-job8-python/bin/ruff check agents/rig/rigbox/quotes/notice.py agents/rig/rigbox/quotes/service.py agents/rig/rigbox/retailer.py --select E9,F
+git diff --check
+docker rm -f -v tervory-job8-copy-test
+```
+
+First pytest attempt started before disposable Postgres was ready: 10 passed, 6 connection-reset setup errors in 14.78s. After pg_isready accepted connections, final run: **16 passed, 1 Starlette/httpx deprecation warning in 14.72s**, including real Chromium stale-refresh paths and memory/Postgres tenant/receipt/field tests. Ruff and whitespace checks exited 0; disposable container removal exited 0. Earlier 136 Python and 25 widget results are retained historical evidence and were not rerun wholesale. Current report-head hosted CI and final independent review must settle separately. No live data, secrets, configuration, deployment or acceptance changed. Founder walkthrough remains last.
