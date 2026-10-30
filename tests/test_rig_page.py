@@ -394,11 +394,13 @@ async def test_shopper_and_dealer_pages_and_only_approved_fits_show() -> None:
 def test_page_asset_urls_survive_a_stale_legacy_cache(monkeypatch, tmp_path, url):
     """A new HTML response must not reuse a cached URL for changed bytes."""
     import re
+    import shutil
     from rigbox import page_route
 
     source = PAGE / "v5"
     for name in ("index.html", "rig.css", "rig.js"):
         (tmp_path / name).write_bytes((source / name).read_bytes())
+    shutil.copytree(source / "assets", tmp_path / "assets")
     monkeypatch.setattr(page_route, "_V5", tmp_path)
     # No configured store or credentials are needed for the published shell.
     monkeypatch.delenv("RIG_WIDGET_PUBLISHABLE_KEY", raising=False)
@@ -417,6 +419,7 @@ def test_page_asset_urls_survive_a_stale_legacy_cache(monkeypatch, tmp_path, url
     assert client.get("/page/v5/rig.css").headers["cache-control"] == "no-cache"
     changed = legacy_cached + b"\n/* offline deployment revision */\n"
     (tmp_path / "rig.css").write_bytes(changed)
+    (tmp_path / "assets" / (hashlib.sha256(changed).hexdigest() + "-rig.css")).write_bytes(changed)
     updated = client.get(url)
     expected = f"/page/v5/assets/{hashlib.sha256(changed).hexdigest()}/rig.css"
     assert expected in updated.text and css_url not in updated.text
@@ -426,7 +429,25 @@ def test_page_asset_urls_survive_a_stale_legacy_cache(monkeypatch, tmp_path, url
     assert fetched.status_code == 200 and fetched.content == changed
     assert hashlib.sha256(fetched.content).hexdigest() in expected
     assert legacy_cached != fetched.content
-    assert client.get(css_url).status_code == 404  # Never serve new bytes under an old hash.
+    old_response = client.get(css_url)
+    assert old_response.status_code == 200 and old_response.content == legacy_cached
+    assert hashlib.sha256(old_response.content).hexdigest() in css_url
+    # Corrupt archives cannot impersonate an immutable object.
+    (tmp_path / "assets" / (hashlib.sha256(legacy_cached).hexdigest() + "-rig.css")).write_bytes(changed)
+    assert client.get(css_url).status_code == 404
+    archived = tmp_path / "assets" / (hashlib.sha256(legacy_cached).hexdigest() + "-rig.css")
+    outside = tmp_path / "outside.css"
+    outside.write_bytes(legacy_cached)
+    archived.unlink()
+    archived.symlink_to(outside)
+    assert client.get(css_url).status_code == 404
     assert client.get("/page/v5/assets/not-a-digest/rig.css").status_code == 404
     assert client.get("/page/v5/assets/anything/index.html").status_code == 404
     assert client.get(url).text == updated.text
+
+
+@pytest.mark.parametrize("name", ["rig.css", "rig.js"])
+def test_current_assets_have_retained_published_objects(name):
+    data = (PAGE / "v5" / name).read_bytes()
+    digest = hashlib.sha256(data).hexdigest()
+    assert (PAGE / "v5/assets" / f"{digest}-{name}").read_bytes() == data
