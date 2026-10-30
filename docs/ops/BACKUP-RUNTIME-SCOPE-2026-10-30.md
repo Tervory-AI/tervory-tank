@@ -64,7 +64,7 @@ Exit 0: image `sha256:0e09506a4ed1daa1c22fa1c3e7fdc63817634e933b7a86eda36f5209a0
 git diff --check
 ```
 
-Final results: **27 passed** (0.18s); **136 passed** (6.47s), both with 13 existing environment deprecation warnings; whitespace check passed. An initial workflow assertion used a required step name on an unnamed checkout step; fixed to optional lookup before the passing runs. Independent review identified the manual-deploy bypass and requested real-transport/gate integration proof; both were fixed on this same branch. Finished files were committed and pushed individually without force pushes.
+Before the final two integration cases, those commands passed **25 tests** (0.15s) and **134 tests** (5.45s). Final reruns after adding the requested cases: **27 passed** (0.18s); **136 passed** (6.47s), both with 13 existing environment deprecation warnings; whitespace check passed. An initial workflow assertion used a required step name on an unnamed checkout step; fixed to optional lookup before the passing runs. Independent review identified the manual-deploy bypass and requested real-transport/gate integration proof; both were fixed on this same branch. Finished files were committed and pushed individually without force pushes.
 
 ## Safe execution boundary
 
