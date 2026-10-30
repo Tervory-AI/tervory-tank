@@ -37,9 +37,11 @@ Module._load = function (name, parent, isMain) {
     clerkClient: async () => ({users: {getCount:async()=>2,getUserList:async()=>({totalCount:2,data:[{id:'user-one',firstName:'Alex',lastName:'Example',createdAt:Date.UTC(2026,9,21),publicMetadata:{company:'Example Company',country:'United States',plan:'Trial'}}]})}}),
   };
   if (name === '@/lib/admin') return {isFounder: id => id === 'founder-fixture'};
-  if (name === '@/lib/tenant') return {activeTenant: async()=>identity};
+  if (name === '@/lib/tenant') return {activeTenant: async()=>identity,currentTenant:async()=>identity};
   if (name === '@/lib/tank') return {
     rigProxy, readClientSavings:async(tenant,endpoint,query)=>{reads.push(['savings',tenant]);return rigProxy('/v1/client-savings'+endpoint,tenant,{query})},
+    listTasks:async(tenant,limit)=>{reads.push(['list',tenant,limit]);return Array.from({length:50},(_,index)=>({id:`recent-${index}`}))},
+    getTask:async(tenant,id)=>{reads.push(['task',tenant,id]);if(tenant!=='fixture'||id!=='00000000-0000-0000-0000-000000000123')throw Error('Task not found');return {id,title:'Older task',status:'done'}},
     commandTools:async(actor)=>{reads.push(['tools',actor.tenantId,actor.userId]);if(sourceError)throw Error('unavailable');return grants.get(actor.tenantId) ?? []},
     commandRequest:async(actor,endpoint)=>{reads.push(['grants',actor.tenantId,actor.userId,endpoint]);return {json:async()=>[{agent:'zenas',enabled:true},{agent:'base',enabled:false}]}},
     readClientDashboard: async(tenant)=>{reads.push(['dashboard',tenant]);if(sourceError)throw Error('unavailable');return fixture},
@@ -47,6 +49,7 @@ Module._load = function (name, parent, isMain) {
     readDashboardCandidates:async()=>[], setPaidPause:async()=>({}),switchProvenModel:async()=>({ok:true}),
   };
   if (name === 'next/navigation') return {notFound:()=>{throw Error('404')},redirect:()=>{throw Error('redirect')}};
+  if (name === 'next/server') return {NextResponse:{json:(data,init)=>Response.json(data,init)}};
   if (name === 'next/cache') return {revalidatePath:()=>{}};
   return original.call(this, name, parent, isMain);
 };
@@ -99,6 +102,28 @@ async function render() {
   sourceError=true;
   await assert.rejects(()=>ClientPage(),/unavailable/);
   sourceError=false;
+  assert(client.includes('href="/tasks?task=job-fixture"'));
+  const {GET:readTasks}=require('../workspace/app/api/tasks/route.ts');
+  const selected='00000000-0000-0000-0000-000000000123';
+  const board=await (await readTasks(new Request('https://app.invalid/api/tasks'))).json();
+  assert.equal(board.length,50);
+  assert(!board.some(row=>row.id===selected));
+  const focused=await readTasks(new Request(`https://app.invalid/api/tasks?task=${selected}&tenant_id=other-client`,{headers:{'x-tervory-tenant':'other-client'}}));
+  assert.deepEqual(await focused.json(),[{id:selected,title:'Older task',status:'done'}]);
+  assert.deepEqual(reads.at(-1),['task','fixture',selected]);
+  for(const invalid of ['', 'not-a-uuid', `${selected}/path`, '__proto__']) {
+    const before=reads.length;
+    assert.equal((await readTasks(new Request(`https://app.invalid/api/tasks?task=${encodeURIComponent(invalid)}`))).status,404);
+    assert.equal(reads.length,before);
+  }
+  identity={...identity,tenantId:'other-client'};
+  const denied=await readTasks(new Request(`https://app.invalid/api/tasks?task=${selected}&tenant_id=fixture`));
+  assert.equal(denied.status,502);
+  assert(!JSON.stringify(await denied.json()).includes('Older task'));
+  assert.deepEqual(reads.at(-1),['task','other-client',selected]);
+  identity={...identity,tenantId:'fixture'};
+  const absent=await readTasks(new Request('https://app.invalid/api/tasks?task=00000000-0000-0000-0000-000000000124'));
+  assert.equal(absent.status,502);
   const {FounderDashboard} = require('../workspace/app/control/view.tsx');
   const view={data:fixture,signups:{total:1,recent:[{id:'user',name:'Alex Example',company:'Example Company',country:'United States',plan:'Trial',createdAt:Date.UTC(2026,9,21)}],days:[]},paying:0,paused:false,models:[],refused:[],errors:[]};
   const control=renderToStaticMarkup(React.createElement(FounderDashboard,{view}));
