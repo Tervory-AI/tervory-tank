@@ -10,18 +10,20 @@ Source: direct founder message, 30 October 2026. This replaces previous client s
 4. Projects
 5. Chats
 6. Integrations
+7. Connections
 
 Integrations opens this submenu:
 
 - PlugIns
 - MCP
-- Connect
 
-Connect is nested under Integrations and opens:
+Connections is a separate top-menu item, at the same level as Integrations. It opens:
 
 - SSH for external Server
 - Connect External Computer
 - Connect to the Cloud
+
+The founder explicitly corrected the earlier nested Connect proposal: use Connections, not Connect, and never nest it under Integrations.
 
 These are founder-specified navigation labels. The menu instruction does not authorise creating connections, reading credentials, changing servers or inventing connection-page copy.
 
