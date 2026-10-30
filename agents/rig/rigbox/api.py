@@ -44,15 +44,19 @@ class AskIn(BaseModel):
 
 
 class LinkIn(BaseModel):
+    model_config = {"extra": "forbid"}
     url: str = ""
     note: str = ""
     contact: dict[str, Any] | None = None
+    notice_version: str | None = Field(default=None, max_length=64)
 
 
 class QuoteIn(BaseModel):
+    model_config = {"extra": "forbid"}
     setup: dict[str, Any] | None = None
     product_id: str | None = None
     contact: dict[str, Any] = Field(default_factory=dict)
+    notice_version: str | None = Field(default=None, max_length=64)
 
 
 class CompareIn(BaseModel):
@@ -248,10 +252,23 @@ async def ask(request: Request, payload: AskIn) -> Response:
     return _ok(request, body)
 
 
+@router.get("/privacy-notice")
+async def privacy_notice(request: Request) -> Response:
+    await _auth(request)
+    from rigbox.quotes.notice import notice
+
+    retailer = await _service(request).store.retailer(_tenant(request)) or {}
+    response = _ok(request, {"notice": notice(retailer.get("quote_notice"))})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @router.post("/link-quote")
 async def link_quote(request: Request, payload: LinkIn) -> Response:
     await _auth(request)
     kwargs = {"contact": payload.contact} if payload.contact is not None else {}
+    if payload.notice_version is not None:
+        kwargs["notice_version"] = payload.notice_version
     if request.state.rig_hold_quote:
         kwargs["hold"] = True
     body = await _service(request).link_quote(_tenant(request), payload.url, payload.note, **kwargs)
@@ -263,7 +280,8 @@ async def quote(request: Request, payload: QuoteIn) -> Response:
     await _auth(request)
     body = await _service(request).quote(
         _tenant(request),
-        {"setup": payload.setup, "product_id": payload.product_id, "contact": payload.contact},
+        {"setup": payload.setup, "product_id": payload.product_id, "contact": payload.contact,
+         "notice_version": payload.notice_version},
         **({"hold": True} if request.state.rig_hold_quote else {}),
     )
     return _ok(request, body)

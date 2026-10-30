@@ -156,6 +156,9 @@ CREATE TABLE IF NOT EXISTS agent_rig.retailers (
 );
 
 ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT '';
+ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS theme text NOT NULL DEFAULT 'neutral'
+    CHECK (theme IN ('neutral', 'custom-nation'));
+ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS quote_notice jsonb;
 
 CREATE TABLE IF NOT EXISTS agent_rig.feeds (
     tenant_id  uuid NOT NULL,
