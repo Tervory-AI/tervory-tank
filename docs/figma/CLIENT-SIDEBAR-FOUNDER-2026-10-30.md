@@ -9,6 +9,21 @@ Source: direct founder message, 30 October 2026. This replaces previous client s
 3. Dashboard
 4. Projects
 5. Chats
+6. Integrations
+
+Integrations opens this submenu:
+
+- PlugIns
+- MCP
+- Connect
+
+Connect is nested under Integrations and opens:
+
+- SSH for external Server
+- Connect External Computer
+- Connect to the Cloud
+
+These are founder-specified navigation labels. The menu instruction does not authorise creating connections, reading credentials, changing servers or inventing connection-page copy.
 
 ## Middle
 
