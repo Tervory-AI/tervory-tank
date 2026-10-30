@@ -106,3 +106,29 @@ async def test_existing_callers_without_budget_keep_successful_results(scoped, m
     monkeypatch.setattr(browser, "visit", visit)
     assert await browser.render(browser.Page(url=URL), "", A, "us-east", "") == {
         "ok": True, "html": "real response unchanged"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("login", [False, True])
+async def test_tiger_budget_is_forwarded_on_both_reads_before_transport_timeout(monkeypatch, login):
+    import httpx
+    from test_tiger_works import tiger
+
+    requests = []
+
+    async def answer(request):
+        import json
+        body = json.loads(request.content)
+        assert body["request_timeout_ms"] == 45000
+        assert body["request_timeout_ms"] < request.extensions["timeout"]["read"] * 1000
+        assert request.extensions["timeout"]["read"] == 50
+        assert request.headers["X-Tenant-ID"] == A
+        requests.append(body)
+        if login and len(requests) == 1:
+            return httpx.Response(200, json={"ok": True, "login_status": "logged in"})
+        return httpx.Response(200, json={"ok": True, "html": "unchanged"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as client:
+        monkeypatch.setattr(tiger.app.state, "http", client, raising=False)
+        assert (await tiger._render(URL, "", "tiger", A))["html"] == "unchanged"
+    assert len(requests) == (2 if login else 1)
