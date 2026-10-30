@@ -55,7 +55,7 @@ export default async function DashboardPage() {
       <section className="client-dashboard-card client-dashboard-recent">
         <h2>Recent work</h2>
         {data.recent.length ? data.recent.map(job =>
-          <a className="client-dashboard-job" key={job.id} href="/tasks">
+          <a className="client-dashboard-job" key={job.id} href={`/tasks?task=${encodeURIComponent(job.id)}`}>
             <span className="client-dashboard-job-title">{job.title}</span>
             <span className={`client-dashboard-dot client-dashboard-dot-${job.status}`} aria-hidden="true" />
             <span className="client-dashboard-status">{job.label}</span>
