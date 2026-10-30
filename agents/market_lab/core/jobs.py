@@ -1,11 +1,12 @@
 """Scheduled work for the Market Lab box.
 
-Listing counts are stored. FRED is read and refused by the ledger. Predictions
+All licensed feeds are stored. Restricted series are never copied. Predictions
 are inserted, never updated.
 """
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 import inspect
 import os
@@ -44,6 +45,10 @@ async def perform_refresh(
     fred_bodies: dict[str, Any] | None = None,
     live: bool = False,
     now: datetime | None = None,
+    backfill: bool = False,
+    source: str | None = None,
+    client: Any = None,
+    extra_sources: list | None = None,
 ) -> dict[str, Any]:
     module = load_engine(engine)
     spec = module.plan()
@@ -51,69 +56,73 @@ async def perform_refresh(
     fetched_at = clock.replace(microsecond=0).isoformat()
     if not fred_is_link_only(engine):
         raise RuntimeError("fred terms allow a copy; refusing to run")
+    from core.evidence import save_check
+    from feeds.collect import EvidenceClient, collect
+    from feeds.live import BlockedSite
+    from feeds.catalog import sources
+
+    if not fixtures and not live:
+        raise RuntimeError("refusing to open the network")
+    feed_plan = set(spec["feeds"]) | set(spec.get("linked_pages", []))
+    selected = [item for item in sources(engine) if item.id in feed_plan and (source is None or item.id == source)]
+    if extra_sources is not None:
+        selected = extra_sources
+    if source and not selected:
+        raise ValueError("unknown source")
+    from urllib.parse import urlsplit
+    domains = {".".join((urlsplit(item.url).hostname or "").split(".")[-2:]) for item in sources(engine)}
+    http = client or EvidenceClient(allowed_domains=domains)
+    public_http = client or EvidenceClient(public_feeds=True, tenant_id=tenant_id)
     stored_rows = 0
     events = 0
-    for supply in spec["supply"]:
-        if supply["source"] != "listing_counts":
-            continue
-        if not fixtures and not live:
-            raise RuntimeError("refusing to open the network")
-        if fixtures:
-            loaded_states = _listing_states(fixtures, engine, supply["source"], fetched_at)
-        else:
-            loaded_states = _listing_states_live(engine, supply["source"], fetched_at)
-        for item in loaded_states:
-            series_id = item["series_id"]
-            ref = series_id.split(":", 1)[1]
-            await _call(
-                ledger.save_series,
-                {
-                    "id": f"{tenant_id}:{series_id}",
-                    "tenant_id": tenant_id,
-                    "source": item["source"],
-                    "ref": ref,
-                    "unit": supply.get("unit") or "count",
-                    "engine": engine,
-                },
-            )
+    checks = []
+    for feed in selected:
+        feed_http = public_http if feed.adapter in {"rss", "comtrade_preview", "searxng"} else http
+        result = await asyncio.to_thread(collect, feed, fixtures=fixtures, backfill=backfill or bool(fixtures), client=feed_http)
+        grouped: dict[str, list[dict]] = {}
+        for point in result["points"]:
+            grouped.setdefault(point["series_id"], []).append(point)
+        accepted = []
+        held = 0
+        for raw_id, points in grouped.items():
+            first = points[0]
+            series_id = f"{tenant_id}:{raw_id}"
+            await _call(ledger.save_series, {"id": series_id, "tenant_id": tenant_id,
+                        "source": feed.id, "ref": first["ref"], "unit": first["unit"], "engine": engine})
             batch_id = str(uuid.uuid4())
-            region = os.environ.get("TANK_REGION", "us-east")
-            if region not in {"us-east", "za"}:
-                region = "us-east"
-            stamped = [
-                {
-                    **point,
-                    "fetched_at": fetched_at,
-                    "source": item["source"],
-                    "region": region,
-                    "currency": "none",
-                    "unit": supply.get("unit") or "count",
-                    "batch_id": batch_id,
-                }
-                for point in item["points"]
-            ]
-            stored_rows += await _call(
-                ledger.save_points,
-                f"{tenant_id}:{series_id}",
-                tenant_id,
-                stamped,
-                stored=True,
-                source=item["source"],
-            )
-            surge = surge_detect({"points": item["points"], **spec["surge"]})
-            for event in surge["events"]:
-                saved = await _call(
-                    ledger.save_event,
-                    f"{tenant_id}:{series_id}",
-                    tenant_id,
-                    event,
-                )
-                events += int(bool(saved))
+            stamped = [{**point, "source": feed.id, "batch_id": batch_id, "fetched_at": fetched_at} for point in points]
+            added = await _call(ledger.save_points, series_id, tenant_id, stamped, stored=True, source=feed.id)
+            if hasattr(ledger, "conn"):
+                status = await ledger.conn.fetchval(
+                    "SELECT status FROM agent_market_lab.batches WHERE tenant_id = $1 AND id = $2",
+                    uuid.UUID(str(tenant_id)), batch_id)
+            else:
+                status = ledger.pool.batches[batch_id]["status"]
+            if status != "pooled":
+                held += len(points)
+                continue
+            accepted.extend(stamped)
+            if any(feed.id == supply["source"] and first["ref"].startswith(supply["prefix"]) for supply in spec["supply"]):
+                stored_rows += added
+                surge = surge_detect({"points": points, **spec["surge"]})
+                for event in surge["events"]:
+                    saved = await _call(ledger.save_event, series_id, tenant_id, event)
+                    events += int(bool(saved))
+        result["points"] = accepted
+        if held:
+            result["note"] = "Some observations are held for review"
+        if not accepted and not result["events"] and not result["note"]:
+            result["note"] = "Off, the source returned no observations"
+        checks.append(await save_check(ledger, tenant_id, result, at=_clock(now)))
     fred_read: list[dict[str, Any]] = []
-    for cost in spec["costs"]:
+    for cost in spec["costs"] if extra_sources is None else []:
         body = None if fred_bodies is None else fred_bodies.get(cost["ref"])
         if body is None and live:
-            body = await _live_fred(str(cost["ref"]))
+            try:
+                body = await _live_fred(str(cost["ref"]), pacing=getattr(http, "client", None))
+            except BlockedSite:
+                fred_read.append({**_fred_off(str(cost["ref"])), "note": "blocked"})
+                break
         if body is None:
             if live:
                 fred_read.append(_fred_off(str(cost["ref"])))
@@ -151,6 +160,7 @@ async def perform_refresh(
         "events": events,
         "fred": fred_read,
         "fred_stored": 0,
+        "feeds": checks,
     }
 
 
@@ -177,10 +187,11 @@ async def perform_opportunities(
     scored = gap_score({"areas": areas})
     found = opportunity_rows(scored["ranked"], module.products(), signals or {})
     for row in scored["ranked"]:
+        signal_id = str(uuid.uuid4())
         await _call(
             ledger.save_opportunity,
             {
-                "id": str(uuid.uuid4()),
+                "id": signal_id,
                 "tenant_id": tenant_id,
                 "made_at": clock,
                 "area": row["area"],
@@ -199,6 +210,10 @@ async def perform_opportunities(
                 },
             },
         )
+        from chassis.events import publish
+        await publish(tenant_id, "marketlab.signal.scored", signal_id, {
+            "signal_id": signal_id, "score": str(row["gap"]), "rank": row["rank"],
+            "observed_at": clock.isoformat()})
         await _call(
             ledger.save_prediction,
             prediction_for_recommendation(
@@ -241,6 +256,7 @@ async def perform_resolve(
     ledger: Any,
     points_by_series: dict[str, list[dict[str, Any]]] | None = None,
     now: datetime | None = None,
+    only_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     clock = _clock(now)
     existing = await _call(ledger.predictions_for, tenant_id)
@@ -252,6 +268,9 @@ async def perform_resolve(
     written = 0
     outcomes: list[dict[str, Any]] = []
     for row in existing:
+        is_warning = any(isinstance(source, dict) and source.get("warning_id") for source in row.get("sources") or [])
+        if (only_ids is None and is_warning) or (only_ids is not None and str(row["id"]) not in only_ids):
+            continue
         if row.get("outcome") or str(row["id"]) in resolved_ids:
             continue
         series_id = str(row["metric_series_id"])
@@ -305,112 +324,6 @@ async def perform_research(
     return answer
 
 
-def _listing_states(fixtures: str, engine: str, source_id: str, fetched_at: str) -> list[dict[str, Any]]:
-    """One feeds run, then every state count series from that source."""
-    import sqlite3
-    import sys
-    import tempfile
-    from pathlib import Path
-
-    root = _market_root()
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
-    from feeds.runner import run
-
-    with tempfile.TemporaryDirectory() as folder:
-        target = str(Path(folder) / "feeds.sqlite")
-        run(
-            "sqlite:///" + target,
-            engine=engine,
-            source=source_id,
-            backfill=True,
-            fixtures=fixtures,
-            live=False,
-        )
-        conn = sqlite3.connect(target)
-        conn.row_factory = sqlite3.Row
-        try:
-            rows = conn.execute(
-                """
-                SELECT s.ref, p.date, p.value
-                FROM points p
-                JOIN series s ON s.id = p.series_id
-                WHERE s.source_id = ? AND s.ref LIKE 'count:state:%'
-                ORDER BY s.ref, p.date, p.revision
-                """,
-                (source_id,),
-            ).fetchall()
-        finally:
-            conn.close()
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for row in rows:
-        grouped.setdefault(str(row["ref"]), []).append(
-            {"date": str(row["date"])[:10], "value": float(row["value"])}
-        )
-    return [
-        {
-            "series_id": f"{source_id}:{ref}",
-            "points": points,
-            "source": source_id,
-            "fetched_at": fetched_at,
-            "stored": True,
-        }
-        for ref, points in sorted(grouped.items())
-    ]
-
-
-def _listing_states_live(engine: str, source_id: str, fetched_at: str) -> list[dict[str, Any]]:
-    import sqlite3
-    import sys
-    import tempfile
-    from pathlib import Path
-
-    root = _market_root()
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
-    from feeds.runner import run
-
-    with tempfile.TemporaryDirectory() as folder:
-        target = str(Path(folder) / "feeds.sqlite")
-        run(
-            "sqlite:///" + target,
-            engine=engine,
-            source=source_id,
-            backfill=False,
-            live=True,
-        )
-        conn = sqlite3.connect(target)
-        conn.row_factory = sqlite3.Row
-        try:
-            rows = conn.execute(
-                """
-                SELECT s.ref, p.date, p.value
-                FROM points p
-                JOIN series s ON s.id = p.series_id
-                WHERE s.source_id = ? AND s.ref LIKE 'count:state:%'
-                ORDER BY s.ref, p.date
-                """,
-                (source_id,),
-            ).fetchall()
-        finally:
-            conn.close()
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for row in rows:
-        grouped.setdefault(str(row["ref"]), []).append(
-            {"date": str(row["date"])[:10], "value": float(row["value"])}
-        )
-    return [
-        {
-            "series_id": f"{source_id}:{ref}",
-            "points": points,
-            "source": source_id,
-            "fetched_at": fetched_at,
-            "stored": True,
-        }
-        for ref, points in sorted(grouped.items())
-    ]
-
-
 def _fred_off(ref: str) -> dict[str, Any]:
     from feeds.keys import FRED_KEY
 
@@ -424,13 +337,14 @@ def _fred_off(ref: str) -> dict[str, Any]:
     }
 
 
-async def _live_fred(series_id: str) -> dict[str, Any] | None:
+async def _live_fred(series_id: str, *, pacing: Any = None) -> dict[str, Any] | None:
     """Read one FRED series. Returns None when the key is missing.
 
     The body is for the caller to turn into points. It is not written here.
     A failure names the host only, never the key or the request URL.
     """
     from feeds.keys import FRED_KEY
+    from feeds.live import BlockedSite, USER_AGENT, blocked_page
 
     key = os.environ.get(FRED_KEY, "").strip()
     if not key:
@@ -438,11 +352,16 @@ async def _live_fred(series_id: str) -> dict[str, Any] | None:
     import httpx
 
     try:
-        async with httpx.AsyncClient(timeout=30) as http:
+        if pacing is not None:
+            pacing.ensure_open("https://api.stlouisfed.org/")
+            await asyncio.to_thread(pacing._wait, "api.stlouisfed.org")
+        async with httpx.AsyncClient(timeout=30, headers={"User-Agent": USER_AGENT}, follow_redirects=False) as http:
             response = await http.get(
                 "https://api.stlouisfed.org/fred/series/observations",
                 params={"series_id": series_id, "api_key": key, "file_type": "json"},
             )
+        if response.status_code in {301, 302, 303, 307, 308, 401, 402, 403, 429} or blocked_page(getattr(response, "content", b"")):
+            raise BlockedSite("api.stlouisfed.org")
         if response.status_code >= 400:
             raise RuntimeError("fred read failed")
         body = response.json()
@@ -453,12 +372,6 @@ async def _live_fred(series_id: str) -> dict[str, Any] | None:
     if not isinstance(body, dict):
         raise RuntimeError("fred read failed")
     return body
-
-
-def _market_root() -> str:
-    from pathlib import Path
-
-    return str(Path(__file__).resolve().parents[1])
 
 
 def _clock(now: datetime | None) -> datetime:

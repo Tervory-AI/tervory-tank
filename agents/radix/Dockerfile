@@ -15,21 +15,21 @@ RUN mkdir -p /out \
 FROM python:3.12-slim
 
 # Pinned scanners. The downloads run at image build. A scan does not use the network.
-# Gitleaks 8.28.0 checksums are from the upstream checksums file for that tag.
+# Gitleaks 8.30.1 checksums are from the upstream checksums file for that tag.
 # Semgrep and pip-audit live in their own venvs so they cannot change the chassis packages.
 # pip-audit and npm audit call a live service, so the scan reads the OSV files in
 # /opt/osv instead of executing those clients.
-ARG GITLEAKS_VERSION=8.28.0
-ARG GITLEAKS_SHA_X64=a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb
-ARG GITLEAKS_SHA_ARM64=eff65261156100e5d94a6b3dec313d532fddfe19ae1590bf7a2b4f2699128356
-ARG SEMGREP_VERSION=1.181.0
+ARG GITLEAKS_VERSION=8.30.1
+ARG GITLEAKS_SHA_X64=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+ARG GITLEAKS_SHA_ARM64=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080
+ARG SEMGREP_VERSION=1.182.1
 ARG PIP_AUDIT_VERSION=2.10.1
 ARG TARGETARCH
 
 WORKDIR /app
 COPY _chassis/requirements.txt .
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git tar \
+    && apt-get install -y --no-install-recommends ca-certificates curl git tar unzip default-jre-headless \
     && pip install --no-cache-dir -r requirements.txt \
     && python -m venv /opt/semgrep \
     && /opt/semgrep/bin/pip install --no-cache-dir "semgrep==${SEMGREP_VERSION}" \
@@ -49,6 +49,11 @@ RUN apt-get update \
     && useradd --create-home --uid 1000 agent \
     && mkdir -p /data /opt/osv \
     && chown agent:agent /data /opt/osv
+COPY radix/install-passive-tools.sh /tmp/install-passive-tools.sh
+RUN sh /tmp/install-passive-tools.sh \
+    && ln -s /opt/bin/nuclei /usr/local/bin/nuclei \
+    && pip install --no-cache-dir dnspython==2.9.0 PyYAML==6.0.3 \
+    && rm /tmp/install-passive-tools.sh
 COPY _chassis/chassis /app/chassis
 COPY radix/app.py /app/app.py
 COPY radix/gold_sources.py /app/gold_sources.py
@@ -57,6 +62,7 @@ COPY radix/net.py /app/net.py
 COPY radix/live.py /app/live.py
 COPY radix/egress.py /app/egress.py
 COPY radix/egress-policy.json /app/egress-policy.json
+COPY radix/passive_*.py /app/
 COPY radix/verify /app/verify
 COPY radix/schema.sql /app/schema.sql
 COPY radix/scanlib /app/scanlib

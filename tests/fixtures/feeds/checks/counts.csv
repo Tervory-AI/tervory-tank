@@ -1,5 +1,5 @@
 month,state,type,count
-2024-01,CA,01,10
-2024-01,CA,02,20
-2024-01,TX,01,5
-2024-02,CA,01,12
+2024-01,CA,Permit,10
+2024-01,CA,Permit recheck,20
+2024-01,TX,Permit,5
+2024-02,CA,Permit,12

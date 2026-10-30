@@ -72,8 +72,8 @@ def test_compose_healthcheck_targets_tank_health() -> None:
             assert "healthcheck" in spec, f"{name} {service} has no health check"
     boston = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     south_africa = yaml.safe_load((ROOT / "docker-compose.za.yml").read_text(encoding="utf-8"))
-    assert boston["services"]["qdrant"]["image"] == "qdrant/qdrant:v1.19.2"
-    assert south_africa["services"]["qdrant"]["image"] == "qdrant/qdrant:v1.19.2"
+    assert boston["services"]["qdrant"]["image"] == "qdrant/qdrant:v1.20.0"
+    assert south_africa["services"]["qdrant"]["image"] == "qdrant/qdrant:v1.20.0"
 
 
 def _watchdog():
@@ -89,7 +89,7 @@ def _watchdog():
 def test_coolify_api_success_can_close_the_coolify_issue(monkeypatch) -> None:
     watchdog = _watchdog()
     monkeypatch.setenv("COOLIFY_TOKEN", "test-token")
-    monkeypatch.setenv("COOLIFY_URL", "https://coolify.example")
+    monkeypatch.setenv("COOLIFY_URL", "https://coolify.tervory.com")
     payload = json.dumps([
         {"name": "tervory-tank-za", "status": "running:unknown", "uuid": "za-uuid"},
         {"name": "tervory-tank", "status": "running:unknown", "uuid": watchdog.MAIN_APP},
@@ -117,7 +117,7 @@ def test_coolify_api_success_can_close_the_coolify_issue(monkeypatch) -> None:
 
 def _coolify_apps(monkeypatch, watchdog, apps: list[dict]) -> None:
     monkeypatch.setenv("COOLIFY_TOKEN", "test-token")
-    monkeypatch.setenv("COOLIFY_URL", "https://coolify.example")
+    monkeypatch.setenv("COOLIFY_URL", "https://coolify.tervory.com")
     payload = json.dumps(apps).encode()
 
     class _Response:

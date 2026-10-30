@@ -1,0 +1,92 @@
+{
+  "source": "GitHub job HTML page, not the GitHub API",
+  "url": "https://github.com/Tervory-AI/tervory-tank/actions/runs/40675008503/job/122771060556",
+  "head": "935b3d05b45279ed9748ff20f1b1124fad783e9b",
+  "steps": [
+    {
+      "name": "Set up job",
+      "number": "1",
+      "conclusion": "success",
+      "started-at": "2026-10-28T10:48:26Z",
+      "completed-at": "2026-10-28T10:48:27Z"
+    },
+    {
+      "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "number": "2",
+      "conclusion": "success",
+      "started-at": "2026-10-28T10:48:27Z",
+      "completed-at": "2026-10-28T10:48:30Z"
+    },
+    {
+      "name": "Run actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+      "number": "3",
+      "conclusion": "success",
+      "started-at": "2026-10-28T10:48:30Z",
+      "completed-at": "2026-10-28T10:48:37Z"
+    },
+    {
+      "name": "Install pinned security CLIs",
+      "number": "4",
+      "conclusion": "success",
+      "started-at": "2026-10-28T10:48:37Z",
+      "completed-at": "2026-10-28T10:48:38Z"
+    },
+    {
+      "name": "Test security gate policy",
+      "number": "5",
+      "conclusion": "success",
+      "started-at": "2026-10-28T10:48:38Z",
+      "completed-at": "2026-10-28T10:48:40Z"
+    },
+    {
+      "name": "Gitleaks \u2014 PR commits or main push",
+      "number": "6",
+      "conclusion": "success",
+      "started-at": "2026-10-28T10:48:40Z",
+      "completed-at": "2026-10-28T10:48:40Z"
+    },
+    {
+      "name": "Semgrep \u2014 new high findings",
+      "number": "7",
+      "conclusion": "failure",
+      "started-at": "2026-10-28T10:48:40Z",
+      "completed-at": "2026-10-28T10:48:51Z"
+    },
+    {
+      "name": "OSV-Scanner \u2014 new vulnerable versions",
+      "number": "8",
+      "conclusion": "success",
+      "started-at": "2026-10-28T10:48:51Z",
+      "completed-at": "2026-10-28T10:48:55Z"
+    },
+    {
+      "name": "Save security results",
+      "number": "9",
+      "conclusion": "success",
+      "started-at": "2026-10-28T10:48:55Z",
+      "completed-at": "2026-10-28T10:48:56Z"
+    },
+    {
+      "name": "Post Run actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+      "number": "17",
+      "conclusion": "skipped",
+      "started-at": "2026-10-28T10:48:56Z",
+      "completed-at": "2026-10-28T10:48:56Z"
+    },
+    {
+      "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "number": "18",
+      "conclusion": "success",
+      "started-at": "2026-10-28T10:48:56Z",
+      "completed-at": "2026-10-28T10:48:56Z"
+    },
+    {
+      "name": "Complete job",
+      "number": "19",
+      "conclusion": "success",
+      "started-at": "2026-10-28T10:48:57Z",
+      "completed-at": "2026-10-28T10:48:57Z"
+    }
+  ],
+  "log_access": "The page requires sign-in to view logs; failure details are not established."
+}

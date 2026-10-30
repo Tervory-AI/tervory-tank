@@ -1,0 +1,30 @@
+(node:8458) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/live-page-fixtures/workspace/app/admin/autumbra/watch-fixtures.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/live-page-fixtures/workspace/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ Watch fixture panel is a usable GhostPanel (0.734756ms)
+✔ Watch fixture exposes ThreatPayload / advisory receipts (propose-only) (0.295667ms)
+✔ no Demo/Practice/fixture-banner chrome in Watch panel UI (9.035092ms)
+✔ isUsableGhostPanel rejects null and incomplete payloads (0.300444ms)
+(node:8459) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/live-page-fixtures/workspace/app/tank/graduation-copy.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/live-page-fixtures/workspace/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ a held batch can be released or rejected, and a rejected batch never enters the pool (4.185034ms)
+✔ a missing reply, an unreachable room, or a bad status changes nothing (1.045235ms)
+✔ graduation names a model trained on removed data and a one-region drop (0.419009ms)
+✔ Moot index reads published room matches through Tank, with US home and no cache (162.434096ms)
+✔ Moot uses its existing empty state for empty, malformed, and unavailable replies (221.577615ms)
+✔ Moot detail calls the real reader and refuses private, fixture, missing, and invalid matches (263.760811ms)
+✔ public Autumbra renders product description without fixture data or internal terms (3.699506ms)
+✔ founder Autumbra renders existing unavailable states for failed and incomplete room replies (189.96539ms)
+✔ shield reads reject explicit offline boards and taps use the actual room without a fixture fallback (4.855966ms)
+✔ feed review displays supplied feed and state label and never serializes the raw series id (35.633323ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1244.008446

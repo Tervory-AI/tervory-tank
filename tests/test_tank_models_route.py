@@ -74,7 +74,9 @@ def test_models_route_lists_served_models_cheapest_first_without_keys() -> None:
 def test_models_route_is_behind_the_key() -> None:
     import main as tank
 
-    route = next(r for r in tank.app.routes if getattr(r, "path", "") == "/v1/models")
+    from http_routes import iter_http_routes
+
+    route = next(r for r in iter_http_routes(tank.app.routes) if r.path == "/v1/models")
     assert any(dep.call is tank.require_key for dep in route.dependant.dependencies)
 
 

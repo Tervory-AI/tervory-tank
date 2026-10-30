@@ -118,4 +118,11 @@ async def scan_job(ctx, *, connect=None, schema: str | None = None) -> dict:
         close = getattr(conn, "close", None)
         if close is not None:
             await close()
+    from chassis.events import publish
+    for ordinal, finding in enumerate(result["findings"]):
+        severity = str(finding.get("severity", "unknown")).lower()
+        if severity not in {"critical", "high", "medium", "low", "info"}:
+            severity = "unknown"
+        await publish(str(ctx.tenant_id), "radix.finding", f"{ctx.job_id}:{ordinal}", {
+            "scan_id": str(ctx.job_id), "ordinal": ordinal, "severity": severity})
     return result

@@ -2,12 +2,13 @@
 # Coolify deploys this file on the SA server and attaches za.tervory.com to tank
 # (port 8000). Every other service stays internal.
 # Own Postgres, Redis, Qdrant, Hermes, Tank, LiteLLM, files and backups.
+# Opt-in r2-backup-za profile archives encrypted dumps to R2_BUCKET_ZENAS_ZA.
 # The Zenas room deploys separately: agents/zenas/docker-compose.za.yml.
 # No replication. No shared network with the other region. Do not add a US hostname here.
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16.15
     restart: unless-stopped
     environment:
       TANK_REGION: za
@@ -27,9 +28,10 @@ services:
       - tervory-gw-zenas
 
   redis:
-    # 7.4.11 fixes CVE-2026-81934 (TLS pending-data use-after-free) and carries the 7.4.9 fix for CVE-2026-23479.
+    # 7.4.12 is the current 7.4 patch. It carries the 7.4.11 fix for CVE-2026-81934
+    # and the 7.4.9 fix for CVE-2026-23479.
     # Multi-arch index digest; keep identical in docker-compose.yml and docker-compose.za.yml.
-    image: redis:7.4.11@sha256:44960b3100c48159a66d28c18b0588c193492e25f7551d60e51dd464fc3eca5b
+    image: redis:7.4.12@sha256:bd28fff4b665fdf1b73e8b5b73ec05d2f858f4fa3c8ea0d7c9bc09f7f6bf7039
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     environment:
@@ -45,7 +47,7 @@ services:
       - default
 
   qdrant:
-    image: qdrant/qdrant:v1.19.2
+    image: qdrant/qdrant:v1.20.0
     restart: unless-stopped
     environment:
       TANK_REGION: za
@@ -63,9 +65,13 @@ services:
       - default
 
   hermes:
-    build: ./hermes
+    build:
+      context: .
+      dockerfile: hermes/Dockerfile
     restart: unless-stopped
     environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       TANK_REGION: za
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY}
@@ -74,6 +80,7 @@ services:
       HERMES_EMBED_MODEL: ${HERMES_EMBED_MODEL:-BAAI/bge-small-en-v1.5}
     depends_on:
       - qdrant
+      - postgres
     networks:
       - default
       - tervory-gw-zenas
@@ -123,7 +130,11 @@ services:
     environment:
       TANK_REGION: za
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      TANK_ADMIN_DATABASE_URL: ${TANK_ADMIN_DATABASE_URL:-}
+      TANK_RLS_ADMIN_ROLE: ${TANK_RLS_ADMIN_ROLE:-}
       REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
       LITELLM_URL: http://litellm:4000
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       TANK_API_KEY: ${TANK_API_KEY}
@@ -156,6 +167,48 @@ services:
       retries: 10
       start_period: 20s
 
+  # ZA only. Opt-in profile; not started by normal Coolify deploy.
+  # Writes encrypted Postgres dumps to founder bucket tervory-zenas-za.
+  # Uses the Zenas R2 pair (same names as agents/zenas/docker-compose.za.yml).
+  # Founder sets R2_BUCKET_ZENAS_ZA=tervory-zenas-za and R2_BACKUP_RECIPIENT,
+  # then enables profile r2-backup-za. Private age identity never mounts here.
+  r2-backup-za:
+    profiles: ["r2-backup-za"]
+    build:
+      context: .
+      dockerfile: jobs/train/Dockerfile.backup
+    restart: "no"
+    mem_limit: 512m
+    cpus: 0.5
+    read_only: true
+    volumes:
+      - za_r2_backup_spool:/tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      TANK_REGION: za
+      AGENT_NAME: zenas
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_BUCKET_ZENAS_ZA: ${R2_BUCKET_ZENAS_ZA:-}
+      R2_BUCKET: ${R2_BUCKET_ZENAS_ZA:-}
+      R2_ACCESS_KEY_ID_ZENAS: ${R2_ACCESS_KEY_ID_ZENAS:-}
+      R2_SECRET_ACCESS_KEY_ZENAS: ${R2_SECRET_ACCESS_KEY_ZENAS:-}
+      R2_BACKUP_RECIPIENT: ${R2_BACKUP_RECIPIENT:-}
+    command: ["python", "jobs/train/backup.py", "--owner", "zenas", "--nightly"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, 'jobs/train'); from backup import dump_configuration; dump_configuration()"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
+
   agent-roles:
     build:
       context: ./agents
@@ -182,6 +235,7 @@ volumes:
   za_redisdata:
   za_qdrantdata:
   za_backups:
+  za_r2_backup_spool:
 
 networks:
   default:

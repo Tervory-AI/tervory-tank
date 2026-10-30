@@ -11,7 +11,7 @@ from feeds.catalog import sources
 from feeds.keys import bind_key, missing_key, redact
 from feeds.db import apply_schema, connect
 from feeds.fetch import fetch_source, watch_page
-from feeds.live import NeedsKey, PoliteClient
+from feeds.live import BlockedSite, NeedsKey, PoliteClient
 from feeds.models import SourceSpec
 from feeds.reader import FixtureReader
 from feeds.store import Store, utc_now
@@ -81,7 +81,7 @@ def run(
     for spec in specs:
         store.upsert_source(_for_store(spec))
         conn.commit()
-        if _hold(spec, live=live, explicit=explicit):
+        if not spec.enabled or _hold(spec, live=live, explicit=explicit):
             continue
         started = utc_now()
         rows = 0
@@ -108,6 +108,11 @@ def run(
                 adapter = ADAPTERS[spec.adapter]
                 rows = adapter(spec, reader, store, backfill=backfill)
             store.finish_batch()
+        except BlockedSite:
+            conn.rollback()
+            store.clear_batch()
+            rows = 0
+            error = "blocked"
         except NeedsKey:
             conn.rollback()
             store.clear_batch()

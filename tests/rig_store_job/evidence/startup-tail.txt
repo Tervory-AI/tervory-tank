@@ -1,0 +1,14 @@
+Tank startup
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+The reference could not be loaded: There are no saved ATF licence rows in the platform reference. (error type: ReferenceFailure)
+Room gold response rejected: rig
+Rig startup
+{"ts": "2026-10-27T15:43:23.109267+00:00", "level": "info", "agent": "rig", "msg": "chassis ready"}
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Started server process [1]
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)

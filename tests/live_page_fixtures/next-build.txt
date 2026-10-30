@@ -1,0 +1,124 @@
+
+> tervory-workspace@0.1.0 build
+> next build
+
+   ▲ Next.js 15.5.28
+
+   Creating an optimized production build ...
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (281kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+ ✓ Compiled successfully in 14.9s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/37) ...
+   Generating static pages (9/37)
+   Generating static pages (18/37)
+   Generating static pages (27/37)
+ ✓ Generating static pages (37/37)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                    Size  First Load JS
+┌ ƒ /                                         188 B         107 kB
+├ ƒ /_not-found                               997 B         104 kB
+├ ƒ /access                                 4.18 kB         107 kB
+├ ƒ /access/api/[...path]                     255 B         103 kB
+├ ƒ /access/live/[id]                       1.46 kB         104 kB
+├ ƒ /admin                                  6.33 kB         112 kB
+├ ƒ /admin/autumbra                         4.37 kB         110 kB
+├ ƒ /admin/feeds                            1.04 kB         107 kB
+├ ƒ /admin/ghost                              255 B         103 kB
+├ ƒ /admin/homes                            1.02 kB         107 kB
+├ ƒ /admin/unpriced                           255 B         103 kB
+├ ƒ /api/autumbra/receipts/weekly/[tenant]    255 B         103 kB
+├ ƒ /api/autumbra/undo                        255 B         103 kB
+├ ƒ /api/base                                 255 B         103 kB
+├ ƒ /api/base/context-trial                   255 B         103 kB
+├ ƒ /api/base/export                          255 B         103 kB
+├ ƒ /api/billing/webhook                      255 B         103 kB
+├ ƒ /api/chat                                 255 B         103 kB
+├ ƒ /api/feedback                             255 B         103 kB
+├ ƒ /api/health                               255 B         103 kB
+├ ƒ /api/ledger                               255 B         103 kB
+├ ƒ /api/skala                                255 B         103 kB
+├ ƒ /api/skala/gold                           255 B         103 kB
+├ ƒ /api/tank                                 255 B         103 kB
+├ ƒ /api/tank/chat                            255 B         103 kB
+├ ƒ /api/tasks                                255 B         103 kB
+├ ƒ /api/zenas/answers                        255 B         103 kB
+├ ƒ /api/zenas/documents/[id]/reviews         255 B         103 kB
+├ ƒ /api/zenas/feeds                          255 B         103 kB
+├ ƒ /api/zenas/feeds/load                     255 B         103 kB
+├ ƒ /api/zenas/feeds/region                   255 B         103 kB
+├ ƒ /api/zenas/feeds/region/convert           255 B         103 kB
+├ ƒ /api/zenas/feeds/region/load              255 B         103 kB
+├ ƒ /api/zenas/matters                        255 B         103 kB
+├ ƒ /api/zenas/matters/[id]/documents         255 B         103 kB
+├ ƒ /api/zenas/matters/[id]/release           255 B         103 kB
+├ ƒ /api/zenas/review                         255 B         103 kB
+├ ƒ /api/zenas/review-switch                  255 B         103 kB
+├ ƒ /api/zenas/selftest                       255 B         103 kB
+├ ƒ /api/zenas/tenants                        255 B         103 kB
+├ ƒ /autumbra                                 180 B         106 kB
+├ ƒ /autumbra/receipts/weekly/[tenant]        255 B         103 kB
+├ ƒ /autumbra/undo/[id]                     1.13 kB         104 kB
+├ ƒ /base                                   19.4 kB         122 kB
+├ ƒ /base/download                            255 B         103 kB
+├ ƒ /base/product/[...path]                   255 B         103 kB
+├ ƒ /billing                                  366 B         103 kB
+├ ƒ /chats                                  10.3 kB         113 kB
+├ ƒ /chats/api/[...path]                      255 B         103 kB
+├ ƒ /chats/evidence/[thread]                  174 B         103 kB
+├ ƒ /chats/evidence/[thread]/[row]            174 B         103 kB
+├ ƒ /control                                3.22 kB         106 kB
+├ ƒ /control/signups                          173 B         103 kB
+├ ƒ /data                                   3.57 kB         106 kB
+├ ƒ /ledger                                   255 B         103 kB
+├ ƒ /market-lab                             10.5 kB         113 kB
+├ ƒ /market-lab/ask                           255 B         103 kB
+├ ƒ /market-lab/sources/[id]                  173 B         103 kB
+├ ƒ /market-lab/warnings/feedback             255 B         103 kB
+├ ƒ /matters                                1.26 kB         104 kB
+├ ƒ /moot                                     180 B         106 kB
+├ ƒ /moot/[match]                             171 B         103 kB
+├ ƒ /onboarding                             6.05 kB         151 kB
+├ ƒ /onboarding/status                        255 B         103 kB
+├ ƒ /prices                                   323 B         103 kB
+├ ƒ /radix                                  10.3 kB         156 kB
+├ ƒ /radix/plugins/files                      255 B         103 kB
+├ ƒ /radix/requests                           255 B         103 kB
+├ ƒ /review                                 2.84 kB         109 kB
+├ ƒ /rig                                    11.7 kB         114 kB
+├ ƒ /rig/admin                              5.79 kB         109 kB
+├ ƒ /rig/admin/api                            255 B         103 kB
+├ ƒ /rig/admin/three-d                      1.08 kB         104 kB
+├ ƒ /rig/admin/three-d/file/[...path]         255 B         103 kB
+├ ƒ /rig/api/rig                              255 B         103 kB
+├ ƒ /sign-in/[[...sign-in]]                   337 B         150 kB
+├ ƒ /sign-up/[[...sign-up]]                   337 B         150 kB
+├ ƒ /skala                                  8.46 kB         111 kB
+├ ƒ /skala/gold                             3.41 kB         106 kB
+├ ƒ /tank                                   5.33 kB         108 kB
+├ ƒ /tank/moa                                 171 B         103 kB
+├ ƒ /tank/proof                             1.83 kB         109 kB
+├ ƒ /tank/proof/export                        255 B         103 kB
+├ ƒ /tank/proof/savings-export                255 B         103 kB
+├ ƒ /tasks                                  1.84 kB         105 kB
+├ ƒ /tiger                                   6.7 kB         109 kB
+├ ƒ /tisan                                  11.5 kB         114 kB
+├ ƒ /zenas                                  11.7 kB         118 kB
+└ ƒ /zenas/feeds                            2.31 kB         108 kB
++ First Load JS shared by all                103 kB
+  ├ chunks/58fbf8b7-9696647028387dd0.js     54.2 kB
+  ├ chunks/9529-47dacaadaa43c94d.js         46.3 kB
+  └ other shared chunks (total)             2.19 kB
+
+
+ƒ Middleware                                92.5 kB
+
+ƒ  (Dynamic)  server-rendered on demand
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

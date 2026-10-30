@@ -20,7 +20,7 @@ from rigbox.rank import _intent
 SEARCH_RECALL_CAP = 500
 _DEFAULT_RECALL_DAYS = 90
 
-_AND = re.compile(r"\s+and\s+", re.IGNORECASE)
+_AND = re.compile(r" and ", re.IGNORECASE)
 
 
 def _norm(text: str) -> str:
@@ -29,6 +29,7 @@ def _norm(text: str) -> str:
 
 def parts_of(query: str) -> tuple[str, list[str]]:
     """The host, then each part, in the order the shopper wrote them."""
+    query = " ".join(query.split())
     sought, host = _intent(query)
     host_n = _norm(host)
     source = sought if host else query

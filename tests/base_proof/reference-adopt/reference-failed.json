@@ -1,0 +1,16 @@
+{
+  "changes": [],
+  "collectors": 0,
+  "duplicate_count": 0,
+  "file": null,
+  "groups": [],
+  "history": [],
+  "refresh": {
+    "checked_at": "2026-10-27 14:09:59.676986+00:00",
+    "message": "The reference could not be loaded: The Base reference service returned HTTP 401.",
+    "status": "unavailable"
+  },
+  "rows": [],
+  "selected": 0,
+  "total_all": 0
+}

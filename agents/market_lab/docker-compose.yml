@@ -18,8 +18,11 @@ services:
       R2_ACCESS_KEY_ID_MARKET_LAB: ${R2_ACCESS_KEY_ID_MARKET_LAB:-}
       R2_SECRET_ACCESS_KEY_MARKET_LAB: ${R2_SECRET_ACCESS_KEY_MARKET_LAB:-}
       DATABASE_URL: postgresql://agent_market_lab:${AGENT_DB_PASSWORD_MARKET_LAB}@postgres:5432/${POSTGRES_DB:-tervory}
+      CHASSIS_ADMIN_DATABASE_URL: ${CHASSIS_ADMIN_DATABASE_URL:-}
+      CHASSIS_RLS_ADMIN_ROLE: ${CHASSIS_RLS_ADMIN_ROLE:-}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_MARKET_LAB:-}
+      TANK_REGION: ${TANK_REGION:-us-east}
       HERMES_URL: http://hermes:8000
       # Feed keys. Empty leaves that feed off. Values stay in Coolify. Never commit them.
       FRED_API_KEY: ${FRED_API_KEY:-}
@@ -27,6 +30,7 @@ services:
       LEGISCAN_API_KEY: ${LEGISCAN_API_KEY:-}
       EIA_API_KEY: ${EIA_API_KEY:-}
       NOAA_TOKEN: ${NOAA_TOKEN:-}
+      USPTO_API_KEY: ${USPTO_API_KEY:-}
       DATA_DIR: /data
     volumes:
       - agent_market_lab_data:/data

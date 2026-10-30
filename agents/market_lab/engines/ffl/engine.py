@@ -35,7 +35,11 @@ RESPONSE_TARGETS = {"increase": 5.0, "hold": 3.0, "reduce": 1.0}
 
 
 def plan() -> dict[str, Any]:
+    from feeds.catalog import sources
+
     return {
+        "feeds": [source.id for source in sources("ffl") if source.allow_bulk],
+        "linked_pages": [source.id for source in sources("ffl") if not source.allow_bulk],
         "engine": "ffl",
         "supply": [
             {
@@ -98,3 +102,13 @@ def schedules() -> list[dict[str, Any]]:
         {**base, "cron": "40 6 1 * *", "kind": "opportunities"},
         {**base, "cron": "10 7 * * *", "kind": "resolve"},
     ]
+
+
+def warning_plan() -> dict[str, Any]:
+    from engines.ffl.warnings import plan
+    return plan()
+
+
+def warning_series(watch: dict, observations: list[dict]) -> list[dict]:
+    from engines.ffl.warnings import product_series
+    return product_series(watch, observations)

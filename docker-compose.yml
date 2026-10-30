@@ -9,7 +9,7 @@
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16.15
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-tervory}
@@ -26,6 +26,7 @@ services:
       - default
       - tervory-gw-template
       - tervory-gw-tiger
+      - tervory-gw-trigger
       - tervory-gw-market_lab
       - tervory-gw-radix
       - tervory-gw-tisan
@@ -33,11 +34,13 @@ services:
       - tervory-gw-base
       - tervory-gw-rig
       - tervory-gw-ghost
+      - tervory-gw-trigger-crm
 
   redis:
-    # 7.4.11 fixes CVE-2026-81934 (TLS pending-data use-after-free) and carries the 7.4.9 fix for CVE-2026-23479.
+    # 7.4.12 is the current 7.4 patch. It carries the 7.4.11 fix for CVE-2026-81934
+    # and the 7.4.9 fix for CVE-2026-23479.
     # Multi-arch index digest; keep identical in docker-compose.yml and docker-compose.za.yml.
-    image: redis:7.4.11@sha256:44960b3100c48159a66d28c18b0588c193492e25f7551d60e51dd464fc3eca5b
+    image: redis:7.4.12@sha256:bd28fff4b665fdf1b73e8b5b73ec05d2f858f4fa3c8ea0d7c9bc09f7f6bf7039
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -50,7 +53,7 @@ services:
 
   qdrant:
     # Same pin as the South Africa stack. :latest made the two regions drift.
-    image: qdrant/qdrant:v1.19.2
+    image: qdrant/qdrant:v1.20.0
     restart: unless-stopped
     environment:
       QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
@@ -69,9 +72,14 @@ services:
   # its tervory-gw-<agent> network here, and TANK_KEY_<AGENT> in the environment
   # below. No public domain. Agents call this service. They never call Qdrant.
   hermes:
-    build: ./hermes
+    build:
+      context: .
+      dockerfile: hermes/Dockerfile
     restart: unless-stopped
     environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
+      TANK_REGION: us-east
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY}
       TANK_API_KEY: ${TANK_API_KEY}
@@ -86,6 +94,7 @@ services:
       HERMES_EMBED_MODEL: ${HERMES_EMBED_MODEL:-BAAI/bge-small-en-v1.5}
     depends_on:
       - qdrant
+      - postgres
     networks:
       - default
       - tervory-gw-template
@@ -161,6 +170,7 @@ services:
     networks:
       - default
       - tervory-gw-base
+      - research-internal
     expose:
       - "8080"
     healthcheck:
@@ -169,6 +179,28 @@ services:
       timeout: 5s
       retries: 10
       start_period: 45s
+
+  # No host port, provider key, shared history, or connection to LiteLLM/stores.
+  # The public network is only for reading search-result pages.
+  market-research:
+    build: ./researcher
+    restart: unless-stopped
+    environment:
+      TANK_KEY: ${TANK_KEY_MARKET_LAB:-}
+    networks:
+      - research-internal
+      - research-egress
+    expose:
+      - "8000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
   tiger:
     build: ./tiger
@@ -203,16 +235,23 @@ services:
       R2_ACCESS_KEY_ID_UPLOADS: ${R2_ACCESS_KEY_ID_UPLOADS:-}
       R2_SECRET_ACCESS_KEY_UPLOADS: ${R2_SECRET_ACCESS_KEY_UPLOADS:-}
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      TANK_ADMIN_DATABASE_URL: ${TANK_ADMIN_DATABASE_URL:-}
+      TANK_RLS_ADMIN_ROLE: ${TANK_RLS_ADMIN_ROLE:-}
       REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
       LITELLM_URL: http://litellm:4000
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       TANK_API_KEY: ${TANK_API_KEY}
+      # Founder-only repository reads; absent means the tools are not offered.
+      TANK_GITHUB_READ_TOKEN: ${TANK_GITHUB_READ_TOKEN:-}
       HF_TOKEN: ${HF_TOKEN:-}
       HF_ORG: ${HF_ORG:-}
       TRAINING_JOB_KEY: ${TRAINING_JOB_KEY:-}
       TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       TANK_KEY_TEMPLATE: ${TANK_KEY_TEMPLATE:-}
       TANK_KEY_TIGER: ${TANK_KEY_TIGER:-}
+      TANK_KEY_TRIGGER: ${TANK_KEY_TRIGGER:-}
       TANK_KEY_MARKET_LAB: ${TANK_KEY_MARKET_LAB:-}
       TANK_KEY_RADIX: ${TANK_KEY_RADIX:-}
       TANK_KEY_TISAN: ${TANK_KEY_TISAN:-}
@@ -232,6 +271,7 @@ services:
       RIG_RETAILER_KEY: ${RIG_RETAILER_KEY:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       BASE_AGENT_URL: http://agent-base:8000
+      BASE_REFERENCE_FILE_URL: ${BASE_REFERENCE_FILE_URL:-}
       SEARXNG_URL: http://searxng:8080
       TIGER_URL: http://tiger:3000
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
@@ -244,6 +284,7 @@ services:
       - default
       - tervory-gw-template
       - tervory-gw-tiger
+      - tervory-gw-trigger
       - tervory-gw-market_lab
       - tervory-gw-radix
       - tervory-gw-tisan
@@ -251,6 +292,7 @@ services:
       - tervory-gw-base
       - tervory-gw-rig
       - tervory-gw-ghost
+      - research-internal
     # Host loopback only, for the workers service on the Boston host (workers/host/).
     # Never a public address: Tank stays off the internet.
     ports:
@@ -264,14 +306,13 @@ services:
       retries: 10
       start_period: 20s
 
-  # Boston only. Not started by normal compose up / Coolify deployment.
-  # Founder configures the public recipient and explicitly enables this profile.
+  # Boston only. Keep the founder-enabled backup in every normal redeployment.
+  # Public recipient and UPLOADS credential values stay in Coolify.
   r2-backup:
-    profiles: ["r2-backup"]
     build:
       context: .
       dockerfile: jobs/train/Dockerfile.backup
-    restart: "no"
+    restart: unless-stopped
     mem_limit: 512m
     cpus: 0.5
     read_only: true
@@ -283,19 +324,23 @@ services:
     environment:
       TANK_REGION: us-east
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_ACCESS_KEY_ID_UPLOADS: ${R2_ACCESS_KEY_ID_UPLOADS:-}
       R2_SECRET_ACCESS_KEY_UPLOADS: ${R2_SECRET_ACCESS_KEY_UPLOADS:-}
       R2_BACKUP_RECIPIENT: ${R2_BACKUP_RECIPIENT:-}
     # Offline readiness only; completed backups are proved by their R2 manifests.
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, 'jobs/train'); from backup import dump_configuration; dump_configuration()"]
+      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, 'jobs/train'); from backup import dump_configuration, qdrant_configuration; dump_configuration(); qdrant_configuration()"]
       interval: 60s
       timeout: 5s
       retries: 3
       start_period: 10s
     depends_on:
       postgres:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
     networks:
       - default
@@ -313,6 +358,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
       AGENT_DB_PASSWORD_TEMPLATE: ${AGENT_DB_PASSWORD_TEMPLATE:-}
       AGENT_DB_PASSWORD_TIGER: ${AGENT_DB_PASSWORD_TIGER:-}
+      AGENT_DB_PASSWORD_TRIGGER: ${AGENT_DB_PASSWORD_TRIGGER:-}
       AGENT_DB_PASSWORD_MARKET_LAB: ${AGENT_DB_PASSWORD_MARKET_LAB:-}
       AGENT_DB_PASSWORD_RADIX: ${AGENT_DB_PASSWORD_RADIX:-}
       AGENT_DB_PASSWORD_TISAN: ${AGENT_DB_PASSWORD_TISAN:-}
@@ -343,6 +389,8 @@ services:
       TERVORY_TENANT_ALIASES: ${TERVORY_TENANT_ALIASES:-}
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      # Shared with Watch + Enforce: signed owner Undo / receipts email links. Coolify secret NAME only.
+      AUTUMBRA_UNDO_TOKEN_SECRET: ${AUTUMBRA_UNDO_TOKEN_SECRET:-}
       # W-2 billing. Empty until set in Coolify; the billing page then says pricing is being finalised.
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
@@ -421,6 +469,9 @@ volumes:
 #   docker network create tervory-gw-template
 # A later agent gets tervory-gw-<agent>, joined here by tank and postgres only.
 networks:
+  research-internal:
+    internal: true
+  research-egress:
   tervory-gw-template:
     external: true
     name: tervory-gw-template
@@ -456,3 +507,11 @@ networks:
   # Ghost alone uses this corridor; no other main-stack service joins it.
   tervory-gw-ghost:
     name: tervory-gw-ghost
+  # Created once: docker network create tervory-gw-trigger-crm
+  # BottleCRM / Trigger CRM Coolify resource joins as external.
+  tervory-gw-trigger-crm:
+    external: true
+    name: tervory-gw-trigger-crm
+
+  tervory-gw-trigger:
+    name: tervory-gw-trigger

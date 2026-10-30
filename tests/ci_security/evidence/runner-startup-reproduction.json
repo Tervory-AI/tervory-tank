@@ -1,0 +1,7 @@
+{
+  "version": "1.182.1",
+  "exit_code": 2,
+  "report_created": false,
+  "known_startup_error_confirmed": true,
+  "error": "Cannot create auto config when metrics are off. Please allow metrics or run with a specific config."
+}

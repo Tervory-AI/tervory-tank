@@ -1,0 +1,58 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-8.3.5, pluggy-1.7.0 -- /workspace/.tervory-cloud/venv/bin/python
+cachedir: .pytest_cache
+rootdir: /workspace/market-lab-main-baseline
+plugins: anyio-4.15.1, langsmith-0.14.11, asyncio-0.25.3
+asyncio: mode=Mode.STRICT, asyncio_default_fixture_loop_scope=function
+collecting ... collected 1 item
+
+tests/test_feeds_boundaries.py::test_industry_words_stay_in_the_engine FAILED [100%]
+
+=================================== FAILURES ===================================
+____________________ test_industry_words_stay_in_the_engine ____________________
+
+    def test_industry_words_stay_in_the_engine() -> None:
+        roots = [ROOT / "agents" / "market_lab" / "feeds", ROOT / "tests"]
+        offenders: list[str] = []
+        for root in roots:
+            for path in root.rglob("*"):
+                if not path.is_file():
+                    continue
+                if "engines/ffl" in path.as_posix():
+                    continue
+                if path.suffix not in {".py", ".sql", ".json", ".csv", ".html", ".tsv", ".md"}:
+                    continue
+                if path.name == "test_feeds_boundaries.py":
+                    continue
+                if path.name.startswith("test_") and "feeds" not in path.name:
+                    continue
+                text = path.read_text(encoding="utf-8")
+                if BANNED.search(text):
+                    offenders.append(str(path.relative_to(ROOT)))
+>       assert offenders == []
+E       AssertionError: assert ['tests/fixtures/base-atf/ORIGIN.md', 'tests/base_proof/reference-adopt/reference-loaded.json', 'tests/base_proof/atf-download/results.json'] == []
+E         
+E         Left contains 3 more items, first extra item: 'tests/fixtures/base-atf/ORIGIN.md'
+E         
+E         Full diff:
+E         - []
+E         + [
+E         +     'tests/fixtures/base-atf/ORIGIN.md',
+E         +     'tests/base_proof/reference-adopt/reference-loaded.json',
+E         +     'tests/base_proof/atf-download/results.json',
+E         + ]
+
+tests/test_feeds_boundaries.py:121: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_feeds_boundaries.py::test_industry_words_stay_in_the_engine - AssertionError: assert ['tests/fixtures/base-atf/ORIGIN.md', 'tests/base_proof/reference-adopt/reference-loaded.json', 'tests/base_proof/atf-download/results.json'] == []
+  
+  Left contains 3 more items, first extra item: 'tests/fixtures/base-atf/ORIGIN.md'
+  
+  Full diff:
+  - []
+  + [
+  +     'tests/fixtures/base-atf/ORIGIN.md',
+  +     'tests/base_proof/reference-adopt/reference-loaded.json',
+  +     'tests/base_proof/atf-download/results.json',
+  + ]
+============================== 1 failed in 1.59s ===============================

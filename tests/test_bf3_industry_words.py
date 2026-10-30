@@ -238,6 +238,11 @@ class _SkillRows:
     async def __aexit__(self, *_args: object) -> bool:
         return False
 
+    async def fetchrow(self, sql: str, *args: object):
+        if "agent_skill_submissions" in sql:
+            return None  # repository packages in this fixture have no private owner
+        raise AssertionError(sql)
+
     async def fetchval(self, sql: str, *args: object):
         if "state='approved'" in sql:
             chosen = [

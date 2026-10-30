@@ -38,16 +38,24 @@ from agents.zenas.core.engine import (
     wording_keeps_law,
 )
 from agents.zenas.core.docx_redline import docx_bytes
-from agents.zenas.core.drafting import TEMPLATES, assemble_draft, select_prior
+from agents.zenas.core.drafting import TEMPLATES, select_prior
+from agents.zenas.core.docassemble import DocassembleClient
 from agents.zenas.core.matters import consider
 from agents.zenas.core.review import review_positions
 from agents.zenas.core.review_switch import card_servable, review_required
 from agents.zenas.core.scope_rules import NOT_YET, REFUSED, classify, ruled
 from agents.zenas.core.precedent import draft_label, drop_unverified_cases, rules_are_draft
 from agents.zenas.core.selftest import is_holdout
+from agents.zenas.core.citation_sources import cited_sources, public_source_url
 
 # Whole passages, best first. A passage is never sliced to fit.
 _PASSAGE_BUDGET = 8000
+_LEGAL_NOTICE = "Zenas provides legal information, not legal advice."
+
+
+def _with_legal_notice(text: str) -> str:
+    text = text.rstrip()
+    return text if text.endswith(_LEGAL_NOTICE) else f"{text}\n\n{_LEGAL_NOTICE}"
 
 _RULE_PROMPT = """Build a rule card from these passages only. Reply with JSON:
 {{"elements":[{{"id":"","test":"","citation":"","quote":""}}],"exceptions":[],"defences":[],"remedies":[],"decision_table":[]}}
@@ -337,13 +345,20 @@ async def _passages_from_pool(
     if citation.strip() and hasattr(pool, "find_by_citation"):
         chunks.extend(await pool.find_by_citation(citation, jurisdiction=law, as_at=day))
     search = _search_query(query)
-    if search and hasattr(pool, "search_text"):
+    if query.strip() and hasattr(pool, "search_hybrid"):
+        chunks.extend(await pool.search_hybrid(query, keyword_query=search, jurisdiction=law, as_at=day,
+                                               level=level, kind=kind, limit=8))
+    elif search and hasattr(pool, "search_text"):
         chunks.extend(
             await pool.search_text(search, jurisdiction=law, as_at=day, level=level, kind=kind, limit=8)
         )
     passages = []
     seen: set[str] = set()
+    metadata = await pool.source_metadata(chunks, jurisdiction=law) if hasattr(pool, "source_metadata") else {}
     for chunk in chunks:
+        source = metadata.get((chunk.document_id, chunk.version_id), {})
+        if getattr(pool, "requires_source_links", False) and not public_source_url(source.get("url")):
+            continue
         key = getattr(chunk, "chunk_id", "") or str(chunk)
         if key in seen:
             continue
@@ -360,6 +375,7 @@ async def _passages_from_pool(
                 "kind": kind or "",
                 "level": level or "",
                 "status": "effective",
+                **metadata.get((chunk.document_id, chunk.version_id), {}),
             }
         )
     return passages
@@ -985,6 +1001,7 @@ async def write_memo(
         if wording_keeps_law(memo["text"], proposal, memo["citations"]):
             memo["text"] = proposal.strip()
             smoothed = True
+    memo["text"] = _with_legal_notice(memo["text"])
     return {
         "ok": True,
         "memo": memo,
@@ -1487,6 +1504,7 @@ async def draft_contract(
     narrative: str = "",
     matter_id: str | None = None,
     provider: str = "luna",
+    assembler: Any = None,
 ) -> dict[str, Any]:
     _home, refused = await _use_home(store, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
     if refused:
@@ -1499,6 +1517,10 @@ async def draft_contract(
         reason = str((gate.get("scope") or {}).get("reason") or "Not in scope.")
         return _refuse(reason, scope=gate.get("scope"))
     box = _box(box_region)
+    local_jurisdiction = "za" if box == "za" else "us"
+    if jurisdiction not in {local_jurisdiction, "both"}:
+        from agents.zenas.core.matters import ZA_HOME_MESSAGE, US_HOME_MESSAGE
+        return _refuse(ZA_HOME_MESSAGE if jurisdiction == "za" else US_HOME_MESSAGE)
     clauses = await store.list_clauses(region=box, template=template, jurisdiction=jurisdiction)
     prior = None
     if ladder is not None:
@@ -1507,8 +1529,12 @@ async def draft_contract(
             tenant_id=tenant_id,
             sharing=sharing_mode(None),
         )
+        rows = [row for row in rows if row.get("region") == box
+                and row.get("jurisdiction") in {local_jurisdiction, "both"}]
         prior = select_prior(rows, template, terms)
-    assembled = assemble_draft(template=template, clauses=clauses, terms=terms, prior=prior)
+    assembler = assembler or DocassembleClient(box)
+    assembled = await assembler.assemble(template=template, jurisdiction=jurisdiction,
+                                         clauses=clauses, terms=terms, prior=prior)
     if not assembled.get("ok"):
         return assembled
     sentences = list(assembled["sentences"])
@@ -1531,15 +1557,9 @@ async def draft_contract(
         _apply_revision(sentences, str(called["result"]["content"]), differing)
         model_calls = 1
         cost = float(called["result"]["cost_usd"])
-    if reused:
-        text = str(assembled["text"])
-        blocks = [[{"kind": "plain", "text": text}]]
-    else:
-        text = "\n\n".join(str(item["text"]) for item in sentences)
-        blocks = [
-            [{"kind": "ins" if item.get("review") else "plain", "text": str(item["text"])}]
-            for item in sentences
-        ]
+    finished = await assembler.finish(template=template, jurisdiction=jurisdiction,
+                                      assembled={**assembled, "sentences": sentences}, notice=_LEGAL_NOTICE)
+    text = finished["text"]
     document_id = None
     if matter_id:
         matter = await store.get_matter(str(tenant_id), str(matter_id))
@@ -1576,7 +1596,7 @@ async def draft_contract(
         "cost_usd": cost,
         "model_calls": model_calls,
         "document_id": document_id,
-        "docx_base64": base64.b64encode(docx_bytes(blocks)).decode("ascii"),
+        "docx_base64": finished["docx_base64"],
     }
 
 
@@ -1725,6 +1745,11 @@ async def answer_question(
         )
     if not passages:
         return _refuse("could not verify", delivered=False)
+    require_links = bool(getattr(pool, "requires_source_links", False))
+    if require_links:
+        passages = [passage for passage in passages if public_source_url(passage.get("url"))]
+        if not passages:
+            return _refuse("could not verify", delivered=False)
     built = await build_rule_card(
         ladder,
         tank,
@@ -1795,6 +1820,11 @@ async def answer_question(
     known = {str(item.get("citation") or "") for item in statements}
     if not checked.get("passed") or any(item not in known for item in memo_cites):
         return _refuse("could not verify", delivered=False, cite=checked)
+    sources = cited_sources(statements, checked, passages, memo_cites, require_links=require_links)
+    if sources is None:
+        return _refuse("could not verify", delivered=False, cite=checked)
+    memo["sources"] = sources
+    memo["text"] = _with_legal_notice(memo["text"])
     state = "in_review" if review_on else "released"
     document_id = None
     if matter_id:
@@ -1809,7 +1839,7 @@ async def answer_question(
                 "kind": "memo",
                 "version": version,
                 "body": memo["text"],
-                "sources": [{"citation": item} for item in memo_cites],
+                "sources": sources,
                 "state": state,
                 "reviewed": False,
             }

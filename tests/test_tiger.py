@@ -379,7 +379,7 @@ def test_two_tenants_get_separate_rows_and_a_price_change_alerts() -> None:
     asyncio.run(check())
 
 
-def test_blocked_and_robots_do_not_invent_a_price() -> None:
+def test_blocked_pages_do_not_invent_a_price_or_fetch_robots() -> None:
     store = MemoryStore()
     rendered = {"n": 0}
 
@@ -394,10 +394,10 @@ def test_blocked_and_robots_do_not_invent_a_price() -> None:
         raise AssertionError("a blocked page is not read for a price")
 
     async def allow(url: str) -> str:
-        return ""
+        raise AssertionError("Public reads must not fetch robots.txt")
 
     async def deny(url: str) -> str:
-        return "User-agent: *\nDisallow: /\n"
+        raise AssertionError("Public reads must not fetch robots.txt")
 
     async def check() -> None:
         blocked = await run_check(
@@ -410,9 +410,9 @@ def test_blocked_and_robots_do_not_invent_a_price() -> None:
         robots = await run_check(
             store, TENANT_A, _watch(), "tiger", render, extract, ocr, deny, DomainLimiter(0),
         )
-        assert robots["status"] == "robots"
-        assert robots["observation"]["method"] == "robots"
-        assert rendered["n"] == 1
+        assert robots["status"] == "blocked"
+        assert robots["observation"]["method"] == "blocked"
+        assert rendered["n"] == 2
 
     asyncio.run(check())
 
@@ -488,8 +488,11 @@ def test_queries_are_tenant_scoped_and_the_room_is_wired() -> None:
 
     agent = _load("tiger_agent_app", ROOT / "agents" / "tiger" / "app.py")
     assert agent.app.state.agent == "tiger"
-    assert set(agent.app.state.handlers) == {"ping", "check", "dispatch"}
-    assert agent.app.state.schedules[0]["kind"] == "ping"
+    assert set(agent.app.state.handlers) == {"ping", "check", "dispatch", "rig_discover"}
+    assert any(row["kind"] == "ping" for row in agent.app.state.schedules)
+    assert any(row["kind"] == "rig_discover" and row["cron"] == "* * * * *"
+               and row["tenant_id"] == agent.HEARTBEAT_TENANT for row in agent.app.state.schedules)
     image = (ROOT / "agents" / "tiger" / "Dockerfile").read_text(encoding="utf-8")
     assert "watch.py" in image
+    assert "rig_watch.py" in image
     assert "app.py" in image

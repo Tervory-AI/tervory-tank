@@ -1,7 +1,7 @@
 """Local collection, scheduled re-tests and optional private exports.
 
-The background collector reads only existing accepted/released sources. Rooms
-need no hooks and keep their own credentials. Exports preserve reviewed content.
+The background collector reads accepted/released sources and private Rig events.
+Rooms keep their own credentials. Exports preserve reviewed content.
 """
 from __future__ import annotations
 
@@ -144,43 +144,58 @@ async def pair_from_gold(conn, row: dict[str, Any]) -> None:
 
 
 async def collect_ledger(conn, tenant: uuid.UUID) -> None:
+    """Client signals are tenant-local training, never automatically reviewed gold."""
     import graduate
     region = runtime().box_region()
-    # A later rejection revokes both the candidate and its training provenance.
+    # Late rejection revokes the positive pair, including the previous collector's
+    # ledger-derived gold provenance. A negative pair is retained but not exported
+    # as a positive completion (active=false, polarity=negative).
     await conn.execute(
         """UPDATE tank.training_pairs p SET active=false
-        WHERE p.tenant_id=$1 AND p.region=$2 AND p.source IN ('ledger','gold')
-        AND EXISTS (SELECT 1 FROM tank.gold_examples g JOIN tank.ledger l
-          ON g.source='ledger' AND g.source_ref=l.id::text AND g.tenant_id=l.tenant_id
-          WHERE g.tenant_id=$1 AND g.region=$2
-          AND (p.gold_id=g.id OR (p.source='ledger' AND p.source_ref=g.source_ref))
-          AND (l.feedback IS DISTINCT FROM 'accepted' OR l.outcome<>'delivered'))""", tenant, region,
-    )
-    await conn.execute(
-        """UPDATE tank.gold_examples g SET status='rejected'
-        WHERE g.tenant_id=$1 AND g.region=$2 AND g.source='ledger'
-        AND EXISTS (SELECT 1 FROM tank.ledger l WHERE l.id::text=g.source_ref AND l.tenant_id=$1
-        AND (l.feedback IS DISTINCT FROM 'accepted' OR l.outcome<>'delivered'))""", tenant, region,
+        WHERE p.tenant_id=$1 AND p.region=$2 AND p.source IN ('ledger','client_accepted','gold')
+        AND EXISTS (SELECT 1 FROM tank.ledger l WHERE l.tenant_id=$1
+          AND (l.id::text=p.source_ref OR EXISTS (SELECT 1 FROM tank.gold_examples g
+            WHERE g.id=p.gold_id AND g.tenant_id=$1 AND g.source='ledger' AND g.source_ref=l.id::text))
+          AND (l.feedback='rejected' OR l.outcome<>'delivered'))""", tenant, region,
     )
     rows = await conn.fetch(
-        """SELECT l.id,l.agent,l.skill,l.task_type,l.feedback_by,t.messages,t.content
-        FROM tank.ledger l JOIN tank.transcripts t ON t.ledger_id=l.id AND t.tenant_id=l.tenant_id
-        WHERE l.tenant_id=$1 AND l.region=$2 AND l.feedback='accepted' AND l.outcome='delivered'
-        AND NOT EXISTS (SELECT 1 FROM tank.training_pairs p
-          WHERE p.tenant_id=$1 AND p.region=$2 AND p.source='ledger' AND p.source_ref=l.id::text)
+        """SELECT l.*,t.messages,t.content FROM tank.ledger l
+        JOIN tank.transcripts t ON t.ledger_id=l.id AND t.tenant_id=l.tenant_id
+        WHERE l.tenant_id=$1 AND l.region=$2 AND l.outcome='delivered' AND l.task_type NOT LIKE '%#shadow'
+          -- A response whose mask failed still has a receipt, but the storage
+          -- placeholder is not a client answer and must never become training.
+          AND jsonb_typeof(t.messages)='array'
+          AND t.content NOT IN ('[omitted: masking unavailable]','[omitted: HTML]')
+          AND (l.feedback='rejected' OR coalesce(l.accept_after,l.ts+interval '1 day')<=now())
+          AND NOT EXISTS (SELECT 1 FROM tank.training_pairs p WHERE p.tenant_id=$1 AND p.region=$2
+            AND p.source_ref=l.id::text AND p.source=CASE WHEN l.feedback='rejected'
+              THEN 'client_rejected' ELSE 'client_accepted' END)
         ORDER BY l.ts LIMIT 500""", tenant, region,
     )
     for row in rows:
+        rejected = row["feedback"] == "rejected"
         value = graduate.skill_payload(obj(row["messages"]))
         output = graduate.as_obj(row["content"]) or {"text": row["content"]}
-        skill = (row["skill"] or row["task_type"]).split("@", 1)[0]
-        gold_id = await add_candidate(conn, tenant=tenant, skill=skill, agent=row["agent"],
-                                      value=value, expected=output, source="ledger", ref=str(row["id"]))
-        from gold import is_holdout
-        await save_pair(conn, tenant=tenant, agent=row["agent"], task=row["task_type"],
-                        value=value, output=output, approved_by=row["feedback_by"] or "client",
-                        source="ledger", ref=str(row["id"]), gold_id=gold_id,
-                        holdout=is_holdout(tenant, skill, value), client_matter=row["agent"] == "zenas")
+        inserted = await conn.fetchval(
+            """INSERT INTO tank.training_pairs(tenant_id,region,agent,task_type,input,output,
+               approved_by,source,source_ref,client_matter,public,active,polarity)
+            VALUES($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,false,$11,$12)
+            ON CONFLICT(tenant_id,region,source,source_ref) DO NOTHING RETURNING id""",
+            tenant, region, row["agent"], row["task_type"], encoded(value), encoded(output),
+            row["feedback_by"] or "client acceptance window", "client_rejected" if rejected else "client_accepted",
+            str(row["id"]), row["agent"] == "zenas", not rejected, "negative" if rejected else "positive",
+        )
+        if rejected and inserted:
+            # Copy the effective policy before changing it: A's rejection never
+            # changes B's shadow rate or the platform defaults.
+            await conn.execute(
+                """INSERT INTO tank.policy SELECT (jsonb_populate_record(NULL::tank.policy,
+                to_jsonb(p)||jsonb_build_object('tenant_id',$1::uuid))).*
+                FROM tank.policy p WHERE task_type=$2 AND (tenant_id=$1 OR tenant_id IS NULL)
+                ORDER BY tenant_id NULLS LAST LIMIT 1 ON CONFLICT DO NOTHING""", tenant, row["task_type"],
+            )
+            await conn.execute("""UPDATE tank.policy SET shadow_rate=least(1,shadow_rate+0.1),updated_at=now()
+                WHERE tenant_id=$1 AND task_type=$2""", tenant, row["task_type"])
 
 
 async def collect_zenas(conn, tenant: uuid.UUID | None) -> None:
@@ -244,12 +259,35 @@ async def collect_fits(conn, tenant: uuid.UUID) -> None:
     )
 
 
+async def collect_rig_events(conn, tenant: uuid.UUID) -> None:
+    """Drain a tenant's durable room events through the canonical pair writer."""
+    region = runtime().box_region()
+    rows = await conn.fetch("""SELECT * FROM agent_rig.training_events
+        WHERE tenant_id=$1 AND region=$2 ORDER BY created_at LIMIT 500 FOR UPDATE""", tenant, region)
+    for row in rows:
+        value, output = obj(row["input"]), obj(row["output"])
+        currency, _ = regional_labels({"input": value, "output": output})
+        await save_pair(conn, tenant=tenant, agent="rig",
+                        task="rig.search" if row["source"] == "rig_no_result" else "rig.quote",
+                        value=value, output=output, approved_by="system:rig-event",
+                        source=row["source"], ref=row["source_ref"], region=region,
+                        client_matter=True, public=False, currency=currency, unit="quote" if currency else None)
+        await conn.execute("""DELETE FROM agent_rig.training_events
+            WHERE tenant_id=$1 AND region=$2 AND source=$3 AND source_ref=$4""",
+            tenant, region, row["source"], row["source_ref"])
+
+
 async def collect_once() -> None:
     rt = runtime()
     async with rt.pool().acquire() as conn:
         if not await conn.fetchval("SELECT pg_try_advisory_lock(871222)"):
             return
         try:
+            if await conn.fetchval("SELECT to_regclass('agent_rig.training_events')"):
+                tenants = await conn.fetch("SELECT DISTINCT tenant_id FROM agent_rig.training_events WHERE region=$1", rt.box_region())
+                for row in tenants:
+                    async with conn.transaction():
+                        await collect_rig_events(conn, row["tenant_id"])
             # Tenant discovery is internal maintenance, never a response or export.
             tenants = await conn.fetch("SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1", rt.box_region())
             for row in tenants:

@@ -1,0 +1,3 @@
+Lockfile v3; manifest dependencies match; all Next optional packages present.
+npm cache, lockfile path, npm ci and 15-minute timeout verified.
+Locked packages: 72

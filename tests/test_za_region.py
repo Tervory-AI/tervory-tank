@@ -44,14 +44,16 @@ def test_za_compose_is_a_tank_stack_with_its_own_stores() -> None:
     data = _parsed()
     assert set(data["services"]) == {
         "postgres", "redis", "qdrant", "hermes", "litellm", "tank", "agent-roles",
+        "r2-backup-za",
     }
+    assert data["services"]["r2-backup-za"]["profiles"] == ["r2-backup-za"]
     for name, service in data["services"].items():
         assert service["environment"]["TANK_REGION"] == "za", name
     assert data["networks"]["default"]["name"] == "tervory-za"
     assert data["networks"]["tervory-gw-zenas"]["name"] == "tervory-gw-zenas"
     assert "external" not in data["networks"]["default"]
     assert "external" not in data["networks"]["tervory-gw-zenas"]
-    assert set(data["volumes"]) == {"za_pgdata", "za_redisdata", "za_qdrantdata", "za_backups"}
+    assert set(data["volumes"]) == {"za_pgdata", "za_redisdata", "za_qdrantdata", "za_backups", "za_r2_backup_spool"}
     assert "tervory-gw-zenas" in data["services"]["postgres"]["networks"]
     assert "tervory-gw-zenas" in data["services"]["tank"]["networks"]
     assert "tervory-gw-zenas" in data["services"]["hermes"]["networks"]
@@ -386,7 +388,9 @@ async def test_empty_or_unknown_home_makes_no_call(
 
 
 class _Conn:
-    async def fetchrow(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+    async def fetchrow(self, *_args: object, **_kwargs: object) -> dict[str, object] | None:
+        if "agent_skill_submissions" in str(_args[0]):
+            return None
         return {
             "id": uuid.uuid4(),
             "model": "luna",
@@ -566,6 +570,8 @@ class _CourtPool:
         ]
 
     async def fetchrow(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+        if "agent_skill_submissions" in str(_args[0]):
+            return None
         return {
             "id": uuid.uuid4(),
             "model": "luna",

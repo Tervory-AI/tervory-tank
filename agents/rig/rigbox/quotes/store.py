@@ -148,9 +148,13 @@ class PgQuotes:
 
     async def create(self, tenant: str, quote: dict[str, Any], *, hold: bool = False) -> None:
         async with self.pool.acquire() as conn, conn.transaction():
+            from rigbox.training import enqueue
+
             await conn.execute("""INSERT INTO agent_rig.quotes (tenant_id, id, payload, contact)
                 VALUES ($1, $2, $3::jsonb, $4::jsonb)""", UUID(tenant), quote["id"],
                 json.dumps(quote["payload"]), json.dumps(quote["contact"]))
+            await enqueue(conn, tenant, "rig_quote", quote["id"], quote["payload"],
+                          {"request_id": quote["id"]})
             await conn.execute("""INSERT INTO agent_rig.quote_handoffs
                 (tenant_id, quote_id, needs_attention, error, next_attempt_at)
                 VALUES ($1, $2, $3, $4, CASE WHEN $3 THEN NULL ELSE now() END)""",

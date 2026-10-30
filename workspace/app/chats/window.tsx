@@ -127,7 +127,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     // The consumed dashboard prompt is sent once, never retried automatically.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAsk, snapshot, busy]);
-  useEffect(() => { bottom.current?.scrollIntoView({ block: "end" }); }, [snapshot?.messages.length, sending]);
+  useEffect(() => { bottom.current?.scrollIntoView({ block: "end" }); }, [snapshot?.messages.length, snapshot?.messages.at(-1)?.content, sending]);
   useEffect(() => { if (work) workClose.current?.focus(); }, [work]);
   useEffect(() => { if (menu) menuClose.current?.focus(); }, [menu]);
   function closeWork() { setWork(false); requestAnimationFrame(() => workButton.current?.focus()); }
@@ -213,13 +213,16 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
           if (event.type === "step") return { ...current, steps: upsert(current.steps, data as unknown as Step, "step_id") };
           if (event.type === "card" && visibleCard(data as unknown as Card, founder)) return { ...current, cards: upsert(current.cards, data as unknown as Card, "card_id") };
           if (event.type === "receipt") return applyReceipt(current, data as unknown as Receipt, localId);
-          if (event.type === "token") return { ...current, messages: current.messages.map(message => message.message_id !== localId ? message : { ...message, ...(event.type === "token" ? { content: message.content + String(data.text ?? "") } : { receipt: data as unknown as Receipt }) }) };
+          if (event.type === "token") return { ...current, messages: current.messages.map(message => message.message_id !== localId ? message : { ...message, content: (data.replace === true ? "" : message.content) + String(data.text ?? "") }) };
           return current;
         });
       });
       if (!completed) throw new Error("The connection ended before the answer finished. Reopen this chat before sending again.");
       await load(id, version); await refreshThreads();
     } catch (err) {
+      // An interrupted preview is never presented as a saved, complete answer,
+      // even if refreshing the authoritative thread also fails.
+      setSnapshot(current => current && ({ ...current, messages: current.messages.filter(message => message.message_id !== localId) }));
       if (!controller.signal.aborted) { setError(problem(err)); await load(id, version).catch(() => {}); }
     } finally { sendingRef.current = false; setSending(false); streamAbort.current = null; }
   }

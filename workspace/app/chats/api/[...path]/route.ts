@@ -1,3 +1,4 @@
+import { triggerIdentity } from "@/lib/trigger";
 import { activeTenant } from "@/lib/tenant";
 import { isFounder } from "@/lib/admin";
 import { commandRequest, commandTools, CommandRequestError, listRoster } from "@/lib/tank";
@@ -34,7 +35,7 @@ async function boundedBody(request: Request, limit: number): Promise<Uint8Array>
 async function handle(request: Request, context: Context): Promise<Response> {
   try {
     if (request.method !== "GET" && !sameHost(request)) return json({ error: "This request must come from your workspace." }, 403);
-    const identity = await activeTenant();
+    const identity = await triggerIdentity(await activeTenant());
     if (!identity) return json({ error: "Please sign in and choose your workspace." }, 401);
     const founder = isFounder(identity.userId);
     const { path } = await context.params;
@@ -82,7 +83,7 @@ async function handle(request: Request, context: Context): Promise<Response> {
         if (!model) return json({ error: "That option is no longer available. Choose another." }, 400);
         const attachments = input.attachments ?? [];
         if (!Array.isArray(attachments) || attachments.length > 5 || attachments.some(file => !file || (file.attachment_id !== undefined ? !attachmentId(file.attachment_id) : !filename(file.name) || typeof file.text !== "string" || file.text.length > 200000 || file.text.includes("\0")))) return json({ error: "Attach up to five stored files or text files of no more than 200,000 characters each." }, 400);
-        body = { text: input.text, model, attachments: attachments.map(file => file.attachment_id ? { attachment_id: file.attachment_id } : { name: file.name, text: file.text }) };
+        body = { text: input.text, model, ...(input.priority === undefined ? {} : { priority: input.priority }), attachments: attachments.map(file => file.attachment_id ? { attachment_id: file.attachment_id } : { name: file.name, text: file.text }) };
       } else {
         if (input.title !== undefined && (typeof input.title !== "string" || !input.title.trim() || input.title.length > 160)) return json({ error: "Use a chat name of 1 to 160 characters." }, 400);
         body = input.title ? { title: input.title.trim() } : {};
@@ -98,9 +99,14 @@ async function handle(request: Request, context: Context): Promise<Response> {
     if (upstream.headers.get("content-type")?.includes("text/event-stream")) {
       if (!upstream.body) throw new Error("Missing stream");
       const encoder = new TextEncoder();
+      const cancelled = new AbortController();
+      let closed = false;
+      const abort = () => cancelled.abort();
+      request.signal.addEventListener("abort", abort, { once: true });
+      if (request.signal.aborted) abort();
       const stream = new ReadableStream<Uint8Array>({
         async start(controller) {
-          const emit = (type: string, data: unknown, seq?: number) => controller.enqueue(encoder.encode(`${seq === undefined ? "" : `id: ${seq}\n`}event: ${type}\ndata: ${JSON.stringify(data)}\n\n`));
+          const emit = (type: string, data: unknown, seq?: number) => { if (!closed && !cancelled.signal.aborted) controller.enqueue(encoder.encode(`${seq === undefined ? "" : `id: ${seq}\n`}event: ${type}\ndata: ${JSON.stringify(data)}\n\n`)); };
           try {
             await readEvents(upstream.body!, event => {
               let data: unknown = event.data;
@@ -112,10 +118,11 @@ async function handle(request: Request, context: Context): Promise<Response> {
               }
               if (founder && event.type === "card") data = presentCard(event.data as unknown as Card, true, names);
               if (["token", "step", "card", "receipt", "done", "error"].includes(event.type)) emit(event.type, data, event.seq);
-            });
+            }, cancelled.signal);
           } catch { emit("error", { message: "The response was interrupted. Reopen this chat before sending again." }); }
-          finally { controller.close(); }
+          finally { request.signal.removeEventListener("abort", abort); if (!closed) { closed = true; controller.close(); } }
         },
+        cancel() { closed = true; cancelled.abort(); },
       });
       return new Response(stream, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no" } });
     }

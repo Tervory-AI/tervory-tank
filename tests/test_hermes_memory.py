@@ -410,8 +410,8 @@ def test_memory_client_hides_transport_errors() -> None:
     asyncio.run(check())
 
 
-def test_hermes_does_not_read_the_database() -> None:
-    text = "\n".join(path.read_text() for path in (ROOT / "hermes").glob("*.py"))
+def test_hermes_key_checks_stay_environment_only() -> None:
+    text = (ROOT / "hermes" / "auth.py").read_text()
     assert "asyncpg" not in text
     assert "agent_keys" not in text
     assert "DATABASE_URL" not in text
@@ -440,7 +440,8 @@ def test_hermes_joins_each_agent_corridor() -> None:
     assert "ports" not in hermes
     env = hermes["environment"]
     assert env["QDRANT_URL"] == "http://qdrant:6333"
-    assert "DATABASE_URL" not in env
+    assert "@postgres:5432/" in env["DATABASE_URL"]
+    assert "TERVORY_ADMIN_USER_IDS" in env
     assert "TANK_KEY_TEMPLATE" in env
     assert "TANK_KEY_TIGER" in env
     assert "TANK_KEY_MARKET_LAB" in env
@@ -462,7 +463,7 @@ def test_hermes_joins_each_agent_corridor() -> None:
 def test_env_example_names_the_hermes_model() -> None:
     text = (ROOT / ".env.example").read_text()
     assert "HERMES_EMBED_MODEL=BAAI/bge-small-en-v1.5" in text
-    assert "does not read the database" in text
+    assert "Key checks do not read the database" in text
 
 
 def test_isolation_script_allows_hermes_and_still_blocks_everyone_else() -> None:

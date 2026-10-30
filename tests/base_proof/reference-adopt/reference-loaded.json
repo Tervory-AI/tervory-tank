@@ -1,0 +1,84 @@
+{
+  "changes": [],
+  "collectors": 1,
+  "duplicate_count": 1,
+  "file": {
+    "adopted": true,
+    "checked_at": "2026-10-16 00:00:00+00:00",
+    "created_at": "2026-10-27 14:10:14.769151+00:00",
+    "duplicate_count": 1,
+    "id": "8e634101-4a68-4f60-b398-3101f7335eb9",
+    "owner_id": "00000000-0000-0000-0000-000000000001",
+    "published_on": "2026-09-01",
+    "row_count": 3,
+    "sha256": "dd1602f5bae150397e86789ec440960753e6dd7f92eef216221c5e136fbeb6c7",
+    "source_url": "https://www.atf.gov/firearms/listing-federal-firearms-licensees/complete"
+  },
+  "groups": [
+    {
+      "licence_type": "07",
+      "licensees": 1,
+      "state": "CA"
+    },
+    {
+      "licence_type": "01",
+      "licensees": 1,
+      "state": "TX"
+    }
+  ],
+  "history": [
+    {
+      "adopted": true,
+      "checked_at": "2026-10-16 00:00:00+00:00",
+      "created_at": "2026-10-27 14:10:14.769151+00:00",
+      "duplicate_count": 1,
+      "id": "8e634101-4a68-4f60-b398-3101f7335eb9",
+      "owner_id": "00000000-0000-0000-0000-000000000001",
+      "published_on": "2026-09-01",
+      "row_count": 3,
+      "sha256": "dd1602f5bae150397e86789ec440960753e6dd7f92eef216221c5e136fbeb6c7",
+      "source_url": "https://www.atf.gov/firearms/listing-federal-firearms-licensees/complete"
+    }
+  ],
+  "refresh": {
+    "checked_at": "2026-10-27 14:10:14.817497+00:00",
+    "message": null,
+    "status": "current"
+  },
+  "rows": [
+    {
+      "address": {
+        "city": "Fixture City",
+        "state": "CA",
+        "street": "1 Fixture Road",
+        "zip": "75001"
+      },
+      "checked_at": "2026-10-16 00:00:00+00:00",
+      "licence_key": "5-74-00002",
+      "licence_number": "5-74-001-07-7A-00002",
+      "licence_type": "07",
+      "name": "Fixture Business 2",
+      "published_on": "2026-09-01",
+      "source_url": "https://www.atf.gov/firearms/listing-federal-firearms-licensees/complete",
+      "state": "CA"
+    },
+    {
+      "address": {
+        "city": "Fixture City",
+        "state": "TX",
+        "street": "2 New Fixture Road",
+        "zip": "75001"
+      },
+      "checked_at": "2026-10-16 00:00:00+00:00",
+      "licence_key": "5-74-00001",
+      "licence_number": "5-74-001-01-7A-00001",
+      "licence_type": "01",
+      "name": "Newest Fixture Business",
+      "published_on": "2026-09-01",
+      "source_url": "https://www.atf.gov/firearms/listing-federal-firearms-licensees/complete",
+      "state": "TX"
+    }
+  ],
+  "selected": 2,
+  "total_all": 3
+}

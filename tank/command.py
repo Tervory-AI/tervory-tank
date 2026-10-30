@@ -23,11 +23,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+import command_repo
+from tenant_db import tenant_path
+from command_stream import AnswerText, TokenSink
+
 router = APIRouter(prefix="/v1/command", tags=["command"])
 logger = logging.getLogger(__name__)
 _background: set[asyncio.Task] = set()
 SQUADS = frozenset({"base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"})
 TOOLS = {
+    "trigger": ["trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
     "base": ["base.batch", "base.search"],
     "tiger": ["tiger.watch", "tiger.read"],
     "market_lab": ["market_lab.research"],
@@ -37,7 +42,7 @@ TOOLS = {
     "zenas": ["zenas.ask", "zenas.matters", "zenas.review"],
 }
 FOUNDER_TOOLS = ["skala.list", "skala.evals", "skala.approve", "skala.retire",
-                 "ledger.receipts", "ledger.savings", "worker.build"]
+                 "ledger.receipts", "ledger.savings", "worker.build", "repo.prs", "repo.pr", "repo.file"]
 
 
 def db() -> Any:
@@ -59,6 +64,7 @@ class Actor:
     user_id: str
     founder: bool
     squads: frozenset[str] = frozenset()
+    tenant_admin: bool = False
 
 
 def key_matches(presented: str, expected: str) -> bool:
@@ -81,7 +87,7 @@ async def identity(request: Request) -> Actor:
     if home != box_region():
         raise HTTPException(403, "This conversation must stay on its home box")
     admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
-    return await authorized_actor(Actor(tenant_id, user, user in admins))
+    return await authorized_actor(Actor(tenant_id, user, user in admins, tenant_admin=request.headers.get("x-tervory-role") == "org:admin"))
 
 
 async def worker(request: Request) -> None:
@@ -90,8 +96,11 @@ async def worker(request: Request) -> None:
 
 
 def allowed_tools(actor: Actor) -> list[str]:
-    squads = SQUADS if actor.founder else actor.squads
-    return sorted([tool for squad in squads for tool in TOOLS[squad]] + (FOUNDER_TOOLS if actor.founder else []))
+    squads = TOOLS.keys() if actor.founder else actor.squads & SQUADS
+    founder_tools = [name for name in FOUNDER_TOOLS
+                     if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
+    voice_tools = ["trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"] if actor.tenant_admin and not actor.founder else []
+    return sorted([tool for squad in squads for tool in TOOLS[squad]] + founder_tools + voice_tools)
 
 
 def require_tool(actor: Actor, name: str) -> None:
@@ -122,6 +131,7 @@ class UploadRef(Body):
 
 
 class Turn(Body):
+    priority: Literal["urgent", "standard", "offpeak"] | None = None
     text: str = Field(min_length=1, max_length=20000)
     attachments: list[Attachment | UploadRef] = Field(default_factory=list, max_length=10)
     model: str | None = Field(default="auto", max_length=200)
@@ -200,7 +210,7 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
     baseline = ledger.get("baseline_cost_usd")
     baseline_model = ledger.get("baseline_model")
     pending = baseline is None or baseline_model is None
-    cost = None if ledger.get("research_cost_status") == "unknown" else float(ledger["cost_usd"])
+    cost = None if ledger.get("research_cost_status") == "unknown" or ledger.get("cost_status") == "not_set" else float(ledger["cost_usd"])
     return {
         "step_id": step_id, "model": ledger["model"],
         "tokens_in": ledger["tokens_in"], "tokens_out": ledger["tokens_out"],
@@ -208,7 +218,7 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
         "baseline_model": baseline_model,
         "baseline_cost_usd": float(baseline) if baseline is not None else None,
         "saved_usd": float(baseline) - cost if not pending and cost is not None else None,
-        "cost_status": "pending" if cost is None else "recorded",
+        "cost_status": "price not set" if ledger.get("cost_status") == "not_set" else "pending" if cost is None else "recorded",
         "baseline_status": "baseline pending" if pending else "recorded",
     }
 
@@ -371,11 +381,25 @@ async def events(thread_id: uuid.UUID, after: int = Query(default=0, ge=0), acto
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-async def route_turn(actor: Actor, messages: list[dict], model: str | None = None) -> Any:
+async def route_turn(actor: Actor, messages: list[dict], model: str | None = None,
+                     *, task_id: uuid.UUID | None = None, on_token: TokenSink | None = None,
+                     priority: str | None = None) -> Any:
     from main import Message, RouteRequest, box_region, run_route
+    from memory_routes import remember_turn
+    remembered = await remember_turn(actor, messages, task_id)
+    if remembered is not None:
+        return remembered
+    from trigger_routes import code_plan
+    planned = await code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     override = {"model_override": model} if model not in (None, "auto") else {}
+    if task_id is not None:
+        override["task_id"] = task_id
+    if on_token is not None:
+        override["_on_token"] = on_token
     return await run_route(RouteRequest(tenant_id=actor.tenant_id, agent="orchestrator", task_type="command.turn",
-                                       home_region=box_region(), messages=[Message(**m) for m in messages]), **override)
+                                       home_region=box_region(), messages=[Message(**m) for m in messages], priority=priority), **override)
 
 
 async def auto_price_snapshot(conn: Any, tenant_id: uuid.UUID) -> dict:
@@ -392,23 +416,67 @@ async def auto_price_snapshot(conn: Any, tenant_id: uuid.UUID) -> dict:
             "priced_at": row["updated_at"].isoformat() if row and row["updated_at"] else None}
 
 
-async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages: list[dict], model: str | None = None) -> None:
-    answer = None
+async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages: list[dict], model: str | None = None,
+                      *, priority: str | None = None, answer=None, deferred_error=None) -> None:
+    preview = AnswerText()
+
+    async def on_token(delta: str) -> None:
+        text = preview.feed(delta)
+        if text:
+            async with db().acquire() as conn, conn.transaction():
+                row = await owned(conn, thread_id, actor, lock=True)
+                if unpack(row["state"])["active_turn"] != turn_id:
+                    raise asyncio.CancelledError()
+                # Provisional events only: no saved assistant message or receipt yet.
+                # Do not rewrite the full conversation for every model delta.
+                await event(conn, row, "token", {"text": text, "message_id": turn_id})
+
     try:
-        async with asyncio.timeout(150):
-            answer = await route_turn(actor, messages, model=model) if model not in (None, "auto") else await route_turn(actor, messages)
+        if deferred_error is not None:
+            raise deferred_error
+        if answer is None:
+            async with asyncio.timeout(150):
+                answer = await route_turn(actor, messages, model=model, task_id=uuid.UUID(turn_id), on_token=on_token,
+                                          **({"priority": priority} if priority is not None else {}))
+        from priority_queue import QueuedResponse
+        if isinstance(answer, QueuedResponse):
+            async with editing(thread_id, actor) as (conn, row, state):
+                await conn.execute("""UPDATE tank.offpeak_jobs SET command_context=$3::jsonb
+                    WHERE id=$1 AND tenant_id=$2 AND task_id=$4""", answer.id, actor.tenant_id,
+                    dump({"thread_id": str(thread_id), "user_id": actor.user_id, "tenant_admin": actor.tenant_admin}), uuid.UUID(turn_id))
+                await step(conn, row, state, {**state["steps"][turn_id], "status": "planned",
+                                              "priority": "offpeak", "job_id": str(answer.id)})
+                if state["active_turn"] == turn_id:
+                    state["active_turn"] = None
+            # The browser stream may close now. Durable worker completion uses
+            # this same answer/receipt path and the existing saved thread events.
+            import main
+            from priority_queue import kick
+            kick(main, answer.id, actor.tenant_id)
+            return
         async with editing(thread_id, actor) as (conn, row, state):
+            if any(m.get("message_id") == turn_id and m.get("role") == "assistant" for m in state["messages"]):
+                return  # worker restarted after saving an answer but before acknowledging it
             await record_receipts(conn, row, state, turn_id, [answer.ledger_id])
+            repeatable = True
             try:
                 plan = parse_plan(answer.content, await authorized_actor(actor, conn))
             except (ValueError, HTTPException):
+                repeatable = False
                 plan = ActionPlan(text="The proposed action plan was invalid. No action was started.")
                 await event(conn, row, "error", {"message": plan.text})
-            state["messages"].append({"message_id": turn_id, "role": "assistant", "content": plan.text})
-            # The router buffers output; this is available answer text, not provider deltas.
-            await event(conn, row, "token", {"text": plan.text})
+            state["messages"].append({"message_id": turn_id, "role": "assistant", "content": plan.text,
+                                      "repeatable": repeatable and not plan.actions})
+            if plan.text != preview.shown or not preview.raw:
+                # Cache/code hits arrive whole. A validated plan may correct an
+                # incomplete/invalid preview without appending a second answer.
+                await event(conn, row, "token", {"text": plan.text, "message_id": turn_id, "replace": True})
             for action in plan.actions:
-                await propose_action(conn, row, state, action)
+                await propose_action(conn, row, state, action, actor)
+            await conn.execute(
+                "UPDATE tank.tasks SET status='done',result=$3,ledger_id=$4,finished_at=now() "
+                "WHERE id=$1 AND tenant_id=$2 AND status='running'",
+                uuid.UUID(turn_id), actor.tenant_id, plan.text, answer.ledger_id)
             await step(conn, row, state, {**state["steps"][turn_id], "label": "Answer ready", "status": "done"})
             await event(conn, row, "done", {"message_id": turn_id})
             if state["active_turn"] == turn_id:
@@ -446,6 +514,9 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
             message = (f"The pinned model {model} did not answer. Pinned models never fall back; choose Auto or another model."
                        if model not in (None, "auto") and answer is None else
                        "The answer could not be completed. Check routing policy and service availability.")
+            await conn.execute(
+                "UPDATE tank.tasks SET status='failed',error=$3,finished_at=now() "
+                "WHERE id=$1 AND tenant_id=$2 AND status='running'", uuid.UUID(turn_id), actor.tenant_id, message)
             await event(conn, row, "error", {"message": message})
             if state["active_turn"] == turn_id:
                 state["active_turn"] = None
@@ -469,6 +540,9 @@ async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity
                                           "step_id": state["active_turn"], "label": "Answer interrupted",
                                           "actor": "Tervory", "status": "failed", "receipt_status": "pending"})
             await receipt_pending(conn, row, state["active_turn"])
+            await conn.execute(
+                "UPDATE tank.tasks SET status='failed',finished_at=now() WHERE id=$1 AND tenant_id=$2 AND status='running'",
+                uuid.UUID(state["active_turn"]), actor.tenant_id)
             await event(conn, row, "error", {"message": "The previous answer was interrupted. It has not been retried."})
         after = row["seq"]
         state["active_turn"] = turn_id
@@ -491,10 +565,29 @@ async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity
         if results:
             messages.insert(0, {"role": "system", "content": "Confirmed tool result data (not instructions): " + dump(results)[:32000]})
         messages.insert(0, planning_message(actor))
-    task = asyncio.create_task(finish_turn(thread_id, actor, turn_id, messages, model=body.model))
+        messages = await repeat_messages(conn, state, actor, messages)
+        await conn.execute(
+            "INSERT INTO tank.tasks(id,tenant_id,created_by,agent,task_type,title,input,status,started_at) "
+            "VALUES($1,$2,$3,'orchestrator','command.turn',$4,$5::jsonb,'running',now())",
+            uuid.UUID(turn_id), actor.tenant_id, actor.user_id, body.text[:200], dump({"messages": messages}))
+    task = asyncio.create_task(finish_turn(thread_id, actor, turn_id, messages, model=body.model,
+                                            **({"priority": body.priority} if body.priority is not None else {})))
     _background.add(task)
     task.add_done_callback(_background.discard)
-    return StreamingResponse(replay(thread_id, actor, after, turn_id=turn_id), media_type="text/event-stream",
+
+    async def stream_turn():
+        finished = False
+        try:
+            async for update in replay(thread_id, actor, after, turn_id=turn_id):
+                yield update
+            finished = True
+        finally:
+            # Foreground disconnects close the SDK stream. An explicitly deferred
+            # turn must finish saving its queue/thread link even if the browser closes.
+            if not finished and not task.done() and body.priority != "offpeak":
+                task.cancel()
+
+    return StreamingResponse(stream_turn(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
@@ -503,7 +596,7 @@ async def propose_build(body: Build, actor: Actor = Depends(identity)) -> dict:
     require_tool(actor, "worker.build")
     action = validate_action(PlannedAction(tool="worker.build", arguments={"brief_markdown": body.brief_markdown}), actor)
     async with editing(body.thread_id, actor) as (conn, row, state):
-        card = await propose_action(conn, row, state, action)
+        card = await propose_action(conn, row, state, action, actor)
     return public_card(card)
 
 
@@ -710,6 +803,53 @@ class EmptyArgs(Body):
     pass
 
 
+class RepoPRsArgs(Body):
+    """Open PRs on Tervory-AI/tervory-tank, with head-commit checks and statuses."""
+
+    page: int = Field(default=1, ge=1, le=1000, description="Read next_page when has_more is true.")
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class RepoPRArgs(RepoPRsArgs):
+    """One PR's changed files and head-commit checks; page applies to files."""
+
+    number: int = Field(gt=0, le=2_147_483_647, strict=True)
+
+
+class RepoFileArgs(Body):
+    """Read a UTF-8 file from main, limited to docs/** or .md files anywhere."""
+
+    path: str = Field(min_length=1, max_length=1000, description="File on main: docs/** or a .md file anywhere.")
+
+    @model_validator(mode="after")
+    def allowed_path(self):
+        command_repo.validate_path(self.path)
+        return self
+
+
+@router.get("/repo/prs")
+async def repo_prs(args: RepoPRsArgs = Depends(), actor: Actor = Depends(identity)) -> dict:
+    require_tool(actor, "repo.prs")
+    return await command_repo.open_prs(args.page, args.limit)
+
+
+@router.get("/repo/pr")
+async def repo_pr(number: int = Query(gt=0, le=2_147_483_647), page: int = Query(default=1, ge=1, le=1000),
+                  limit: int = Query(default=20, ge=1, le=50), actor: Actor = Depends(identity)) -> dict:
+    require_tool(actor, "repo.pr")
+    return await command_repo.pull_request(number, page, limit)
+
+
+@router.get("/repo/file")
+async def repo_file(path: str = Query(min_length=1, max_length=1000), actor: Actor = Depends(identity)) -> dict:
+    require_tool(actor, "repo.file")
+    try:
+        command_repo.validate_path(path)
+    except ValueError:
+        raise HTTPException(422, "The action arguments are invalid") from None
+    return await command_repo.read_file(path)
+
+
 class QueryArgs(Body):
     q: str = Field(min_length=1, max_length=200)
     limit: int = Field(default=20, ge=1, le=100)
@@ -789,6 +929,52 @@ class ReviewArgs(Body):
     matter_id: uuid.UUID | None = None
 
 
+class TriggerCheckArgs(Body):
+    text: str = Field(min_length=1, max_length=20000)
+
+
+class TriggerWriteArgs(TriggerCheckArgs):
+    document_type: Literal["copy", "article", "document", "legal"] = "copy"
+    register: str | None = Field(default=None, max_length=100)
+    template: str | None = Field(default=None, max_length=100)
+    jurisdiction: str | None = Field(default=None, max_length=80)
+    terms: dict[str, Any] = Field(default_factory=dict)
+    matter_id: uuid.UUID | None = None
+
+
+
+class TriggerVoiceShowArgs(Body):
+    target: int | None = Field(default=None, ge=1)
+    offset: int = Field(default=0, ge=0)
+
+
+class TriggerVoiceSetArgs(Body):
+    text: str = Field(min_length=1, max_length=12000)
+    expected_revision: int = Field(default=0, ge=0)
+    preview_hash: str = Field(default="", max_length=64)
+    brief_markdown: str = Field(default="", max_length=24000)
+
+
+class TriggerVoiceRollbackArgs(Body):
+    target: int = Field(ge=1)
+    expected_revision: int = Field(default=0, ge=0)
+    preview_hash: str = Field(default="", max_length=64)
+    brief_markdown: str = Field(default="", max_length=24000)
+
+
+class TriggerFeedbackArgs(Body):
+    write_id: uuid.UUID
+    status: Literal["accepted", "changes_requested", "rejected"]
+    changes: str = Field(default="", max_length=10000)
+    brief_markdown: str = Field(default="", max_length=16000)
+
+    @model_validator(mode="after")
+    def change_details(self):
+        if self.status == "changes_requested" and not self.changes.strip():
+            raise ValueError("Change details required")
+        return self
+
+
 class SavingsArgs(Body):
     days: int = Field(default=30, ge=1, le=365)
 
@@ -814,6 +1000,15 @@ class Adapter:
 
 
 ADAPTERS = {
+    "trigger.voice.show": Adapter("POST", "/v1/trigger/voice.show", TriggerVoiceShowArgs, "trigger.voice.show"),
+    "trigger.voice.set": Adapter("POST", "/v1/trigger/voice.set", TriggerVoiceSetArgs, "trigger.voice.set"),
+    "trigger.voice.rollback": Adapter("POST", "/v1/trigger/voice.rollback", TriggerVoiceRollbackArgs, "trigger.voice.rollback"),
+    "trigger.feedback": Adapter("POST", "/v1/trigger/feedback", TriggerFeedbackArgs, "trigger.feedback"),
+    "trigger.write": Adapter("POST", "/v1/trigger/write", TriggerWriteArgs, "trigger.write", True, "paid_run"),
+    "trigger.check": Adapter("POST", "/v1/trigger/check", TriggerCheckArgs, "trigger.check"),
+    "repo.prs": Adapter("GET", "/v1/command/repo/prs", RepoPRsArgs, "open PRs on Tervory-AI/tervory-tank"),
+    "repo.pr": Adapter("GET", "/v1/command/repo/pr", RepoPRArgs, "one PR's changed files and check results"),
+    "repo.file": Adapter("GET", "/v1/command/repo/file", RepoFileArgs, "read one file from main"),
     "base.batch": Adapter("POST", "/v1/base/run", BaseBatchArgs, "Start a Base batch", True, "paid_run"),
     "base.search": Adapter("GET", "/v1/base/records", BaseSearchArgs, "Read Base records"),
     "tiger.watch": Adapter("POST", "/v1/tiger/watchlist", WatchArgs, "Start a price watch", True, "paid_run"),
@@ -893,7 +1088,10 @@ def public_card(card: dict) -> dict:
     return {k: v for k, v in card.items() if k not in {"payload", "evidence_ids"}}
 
 
-async def propose_action(conn: Any, row: dict, state: dict, action: PlannedAction) -> dict:
+async def propose_action(conn: Any, row: dict, state: dict, action: PlannedAction, actor: Actor | None = None) -> dict:
+    if action.tool.startswith("trigger."):
+        from trigger_commands import prepare
+        action = await prepare(action, await authorized_actor(actor or Actor(row["tenant_id"], row["user_id"], False), conn), state)
     card_id = str(uuid.uuid4())
     adapter = ADAPTERS.get(action.tool)
     label = adapter.label if adapter else "Start a worker build"
@@ -908,9 +1106,10 @@ async def propose_action(conn: Any, row: dict, state: dict, action: PlannedActio
 
 def current_actor(actor: Actor) -> Actor:
     admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
-    return Actor(actor.tenant_id, actor.user_id, actor.user_id in admins, actor.squads)
+    return Actor(actor.tenant_id, actor.user_id, actor.user_id in admins, actor.squads, actor.tenant_admin)
 
 
+@tenant_path("actor")
 async def authorized_actor(actor: Actor, conn: Any = None) -> Actor:
     actor = current_actor(actor)
     if actor.founder:
@@ -919,7 +1118,7 @@ async def authorized_actor(actor: Actor, conn: Any = None) -> Actor:
         async with db().acquire() as connection:
             return await authorized_actor(actor, connection)
     rows = await conn.fetch("SELECT agent FROM tank.tenant_squad WHERE tenant_id=$1", actor.tenant_id)
-    return Actor(actor.tenant_id, actor.user_id, False, frozenset(row["agent"] for row in rows) & SQUADS)
+    return Actor(actor.tenant_id, actor.user_id, False, frozenset(row["agent"] for row in rows) & SQUADS, actor.tenant_admin)
 
 
 def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict, dict | None]:
@@ -945,6 +1144,8 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
     if action.tool == "ledger.savings":
         end = datetime.now(timezone.utc)
         args = {"start": (end - timedelta(days=args["days"])).isoformat(), "end": end.isoformat()}
+    if action.tool.startswith("trigger."):
+        return adapter.method, path, {}, {**args, **scope}
     if adapter.method == "GET":
         return adapter.method, path, {**args, **scope}, None
     return adapter.method, path, scope, {**args, **scope}
@@ -962,6 +1163,7 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     method, path, params, body = adapter_request(action, actor)
     headers = {"X-Tank-Key": TANK_API_KEY, "X-Tervory-User": actor.user_id,
                "X-Tervory-Tenant": str(actor.tenant_id)}
+    headers["X-Tervory-Role"] = "org:admin" if actor.tenant_admin else ""
     if current_actor(actor).founder:
         headers["X-Tervory-Admin"] = actor.user_id
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tank.internal",
@@ -1102,7 +1304,11 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
         require_tool(current_actor(actor), action.tool)
         attempted = True
         async with asyncio.timeout(ACTION_TIMEOUT):
-            status, result = await dispatch_action(action, actor)
+            if action.tool.startswith("trigger."):
+                from trigger_commands import dispatch_confirmed
+                status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
+            else:
+                status, result = await dispatch_action(action, actor)
         ids = explicit_ledger_ids(result)
         async with editing(thread_id, actor) as (conn, row, state):
             card = state["cards"][card_id]
@@ -1225,3 +1431,28 @@ def message_context(messages: list[dict]) -> list[dict]:
     if len(dump(result).encode()) > 128000:
         raise HTTPException(413, "Conversation context is too large; start another thread or use shorter text attachments")
     return result
+
+
+async def repeat_messages(conn: Any, state: dict, actor: Actor, messages: list[dict]) -> list[dict]:
+    """An immediate, identical question can reuse its original exact request.
+
+    Only completed answer-only turns qualify. Intervening conversation, changed
+    attachments/model/tools or confirmed tool results keep the complete context.
+    The normal router still checks the current policy, expiry and rejection.
+    """
+    if len(state["messages"]) < 3:
+        return messages
+    prior, answer, current = state["messages"][-3:]
+    if ([prior["role"], answer["role"], current["role"]] != ["user", "assistant", "user"]
+            or not answer.get("repeatable")
+            or any(prior.get(key) != current.get(key) for key in ("content", "model", "attachments"))):
+        return messages
+    saved = await conn.fetchval(
+        "SELECT input FROM tank.tasks WHERE id=$1 AND tenant_id=$2 AND created_by=$3 "
+        "AND task_type='command.turn' AND status='done'",
+        uuid.UUID(answer["message_id"]), actor.tenant_id, actor.user_id)
+    original = unpack(saved).get("messages", []) if saved else []
+    if (not original or original[-1] != messages[-1]
+            or [m for m in original if m["role"] == "system"] != [m for m in messages if m["role"] == "system"]):
+        return messages
+    return original

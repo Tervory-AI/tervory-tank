@@ -1,8 +1,8 @@
 "use client";
 
-import { OrganizationSwitcher, SignedIn, UserButton, useAuth } from "@clerk/nextjs";
+import { OrganizationSwitcher, UserButton, useAuth } from "@clerk/nextjs";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams, useSelectedLayoutSegments } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import {
   FOUNDER_LINKS,
@@ -29,7 +29,10 @@ export function Shell({
   readAccess: () => Promise<ShellAccess>;
   children: React.ReactNode;
 }) {
-  const pathname = usePathname() ?? "";
+  const browserPathname = usePathname() ?? "";
+  const [routeRoot] = useSelectedLayoutSegments();
+  // The public host rewrites / to /autumbra without changing the browser pathname.
+  const pathname = routeRoot === "autumbra" ? "/autumbra" : browserPathname;
   const { isLoaded, userId } = useAuth();
   const [founder, setFounder] = useState(initialFounder);
   const [reviewer, setReviewer] = useState(initialReviewer);
@@ -142,6 +145,8 @@ function ShellBar({
 }) {
   const section = pageSection(pathname, founder, reviewer);
   const current = (href: string) => linkIsCurrent(href, pathname, search, hash);
+  // Clerk 7 (Core 3) removed <SignedIn>; check the session with useAuth instead.
+  const { isSignedIn } = useAuth();
 
   return (
     <aside id="app-sidebar" className={menu ? "shell-side open" : "shell-side"} aria-label="Sidebar">
@@ -149,12 +154,12 @@ function ShellBar({
         <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={218} height={40} />
         <button type="button" className="shell-side-close" id="shell-side-close" onClick={onClose}>Close</button>
       </div>
-      <SignedIn>
+      {isSignedIn ? (
         <div className="shell-account">
           <OrganizationSwitcher hidePersonal afterSelectOrganizationUrl="/" />
           <UserButton />
         </div>
-      </SignedIn>
+      ) : null}
       <nav className="shell-nav" aria-label="Workspace">
         {TOP_LINKS.map((link) => (
           <ShellLink key={link.label} link={link} current={current(link.href)} onClose={onClose} />

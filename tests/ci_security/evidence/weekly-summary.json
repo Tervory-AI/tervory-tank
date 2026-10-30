@@ -1,0 +1,9 @@
+{
+  "scope": "whole HEAD history",
+  "tool": "gitleaks",
+  "version": "8.30.1",
+  "exit_code": 1,
+  "findings": 43,
+  "all_findings_in_starting_main": true,
+  "starting_main": "4e74b4269fd91220a52970bd73cee03a3d3b89ba"
+}

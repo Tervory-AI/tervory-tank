@@ -1043,7 +1043,7 @@ CREATE TABLE IF NOT EXISTS tank.skill_source_reviews (
 -- Tank's planning message supplies the system prompt; the founder promotes later.
 -- Kept above MODELS-2 so later re-apply tests see it as an existing row.
 INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
-  ('command.turn', 1, 'luna', 'urgent', 'none', 2048, NULL)
+  ('command.turn', 1, 'luna', 'urgent', 'tenant', 2048, NULL)
 ON CONFLICT DO NOTHING;
 
 -- RIG-2: Rig's own Hermes brain; the founder controls later promotions.
@@ -1633,3 +1633,616 @@ CREATE TABLE IF NOT EXISTS tank.rig_forge_jobs (
     PRIMARY KEY (tenant_id,id)
 );
 -- End RIG-5F.
+
+-- ONE-DOOR Part B: foreground ladder, tenant cache, learning windows and batches.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS escalation_model text;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS confidence_floor numeric(5,4) NOT NULL DEFAULT 0.8;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS acceptance_window_s integer NOT NULL DEFAULT 86400;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS matter_matching boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS max_cost_usd numeric(12,6) NOT NULL DEFAULT 1;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS escalation jsonb NOT NULL DEFAULT '[]';
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS accept_after timestamptz;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS batch boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS batch_id uuid;
+ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS polarity text NOT NULL DEFAULT 'positive';
+CREATE TABLE IF NOT EXISTS tank.route_cache (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    task_type text NOT NULL,
+    context_hash text NOT NULL,
+    input_hash text NOT NULL,
+    semantic_form text NOT NULL,
+    vector jsonb NOT NULL,
+    ledger_id uuid NOT NULL REFERENCES tank.ledger(id),
+    expires_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id,region,task_type,context_hash,input_hash)
+);
+CREATE INDEX IF NOT EXISTS route_cache_expiry ON tank.route_cache(expires_at);
+CREATE TABLE IF NOT EXISTS tank.batches (
+    id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    task_type text NOT NULL,
+    model text NOT NULL,
+    count integer NOT NULL,
+    status text NOT NULL DEFAULT 'queued',
+    provider text NOT NULL,
+    provider_id text,
+    input_file_id text,
+    submitted_at timestamptz,
+    finished_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    estimated_cost_usd numeric(18,8) NOT NULL DEFAULT 0,
+    actual_cost_usd numeric(18,8) NOT NULL DEFAULT 0,
+    error text,
+    caller text,
+    UNIQUE (tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS tank.batch_items (
+    batch_id uuid NOT NULL REFERENCES tank.batches(id),
+    tenant_id uuid NOT NULL,
+    item_id uuid NOT NULL,
+    request jsonb NOT NULL,
+    policy jsonb NOT NULL,
+    prices jsonb NOT NULL,
+    status text NOT NULL DEFAULT 'queued',
+    attempts integer NOT NULL DEFAULT 0,
+    reserved_usd numeric(18,8) NOT NULL DEFAULT 0,
+    ledger_id uuid REFERENCES tank.ledger(id),
+    error text,
+    PRIMARY KEY (batch_id,item_id)
+);
+CREATE INDEX IF NOT EXISTS batches_pending ON tank.batches(status,created_at);
+CREATE TABLE IF NOT EXISTS tank.policy_seeds (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());
+DO $$
+BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended('one-door-ladder-v1',0));
+    IF NOT EXISTS (SELECT 1 FROM tank.policy_seeds WHERE name='one-door-ladder-v1') THEN
+        -- Luna is the existing funded cheap roster model. Never approve code here.
+        UPDATE tank.policy SET escalation_model='luna',rung=3,cache_scope='tenant',updated_at=now()
+        WHERE tenant_id IS NULL AND task_type IN ('base.extract','base.business_data','agent.base.think');
+        UPDATE tank.policy SET model=CASE WHEN EXISTS (
+            SELECT 1 FROM tank.skills WHERE id='base.extract' AND version='2.0.0' AND state='approved'
+        ) THEN 'skill:base.extract@2.0.0' ELSE 'luna' END
+        WHERE tenant_id IS NULL AND task_type='base.extract';
+        UPDATE tank.policy SET model=CASE WHEN EXISTS (
+            SELECT 1 FROM tank.skills WHERE id='base.business_data' AND version='2.0.0' AND state='approved'
+        ) THEN 'skill:base.business_data@2.0.0' ELSE 'luna' END,confidence_floor=0.4
+        WHERE tenant_id IS NULL AND task_type='base.business_data';
+        INSERT INTO tank.policy(task_type,rung,model,escalation_model,cache_scope,confidence_floor)
+        VALUES ('base.normalize',3,CASE WHEN EXISTS (
+            SELECT 1 FROM tank.skills WHERE id='base.normalize' AND version='1.0.0' AND state='approved'
+        ) THEN 'skill:base.normalize@1.0.0' ELSE 'luna' END,'luna','tenant',0.8)
+        ON CONFLICT DO NOTHING;
+        -- Existing funded roster entry; no new provider or key. Matter keys are
+        -- mandatory for semantic reuse; no reference means a semantic miss.
+        UPDATE tank.policy SET model='astra',rung=1,semantic_cache=true,matter_matching=true,
+            cache_scope='tenant',updated_at=now()
+        WHERE tenant_id IS NULL AND task_type IN
+          ('zenas.scope','zenas.rule_card','zenas.case_facts','zenas.apply','zenas.compose',
+           'zenas.plain_language','zenas.draft','zenas.review','zenas.selftest');
+        UPDATE tank.policy SET batch_eligible=true WHERE tenant_id IS NULL
+          AND task_type IN ('base.extract','base.business_data','zenas.case_facts','zenas.rule_card','zenas.selftest');
+        INSERT INTO tank.policy_seeds(name) VALUES('one-door-ladder-v1');
+    END IF;
+END $$;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS batch_baseline_cost_usd numeric(18,8);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS batch_discount_usd numeric(18,8);
+ALTER TABLE tank.batches ADD COLUMN IF NOT EXISTS request_hash text NOT NULL DEFAULT '';
+ALTER TABLE tank.batch_items ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
+
+-- Repair only the three original platform seed pins on boxes that already ran
+-- v1. Never approve a package, alter tenant overrides or overwrite later choices.
+DO $$
+BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended('one-door-approved-seeds-v2',0));
+    IF NOT EXISTS (SELECT 1 FROM tank.policy_seeds WHERE name='one-door-approved-seeds-v2') THEN
+        UPDATE tank.policy p SET model='luna',updated_at=now()
+        FROM (VALUES ('base.normalize','1.0.0'),('base.extract','2.0.0'),
+                     ('base.business_data','2.0.0')) AS seed(skill_id,version)
+        WHERE p.tenant_id IS NULL AND p.task_type=seed.skill_id
+          AND p.rung=3 AND p.escalation_model='luna'
+          AND p.model='skill:'||seed.skill_id||'@'||seed.version
+          AND NOT EXISTS (SELECT 1 FROM tank.skills s
+            WHERE s.id=seed.skill_id AND s.version=seed.version AND s.state='approved');
+        INSERT INTO tank.policy_seeds(name) VALUES('one-door-approved-seeds-v2');
+    END IF;
+END $$;
+
+-- BASE-WORKS: immutable public reference snapshots and private client results.
+CREATE TABLE IF NOT EXISTS tank.base_reference_files (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id uuid NOT NULL CHECK(owner_id='00000000-0000-0000-0000-000000000001'),
+    published_on date NOT NULL UNIQUE,
+    source_url text NOT NULL,
+    sha256 text NOT NULL,
+    checked_at timestamptz NOT NULL,
+    adopted boolean NOT NULL DEFAULT false,
+    row_count integer NOT NULL CHECK(row_count > 0),
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS tank.base_reference_entries (
+    file_id uuid NOT NULL REFERENCES tank.base_reference_files(id),
+    licence_key text NOT NULL,
+    licence_number text NOT NULL,
+    state text NOT NULL,
+    licence_type text NOT NULL,
+    name text NOT NULL,
+    address jsonb NOT NULL,
+    legacy_record_id uuid,
+    raw jsonb,
+    PRIMARY KEY(file_id,licence_key),
+    CHECK (legacy_record_id IS NOT NULL OR raw IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS base_reference_selection ON tank.base_reference_entries(file_id,state,licence_type);
+CREATE TABLE IF NOT EXISTS tank.base_reference_checks (
+    owner_id uuid PRIMARY KEY CHECK(owner_id='00000000-0000-0000-0000-000000000001'),
+    checked_at timestamptz NOT NULL,
+    status text NOT NULL,
+    message text
+);
+-- Independent source stops; legacy rows still describe ATF until next checked.
+ALTER TABLE tank.base_reference_checks ADD COLUMN IF NOT EXISTS source_checks jsonb NOT NULL DEFAULT '{}'::jsonb;
+CREATE TABLE IF NOT EXISTS tank.base_campaigns (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    request_id uuid NOT NULL,
+    name text NOT NULL,
+    file_id uuid REFERENCES tank.base_reference_files(id),
+    selection jsonb NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,id),
+    UNIQUE(tenant_id,request_id)
+);
+CREATE TABLE IF NOT EXISTS tank.base_campaign_states (
+    tenant_id uuid NOT NULL,
+    campaign_id uuid NOT NULL,
+    state text NOT NULL,
+    ordinal integer NOT NULL,
+    batch text NOT NULL,
+    task_id uuid,
+    status text NOT NULL DEFAULT 'waiting',
+    records_count integer NOT NULL,
+    csv_records jsonb,
+    started_at timestamptz,
+    finished_at timestamptz,
+    error text,
+    PRIMARY KEY(tenant_id,campaign_id,state),
+    FOREIGN KEY(tenant_id,campaign_id) REFERENCES tank.base_campaigns(tenant_id,id),
+    UNIQUE(tenant_id,batch)
+);
+CREATE TABLE IF NOT EXISTS tank.base_record_results (
+    tenant_id uuid NOT NULL,
+    record_id uuid NOT NULL,
+    task_id uuid,
+    batch text,
+    licence_key text,
+    state text NOT NULL,
+    licence_type text NOT NULL,
+    name text NOT NULL,
+    status text NOT NULL,
+    fields jsonb NOT NULL,
+    source_revision text NOT NULL,
+    attempted_at timestamptz NOT NULL,
+    checked_at timestamptz NOT NULL,
+    PRIMARY KEY(tenant_id,record_id)
+);
+CREATE INDEX IF NOT EXISTS base_results_dimensions ON tank.base_record_results(tenant_id,state,licence_type,checked_at);
+CREATE TABLE IF NOT EXISTS tank.base_ledger_links (
+    tenant_id uuid NOT NULL,
+    record_id uuid NOT NULL,
+    ledger_id uuid NOT NULL REFERENCES tank.ledger(id),
+    PRIMARY KEY(tenant_id,record_id,ledger_id)
+);
+CREATE TABLE IF NOT EXISTS tank.base_apollo_imports (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    sha256 text NOT NULL,
+    imported_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,id),
+    UNIQUE(tenant_id,sha256)
+);
+CREATE TABLE IF NOT EXISTS tank.base_apollo_records (
+    tenant_id uuid NOT NULL,
+    import_id uuid NOT NULL,
+    licence_key text NOT NULL,
+    fields jsonb NOT NULL,
+    PRIMARY KEY(tenant_id,import_id,licence_key),
+    FOREIGN KEY(tenant_id,import_id) REFERENCES tank.base_apollo_imports(tenant_id,id)
+);
+ALTER TABLE tank.base_apollo_records ADD COLUMN IF NOT EXISTS base_snapshot jsonb;
+
+-- Immutable sampled evidence; a checked CSV only adds human verdicts.
+CREATE TABLE IF NOT EXISTS tank.base_audits (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    campaign_id uuid NOT NULL,
+    seed bigint NOT NULL CHECK(seed >= 0),
+    sampling_method text NOT NULL DEFAULT 'python_random_sample_v1',
+    population_size integer NOT NULL CHECK(population_size >= 200),
+    population_sha256 text NOT NULL,
+    records jsonb NOT NULL CHECK(jsonb_typeof(records)='array' AND jsonb_array_length(records)=200),
+    verdicts jsonb NOT NULL DEFAULT '{}'::jsonb CHECK(jsonb_typeof(verdicts)='object'),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    created_by text NOT NULL,
+    reviewed_at timestamptz,
+    reviewed_by text,
+    PRIMARY KEY(tenant_id,id),
+    FOREIGN KEY(tenant_id,campaign_id) REFERENCES tank.base_campaigns(tenant_id,id),
+    UNIQUE(tenant_id,campaign_id,seed)
+);
+
+-- Explicit field checks are additive; legacy record verdicts stay unchanged.
+ALTER TABLE tank.base_audits ADD COLUMN IF NOT EXISTS field_verdicts jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+-- Job 6 (F8): Base source reliability from reviewed audits. Platform-wide counts only:
+-- source kind, field name and numbers; never a tenant, record, URL or value.
+CREATE TABLE IF NOT EXISTS tank.base_source_reliability (
+    source text NOT NULL,
+    field text NOT NULL,
+    correct integer NOT NULL CHECK(correct >= 0),
+    wrong integer NOT NULL CHECK(wrong >= 0),
+    checked integer NOT NULL CHECK(checked = correct + wrong AND checked > 0),
+    accuracy double precision NOT NULL CHECK(accuracy BETWEEN 0 AND 1),
+    wilson_lower double precision CHECK(wilson_lower BETWEEN 0 AND 1),
+    audits integer NOT NULL CHECK(audits > 0),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(source, field)
+);
+-- Additive ownership for branches that already installed the initial score table.
+ALTER TABLE tank.base_source_reliability ADD COLUMN IF NOT EXISTS owner_id uuid NOT NULL
+    DEFAULT '00000000-0000-0000-0000-000000000001'
+    CHECK (owner_id='00000000-0000-0000-0000-000000000001'::uuid);
+
+-- Founder decision: retain NOT NULL; a not_set amount is storage only, never spend.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema='tank' AND table_name='price_book' AND column_name='unit_price'
+          AND numeric_precision=18 AND numeric_scale=8
+    ) THEN
+        ALTER TABLE tank.price_book ALTER COLUMN unit_price TYPE numeric(18,8);
+    END IF;
+END $$;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema='tank' AND table_name='ledger' AND column_name='cost_usd'
+          AND numeric_precision=18 AND numeric_scale=8
+    ) THEN
+        ALTER TABLE tank.ledger ALTER COLUMN cost_usd TYPE numeric(18,8);
+    END IF;
+END $$;
+ALTER TABLE tank.price_book ADD COLUMN IF NOT EXISTS price_status text NOT NULL DEFAULT 'set' CHECK(price_status IN ('set','not_set'));
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS cost_status text NOT NULL DEFAULT 'set' CHECK(cost_status IN ('set','not_set'));
+ALTER TABLE tank.econ_daily ADD COLUMN IF NOT EXISTS unpriced_calls integer NOT NULL DEFAULT 0;
+ALTER TABLE tank.price_book ADD COLUMN IF NOT EXISTS free_pass boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS vendor_cost_status text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS vendor_unit_price numeric(20,10);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS vendor_price_id uuid;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS vendor_list_cost_usd numeric(20,10);
+INSERT INTO tank.price_book(id,tenant_id,outcome_type,unit_price,price_status,currency,effective_from,note)
+VALUES
+ ('ba5e0000-0000-4000-8000-000000000001','00000000-0000-0000-0000-000000000001','apollo.contact',0,'not_set','USD','2026-10-01','Expense per contact; price not set. Founder-supplied CSV comparison requires no API call.'),
+ ('ba5e0000-0000-4000-8000-000000000002','00000000-0000-0000-0000-000000000001','brave.search.query',0,'not_set','USD','2026-10-01','Expense per successful query; price not set.'),
+ ('ba5e0000-0000-4000-8000-000000000003','00000000-0000-0000-0000-000000000001','google.places.request',0,'not_set','USD','2026-10-01','Expense per successful Places request; price not set.'),
+ ('ba5e0000-0000-4000-8000-000000000004','00000000-0000-0000-0000-000000000001','context.dev.credit',0.000792,'set','USD','2026-10-21','Pro list price: $99 / 125000 credits; https://www.context.dev/pricing checked 2026-10-21. Free pass only when founder explicitly sets it.')
+ON CONFLICT(id) DO NOTHING;
+
+-- Count duplicate source rows without changing the platform-owned originals.
+ALTER TABLE tank.base_reference_files ADD COLUMN IF NOT EXISTS duplicate_count integer NOT NULL DEFAULT 0 CHECK (duplicate_count >= 0);
+
+-- Product plugin metadata; credential plaintext is never persisted here.
+CREATE TABLE IF NOT EXISTS tank.vault_items (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL, vault text NOT NULL, kind text NOT NULL,
+    name text NOT NULL, metadata jsonb NOT NULL, sealed text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, vault, kind, name)
+);
+
+
+-- Founder decision, 2026-10-27: 99% agreement over 200 checked samples.
+-- Change only the complete old default pair, leaving customized bars intact.
+-- A marker protects later founder edits (including a deliberate return to the
+-- old values) when startup reapplies this file. No policy choice is reset.
+ALTER TABLE tank.policy ALTER COLUMN eval_threshold SET DEFAULT 0.99;
+ALTER TABLE tank.policy ALTER COLUMN min_shadow_samples SET DEFAULT 200;
+ALTER TABLE tank.route_evidence ALTER COLUMN min_shadow_samples SET DEFAULT 200;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM tank.policy_seeds WHERE name='graduation-99-200-v1') THEN
+        UPDATE tank.policy SET eval_threshold=0.99, min_shadow_samples=200
+        WHERE eval_threshold=0.97 AND min_shadow_samples=30;
+        INSERT INTO tank.policy_seeds(name) VALUES('graduation-99-200-v1');
+    END IF;
+END $$;
+
+-- Chats use Tank's tenant-sealed exact cache, never semantic matching.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM tank.policy_seeds WHERE name='command-exact-cache-v1') THEN
+        UPDATE tank.policy SET cache_scope='tenant', semantic_cache=false, updated_at=now()
+        WHERE task_type='command.turn';
+        INSERT INTO tank.policy_seeds(name) VALUES('command-exact-cache-v1');
+    END IF;
+END $$;
+
+-- Local semantic cache shadow evidence. No existing serving policy is changed.
+CREATE TABLE IF NOT EXISTS tank.semantic_observations (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    task_type text NOT NULL,
+    ledger_id uuid NOT NULL REFERENCES tank.ledger(id),
+    policy_hash text NOT NULL,
+    encoder_id text NOT NULL,
+    input_hash text NOT NULL,
+    status text NOT NULL CHECK (status IN ('hit','miss','guarded','unavailable')),
+    source_id uuid REFERENCES tank.ledger(id),
+    candidate_content text,
+    similarity double precision,
+    agreement double precision CHECK (agreement BETWEEN 0 AND 1),
+    primary_cost_usd numeric(18,8) NOT NULL DEFAULT 0,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,ledger_id)
+);
+CREATE INDEX IF NOT EXISTS semantic_observations_evidence
+    ON tank.semantic_observations(tenant_id,region,task_type,policy_hash,encoder_id,input_hash);
+CREATE TABLE IF NOT EXISTS tank.semantic_approvals (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    task_type text NOT NULL,
+    policy_hash text NOT NULL,
+    encoder_id text NOT NULL,
+    approved boolean NOT NULL DEFAULT false,
+    approved_by text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,region,task_type,policy_hash,encoder_id)
+);
+
+-- RouteLLM is an opt-in shadow experiment. No policy is enabled by migration.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS routellm_weak_model text;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS routellm_threshold double precision
+    CHECK (routellm_threshold >= 0 AND routellm_threshold <= 1);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_model text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_score double precision;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_threshold double precision;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_weak_model text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_config text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_status text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_primary_cost_known boolean;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_model_cost_usd numeric(12,6);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_parent_id uuid;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_sample_tenant uuid;
+ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS routellm_config text;
+ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS candidate_ledger_id uuid;
+
+-- Case-study report identities. Values stay in their existing evidence stores.
+CREATE TABLE IF NOT EXISTS tank.case_study_clients (
+    tenant_id uuid PRIMARY KEY,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS tank.case_study_reports (
+    tenant_id uuid NOT NULL REFERENCES tank.case_study_clients(tenant_id),
+    product text NOT NULL CHECK(product IN ('base','tiger','market_lab','rig','zenas','trigger','tisan','radix','autumbra')),
+    template_version integer NOT NULL DEFAULT 1,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,product)
+);
+CREATE OR REPLACE FUNCTION tank.register_case_study_product() RETURNS trigger AS $$
+DECLARE report_product text;
+BEGIN
+    IF TG_NARGS>0 THEN
+        report_product := TG_ARGV[0];
+    ELSE
+        report_product := NEW.agent;
+    END IF;
+    report_product := CASE report_product WHEN 'ghost' THEN 'autumbra' WHEN 'market-lab' THEN 'market_lab' ELSE report_product END;
+    IF report_product IN ('base','tiger','market_lab','rig','zenas','trigger','tisan','radix','autumbra') THEN
+        INSERT INTO tank.case_study_clients(tenant_id) VALUES(NEW.tenant_id) ON CONFLICT DO NOTHING;
+        INSERT INTO tank.case_study_reports(tenant_id,product) VALUES(NEW.tenant_id,report_product) ON CONFLICT DO NOTHING;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, tank;
+DO $$ BEGIN
+    IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='case_study_product_added' AND tgrelid='tank.tenant_squad'::regclass) THEN
+        CREATE TRIGGER case_study_product_added AFTER INSERT OR UPDATE OF agent ON tank.tenant_squad
+            FOR EACH ROW EXECUTE FUNCTION tank.register_case_study_product();
+    END IF;
+    -- Trigger and Autumbra have no squad-grant entry on today's main. Existing
+    -- product activity still registers its report atomically, without granting
+    -- new tools or copying the receipt into a parallel reporting store.
+    IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='case_study_product_used' AND tgrelid='tank.ledger'::regclass) THEN
+        CREATE TRIGGER case_study_product_used AFTER INSERT ON tank.ledger
+            FOR EACH ROW EXECUTE FUNCTION tank.register_case_study_product();
+    END IF;
+    IF to_regclass('agent_trigger.voices') IS NOT NULL AND NOT EXISTS(
+        SELECT 1 FROM pg_trigger WHERE tgname='case_study_trigger_provisioned' AND tgrelid=to_regclass('agent_trigger.voices')) THEN
+        CREATE TRIGGER case_study_trigger_provisioned AFTER INSERT ON agent_trigger.voices
+            FOR EACH ROW EXECUTE FUNCTION tank.register_case_study_product('trigger');
+    END IF;
+END $$;
+-- Existing grants receive the same registration once; no report metrics are copied.
+INSERT INTO tank.case_study_clients(tenant_id) SELECT DISTINCT tenant_id FROM tank.tenant_squad ON CONFLICT DO NOTHING;
+INSERT INTO tank.case_study_reports(tenant_id,product)
+    SELECT tenant_id,CASE WHEN agent='ghost' THEN 'autumbra' ELSE agent END FROM tank.tenant_squad
+    WHERE agent IN ('base','tiger','market_lab','rig','zenas','trigger','tisan','radix','autumbra','ghost') ON CONFLICT DO NOTHING;
+INSERT INTO tank.case_study_clients(tenant_id)
+    SELECT DISTINCT tenant_id FROM tank.ledger
+    WHERE agent IN ('base','tiger','market_lab','market-lab','rig','zenas','trigger','tisan','radix','autumbra','ghost') ON CONFLICT DO NOTHING;
+INSERT INTO tank.case_study_reports(tenant_id,product)
+    SELECT DISTINCT tenant_id,CASE agent WHEN 'ghost' THEN 'autumbra' WHEN 'market-lab' THEN 'market_lab' ELSE agent END
+    FROM tank.ledger WHERE agent IN ('base','tiger','market_lab','market-lab','rig','zenas','trigger','tisan','radix','autumbra','ghost') ON CONFLICT DO NOTHING;
+DO $$ BEGIN
+    IF to_regclass('agent_trigger.voices') IS NOT NULL THEN
+        INSERT INTO tank.case_study_clients(tenant_id) SELECT tenant_id FROM agent_trigger.voices ON CONFLICT DO NOTHING;
+        INSERT INTO tank.case_study_reports(tenant_id,product) SELECT tenant_id,'trigger' FROM agent_trigger.voices ON CONFLICT DO NOTHING;
+    END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS shadow_routellm_tenant_task ON tank.shadow(tenant_id,task_type,routellm_config)
+    WHERE routellm_config IS NOT NULL;
+
+-- Trigger first build. Leave all existing and tenant-specific policies untouched.
+INSERT INTO tank.policy(task_type,rung,model,cache_scope,max_tokens_out,eval_threshold,min_shadow_samples,auto_promote)
+VALUES ('trigger.write',1,'luna','tenant',3000,0.99,200,false),
+       ('trigger.check',3,'code','none',0,0.99,200,false)
+ON CONFLICT DO NOTHING;
+-- trigger.check never calls /v1/route; its adapter executes code and records zero cost.
+
+-- Trigger second build: tenant-private writing/feedback provenance.
+CREATE TABLE IF NOT EXISTS tank.trigger_writes (
+    id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    user_id text NOT NULL,
+    brief text NOT NULL,
+    draft text NOT NULL,
+    checker_results jsonb NOT NULL,
+    feedback_status text NOT NULL DEFAULT 'pending',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_feedback (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    write_id uuid NOT NULL,
+    status text NOT NULL CHECK (status IN ('accepted','changes_requested','rejected')),
+    changes text NOT NULL DEFAULT '',
+    user_id text NOT NULL,
+    operation_id uuid NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    FOREIGN KEY (tenant_id,write_id) REFERENCES tank.trigger_writes(tenant_id,id),
+    UNIQUE (tenant_id,operation_id)
+);
+
+-- Explicitly deferred requests. Queue claims and all receipts remain tenant/box scoped.
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS sent_at timestamptz;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS offpeak_job_id uuid;
+CREATE TABLE IF NOT EXISTS tank.offpeak_jobs (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    request jsonb NOT NULL,
+    policy jsonb NOT NULL,
+    caller text,
+    task_id uuid,
+    model_override text,
+    status text NOT NULL DEFAULT 'queued'
+        CHECK(status IN ('queued','dispatching','batch','completed','failed','uncertain')),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    sent_at timestamptz,
+    finished_at timestamptz,
+    result jsonb,
+    error text,
+    command_context jsonb,
+    notified boolean NOT NULL DEFAULT false,
+    UNIQUE(tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS offpeak_pending ON tank.offpeak_jobs(region,status,created_at);
+CREATE INDEX IF NOT EXISTS offpeak_task ON tank.offpeak_jobs(tenant_id,task_id);
+ALTER TABLE tank.offpeak_jobs ADD COLUMN IF NOT EXISTS checked_at timestamptz;
+
+
+-- B3: transactional model-change outbox. Registry/eval work belongs to the
+-- platform tenant; policy_tenant_id identifies an optional tenant override.
+CREATE TABLE IF NOT EXISTS tank.skill_revalidations (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    policy_tenant_id uuid,
+    task_type text NOT NULL,
+    old_model text NOT NULL,
+    model text NOT NULL,
+    policy jsonb NOT NULL,
+    skill_id text NOT NULL,
+    version text NOT NULL,
+    queued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    completed_at timestamptz,
+    eval_id uuid,
+    error text
+);
+CREATE INDEX IF NOT EXISTS skill_revalidations_pending
+    ON tank.skill_revalidations(tenant_id, queued_at, id) WHERE completed_at IS NULL;
+ALTER TABLE tank.skill_evals ADD COLUMN IF NOT EXISTS model text;
+ALTER TABLE tank.skill_evals ADD COLUMN IF NOT EXISTS revalidation_id uuid;
+CREATE UNIQUE INDEX IF NOT EXISTS skill_evals_revalidation_once
+    ON tank.skill_evals(revalidation_id) WHERE revalidation_id IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION tank.queue_skill_revalidations() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE previous text;
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        previous := OLD.model;
+    ELSIF NEW.tenant_id IS NOT NULL THEN
+        SELECT model INTO previous FROM tank.policy
+          WHERE task_type=NEW.task_type AND tenant_id IS NULL;
+    END IF;
+    -- Initial creation without a prior effective model is not a swap.
+    IF previous IS NULL OR previous IS NOT DISTINCT FROM NEW.model THEN
+        RETURN NEW;
+    END IF;
+    INSERT INTO tank.skill_revalidations
+      (tenant_id,policy_tenant_id,task_type,old_model,model,policy,skill_id,version)
+    SELECT '00000000-0000-0000-0000-000000000001'::uuid,
+           NEW.tenant_id,NEW.task_type,previous,NEW.model,to_jsonb(NEW),s.id,s.version
+      FROM tank.skills s WHERE s.task_type=NEW.task_type AND s.state='approved';
+    RETURN NEW;
+END;
+$$;
+CREATE OR REPLACE TRIGGER policy_skill_revalidation
+    AFTER INSERT OR UPDATE OF model ON tank.policy
+    FOR EACH ROW EXECUTE FUNCTION tank.queue_skill_revalidations();
+
+-- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
+CREATE SCHEMA IF NOT EXISTS agent_tank;
+CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
+    id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    agent text NOT NULL DEFAULT 'tank' CHECK (agent = 'tank'),
+    claim text NOT NULL CHECK (length(claim) BETWEEN 1 AND 8000),
+    evidence jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(evidence) = 'array'),
+    confidence double precision NOT NULL DEFAULT 0.5 CHECK (confidence BETWEEN 0 AND 1),
+    last_verified timestamptz,
+    embed_model text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    tier text NOT NULL DEFAULT 'client' CHECK (tier IN ('client','platform')),
+    kind text NOT NULL DEFAULT 'fact',
+    meta jsonb NOT NULL DEFAULT '{}',
+    seen integer NOT NULL DEFAULT 1,
+    CHECK (tier <> 'platform' OR tenant_id = '00000000-0000-0000-0000-000000000001'::uuid)
+);
+CREATE INDEX IF NOT EXISTS memory_records_scope ON agent_tank.memory_records (tenant_id, tier, created_at, id);
+CREATE INDEX IF NOT EXISTS memory_records_encoder ON agent_tank.memory_records (tenant_id, embed_model);
+CREATE TABLE IF NOT EXISTS agent_tank.memory_index_jobs (
+    row_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    target_model text NOT NULL,
+    operation text NOT NULL DEFAULT 'upsert' CHECK (operation IN ('upsert','delete')),
+    attempts integer NOT NULL DEFAULT 0,
+    run_at timestamptz NOT NULL DEFAULT now(),
+    last_error text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, row_id, target_model, operation)
+);
+CREATE INDEX IF NOT EXISTS memory_index_jobs_due ON agent_tank.memory_index_jobs (run_at);
+CREATE TABLE IF NOT EXISTS agent_tank.memory_publish_policy (
+    tenant_id uuid PRIMARY KEY,
+    enabled boolean NOT NULL DEFAULT false,
+    identifiers jsonb NOT NULL DEFAULT '{}',
+    updated_by text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS agent_tank.memory_publish_log (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    actor text NOT NULL,
+    happened_at timestamptz NOT NULL DEFAULT now(),
+    source_row uuid NOT NULL,
+    result text NOT NULL CHECK (result IN ('disabled','missing','refused','published','already_published')),
+    published_row uuid
+);
+-- END GENERATED AGENT MEMORY

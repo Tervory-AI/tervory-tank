@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from chassis.tenant_db import TenantPool
+
 from rigbox.logic import public_product
 from rigbox.recall import SEARCH_RECALL_CAP
 from rigbox.retailer_store import RetailerMemoryStore, RetailerPgStore
@@ -236,6 +238,42 @@ class MemoryStore(RetailerMemoryStore):
         self.fit_why: dict[tuple[str, str, str], list[str]] = {}
         self.market: dict[tuple[str, str, str], dict[str, Any]] = {}
         self.searches: list[dict[str, Any]] = []
+        self.training_events: list[dict[str, Any]] = []
+        self.deleted_products: set[tuple[str, str]] = set()
+
+    async def deleted_skus(self, tenant_id: str) -> set[str]:
+        return {sku for tenant, sku in self.deleted_products if tenant == str(tenant_id)}
+
+    async def restore_products(self, tenant_id: str, skus: list[str]) -> None:
+        self.deleted_products.difference_update((str(tenant_id), sku) for sku in skus)
+
+    async def delete_products(self, tenant_id: str, skus: list[str]) -> int:
+        """Called inside atomic: catalogue, private rows and recall change together."""
+        self._retailer_state()
+        tenant, wanted = str(tenant_id), set(skus)
+        found = {sku for owner, sku in self._products if owner == tenant and sku in wanted}
+        for sku in found:
+            del self._products[(tenant, sku)]
+            self.deleted_products.add((tenant, sku))
+        self.private_costs = {key: row for key, row in self.private_costs.items()
+                              if key[0] != tenant or key[1] not in found}
+        if hasattr(self, "feed_products"):
+            self.feed_products = {key for key in self.feed_products if key[0] != tenant or key[1] not in found}
+        if hasattr(self, "watch_receipts"):
+            self.watch_receipts = {key: value for key, value in self.watch_receipts.items() if key[0] != tenant or key[1] not in found}
+        self._fits = {key: row for key, row in self._fits.items()
+                      if key[0] != tenant or (key[1] not in found and key[2] not in found)}
+        for (owner, family), members in list(self.families.items()):
+            if owner == tenant:
+                remaining = [sku for sku in members if sku not in found]
+                await self.set_family(tenant, family, remaining)
+                if members and not remaining:
+                    self._fits = {key: row for key, row in self._fits.items() if key[0] != tenant or key[3] != family}
+        if found:
+            self._drop_answers(tenant)
+            self.searches = [row for row in self.searches
+                             if row["tenant_id"] != tenant or not found.intersection(row["ids"])]
+        return len(found)
 
     def _drop_answers(self, tenant_id: str) -> None:
         tenant = str(tenant_id)
@@ -246,6 +284,8 @@ class MemoryStore(RetailerMemoryStore):
 
     async def upsert_product(self, tenant_id: str, row: dict[str, Any]) -> str:
         key = (str(tenant_id), str(row["sku"]))
+        if key in self.deleted_products:
+            return "skipped"
         action = "updated" if key in self._products else "added"
         self._products[key] = {**row, "tenant_id": str(tenant_id), "sku": str(row["sku"])}
         self._drop_answers(tenant_id)
@@ -329,6 +369,7 @@ class MemoryStore(RetailerMemoryStore):
 
     async def put_feed(self, tenant_id: str, fmt: str, url: str, currency: str) -> None:
         self.feeds[(str(tenant_id), url)] = {"format": fmt, "url": url, "currency": currency}
+        getattr(self, "indexed_feeds", set()).discard((str(tenant_id), url))
 
     async def feeds_for(self, tenant_id: str) -> list[dict[str, Any]]:
         return [dict(row) for (tenant, _url), row in self.feeds.items() if tenant == str(tenant_id)]
@@ -342,6 +383,7 @@ class MemoryStore(RetailerMemoryStore):
         self.quotes.append(
             {"tenant_id": str(tenant_id), "id": quote_id, "payload": payload, "contact": contact, "sent_at": None}
         )
+        await self.training_event(tenant_id, "rig_quote", quote_id, payload, {"request_id": quote_id})
 
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         for row in self.quotes:
@@ -402,6 +444,10 @@ class MemoryStore(RetailerMemoryStore):
 
     async def put_fit_why(self, tenant_id: str, fit_id: str, rule_hash: str, why: list[str]) -> None:
         self.fit_why[(str(tenant_id), fit_id, rule_hash)] = [str(line) for line in why]
+
+    async def training_event(self, tenant: str, source: str, ref: str, value: dict, output: dict) -> None:
+        self.training_events.append({"tenant_id": tenant, "source": source, "source_ref": ref,
+                                     "input": copy.deepcopy(value), "output": copy.deepcopy(output)})
 
     async def add_search(self, tenant_id: str, version: str, row: dict[str, Any]) -> None:
         self.searches.append(
@@ -477,6 +523,43 @@ class PgStore(RetailerPgStore):
     def __init__(self, pool: Any) -> None:
         self.pool = pool
 
+    async def deleted_skus(self, tenant_id: str) -> set[str]:
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("SELECT sku FROM agent_rig.deleted_products WHERE tenant_id=$1", _uuid(tenant_id))
+        return {row["sku"] for row in rows}
+
+    async def restore_products(self, tenant_id: str, skus: list[str]) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute("DELETE FROM agent_rig.deleted_products WHERE tenant_id=$1 AND sku=ANY($2::text[])", _uuid(tenant_id), skus)
+
+    async def delete_products(self, tenant_id: str, skus: list[str]) -> int:
+        """Use the caller's atomic connection, including its tenant lock."""
+        tenant = _uuid(tenant_id)
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("SELECT sku FROM agent_rig.products WHERE tenant_id=$1 AND sku=ANY($2::text[]) FOR UPDATE", tenant, skus)
+            found = [row["sku"] for row in rows]
+            if not found:
+                return 0
+            await conn.execute("""INSERT INTO agent_rig.deleted_products(tenant_id,sku)
+                SELECT $1,unnest($2::text[]) ON CONFLICT(tenant_id,sku) DO NOTHING""", tenant, found)
+            await conn.execute("DELETE FROM agent_rig.supplier_costs WHERE tenant_id=$1 AND sku=ANY($2::text[])", tenant, found)
+            await conn.execute("DELETE FROM agent_rig.fits WHERE tenant_id=$1 AND (part_sku=ANY($2::text[]) OR fits_sku=ANY($2::text[]))", tenant, found)
+            families = await conn.fetch("SELECT family,member_skus FROM agent_rig.families WHERE tenant_id=$1", tenant)
+            # These derived jobs reference the product. Quote history has no such FK.
+            await conn.execute("DELETE FROM agent_rig.rig_3d_jobs WHERE tenant_id=$1 AND product_id=ANY($2::text[])", tenant, found)
+            await conn.execute("DELETE FROM agent_rig.products WHERE tenant_id=$1 AND sku=ANY($2::text[])", tenant, found)
+        removed = set(found)
+        for row in families:
+            remaining = [sku for sku in row["member_skus"] if sku not in removed]
+            await self.set_family(tenant_id, row["family"], remaining)
+            if row["member_skus"] and not remaining:
+                async with self.pool.acquire() as conn:
+                    await conn.execute("DELETE FROM agent_rig.fits WHERE tenant_id=$1 AND fits_family=$2", tenant, row["family"])
+        await self._drop_answers(tenant_id)
+        async with self.pool.acquire() as conn:
+            await conn.execute("DELETE FROM agent_rig.searches WHERE tenant_id=$1 AND ids ?| $2::text[]", tenant, found)
+        return len(found)
+
     async def apply_schema(self) -> None:
         """Apply ``schema.sql``. The agent role is not allowed to create schemas.
 
@@ -487,7 +570,10 @@ class PgStore(RetailerPgStore):
         Statements are classified after leading blank lines and ``--`` comments
         are removed, because those comments ride along on the first statement.
         """
-        async with self.pool.acquire() as conn:
+        # Optional DDL errors must roll back before the existing-schema fallback
+        # or next statement. Keep SET LOCAL per statement on scoped pools.
+        checkout = self.pool.acquire(autocommit=True) if isinstance(self.pool, TenantPool) else self.pool.acquire()
+        async with checkout as conn:
             for statement in schema_statements():
                 sql = _classified_sql(statement)
                 if not sql:
@@ -515,6 +601,15 @@ class PgStore(RetailerPgStore):
         return found == 1
 
     async def upsert_product(self, tenant_id: str, row: dict[str, Any]) -> str:
+        # Legacy scheduled feeds also share the delete/import tenant lock.
+        async with self.atomic(tenant_id) as store:
+            return await store._upsert_product(tenant_id, row)
+
+    async def _upsert_product(self, tenant_id: str, row: dict[str, Any]) -> str:
+        async with self.pool.acquire() as conn:
+            deleted = await conn.fetchval("SELECT 1 FROM agent_rig.deleted_products WHERE tenant_id=$1 AND sku=$2", _uuid(tenant_id), str(row["sku"]))
+        if deleted:
+            return "skipped"
         existed = await self.product_exists(tenant_id, str(row["sku"]))
         async with self.pool.acquire() as conn:
             await conn.execute(
@@ -683,7 +778,9 @@ class PgStore(RetailerPgStore):
             )
 
     async def key(self, key_hash: str) -> dict[str, Any] | None:
-        async with self.pool.acquire() as conn:
+        # Authentication must identify the tenant before tenant-scoped checkout.
+        bootstrap_pool = getattr(self.pool, "admin_pool", None) or self.pool
+        async with bootstrap_pool.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT tenant_id, kind, origins FROM agent_rig.keys WHERE key_hash = $1",
                 key_hash,
@@ -797,7 +894,7 @@ class PgStore(RetailerPgStore):
                 """
                 INSERT INTO agent_rig.feeds (tenant_id, format, url, currency)
                 VALUES ($1, $2, $3, $4)
-                ON CONFLICT (tenant_id, url) DO UPDATE SET format = EXCLUDED.format, currency = EXCLUDED.currency
+                ON CONFLICT (tenant_id, url) DO UPDATE SET format = EXCLUDED.format, currency = EXCLUDED.currency, watch_indexed=false
                 """,
                 _uuid(tenant_id),
                 str(fmt),
@@ -815,11 +912,13 @@ class PgStore(RetailerPgStore):
 
     async def tenant_ids(self) -> list[str]:
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch("SELECT tenant_id FROM agent_rig.retailers")
+            rows = await conn.fetch("SELECT tenant_id FROM agent_rig.retailers UNION SELECT tenant_id FROM agent_rig.products")
         return [str(row["tenant_id"]) for row in rows]
 
     async def add_quote(self, tenant_id: str, quote_id: str, payload: dict[str, Any], contact: dict[str, Any]) -> None:
-        async with self.pool.acquire() as conn:
+        from rigbox.training import enqueue
+
+        async with self.pool.acquire() as conn, conn.transaction():
             await conn.execute(
                 """
                 INSERT INTO agent_rig.quotes (tenant_id, id, payload, contact)
@@ -830,6 +929,7 @@ class PgStore(RetailerPgStore):
                 _json(payload),
                 _json(contact),
             )
+            await enqueue(conn, tenant_id, "rig_quote", quote_id, payload, {"request_id": quote_id})
 
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         async with self.pool.acquire() as conn:
@@ -983,6 +1083,12 @@ class PgStore(RetailerPgStore):
                 rule_hash,
                 _json(list(why)),
             )
+
+    async def training_event(self, tenant: str, source: str, ref: str, value: dict, output: dict) -> None:
+        from rigbox.training import enqueue
+
+        async with self.pool.acquire() as conn:
+            await enqueue(conn, tenant, source, ref, value, output)
 
     async def add_search(self, tenant_id: str, version: str, row: dict[str, Any]) -> None:
         created = row.get("created_at")

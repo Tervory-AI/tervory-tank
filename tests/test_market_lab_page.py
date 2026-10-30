@@ -54,8 +54,13 @@ def test_catalog_matches_feed_sources():
     assert listed.returncode == 0, listed.stderr
     catalog = {item_id: key for item_id, key in json.loads(listed.stdout)}
     specs = {spec.id: bind_key(spec).key_name for spec in sources()}
-    assert catalog.keys() == specs.keys()
-    assert catalog == specs
+    # New feeds use source metadata from the tenant-scoped API, in the same
+    # cards. They do not introduce another static set of page wording.
+    assert specs.keys() - catalog.keys() == {"comtrade_preview", "searxng", "uspto"}
+    assert catalog == {key: value for key, value in specs.items() if key in catalog}
+    for source in sources():
+        if source.id not in catalog:
+            assert source.name and source.url.startswith("https://") and source.cadence
 
 
 def test_page_does_not_invent_numbers_or_store_keys():
@@ -69,7 +74,7 @@ def test_page_does_not_invent_numbers_or_store_keys():
     assert "Nothing was stored" in text
     assert "Nothing was saved" in text
     assert "•••• saved" not in text
-    assert "set in the environment" in text
+    assert "Provided by your workspace administrator" in text
     assert 'type="password"' in text
     assert "console." not in text
     readers = (PAGE / "load.ts").read_text(encoding="utf-8") + (PAGE / "page.tsx").read_text(encoding="utf-8")
@@ -84,22 +89,22 @@ def test_page_does_not_invent_numbers_or_store_keys():
     assert re.search(r"\.ml-main\s*\{[^}]*overflow-y:\s*auto", css)
     nav = (ROOT / "workspace" / "app" / "product-nav.ts").read_text(encoding="utf-8")
     assert '"/market-lab"' in nav
-    chat = (ROOT / "workspace" / "app" / "api" / "market-lab" / "chat" / "route.ts").read_text(encoding="utf-8")
-    assert "scrubSecrets" in chat
-    assert "route(" in chat
-    assert "console." not in chat
+    assert not (ROOT / "workspace/app/api/market-lab/chat/route.ts").exists()
+    ask = (PAGE / "ask/route.ts").read_text(encoding="utf-8")
+    assert 'marketLabRequest' in ask and '"ask"' in ask
+    assert 'tier0.answer' not in text and 'route(' not in ask
     view = (PAGE / "view.tsx").read_text(encoding="utf-8")
     assert "Help" not in view
     assert "WORKSPACE_HREF" not in view
     assert "headerLinks" not in view
-    assert 'label: "Dashboard"' in view
+    assert 'label: "Usage"' in view
     assert 'href: "/ledger"' in view
-    assert 'label: "Projects"' in view
+    assert 'label: "Tasks"' in view
     assert 'href: "/tasks"' in view
     assert 'label: "Chats"' in view
-    assert 'label: "Settings"' in view
+    assert 'label: "Workspace setup"' in view
     assert 'href: "/onboarding"' in view
-    assert 'label: "Support"' in view
+    assert 'label: "Support"' not in view
     brand = view.index('className="ml-brand"')
     bottom = view.index('className="ml-bottom"')
     settings = view.index('aria-label="Workspace"')
@@ -107,10 +112,10 @@ def test_page_does_not_invent_numbers_or_store_keys():
     assert "MARKET_LAB_LOGO_SRC" in view[brand:bottom]
     assert "tervory-logo-reversed.png" in view[bottom:settings]
     assert "Market Lab logo, added later" not in view
-    for old in ("Chat", "Tasks", "Data", "Ledger", "Skills", "Tank"):
+    for old in ("Chat", "Data", "Ledger", "Skills", "Tank"):
         assert f'label: "{old}"' not in view
     plugins = (PAGE / "plugins.ts").read_text(encoding="utf-8")
-    assert "This vault is off. Turn it on in Tank." in plugins
+    assert "Plugins are not available yet. Ask your workspace administrator to enable them." in plugins
     for name in ("vault-server.ts", "plugin-actions.ts"):
         server = (PAGE / name).read_text(encoding="utf-8")
         assert 'const VAULT = "lab.vault"' in server
