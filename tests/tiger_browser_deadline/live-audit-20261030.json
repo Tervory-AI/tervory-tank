@@ -286,5 +286,8 @@
     "created_at": "2026-10-30T21:57:45.017027Z",
     "started_at": "2026-10-30T22:00:53.156110Z",
     "finished_at": "2026-10-30T22:00:53.165991Z"
-  }
+  },
+  "confirmed_reading_watch_count": 11,
+  "error_observation_watch_count": 2,
+  "unobserved_watch_count": 1
 }
