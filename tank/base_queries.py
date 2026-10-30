@@ -105,7 +105,7 @@ async def numbers(store: Any, tenant: uuid.UUID, states: list[str], kinds: list[
         amounts.append({"state": row["state"], "month": row["month"], "rung": row["rung"], "rung_label": RUNGS.get(row["rung"], "other"),
             "known_cost_usd": str(known), "cost_usd": None if row["unpriced"] else str(known),
             "verified_records": n, "unpriced": row["unpriced"], "vendors": row["vendors"],
-            "cost_per_verified_record": str(known / n) if n and not row["missing_receipts"] else None,
+            "cost_per_verified_record": str(known / n) if n and not row["missing_receipts"] and not row["unpriced"] else None,
             "status": "price not set" if row["unpriced"] else "receipts unavailable" if row["missing_receipts"] else "no verified records" if not n else "priced"})
     return {"groups": [groups[key] for key in sorted(groups)], "costs": amounts,
             "unattributed_calls": unattributed, "records_without_receipts": missing}
