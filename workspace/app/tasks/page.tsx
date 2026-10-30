@@ -43,7 +43,9 @@ export default function TasksPage() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const res = await fetch("/api/tasks", { cache: "no-store" });
+    const taskId = new URLSearchParams(window.location.search).get("task");
+    const query = taskId === null ? "" : `?${new URLSearchParams({ task: taskId })}`;
+    const res = await fetch(`/api/tasks${query}`, { cache: "no-store" });
     if (res.ok) setTasks((await res.json()) as Task[]);
   }, []);
 
