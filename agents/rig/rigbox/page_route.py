@@ -98,9 +98,13 @@ def mount_page(application: FastAPI) -> None:
 
     @application.get("/page/v5/assets/{digest}/{name}", include_in_schema=False)
     async def v5_versioned_asset(digest: str, name: str) -> FileResponse:
-        if name not in ("rig.css", "rig.js") or _v5_asset_url(name) != f"/page/v5/assets/{digest}/{name}":
+        if name not in ("rig.css", "rig.js") or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
             raise HTTPException(status_code=404, detail="Not found")
-        return FileResponse(_V5 / name, media_type=_V5_MEDIA[Path(name).suffix],
+        # Published objects are retained across releases; never substitute current bytes.
+        path = _V5 / "assets" / f"{digest}-{name}"
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            raise HTTPException(status_code=404, detail="Not found")
+        return FileResponse(path, media_type=_V5_MEDIA[Path(name).suffix],
                             headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
     @application.get("/page/v5/{name:path}", include_in_schema=False)
