@@ -306,14 +306,13 @@ services:
       retries: 10
       start_period: 20s
 
-  # Boston only. Not started by normal compose up / Coolify deployment.
-  # Founder configures the public recipient and explicitly enables this profile.
+  # Boston only. Keep the founder-enabled backup in every normal redeployment.
+  # Public recipient and UPLOADS credential values stay in Coolify.
   r2-backup:
-    profiles: ["r2-backup"]
     build:
       context: .
       dockerfile: jobs/train/Dockerfile.backup
-    restart: "no"
+    restart: unless-stopped
     mem_limit: 512m
     cpus: 0.5
     read_only: true
