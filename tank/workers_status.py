@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from admin import require_admin
+from tenant_db import tenant_transaction
 
 # A heartbeat older than this shows "not checking in" on /control.
 STALE_AFTER_S = 180
@@ -142,35 +143,34 @@ async def workers_tile() -> dict[str, Any]:
 
     try:
         async with asyncio.timeout(5):
-            async with db().acquire() as conn:
-                async with conn.transaction(readonly=True, isolation="repeatable_read"):
-                    row = await conn.fetchrow(
-                        "SELECT worker,state,issue,commit,last_error,seen_at FROM tank.workers_heartbeat ORDER BY seen_at DESC LIMIT 1"
-                    )
-                    pause = await conn.fetchrow(
-                        "SELECT value,updated_by,updated_at FROM tank.workers_controls "
-                        "WHERE tenant_id=$1 AND name='workers_paused'", PLATFORM,
-                    )
-                    change = await conn.fetchrow(
-                        "SELECT by_user,old_value,new_value,at FROM tank.control_log "
-                        "WHERE tenant_id=$1 AND name='workers_paused' ORDER BY at DESC LIMIT 1", PLATFORM,
-                    )
-                    # Box-wide founder snapshot, matching the worker's thread/tenant
-                    # join. Counts do not establish capacity, claimability or progress.
-                    counts = await conn.fetchrow(
-                        "SELECT count(*) FILTER (WHERE b.status='queued') AS queued, "
-                        "count(*) FILTER (WHERE b.status='running') AS running, "
-                        "count(*) FILTER (WHERE b.status='awaiting_review') AS awaiting_review "
-                        "FROM tank.command_builds b JOIN tank.command_threads t "
-                        "ON t.thread_id=b.thread_id AND t.tenant_id=b.tenant_id "
-                        "WHERE b.status IN ('queued','running','awaiting_review')"
-                    )
+            async with tenant_transaction(db(), readonly=True, isolation="repeatable_read") as conn:
+                row = await conn.fetchrow(
+                    "SELECT worker,state,issue,commit,last_error,seen_at FROM tank.workers_heartbeat ORDER BY seen_at DESC LIMIT 1"
+                )
+                pause = await conn.fetchrow(
+                    "SELECT value,updated_by,updated_at FROM tank.workers_controls "
+                    "WHERE tenant_id=$1 AND name='workers_paused'", PLATFORM,
+                )
+                change = await conn.fetchrow(
+                    "SELECT by_user,old_value,new_value,at FROM tank.control_log "
+                    "WHERE tenant_id=$1 AND name='workers_paused' ORDER BY at DESC LIMIT 1", PLATFORM,
+                )
+                # Box-wide founder snapshot, matching the worker's thread/tenant
+                # join. Counts do not establish capacity, claimability or progress.
+                counts = await conn.fetchrow(
+                    "SELECT count(*) FILTER (WHERE b.status='queued') AS queued, "
+                    "count(*) FILTER (WHERE b.status='running') AS running, "
+                    "count(*) FILTER (WHERE b.status='awaiting_review') AS awaiting_review "
+                    "FROM tank.command_builds b JOIN tank.command_threads t "
+                    "ON t.thread_id=b.thread_id AND t.tenant_id=b.tenant_id "
+                    "WHERE b.status IN ('queued','running','awaiting_review')"
+                )
             return {
                 "workers_paused": bool(pause["value"]) if pause else False,
                 "worker": view(row), "stale_after_s": STALE_AFTER_S,
                 "pause_control": {"updated_by": pause["updated_by"], "updated_at": pause["updated_at"].isoformat()} if pause else None,
                 "last_pause_change": {"by_user": change["by_user"], "old_value": change["old_value"],
-                                      "new_value": change["new_value"], "at": change["at"].isoformat()} if change else None,
+                                  "new_value": change["new_value"], "at": change["at"].isoformat()} if change else None,
                 "build_counts": {name: int(counts[name]) for name in ("queued", "running", "awaiting_review")},
             }
     except Exception:
