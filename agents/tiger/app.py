@@ -63,7 +63,8 @@ async def ping(ctx: JobContext) -> dict:
 async def _render(url: str, session: str, agent: str, tenant: str, task: str = "") -> dict[str, Any]:
     response = await app.state.http.post(
         f"{TIGER_URL.rstrip('/')}/render",
-        json={"url": url, "screenshot": True, "settle_ms": 10000, "max_ms": 25000, "price_reader": True},
+        json={"url": url, "screenshot": True, "settle_ms": 10000, "max_ms": 25000,
+              "request_timeout_ms": 45000, "price_reader": True},
         headers={"X-Tank-Key": os.environ.get("TANK_KEY", ""), "X-Tenant-ID": tenant,
                  "X-Home-Region": os.environ.get("TANK_REGION", "us-east"), "X-Task-ID": task},
         timeout=50,
@@ -78,7 +79,7 @@ async def _render(url: str, session: str, agent: str, tenant: str, task: str = "
         # Login itself returns status only. Read numeric fields in a second
         # request, with the session cookie in the same room's own browser.
         response = await app.state.http.post(f"{TIGER_URL.rstrip('/')}/render",
-            json={"url": url, "max_ms": 25000}, headers={"X-Tank-Key": os.environ.get("TANK_KEY", ""),
+            json={"url": url, "max_ms": 25000, "request_timeout_ms": 45000}, headers={"X-Tank-Key": os.environ.get("TANK_KEY", ""),
             "X-Tenant-ID": tenant, "X-Home-Region": os.environ.get("TANK_REGION", "us-east"), "X-Task-ID": task}, timeout=50)
         if response.status_code != 200: return {"ok": False, "error": "Private page unavailable."}
         data = response.json()
