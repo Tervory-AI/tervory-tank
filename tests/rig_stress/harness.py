@@ -77,7 +77,7 @@ def preflight(config: dict) -> None:
         if host.get('NetworkMode') in ('host', 'default', 'bridge', 'coolify'):
             raise ValueError('Production/default networks forbidden')
         addresses.add(container['NetworkSettings']['Networks'][name]['IPAddress'])
-    if not config.get('dedicated_spare_host'):
+    if config.get('dedicated_spare_host') is not True:
         raise ValueError('Saturation requires explicit dedicated spare host confirmation')
     for store in config['stores']:
         if validate_url(store['target'], config['target_allowlist']) not in addresses:
@@ -106,12 +106,12 @@ def load_config(path: Path) -> dict:
         validate_url(store['target'], config['target_allowlist'])
         if set(store['operations']) != {'search', 'setup', 'quote'}:
             raise ValueError('Explicit search/setup/quote request fixtures required')
-        for operation in store['operations'].values():
-            route = operation['path']
-            if not route.startswith('/v1/rig/') or route.startswith('//') or '#' in route:
-                raise ValueError('Only relative Rig API paths allowed')
-            if operation['method'] not in ('GET', 'POST'):
-                raise ValueError('Only GET/POST fixture requests allowed')
+        approved = {'search': ('GET', '/v1/rig/search'),
+                    'setup': ('POST', '/v1/rig/setups'),
+                    'quote': ('POST', '/v1/rig/quote')}
+        for kind, operation in store['operations'].items():
+            if (operation['method'], operation['path']) != approved[kind]:
+                raise ValueError('Operation must match its exact approved Rig method/path')
     return config
 
 
