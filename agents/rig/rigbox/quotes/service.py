@@ -79,7 +79,7 @@ class QuoteService(Service):
     def _quote_fields(contact: Any) -> None:
         if contact is not None and (not isinstance(contact, dict)
                                    or set(contact) - {"name", "email", "phone"}):
-            raise RigError("invalid", "Only name, email and phone belong in the contact fields.", 422)
+            raise RigError("invalid", "The request is not valid.", 422)
 
     async def privacy_notice(self, tenant: str) -> dict[str, str] | None:
         retailer = await self.store.retailer(tenant) or {}
