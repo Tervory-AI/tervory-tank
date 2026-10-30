@@ -101,8 +101,9 @@ def mount_page(application: FastAPI) -> None:
         if name not in ("rig.css", "rig.js") or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
             raise HTTPException(status_code=404, detail="Not found")
         # Published objects are retained across releases; never substitute current bytes.
-        path = _V5 / "assets" / f"{digest}-{name}"
-        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+        root = (_V5 / "assets").resolve()
+        path = (root / f"{digest}-{name}").resolve()
+        if path.parent != root or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             raise HTTPException(status_code=404, detail="Not found")
         return FileResponse(path, media_type=_V5_MEDIA[Path(name).suffix],
                             headers={"Cache-Control": "public, max-age=31536000, immutable"})
