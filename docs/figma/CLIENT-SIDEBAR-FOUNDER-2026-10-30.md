@@ -29,8 +29,10 @@ These are founder-specified navigation labels. The menu instruction does not aut
 
 The first two items are standard everywhere:
 
-1. Squad
+1. The Squad
 2. New Notices
+
+The Squad opens a submenu containing all products from the actual product catalogue. It is distinct from the chosen-product shortcuts below. Listing a product does not grant access or change server authorisation. This updates the earlier Squad label rather than creating a duplicate row.
 
 Below these, list the products the client has chosen. Each opens its own product window. Do not infer that this requires a new browser tab.
 
