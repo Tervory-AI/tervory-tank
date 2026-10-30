@@ -7,6 +7,15 @@ const WRITE = new Set(["reference/batches", "uploads", "comparison"]);
 const FILTERS = new Set(["states", "types", "include_collectors", "metric", "reason", "offset", "limit", "state", "month", "rung", "batch", "cost_status"]);
 type Context = { params: Promise<{ path: string[] }> };
 
+function sameOrigin(request: Request): boolean {
+  try {
+    const origin = new URL(request.headers.get("origin") ?? "");
+    const url = new URL(request.url);
+    // Coolify preserves the public Host while Next sees the internal bind URL.
+    return origin.protocol === url.protocol && origin.host === (request.headers.get("host") ?? url.host);
+  } catch { return false; }
+}
+
 async function route(request: Request, context: Context): Promise<Response> {
   const path = (await context.params).path.join("/");
   if (!(request.method === "GET" ? READ : WRITE).has(path)) return new Response("Not found", { status: 404 });
@@ -18,7 +27,7 @@ async function route(request: Request, context: Context): Promise<Response> {
   for (const [key, value] of url.searchParams) if (FILTERS.has(key)) query.set(key, value);
   let body: Record<string, unknown> | undefined;
   if (request.method === "POST") {
-    if (request.headers.get("origin") !== url.origin) return Response.json({ detail: "Open this form in your workspace." }, { status: 403 });
+    if (!sameOrigin(request)) return Response.json({ detail: "Open this form in your workspace." }, { status: 403 });
     const text = await request.text();
     if (Buffer.byteLength(text) > 2_100_000) return Response.json({ detail: "This file is too large." }, { status: 413 });
     try {
