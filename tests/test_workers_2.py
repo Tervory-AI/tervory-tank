@@ -43,8 +43,10 @@ class Conn:
         self.pause_change: dict | None = None
         self.build_counts = {"queued": 0, "running": 0, "awaiting_review": 0}
         self.readonly_transactions: list[dict] = []
+        self.acquisitions = 0
 
     def acquire(self):
+        self.acquisitions += 1
         return self
 
     def transaction(self, **options):
@@ -226,7 +228,7 @@ def test_worker_diagnostics_reject_nonfounders_before_database_reads(client, con
                     {"x-tank-key": WORKER_KEY}, {**FOUNDER, "x-tank-key": "wrong"},
                     {"x-tank-key": "offline-workspace-key", "x-tervory-user": "founder-one"}):
         assert client.get("/v1/controls/workers", headers=headers).status_code == 404
-    assert not conn.reads and not conn.writes
+    assert conn.acquisitions == 0 and not conn.reads and not conn.writes
 
 
 def test_worker_key_pause_response_does_not_expose_diagnostics(client, conn):
@@ -246,7 +248,7 @@ def test_worker_diagnostics_database_failure_is_not_false_or_zero(client, conn):
 def test_worker_diagnostics_counts_join_both_thread_and_tenant(client, conn, monkeypatch):
     # Execute the route's real aggregate SQL locally; a mock count cannot catch
     # a missing tenant join or accidentally counting completed/failed builds.
-    with sqlite3.connect(":memory:") as memory:
+    with sqlite3.connect(":memory:", check_same_thread=False) as memory:
         memory.row_factory = sqlite3.Row
         memory.execute("ATTACH DATABASE ':memory:' AS tank")
         memory.execute("CREATE TABLE tank.command_threads (thread_id text, tenant_id text)")
@@ -270,6 +272,21 @@ def test_worker_diagnostics_counts_join_both_thread_and_tenant(client, conn, mon
         assert response.status_code == 200
         assert response.json()["build_counts"] == {"queued": 2, "running": 1, "awaiting_review": 1}
         assert [tuple(row) for row in memory.execute("SELECT * FROM tank.command_builds")] == rows
+    assert not conn.writes
+
+
+def test_worker_diagnostics_query_error_has_no_partial_or_private_response(client, conn, monkeypatch):
+    original = conn.fetchrow
+
+    async def fetchrow(sql, *args):
+        if "tank.command_builds" in sql:
+            raise RuntimeError("private database error and query contents")
+        return await original(sql, *args)
+
+    monkeypatch.setattr(conn, "fetchrow", fetchrow)
+    response = client.get("/v1/controls/workers", headers=FOUNDER)
+    assert response.status_code == 503
+    assert response.json() == {"detail": "worker diagnostics unavailable"}
     assert not conn.writes
 
 
