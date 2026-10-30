@@ -367,7 +367,9 @@ class FixedHTTPSBaseTests(unittest.TestCase):
         tree.body = [node for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))
                      or isinstance(node, ast.FunctionDef) and node.name == "api"]
         namespace = {"URL": base, "TOKEN": ""}
-        exec(compile(tree, str(path), "exec"), namespace)
+        # Match Python's sibling-import path when these scripts run directly.
+        with patch.object(sys, "path", [str(path.parent), *sys.path]):
+            exec(compile(tree, str(path), "exec"), namespace)
         return namespace["api"], namespace["urllib"].request
 
     def watchdog(self):

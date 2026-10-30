@@ -17,6 +17,8 @@ import sys
 import time
 import urllib.request
 
+from backup_runtime_scope import verify_main_scope
+
 URL = os.environ["COOLIFY_URL"].rstrip("/")
 TOKEN = os.environ["COOLIFY_TOKEN"]
 BEFORE = os.environ.get("BEFORE", "")
@@ -136,6 +138,10 @@ def main() -> int:
         print("::notice title=nothing to deploy::no app code changed")
         return 0
     if want_main:
+        # Coolify injects the app's runtime .env into every Compose service.
+        # Refuse drift before replacing the live stack, rather than losing backups.
+        if not verify_main_scope(api):
+            return 1
         if not deploy(MAIN_APP, "main") or not wait_for(MAIN_APP, "main"):
             print("::error title=stopped::main did not deploy; rooms were not touched")
             return 1
