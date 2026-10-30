@@ -371,8 +371,8 @@ def test_room_has_no_path_to_figma_and_copies_the_reader() -> None:
     assert "api.figma.com" not in reader
     assert "httpx" not in reader
     docker = (ROOT / "agents" / "tisan" / "Dockerfile").read_text(encoding="utf-8")
-    assert "COPY tisan/figma.py /app/figma.py" in docker
-    assert "COPY tisan/fixtures /app/fixtures" in docker
+    assert "COPY agents/tisan/figma.py /app/figma.py" in docker
+    assert "COPY agents/tisan/fixtures /app/fixtures" in docker
     assert "TISAN_FIGMA_FIXTURE=/app/fixtures/tervory-landing.json" in docker
     compose = (ROOT / "agents" / "tisan" / "docker-compose.yml").read_text(encoding="utf-8")
     assert "FIGMA_TOKEN" not in compose

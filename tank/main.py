@@ -4026,6 +4026,34 @@ async def training_graduation(actor=Depends(__import__("gold").require_reviewer)
         return await graduate.training_table(conn, actor.tenant, box_region())
 
 
+@app.api_route("/v1/tisan/promotion/{action}", methods=["GET", "POST"],
+               dependencies=[Depends(__import__("admin").require_admin)])
+async def tisan_promotion_proxy(action: str, request: Request) -> Response:
+    """Founder-only API corridor; only Tisan owns application mappings and checks."""
+    allowed = {("POST", "sites"), ("POST", "promote"), ("POST", "rollback"),
+               ("POST", "status"), ("GET", "history")}
+    if (request.method, action) not in allowed:
+        raise HTTPException(status_code=404, detail="not found")
+    key = os.environ.get("TANK_KEY_TISAN", "")
+    if _http is None or not key:
+        raise HTTPException(status_code=503, detail="Tisan room is unavailable")
+    raw = bytearray()
+    async for chunk in request.stream():
+        raw.extend(chunk)
+        if len(raw) > 8192:
+            raise HTTPException(status_code=413, detail="request too large")
+    try:
+        response = await _http.request(
+            request.method, f"http://agent-tisan:8000/promotion/{action}",
+            params=list(request.query_params.multi_items()), content=bytes(raw) or None,
+            headers={"X-Tank-Key": key, "X-Tervory-Admin": request.headers.get("x-tervory-admin", ""),
+                     "Content-Type": "application/json"}, timeout=600,
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=503, detail="Tisan operation unavailable; check its status before retrying") from None
+    return Response(content=response.content, status_code=response.status_code, media_type="application/json")
+
+
 @app.api_route("/v1/tisan/gold/{action}", methods=["GET", "POST"],
                dependencies=[Depends(__import__("admin").require_admin)])
 async def tisan_gold_proxy(action: str, request: Request) -> Response:
