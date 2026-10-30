@@ -8,11 +8,13 @@ from uuid import UUID
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from chassis.tenant_db import activate_tenant, tenant_scope
+
 from rigbox.retailer import Retailer
 from rigbox.service import RigError
 
 router = APIRouter()
-OPERATIONS = {"panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger", "watch-tenants", "watch-products"}
+OPERATIONS = {"panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger", "watch-tenants", "watch-products", "watch-context"}
 
 
 @router.post("/internal/retailer/{operation}")
@@ -36,15 +38,19 @@ async def retailer_operation(operation: str, request: Request) -> JSONResponse:
             raise ValueError()
     except (ValueError, KeyError, TypeError):
         raise RigError("invalid", "A tenant and valid operation fields are required.", 422) from None
+    activate_tenant(tenant)
     service = request.app.state.rig
     retailer = Retailer(service)
     try:
         if operation == "watch-tenants":
             if tenant != "00000000-0000-0000-0000-000000000001":
                 raise RigError("unauthorized", "Retailer control authentication required.", 403)
-            result = {"tenants": await service.store.tenant_ids()}
+            with tenant_scope(None, administrative=True):
+                result = {"tenants": await service.store.tenant_ids()}
         elif operation == "watch-products":
             result = {"tenant_id": tenant, "products": await service.store.watch_products(tenant)}
+        elif operation == "watch-context":
+            result = {"tenant_id": tenant, "product": await service.store.watch_context(tenant, str(data["sku"]))}
         elif operation == "panel":
             result = await retailer.panel(tenant)
         elif operation == "settings":

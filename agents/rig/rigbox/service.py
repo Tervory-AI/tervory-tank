@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from chassis.tenant_db import tenant_scope
+
 import hashlib
 import hmac
 import json
@@ -277,7 +279,8 @@ class Service:
             return row
         env_key = os.environ.get("RIG_ADMIN_KEY") or ""
         if env_key and hmac.compare_digest(presented, env_key):
-            tenants = await self.store.tenant_ids()
+            with tenant_scope(None, administrative=True):
+                tenants = await self.store.tenant_ids()
             if len(tenants) == 1:
                 return {"tenant_id": tenants[0], "kind": "admin", "origins": []}
         raise RigError("unauthorized", "That key is not valid.", 401)

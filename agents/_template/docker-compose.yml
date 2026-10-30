@@ -14,6 +14,8 @@ services:
     environment:
       AGENT_NAME: template
       DATABASE_URL: postgresql://agent_template:${AGENT_DB_PASSWORD_TEMPLATE}@postgres:5432/${POSTGRES_DB:-tervory}
+      CHASSIS_ADMIN_DATABASE_URL: ${CHASSIS_ADMIN_DATABASE_URL:-}
+      CHASSIS_RLS_ADMIN_ROLE: ${CHASSIS_RLS_ADMIN_ROLE:-}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_TEMPLATE:-}
       DATA_DIR: /data

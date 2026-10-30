@@ -18,6 +18,7 @@ from chassis.app import create_app
 from chassis.db import ensure_schedules, schema_for
 from chassis.jobs import JobContext
 from chassis.logs import log_line
+from chassis.tenant_db import activate_tenant, tenant_scope
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
@@ -91,7 +92,8 @@ async def retry_quotes(ctx: JobContext) -> dict:
 
 
 async def discover_quote_tenants(ctx: JobContext) -> dict:
-    return {"tenants": await refresh_quote_schedules(app.state.pool, app.state.rig.store, ctx.agent)}
+    with tenant_scope(None, administrative=True):
+        return {"tenants": await refresh_quote_schedules(app.state.pool, app.state.rig.store, ctx.agent)}
 
 
 app = create_app(
@@ -273,6 +275,7 @@ async def _catalogue_counts(request: Request) -> JSONResponse:
     tenant_id, error = _room_tenant(_query_tenants(request))
     if error is not None or tenant_id is None:
         return error or _room_error(400, "tenant", "tenant_id is required")
+    activate_tenant(tenant_id)
     products = await service.store.products(tenant_id)
     fits = await service.store.fits(tenant_id)
     return JSONResponse({"products": len(products), "fits": len(fits)})
@@ -294,6 +297,7 @@ async def _room_read(request: Request, kind: str) -> JSONResponse:
     tenant_id, error = _room_tenant(named)
     if error is not None or tenant_id is None:
         return error or _room_error(400, "tenant", "tenant_id is required")
+    activate_tenant(tenant_id)
     try:
         if kind == "search":
             raw_limit = request.query_params.get("limit")
@@ -349,9 +353,10 @@ async def rig_room_reads(request: Request, call_next):
         if kind == "catalogues":
             return JSONResponse(status_code=401, content={"detail": "room key required"})
         return await call_next(request)
-    if kind == "catalogues":
-        return await _catalogue_counts(request)
-    return await _room_read(request, kind)
+    with tenant_scope(None):
+        if kind == "catalogues":
+            return await _catalogue_counts(request)
+        return await _room_read(request, kind)
 
 
 _inner = app.router.lifespan_context

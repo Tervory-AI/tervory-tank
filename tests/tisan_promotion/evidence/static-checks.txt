@@ -1,0 +1,19 @@
+$ /tmp/tisan-promotion-ElpCaP/venv/bin/ruff check agents/tisan/app.py agents/tisan/promotion.py agents/tisan/promotion_api.py tank/main.py tests/test_tisan_figma.py tests/tisan_promotion/test_api.py tests/tisan_promotion/test_browser.py tests/tisan_promotion/test_promotion.py tests/tisan_promotion/verify_image.py --select E9,F
+All checks passed!
+
+exit 0
+
+$ node --check ops/live_check.mjs
+
+
+exit 0
+
+$ git diff --check
+
+
+exit 0
+
+$ docker compose --env-file /dev/null -f agents/tisan/docker-compose.yml config --no-interpolate --quiet
+
+
+exit 0

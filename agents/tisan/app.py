@@ -6,6 +6,7 @@ import importlib.util
 import hashlib
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +30,13 @@ def _load_beside(cache: dict[str, Any], key: str, filename: str) -> Any:
     if spec is None or spec.loader is None:
         raise RuntimeError(f"{filename} is missing")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Pydantic resolves route annotations through the defining module.
+    sys.modules[key] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(key, None)
+        raise
     cache[key] = module
     return module
 
@@ -134,3 +141,7 @@ async def eval_case(body: EvalCase, x_tank_key: str = Header(default="")) -> dic
         return await module.execute(body.input, str(body.tenant_id))
     except ValueError:
         return {"refused": True, "error": "invalid eval input"}
+
+# API-only promotion reuses founder identity, the Tisan data volume and Coolify.
+_load_beside({}, 'tisan_promotion_api', 'promotion_api.py').mount(
+    app, _load_beside({}, 'tisan_promotion', 'promotion.py'))

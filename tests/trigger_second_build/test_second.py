@@ -90,7 +90,9 @@ async def env(monkeypatch):
     monkeypatch.setattr(room_app.state, 'pool', pool, raising=False)
     lt = httpx.AsyncClient(transport=httpx.MockTransport(lambda req: httpx.Response(200, json={'matches': []})))
     monkeypatch.setattr(room_app.state, 'http', lt, raising=False)
-    tank = SimpleNamespace(route=AsyncMock(return_value={'content': 'A reliable product.', 'ledger_id': str(uuid4()), 'cost_usd': 0.01}))
+    # No approved checker versions: the current client explicitly returns None.
+    tank = SimpleNamespace(route=AsyncMock(return_value={'content': 'A reliable product.', 'ledger_id': str(uuid4()), 'cost_usd': 0.01}),
+                           approved_skill=AsyncMock(return_value=None))
     monkeypatch.setattr(room_app.state, 'tank', tank, raising=False)
     bridge_calls = []
     async def bridge(operation, body):
@@ -103,7 +105,8 @@ async def env(monkeypatch):
     monkeypatch.setattr(trigger_routes, 'room', bridge)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://tank', timeout=20) as client:
         yield SimpleNamespace(pool=pool, client=client, store=VoiceHistory(pool), model=tank.route,
-                              planner=runtime.run_route, actor=command.Actor(TENANT, 'founder', True), bridge=bridge_calls)
+                              planner=runtime.run_route, actor=command.Actor(TENANT, 'founder', True), bridge=bridge_calls,
+                              checkers=tank.approved_skill)
     await lt.aclose()
     await pool.close()
     await admin.execute(f'DROP DATABASE "{name}"')
@@ -213,6 +216,10 @@ async def test_house_write_records_private_pending_pair_then_feedback(env):
     assert response.status_code == 200, response.text
     result = response.json()
     assert result['report']['style_source'] == 'house'
+    assert [call.args for call in env.checkers.await_args_list] == [
+        (str(TENANT), 'trigger.' + component, {'text': result['text']})
+        for component in ('proselint', 'agent_style', 'readability', 'voice_check', 'house_style', 'languagetool')
+    ]
     write_id = result['write_id']
     pair = await env.pool.fetchrow("SELECT * FROM tank.training_pairs WHERE tenant_id=$1 AND source='trigger.write' AND source_ref=$2", TENANT, write_id)
     assert not pair['active'] and not pair['public'] and pair['client_matter']

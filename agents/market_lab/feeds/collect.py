@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
+import os
 import urllib.request
+import uuid
 from typing import Any
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
@@ -40,9 +42,13 @@ def public_url(url: str) -> str:
 class EvidenceClient:
     """Read public pages, retain provenance, and stop at access boundaries."""
 
-    def __init__(self, client: PoliteClient | None = None, *, allowed_domains: set[str] | None = None) -> None:
+    def __init__(self, client: PoliteClient | None = None, *, allowed_domains: set[str] | None = None,
+                 public_feeds: bool = False, tenant_id: str | None = None) -> None:
+        from feeds.keyless import MAX_BYTES
+        self.public_feeds = public_feeds
+        self.tenant_id = tenant_id
         self.allowed_domains = allowed_domains
-        self.client = client or PoliteClient()
+        self.client = client or PoliteClient(max_bytes=MAX_BYTES if public_feeds else None)
         if client is None:
             evidence = self
             class CheckedRedirect(urllib.request.HTTPRedirectHandler):
@@ -58,7 +64,8 @@ class EvidenceClient:
         self.documents: list[dict] = []
 
     def _destination(self, url: str) -> str:
-        clean = public_url(url)
+        from feeds.keyless import check_feed_url
+        clean = check_feed_url(url) if self.public_feeds else public_url(url)
         host = urlsplit(clean).hostname or ""
         if self.allowed_domains is not None and not any(host == domain or host.endswith("." + domain) for domain in self.allowed_domains):
             raise ValueError("download is outside the configured publishers")
@@ -74,8 +81,32 @@ class EvidenceClient:
     def get(self, url: str, headers: dict | None = None) -> bytes:
         self._allowed(url)
         body = self.client.get(url, headers=headers)
-        self.documents.append({"url": public_url(url), "sha256": hashlib.sha256(body).hexdigest()})
+        from feeds.keyless import public_link
+        self.documents.append({"url": public_link(url) if self.public_feeds else public_url(url),
+                               "sha256": hashlib.sha256(body).hexdigest()})
         return body
+
+    def search(self, query: str) -> dict:
+        """A fixed, room-authenticated Tank corridor; it cannot invoke a model."""
+        import httpx
+        import json
+        from feeds.keyless import MAX_BYTES
+        owner = str(uuid.UUID(str(self.tenant_id)))
+        key = os.environ.get("TANK_KEY", "")
+        if not key:
+            raise ValueError("room connection unavailable")
+        base = os.environ.get("TANK_URL", "http://tank:8000").rstrip("/")
+        with httpx.Client(timeout=60, follow_redirects=False) as http:
+            with http.stream("POST", base + "/v1/market-lab/internal/search",
+                             headers={"X-Tank-Key": key}, json={"tenant_id": owner, "question": query,
+                             "home_region": os.environ.get("TANK_REGION", "us-east")}) as response:
+                response.raise_for_status()
+                body = bytearray()
+                for part in response.iter_bytes():
+                    body.extend(part)
+                    if len(body) > MAX_BYTES:
+                        raise ValueError("response exceeds the feed limit")
+        return json.loads(body)
 
     def iter_lines(self, url: str, headers: dict | None = None):
         self._allowed(url)
@@ -88,9 +119,11 @@ class EvidenceClient:
 
 def collect(source: Any, *, fixtures: str | None, backfill: bool, client: EvidenceClient) -> dict:
     spec = bind_key(source)
+    from feeds.keyless import public_link
+    keyless = spec.adapter in {"rss", "comtrade_preview", "searxng"}
     result = {"source_id": spec.id, "name": spec.name, "cadence": spec.cadence,
               "kind": "copy" if spec.allow_bulk else "linked", "licence": spec.licence,
-              "terms_checked_at": spec.terms_checked_at, "url": public_url(spec.url),
+              "terms_checked_at": spec.terms_checked_at, "url": public_link(spec.url) if keyless else public_url(spec.url),
               "presentation": spec.config.get("presentation", {}),
               "points": [], "events": [], "downloads": [], "note": "", "fixture": bool(fixtures)}
     if not spec.enabled:
@@ -116,6 +149,8 @@ def collect(source: Any, *, fixtures: str | None, backfill: bool, client: Eviden
             watch_page(spec, client, store)
         meta = {row["id"]: dict(row) for row in conn.execute("SELECT * FROM series")}
         result["points"] = [{**meta[point["series_id"]], **point} for point in store._staged]
+        if spec.adapter == "comtrade_preview" and result["points"]:
+            result["url"] = result["points"][0]["url"]
         result["events"] = [dict(row) for row in conn.execute("SELECT * FROM events ORDER BY date, id")]
         result["downloads"] = list(client.documents)
     except BlockedSite:
@@ -125,14 +160,20 @@ def collect(source: Any, *, fixtures: str | None, backfill: bool, client: Eviden
         result.update(points=[], events=[], downloads=[], note="Off, source could not be read")
     finally:
         conn.close()
-    return _clean(result)
+    return _clean(result, public_links=keyless)
 
 
-def _clean(value: Any) -> Any:
+def _clean(value: Any, *, public_links: bool = False) -> Any:
     if isinstance(value, str):
+        if public_links and value.startswith(("http://", "https://")):
+            from feeds.keyless import public_link
+            try:
+                return public_link(value)
+            except ValueError:
+                return ""
         return redact(value)
     if isinstance(value, list):
-        return [_clean(item) for item in value]
+        return [_clean(item, public_links=public_links) for item in value]
     if isinstance(value, dict):
-        return {key: _clean(item) for key, item in value.items()}
+        return {key: _clean(item, public_links=public_links) for key, item in value.items()}
     return value

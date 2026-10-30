@@ -1,0 +1,408 @@
+G5 review proof. Commands run in /workspace/tiger-g5-alerts unless noted.
+All database/SMTP checks used loopback test fixtures. No live founder proof.
+Captured output has trailing whitespace trimmed.
+
+Initial regression reproduction; implementation b7a63d1, tests committed as 4368131
+COMMAND:
+source /workspace/tervory-env/activate.sh && python -m pytest -q tests/tiger_g5/test_review.py --tb=short > /tmp/tiger-g5-review-before.txt 2>&1
+EXIT: 1
+OUTPUT:
+.FFF.FFFFFFFFFF                                                          [100%]
+=================================== FAILURES ===================================
+_____ test_microdata_third_product_sends_one_new_product_email[memory-sku] _____
+tests/tiger_g5/test_review.py:47: in test_microdata_third_product_sends_one_new_product_email
+    assert [(a["kind"], a["after"]) for a in added["alerts"]] == [("new_product", "Controlled item 2")]
+E   AssertionError: assert [] == [('new_produc...lled item 2')]
+E
+E     Right contains one more item: ('new_product', 'Controlled item 2')
+E     Use -v to get more diff
+____ test_microdata_third_product_sends_one_new_product_email[memory-gtin] _____
+tests/tiger_g5/test_review.py:47: in test_microdata_third_product_sends_one_new_product_email
+    assert [(a["kind"], a["after"]) for a in added["alerts"]] == [("new_product", "Controlled item 2")]
+E   AssertionError: assert [] == [('new_produc...lled item 2')]
+E
+E     Right contains one more item: ('new_product', 'Controlled item 2')
+E     Use -v to get more diff
+_ test_microdata_third_product_sends_one_new_product_email[memory-name_price] __
+tests/tiger_g5/test_review.py:47: in test_microdata_third_product_sends_one_new_product_email
+    assert [(a["kind"], a["after"]) for a in added["alerts"]] == [("new_product", "Controlled item 2")]
+E   AssertionError: assert [] == [('new_produc...lled item 2')]
+E
+E     Right contains one more item: ('new_product', 'Controlled item 2')
+E     Use -v to get more diff
+____ test_microdata_third_product_sends_one_new_product_email[postgres-sku] ____
+tests/tiger_g5/test_review.py:47: in test_microdata_third_product_sends_one_new_product_email
+    assert [(a["kind"], a["after"]) for a in added["alerts"]] == [("new_product", "Controlled item 2")]
+E   AssertionError: assert [] == [('new_produc...lled item 2')]
+E
+E     Right contains one more item: ('new_product', 'Controlled item 2')
+E     Use -v to get more diff
+___ test_microdata_third_product_sends_one_new_product_email[postgres-gtin] ____
+tests/tiger_g5/test_review.py:47: in test_microdata_third_product_sends_one_new_product_email
+    assert [(a["kind"], a["after"]) for a in added["alerts"]] == [("new_product", "Controlled item 2")]
+E   AssertionError: assert [] == [('new_produc...lled item 2')]
+E
+E     Right contains one more item: ('new_product', 'Controlled item 2')
+E     Use -v to get more diff
+_ test_microdata_third_product_sends_one_new_product_email[postgres-name_price] _
+tests/tiger_g5/test_review.py:47: in test_microdata_third_product_sends_one_new_product_email
+    assert [(a["kind"], a["after"]) for a in added["alerts"]] == [("new_product", "Controlled item 2")]
+E   AssertionError: assert [] == [('new_produc...lled item 2')]
+E
+E     Right contains one more item: ('new_product', 'Controlled item 2')
+E     Use -v to get more diff
+__________ test_below_cost_ten_against_fifteen_needs_no_stock[memory] __________
+tests/tiger_g5/test_review.py:65: in test_below_cost_ten_against_fifteen_needs_no_stock
+    assert [a["kind"] for a in result["alerts"]] == (["below_cost"] if tenant == A and minute == 0 else [])
+E   AssertionError: assert [] == ['below_cost']
+E
+E     Right contains one more item: 'below_cost'
+E     Use -v to get more diff
+_________ test_below_cost_ten_against_fifteen_needs_no_stock[postgres] _________
+tests/tiger_g5/test_review.py:65: in test_below_cost_ten_against_fifteen_needs_no_stock
+    assert [a["kind"] for a in result["alerts"]] == (["below_cost"] if tenant == A and minute == 0 else [])
+E   AssertionError: assert [] == ['below_cost']
+E
+E     Right contains one more item: 'below_cost'
+E     Use -v to get more diff
+__________ test_market_gap_all_competitors_out_without_prices[memory] __________
+tests/tiger_g5/test_review.py:76: in test_market_gap_all_competitors_out_without_prices
+    assert result["observation"]["availability"] == "OutOfStock"
+E   AssertionError: assert None == 'OutOfStock'
+_________ test_market_gap_all_competitors_out_without_prices[postgres] _________
+tests/tiger_g5/test_review.py:76: in test_market_gap_all_competitors_out_without_prices
+    assert result["observation"]["availability"] == "OutOfStock"
+E   AssertionError: assert None == 'OutOfStock'
+______ test_watch_url_change_starts_new_baseline_and_peer_reading[memory] ______
+tests/tiger_g5/test_review.py:89: in test_watch_url_change_starts_new_baseline_and_peer_reading
+    assert (await checked(store, updated, html=listing(added=True), at=1))["alerts"] == []
+E   AssertionError: assert [{'after': 'F...roduct', ...}] == []
+E
+E     Left contains one more item: {'after': 'Fixture saw', 'before': None, 'id': '62f7e9a7-0e71-4d11-85c7-a63bd5406b59', 'kind': 'new_product', ...}
+E     Use -v to get more diff
+_____ test_watch_url_change_starts_new_baseline_and_peer_reading[postgres] _____
+tests/tiger_g5/test_review.py:89: in test_watch_url_change_starts_new_baseline_and_peer_reading
+    assert (await checked(store, updated, html=listing(added=True), at=1))["alerts"] == []
+E   AssertionError: assert [{'after': 'F...roduct', ...}] == []
+E
+E     Left contains one more item: {'after': 'Fixture saw', 'before': None, 'id': 'f76cd4ff-320d-484d-acf7-9e10e4c6541e', 'kind': 'new_product', ...}
+E     Use -v to get more diff
+______ test_workspace_omits_g5_rows_until_figma_and_keeps_existing_alerts ______
+tests/tiger_g5/test_review.py:114: in test_workspace_omits_g5_rows_until_figma_and_keeps_existing_alerts
+    assert rows[:3] == [None, None, None]
+E   assert [{'before': N...'Price', ...}] == [None, None, None]
+E
+E     At index 0 diff: {'id': 'new_product', 'when': 'Jan 1, 12:00 AM UTC', 'url': 'https://shop.example/category', 'reason': "the alert details weren't recorded", 'product': 'Controlled item', 'store': 'shop.example', 'kind': 'Price', 'before': None, 'now': None, 'change': "Not checked — the alert details weren't recorded", 'today': False, 'live': True} != None
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED tests/tiger_g5/test_review.py::test_microdata_third_product_sends_one_new_product_email[memory-sku]
+FAILED tests/tiger_g5/test_review.py::test_microdata_third_product_sends_one_new_product_email[memory-gtin]
+FAILED tests/tiger_g5/test_review.py::test_microdata_third_product_sends_one_new_product_email[memory-name_price]
+FAILED tests/tiger_g5/test_review.py::test_microdata_third_product_sends_one_new_product_email[postgres-sku]
+FAILED tests/tiger_g5/test_review.py::test_microdata_third_product_sends_one_new_product_email[postgres-gtin]
+FAILED tests/tiger_g5/test_review.py::test_microdata_third_product_sends_one_new_product_email[postgres-name_price]
+FAILED tests/tiger_g5/test_review.py::test_below_cost_ten_against_fifteen_needs_no_stock[memory]
+FAILED tests/tiger_g5/test_review.py::test_below_cost_ten_against_fifteen_needs_no_stock[postgres]
+FAILED tests/tiger_g5/test_review.py::test_market_gap_all_competitors_out_without_prices[memory]
+FAILED tests/tiger_g5/test_review.py::test_market_gap_all_competitors_out_without_prices[postgres]
+FAILED tests/tiger_g5/test_review.py::test_watch_url_change_starts_new_baseline_and_peer_reading[memory]
+FAILED tests/tiger_g5/test_review.py::test_watch_url_change_starts_new_baseline_and_peer_reading[postgres]
+FAILED tests/tiger_g5/test_review.py::test_workspace_omits_g5_rows_until_figma_and_keeps_existing_alerts
+13 failed, 2 passed in 3.07s
+
+Completed five regression groups (15 parameterized cases)
+COMMAND:
+source /workspace/tervory-env/activate.sh && python -m pytest -q tests/tiger_g5/test_review.py --tb=short > /tmp/tiger-g5-review-after.txt 2>&1
+EXIT: 0
+OUTPUT:
+...............                                                          [100%]
+15 passed in 4.75s
+
+Broader run before the catalogue-classification correction and stale-default assertion update
+COMMAND:
+source /workspace/tervory-env/activate.sh && TIGER_MAIL_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/pooltest python -m pytest -q tests/test_tiger*.py tests/test_tg2_tiger_watchlist.py tests/tiger_g5 tests/tiger_playbooks tests/tiger_alert_page tests/tiger_before_deploy tests/tiger_price_read tests/rig_tiger_prices tests/test_tank_one_door.py --tb=short > /tmp/tiger-g5-review-suite.txt 2>&1
+EXIT: 1
+OUTPUT:
+........................................................................ [ 20%]
+........................................................................ [ 41%]
+........................................................................ [ 61%]
+................................................F..F......s...........F. [ 82%]
+..............................................................           [100%]
+=================================== FAILURES ===================================
+________________________ test_changed_pages_never_guess ________________________
+tests/tiger_alert_page/test_page_changed.py:51: in test_changed_pages_never_guess
+    assert summary["ok_pct"] == 100
+E   assert 98.53 == 100
+_______________ test_weekly_retest_is_quiet_and_alerts_on_a_drop _______________
+tests/tiger_alert_page/test_weekly_and_feedback.py:35: in test_weekly_retest_is_quiet_and_alerts_on_a_drop
+    assert weekly_alerts(current, baseline) == []
+E   AssertionError: assert ['heldout_ref...0.0 to 96.88'] == []
+E
+E     Left contains one more item: 'heldout_refusal dropped from 100.0 to 96.88'
+E     Use -v to get more diff
+_____________________ test_code_reader_is_not_a_paid_route _____________________
+tests/tiger_price_read/test_shadow_reused.py:16: in test_code_reader_is_not_a_paid_route
+    assert graduate.DEFAULT_MIN_SAMPLES == 30
+E   assert 200 == 30
+E    +  where 200 = graduate.DEFAULT_MIN_SAMPLES
+=============================== warnings summary ===============================
+../tervory-env/venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/tervory-env/venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tank/main.py:679
+  /workspace/tiger-g5-alerts/tank/main.py:679: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+../tervory-env/venv/lib/python3.12/site-packages/fastapi/applications.py:4599
+../tervory-env/venv/lib/python3.12/site-packages/fastapi/applications.py:4599
+../tervory-env/venv/lib/python3.12/site-packages/fastapi/applications.py:4599
+../tervory-env/venv/lib/python3.12/site-packages/fastapi/applications.py:4599
+../tervory-env/venv/lib/python3.12/site-packages/fastapi/applications.py:4599
+  /workspace/tervory-env/venv/lib/python3.12/site-packages/fastapi/applications.py:4599: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)
+
+tank/main.py:714
+  /workspace/tiger-g5-alerts/tank/main.py:714: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tank/agent_skills.py:529
+  /workspace/tiger-g5-alerts/tank/agent_skills.py:529: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tank/skala_intake.py:67
+  /workspace/tiger-g5-alerts/tank/skala_intake.py:67: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tank/skala_intake.py:72
+  /workspace/tiger-g5-alerts/tank/skala_intake.py:72: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tank/skala_revalidation.py:190
+  /workspace/tiger-g5-alerts/tank/skala_revalidation.py:190: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/tiger_alert_page/test_page_changed.py::test_changed_pages_never_guess
+FAILED tests/tiger_alert_page/test_weekly_and_feedback.py::test_weekly_retest_is_quiet_and_alerts_on_a_drop
+FAILED tests/tiger_price_read/test_shadow_reused.py::test_code_reader_is_not_a_paid_route
+3 failed, 346 passed, 1 skipped, 12 warnings in 127.57s (0:02:07)
+
+Baseline diagnosis on untouched main 37ec348 in /tmp/tiger-g5-main-37ec348
+COMMAND:
+git worktree add --detach /tmp/tiger-g5-main-37ec348 37ec348
+source /workspace/tervory-env/activate.sh && python -m pytest -q tests/tiger_alert_page/test_page_changed.py::test_changed_pages_never_guess tests/tiger_alert_page/test_weekly_and_feedback.py::test_weekly_retest_is_quiet_and_alerts_on_a_drop tests/tiger_price_read/test_shadow_reused.py::test_code_reader_is_not_a_paid_route --tb=short > /tmp/tiger-g5-main-baseline.txt 2>&1
+EXIT: 1
+OUTPUT:
+..F                                                                      [100%]
+=================================== FAILURES ===================================
+_____________________ test_code_reader_is_not_a_paid_route _____________________
+tests/tiger_price_read/test_shadow_reused.py:16: in test_code_reader_is_not_a_paid_route
+    assert graduate.DEFAULT_MIN_SAMPLES == 30
+E   assert 200 == 30
+E    +  where 200 = graduate.DEFAULT_MIN_SAMPLES
+=========================== short test summary info ============================
+FAILED tests/tiger_price_read/test_shadow_reused.py::test_code_reader_is_not_a_paid_route
+1 failed, 2 passed in 1.44s
+
+Corrected catalogue classification plus five regression groups
+COMMAND:
+source /workspace/tervory-env/activate.sh && python -m pytest -q tests/tiger_g5/test_review.py tests/tiger_alert_page/test_page_changed.py::test_changed_pages_never_guess tests/tiger_alert_page/test_weekly_and_feedback.py::test_weekly_retest_is_quiet_and_alerts_on_a_drop --tb=short > /tmp/tiger-g5-review-classification.txt 2>&1
+EXIT: 0
+OUTPUT:
+.................                                                        [100%]
+17 passed in 5.27s
+
+FINAL Tiger suite at 8111bfa
+COMMAND:
+source /workspace/tervory-env/activate.sh && TIGER_MAIL_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/pooltest python -m pytest -q tests/test_tiger*.py tests/test_tg2_tiger_watchlist.py tests/tiger_g5 tests/tiger_playbooks tests/tiger_alert_page tests/tiger_before_deploy tests/tiger_price_read tests/rig_tiger_prices tests/test_tank_one_door.py --tb=short -rs > /tmp/tiger-g5-review-suite-final.txt 2>&1
+EXIT: 0
+OUTPUT:
+........................................................................ [ 20%]
+........................................................................ [ 41%]
+........................................................................ [ 61%]
+..........................................................s............. [ 82%]
+..............................................................           [100%]
+=============================== warnings summary ===============================
+../tervory-env/venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/tervory-env/venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tank/main.py:679
+  /workspace/tiger-g5-alerts/tank/main.py:679: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+../tervory-env/venv/lib/python3.12/site-packages/fastapi/applications.py:4599
+../tervory-env/venv/lib/python3.12/site-packages/fastapi/applications.py:4599
+../tervory-env/venv/lib/python3.12/site-packages/fastapi/applications.py:4599
+../tervory-env/venv/lib/python3.12/site-packages/fastapi/applications.py:4599
+../tervory-env/venv/lib/python3.12/site-packages/fastapi/applications.py:4599
+  /workspace/tervory-env/venv/lib/python3.12/site-packages/fastapi/applications.py:4599: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)
+
+tank/main.py:714
+  /workspace/tiger-g5-alerts/tank/main.py:714: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tank/agent_skills.py:529
+  /workspace/tiger-g5-alerts/tank/agent_skills.py:529: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tank/skala_intake.py:67
+  /workspace/tiger-g5-alerts/tank/skala_intake.py:67: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tank/skala_intake.py:72
+  /workspace/tiger-g5-alerts/tank/skala_intake.py:72: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tank/skala_revalidation.py:190
+  /workspace/tiger-g5-alerts/tank/skala_revalidation.py:190: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/tiger_before_deploy/test_before_deploy.py:181: 100-page gold set is still for a person to fill
+349 passed, 1 skipped, 12 warnings in 133.28s (0:02:13)
+
+Workspace typecheck; cwd /workspace/tiger-g5-alerts/workspace
+COMMAND:
+source /workspace/tervory-env/activate.sh && npx tsc --noEmit > /tmp/tiger-g5-review-tsc.txt 2>&1
+EXIT: 0
+OUTPUT:
+(no output)
+
+FINAL Semgrep source scan against main 37ec348, suppressions disabled
+COMMAND:
+SEMGREP_SETTINGS_FILE=/tmp/tiger-g5-semgrep-settings.yml SEMGREP_LOG_FILE=/tmp/tiger-g5-semgrep-runtime.log /tmp/tiger-playbooks-semgrep-env/bin/semgrep scan --config auto --metrics auto --disable-version-check --disable-nosem --no-git-ignore --baseline-commit 37ec348 --error --json --output /tmp/tiger-g5-review-semgrep-final.json agents/tiger agents/rig/rigbox/retailer_api.py agents/rig/rigbox/retailer_store.py tank/access.py tank/main.py workspace/app/tiger/model.ts > /tmp/tiger-g5-review-semgrep-final.txt 2>&1
+EXIT: 0
+OUTPUT:
+
+
+┌─────────────┐
+│ Scan Status │
+└─────────────┘
+  Scanning 32 files with 1074 Code rules:
+
+  Language      Rules   Files          Origin      Rules
+ ─────────────────────────────        ───────────────────
+  <multilang>      47      32          Community    1074
+  python          243      15
+  ts              163       1
+  yaml             35       1
+  dockerfile        6       1
+  json              4       1
+
+  Current version has 35 findings.
+
+Creating git worktree from '37ec348' to scan baseline.
+  Will report findings introduced by these commits (may be incomplete for shallow checkouts):
+    * 8111bfa test(tiger): align default assertions with founder graduation decision
+    * 0d9fdaa fix(tiger): keep standalone product pages out of catalogue alerts
+    * 9c0f818 test(tiger): require stock-only gap checks to avoid OCR
+    * 5de6c7f test(tiger): retain Rig cycle coverage with the merged playbook interface
+    * 9468a58 test(tiger): exercise merged playbook callback in G5 integration
+    * 4db0954 fix(tiger): hide G5 alert rows until their Figma design is approved
+    * 09587d0 fix(tiger): retain confirmed stock when a page has no price
+    * 43fb7a6 fix(tiger): separate product identities and price stock conditions
+    * 4368131 test(tiger): reproduce all five G5 review findings
+    * b7a63d1 Merge origin/main into codex/tiger-g5-alerts preserving both Tiger callbacks
+    * 1a4e5d0 docs: record G5 verification and pending founder inbox test
+    * 8fecf31 test(tiger): prove G5 through Tank Rig and local SMTP
+    * b880581 feat(tiger): detect product cost and market alerts with durable deduplication
+    * 56305a6 docs: record Tiger G5 scope and proof checkpoint
+
+
+
+┌─────────────┐
+│ Scan Status │
+└─────────────┘
+  Scanning 4 files with 3 Code rules:
+  Scanning 4 files with 3 python rules.
+
+
+┌──────────────┐
+│ Scan Summary │
+└──────────────┘
+✅ Scan completed successfully.
+ • Findings: 0 (0 blocking)
+ • Rules run: 494
+ • Targets scanned: 32
+ • Parsed lines: ~100.0%
+ • Scan skipped:
+   ◦ Files larger than  files 1.0 MB: 1
+ • Scan was limited to files changed since baseline commit.
+ • For a detailed list of skipped files and lines, run semgrep with the --verbose flag
+Ran 494 rules on 32 files: 0 findings.
+(need more rules? `semgrep login` for additional free Semgrep Registry rules)
