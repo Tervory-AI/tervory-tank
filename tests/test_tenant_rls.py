@@ -432,6 +432,56 @@ async def test_repeatable_read_options_preserved(database):
 
 
 @pytest.mark.asyncio
+async def test_worker_diagnostics_with_real_scoped_founder_pool(database, monkeypatch):
+    """The real route must configure the outer scoped transaction, not a savepoint."""
+    from fastapi import FastAPI
+    import controls
+    import workers_status
+    from tenant_db import bind_tenant_endpoints
+
+    monkeypatch.setenv("TANK_API_KEY", "offline-workspace-key")
+    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder-one")
+    pool = TenantPool(database.raw, database.founder)
+    monkeypatch.setattr(workers_status, "db", lambda: pool)
+    at = datetime(2026, 10, 30, 18, 30, tzinfo=timezone.utc)
+    await database.owner.execute(
+        "INSERT INTO tank.workers_controls(tenant_id,name,value,updated_by,updated_at) "
+        "VALUES($1,'workers_paused',true,'founder-one',$2)", controls.PLATFORM, at,
+    )
+    await database.owner.execute(
+        "INSERT INTO tank.control_log(tenant_id,name,by_user,old_value,new_value,at) "
+        "VALUES($1,'workers_paused','founder-one',false,true,$2)", controls.PLATFORM, at,
+    )
+    builds = []
+    for tenant in (uuid4(), uuid4()):
+        thread, build = uuid4(), uuid4()
+        builds.append(build)
+        await database.owner.execute(
+            "INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,title,state) "
+            "VALUES($1,$2,'offline-user','offline-title','{}'::jsonb)", thread, tenant,
+        )
+        await database.owner.execute(
+            "INSERT INTO tank.command_builds(build_id,thread_id,tenant_id,user_id,brief_markdown,status) "
+            "VALUES($1,$2,$3,'offline-user','offline-brief','queued')", build, thread, tenant,
+        )
+    app = FastAPI()
+    app.include_router(workers_status.founder_router)
+    bind_tenant_endpoints(app)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://offline") as client:
+        denied = await client.get("/v1/controls/workers", headers={"x-tank-key": "offline-workspace-key", "x-tervory-admin": "other"})
+        assert denied.status_code == 404
+        response = await client.get("/v1/controls/workers", headers={"x-tank-key": "offline-workspace-key", "x-tervory-admin": "founder-one"})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["workers_paused"] is True
+    assert body["pause_control"] == {"updated_by": "founder-one", "updated_at": at.isoformat()}
+    assert body["last_pause_change"] == {"by_user": "founder-one", "old_value": False, "new_value": True, "at": at.isoformat()}
+    assert body["build_counts"] == {"queued": 2, "running": 0, "awaiting_review": 0}
+    assert await database.owner.fetchval("SELECT count(*) FROM tank.command_builds WHERE build_id=ANY($1::uuid[]) AND status='queued'", builds) == 2
+    assert await database.raw.fetchval("SHOW transaction_read_only") == "off"
+
+
+@pytest.mark.asyncio
 async def test_base_queue_uses_persisted_owner_after_admin_discovery(database, monkeypatch):
     import importlib.util
     sys.path.insert(0, str(ROOT / "agents/base"))
