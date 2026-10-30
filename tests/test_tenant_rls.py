@@ -432,7 +432,8 @@ async def test_repeatable_read_options_preserved(database):
 
 
 @pytest.mark.asyncio
-async def test_worker_diagnostics_with_real_scoped_founder_pool(database, monkeypatch):
+@pytest.mark.parametrize("scoped", [True, False])
+async def test_worker_diagnostics_with_real_scoped_founder_pool(database, monkeypatch, scoped):
     """The real route must configure the outer scoped transaction, not a savepoint."""
     from fastapi import FastAPI
     import controls
@@ -441,8 +442,19 @@ async def test_worker_diagnostics_with_real_scoped_founder_pool(database, monkey
 
     monkeypatch.setenv("TANK_API_KEY", "offline-workspace-key")
     monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder-one")
-    pool = TenantPool(database.raw, database.founder)
+    pool = TenantPool(database.raw, database.founder) if scoped else database.founder
     monkeypatch.setattr(workers_status, "db", lambda: pool)
+    snapshot = workers_status.tenant_transaction
+    observed = []
+
+    @asynccontextmanager
+    async def checked_snapshot(selected, **options):
+        async with snapshot(selected, **options) as conn:
+            observed.append((await conn.fetchval("SHOW transaction_isolation"),
+                             await conn.fetchval("SHOW transaction_read_only")))
+            yield conn
+
+    monkeypatch.setattr(workers_status, "tenant_transaction", checked_snapshot)
     at = datetime(2026, 10, 30, 18, 30, tzinfo=timezone.utc)
     await database.owner.execute(
         "INSERT INTO tank.workers_controls(tenant_id,name,value,updated_by,updated_at) "
@@ -477,6 +489,7 @@ async def test_worker_diagnostics_with_real_scoped_founder_pool(database, monkey
     assert body["pause_control"] == {"updated_by": "founder-one", "updated_at": at.isoformat()}
     assert body["last_pause_change"] == {"by_user": "founder-one", "old_value": False, "new_value": True, "at": at.isoformat()}
     assert body["build_counts"] == {"queued": 2, "running": 0, "awaiting_review": 0}
+    assert observed == [("repeatable read", "on")]
     assert await database.owner.fetchval("SELECT count(*) FROM tank.command_builds WHERE build_id=ANY($1::uuid[]) AND status='queued'", builds) == 2
     assert await database.raw.fetchval("SHOW transaction_read_only") == "off"
 
