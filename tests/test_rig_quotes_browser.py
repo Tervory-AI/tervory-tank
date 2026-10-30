@@ -20,7 +20,7 @@ async def widget_server(tmp_path):
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     base = f"http://127.0.0.1:{port}"
-    process_env = {**os.environ, "PYTHONPATH": str(ROOT / "agents" / "rig"),
+    process_env = {**os.environ, "PYTHONPATH": os.pathsep.join(str(ROOT / "agents" / part) for part in ("rig", "_chassis")),
                    "RIG_SAMPLE_ORIGIN": base, "RIG_WIDGET_PUBLISHABLE_KEY": "rk_pub_neutral_sample"}
     process_env.pop("RIG_WIDGET_DIR", None)
     with (tmp_path / "server.log").open("w") as log:
