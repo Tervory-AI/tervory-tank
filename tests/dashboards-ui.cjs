@@ -10,6 +10,9 @@ const { renderToStaticMarkup } = require(path.join(root, 'workspace/node_modules
 const original = Module._load;
 let founder = true;
 let sourceError = false;
+let identity = {tenantId:'fixture',orgName:'Example Company',userId:'client-fixture'};
+const reads = [];
+const grants = new Map([['fixture',['base.search','trigger.voice.show']], ['other-client',['tiger.watch']]]);
 const fixture = {
   jobs_done: 4, saved_usd: null, credits_left: null,
   daily: [{day:'2026-10-20',calls:4,code:2,delivered:3,spent:0.12}, {day:'2026-10-21',calls:9,code:5,delivered:8,spent:0.24}],
@@ -34,10 +37,12 @@ Module._load = function (name, parent, isMain) {
     clerkClient: async () => ({users: {getCount:async()=>2,getUserList:async()=>({totalCount:2,data:[{id:'user-one',firstName:'Alex',lastName:'Example',createdAt:Date.UTC(2026,9,21),publicMetadata:{company:'Example Company',country:'United States',plan:'Trial'}}]})}}),
   };
   if (name === '@/lib/admin') return {isFounder: id => id === 'founder-fixture'};
-  if (name === '@/lib/tenant') return {activeTenant: async()=>({tenantId:'fixture',orgName:'Example Company',userId:'client-fixture'})};
+  if (name === '@/lib/tenant') return {activeTenant: async()=>identity};
   if (name === '@/lib/tank') return {
-    rigProxy, readClientSavings:async(tenant,endpoint,query)=>rigProxy('/v1/client-savings'+endpoint,tenant,{query}),
-    readClientDashboard: async()=>{if(sourceError)throw Error('unavailable');return fixture},
+    rigProxy, readClientSavings:async(tenant,endpoint,query)=>{reads.push(['savings',tenant]);return rigProxy('/v1/client-savings'+endpoint,tenant,{query})},
+    commandTools:async(actor)=>{reads.push(['tools',actor.tenantId,actor.userId]);if(sourceError)throw Error('unavailable');return grants.get(actor.tenantId) ?? []},
+    commandRequest:async(actor,endpoint)=>{reads.push(['grants',actor.tenantId,actor.userId,endpoint]);return {json:async()=>[{agent:'zenas',enabled:true},{agent:'base',enabled:false}]}},
+    readClientDashboard: async(tenant)=>{reads.push(['dashboard',tenant]);if(sourceError)throw Error('unavailable');return fixture},
     readFounderDashboard: async()=>fixture, readPaidPause:async()=>({paid_paused:false,refused:[]}),
     readDashboardCandidates:async()=>[], setPaidPause:async()=>({}),switchProvenModel:async()=>({ok:true}),
   };
@@ -63,11 +68,36 @@ async function render() {
     assert(!new RegExp(`\\b${word}\\b`,'i').test(visible),`banned client copy: ${word}`);
   }
   require('./client-copy.cjs')(visible);
-  assert(visible.includes('Saved by team member') && visible.includes('the standard model') && !visible.includes('savings could not'));
-  assert(visible.includes('Jobs done this month') && visible.includes('Business list'));
+  for (const text of ['Home','Chats','Files','Billing','Settings','What do you need today?','Add a file','Go','Jobs done this month','You saved','Recent work','Your team','Business lists']) assert(client.includes(text),text);
+  for (const removed of ['Saved by team member','the standard model','Credits left','Waiting on you','Your activity could not be loaded']) assert(!visible.includes(removed),removed);
+  assert(visible.includes('Business list') && visible.includes('Ready') && visible.includes('$3'));
+  assert(client.includes('href="/base"') && !client.includes('href="/tiger"') && !client.includes('href="/zenas"'));
+  assert.equal((client.match(/class="client-dashboard-job"/g)||[]).length,1);
+  const {loadDashboardData}=require('../workspace/app/dashboard-data.ts');
+  reads.length=0;
+  for (const [tenantId,expected] of [['fixture',['base']],['other-client',['tiger']]]) {
+    identity={...identity,tenantId};
+    const start=reads.length;
+    const result=await loadDashboardData(identity);
+    assert.deepEqual(result.team.map(row=>row.agent),expected);
+    assert.deepEqual(reads.slice(start).map(row=>row[1]),[tenantId,tenantId,tenantId]);
+    assert.equal(reads.at(-1)[2],'client-fixture');
+  }
+  identity={...identity,tenantId:'fixture',userId:'founder-fixture'};
+  assert.deepEqual((await loadDashboardData(identity)).team.map(row=>row.agent),['zenas']);
+  assert.deepEqual(reads.at(-1),['grants','fixture','founder-fixture','squads']);
+  identity={...identity,userId:'client-fixture'};
+  const originalRecent=fixture.recent;
+  fixture.recent=['queued','running','done','failed','done'].map((status,index)=>({id:`offline-${index}`,title:`Offline job ${index}`,status}));
+  const four=await loadDashboardData(identity);
+  assert.deepEqual(four.recent.map(row=>row.label),['Queued','In progress','Ready','Failed']);
+  fixture.recent=[];
+  assert(renderToStaticMarkup(await ClientPage()).includes('No work yet.'));
+  fixture.recent=[{id:'offline-invalid',title:'Invalid status',status:'waiting'}];
+  await assert.rejects(()=>loadDashboardData(identity),/job data is unavailable/);
+  fixture.recent=originalRecent;
   sourceError=true;
-  const unavailable=renderToStaticMarkup(await ClientPage({searchParams:Promise.resolve({})}));
-  assert(unavailable.includes('Your activity could not be loaded'));
+  await assert.rejects(()=>ClientPage(),/unavailable/);
   sourceError=false;
   const {FounderDashboard} = require('../workspace/app/control/view.tsx');
   const view={data:fixture,signups:{total:1,recent:[{id:'user',name:'Alex Example',company:'Example Company',country:'United States',plan:'Trial',createdAt:Date.UTC(2026,9,21)}],days:[]},paying:0,paused:false,models:[],refused:[],errors:[]};
@@ -90,7 +120,7 @@ async function render() {
   assert.equal((await signupSource()).total,2);
   assert.equal((await signupSource()).recent[0].name,'Alex Example');
   const dir=path.join(root,'tests/artifacts/dash-1');fs.mkdirSync(dir,{recursive:true});
-  const css=fs.readFileSync(path.join(root,'workspace/app/globals.css'),'utf8') + fs.readFileSync(path.join(root,'workspace/app/control/dashboard.css'),'utf8');
+  const css=fs.readFileSync(path.join(root,'workspace/app/globals.css'),'utf8') + fs.readFileSync(path.join(root,'workspace/app/control/dashboard.css'),'utf8') + fs.readFileSync(path.join(root,'workspace/app/dashboard.css'),'utf8');
   const fonts=`@font-face{font-family:Jost;src:url('/fonts/Jost-300-latin.woff2')}@font-face{font-family:Inter;src:url('/fonts/Inter-latin.woff2')}@font-face{font-family:Mono;src:url('/fonts/JetBrainsMono-latin.woff2')}html,body{margin:0}:root{--font-jost:Jost;--font-inter:Inter;--font-mono:Mono}`;
   for (const [name,html] of [['client',client],['founder',control]]) fs.writeFileSync(path.join(dir,`${name}.html`),`<!doctype html><html lang="en"><meta charset="utf-8"><title>DASH-1 offline fixture · ${name}</title><style>${fonts}${css}</style><body><div class="app-shell product"><aside class="shell-side">Shared shell (must be hidden)</aside><div class="shell-main"><main>${html}</main></div></div></body></html>`);
   console.log('Dashboard rendering, non-founder gate, source fixtures and client copy checks passed.');
