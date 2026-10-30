@@ -69,3 +69,23 @@ Before the final two integration cases, those commands passed **25 tests** (0.15
 ## Safe execution boundary
 
 No scope operation, settings mutation, manual deployment, container restart, SQL, forced backup or secret-value change has been executed by this lane. Founder alone merges after exact-head review and CI. After merge, coordinator runs the fixed `backup-scope` metadata operation first, then a single coordinated main deployment through the existing gated interface. Verify generated/runtime names, restart policy, original volume and health afterwards. Do not infer upload success, SQL restore counts/duration or founder acceptance from health. ZA remains untouched.
+
+## Security harness correction and concise cause matrix
+
+| Layer | Working / breaking event | Source and reproduction | Fix and remaining proof |
+| --- | --- | --- | --- |
+| Repository deployment selection | Founder repaired a healthy worker outside normal artifact deployment; an ordinary Tank redeploy omitted the profiled worker | Old `docker-compose.yml:309–316`: opt-in profile plus restart `no`; actual default Compose dry-run failed twice on worker inclusion | #441 removes the profile and changes restart to `unless-stopped`; two dry runs pass, and automatic run `41102958930` actually created worker `175956` with the same spool. Selection fixed; health is separate |
+| Coolify runtime configuration | Worker `175956` was included, but failed closed after normal deployment injected the shared runtime environment | Coolify `ApplicationDeploymentJob.php:848,1971`; generated `env_file: [.env]`; selected runtime names contain GHOST alongside UPLOADS; unchanged storage constructor rejects mixed owners | #442 disables only the two existing main GHOST runtime flags, preserves their values and Ghost's resource, and gates automatic/manual main deploys on inventory. Real mocked controller/transport and drift refusal pass; live flags and healthy redeployment are not yet proved |
+| Security test harness | New sibling import in the deployment script reached the existing API-only AST loader without the script directory | Hosted run `41105020674`, security job `124232319272`: nine `ModuleNotFoundError: backup_runtime_scope` errors; gitleaks/Semgrep/OSV were clean | `tests/ci_security/test_security.py:370–372` temporarily exposes the sibling directory around the existing API-only AST exec. No assertion/skips/module-level mutation behavior changed. Full local security suite now passes; hosted rerun still required |
+
+The original #441 automatic deployment ultimately completed **failure** at 11:15:00 PDT / 18:15:00 UTC (queried at 11:15:46 PDT / 18:15:46 UTC). Main/public health and backup health must continue to be reported separately. No required setting value was found missing in the names-only worker projection; this is not a user-input problem.
+
+Exact post-loader-fix verification:
+
+```sh
+PATH=/tmp/tervory-backup-security-tools:$PATH python3 -m unittest discover -s tests/ci_security -p test_security.py -v
+/tmp/tervory-rls-python/bin/python -m pytest -q tests/test_backup_runtime_scope.py tests/test_deploy_changed.py
+git diff --check
+```
+
+Results: **41 tests OK** (15.480s); **27 passed** (0.15s), 13 existing environment warnings; whitespace passed. Before adding the repo-pinned gitleaks CLI to this local PATH, the same full suite had three missing-executable errors; the nine sibling-import errors were already resolved. The existing official gitleaks 8.30.1 archive/checksum from `.github/scripts/install-security-tools.sh` was reused in `/tmp`; SHA-256 check returned OK. No scanner was replaced or weakened. Report update after verification: 11:18:44 PDT / 18:18:44 UTC.
