@@ -15,8 +15,10 @@ const data={revision:'0',as_of:'2026-10-21T12:00:00Z',total,month:total,daily:Ar
 const fixtures=`export const data=${JSON.stringify(data)};
 if(location.search.includes('tiny')){data.daily=data.daily.map(p=>({...p,spent:'0.00000000',would_have_cost:'0.00000001',saved:'0.00000001',cumulative:'0.00000001'}));}
 export function rows(f={}){window.__filters=f;return {as_of:data.as_of,page:Number(f.page??0),has_more:!Number(f.page),total:data.total,rows:[{job_id:'fixture-job',job_title:'Business list',member:'Base',day:'2026-10-20',spent:'.1',would_have_cost:'.4',saved:'.3',free_work:false,standard_name:'sol',top_name:'astra',top_saved:'.9',selected_name:'astra',selected_cost:'1',quality_compared:false,comparison_status:'re-priced',compared_at:'2026-10-21T12:00:00Z',...(f.population==='excluded'?{id:'receipt-fixture',model:'founder-model',excluded_reason:'Unknown baseline'}:{})}]};}`;
-const entry=`import React from 'react';import {createRoot} from 'react-dom/client';import Dashboard from './app/page';import {FounderSavingsPanel} from './app/tank/proof/savings-founder';
-const root=createRoot(document.getElementById('root'));async function render(){const content=location.pathname==='/client' ? await Dashboard({searchParams:Promise.resolve({})}) : await FounderSavingsPanel({tenant:new URLSearchParams(location.search).get('tenant_id')??(location.search.includes('selected')?'client-fixture':undefined)});
+// There is no separate client savings page route. This mounts the existing client
+// component with its real server-action module; dashboard coverage lives in dashboards-ui.cjs.
+const entry=`import React from 'react';import {createRoot} from 'react-dom/client';import {SavingsLive} from './app/tank/proof/savings-set';import {readClientSavings,readSavingsRevision,readClientSavingsRows} from './app/tank/proof/savings-actions';import {FounderSavingsPanel} from './app/tank/proof/savings-founder';
+const root=createRoot(document.getElementById('root'));async function render(){const content=location.pathname==='/client' ? <SavingsLive initial={await readClientSavings()} loadReport={readClientSavings} loadRevision={readSavingsRevision} loadRows={readClientSavingsRows}/> : await FounderSavingsPanel({tenant:new URLSearchParams(location.search).get('tenant_id')??(location.search.includes('selected')?'client-fixture':undefined)});
 root.render(content);}await render();window.addEventListener('server-refresh',()=>void render());`;
 const bundle=await build({stdin:{contents:entry,resolveDir:path.join(root,'workspace'),loader:'tsx'},bundle:true,write:false,format:'esm',jsx:'automatic',outdir:'/tmp/unused-core2',define:{'process.env.NODE_ENV':'"production"'},plugins:[{name:'offline-identity',setup(b){
  b.onResolve({filter:/^fixture$/},()=>({path:'fixture',namespace:'mock'}));
@@ -73,5 +75,5 @@ try {
  await page.getByRole('heading',{name:'What you saved',exact:true}).waitFor();
  assert((await page.locator('.savings-axis').first().innerText()).includes('$0.00000001'));
  assert(!/NaN|Infinity/.test(await page.locator('.savings-chart').first().innerHTML()));
- assert.deepEqual(errors,[]);console.log('Client/founder 375px/1440px: graphs, ranges, private drawer, pagination, billing state, tenant picker, exports, 60-second refresh and job-finish refresh passed.');
+ assert.deepEqual(errors,[]);console.log('Client savings component/founder panel 375px/1440px: graphs, ranges, private drawer, pagination, billing state, tenant picker, exports, 60-second refresh and job-finish refresh passed.');
 } finally {await browser.close();server.close();}
