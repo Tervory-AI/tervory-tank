@@ -83,13 +83,18 @@ const transport = async (url, init) => {
   assert.equal(first.region, region);
   assert(first.access_token.startsWith(`tv1.${region}.${input.tenant.replaceAll('-', '')}.`));
 
-  // A streamed chat turn from the CLI with a pinned model: Tank prices the Auto comparison.
-  await cli.run(['ask', '--model', input.pin, 'Hello from the CLI'], { store, transport, io });
+  // Review of #506 B2: offline-client is a customer, so a pin is refused by Tank (403)
+  // before any write and the CLI names no model. The real turn then uses Auto.
+  await assert.rejects(() => cli.run(['ask', '--model', input.pin, 'Pinned from the CLI'], { store, transport, io }),
+    error => error.message === 'Only Auto is available on this account. Nothing was sent.');
+  assert(!output.includes(input.pin), output);
+  output = '';
+  await cli.run(['ask', 'Hello from the CLI'], { store, transport, io });
   assert.match(output, /Hello world\./, output);
-  // offline-client is a customer: dollar figures and the Auto label only, no model,
-  // baseline-model or Auto-model names and no ledger ids (review item 3).
+  // Customer receipt: dollar figures only, no model, baseline-model or Auto-model
+  // names and no ledger ids (review item 3); an Auto turn has no Auto comparison line.
   assert.match(output, /Step 1 \| cost [0-9.]+ \| would have cost /, output);
-  assert.match(output, /\| What Auto would have cost: [0-9.]+/, output);
+  assert.doesNotMatch(output, /What Auto would have cost/, output);
   for (const name of ['luna', input.pin, 'ledger ', 'tokens ']) assert(!output.includes(name), `customer receipt leaked ${name}: ${output}`);
   const thread = /Thread ([0-9a-f-]{36})/.exec(output)[1];
 

@@ -3,7 +3,7 @@
 ## 0.1.0 — 2026-10-31
 
 - Node 22 `tervory` command, persistent OS keychain login and logout.
-- Tank-backed chat, ask, threads, run, build, receipts and models.
+- Tank-backed chat, ask, threads, run, build and receipts. Answers use Auto; the model roster and pinning are founder-only.
 - Token-selected region, live steps and receipts, explicit Confirm prompts.
 - Offline fake-Tank tests and public PAT forwarding boundary tests.
 - Browser device-approval login (us-east via Workspace, ZA direct to Tank); 10 s timeout on device calls; a 401/403 while polling stops login.

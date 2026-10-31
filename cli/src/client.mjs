@@ -301,7 +301,9 @@ export function receiptLines(receipt) {
   return rows.map((row, index) => {
     // Tank prices pinned turns' same recorded tokens at the frozen Auto policy price; the CLI never computes money.
     const priced = row.auto_cost_status === 'priced' && typeof row.auto_cost_usd === 'number';
-    const pinned = row.requested_model && row.requested_model !== 'auto';
+    // Customers never receive requested_model (Tank's customer receipt is an allowlist);
+    // Tank sets auto_cost_status only on a pinned step, so it marks one for both views.
+    const pinned = (row.requested_model && row.requested_model !== 'auto') || typeof row.auto_cost_status === 'string';
     // Tank sends model names only to the founder (as the Workspace receipt shows them only
     // to the founder). Without them this is a customer receipt: dollar figures only.
     if (typeof row.model !== 'string') {
@@ -327,7 +329,12 @@ export async function confirmCard(tank, card, io) {
 }
 
 export async function showTurn(tank, thread, text, model, attachments, io) {
-  const response = await tank.request(`/v1/command/threads/${encodeURIComponent(thread)}/turn`, { text, model, attachments });
+  let response;
+  try { response = await tank.request(`/v1/command/threads/${encodeURIComponent(thread)}/turn`, { text, model, attachments }); } catch (error) {
+    // Pinning is founder-only; Tank's 403 names no model and neither does this.
+    if (error.status === 403 && model !== 'auto') throw new Error('Only Auto is available on this account. Nothing was sent.');
+    throw error;
+  }
   const cards = new Map(); const receipts = []; let complete = false; let lastSeq = 0;
   let sanitizer = new StreamSanitizer(); let answer = '';
   for await (const event of events(response, { signal: tank.signal })) {
@@ -412,7 +419,7 @@ export function options(argv) {
 export async function run(argv, { store, transport, io, env = process.env }) {
   const { args, flags } = options(argv); const [name, ...rest] = args;
   if (!name || name === 'help') {
-    io.write('tervory login [--region us-east|za] | logout | chat [thread] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] | build "change" | receipts <thread|task> | models | update [--version X.Y.Z] | version\n');
+    io.write('tervory login [--region us-east|za] | logout | chat [thread] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] | build "change" | receipts <thread|task> | update [--version X.Y.Z] | version\n');
     return;
   }
   if (name === 'update') {
@@ -438,7 +445,21 @@ export async function run(argv, { store, transport, io, env = process.env }) {
   if (name === 'logout') return logout({ store, transport, io });
   const token = await session(store, transport);
   const tank = new Tank(token, transport, io.signal);
-  if (name === 'models') { io.write(safe(JSON.stringify(await tank.json('/v1/command/models'), null, 2)) + '\n'); return; }
+  if (name === 'models') {
+    // Founder-only and unadvertised: Tank answers 404 to everyone else (and the
+    // app.tervory.com corridor does not forward it). Never print Tank's raw JSON.
+    let roster;
+    try { roster = await tank.json('/v1/command/models'); } catch (error) {
+      if (error.status === 404 || error.status === 403) throw new Error('Unknown command. Run: tervory help');
+      throw error;
+    }
+    if (!Array.isArray(roster)) throw new Error('Tank sent an invalid answer.');
+    const price = value => (typeof value === 'number' && Number.isFinite(value) ? `$${value}` : 'price not set');
+    for (const row of roster) {
+      if (row && typeof row.name === 'string') io.write(`${safe(row.name)} | in ${price(row.input_usd_per_m)}/M | out ${price(row.output_usd_per_m)}/M\n`);
+    }
+    return;
+  }
   if (name === 'threads') {
     for (const thread of await tank.json('/v1/command/threads')) io.write(`${safe(thread.thread_id)} ${safe(thread.title)} | spent ${amount(thread.spent_usd)} | saved ${amount(thread.saved_usd)}\n`);
     return;

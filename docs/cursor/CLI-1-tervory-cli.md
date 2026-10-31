@@ -21,11 +21,11 @@
    - `tervory threads`: list threads, with spent and saved for each.
    - `tervory run <agent> <task> [--file]`: start squad work (for example `tervory run base batch --file delaware.csv`).
    - `tervory build "<change>"`: writes the brief, then confirm sends it to the workers.
-   - `tervory receipts [thread|task]`: model or "code", tokens, cost, baseline and saved per step.
-   - `tervory models`: the roster with prices.
-4. **Model choice, the same in the CLI and the window:**
-   - `--model auto` (the default): Tank picks the cheapest proven step.
-   - `--model <name>`: pins any roster model for that turn. It still goes through Tank, and the receipt also shows what Auto would have cost.
+   - `tervory receipts [thread|task]`: cost, would-have-cost and saved per step (the founder also sees model or "code" and tokens).
+4. **Model choice is founder-only, the same in the CLI and the window (review of #506, B2):**
+   - Everyone answers with Auto: Tank picks the cheapest proven step.
+   - Founder only, not in help or the README: `tervory models` (the roster, formatted, never raw JSON) and `--model <name>` (pins a roster model for that turn, still through Tank; the receipt also shows what Auto would have cost).
+   - Tank answers `/v1/command/models` with 404 and a non-Auto pin with 403 ("Only Auto is available on this account", no model named) for everyone else. The app.tervory.com CLI corridor does not forward `models` at all. Receipts, steps, messages and streams carry model names, requested models and price-book rows to the founder only (customer views are allowlists).
 5. **Region:** the token's box decides where it talks: app.tervory.com or za.tervory.com. It never mixes the two.
 
 ## Decision: ZA device codes are not bound to a tenant (review item 5, 31 Oct)

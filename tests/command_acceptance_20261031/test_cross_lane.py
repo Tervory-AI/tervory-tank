@@ -165,7 +165,8 @@ async def test_cli_public_adapter_reaches_real_tank_with_cancel_barrier(streamin
 
 async def device_login_edge(b, region, za_key=None):
     async with b.pool.acquire() as conn:
-        # Tank prices the pinned turn's Auto comparison from the policy model's live price row.
+        # A live price row for the policy model; the customer's pinned turn is refused
+        # anyway, so no Auto comparison is priced (review of #506 B2).
         await conn.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) "
                            "VALUES('luna','openai/gpt',0.000001,0.000004) ON CONFLICT(model) DO NOTHING")
     decoded = await asyncio.to_thread(subprocess.run,
@@ -193,8 +194,10 @@ async def device_login_edge(b, region, za_key=None):
     receipt = next(r for receipts in state['receipts'].values() for r in receipts) if isinstance(state['receipts'], dict) \
         else state['receipts'][0]
     assert receipt['ledger_id'] == str(ledger['id'])
-    assert (receipt['requested_model'], receipt['auto_model'], receipt['auto_cost_status']) == ('fixture-pin', 'luna', 'priced')
-    assert receipt['auto_cost_usd'] is not None
+    # Customers answer with Auto (review of #506 B2): the refused pin wrote nothing.
+    assert 'auto_model' not in receipt and 'auto_cost_status' not in receipt
+    assert all(m.get('model', 'auto') == 'auto' for m in state['messages'])
+    assert all(s.get('requested_model') == 'auto' for s in state['steps'].values() if 'requested_model' in s)
 
 
 @pytest.mark.asyncio

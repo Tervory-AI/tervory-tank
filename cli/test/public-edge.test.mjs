@@ -74,14 +74,16 @@ test('public POST body is bounded and content type checked', async () => {
   assert.equal(count, 0);
 });
 
-test('CLI traverses public domain adapter to fake Tank with PAT and receives roster', async () => {
-  const inner = [];
-  const proxy = edge(async (url, init) => { inner.push({ url: String(url), ...init }); return Response.json([{ name: 'fake-model', input_usd_per_m: 1 }]); });
+test('the public adapter never forwards the model roster; the CLI shows customers no models and no raw JSON', async () => {
+  // Review of #506 B2: /v1/command/models is founder-only in Tank and not on the PAT
+  // allowlist here at all. A customer running `tervory models` sees an unknown command.
+  let upstream = 0;
+  const proxy = edge(async () => { upstream++; return Response.json([{ name: 'fake-model', provider_model: 'provider/x', input_usd_per_m: 1 }]); });
+  assert.equal((await call(proxy, 'models')).status, 404);
   let output = '';
-  await run(['models'], {
+  await assert.rejects(run(['models'], {
     store: { get: async () => TOKEN }, io: { write: value => { output += value; } },
-    transport: async (url, init) => { const req = new Request(url, init); return proxy(req, ['models']); },
-  });
-  assert.match(output, /fake-model/); assert.equal(inner.length, 1);
-  assert.equal(inner[0].headers.Authorization, `Bearer ${TOKEN}`);
+    transport: async (url, init) => { const req = new Request(url, init); return proxy(req, new URL(url).pathname.split('/').slice(3)); },
+  }), /^Error: Unknown command\. Run: tervory help$/);
+  assert.equal(upstream, 0); assert.equal(output, '');
 });

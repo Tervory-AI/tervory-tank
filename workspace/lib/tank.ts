@@ -138,7 +138,7 @@ export async function personalCommandRequest(request: Request, path: string[],
   const id = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
   const target = path.join("/");
   const routes: Record<string, RegExp> = {
-    GET: new RegExp(`^(tools|models|threads|threads/${id}(/events)?|tasks/${id}/receipts)$`),
+    GET: new RegExp(`^(tools|threads|threads/${id}(/events)?|tasks/${id}/receipts)$`),
     POST: new RegExp(`^(threads|threads/${id}/(turn|actions)|cards/${id}|build)$`),
     PATCH: new RegExp(`^threads/${id}$`),
   };

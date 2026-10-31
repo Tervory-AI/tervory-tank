@@ -229,19 +229,32 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
     }
 
 
-# Engine and model names are founder-only (as in the Workspace receipt). Customers
-# get the dollar figures and the "What Auto would have cost" label, never the
-# serving, baseline or Auto model names. Durable state is not rewritten.
-MODEL_NAME_KEYS = frozenset({"model", "baseline_model", "auto_model"})
+# Engine and model names, provider models and price-book rows are founder-only (as in
+# the Workspace receipt). Customers get the dollar figures and the "What Auto would
+# have cost" label, never a serving, baseline, requested or Auto model name. Customer
+# views are allowlists, so a field added later stays founder-only until listed here.
+# Durable state is not rewritten.
+MODEL_NAME_KEYS = frozenset({"model", "baseline_model", "auto_model", "requested_model"})
+CUSTOMER_RECEIPT_KEYS = frozenset({
+    "step_id", "ledger_id", "tokens_in", "tokens_out", "cost_usd", "baseline_cost_usd", "saved_usd",
+    "cost_status", "baseline_status", "auto_cost_usd", "auto_cost_status", "auto_priced_at",
+    "auto_cost_label", "auto_cost_basis",
+})
+CUSTOMER_STEP_DROP = frozenset({"auto_comparison", "requested_model", "model"})
+CUSTOMER_MESSAGE_KEYS = frozenset({"message_id", "role", "content", "attachments", "repeatable"})
 
 
 def public_receipt(receipt: dict, founder: bool) -> dict:
-    return receipt if founder else {k: v for k, v in receipt.items() if k not in MODEL_NAME_KEYS}
+    return receipt if founder else {k: v for k, v in receipt.items() if k in CUSTOMER_RECEIPT_KEYS}
 
 
 def public_step(payload: dict, founder: bool) -> dict:
     # auto_comparison is the frozen policy model and its price book row.
-    return payload if founder else {k: v for k, v in payload.items() if k != "auto_comparison"}
+    return payload if founder else {k: v for k, v in payload.items() if k not in CUSTOMER_STEP_DROP}
+
+
+def public_message(message: dict, founder: bool) -> dict:
+    return message if founder else {k: v for k, v in message.items() if k in CUSTOMER_MESSAGE_KEYS}
 
 
 def public_event(kind: str, data: dict, founder: bool) -> dict:
@@ -251,6 +264,8 @@ def public_event(kind: str, data: dict, founder: bool) -> dict:
         return {**data, "rows": [public_receipt(r, False) for r in data.get("rows", [])]}
     if kind == "step":
         return public_step(data, False)
+    if kind == "message":
+        return public_message(data, False)
     return data
 
 
@@ -277,6 +292,11 @@ def thread_totals(state: dict) -> dict:
 
 @router.get("/models")
 async def models(actor: Actor = Depends(identity)) -> list[dict]:
+    # The roster carries provider models and prices: founders only. Everyone else
+    # (Workspace session or CLI token) gets a plain 404, as if the route did not exist.
+    actor = await authorized_actor(actor)
+    if not actor.founder:
+        raise HTTPException(404, "Not Found")
     from main import list_models
     return await list_models()
 
@@ -370,7 +390,8 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
     return {"thread": {"thread_id": str(thread_id), "title": row["title"], "updated_at": row["updated_at"],
                        "spent_usd": amounts["cost_usd"], "saved_usd": amounts["saved_usd"], "receipt_status": amounts["receipt_status"],
                        "recorded_spent_usd": amounts["recorded_spent_usd"]},
-            "messages": state["messages"], "steps": [public_step(s, founder) for s in state["steps"].values()],
+            "messages": [public_message(m, founder) for m in state["messages"]],
+            "steps": [public_step(s, founder) for s in state["steps"].values()],
             "cards": [public_card(c) for c in state["cards"].values()],
             "receipts": [public_receipt(r, founder) for r in state["receipts"]], "seq": row["seq"]}
 
@@ -570,7 +591,8 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
                 await receipt_pending(conn, row, turn_id)
             await step(conn, row, state, {**state["steps"][turn_id], "label": "Answer failed", "status": "failed",
                                           "receipt_status": "pending" if pending else "recorded" if receipt_known else "not_started"})
-            message = (f"The pinned model {model} did not answer. Pinned models never fall back; choose Auto or another model."
+            # Never echo the pinned name: this text is stored on the task and streamed.
+            message = ("The pinned model did not answer. Pinned models never fall back; choose Auto or another model."
                        if model not in (None, "auto") and answer is None else
                        "The answer could not be completed. Check routing policy and service availability.")
             await conn.execute(
@@ -584,6 +606,10 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
 @router.post("/threads/{thread_id}/turn")
 async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity)):
     if body.model not in (None, "auto"):
+        # Pinning is founder-only. The refusal names no model and does not say whether
+        # the requested name exists on the roster.
+        if not current_actor(actor).founder:
+            raise HTTPException(403, "Only Auto is available on this account")
         from main import list_models
         if body.model not in {m["name"] for m in await list_models()}:
             raise HTTPException(422, "Model is not on the roster")

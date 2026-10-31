@@ -86,7 +86,8 @@ const within = (promise, ms, label) => Promise.race([
   };
   assert.equal((await call('threads', 401, 'application/json', '{}')).status, 401);
   assert.equal((await call('threads', 500, 'text/plain', 'boom')).status, 500);
-  assert.equal((await call('models', 200, 'text/html', '<html></html>')).status, 502);
+  assert.equal((await call('tools', 200, 'text/html', '<html></html>')).status, 502);
+  assert.equal((await call('models', 200, 'application/json', '[]')).status, 404); // founder-only roster is not on the PAT allowlist
   const device = await within(personalCommandRequest(new Request('https://app.tervory.com/v1/command/device/code', {
     method: 'POST', headers: { host: 'app.tervory.com', 'content-type': 'application/json' }, body: '{}' }), ['device', 'code']), 2000, 'device code');
   assert.equal(device.status, 404);

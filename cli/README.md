@@ -26,23 +26,22 @@ Development: `npm ci --prefix cli`, then `node cli/bin/tervory.mjs help`. Do not
 Regions: **us-east** device calls go to `https://app.tervory.com/v1/command/device/{code,token,refresh,revoke}`, which the Workspace forwards to its local Tank. **ZA** has no Workspace: `za.tervory.com` is Tank only, so the CLI calls `https://za.tervory.com/v1/command/device/…` and every later chat turn goes straight to the ZA Tank. Approval still happens on the single Clerk-backed Workspace (`app.tervory.com/cli/device?region=za`), which records the decision on the ZA Tank at `TANK_URL_ZA` with the dedicated `TANK_DEVICE_APPROVAL_KEY_ZA` (the ZA Tank accepts it as `TANK_DEVICE_APPROVAL_KEY` for the two approval routes only; the ZA homes key in `TANK_API_KEY_ZA` cannot approve). No Clerk dashboard change is needed: the page is an ordinary signed-in Workspace route protected by the existing middleware.
 
 ```
-tervory chat [thread] [--model auto|name]
-tervory ask "question" [--thread id] [--model auto|name] [--file path]
+tervory chat [thread]
+tervory ask "question" [--thread id] [--file path]
 tervory threads
 tervory run base batch --file path.csv [--thread id]
 tervory run agent task --args '{"argument":"value"}' [--thread id]
 tervory build "change" [--thread id]
 tervory receipts thread-or-task-id
-tervory models
 ```
 
 Interactive chat ends on `/exit` or EOF. Tool cards require an explicit `y` or `yes`; every other answer cancels. Non-interactive input cannot confirm. `run` uses the existing Tank tool name and argument schema; Base CSV intake maps headers and records to the existing batch contract. Other tool files must use that tool's JSON schema through `--args`. Tank enforces the schema and current role. `build` displays the submitted change as its brief, proposes the existing build card, and waits for confirmation; it does not spend a model call to rewrite the user's text.
 
 The token envelope selects `https://app.tervory.com` or `https://za.tervory.com`. There is no URL override or cross-box fallback. Tank verifies the complete credential hash and region; the envelope alone grants no identity. The public command route forwards only the bearer credential to its fixed local Tank. It never sends a service key or client-supplied user, tenant or role assertions.
 
-Receipt amounts are displayed exactly as Tank returns them. Model, baseline-model and Auto-model names are shown to the founder only (Tank sends them only to the founder); customers see the dollar figures and "What Auto would have cost". A pinned model's receipt shows Tank's Auto comparison: the same recorded tokens at the Auto policy model's price-book rate, frozen when the turn was accepted. It is labelled as that, not as a separate model run, and shows `comparison pending` when Tank has no price. The CLI never computes money. An interrupted stream is reported and never automatically retried, because a turn may have incurred cost.
+Receipt amounts are displayed exactly as Tank returns them. Answers use Auto. Model names, provider models and prices are founder-only: Tank refuses the model roster (404) and any pinned model (403, naming no model) for everyone else, and sends model names in receipts, steps and messages only to the founder. Customers see the dollar figures and "What Auto would have cost". The CLI never computes money. An interrupted stream is reported and never automatically retried, because a turn may have incurred cost.
 
-The `models`, known-action `run`, and owned task receipt endpoints are supplied by companion draft PR #465. This branch must be tested with that backend before founder acceptance. Confirmed jobs are watched with read-only snapshot polls every 500 ms, for at most 240 polls; Ctrl-C cancels watching, never the already confirmed job. The CLI prints changed steps, produced links and ledger receipts and stops at completion, failure, unknown outcome or the polling bound. Reopen `chat <thread>` to show saved messages and resume watching. No failed or interrupted turn/action is automatically resubmitted.
+The known-action `run` and owned task receipt endpoints are supplied by companion draft PR #465. This branch must be tested with that backend before founder acceptance. Confirmed jobs are watched with read-only snapshot polls every 500 ms, for at most 240 polls; Ctrl-C cancels watching, never the already confirmed job. The CLI prints changed steps, produced links and ledger receipts and stops at completion, failure, unknown outcome or the polling bound. Reopen `chat <thread>` to show saved messages and resume watching. No failed or interrupted turn/action is automatically resubmitted.
 
 Interactive terminals show provisional answer text on a single stderr preview line; stdout receives the final answer once. Tank's `replace` event replaces the provisional answer, and duplicate sequence numbers are ignored. Non-interactive stdout receives only the validated final answer, avoiding stale previews in scripts.
 

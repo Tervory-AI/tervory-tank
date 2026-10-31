@@ -414,3 +414,36 @@ export async function fakeTranscript() {
   await run(['chat', 'fake-thread', '--model', 'fake-model'], h);
   return h.output();
 }
+
+test('review of #506 B2: help hides models and --model; founder roster is formatted, never raw JSON', async () => {
+  let output = ''; const io = { write: value => { output += value; } };
+  await run(['help'], { io });
+  assert.doesNotMatch(output, /models|--model|model/);
+  const roster = [{ name: 'fake-model', provider_model: 'provider/secret', input_usd_per_m: 1, output_usd_per_m: 2 }];
+  const h = harness();
+  output = '';
+  await run(['models'], { ...h, io: { ...h.io, write: value => { output += value; } }, transport: async (url, init) =>
+    new URL(url).pathname === '/v1/command/models' ? Response.json(roster) : h.transport(url, init) });
+  assert.equal(output, 'fake-model | in $1/M | out $2/M\n');
+  assert.doesNotMatch(output, /provider|[{}"]/);
+});
+
+test('review of #506 B2: a customer --model pin is refused by Tank (403) and the CLI names no model', async () => {
+  const h = harness(); let output = '';
+  const transport = async (url, init) => {
+    const path = new URL(url).pathname;
+    if (path === '/v1/command/threads' && init.method === 'POST') return Response.json({ thread_id: 'fake-thread' });
+    if (path.endsWith('/turn')) return Response.json({ detail: 'Only Auto is available on this account' }, { status: 403 });
+    return h.transport(url, init);
+  };
+  await assert.rejects(run(['ask', 'hello', '--model', 'secret-pin'], { ...h, io: { ...h.io, write: v => { output += v; } }, transport }),
+    error => error.message === 'Only Auto is available on this account. Nothing was sent.' && !error.message.includes('secret-pin'));
+  assert(!output.includes('secret-pin'));
+});
+
+test('review of #506 B2: a customer receipt on a historic pin keeps the Auto line without any model field', () => {
+  const [line] = receiptLines({ rows: [{ cost_usd: 0.02, baseline_cost_usd: 0.5, saved_usd: 0.48, auto_cost_usd: 0.05, auto_cost_status: 'priced' }] });
+  assert.equal(line, 'Step 1 | cost 0.02 | would have cost 0.5 | saved 0.48 | What Auto would have cost: 0.05');
+  const [auto] = receiptLines({ rows: [{ cost_usd: 0.02, baseline_cost_usd: 0.5, saved_usd: 0.48 }] });
+  assert.equal(auto, 'Step 1 | cost 0.02 | would have cost 0.5 | saved 0.48');
+});

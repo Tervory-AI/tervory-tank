@@ -107,11 +107,49 @@ async def test_auto_turn_uses_existing_router(runtime):
 @pytest.mark.asyncio
 async def test_unknown_pin_fails_explicitly_before_any_write(runtime):
     runtime.list_models = AsyncMock(return_value=[{'name': 'fixture-model'}])
-    actor = command.Actor(TENANT, 'client', False)
-    for name, status in [('missing', 422)]:
-        with pytest.raises(HTTPException) as error:
-            await command.turn(uuid.uuid4(), command.Turn(text='Hi', model=name), actor)
-        assert error.value.status_code == status
+    founder = command.Actor(TENANT, 'founder', True)
+    with pytest.raises(HTTPException) as error:
+        await command.turn(uuid.uuid4(), command.Turn(text='Hi', model='missing'), founder)
+    assert error.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_customer_pin_is_refused_403_naming_no_model_before_any_write(api, runtime, monkeypatch):
+    # Review of #506 B2: pinning is founder-only; the refusal names no model and does
+    # not reveal whether the requested name is on the roster.
+    client, pool = api
+    runtime.list_models = AsyncMock(return_value=[{'name': 'fixture-pin'}])
+    route = AsyncMock()
+    monkeypatch.setattr(command, 'route_turn', route)
+    headers = {'x-tervory-user': 'customer'}
+    thread = (await client.post('/v1/command/threads', json={}, headers=headers)).json()['thread_id']
+    before = await pool.fetchval("SELECT state::text FROM tank.command_threads WHERE thread_id=$1", uuid.UUID(thread))
+    for name in ('fixture-pin', 'missing-model'):
+        reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Hi', 'model': name}, headers=headers)
+        assert reply.status_code == 403
+        assert reply.json() == {'detail': 'Only Auto is available on this account'}
+        assert name not in reply.text and 'fixture' not in reply.text and 'roster' not in reply.text
+    runtime.list_models.assert_not_awaited()
+    route.assert_not_awaited()
+    assert await pool.fetchval("SELECT state::text FROM tank.command_threads WHERE thread_id=$1", uuid.UUID(thread)) == before
+    assert await pool.fetchval("SELECT count(*) FROM tank.tasks WHERE created_by='customer'") == 0
+
+
+@pytest.mark.asyncio
+async def test_models_roster_is_founder_only_and_404_for_everyone_else(api, runtime):
+    # Review of #506 B2: name, provider_model and prices are model internals.
+    client, _ = api
+    roster = [{'name': 'fixture-pin', 'provider_model': 'provider/fixture', 'input_usd_per_m': 1.5, 'output_usd_per_m': 2.5}]
+    runtime.list_models = AsyncMock(return_value=roster)
+    for user, role in (('customer', ''), ('customer', 'org:admin')):
+        reply = await client.get('/v1/command/models', headers={'x-tervory-user': user, 'x-tervory-role': role})
+        assert reply.status_code == 404 and reply.json() == {'detail': 'Not Found'}
+        assert 'fixture' not in reply.text and 'provider' not in reply.text
+    # Same answer as a route that does not exist.
+    assert (await client.get('/v1/command/no-such-route', headers={'x-tervory-user': 'customer'})).json() == {'detail': 'Not Found'}
+    runtime.list_models.assert_not_awaited()
+    founder = await client.get('/v1/command/models')
+    assert founder.status_code == 200 and founder.json() == roster
 
 
 @pytest_asyncio.fixture
@@ -1015,7 +1053,8 @@ async def test_customer_receipts_carry_no_model_names_but_keep_the_auto_dollar_f
         await conn.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) VALUES('fixture-auto','fixture',0.001,0.002)")
         await conn.execute("DELETE FROM tank.policy WHERE task_type='command.turn' AND tenant_id IS NULL")
         await conn.execute("INSERT INTO tank.policy(tenant_id,task_type,model) VALUES($1,'command.turn','fixture-auto')", TENANT)
-    names = ('fixture-auto', 'fixture-model', 'fixture-baseline', '"auto_model"', '"baseline_model"', '"model": "fixture', 'auto_comparison')
+    names = ('fixture-auto', 'fixture-model', 'fixture-baseline', 'fixture-pin', '"auto_model"', '"baseline_model"',
+             '"requested_model"', '"model"', 'auto_comparison', 'input_usd', 'output_usd', 'provider')
     results = {}
     for user in ('customer', 'founder'):
         ledger_id = await seed_ledger(pool)
@@ -1023,22 +1062,29 @@ async def test_customer_receipts_carry_no_model_names_but_keep_the_auto_dollar_f
         monkeypatch.setattr(command, 'route_turn', AsyncMock(return_value=SimpleNamespace(ledger_id=ledger_id, content='Measured answer')))
         headers = {'x-tervory-user': user}
         thread = (await client.post('/v1/command/threads', json={}, headers=headers)).json()['thread_id']
+        # Customers can no longer pin (403), but threads pinned before that change keep
+        # the names in durable state: make this one by pinning while briefly an admin.
+        monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', f'founder,{user}')
         reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Hello', 'model': 'fixture-pin'}, headers=headers)
+        monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
         snapshot = await client.get(f'/v1/command/threads/{thread}', headers=headers)
         events = await client.get(f'/v1/command/threads/{thread}/events', headers=headers)
-        results[user] = (reply.text, snapshot.text, events.text, snapshot.json()['receipts'][0])
-    for text in results['customer'][:3]:
-        assert 'auto_cost_usd' in text
+        receipts = await client.get(f"/v1/command/tasks/{snapshot.json()['steps'][0]['step_id']}/receipts", headers=headers)
+        listed = await client.get('/v1/command/threads', headers=headers)
+        results[user] = (snapshot.text, events.text, listed.text, receipts.text, snapshot.json()['receipts'][0])
+    for text in results['customer'][:4]:
         for name in names:
             assert name not in text, name
-    customer = results['customer'][3]
+    for text in results['customer'][:2]:
+        assert 'auto_cost_usd' in text
+    customer = results['customer'][4]
     assert customer['auto_cost_usd'] == pytest.approx(0.05) and customer['auto_cost_status'] == 'priced'
     assert customer['cost_usd'] == 0.02 and customer['baseline_cost_usd'] == 0.5 and 'same tokens' in customer['auto_cost_label']
-    assert not {'model', 'baseline_model', 'auto_model'} & customer.keys()
-    founder = results['founder'][3]
+    assert not {'model', 'baseline_model', 'auto_model', 'requested_model'} & customer.keys()
+    founder = results['founder'][4]
     assert (founder['model'], founder['baseline_model'], founder['auto_model']) == ('fixture-model', 'fixture-baseline', 'fixture-auto')
     assert founder['auto_cost_usd'] == pytest.approx(0.05)
-    assert 'auto_comparison' in results['founder'][1]
+    assert 'auto_comparison' in results['founder'][0] and '"requested_model"' in results['founder'][0]
     # Durable state still holds the full evidence for the founder's audit.
     state = await pool.fetchval("SELECT state FROM tank.command_threads WHERE user_id='customer'")
     assert 'fixture-auto' in (state if isinstance(state, str) else json.dumps(state))
@@ -1069,7 +1115,11 @@ async def test_pinned_failure_is_clear_and_logs_only_exception_type(api, runtime
     monkeypatch.setattr(command, 'route_turn', AsyncMock(side_effect=RuntimeError('private provider detail')))
     thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
     reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Hi', 'model': 'fixture-pin'})
-    assert 'The pinned model fixture-pin did not answer. Pinned models never fall back; choose Auto or another model.' in reply.text
+    assert 'The pinned model did not answer. Pinned models never fall back; choose Auto or another model.' in reply.text
+    # Review of #506 B2: the stored and streamed error never echoes the pinned name.
+    error_events = [line for line in reply.text.split('\n\n') if line.startswith('id:') and 'event: error' in line]
+    assert error_events and all('fixture-pin' not in e for e in error_events)
+    assert await pool.fetchval("SELECT count(*) FROM tank.tasks WHERE error LIKE '%fixture-pin%'") == 0
     assert 'RuntimeError' in caplog.text
     assert 'private provider detail' not in caplog.text + reply.text
     data = (await client.get(f'/v1/command/threads/{thread}')).json()
@@ -1293,3 +1343,62 @@ async def test_owned_task_receipts_require_owner_and_exact_ledger(api, monkeypat
     async with pool.acquire() as conn:
         await conn.execute('UPDATE tank.tasks SET ledger_id=$2 WHERE id=$1', uuid.UUID(task_id), foreign)
     assert (await client.get(path)).status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_customer_lap_over_every_cli_corridor_route_names_no_model_price_or_auto_model(api, runtime, monkeypatch):
+    # Review of #506, self-review (b): every route a customer CLI token reaches
+    # (tests/test_pat_route_corridor.py pins the list), success and error bodies and
+    # streams, carries no model name, provider model, price-book rate or Auto model.
+    client, pool = api
+    runtime.list_models = AsyncMock(return_value=[{'name': 'fixture-pin', 'provider_model': 'provider/fixture', 'input_usd_per_m': 3}])
+    async with pool.acquire() as conn:
+        await conn.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) VALUES('fixture-auto','fixture',0.001,0.002)")
+        await conn.execute("DELETE FROM tank.policy WHERE task_type='command.turn' AND tenant_id IS NULL")
+        await conn.execute("INSERT INTO tank.policy(tenant_id,task_type,model) VALUES($1,'command.turn','fixture-auto')", TENANT)
+    forbidden = ('fixture-auto', 'fixture-model', 'fixture-baseline', 'fixture-pin', 'provider/fixture', '"model"',
+                 '"auto_model"', '"baseline_model"', '"requested_model"', 'auto_comparison', 'input_usd', 'output_usd',
+                 'usd_per_m', 'provider')
+    headers = {'x-tervory-user': 'customer'}
+    bodies = []
+
+    async def call(method, path, **kwargs):
+        response = await client.request(method, path, headers=headers, **kwargs)
+        bodies.append((method, path, response.status_code, response.text))
+        return response
+
+    ledger_id = await seed_ledger(pool)
+    await pool.execute("UPDATE tank.ledger SET baseline_model='fixture-baseline',baseline_cost_usd=0.5 WHERE id=$1", ledger_id)
+    plan = json.dumps({'text': 'Please confirm.', 'actions': [{'tool': 'tiger.read', 'arguments': {}}]})
+    monkeypatch.setattr(command, 'route_turn', AsyncMock(return_value=SimpleNamespace(ledger_id=ledger_id, content=plan)))
+    assert (await call('GET', '/v1/command/models')).status_code == 404
+    await call('GET', '/v1/command/tools')
+    thread = (await call('POST', '/v1/command/threads', json={'title': 'Lap'})).json()['thread_id']
+    await call('PATCH', f'/v1/command/threads/{thread}', json={'title': 'Lap two'})
+    assert (await call('POST', f'/v1/command/threads/{thread}/turn', json={'text': 'Hi', 'model': 'fixture-pin'})).status_code == 403
+    assert (await call('POST', f'/v1/command/threads/{thread}/turn', json={'text': 'Hi', 'model': 'not-a-model'})).status_code == 403
+    assert (await call('POST', f'/v1/command/threads/{thread}/turn', json={'text': 'Hi'})).status_code == 200
+    snapshot = (await call('GET', f'/v1/command/threads/{thread}')).json()
+    assert snapshot['receipts'][0]['cost_usd'] == 0.02 and snapshot['receipts'][0]['baseline_cost_usd'] == 0.5
+    await call('GET', f'/v1/command/threads/{thread}/events')
+    await call('GET', '/v1/command/threads')
+    await call('GET', f"/v1/command/tasks/{snapshot['steps'][0]['step_id']}/receipts")
+    for card in snapshot['cards']:
+        await call('POST', f"/v1/command/cards/{card['card_id']}", json={'action': 'cancel'})
+    await call('POST', f'/v1/command/threads/{thread}/actions', json={'tool': 'tiger.read', 'arguments': {}})
+    await call('POST', '/v1/command/build', json={'thread_id': thread, 'brief_markdown': 'Change'})
+    # Error paths: an upstream refusal that names the model, and a provider crash.
+    monkeypatch.setattr(command, 'route_turn', AsyncMock(side_effect=HTTPException(503, 'fixture-auto is unavailable')))
+    await call('POST', f'/v1/command/threads/{thread}/turn', json={'text': 'Again'})
+    monkeypatch.setattr(command, 'route_turn', AsyncMock(side_effect=RuntimeError('fixture-auto provider/fixture exploded')))
+    await call('POST', f'/v1/command/threads/{thread}/turn', json={'text': 'Once more'})
+    await call('GET', f'/v1/command/threads/{thread}')
+    await call('GET', f'/v1/command/threads/{thread}/events')
+    assert {path for _, path, _, _ in bodies} >= {'/v1/command/models', '/v1/command/tools', '/v1/command/threads', '/v1/command/build',
+                                                  f'/v1/command/threads/{thread}', f'/v1/command/threads/{thread}/events',
+                                                  f'/v1/command/threads/{thread}/turn', f'/v1/command/threads/{thread}/actions'}
+    for method, path, status, text in bodies:
+        for name in forbidden:
+            assert name not in text, (method, path, status, name)
+    errors = await pool.fetch("SELECT error FROM tank.tasks WHERE created_by='customer' AND error IS NOT NULL")
+    assert errors and all('fixture' not in row['error'] for row in errors)
