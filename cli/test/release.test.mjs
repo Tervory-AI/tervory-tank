@@ -6,7 +6,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer as createHttpsServer } from 'node:https';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -159,15 +160,91 @@ test('tervory update: latest, TERVORY_CLI_VERSION pin, and checksum refusal', { 
   await assert.rejects(devRun(['update'], { transport, io, env: {} }), /only available for copies installed with: curl -fsSL https:\/\/app\.tervory\.com\/cli\/install\.sh \| sh/);
 });
 
-test('install.sh: https only incl. redirects, deadlines, wrapped in main, atomic swap', () => {
+test('install.sh: deadlines on every download, wrapped in main, atomic swap', () => {
   const script = readFileSync(join(CLI, 'install.sh'), 'utf8');
   assert.match(script, /PROTO='=https'; LOOPBACK=0/);
   assert.match(script, /http:\/\/127\.0\.0\.1:\*\|http:\/\/127\.0\.0\.1\/\*\|http:\/\/localhost:\*\|http:\/\/localhost\/\*\) PROTO='=https,http'; LOOPBACK=1/);
   assert.match(script, /curl -fsSL --proto "\$PROTO" --proto-redir "\$PROTO" --connect-timeout 15 --max-time 300/);
-  assert.match(script, /wget -q --https-only -T 30/);
+  // Every wget call follows no redirect and has a per-read and (where available) total deadline.
+  const wgets = script.split('\n').filter(line => /\bwget -q\b/.test(line));
+  assert.equal(wgets.length, 2);
+  for (const line of wgets) assert.match(line, /\$DEADLINE wget -q (--https-only )?--max-redirect=0 -T 30 -t 2 -O "\$2" "\$1"/);
+  assert.match(script, /DEADLINE="timeout 300"/);
   assert.match(script, /\nmain\(\) \{\n/);
   assert.equal(script.trimEnd().split('\n').at(-1), 'main "$@"');
   assert.match(script, /mv "\$CLI_DIR\/\$VERSION" "\$CLI_DIR\/\$VERSION\.old"/);
+});
+
+// Behavioural redirect tests (review of #506 round 2, D1): the installer runs against a
+// loopback https server (throwaway self-signed certificate made here, trusted only through
+// CURL_CA_BUNDLE / WGETRC) whose /r/cli/* answers 302 to the plain-http server above.
+// The PATH holds only the tools install.sh needs, without curl (wget path) or without wget
+// (curl path). Each downloader must refuse the downgrade: non-zero exit, nothing installed,
+// and the http server never asked. A direct https install with the same PATH must succeed,
+// so a refusal cannot come from TLS or a missing tool.
+const has = cmd => { try { execFileSync('sh', ['-c', `command -v ${cmd}`], { stdio: 'ignore' }); return true; } catch { return false; } };
+const TOOLS = ['sh', 'tar', 'gzip', 'sha256sum', 'shasum', 'cut', 'grep', 'mktemp', 'rm', 'mv', 'mkdir', 'uname', 'ldd', 'chmod',
+  'timeout', 'cat', 'env', 'readlink', 'dirname', 'basename', 'head', 'tr', 'sed', 'ls', 'curl', 'wget'];
+const redirectSkip = !supported ? 'host platform has no build'
+  : !process.env.CI && !(has('openssl') && has('wget') && has('curl')) && 'needs openssl, wget and curl (always run in CI)';
+
+function toolDir(without) {
+  const dir = mkdtempSync(join(work, `bin-no-${without}-`));
+  symlinkSync(process.execPath, join(dir, 'node'));
+  for (const tool of TOOLS) {
+    if (tool === without) continue;
+    const found = (() => { try { return execFileSync('sh', ['-c', `command -v ${tool}`]).toString().trim(); } catch { return ''; } })();
+    if (found.startsWith('/')) symlinkSync(found, join(dir, tool));
+  }
+  return dir;
+}
+
+test('install.sh refuses an https->http redirect over wget and over curl (behaviour, not text)', { skip: redirectSkip }, async () => {
+  const tls = mkdtempSync(join(work, 'tls-'));
+  execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '2', '-subj', '/CN=127.0.0.1',
+    '-addext', 'subjectAltName=IP:127.0.0.1', '-keyout', join(tls, 'key.pem'), '-out', join(tls, 'cert.pem')], { stdio: 'ignore' });
+  const cert = join(tls, 'cert.pem');
+  writeFileSync(join(tls, 'wgetrc'), `ca_certificate = ${cert}\n`);
+  const httpPort = new URL(base).port;
+  let plainHits = 0;
+  const countPlain = req => { if (!req.headers['x-https-front']) plainHits++; };
+  server.on('request', countPlain);
+  const front = createHttpsServer({ key: readFileSync(join(tls, 'key.pem')), cert: readFileSync(cert) }, (req, res) => {
+    const url = new URL(req.url, 'https://x');
+    if (url.pathname.startsWith('/r/cli/')) { res.writeHead(302, { location: `http://127.0.0.1:${httpPort}${url.pathname.slice(2)}` }).end(); return; }
+    // Direct: the same files, fetched from the plain server behind this one.
+    fetch(`${base}${url.pathname.replace(/^\/cli/, '')}`, { headers: { 'x-https-front': '1' } })
+      .then(async upstream => res.writeHead(upstream.status).end(Buffer.from(await upstream.arrayBuffer())))
+      .catch(() => res.writeHead(502).end());
+  });
+  await new Promise(r => front.listen(0, '127.0.0.1', r));
+  const httpsBase = `https://127.0.0.1:${front.address().port}`;
+  const attempt = (without, path) => {
+    const home = mkdtempSync(join(work, `home-${without}-`));
+    const before = plainHits;
+    return run('sh', [join(CLI, 'install.sh')], { env: {
+      PATH: toolDir(without), HOME: home, TERVORY_CLI_BASE: `${httpsBase}${path}`, TERVORY_BIN_DIR: join(home, 'bin'),
+      CURL_CA_BUNDLE: cert, WGETRC: join(tls, 'wgetrc'),
+    } }).then(r => ({ code: 0, ...r }), e => ({ code: e.code, stdout: e.stdout, stderr: e.stderr }))
+      .then(result => ({ ...result, home, plain: plainHits - before }));
+  };
+  try {
+    for (const [downloader, without] of [['wget', 'curl'], ['curl', 'wget']]) {
+      const direct = await attempt(without, '/cli');
+      assert.equal(direct.code, 0, `${downloader} direct https install: ${direct.stderr}`);
+      assert.equal(readlinkSync(join(direct.home, '.tervory/cli/current')), '0.1.1');
+
+      const redirected = await attempt(without, '/r/cli');
+      assert.notEqual(redirected.code, 0, `${downloader} followed an https->http redirect: ${redirected.stdout}`);
+      assert.match(redirected.stderr, /tervory install: Could not read https:\/\/127\.0\.0\.1:\d+\/r\/cli\/latest\.json\./);
+      assert.equal(existsSync(join(redirected.home, '.tervory')), false, `${downloader}: nothing installed`);
+      assert.equal(existsSync(join(redirected.home, 'bin/tervory')), false, `${downloader}: no launcher`);
+      assert.equal(redirected.plain, 0, `${downloader}: the plain-http server was never asked`);
+    }
+  } finally {
+    server.off('request', countPlain);
+    await new Promise(r => front.close(r));
+  }
 });
 
 test('update notice: at most daily, silent on failure', { skip: !supported && 'host platform has no build' }, async () => {

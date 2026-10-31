@@ -43,13 +43,19 @@ main() {
   command -v tar >/dev/null 2>&1 || fail "tar is required."
 
   # Every download has a hard deadline so a stalled server cannot hang the install.
+  # curl: --proto/--proto-redir keep the first request and every redirect on https.
+  # wget: --https-only covers recursive mode only (an https->http redirect would still be
+  # followed), so wget follows no redirect at all; app.tervory.com serves the files
+  # directly. -T is per read, so `timeout 300` adds a total deadline where it exists.
   if command -v curl >/dev/null 2>&1; then
     fetch() { curl -fsSL --proto "$PROTO" --proto-redir "$PROTO" --connect-timeout 15 --max-time 300 --retry 2 -o "$2" "$1"; }
   elif command -v wget >/dev/null 2>&1; then
+    DEADLINE=""
+    if command -v timeout >/dev/null 2>&1; then DEADLINE="timeout 300"; fi
     if [ "$LOOPBACK" = 1 ]; then
-      fetch() { wget -q -T 30 -t 2 -O "$2" "$1"; }
+      fetch() { $DEADLINE wget -q --max-redirect=0 -T 30 -t 2 -O "$2" "$1"; }
     else
-      fetch() { wget -q --https-only -T 30 -t 2 -O "$2" "$1"; }
+      fetch() { $DEADLINE wget -q --https-only --max-redirect=0 -T 30 -t 2 -O "$2" "$1"; }
     fi
   else
     fail "curl or wget is required."
