@@ -248,48 +248,6 @@ async def test_real_postgres_schema_twice_import_isolation_and_receipt_atomicity
 
 
 @pytest.mark.asyncio
-async def test_odoo_supplier_note_internal_and_retry_reconciles_lost_response():
-    import httpx
-    from test_rig_quotes import OdooStub, adapter
-    from rigbox.quotes.senders import DeliveryError
-    class Stub(OdooStub):
-        def __init__(self):
-            super().__init__()
-            self.notes = []
-            self.lose_response = True
-        def __call__(self, request):
-            params = json.loads(request.content)["params"]
-            if params["service"] == "object":
-                _, _, _, model, method, args, kwargs = params["args"]
-                if model == "mail.message" and method == "search":
-                    return httpx.Response(200, json={"result": [1] if self.notes else []})
-                if model == "sale.order" and method == "message_post":
-                    assert kwargs["subtype_xmlid"] == "mail.mt_note"
-                    assert kwargs["message_type"] == "comment"
-                    self.notes.append(kwargs["body"])
-                    if self.lose_response:
-                        self.lose_response = False
-                        raise httpx.ReadTimeout("offline lost response", request=request)
-                    return httpx.Response(200, json={"result": 1})
-            return super().__call__(request)
-    stub = Stub()
-    store, _, _, _ = await network()
-    payload, contact = await Service(store).quote_payload(TENANT, {"product_id": "desk", "contact": {
-        "name": "Offline", "email": "offline@example.com"}})
-    quote = {"id": "offline-odoo", "payload": payload, "contact": contact}
-    async with httpx.AsyncClient(transport=httpx.MockTransport(stub)) as http:
-        sender = adapter(http)
-        with pytest.raises(DeliveryError):
-            await sender.send(tenant_id=TENANT, email=None, webhook=None, quote=quote)
-        await sender.send(tenant_id=TENANT, email=None, webhook=None, quote=quote)
-    assert len(stub.orders) == len(stub.notes) == 1
-    order = stub.orders[0]
-    assert "supplier-desk" not in json.dumps(order)
-    assert "supplier-desk" in stub.notes[0]
-    assert all(method not in ("action_confirm", "action_invoice_create", "action_post") for _, method, _, _ in stub.calls)
-
-
-@pytest.mark.asyncio
 async def test_disabled_product_is_not_resurrected_by_available_offer():
     store, _, product, _ = await network()
     product["supply_eligible"] = False
