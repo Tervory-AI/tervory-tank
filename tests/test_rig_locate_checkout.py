@@ -50,8 +50,8 @@ def available(price="42.00", currency="USD", checked=None, code=None):
 
 async def shop(enabled_flag=True, tenant=TENANT):
     store = MemoryStore()
-    product = dict(sku="part-1", id="part-1", gtin="847313003072", mpn="00307", name="Roller cam pin",
-                   brand="POF-USA", category="Parts", price="3350", currency="ZAR",
+    product = dict(sku="part-1", id="part-1", gtin="2000000903071", mpn="90307", name="Roller cam pin",
+                   brand="POF-USA", category="Parts", price="2345", currency="ZAR",
                    image_url="https://example.com/part.png", active=True,
                    attributes={"stock": {"status": "out_of_stock"}})
     await store.upsert_product(tenant, product)
@@ -61,8 +61,8 @@ async def shop(enabled_flag=True, tenant=TENANT):
     await supply.source(tenant, dict(id="other-store", approved=True, priority=1, max_offer_age_seconds=3600,
                                      provider="tiger", site="https://other.example"))
     store.supply_state[tenant]["offers"] = [dict(
-        tenant_id=tenant, source_id="other-store", sku="RSR|POF00307", gtin="847313003072", brand="POF-USA",
-        mpn="00307", quantity="1", status="available", eta="2026-11-12", ship_days=10, region="US",
+        tenant_id=tenant, source_id="other-store", sku="RSR|POF90307", gtin="2000000903071", brand="POF-USA",
+        mpn="90307", quantity="1", status="available", eta="2026-11-12", ship_days=10, region="US",
         cost="40", currency="USD", seen_at=NOW, url="https://other.example/product/cam-pin/")]
     return store
 
@@ -139,7 +139,7 @@ async def test_confirm_issues_hold_from_live_price_without_supplier_fields():
     assert public["status"] == "available_to_order"
     # (45 + 5) * 18 / 0.8 from the live price, not the imported 40.
     assert public["price"] == {"amount": "1125.00", "currency": "ZAR"}
-    assert checker.calls == [(TENANT, "other-store", "RSR|POF00307")]
+    assert checker.calls == [(TENANT, "other-store", "RSR|POF90307")]
     assert set(shopper_body(public)) == {"status", "eta", "price", "expires_at", "hold"}
     assert "other-store" not in json.dumps(shopper_body(public)) and "RSR" not in json.dumps(public)
     assert read_token(SECRET, TENANT, public["hold"], datetime.now(timezone.utc)) == result["hold_id"]
@@ -324,7 +324,7 @@ async def test_accept_pays_in_test_mode_then_orders_and_records_each_state(monke
     assert state["state"] == "ordered" and state["order"] == "S00001" and state["purchase_order"] == "P00001"
     assert state["payment"] == {"reference": "ch_test_1", "provider": "test-double", "test": True}
     assert quote["payload"]["product"]["price"] == held["price"]
-    assert orders.placed == [(TENANT, result["request_id"], "RSR|POF00307", "45.00")]
+    assert orders.placed == [(TENANT, result["request_id"], "RSR|POF90307", "45.00")]
     assert service.payments.captured == [(Decimal("1125.00"), "ZAR", f"rig:{TENANT}:{result['request_id']}")]
     # Single use: the same hold cannot pay twice.
     with pytest.raises(RigError) as raised:
@@ -400,7 +400,7 @@ async def test_product_checkers_fail_closed():
         seen.append((str(request.url), dict(request.headers)))
         if request.url.path == "/rig/check-now":
             return httpx.Response(200, json={"status": "available", "price": "45.00", "currency": "USD",
-                                             "checked_at": NOW.isoformat(), "gtin": "847313003072"})
+                                             "checked_at": NOW.isoformat(), "gtin": "2000000903071"})
         return httpx.Response(200, json={"status": "available"})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as http:
@@ -409,7 +409,7 @@ async def test_product_checkers_fail_closed():
             TENANT, source, {"sku": "x", "url": "http://other.example/p"})).status == "unknown"
         live = await TigerChecker(http, {"RIG_TIGER_URL": "http://tiger", "RIG_TIGER_CHECK_KEY": "k"}).check(
             TENANT, source, offer)
-        assert live.status == "available" and live.price == Decimal("45.00") and live.gtin == "00847313003072"
+        assert live.status == "available" and live.price == Decimal("45.00") and live.gtin == "02000000903071"
         assert seen[-1][1]["x-rig-check-key"] == "k"
         api = {"id": "other-store", "provider": "api"}
         assert (await SourceApiChecker(http, {}).check(TENANT, api, offer)).status == "unknown"
@@ -440,18 +440,18 @@ async def test_tiger_check_now_reads_only_explicit_stock_on_watched_pages():
     async def robots(_):
         return "User-agent: *\nDisallow: /cart/"
 
-    def page(availability, price="240.00"):
+    def page(availability, price="234.00"):
         async def render(_):
             return {"ok": True, "html": "<html></html>"}
         async def extract(html, _):
             return {"method": "jsonld", "items": [{"name": "Cam pin", "price": price, "currency": "USD",
-                                                    "availability": availability, "gtin": "847313003072",
+                                                    "availability": availability, "gtin": "2000000903071",
                                                     "method": "jsonld"}]}
         return render, extract
 
     render, extract = page("InStock")
     result = await check_now(Watches(url), TENANT, url, render, extract, robots)
-    assert result["status"] == "available" and result["price"] == "240.00" and result["currency"] == "USD"
+    assert result["status"] == "available" and result["price"] == "234.00" and result["currency"] == "USD"
     render, extract = page("OutOfStock")
     assert (await check_now(Watches(url), TENANT, url, render, extract, robots))["status"] == "unavailable"
     render, extract = page("SomethingElse")
@@ -536,20 +536,20 @@ async def test_page_observation_records_only_definite_priced_reads():
     store = await rate_stub(await shop())
     store.supply_state[TENANT]["offers"] = []
     supply = SupplyStore(store)
-    page = dict(url="https://other.example/product/cam-pin/", sku="RSR|POF00307", brand="POF-USA", mpn=None, region="us")
+    page = dict(url="https://other.example/product/cam-pin/", sku="RSR|POF90307", brand="POF-USA", mpn=None, region="us")
     for status in ("unknown", "blocked"):
         result = LiveResult(status, None, None, NOW, None, "double")
         assert (await supply.observe_page(TENANT, "other-store", live=result, **page))["imported"] == 0
     assert store.supply_state[TENANT]["offers"] == []
     product = (await store.products(TENANT))[0]
     assert (await catalogue_status(store, product)) == "unavailable"
-    await supply.observe_page(TENANT, "other-store", live=available("240.00", code="847313003072"), **page)
+    await supply.observe_page(TENANT, "other-store", live=available("234.00", code="2000000903071"), **page)
     [offer] = store.supply_state[TENANT]["offers"]
     assert offer["quantity"] == 1 and offer["status"] == "available" and offer["region"] == "US"
-    assert offer["eta"] is None and offer["cost"] == Decimal("240.00")
+    assert offer["eta"] is None and offer["cost"] == Decimal("234.00")
     assert (await catalogue_status(store, product)) == "available_to_order"
     await supply.observe_page(TENANT, "other-store", live=LiveResult(
-        "unavailable", Decimal("240.00"), "USD", datetime.now(timezone.utc), "847313003072", "double"), **page)
+        "unavailable", Decimal("234.00"), "USD", datetime.now(timezone.utc), "2000000903071", "double"), **page)
     assert (await catalogue_status(store, product)) == "unavailable"
     with pytest.raises(ValueError):
         await supply.observe_page(TENANT, "other-store", live=available(), **{**page, "url": "http://other.example/x"})
