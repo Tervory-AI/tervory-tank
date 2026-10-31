@@ -405,7 +405,7 @@ CREATE TABLE IF NOT EXISTS agent_rig.memory_publish_log (
 );
 -- END GENERATED AGENT MEMORY
 
--- Prompt2: approved store supplier network; private inputs never selected as products.
+-- Prompt2: approved store supplier network. Private inputs never selected as products.
 ALTER TABLE agent_rig.products ADD COLUMN IF NOT EXISTS mpn text;
 CREATE TABLE IF NOT EXISTS agent_rig.supply_sources (
     tenant_id uuid NOT NULL,
