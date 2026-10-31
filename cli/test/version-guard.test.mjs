@@ -83,5 +83,5 @@ test('this checkout: package.json, package-lock.json and CHANGELOG agree on the 
   const r = spawnSync('sh', [GUARD, '4b825dc642cb6eb9a060e54bf8d69288fbee4904'], { cwd: root, encoding: 'utf8' }); // empty tree: no cli/ at base
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const { version } = JSON.parse(readFileSync(join(root, 'cli/package.json'), 'utf8'));
-  assert.match(r.stdout, new RegExp(`${version.replace(/\./g, '\\.')} is the first version`));
+  assert(r.stdout.includes(`${version} is the first version`), r.stdout);
 });
