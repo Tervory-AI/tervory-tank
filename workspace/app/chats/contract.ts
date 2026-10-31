@@ -53,8 +53,10 @@ export function upsert<T>(rows: T[], row: T, key: keyof T): T[] {
 }
 
 export function receiptFor(rows: ReceiptRow[], step_id?: string, pending = false): Receipt {
-  const sum = (key: "cost_usd" | "baseline_cost_usd" | "saved_usd" | "auto_cost_usd") => !pending && rows.length && rows.every(row => typeof row[key] === "number" && Number.isFinite(row[key])) ? rows.reduce((total, row) => total + row[key]!, 0) : null;
-  return { step_id, rows, status: pending || !rows.length || rows.some(row => row.cost_usd === null) ? "pending" : "recorded", totals: { cost_usd: sum("cost_usd"), baseline_cost_usd: sum("baseline_cost_usd"), saved_usd: sum("saved_usd"), ...(rows.some(row => row.auto_cost_usd !== undefined) ? { auto_cost_usd: sum("auto_cost_usd") } : {}) } };
+  const sum = (key: "cost_usd" | "baseline_cost_usd" | "saved_usd") => !pending && rows.length && rows.every(row => typeof row[key] === "number" && Number.isFinite(row[key])) ? rows.reduce((total, row) => total + row[key]!, 0) : null;
+  // No actual Auto comparison ledger provenance exists in the current contract.
+  // Older rows may contain price-book projections; never turn those into proof.
+  return { step_id, rows, status: pending || !rows.length || rows.some(row => row.cost_usd === null) ? "pending" : "recorded", totals: { cost_usd: sum("cost_usd"), baseline_cost_usd: sum("baseline_cost_usd"), saved_usd: sum("saved_usd"), ...(rows.some(row => row.auto_cost_usd !== undefined) ? { auto_cost_usd: null } : {}) } };
 }
 /** Reconstruct durable empty receipts from the step/card markers, without inventing zero. */
 export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
