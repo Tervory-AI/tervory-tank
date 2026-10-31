@@ -258,6 +258,34 @@ async def test_za_device_approval_key_still_needs_user_and_tenant_and_reaches_no
         assert await conn.fetchval('SELECT count(*) FROM tank.personal_tokens') == 0
 
 
+@pytest.mark.asyncio
+async def test_za_device_approval_key_never_approves_for_a_founder(device, monkeypatch):
+    """Review of #506, should-fix 1: the Boston-held approval key cannot mint a founder credential."""
+    client, pool, rt = device
+    monkeypatch.setattr(rt, 'box_region', lambda: 'za')
+    monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', APPROVER)
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', ' founder , second-founder ')
+    grant = await start(client)
+    code = grant['user_code']
+    for user in ('founder', 'second-founder'):
+        as_founder = {**APPROVER_WORKSPACE, 'x-tervory-user': user, 'x-tervory-role': 'org:admin'}
+        shown = await client.get(f'/v1/command/device/approval/{code}', headers=as_founder)
+        assert shown.status_code == 403 and 'device_name' not in shown.text
+        assert (await approve(client, code, headers=as_founder)).status_code == 403
+        assert (await approve(client, code, 'deny', headers=as_founder)).status_code == 403
+    assert (await client.post('/v1/command/device/token', json={'device_code': grant['device_code']})).json() == {
+        'error': 'authorization_pending'}
+    async with pool.acquire() as conn:
+        assert await conn.fetchval("SELECT status FROM tank.device_authorizations WHERE user_code=$1", code) == 'pending'
+        assert await conn.fetchval('SELECT count(*) FROM tank.personal_tokens') == 0
+    # The ZA Workspace key path is unchanged for the founder; an ordinary member still
+    # approves with the dedicated key, and the credential carries no admin role.
+    assert (await approve(client, code, headers={**APPROVER_WORKSPACE, 'x-tervory-role': 'org:admin'})).json()['status'] == 'approved'
+    issued = (await client.post('/v1/command/device/token', json={'device_code': grant['device_code']})).json()
+    actor = await pat.identity(__import__('test_personal_tokens').request(issued['access_token'], path='/v1/command/threads'))
+    assert actor.user_id == 'client' and not actor.founder and not actor.tenant_admin
+
+
 def test_device_schema_is_additive_and_hash_only():
     from pathlib import Path
     sql = Path('tank/schema.sql').read_text()

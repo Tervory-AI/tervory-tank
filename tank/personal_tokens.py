@@ -69,7 +69,16 @@ def device_approval_key_may_approve(request: Request) -> bool:
 async def device_approval_actor(request: Request) -> command.Actor:
     """Workspace key, or (ZA box, approval routes only) the dedicated device-approval key; user and tenant always required."""
     if device_approval_key_may_approve(request):
-        return await command.signed_in_actor(request)
+        actor = await command.signed_in_actor(request)
+        # Review of #506, should-fix 1: this key lives on the Boston Workspace and the
+        # user header is its assertion. It must never approve (and so mint) a CLI
+        # credential for a founder: a founder signs in to the ZA CLI with the ZA
+        # Workspace key path, never this one. Checked on the raw admin list, before
+        # any squad or role lookup could matter.
+        admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
+        if actor.founder or actor.user_id in admins:
+            raise HTTPException(403, "This sign-in cannot be approved here")
+        return actor
     return await command.identity(request)
 
 

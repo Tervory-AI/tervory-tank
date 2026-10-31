@@ -31,6 +31,8 @@ const MESSAGES: Record<number, string> = {
   // The user's own Clerk session is checked before this call; a 401 here means this
   // Workspace's service link to the region's Tank is refused, so "sign in again" would mislead.
   401: "Sign-in approval for this region is not available right now. Your Workspace session is fine; contact Tervory support.",
+  // The ZA Tank refuses founder accounts on the Boston-held approval key (review of #506, should-fix 1).
+  403: "This account cannot approve a sign-in for this region here. Nothing was approved.",
   404: "This code has expired, was already used, or does not exist. Run tervory login again.",
 };
 
