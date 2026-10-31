@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -22,7 +22,7 @@ const supported = (process.platform === 'linux' || process.platform === 'darwin'
 
 const work = mkdtempSync(join(tmpdir(), 'tervory-release-test-'));
 const out = join(work, 'site');
-let server; let base; const tamper = { on: false };
+let server; let base; const tamper = { on: false }; const stale = { on: false };
 
 test.before(async () => {
   if (!supported) return;
@@ -30,6 +30,7 @@ test.before(async () => {
   buildRelease({ out, platforms: [PLATFORM], version: '0.1.1' });
   server = createServer((req, res) => {
     const path = new URL(req.url, 'http://x').pathname.replace(/^\/cli\//, '');
+    if (stale.on && path === 'latest.json') { res.writeHead(200).end('{"version":"0.1.0","manifest":"releases/0.1.0/manifest.json"}'); return; }
     const file = resolve(out, path);
     if (!file.startsWith(out + '/') || !existsSync(file)) { res.writeHead(404).end('not found'); return; }
     let bytes = readFileSync(file);
@@ -74,9 +75,24 @@ test('install.sh installs latest, honours TERVORY_CLI_VERSION, and refuses a tam
   const version = await run(join(home, 'bin/tervory'), ['version'], { env: { PATH: process.env.PATH, HOME: home } });
   assert.equal(version.stdout, `tervory 0.1.1 (${PLATFORM})\n`);
 
+  // Re-installing the same version swaps the directory (.new in, .old out) and leaves no debris.
+  assert.equal((await install({}, home)).code, 0);
+  assert.deepEqual(readdirSync(join(home, '.tervory/cli')).sort(), ['0.1.1', 'current']);
+
   const pinned = await install({ TERVORY_CLI_VERSION: '0.1.0' }, home);
   assert.equal(pinned.code, 0, pinned.stderr);
   assert.equal(readlinkSync(join(home, '.tervory/cli/current')), '0.1.0');
+
+  // No silent downgrade: with 0.1.1 current, a latest.json offering 0.1.0 is refused.
+  assert.equal((await install({ TERVORY_CLI_VERSION: '0.1.1' }, home)).code, 0);
+  stale.on = true;
+  try {
+    const refused = await install({}, home);
+    assert.notEqual(refused.code, 0);
+    assert.match(refused.stderr, /latest\.json offers 0\.1\.0, older than the installed 0\.1\.1\. Set TERVORY_CLI_VERSION=0\.1\.0 to downgrade\. Nothing was changed\./);
+    assert.equal(readlinkSync(join(home, '.tervory/cli/current')), '0.1.1');
+  } finally { stale.on = false; }
+  assert.equal((await install({ TERVORY_CLI_VERSION: '0.1.0' }, home)).code, 0);
 
   assert.notEqual((await install({ TERVORY_CLI_VERSION: '9.9.9' }, home)).code, 0);
   assert.notEqual((await install({ TERVORY_CLI_VERSION: '1.0; rm -rf /' }, home)).code, 0);
@@ -141,6 +157,17 @@ test('tervory update: latest, TERVORY_CLI_VERSION pin, and checksum refusal', { 
   // Development checkouts never self-update.
   const { run: devRun } = await import('../src/client.mjs');
   await assert.rejects(devRun(['update'], { transport, io, env: {} }), /only available for copies installed with: curl -fsSL https:\/\/app\.tervory\.com\/cli\/install\.sh \| sh/);
+});
+
+test('install.sh: https only incl. redirects, deadlines, wrapped in main, atomic swap', () => {
+  const script = readFileSync(join(CLI, 'install.sh'), 'utf8');
+  assert.match(script, /PROTO='=https'; LOOPBACK=0/);
+  assert.match(script, /http:\/\/127\.0\.0\.1:\*\|http:\/\/127\.0\.0\.1\/\*\|http:\/\/localhost:\*\|http:\/\/localhost\/\*\) PROTO='=https,http'; LOOPBACK=1/);
+  assert.match(script, /curl -fsSL --proto "\$PROTO" --proto-redir "\$PROTO" --connect-timeout 15 --max-time 300/);
+  assert.match(script, /wget -q --https-only -T 30/);
+  assert.match(script, /\nmain\(\) \{\n/);
+  assert.equal(script.trimEnd().split('\n').at(-1), 'main "$@"');
+  assert.match(script, /mv "\$CLI_DIR\/\$VERSION" "\$CLI_DIR\/\$VERSION\.old"/);
 });
 
 test('update notice: at most daily, silent on failure', { skip: !supported && 'host platform has no build' }, async () => {
