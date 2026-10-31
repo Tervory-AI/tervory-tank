@@ -1,0 +1,8 @@
+# Tests that already fail on main, quarantined so the full offline suite can gate PRs.
+#
+# Format: <pytest node id or prefix> | xfail|skip | <reason>
+#   xfail: still runs and is reported (XFAIL; XPASS once fixed, then delete the line).
+#   skip:  not run (it hangs or burns minutes before failing); say why.
+# Every entry is printed with its outcome at the end of each CI run.
+# Remove an entry in the PR that fixes the test. Do not add entries for new failures:
+# a PR that breaks a passing test must fix it.
