@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 from urllib.parse import urlsplit
 from uuid import uuid4
@@ -13,6 +14,30 @@ from rigbox.service import RigError, Service, _clean_text, _contact
 
 from .senders import DeliveryError
 from .notice import notice, receipt
+
+
+
+_ADDRESS = {"name": 120, "street": 200, "street2": 200, "city": 120, "zip": 20, "state": 120,
+            "country": 2, "phone": 40}
+_ADDRESS_REQUIRED = ("name", "street", "city", "zip", "country")
+
+
+def ship_address(value: Any) -> dict[str, str]:
+    """Blind-ship delivery address from the shopper. Strict: known keys, sane lengths."""
+    if not isinstance(value, dict) or set(value) - set(_ADDRESS):
+        raise RigError("invalid", "A delivery address is required.", 422)
+    address: dict[str, str] = {}
+    for key, limit in _ADDRESS.items():
+        item = value.get(key)
+        if item is None or item == "":
+            continue
+        if not isinstance(item, str) or len(item.strip()) > limit or any(ch in item for ch in "\r\n\x00"):
+            raise RigError("invalid", "A delivery address is required.", 422)
+        address[key] = item.strip()
+    if any(not address.get(key) for key in _ADDRESS_REQUIRED) or not re.fullmatch(r"[A-Za-z]{2}", address["country"]):
+        raise RigError("invalid", "A delivery address is required.", 422)
+    address["country"] = address["country"].upper()
+    return address
 
 
 class QuoteService(Service):
@@ -138,6 +163,10 @@ class QuoteService(Service):
         token = str(body.get("payment_token") or "")
         if not token or len(token) > 200:
             raise RigError("invalid", "A payment is required.", 422)
+        # Blind ship (per store, off by default): validate the address before
+        # the hold is taken, so a bad address never burns the held price.
+        blind = (await self.store.retailer(tenant_id) or {}).get("blind_ship") is True
+        ship_to = ship_address(body.get("delivery")) if blind else None
         now = datetime.now(timezone.utc)
         try:
             hold_id = read_token(secret, tenant_id, str(body.get("hold") or ""), now)
@@ -156,6 +185,9 @@ class QuoteService(Service):
                                  "price": price}
         payload = {"kind": "product", "product": product, "locate_state": state,
                    "locate": [{"product_id": row["sku"], "public": held["public"], "store": held["private"]}]}
+        if ship_to is not None:
+            state["blind_ship"] = True
+            payload["ship_to"] = ship_to
         evidence = await self._notice_receipt(tenant_id, body.get("notice_version"))
         if evidence:
             payload["notice_receipt"] = evidence
@@ -185,15 +217,19 @@ class QuoteService(Service):
                      payment={"reference": charge.reference, "provider": provider.name, "test": charge.test})
         try:
             order = await self.handoff.place_located_order(tenant_id=tenant_id, quote_id=quote_id,
-                                                           located=held["private"])
+                                                           located=held["private"],
+                                                           **({"ship": {"address": ship_to}} if ship_to else {}))
         except DeliveryError as exc:
             refunded = await payments.refund(provider, charge, "order_failed")
             await record(state="order_failed_refunded", error=str(exc), refund={"status": refunded.status})
             raise RigError("order", "The order could not be placed. The payment was refunded.", 502) from None
         await record(state="ordered", ordered_at=datetime.now(timezone.utc).isoformat(),
                      sale_order=order["sale_order"]["name"], purchase_order=order["purchase_order"]["name"])
-        return {"request_id": quote_id, "state": "ordered", "price": price,
+        body = {"request_id": quote_id, "state": "ordered", "price": price,
                 "payment": {"reference": charge.reference, "test": True}}
+        if ship_to is not None:
+            body["ships_direct"] = True
+        return body
 
     async def deliver(self, tenant: str, quote_id: str) -> None:
         quote = await self.quote_store.claim(tenant, quote_id)

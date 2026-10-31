@@ -69,8 +69,11 @@ class SupplyStore:
         age = int(source["max_offer_age_seconds"])
         if not identity or age <= 0 or not isinstance(source.get("approved"), bool):
             raise ValueError("A source, explicit approval and maximum age are required.")
+        neutral = source.get("neutral_slip_required", False)
+        if type(neutral) is not bool:
+            raise ValueError("neutral_slip_required must be true or false.")
         row = {"id": identity, "approved": source["approved"], "priority": int(source.get("priority", 0)),
-               "max_offer_age_seconds": age, "tenant_id": str(tenant),
+               "max_offer_age_seconds": age, "tenant_id": str(tenant), "neutral_slip_required": neutral,
                **{key: str(source.get(key) or "") for key in ("provider", "site", "feed_id")}}
         if self.pool is None:
             state = self.store.supply_state.setdefault(str(tenant), {})
@@ -78,9 +81,12 @@ class SupplyStore:
             return
         async with self.pool.acquire() as conn:
             await conn.execute("""INSERT INTO agent_rig.supply_sources
-                (tenant_id,id,approved,priority,max_offer_age_seconds,provider,site,feed_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
-                ON CONFLICT(tenant_id,id) DO UPDATE SET approved=$3,priority=$4,max_offer_age_seconds=$5,provider=$6,site=$7,feed_id=$8""",
-                UUID(str(tenant)), identity, row["approved"], row["priority"], age, row["provider"], row["site"], row["feed_id"])
+                (tenant_id,id,approved,priority,max_offer_age_seconds,provider,site,feed_id,neutral_slip_required)
+                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                ON CONFLICT(tenant_id,id) DO UPDATE SET approved=$3,priority=$4,max_offer_age_seconds=$5,provider=$6,site=$7,
+                feed_id=$8,neutral_slip_required=$9""",
+                UUID(str(tenant)), identity, row["approved"], row["priority"], age, row["provider"], row["site"], row["feed_id"],
+                neutral)
 
     async def import_catalogue(self, tenant: str, source_id: str, record: dict, contents: str | bytes,
                                seen_at: Any) -> dict:

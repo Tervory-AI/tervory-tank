@@ -287,7 +287,8 @@ async def confirm(store: Any, tenant: str, product: dict, checker: LiveChecker, 
     public = {"status": "available_to_order", "eta": offer.get("eta"),
               "price": {"amount": str(amount), "currency": product["currency"]},
               "expires_at": expires_at.isoformat()}
-    private = {"offer": offer, "source": {key: source.get(key) for key in ("id", "provider", "site")},
+    private = {"offer": offer, "source": {**{key: source.get(key) for key in ("id", "provider", "site")},
+                                          "neutral_slip_required": source.get("neutral_slip_required") is True},
                "live": {**evidence, "price": str(live.price), "currency": live.currency,
                         "checked_at": live.checked_at.isoformat()},
                "landed": str(landed), "product_sku": product["sku"]}

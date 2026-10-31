@@ -162,6 +162,8 @@ ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS quote_notice jsonb;
 -- Optional cross-store fulfilment (Locate). Off for every store until it opts in.
 -- Off means no supply lookup in search or quotes and no locate, confirm or accept.
 ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS locate_enabled boolean NOT NULL DEFAULT false;
+-- Optional blind ship: Locate orders ship from the other store straight to the shopper. Off by default.
+ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS blind_ship boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS agent_rig.feeds (
     tenant_id  uuid NOT NULL,
@@ -466,6 +468,8 @@ ALTER TABLE agent_rig.products ADD COLUMN IF NOT EXISTS supply_eligible boolean 
 ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT '';
 ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS site text NOT NULL DEFAULT '';
 ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS feed_id text NOT NULL DEFAULT '';
+-- Blind ship: this source must pack a neutral slip (no own branding or invoice in the parcel).
+ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS neutral_slip_required boolean NOT NULL DEFAULT false;
 
 -- Locate confirm. The offer page is re-read live before any hold is issued.
 ALTER TABLE agent_rig.supply_offers ADD COLUMN IF NOT EXISTS url text;

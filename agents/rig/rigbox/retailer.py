@@ -79,7 +79,8 @@ class Retailer:
         return {
             "settings": {"name": retailer.get("name", ""), "email": retailer.get("email") or "",
                          "theme": retailer.get("theme", "neutral"),
-                         "locate_enabled": retailer.get("locate_enabled") is True},
+                         "locate_enabled": retailer.get("locate_enabled") is True,
+                         "blind_ship": retailer.get("blind_ship") is True},
             "price_configured": bool(settings),
             "currency": (settings or {}).get("shop_currency", "ZAR"),
             "templates": await self.store.templates_for(tenant),
@@ -124,11 +125,15 @@ class Retailer:
         locate_enabled = data.get("locate_enabled", previous.get("locate_enabled", False))
         if type(locate_enabled) is not bool:
             raise ValueError("The request is not valid.")
+        # Blind ship is a separate explicit opt-in, off by default.
+        blind_ship = data.get("blind_ship", previous.get("blind_ship", False))
+        if type(blind_ship) is not bool:
+            raise ValueError("The request is not valid.")
         await self.store.put_retailer(tenant, previous.get("slug") or tenant, email,
                                       previous.get("webhook"), name.strip(), theme=theme,
                                       quote_notice={key: validated_notice[key] for key in ("text", "url")}
                                       if validated_notice else None,
-                                      locate_enabled=locate_enabled)
+                                      locate_enabled=locate_enabled, blind_ship=blind_ship)
         return {"saved": True}
 
     async def embed_key(self, tenant: str, data: dict[str, Any]) -> dict:

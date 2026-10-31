@@ -215,6 +215,8 @@ class LocateAcceptIn(BaseModel):
     payment_token: str = Field(min_length=1, max_length=200)
     contact: dict[str, Any] = Field(default_factory=dict)
     notice_version: str | None = Field(default=None, max_length=64)
+    # Blind ship only: where the other store ships the parcel.
+    delivery: dict[str, Any] | None = None
 
 
 @router.post("/locate/confirm")
@@ -383,6 +385,8 @@ class SupplySourceIn(BaseModel):
     provider: str = Field(default="", max_length=200)
     site: str = Field(default="", max_length=200)
     feed_id: str = Field(default="", max_length=200)
+    # Blind ship: this source must pack a neutral slip (no own branding or invoice).
+    neutral_slip_required: bool = False
 
 
 class SupplyImportIn(BaseModel):
