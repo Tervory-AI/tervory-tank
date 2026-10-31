@@ -19,14 +19,14 @@ from rigbox.retailer_store import RetailerMemoryStore, RetailerPgStore
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.sql"
 
 _PRODUCTS = """
-SELECT sku, gtin, mpn, name, brand, category, price, currency, image_url, url, family,
+SELECT sku, gtin, mpn, supply_eligible, name, brand, category, price, currency, image_url, url, family,
        attributes, active
 FROM agent_rig.products
 WHERE tenant_id = $1
 """
 
 _SEARCH = """
-SELECT sku, gtin, mpn, name, brand, category, price, currency, image_url, url, family,
+SELECT sku, gtin, mpn, supply_eligible, name, brand, category, price, currency, image_url, url, family,
        attributes, active
 FROM agent_rig.products
 WHERE tenant_id = $1
@@ -48,7 +48,7 @@ LIMIT $3
 """
 
 _SEARCH_FTS = """
-SELECT sku, gtin, mpn, name, brand, category, price, currency, image_url, url, family,
+SELECT sku, gtin, mpn, supply_eligible, name, brand, category, price, currency, image_url, url, family,
        attributes, active
 FROM agent_rig.products
 WHERE tenant_id = $1
@@ -511,6 +511,7 @@ def _record_product(row: Any) -> dict[str, Any]:
         "id": row["sku"],
         "gtin": row["gtin"],
         "mpn": row.get("mpn"),
+        "supply_eligible": bool(row.get("supply_eligible", False)),
         "name": row["name"],
         "brand": row["brand"],
         "category": row["category"],
@@ -623,11 +624,12 @@ class PgStore(RetailerPgStore):
                 """
                 INSERT INTO agent_rig.products
                     (tenant_id, id, sku, gtin, name, brand, category, price, currency,
-                     image_url, url, family, attributes, active, updated_at, mpn)
-                VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, now(), $14)
+                     image_url, url, family, attributes, active, updated_at, mpn, supply_eligible)
+                VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, now(), $14, $15)
                 ON CONFLICT (tenant_id, sku) DO UPDATE SET
                     gtin = EXCLUDED.gtin,
                     mpn = EXCLUDED.mpn,
+                    supply_eligible = EXCLUDED.supply_eligible,
                     name = EXCLUDED.name,
                     brand = EXCLUDED.brand,
                     category = EXCLUDED.category,
@@ -654,6 +656,7 @@ class PgStore(RetailerPgStore):
                 _json(row.get("attributes") or {}),
                 bool(row.get("active", True)),
                 _optional_text(row.get("mpn")),
+                bool(row.get("supply_eligible", False)),
             )
         await self._drop_answers(tenant_id)
         return "updated" if existed else "added"
