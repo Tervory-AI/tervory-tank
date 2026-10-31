@@ -39,6 +39,10 @@ Two different things, kept apart:
   come from the person who approves: the credential is minted for the approving user in the
   approving user's active organization, never for anyone else, and never as a founder through
   the ZA key (Tank refuses founders there with 403).
+- **What the ZA approval key is worth (should-fix 1).** `TANK_DEVICE_APPROVAL_KEY` trusts the
+  user and tenant headers, so whoever holds it can create a CLI sign-in for any non-founder
+  user in any tenant on ZA; it is a secret of that weight, not a low-privilege key. It cannot
+  act for founders, call any other route, or create tokens except through a pending code.
 
 **What phishing gets an attacker, and why revoke matters.** An attacker can start
 `tervory login` on their own machine and send the code or approval link to a victim. If the
