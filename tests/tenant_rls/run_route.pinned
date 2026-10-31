@@ -1,5 +1,6 @@
 # Pinned body of tank/main.py run_route for tests/test_tenant_rls.py.
 # Changed on purpose by the prompt-caching PR (cache read/write tokens on the receipt).
+# Changed on purpose by #quarantine-zero: urgent reads the tenant-sealed exact cache (#360 over #424).
 # Update this copy only together with a reviewed change to run_route.
 async def run_route(
     req: RouteRequest,
@@ -109,11 +110,13 @@ async def run_route(
     transcript_messages = await _preflight_mask(req, policy, messages, task_id)
     identity = _cache_identity(req, policy, messages, max_tokens, route_seat)
     cache_policy, cache_probe = dict(policy), None
-    if priority != "urgent" and not _offpeak_dispatch and not holds_identifier and code_problem is None:
-        hit = await _cache_read(req, policy, identity)
+    if not _offpeak_dispatch and not holds_identifier and code_problem is None:
+        exact_policy = policy if priority != "urgent" else {**policy, "semantic_cache": False}
+        hit = await _cache_read(req, exact_policy, identity)
         if hit is not None:
             await _check_route_task(req, task_id)
             return await _record_local(req, policy, model=model, rung=4, content=hit, task_id=task_id, route_seat=route_seat)
+    if priority != "urgent" and not _offpeak_dispatch and not holds_identifier and code_problem is None:
         cache_probe = await semantic_cache.lookup(__import__("sys").modules[__name__], req, cache_policy, identity, messages)
         if await semantic_cache.may_serve(__import__("sys").modules[__name__], req, cache_policy, cache_probe):
             await _check_route_task(req, task_id)
