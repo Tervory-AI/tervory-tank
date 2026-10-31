@@ -51,7 +51,7 @@ const within = (promise, ms, label) => Promise.race([
   const identity = { tenantId: '00000000-0000-4000-8000-000000000001', userId: 'user_e2e', tenantAdmin: false };
 
   // 1. Error answers to the page's lookup render promptly with the right message.
-  for (const [status, text] of [[404, 'expired, was already used, or does not exist'], [401, 'could not be verified'],
+  for (const [status, text] of [[404, 'expired, was already used, or does not exist'], [401, 'Your Workspace session is fine'],
                                 [500, 'could not be completed'], [403, 'could not be completed']]) {
     answers.set(`GET /v1/command/device/approval/${CODE}`, { status, body: '{"detail":"x"}' });
     const shown = await within(deviceApproval(identity, 'us-east', CODE), 2000, `lookup ${status}`);

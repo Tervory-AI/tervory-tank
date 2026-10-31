@@ -1,9 +1,11 @@
 // CLI device sign-in: the signed-in Workspace user approves or denies a code
 // that `tervory login` shows. Server-side only (uses the Tank service keys).
-// us-east approvals go to this Workspace's own Tank; ZA approvals go to the ZA
-// Tank through the existing regionTank pattern (TANK_URL_ZA + TANK_API_KEY_ZA,
-// https only). za.tervory.com has no Workspace and no Clerk login of its own.
-import { regionTank, type Region } from "@/app/api/zenas/tank";
+// us-east approvals go to this Workspace's own Tank (TANK_URL + TANK_API_KEY).
+// ZA approvals go to the ZA Tank at TANK_URL_ZA (https only) with the dedicated
+// TANK_DEVICE_APPROVAL_KEY_ZA, which the ZA Tank accepts for the two approval
+// routes only. TANK_API_KEY_ZA (the ZA homes key) is never used here: it cannot
+// approve sign-ins. za.tervory.com has no Workspace and no Clerk login of its own.
+import { homeRegion, regionTank, type Region } from "@/app/api/zenas/tank";
 
 export const USER_CODE = /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/;
 
@@ -25,15 +27,29 @@ export function deviceCode(value: unknown): string | null {
 export const DEVICE_TIMEOUT_MS = 10_000;
 
 const MESSAGES: Record<number, string> = {
-  401: "This sign-in could not be verified. Sign in again and retry.",
+  // The user's own Clerk session is checked before this call; a 401 here means this
+  // Workspace's service link to the region's Tank is refused, so "sign in again" would mislead.
+  401: "Sign-in approval for this region is not available right now. Your Workspace session is fine; contact Tervory support.",
   404: "This code has expired, was already used, or does not exist. Run tervory login again.",
 };
+
+/** The Tank and key that may record an approval for `region`, or null when not connected here. */
+export function approvalTank(region: Region): { url: string; key: string } | null {
+  if (region === homeRegion()) return regionTank(region);
+  const url = ((region === "za" ? process.env.TANK_URL_ZA : process.env.TANK_URL_US) ?? "").trim().replace(/\/+$/, "");
+  const key = ((region === "za" ? process.env.TANK_DEVICE_APPROVAL_KEY_ZA : process.env.TANK_DEVICE_APPROVAL_KEY_US) ?? "").trim();
+  if (!url || !key) return null;
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return null; }
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) return null;
+  return { url, key };
+}
 
 /** GET shows a pending code; POST records approve or deny for the signed-in user's org. */
 export async function deviceApproval(identity: DeviceIdentity, region: Region, code: string,
                                      action?: "approve" | "deny"): Promise<DeviceResult> {
   if (!USER_CODE.test(code)) return { ok: false, status: 404, message: MESSAGES[404] };
-  const tank = regionTank(region);
+  const tank = approvalTank(region);
   if (!tank || !tank.key) return { ok: false, status: 503, message: "Sign-in for this region is not connected here." };
   let response: Response;
   try {

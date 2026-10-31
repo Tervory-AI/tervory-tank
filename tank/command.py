@@ -72,9 +72,15 @@ def key_matches(presented: str, expected: str) -> bool:
 
 
 async def identity(request: Request) -> Actor:
-    from main import TANK_API_KEY, box_region
+    from main import TANK_API_KEY
     if not key_matches(request.headers.get("x-tank-key", ""), TANK_API_KEY):
         raise HTTPException(401, "Workspace authentication required")
+    return await signed_in_actor(request)
+
+
+async def signed_in_actor(request: Request) -> Actor:
+    """The Clerk-derived user and tenant headers. Call only after the service key is checked."""
+    from main import box_region
     user = request.headers.get("x-tervory-user", "").strip()
     tenant = request.headers.get("x-tervory-tenant")
     if not user:

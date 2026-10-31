@@ -163,6 +163,8 @@ def test_homes_key_may_call_za_founder_feeds(
         ("POST", "/v1/zenas/cases/convert", b'{"home_region":"za","judgment":"a client memo"}', b"home_region=za"),
         ("GET", "/v1/zenas/matters", b"", b"home_region=za"),
         ("POST", "/v1/route", b"{}", b""),
+        ("GET", "/v1/command/threads", b"", b""),
+        ("POST", "/v1/command/device/approval/BCDF-GHJK", b'{"action":"approve"}', b""),
         ("GET", "/health", b"", b""),
         ("POST", "/v1/zenas/tenants", _tenant_body("us-east"), b""),
         ("POST", "/v1/zenas/tenants", _tenant_body(), b"home_region=us-east"),

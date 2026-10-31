@@ -530,6 +530,8 @@ async def _homes_key_scope(request: Request) -> None:
     or run case conversion, each only with home_region=za. Those routes return names, counts, dates,
     errors and scores. Documents, matters and client data stay refused.
     The Boston Workspace holds this key. It never holds the ZA TANK_API_KEY.
+    It cannot approve CLI device sign-ins: those use the separate
+    TANK_DEVICE_APPROVAL_KEY (personal_tokens.device_approval_actor).
     """
     if box_region() != ZA_REGION:
         raise HTTPException(status_code=403, detail=_HOMES_DENIED)

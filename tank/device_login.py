@@ -9,7 +9,11 @@ token is ever pasted, printed or stored in plaintext here:
   the approving user's org (tenant) on this box, with expiry, rotating refresh,
   last_used_at and revoke;
 * approval and denial use the Workspace service key plus the Clerk-derived user
-  and tenant headers (command.identity), never a CLI bearer.
+  and tenant headers (command.identity), never a CLI bearer. On a ZA box the
+  dedicated TANK_DEVICE_APPROVAL_KEY (held by the Boston Workspace as
+  TANK_DEVICE_APPROVAL_KEY_ZA) is also accepted for these two routes only
+  (personal_tokens.device_approval_actor), with the same user/tenant checks.
+  The ZA homes key is not.
 
 Unauthenticated callers can only create a pending code, poll with the secret
 device code, refresh with the secret refresh token, or revoke a credential they
@@ -267,7 +271,7 @@ async def pending(conn: Any, code: str, box: str) -> Any:
 
 
 @router.get("/approval/{code}")
-async def approval(code: str, actor: command.Actor = Depends(pat.workspace_actor)) -> JSONResponse:
+async def approval(code: str, actor: command.Actor = Depends(pat.device_approval_actor)) -> JSONResponse:
     box = region()
     with platform():
         async with command.db().acquire() as conn:
@@ -277,7 +281,7 @@ async def approval(code: str, actor: command.Actor = Depends(pat.workspace_actor
 
 
 @router.post("/approval/{code}")
-async def decide(code: str, body: Decision, actor: command.Actor = Depends(pat.workspace_actor)) -> JSONResponse:
+async def decide(code: str, body: Decision, actor: command.Actor = Depends(pat.device_approval_actor)) -> JSONResponse:
     box = region()
     with platform():
         async with command.db().acquire() as conn:

@@ -28,7 +28,7 @@ const log = (...parts) => process.stdout.write(parts.join(' ') + '\n');
 
 function rig(region, founder) {
   const load = workspace({
-    env: { TANK_URL: TANK['us-east'], TANK_API_KEY: KEY, TANK_URL_ZA: ZA_TANK, TANK_API_KEY_ZA: KEY },
+    env: { TANK_URL: TANK['us-east'], TANK_API_KEY: KEY, TANK_URL_ZA: ZA_TANK, TANK_API_KEY_ZA: KEY, TANK_DEVICE_APPROVAL_KEY_ZA: KEY },
     fetch: async (url, init) => {
       const target = new URL(url);
       const base = target.origin === ZA_TANK ? TANK.za : target.origin;

@@ -177,6 +177,8 @@ async function login(region, { store, transport, io }) {
       io.write(`Signed in on ${region}. Credential saved in the OS keychain; it refreshes automatically.\n`);
       return;
     }
+    // A 401/403 never turns into a grant by waiting: stop instead of polling to expiry.
+    if (grant.status === 401 || grant.status === 403) throw new Error(`Login refused by Tank (HTTP ${grant.status}). Run tervory login again.`);
     if (grant.error === 'authorization_pending') continue;
     if (grant.error === 'slow_down') { interval += 5000; continue; }
     if (grant.error === 'access_denied') throw new Error('Login denied in the browser.');

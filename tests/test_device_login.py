@@ -175,6 +175,89 @@ async def test_approval_needs_the_workspace_session_not_a_cli_bearer(device):
     assert (await client.post('/v1/command/device/code', json={'device_name': '\x00\x1b'})).status_code == 422
 
 
+HOMES = 'dummy-za-homes-key'
+APPROVER = 'dummy-za-device-approval-key'
+APPROVER_WORKSPACE = {**WORKSPACE, 'x-tank-key': APPROVER}
+HOMES_WORKSPACE = {**WORKSPACE, 'x-tank-key': HOMES}
+
+
+@pytest.mark.asyncio
+async def test_za_device_approval_key_may_show_approve_and_deny_device_codes(device, monkeypatch):
+    """Boston never holds the ZA Workspace key; it approves ZA sign-ins with the dedicated key."""
+    client, pool, rt = device
+    monkeypatch.setattr(rt, 'box_region', lambda: 'za')
+    monkeypatch.setenv('TANK_HOMES_KEY', HOMES)
+    monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', APPROVER)
+    grant = await start(client, 'za-laptop')
+    assert grant['region'] == 'za'
+    shown = await client.get(f"/v1/command/device/approval/{grant['user_code']}", headers=APPROVER_WORKSPACE)
+    assert shown.status_code == 200, shown.text
+    assert shown.json()['device_name'] == 'za-laptop' and shown.json()['region'] == 'za'
+    assert (await approve(client, grant['user_code'], headers=APPROVER_WORKSPACE)).json()['status'] == 'approved'
+    issued = (await client.post('/v1/command/device/token', json={'device_code': grant['device_code']})).json()
+    assert issued['access_token'].startswith(f'tv1.za.{TENANT.hex}.')
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow('SELECT tenant_id,user_id,region FROM tank.personal_tokens')
+    assert (row['tenant_id'], row['user_id'], row['region']) == (TENANT, 'client', 'za')
+    denied = await start(client)
+    assert (await approve(client, denied['user_code'], 'deny', headers=APPROVER_WORKSPACE)).json()['status'] == 'denied'
+    # The full ZA Workspace key keeps working too.
+    plain = await start(client)
+    assert (await approve(client, plain['user_code'])).json()['status'] == 'approved'
+
+
+@pytest.mark.asyncio
+async def test_za_homes_key_cannot_approve_device_codes(device, monkeypatch):
+    """Least privilege: the ZA homes key (Boston's TANK_API_KEY_ZA) is not widened."""
+    client, pool, rt = device
+    monkeypatch.setattr(rt, 'box_region', lambda: 'za')
+    monkeypatch.setenv('TANK_HOMES_KEY', HOMES)
+    monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', APPROVER)
+    grant = await start(client)
+    assert (await client.get(f"/v1/command/device/approval/{grant['user_code']}", headers=HOMES_WORKSPACE)).status_code == 401
+    assert (await approve(client, grant['user_code'], headers=HOMES_WORKSPACE)).status_code == 401
+    # A dedicated key configured equal to the homes key is refused outright (no scope blur).
+    monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', HOMES)
+    assert (await approve(client, grant['user_code'], headers=HOMES_WORKSPACE)).status_code == 401
+    async with pool.acquire() as conn:
+        assert await conn.fetchval("SELECT status FROM tank.device_authorizations WHERE user_code=$1",
+                                   grant['user_code']) == 'pending'
+
+
+@pytest.mark.asyncio
+async def test_za_device_approval_key_still_needs_user_and_tenant_and_reaches_nothing_else(device, monkeypatch):
+    client, pool, rt = device
+    monkeypatch.setattr(rt, 'box_region', lambda: 'za')
+    monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', APPROVER)
+    grant = await start(client)
+    code = grant['user_code']
+    # User and tenant are still required and checked.
+    no_user = {k: v for k, v in APPROVER_WORKSPACE.items() if k != 'x-tervory-user'}
+    assert (await approve(client, code, headers=no_user)).status_code == 401
+    assert (await client.get(f'/v1/command/device/approval/{code}', headers=no_user)).status_code == 401
+    assert (await approve(client, code, headers={**APPROVER_WORKSPACE, 'x-tervory-tenant': 'not-a-uuid'})).status_code == 422
+    assert (await approve(client, code, headers={**APPROVER_WORKSPACE, 'x-tervory-home-region': 'us-east'})).status_code == 403
+    # A near-miss key is not the approval key.
+    assert (await approve(client, code, headers={**APPROVER_WORKSPACE, 'x-tank-key': APPROVER + 'x'})).status_code == 401
+    # Outside the two approval routes the approval key is refused.
+    for method, path, body in (('GET', '/v1/command/tools', None), ('GET', '/v1/command/threads', None),
+                               ('POST', '/v1/command/threads', {}), ('GET', '/v1/personal-tokens', None),
+                               ('POST', '/v1/personal-tokens', {'name': 'x'})):
+        response = await client.request(method, path, json=body, headers=APPROVER_WORKSPACE)
+        assert response.status_code == 401, (method, path, response.status_code)
+    # Not on a us-east box, and not when TANK_DEVICE_APPROVAL_KEY is unset.
+    monkeypatch.setattr(rt, 'box_region', lambda: 'us-east')
+    us = await start(client)
+    assert (await approve(client, us['user_code'], headers=APPROVER_WORKSPACE)).status_code == 401
+    assert (await client.get(f"/v1/command/device/approval/{us['user_code']}", headers=APPROVER_WORKSPACE)).status_code == 401
+    monkeypatch.setattr(rt, 'box_region', lambda: 'za')
+    monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', '')
+    assert (await approve(client, code, headers=APPROVER_WORKSPACE)).status_code == 401
+    async with pool.acquire() as conn:
+        assert await conn.fetchval("SELECT status FROM tank.device_authorizations WHERE user_code=$1", code) == 'pending'
+        assert await conn.fetchval('SELECT count(*) FROM tank.personal_tokens') == 0
+
+
 def test_device_schema_is_additive_and_hash_only():
     from pathlib import Path
     sql = Path('tank/schema.sql').read_text()

@@ -163,7 +163,7 @@ async def test_cli_public_adapter_reaches_real_tank_with_cancel_barrier(streamin
         assert next(iter(state['cards'].values()))['status'] == 'cancelled'
 
 
-async def device_login_edge(b, region):
+async def device_login_edge(b, region, za_key=None):
     async with b.pool.acquire() as conn:
         # Tank prices the pinned turn's Auto comparison from the policy model's live price row.
         await conn.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) "
@@ -171,7 +171,7 @@ async def device_login_edge(b, region):
     decoded = await asyncio.to_thread(subprocess.run,
         ['node', str(Path(__file__).with_name('device_edge.cjs'))],
         input=json.dumps({'origin': str(b.api.base_url).rstrip('/'), 'tenant': str(TENANT), 'region': region,
-                          'pin': 'fixture-pin'}),
+                          'pin': 'fixture-pin', **({'za_key': za_key} if za_key else {})}),
         text=True, capture_output=True, timeout=60, check=False)
     assert decoded.returncode == 0, decoded.stderr
     assert decoded.stdout.startswith(f'PASS: CLI device login {region}')
@@ -209,8 +209,12 @@ async def test_cli_device_login_through_workspace_with_automated_approval(stream
                     reason='Requires assembled CLI/Workspace and local-only client dependencies')
 async def test_za_cli_talks_straight_to_tank_with_device_login(streaming, monkeypatch):  # noqa: F811
     """B: za.tervory.com is Tank only (no Workspace). Approval still happens on the
-    one Workspace, which records it on the ZA Tank via TANK_URL_ZA/TANK_API_KEY_ZA."""
+    one Workspace, which records it on the ZA Tank via TANK_URL_ZA/TANK_API_KEY_ZA.
+    As in production, Boston's TANK_API_KEY_ZA is the ZA Tank's narrow TANK_HOMES_KEY
+    (it cannot approve); approvals use the dedicated TANK_DEVICE_APPROVAL_KEY."""
     monkeypatch.setenv('TANK_REGION', 'za')
+    monkeypatch.setenv('TANK_HOMES_KEY', 'dummy-za-homes-key')
+    monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', 'dummy-za-device-approval-key')
     # A ZA Tank process reads TANK_REGION=za at import; mirror that for the ledger.
     monkeypatch.setattr(streaming.tank, 'DEFAULT_REGION', 'za')
-    await device_login_edge(streaming, 'za')
+    await device_login_edge(streaming, 'za', za_key='dummy-za-device-approval-key')

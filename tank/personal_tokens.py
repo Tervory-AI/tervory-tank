@@ -7,6 +7,7 @@ Management endpoints deliberately require the original Workspace dependency.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import secrets
 import uuid
@@ -33,6 +34,42 @@ def digest(token: str) -> str:
 
 async def workspace_actor(request: Request) -> command.Actor:
     # Do not permit a PAT to mint new PATs or manage Workspace credentials.
+    return await command.identity(request)
+
+
+# Approving a ZA CLI sign-in happens on the Boston Workspace's Clerk page, but the
+# Boston Workspace never holds the ZA TANK_API_KEY, and its ZA homes key
+# (TANK_HOMES_KEY, Boston's TANK_API_KEY_ZA) stays limited to the Zenas homes and
+# feeds routes. So the ZA Tank accepts one dedicated key, TANK_DEVICE_APPROVAL_KEY
+# (Boston holds it as TANK_DEVICE_APPROVAL_KEY_ZA), for exactly the two
+# device-approval routes below (GET shows a pending code, POST approves or denies
+# it), on a ZA box only. The signed-in user and tenant headers are still required
+# and checked exactly as for the Workspace key. The key is refused everywhere else,
+# and refused outright if it is unset or equal to the Workspace or homes key (a
+# misconfiguration that would blur the scopes).
+DEVICE_APPROVAL_PATH = re.compile(r"/v1/command/device/approval/[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}\Z")
+
+
+def device_approval_key() -> str:
+    """The ZA Tank's dedicated device-approval key, or '' when unset or not distinct."""
+    from main import TANK_API_KEY
+    key = os.environ.get("TANK_DEVICE_APPROVAL_KEY", "").strip()
+    others = {TANK_API_KEY.strip(), os.environ.get("TANK_HOMES_KEY", "").strip()} - {""}
+    return "" if not key or key in others else key
+
+
+def device_approval_key_may_approve(request: Request) -> bool:
+    from main import box_region
+    key = device_approval_key()
+    return (bool(key) and box_region() == "za" and request.method in {"GET", "POST"}
+            and DEVICE_APPROVAL_PATH.fullmatch(request.url.path) is not None
+            and command.key_matches(request.headers.get("x-tank-key", ""), key))
+
+
+async def device_approval_actor(request: Request) -> command.Actor:
+    """Workspace key, or (ZA box, approval routes only) the dedicated device-approval key; user and tenant always required."""
+    if device_approval_key_may_approve(request):
+        return await command.signed_in_actor(request)
     return await command.identity(request)
 
 

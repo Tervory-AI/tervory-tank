@@ -67,6 +67,7 @@ function deviceHarness({ region = 'us-east', outcomes = ['authorization_pending'
     }
     if (call.path.endsWith('/device/token')) {
       const next = outcomes.shift();
+      if (typeof next === 'object') return Response.json(next.body, { status: next.status });
       return next === 'grant' ? Response.json(grantFor(region, 1)) : Response.json({ error: next, detail: 'must not print' }, { status: 400 });
     }
     if (call.path.endsWith('/device/refresh')) return Response.json(grantFor(region, 3));
@@ -110,6 +111,15 @@ test('denied and expired approvals store nothing', async () => {
   for (const [outcome, message] of [['access_denied', /denied in the browser/], ['expired_token', /code expired/], ['invalid_grant', /refused by Tank/]]) {
     const h = deviceHarness({ outcomes: [outcome] });
     await assert.rejects(run(['login'], h), message);
+    assert.equal(h.saved(), null);
+  }
+});
+
+test('a 401 or 403 while polling stops login at once instead of polling to expiry', async () => {
+  for (const status of [401, 403]) {
+    const h = deviceHarness({ region: 'za', outcomes: ['authorization_pending', { status, body: { error: 'authorization_pending' } }, 'grant'] });
+    await assert.rejects(run(['login', '--region', 'za'], h), new RegExp(`Login refused by Tank \\(HTTP ${status}\\)`));
+    assert.equal(h.calls.filter(call => call.path.endsWith('/device/token')).length, 2);
     assert.equal(h.saved(), null);
   }
 });
