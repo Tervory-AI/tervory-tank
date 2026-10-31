@@ -224,11 +224,11 @@ def test_locate_confirm_accept_responses_have_no_supplier_identity_or_cost(monke
         store.supply_state[SAMPLE]["offers"] = [dict(
             tenant_id=SAMPLE, source_id="other-store", sku="RSR|POF02445", gtin="847313024459", brand="POF-USA",
             mpn=None, quantity="1", status="available", eta="2026-11-20", ship_days=8, region="US",
-            cost="606", currency="USD", seen_at=datetime.now(timezone.utc),
+            cost="987", currency="USD", seen_at=datetime.now(timezone.utc),
             url="https://other.example/product/cam-pin/")]
         await rate_stub(store)
         service = QuoteService(store, None, HandoffDouble(), MemoryQuotes(store))
-        service.locate_checker = Live(available("606.00"))
+        service.locate_checker = Live(available("987.00"))
         service.payments = FakeProvider()
         return service
 
@@ -250,9 +250,9 @@ def test_locate_confirm_accept_responses_have_no_supplier_identity_or_cost(monke
         assert accepted.json()["ships_direct"] is True
     for response in (located, held, product, accepted):
         text = response.text
-        # The supplier's live cost (606 USD). Random ids (hold token, request id,
-        # payment reference) are dropped first: their hex can contain "606".
-        assert re.search(r"(?<![0-9A-Za-z])606(?:\.0+)?(?![0-9A-Za-z])", re.sub(r'"(hold|request_id|reference)":"[^"]*"', "", text)) is None, text
+        # The supplier's live cost (a made-up 987 USD, not a real supplier price). Random ids (hold token, request id,
+        # payment reference) are dropped first: their hex can contain "987".
+        assert re.search(r"(?<![0-9A-Za-z])987(?:\.0+)?(?![0-9A-Za-z])", re.sub(r'"(hold|request_id|reference)":"[^"]*"', "", text)) is None, text
         assert "neutral_slip" not in text and "landed" not in text
         for marker in ("other-store", "other.example", "RSR|POF02445", "RSR", "tiger"):
             assert marker not in text, (marker, text)
