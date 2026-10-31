@@ -142,7 +142,8 @@ jobs:
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.run == 'true' }}
     # Self-hosted only when "pick runner" chose it and the change is not from a fork.
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
-    timeout-minutes: 10
+    # Full suite: about N minutes on a 4-core runner; the per-test timeout is 5 minutes.
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -150,6 +151,9 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: pooltest
+          # Disposable service: tests create LOGIN roles without passwords (tenant RLS)
+          # and Radix passive insists on a password-free URL, as in tenant-rls.yml.
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -159,6 +163,9 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # tests/test_tenant_rls.py compares routing bodies with an older commit.
+          fetch-depth: 0
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.12"
@@ -171,18 +178,61 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r tank/requirements.txt -r tank/requirements-dev.txt
           pip install --require-hashes -r agents/rig/forge/requirements.lock
+      - name: Prepare Chromium for required READ-1 browser tests
+        run: |
+          browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome || command -v google-chrome-stable || true)
+          if [ -n "$browser" ]; then
+            echo "READ1_CHROMIUM_EXECUTABLE=$browser" >> "$GITHUB_ENV"
+          else
+            python -m playwright install --with-deps chromium
+          fi
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: workspace/package-lock.json
+      - name: Install workspace packages for offline billing and Node tests
+        working-directory: workspace
+        run: npm ci --no-audit --no-fund
       - name: Lint
         # F401 in base.socials/1.0.0/run.py is a pre-existing unused import.
         # This lane cannot edit an approved skill in place.
         run: ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
-      - name: Secret scan, Tank starts, patch releases keep their code
-        # Founder, 27 Oct: the full suite no longer gates merges (it took ~15 minutes).
-        # This job checks lint, the secret scan, that the real Tank starts on an empty database,
-        # and (under a second) that no skill's x.y.Z patch changes code (zenas.pii 1.1.2 did).
-        run: python3 -m pytest -q tests/test_secrets.py tests/test_tank_boots.py tests/test_tank_one_door.py tests/test_skala_patch_code_unchanged.py
+      - name: Prepare test databases
+        # tests/test_radix_passive.py insists on a database named radix_passive_test.
+        run: |
+          python - <<'PY'
+          import asyncio, asyncpg
+          async def main():
+              conn = await asyncpg.connect("postgresql://postgres@127.0.0.1:5432/pooltest")
+              await conn.execute("CREATE DATABASE radix_passive_test")
+              await conn.close()
+          asyncio.run(main())
+          PY
+      - name: Full offline test suite
+        # The whole suite gates every PR again (it was cut to 3 files on 27 Oct, #351,
+        # because it took 10-15 minutes serially and had not passed for three days).
+        # Now: pytest-xdist workers with one database each, a per-test timeout, no
+        # provider keys, and in-process sockets limited to loopback. Known failures on
+        # main are listed with reasons in tests/quarantine.txt and still reported.
+        # tests/test_skala_patch_code_unchanged.py (#484) runs as part of the suite.
+        run: python3 .github/scripts/offline_suite.py
         env:
           PYTHONPATH: tank
-          POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
+          # One Postgres service. tests/conftest.py gives each xdist worker its own
+          # database cloned by name from this one (pooltest_gw0, ...).
+          POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          ZENAS_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          # Opt-in database tests: CI has a disposable Postgres, so they run here too.
+          MEMORY_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          BASE_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          RLS_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          RADIX_PASSIVE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/radix_passive_test
+          SKALA_B3_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          SKALA_INTAKE_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          TIGER_MAIL_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          RIG_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          TRAINING_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
 
   workspace:
     needs: [changes, runner]

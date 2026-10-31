@@ -84,7 +84,7 @@ async def test_registered_route_forwards_complexity_and_preserves_auth(monkeypat
     async def routed(request,caller,**kwargs):
         seen.append((request,caller,kwargs))
         return dict(ledger_id=str(uuid.uuid4()),model='selected',rung=1,content='done',tokens_in=1,tokens_out=1,cost_usd=None,latency_ms=0,moa={'missing':['research']})
-    row = {'model': 'selected', 'moa_enabled': True}
+    row = {'model': 'selected', 'priority': 'standard', 'moa_enabled': True}
     async def load(*args): return row
     monkeypatch.setenv('TANK_REGION', 'us-east')
     monkeypatch.setattr(main, 'load_policy', load)
@@ -407,7 +407,7 @@ async def test_disabled_route_does_not_import_or_call_moa(monkeypatch):
         if name == 'moa':
             raise AssertionError('Disabled routes must not depend on MoA')
         return original_import(name, *args, **kwargs)
-    async def load(*args): return {'moa_enabled': False, 'moa_config': 'stale and invalid'}
+    async def load(*args): return {'priority': 'standard', 'moa_enabled': False, 'moa_config': 'stale and invalid'}
     async def single(request, caller):
         assert request.agent == caller == 'base'
         return 'ordinary route'
@@ -422,7 +422,7 @@ async def test_disabled_route_does_not_import_or_call_moa(monkeypatch):
 @pytest.mark.parametrize('stored', ['invalid json', '[]', [], 123, {'shape': 'obsolete'},
                                    {'enabled': True}, {'seats': [{'name': 'logic', 'model': 'sonar'}]}])
 async def test_stale_config_logs_and_falls_back_to_single_route(monkeypatch, caplog, stored):
-    row = {'task_type': 'fixture', 'tenant_id': TENANT, 'model': 'selected',
+    row = {'task_type': 'fixture', 'tenant_id': TENANT, 'model': 'selected', 'priority': 'standard',
            'moa_enabled': True, 'moa_config': stored}
     async def load(*args): return row
     async def single(*args, **kwargs): return 'ordinary route'

@@ -1,0 +1,20 @@
+# Tests that already fail on main, quarantined so the full offline suite can gate PRs.
+#
+# Format: <pytest node id or prefix> | xfail|skip | <reason>
+#   xfail: still runs and is reported as XFAIL. Strict: once it passes (XPASS) the run
+#          fails, so the PR that fixes it must delete the line. Use exact node ids
+#          (with [params]) so passing siblings stay gated.
+#   skip:  not run (it hangs or burns minutes before failing); say why.
+# Every entry is printed with its outcome at the end of each CI run.
+# Remove an entry in the PR that fixes the test. Do not add entries for new failures:
+# a PR that breaks a passing test must fix it.
+#
+# Added 31 Oct 2026 (#486): failures found when the whole suite ran again on main fd5fc1a5.
+# None of these tests ran in PR CI since 27 Oct (#351), so each drifted from the code it checks.
+# 17 of the 22 found were fixed in #486; these remain.
+tests/test_room_seal.py::test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.yml] | xfail | docassemble is sealed on the internal assembly network, but the file is not raw compose, so Coolify would add its internet-facing app network; mark it raw compose (after checking the live resource) or decide the seal rule, do not relax the test
+tests/test_room_seal.py::test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.za.yml] | xfail | docassemble is sealed on the internal assembly network, but the file is not raw compose, so Coolify would add its internet-facing app network; mark it raw compose (after checking the live resource) or decide the seal rule, do not relax the test
+tests/test_chat_graduation.py::test_chat_exact_repeat_has_zero_cost_both_jobs_in_savings_and_tenants_sealed | xfail | the exact-repeat chat stream has no "event: done" (it shows step/waiting/receipt events); the test expects done
+tests/test_candidate_eval_runtime.py::CandidateEvalRuntimeTests::test_bundled_feeds_and_fixtures_match_existing_sources | xfail | agents/market_lab/feeds/runner.py changed (skips disabled specs) after market.series_fetch 1.2.1 was approved; approved packages are immutable, so the fix is a new 1.2.2 package with the current feeds through Skala evals and approval
+tests/test_backup_deploy_persistence.py::test_boston_backup_survives_default_deployment_composition | xfail | `docker compose --dry-run up --pull never` exits 1 on the GitHub runner (the test does not capture stderr); it was skipped where Docker was absent
+tests/test_rig_3d_deployment.py::test_docker_cmd_preserves_public_api_health_and_private_brain | xfail | Rig 3D docker CMD check fails at its line-28 assertion after "chassis ready"; needs a look by the Rig 3D owner
