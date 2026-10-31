@@ -28,8 +28,6 @@ from gold import PLATFORM_TENANT, encoded, obj, runtime
 
 log = logging.getLogger(__name__)
 LOCK_ID = 218001
-# Serializes proof_prices writers (startup refresh, paused ticks, bench ticks, replicas).
-PRICE_LOCK_ID = 218002
 
 
 def price_book(rows: list[dict]) -> dict[str, dict]:
@@ -96,7 +94,6 @@ def reserve_quote(messages: list[dict], max_tokens: int, price: dict) -> Decimal
 
 async def sync_prices(conn, book: dict) -> None:
     async with conn.transaction():
-        await conn.execute('SELECT pg_advisory_xact_lock($1)', PRICE_LOCK_ID)
         # Avoid transient false/true flips: an unchanged book must not invalidate
         # every client cache when this transaction commits.
         await conn.execute('UPDATE tank.proof_prices SET active=false WHERE active AND NOT (model=ANY($1::text[]))',list(book))
@@ -266,13 +263,8 @@ async def tick() -> str | None:
     # Read only: a long pause must not emit one run/audit row per task per tick.
     # Per-call checks below still catch a pause enabled while a tick is running.
     async with asyncio.timeout(controls.STATE_TIMEOUT_S):
-        paused = await controls.paid_paused()
-    if paused:
-        # Reading LiteLLM's price list is free; a paused box must still price
-        # receipts and the Auto comparison. Only the paid bench stops.
-        with suppress(Exception):
-            await refresh_prices()
-        return 'paused'
+        if await controls.paid_paused():
+            return 'paused'
     rt = runtime()
     cap = Decimal(os.environ.get('TANK_BENCH_MAX_USD') or '5')
     if not cap.is_finite() or cap < 0:
@@ -354,36 +346,7 @@ async def worker_status(error: str | None, status: str = 'running') -> None:
             'unavailable' if error else status, error)
 
 
-async def refresh_prices() -> int:
-    """Populate tank.proof_prices from the live roster. Idempotent; costs no model call."""
-    rt = runtime()
-    if not rt.LITELLM_MASTER_KEY:
-        raise RuntimeError('LiteLLM connection is not configured')
-    book = price_book(await rt._roster_models())
-    if not book:
-        raise RuntimeError('No priced roster available; prices unchanged')
-    async with rt.pool().acquire() as conn:
-        await sync_prices(conn, book)
-    return len(book)
-
-
-async def initial_prices(delays=(5, 10, 20, 40, 80, 160)) -> bool:
-    """After a fresh deploy LiteLLM may still be starting (compose waits only for
-    service_started). Retry quickly instead of leaving proof_prices empty until
-    the next five-minute tick, which never synced prices while paid work was paused."""
-    for delay in (0, *delays):
-        await asyncio.sleep(delay)
-        try:
-            count = await refresh_prices()
-            log.info('Price roster synced at startup (%d models)', count)
-            return True
-        except Exception as exc:  # noqa: BLE001 - logged by type only; never the key
-            log.warning('Price roster not ready at startup (%s); retrying', type(exc).__name__)
-    return False
-
-
 async def loop() -> None:
-    await initial_prices()
     while True:
         try:
             status = await tick()
