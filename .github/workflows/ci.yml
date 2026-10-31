@@ -332,10 +332,10 @@ jobs:
           POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
         run: |
           # Cross-lane (6, incl. CLI device login via Workspace and ZA direct to Tank),
-          # device-login + personal-token units on real Postgres, and the proof_prices
+          # device-login + personal-token + CLI-token route-corridor units on real Postgres, and the proof_prices
           # fresh-deploy/paused syncs. One junit file, so the skip gate covers all of it.
           python -m pytest -q -s -rs tests/command_acceptance_20261031/test_cross_lane.py \
-            tests/test_device_login.py tests/test_personal_tokens.py \
+            tests/test_device_login.py tests/test_personal_tokens.py tests/test_pat_route_corridor.py \
             tests/test_core1_proof.py::test_paused_ticks_do_not_create_runs_audits_or_reservations_and_resume \
             tests/test_core1_proof.py::test_fresh_deploy_populates_proof_prices_idempotently_before_any_tick \
             --junitxml="$RUNNER_TEMP/command-acceptance.xml"
