@@ -1,0 +1,86 @@
+[
+  {
+    "Fingerprint": "30b3432ae2016ec36530e09471b4c25817667780:tank/skills/tisan.figma/1.0.1/evals/cases.jsonl:generic-api-key:1"
+  },
+  {
+    "Fingerprint": "30b3432ae2016ec36530e09471b4c25817667780:tank/skills/tisan.figma/1.0.1/evals/cases.jsonl:generic-api-key:1"
+  },
+  {
+    "Fingerprint": "30b3432ae2016ec36530e09471b4c25817667780:tank/skills/tisan.figma/1.0.1/evals/cases.jsonl:generic-api-key:2"
+  },
+  {
+    "Fingerprint": "30b3432ae2016ec36530e09471b4c25817667780:tank/skills/tisan.figma/1.0.1/evals/cases.jsonl:generic-api-key:3"
+  },
+  {
+    "Fingerprint": "30b3432ae2016ec36530e09471b4c25817667780:tank/skills/tisan.figma/1.0.1/evals/cases.jsonl:generic-api-key:6"
+  },
+  {
+    "Fingerprint": "464442545e4b0706e3137208659ce9656242e1b1:tests/w2/billing.test.ts:stripe-access-token:29"
+  },
+  {
+    "Fingerprint": "a3fd268ade905b71131a9465d0968f45e21324f4:.github/workflows/retest.yml:generic-api-key:59"
+  },
+  {
+    "Fingerprint": "aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:agents/tisan/README.md:generic-api-key:45"
+  },
+  {
+    "Fingerprint": "aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:agents/tisan/fixtures/tervory-landing.json:generic-api-key:5"
+  },
+  {
+    "Fingerprint": "aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:tank/skills/tisan.figma/1.0.0/evals/cases.jsonl:generic-api-key:1"
+  },
+  {
+    "Fingerprint": "aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:tank/skills/tisan.figma/1.0.0/evals/cases.jsonl:generic-api-key:1"
+  },
+  {
+    "Fingerprint": "aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:tank/skills/tisan.figma/1.0.0/evals/cases.jsonl:generic-api-key:2"
+  },
+  {
+    "Fingerprint": "aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:tank/skills/tisan.figma/1.0.0/evals/cases.jsonl:generic-api-key:3"
+  },
+  {
+    "Fingerprint": "aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:tests/test_tisan_figma.py:generic-api-key:16"
+  },
+  {
+    "Fingerprint": "aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:agents/tisan/figma.py:generic-api-key:19"
+  },
+  {
+    "Fingerprint": "4d30892d389048f575f77d0ab69dfaedd2017e67:tests/tiger_alert_page/fixtures/live/automationexercise-com--product-details-1.html:generic-api-key:329"
+  },
+  {
+    "Fingerprint": "4d30892d389048f575f77d0ab69dfaedd2017e67:tests/tiger_alert_page/fixtures/live/www-adafruit-com--product-4296.html:generic-api-key:284"
+  },
+  {
+    "Fingerprint": "4d30892d389048f575f77d0ab69dfaedd2017e67:tests/tiger_alert_page/fixtures/live/www-adafruit-com--product-4296.html:generic-api-key:307"
+  },
+  {
+    "Fingerprint": "4d30892d389048f575f77d0ab69dfaedd2017e67:tests/tiger_alert_page/fixtures/live/www-adafruit-com--product-4296.html:generic-api-key:342"
+  },
+  {
+    "Fingerprint": "d89a04ad17aa2c427da0d4ceb272b499f4a6a420:.github/workflows/ci.yml:generic-api-key:57"
+  },
+  {
+    "Fingerprint": "d89a04ad17aa2c427da0d4ceb272b499f4a6a420:tests/test_secrets.py:generic-api-key:90"
+  },
+  {
+    "Fingerprint": "b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-073.html:generic-api-key:14316"
+  },
+  {
+    "Fingerprint": "b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-071.html:generic-api-key:14316"
+  },
+  {
+    "Fingerprint": "b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-072.html:generic-api-key:14316"
+  },
+  {
+    "Fingerprint": "b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-074.html:generic-api-key:14316"
+  },
+  {
+    "Fingerprint": "b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-045.html:generic-api-key:350"
+  },
+  {
+    "Fingerprint": "b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-048.html:generic-api-key:345"
+  },
+  {
+    "Fingerprint": "b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-047.html:generic-api-key:354"
+  }
+]
