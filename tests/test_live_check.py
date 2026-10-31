@@ -221,7 +221,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(ops['queue'], 'max')
         for op in ['deploy', 'room-setup']:
             self.assertEqual(group_for(ops['group'], op), 'coolify-deploy')
-        for op in ['status', 'env-refs', 'create-room', 'backup-scope', 'nightly-status']:
+        for op in ['status', 'env-refs', 'create-room', 'backup-scope', 'nightly-status',
+                   'zenas-renormalise', 'zenas-renormalise-report']:
             self.assertEqual(group_for(ops['group'], op), 'coolify-ops-RUN')
 
     def test_live_check_probes_through_the_coolify_gate(self):

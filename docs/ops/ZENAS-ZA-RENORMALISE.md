@@ -38,7 +38,72 @@ Counts: `rows`, `batches`, `changed`, `unchanged`, `written`,
 `skipped: not a pdf`, `skipped: fetch failed`, `skipped: no text`,
 `skipped: id would change`, `skipped: no url`, `skipped: not a case`.
 
-## How to run (ZA box, pool-loader image)
+## How to run: coolify-ops op=zenas-renormalise (the sanctioned way)
+
+The job runs inside the deployed ZA Zenas room (`agent-zenas-za`), whose image
+already carries `agents/zenas/pool` with `pdf_spacing.py` and `pypdfium2`, and
+whose environment has `TANK_REGION=za` and `DATABASE_URL`. The op does it the
+way the nightly pool job runs there: as a Coolify scheduled task on that
+application, in the same container as `zenas-pool-nightly`. Nobody calls the
+Coolify API from a laptop or box, and nobody shells into the server. The
+Coolify token stays in the workflow's secret and is never printed.
+
+```sh
+# 1. Dry run on a small slice first (dry run is the default)
+gh workflow run coolify-ops.yml --ref main -f op=zenas-renormalise -f region=za \
+  -f source=cac -f limit=20
+
+# 2. Whole set, still a dry run
+gh workflow run coolify-ops.yml --ref main -f op=zenas-renormalise -f region=za
+
+# 3. Write, only after Zenas approves the dry-run report: apply=true is the only way to write
+gh workflow run coolify-ops.yml --ref main -f op=zenas-renormalise -f region=za -f apply=true
+
+# Resume after an interruption, from last_document_id in the report
+gh workflow run coolify-ops.yml --ref main -f op=zenas-renormalise -f region=za -f apply=true \
+  -f after="<last_document_id>"
+
+# Read the last run (status and report) at any time; read-only
+gh workflow run coolify-ops.yml --ref main -f op=zenas-renormalise-report -f region=za
+```
+
+Inputs (all optional except `region`):
+
+| input  | meaning |
+| ------ | ------- |
+| region | must be `za`; the job exists only on the ZA box |
+| apply  | `true` adds `--apply`. Anything else (default `false`) runs `--dry-run` |
+| source | comma-separated source ids, e.g. `cac,comptrib`. Default: every PDF court source listed above (this includes `special-tribunal`; name the sources to leave it out) |
+| limit  | stop after this many rows |
+| after  | resume after this `document_id` |
+
+What the op does (`.github/scripts/zenas_renormalise_op.py`):
+
+1. Verifies the application is `agent-zenas-za` and reads the container name
+   from the existing `zenas-pool-nightly` task.
+2. Creates (once) or updates the scheduled task `zenas-za-renormalise` with the
+   exact command, e.g.
+   `python -m agents.zenas.pool.renormalise --batch-size 25 --source cac --limit 20 --dry-run`.
+   Every value is validated and shell-quoted. The task is kept **disabled** with
+   a yearly frequency, so it never runs on a schedule; timeout 36000 s
+   (Coolify's maximum, resume with `after` if a run is cut).
+3. Refuses to start while an earlier renormalise execution is still running.
+4. Queues one execution (Coolify "Execute now") and waits up to about 7
+   minutes. If it finished, it prints a fixed projection of the job's report
+   (`dry_run`, `counts`, up to 50 changed `document_id`s with suspect-space
+   counts, `last_document_id`). If it is still running, use
+   `op=zenas-renormalise-report` later. The raw execution output is never printed.
+
+It is not a deploy: it does not join the `coolify-deploy` concurrency group, so
+it neither waits for nor blocks a deploy. A room redeploy while it runs stops
+the execution; resume with `after`.
+
+If the installed Coolify does not support executing a scheduled task through
+its API, the op fails with "queuing the renormalise run failed (HTTP n)". The
+task is still created with the right command; a founder can press
+**Execute now** on it in the Coolify dashboard.
+
+## By hand on the ZA box (pool-loader image), only if the op cannot be used
 
 From `agents/zenas/`:
 
