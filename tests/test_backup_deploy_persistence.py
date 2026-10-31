@@ -11,6 +11,19 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _without_dependency_waits(compose: dict) -> None:
+    """Drop depends_on from the temporary copy. These tests check which services an
+    ordinary `up` selects, not start order. With depends_on, a dry-run `up` still
+    waits on each dependency's simulated container, and on a loaded CI runner Compose
+    sometimes looked before that container was listed and stopped with
+    "agent-roles is missing dependency postgres" (31 Oct, #486). No service here
+    depends on a profiled service, so dropping depends_on cannot change selection;
+    the loop checks that no dependency is profiled."""
+    for name, service in compose["services"].items():
+        for dependency in service.pop("depends_on", None) or []:
+            assert not compose["services"][dependency].get("profiles"), (name, dependency)
+
+
 @pytest.mark.parametrize("directory", ["deployment-artifact", "saved-coolify-compose"])
 def test_boston_backup_survives_default_deployment_composition(tmp_path, directory):
     if shutil.which("docker") is None:
@@ -25,6 +38,7 @@ def test_boston_backup_survives_default_deployment_composition(tmp_path, directo
     for network in (compose.get("networks") or {}).values():
         if network:
             network.pop("external", None)
+    _without_dependency_waits(compose)
     target = tmp_path / directory
     target.mkdir()
     source = target / "docker-compose.yaml"
@@ -80,6 +94,8 @@ def test_za_backup_survives_default_deployment_composition(tmp_path):
     for network in (compose.get("networks") or {}).values():
         if network:
             network.pop("external", None)
+    _without_dependency_waits(compose)
+    for service in compose["services"].values():
         service["env_file"] = [".env"]  # what Coolify writes on every deploy
     (tmp_path / ".env").write_text("")
     source = tmp_path / "docker-compose.yaml"
