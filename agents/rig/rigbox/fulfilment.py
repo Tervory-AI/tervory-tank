@@ -169,9 +169,65 @@ class RigOrders:
                                    "recorded": updated is not None},
                 "supplier_order": sent}
 
-    async def cancel(self, tenant_id: str, quote_id: str, reason: str) -> None:
-        """Cancel the order and its unsent PO (before a refund). Best effort, never raises."""
+    async def cancel(self, tenant_id: str, quote_id: str, reason: str,
+                     env: dict[str, str] | None = None) -> str:
+        """Cancel the order and its unsent PO before a refund. Never raises.
+
+        Returns "cancelled", "missing", "sent" or "unrecorded". "sent" means the
+        supplier already has the PO (it is marked sent, or its outbox file
+        exists and is reconciled now): the order is not cancelled, and the
+        caller must not refund. "unrecorded" means the store failed; the caller
+        still refunds and the open order stays visible.
+        """
+        log = logging.getLogger(__name__)
         try:
-            await self.store.cancel_locate_order(tenant_id, quote_id, reason[:120])
+            if await self._reconcile_one(tenant_id, quote_id, env) is not None:
+                return "sent"
+        except DeliveryError:
+            pass  # no sandbox outbox configured: nothing can have been written
+        except Exception:  # noqa: BLE001
+            log.warning("locate order reconcile before cancel failed")
+            return "unrecorded"
+        try:
+            return await self.store.cancel_locate_order(tenant_id, quote_id, reason[:120])
         except Exception:  # noqa: BLE001 — the refund still happens; the store sees the open order
-            logging.getLogger(__name__).warning("locate order cancel not recorded")
+            log.warning("locate order cancel not recorded")
+            return "unrecorded"
+
+    async def _reconcile_one(self, tenant_id: str, quote_id: str,
+                             env: dict[str, str] | None) -> dict[str, Any] | None:
+        """Mark a draft PO sent when its outbox file exists. Returns the sent PO, else None."""
+        from rigbox import supplier_orders
+
+        sandbox_orders(env)
+        record = supplier_orders.sent_record(tenant_id=tenant_id, quote_id=quote_id, env=env)
+        if record is None:
+            return None
+        saved = await self.store.locate_order(tenant_id, quote_id)
+        if saved is None:
+            return None
+        if saved["purchase_order"]["state"] == "sent":
+            return saved["purchase_order"]
+        if saved["purchase_order"]["state"] != "draft":
+            return None
+        return await self.store.supplier_po_sent(tenant_id, quote_id, record)
+
+    async def reconcile(self, *, tenant_id: str, env: dict[str, str] | None = None,
+                        limit: int = 200) -> dict[str, Any]:
+        """Sandbox reconcile for send_supplier_order's recorded:false case.
+
+        For each draft PO whose order is still placed, if the outbox file was
+        written (the supplier has the order) mark the PO sent with that file.
+        Never writes the outbox, cancels or refunds. Safe to run repeatedly.
+        """
+        from rigbox import supplier_orders
+
+        sandbox_orders(env)
+        supplier_orders.outbox(env)
+        drafts = await self.store.draft_supplier_orders(tenant_id, limit)
+        fixed = []
+        for quote_id in drafts:
+            purchase = await self._reconcile_one(tenant_id, quote_id, env)
+            if purchase is not None:
+                fixed.append({"quote_id": quote_id, "purchase_order": purchase["number"]})
+        return {"checked": len(drafts), "reconciled": fixed}

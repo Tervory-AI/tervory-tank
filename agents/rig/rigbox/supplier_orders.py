@@ -93,11 +93,30 @@ def compose(*, tenant_id: str, quote_id: str, store_name: str, store_email: str 
     return message
 
 
+def file_name(tenant_id: str, quote_id: str) -> str:
+    return hashlib.sha256(f"rig:{tenant_id}:{quote_id}".encode()).hexdigest()[:32] + ".eml"
+
+
+def sent_record(*, tenant_id: str, quote_id: str, env: dict[str, str] | None = None) -> dict[str, Any] | None:
+    """The outbox record for an order already written to the outbox, else None (reconcile)."""
+    from email import message_from_bytes
+
+    path = outbox(env) / file_name(tenant_id, quote_id)
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise DeliveryError("outbox_unavailable") from None
+    return {"channel": "email", "transport": "sandbox_outbox", "file": path.name,
+            "message_id": message_from_bytes(raw).get("Message-ID")}
+
+
 def write(message: EmailMessage, *, tenant_id: str, quote_id: str,
           env: dict[str, str] | None = None) -> dict[str, Any]:
     """Write once to the sandbox outbox. A second call for the same order is a no-op."""
     folder = outbox(env)
-    name = hashlib.sha256(f"rig:{tenant_id}:{quote_id}".encode()).hexdigest()[:32] + ".eml"
+    name = file_name(tenant_id, quote_id)
     path = folder / name
     try:
         handle = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)

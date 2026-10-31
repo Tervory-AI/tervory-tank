@@ -220,6 +220,8 @@ async def test_source_without_vendor_or_inbox_refuses_before_payment(monkeypatch
         await service.locate_accept(TENANT, body)
     assert raised.value.status == 503
     assert service.payments.captured == [] and store.locate_orders == {} and orders.sent == []
+    # Refused before the hold is taken: the shopper's held price is still usable.
+    assert store.supply_state[TENANT]["holds"][body["hold"].split(".")[0]]["used_at"] is None
 
 
 @pytest.mark.asyncio
@@ -280,6 +282,74 @@ async def test_rig_supplier_order_refuses_outside_sandbox_missing_or_cancelled_o
     assert list(tmp_path.iterdir()) == []
 
 
+class LosesTheSentUpdate:
+    """Store wrapper: the outbox write succeeds, recording it fails once."""
+
+    def __init__(self, store):
+        self.store, self.failed = store, False
+
+    def __getattr__(self, name):
+        return getattr(self.store, name)
+
+    async def supplier_po_sent(self, *args):
+        if not self.failed:
+            self.failed = True
+            raise RuntimeError("database went away")
+        return await self.store.supplier_po_sent(*args)
+
+
+@pytest.mark.asyncio
+async def test_cancel_refuses_a_sent_po_and_reconcile_fixes_recorded_false(tmp_path):
+    from rigbox.store import MemoryStore
+    store = MemoryStore()
+    values = {**SANDBOX, "RIG_LOCATE_OUTBOX_DIR": str(tmp_path)}
+    await placed(store, "q1")
+    await RigOrders(store).send_supplier_order(tenant_id=TENANT, quote_id="q1", store_name="Shop", env=values)
+    assert await store.cancel_locate_order(TENANT, "q1", "late") == "sent"
+    assert await RigOrders(store).cancel(TENANT, "q1", "late", env=values) == "sent"
+    assert store.locate_orders[(TENANT, "q1")]["order"]["state"] == "placed"
+    # recorded:false, then cancel: the outbox file exists, so cancel reconciles and refuses.
+    flaky = LosesTheSentUpdate(store)
+    await placed(store, "q2")
+    lost = await RigOrders(flaky).send_supplier_order(tenant_id=TENANT, quote_id="q2", store_name="Shop", env=values)
+    assert lost["purchase_order"]["recorded"] is False and lost["purchase_order"]["state"] == "draft"
+    assert await RigOrders(store).cancel(TENANT, "q2", "x", env=values) == "sent"
+    assert store.locate_orders[(TENANT, "q2")]["purchase_order"]["state"] == "sent"
+    # recorded:false, then reconcile.
+    flaky = LosesTheSentUpdate(store)
+    await placed(store, "q3")
+    await placed(store, "q4")  # never sent: reconcile leaves it draft
+    await RigOrders(flaky).send_supplier_order(tenant_id=TENANT, quote_id="q3", store_name="Shop", env=values)
+    result = await RigOrders(store).reconcile(tenant_id=TENANT, env=values)
+    assert result == {"checked": 2, "reconciled": [{"quote_id": "q3", "purchase_order": numbers(TENANT, "q3")[1]}]}
+    assert store.locate_orders[(TENANT, "q3")]["purchase_order"]["sent"]["file"] == supplier_orders.file_name(TENANT, "q3")
+    assert store.locate_orders[(TENANT, "q4")]["purchase_order"]["state"] == "draft"
+    assert len(list(tmp_path.iterdir())) == 3  # reconcile never writes the outbox
+    with pytest.raises(DeliveryError):
+        await RigOrders(store).reconcile(tenant_id=TENANT, env={"RIG_LOCATE_OUTBOX_DIR": str(tmp_path)})
+    assert await RigOrders(store).cancel(TENANT, "q4", "x", env=values) == "cancelled"
+    assert await RigOrders(store).cancel(TENANT, "nope", "x", env=values) == "missing"
+
+
+@pytest.mark.asyncio
+async def test_supplier_failure_after_the_outbox_write_keeps_the_order_and_does_not_refund(monkeypatch, tmp_path):
+    store, service, orders, _, body = await auto_shop(monkeypatch, tmp_path)
+    real = RigOrders.send_supplier_order
+
+    async def written_then_lost(self, **kwargs):
+        await real(self, **kwargs)
+        store.locate_orders[(TENANT, kwargs["quote_id"])]["purchase_order"].update(state="draft", sent=None)
+        raise DeliveryError("order_unavailable")
+    monkeypatch.setattr(RigOrders, "send_supplier_order", written_then_lost)
+    accepted = await service.locate_accept(TENANT, body)
+    assert accepted["state"] == "ordered" and service.payments.refunded == []
+    state = store.quotes[-1]["payload"]["locate_state"]
+    assert state["state"] == "supplier_ordered" and state["purchase_order_state"] == "sent"
+    [row] = store.locate_orders.values()
+    assert row["order"]["state"] == "placed" and row["purchase_order"]["state"] == "sent"
+    assert len(list(tmp_path.iterdir())) == 1
+
+
 # 5. Real Postgres: defaults and persistence; PO sent once, cancel only an unsent PO.
 
 @pytest.mark.asyncio
@@ -315,14 +385,39 @@ async def test_real_postgres_auto_order_and_vendor_fields(tmp_path):
             row = await store.locate_order(TENANT, "req_1")
             assert row["purchase_order"]["state"] == "sent" and row["purchase_order"]["sent"]["transport"] == "sandbox_outbox"
             assert await pool.fetchval("SELECT sent_at IS NOT NULL FROM agent_rig.supplier_purchase_orders") is True
-            await orders.cancel(TENANT, "req_1", "late")  # a sent PO stays sent
-            assert (await store.locate_order(TENANT, "req_1"))["purchase_order"]["state"] == "sent"
+            assert await orders.cancel(TENANT, "req_1", "late") == "sent"  # a sent PO refuses cancel
+            row = await store.locate_order(TENANT, "req_1")
+            assert (row["order"]["state"], row["purchase_order"]["state"]) == ("placed", "sent")
+            assert await store.cancel_locate_order(TENANT, "req_1", "late") == "sent"
             await placed(store, "req_2")
-            await orders.cancel(TENANT, "req_2", "supplier_order_failed:outbox_unavailable")
+            assert await orders.cancel(TENANT, "req_2", "supplier_order_failed:outbox_unavailable") == "cancelled"
             row = await store.locate_order(TENANT, "req_2")
             assert (row["order"]["state"], row["purchase_order"]["state"]) == ("cancelled", "cancelled")
             assert len(list(tmp_path.iterdir())) == 1
             print("RIG_PO_PG", json.dumps(row, sort_keys=True))
+            # recorded:false: the outbox file exists but the PO is still draft.
+            await placed(store, "req_3")
+            purchase = (await store.locate_order(TENANT, "req_3"))["purchase_order"]
+            supplier_orders.write(supplier_orders.compose(tenant_id=TENANT, quote_id="req_3", store_name="Shop",
+                                                          store_email=None, purchase=purchase),
+                                  tenant_id=TENANT, quote_id="req_3", env=values)
+            assert await store.draft_supplier_orders(TENANT) == ["req_3"]
+            fixed = await orders.reconcile(tenant_id=TENANT, env=values)
+            assert fixed == {"checked": 1, "reconciled": [{"quote_id": "req_3", "purchase_order": purchase["number"]}]}
+            row = await store.locate_order(TENANT, "req_3")
+            assert row["purchase_order"]["state"] == "sent" and row["purchase_order"]["sent"]["file"].endswith(".eml")
+            assert await orders.reconcile(tenant_id=TENANT, env=values) == {"checked": 0, "reconciled": []}
+            assert await store.draft_supplier_orders(TENANT) == []
+            print("RIG_RECONCILE_PG", json.dumps(fixed, sort_keys=True))
+            # Holds.peek reads without consuming; take still consumes once.
+            from datetime import datetime, timedelta, timezone
+            from rigbox.locate_live import Holds
+            holds, now = Holds(store), datetime.now(timezone.utc)
+            await holds.save(TENANT, "h1", "part-1", {"status": "available_to_order"}, {"source": SOURCE},
+                             now + timedelta(minutes=5))
+            assert (await holds.peek(TENANT, "h1", now))["private"]["source"]["id"] == "other-store"
+            assert (await holds.peek(TENANT, "h1", now)) is not None and (await holds.take(TENANT, "h1", now))
+            assert await holds.peek(TENANT, "h1", now) is None and await holds.take(TENANT, "h1", now) is None
             default = await pool.fetchval("""SELECT column_default FROM information_schema.columns
                 WHERE table_schema='agent_rig' AND table_name='retailers' AND column_name='auto_order'""")
             assert default == "false"
