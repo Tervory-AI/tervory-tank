@@ -1244,3 +1244,50 @@ async def test_legacy_projected_receipt_is_unavailable_in_snapshot_and_replay(ap
         assert durable['receipts'][0]['auto_cost_usd'] == 0.05
         durable_event = json.loads(await conn.fetchval('SELECT data FROM tank.command_events WHERE thread_id=$1', uuid.UUID(thread)))
         assert durable_event['rows'][0]['auto_cost_usd'] == 0.05
+
+
+@pytest.mark.asyncio
+async def test_owned_task_receipts_require_owner_and_exact_ledger(api, monkeypatch):
+    client, pool = api
+    ledger = await seed_ledger(pool)
+    monkeypatch.setattr(command, 'route_turn', AsyncMock(return_value=SimpleNamespace(ledger_id=ledger, content='Recorded answer')))
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Offline task test'})
+    assert 'event: done' in reply.text
+    saved = (await client.get(f'/v1/command/threads/{thread}')).json()
+    task_id = saved['messages'][-1]['message_id']
+    path = f'/v1/command/tasks/{task_id}/receipts'
+    response = await client.get(path)
+    assert response.status_code == 200
+    assert response.json()['rows'] == saved['receipts']
+    assert response.json()['totals']['cost_usd'] == 0.02
+    assert response.json()['totals']['baseline_cost_usd'] is None
+    assert response.json()['status'] == 'recorded'
+    assert (await client.get(path, headers={'x-tervory-user': 'client'})).status_code == 404
+    assert (await client.get(path, headers={'x-tervory-tenant': str(OTHER)})).status_code == 404
+    assert (await client.get(path, headers={'x-tank-key': ''})).status_code == 401
+    async with pool.acquire() as conn:
+        # Other runs are readable only when created by this exact user.
+        unlinked = uuid.uuid4()
+        await conn.execute("INSERT INTO tank.tasks(id,tenant_id,created_by,task_type,title,input,ledger_id) VALUES($1,$2,'founder','command.turn','offline','{}',$3)", unlinked, TENANT, ledger)
+        assert (await client.get(f'/v1/command/tasks/{unlinked}/receipts')).json()['rows'][0]['ledger_id'] == str(ledger)
+        await conn.execute("UPDATE tank.tasks SET created_by='someone-else' WHERE id=$1", unlinked)
+        assert (await client.get(f'/v1/command/tasks/{unlinked}/receipts')).status_code == 404
+        await conn.execute('UPDATE tank.tasks SET ledger_id=NULL WHERE id=$1', uuid.UUID(task_id))
+    pending = (await client.get(path)).json()
+    assert pending == {'rows': [], 'totals': {'cost_usd': None, 'baseline_cost_usd': None, 'saved_usd': None}, 'status': 'pending'}
+    async with pool.acquire() as conn:
+        await conn.execute('UPDATE tank.tasks SET ledger_id=$2 WHERE id=$1', uuid.UUID(task_id), ledger)
+        await conn.execute("UPDATE tank.ledger SET cost_usd=0,cost_status='not_set' WHERE id=$1", ledger)
+    unknown = (await client.get(path)).json()
+    assert unknown['rows'][0]['cost_usd'] is None and unknown['totals']['cost_usd'] is None
+    assert unknown['status'] == 'pending'
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE tank.ledger SET cost_status='set' WHERE id=$1", ledger)
+    zero = (await client.get(path)).json()
+    assert zero['rows'][0]['cost_usd'] == zero['totals']['cost_usd'] == 0
+    assert zero['status'] == 'recorded'
+    foreign = await seed_ledger(pool, tenant=OTHER)
+    async with pool.acquire() as conn:
+        await conn.execute('UPDATE tank.tasks SET ledger_id=$2 WHERE id=$1', uuid.UUID(task_id), foreign)
+    assert (await client.get(path)).status_code == 409
