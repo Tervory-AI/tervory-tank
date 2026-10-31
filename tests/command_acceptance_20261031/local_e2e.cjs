@@ -6,8 +6,11 @@
  * actual /chats/api route module with the same injected identity.
  *
  * Inputs (env): E2E_TANK_US, E2E_TANK_ZA (loopback http), E2E_TANK_KEY (local
- * service key, never printed), E2E_TENANT, E2E_PIN (pinned model), E2E_PSQL
+ * service key for both Tanks, never printed), E2E_APPROVAL_KEY_ZA (a different local key;
+ * start the ZA Tank with it as TANK_DEVICE_APPROVAL_KEY, never printed), E2E_TENANT, E2E_PIN (pinned model), E2E_PSQL
  * (psql connection args for the two local databases, comma separated).
+ * The ZA sign-in is approved by a non-founder (e2e-client), because the ZA approval key
+ * never approves for a founder (review of #506, should-fix 1); its turn runs on Auto.
  * Never point this at a deployed Tank or database. */
 const assert = require('node:assert/strict');
 const path = require('node:path');
@@ -19,7 +22,11 @@ const env = process.env;
 const TANK = { 'us-east': env.E2E_TANK_US, za: env.E2E_TANK_ZA };
 for (const url of Object.values(TANK)) assert.equal(new URL(url).hostname, '127.0.0.1', 'local Tank only');
 const DB = { 'us-east': env.E2E_DB_US, za: env.E2E_DB_ZA };
-const KEY = env.E2E_TANK_KEY; const TENANT = env.E2E_TENANT; const PIN = env.E2E_PIN;
+const KEY = env.E2E_TANK_KEY; const APPROVAL_KEY_ZA = env.E2E_APPROVAL_KEY_ZA; const TENANT = env.E2E_TENANT; const PIN = env.E2E_PIN;
+// Review of #506, should-fix 5: the ZA homes key and the ZA approval key are different
+// keys, as in production, so this run proves the approval key (not the homes key) records ZA approvals.
+assert.ok(KEY && APPROVAL_KEY_ZA && APPROVAL_KEY_ZA !== KEY, 'E2E_APPROVAL_KEY_ZA must be set and differ from E2E_TANK_KEY');
+const USER = { 'us-east': 'e2e-founder', za: 'e2e-client' };
 const ZA_TANK = 'https://za-tank.local-e2e';
 const redact = text => String(text).replace(/\btv[rd]?1\.[\w.-]+/g, '[credential]');
 const sql = (region, query) => execFileSync('psql', ['-h', '127.0.0.1', '-p', '55471', '-U', 'postgres', '-d', DB[region],
@@ -28,7 +35,7 @@ const log = (...parts) => process.stdout.write(parts.join(' ') + '\n');
 
 function rig(region, founder) {
   const load = workspace({
-    env: { TANK_URL: TANK['us-east'], TANK_API_KEY: KEY, TANK_URL_ZA: ZA_TANK, TANK_API_KEY_ZA: KEY, TANK_DEVICE_APPROVAL_KEY_ZA: KEY },
+    env: { TANK_URL: TANK['us-east'], TANK_API_KEY: KEY, TANK_URL_ZA: ZA_TANK, TANK_API_KEY_ZA: KEY, TANK_DEVICE_APPROVAL_KEY_ZA: APPROVAL_KEY_ZA },
     fetch: async (url, init) => {
       const target = new URL(url);
       const base = target.origin === ZA_TANK ? TANK.za : target.origin;
@@ -36,7 +43,7 @@ function rig(region, founder) {
     },
     mocks: {
       '@/lib/trigger': { triggerIdentity: async tenant => tenant && { ...tenant, tenantAdmin: false } },
-      '@/lib/tenant': { activeTenant: async () => ({ tenantId: TENANT, userId: 'e2e-founder', orgName: 'Local E2E', orgId: 'org_local' }) },
+      '@/lib/tenant': { activeTenant: async () => ({ tenantId: TENANT, userId: USER[region], orgName: 'Local E2E', orgId: 'org_local' }) },
       '@/lib/admin': { isFounder: () => founder },
     },
   });
@@ -55,10 +62,10 @@ function rig(region, founder) {
 }
 
 async function deviceLogin(cli, region) {
-  const { approval, transport, load } = rig(region, true);
+  const { approval, transport, load } = rig(region, region === 'us-east');
   let saved = null; let output = ''; const opened = []; let shown;
   const store = { get: async () => saved, set: async value => { saved = value; }, remove: async () => { saved = null; } };
-  const identity = { tenantId: TENANT, userId: 'e2e-founder', tenantAdmin: true };
+  const identity = { tenantId: TENANT, userId: USER[region], tenantAdmin: true };
   const io = {
     write: value => { output += value; }, prompt: async () => 'N', deviceName: () => `e2e-laptop-${region}`,
     open: url => { opened.push(url); },
@@ -83,6 +90,12 @@ async function deviceLogin(cli, region) {
 
 (async () => {
   const cli = await import(pathToFileURL(path.join(root, 'cli/src/client.mjs')).href);
+  // The ZA homes key cannot record an approval; only the dedicated approval key reaches the route.
+  const probe = key => fetch(`${TANK.za}/v1/command/device/approval/BCDF-GHJK`, { headers: {
+    'x-tank-key': key, 'x-tervory-user': USER.za, 'x-tervory-tenant': TENANT } }).then(r => r.status);
+  assert.equal(await probe(KEY), 401, 'ZA homes key refused on the approval route');
+  assert.equal(await probe(APPROVAL_KEY_ZA), 404, 'ZA approval key reaches the route (unknown code)');
+  log('  ZA approval route: homes key 401, approval key 404 (unknown code)');
   for (const region of ['us-east', 'za']) {
     log(`\n== ${region}: ${region === 'za' ? 'CLI -> za.tervory.com (Tank only)' : 'CLI -> app.tervory.com Workspace adapter -> Tank'} ==`);
     const s = await deviceLogin(cli, region);
@@ -95,7 +108,7 @@ async function deviceLogin(cli, region) {
     s.clear();
     const deltas = [];
     const io = { ...s.io, write: v => { s.io.write(v); deltas.push(v); }, preview: v => deltas.push(`[preview]${v}`) };
-    await cli.run(['ask', '--model', PIN, `Local e2e CLI turn (${region})`], { store: s.store, transport: s.transport, io });
+    await cli.run(region === 'za' ? ['ask', `Local e2e CLI turn (${region})`] : ['ask', '--model', PIN, `Local e2e CLI turn (${region})`], { store: s.store, transport: s.transport, io });
     const out = s.output();
     log('  CLI ask output:\n' + redact(out).trim().split('\n').map(line => '    ' + line).join('\n'));
     assert.match(out, /Auto would have cost/);
