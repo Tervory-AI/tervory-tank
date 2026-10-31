@@ -1,4 +1,5 @@
 """Offline acceptance: real command HTTP/SQL, fake worker progress, no model calls."""
+import asyncio
 import json
 import os
 import subprocess
@@ -8,6 +9,7 @@ import uuid
 import pytest
 
 from test_command import api, command_pool, runtime, TENANT, OTHER  # noqa: F401
+from test_command_streaming import streaming  # noqa: F401
 
 
 WORKER = {'x-tank-key': 'dummy-worker-key'}
@@ -131,3 +133,31 @@ async def test_persisted_pat_cannot_escalate_headers_or_cross_user_and_revokes(a
                            TENANT, pat.digest(token))
     refused = await client.get(f'/v1/command/threads/{tid}', headers=headers)
     assert refused.status_code == 401 and token not in refused.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.environ.get('COMMAND_ACCEPTANCE_CLIENTS') != '1',
+                    reason='Requires assembled CLI/Workspace and local-only client dependencies')
+async def test_cli_public_adapter_reaches_real_tank_with_cancel_barrier(streaming):  # noqa: F811
+    pat = pytest.importorskip('personal_tokens')
+    b = streaming
+    async with b.pool.acquire() as conn:
+        for user, suffix in [('founder', 'f'), ('offline-client', 'c')]:
+            token = f'tv1.us-east.{TENANT.hex}.' + suffix * 43
+            await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash) "
+                               "VALUES($1,$2,'us-east','offline-edge',$3)", TENANT, user, pat.digest(token))
+    # The subprocess waits on loopback HTTP; keep the async server loop running.
+    decoded = await asyncio.to_thread(subprocess.run,
+        ['node', str(Path(__file__).with_name('public_edge.cjs'))],
+        input=json.dumps({'origin': str(b.api.base_url).rstrip('/'), 'tenant': str(TENANT)}),
+        text=True, capture_output=True, timeout=30, check=False)
+    assert decoded.returncode == 0, decoded.stderr
+    assert decoded.stdout.startswith('PASS: actual CLI/public PAT adapter/Tank')
+    print(decoded.stdout.strip())
+    assert b.gateway.calls == []
+    async with b.pool.acquire() as conn:
+        assert await conn.fetchval('SELECT count(*) FROM tank.command_builds') == 0
+        state = json.loads(await conn.fetchval(
+            "SELECT state FROM tank.command_threads WHERE tenant_id=$1 AND user_id='founder'", TENANT))
+        assert len(state['cards']) == 1
+        assert next(iter(state['cards'].values()))['status'] == 'cancelled'
