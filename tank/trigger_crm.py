@@ -1,4 +1,4 @@
-"""Founder CRM corridor: fixed endpoints, explicit tenant binding, no raw proxy."""
+"""Tenant-bound CRM corridor: fixed endpoints, explicit tenant binding, no raw proxy."""
 from __future__ import annotations
 
 import json
@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 import httpx
-from command import Actor, authorized_actor, identity
+from command import Actor, authorized_actor, identity, require_tool
 from fastapi import APIRouter, Depends, HTTPException, Request
 from jsonschema import Draft4Validator, FormatChecker
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -47,9 +47,9 @@ class CRMWriteArgs(BaseModel):
 
 async def authority(actor: Actor) -> Actor:
     actor = await authorized_actor(actor)
-    # Existing CRM Figma scope is founder-only; client UI is not approved.
-    if not actor.founder:
-        raise HTTPException(403, "CRM access is unavailable")
+    # The founder authorized client integration under actual persisted Trigger grants.
+    # UI approval remains separate; no grant is created or inferred here.
+    require_tool(actor, "trigger.crm.write")
     return actor
 
 
