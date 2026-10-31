@@ -13,7 +13,7 @@ const TOKEN = `tv1.us-east.${TENANT.replaceAll('-', '')}.${'x'.repeat(43)}`;
 
 function edge(upstream) {
   const module = { exports: {} };
-  vm.runInNewContext(code, { exports: module.exports, module, process: { env: { TANK_URL: 'http://fake-tank:8000', TANK_API_KEY: 'must-not-forward' } },
+  vm.runInNewContext(code, { exports: module.exports, module, process: { env: { TANK_URL: 'http://fake-tank:8000', TANK_API_KEY: 'dummy-must-not-forward' } },
     URL, Request, Response, Headers, Uint8Array, fetch: upstream });
   return module.exports.personalCommandRequest;
 }
@@ -33,7 +33,7 @@ test('public adapter forwards only PAT and content type to fixed local Tank', as
   assert.deepEqual(Object.keys(received.headers).sort(), ['Authorization', 'Content-Type']);
   assert.equal(received.headers.Authorization, `Bearer ${TOKEN}`);
   assert.equal(received.redirect, 'error');
-  assert(!JSON.stringify(received).includes('must-not-forward'));
+  assert(!JSON.stringify(received).includes('dummy-must-not-forward'));
 });
 
 test('public path refuses revoked PAT without leaking upstream body', async () => {
