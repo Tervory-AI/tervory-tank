@@ -1,5 +1,11 @@
 # 1.1.0
 
+Eval evidence: a true dated quote is approvable, and a quote with an altered
+date is refused. The root fix is in the room (agents/zenas/core/engine.py):
+quotes are cite-checked UNMASKED, word for word, and masked only afterwards.
+A masked quote is rechecked only through the fingerprint of the exact words.
+
+
 Root fix for a made-up-case miss on ZA ([2026] ZACAC 1). The model quoted a
 sentence containing "08 March 2023". Rule-card cleaning masks dates and other
 identifiers before cite-check ("[Date]"), so the quote no longer matched the
