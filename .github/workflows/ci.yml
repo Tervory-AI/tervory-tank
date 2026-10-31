@@ -212,6 +212,76 @@ jobs:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==
           CLERK_SECRET_KEY: sk_test_dummy
 
+  # Chat CLI cross-lane acceptance (#467). Runs the four tests in
+  # tests/command_acceptance_20261031/test_cross_lane.py with COMMAND_ACCEPTANCE_CLIENTS=1:
+  # real Postgres + schema.sql, the full Tank app on loopback HTTP, the actual Workspace PAT
+  # adapter (workspace/lib/tank.ts) and the actual CLI (cli/src/client.mjs). No network,
+  # no model calls, no secrets: every key and token here is a fixed dummy.
+  # Any skipped or missing test fails the job, so it never passes silently.
+  command-acceptance:
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pooltest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            tank/requirements.txt
+            tank/requirements-dev.txt
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+      - name: Install Tank and CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tank/requirements.txt -r tank/requirements-dev.txt
+          # The CLI devDependency provides the TypeScript the tests use to load workspace/*.ts.
+          npm ci --ignore-scripts --no-audit --no-fund --prefix cli
+          node --check cli/bin/tervory.mjs
+          node --check cli/src/client.mjs
+      - name: Cross-lane acceptance (COMMAND_ACCEPTANCE_CLIENTS=1)
+        env:
+          COMMAND_ACCEPTANCE_CLIENTS: "1"
+          COMMAND_TEST_TOOLS: ${{ github.workspace }}/cli/node_modules
+          PYTHONPATH: tank:tests
+          POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
+        run: |
+          python -m pytest -q -s -rs tests/command_acceptance_20261031/test_cross_lane.py \
+            --junitxml="$RUNNER_TEMP/command-acceptance.xml"
+      - name: Fail if any acceptance test was skipped
+        if: ${{ !cancelled() }}
+        run: |
+          python3 - "$RUNNER_TEMP/command-acceptance.xml" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          root = ET.parse(sys.argv[1]).getroot()
+          suite = root if root.tag == "testsuite" else root.find("testsuite")
+          counts = {k: int(suite.get(k, 0)) for k in ("tests", "skipped", "failures", "errors")}
+          print(counts)
+          if counts["tests"] < 4 or counts["skipped"] or counts["failures"] or counts["errors"]:
+              sys.exit("Chat CLI acceptance must run all 4 cross-lane tests with zero skips.")
+          PY
+
   savings-page:
     needs: [changes]
     # Only when the savings pages (or what they render) change. Founder, 27 Oct: no
