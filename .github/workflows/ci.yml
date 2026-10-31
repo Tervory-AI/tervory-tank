@@ -175,10 +175,11 @@ jobs:
         # F401 in base.socials/1.0.0/run.py is a pre-existing unused import.
         # This lane cannot edit an approved skill in place.
         run: ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
-      - name: Secret scan and Tank starts
+      - name: Secret scan, Tank starts, patch releases keep their code
         # Founder, 27 Oct: the full suite no longer gates merges (it took ~15 minutes).
-        # This job checks only lint, the secret scan, and that the real Tank starts on an empty database.
-        run: python3 -m pytest -q tests/test_secrets.py tests/test_tank_boots.py tests/test_tank_one_door.py
+        # This job checks lint, the secret scan, that the real Tank starts on an empty database,
+        # and (under a second) that no skill's x.y.Z patch changes code (zenas.pii 1.1.2 did).
+        run: python3 -m pytest -q tests/test_secrets.py tests/test_tank_boots.py tests/test_tank_one_door.py tests/test_skala_patch_code_unchanged.py
         env:
           PYTHONPATH: tank
           POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
