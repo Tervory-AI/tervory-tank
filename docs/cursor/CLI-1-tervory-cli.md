@@ -5,13 +5,13 @@
 **Files you may change:**
 - new `cli/` (the package);
 - `tank/` (personal access tokens only: new module, route registration in main.py, additive schema);
-- `workspace/app/settings/` (token page only);
+- `workspace/app/cli/` (device approval and CLI sign-ins pages);
 - `.env.example` (names only);
 - tests.
 
 1. **Package:** `cli/` (`"private": true`, never published to npm or any third-party registry), distributed only from Tervory's own Workspace at `https://app.tervory.com/cli/` (install.sh, latest.json, versioned per-platform tarballs with a SHA-256 manifest; `tervory update`). Node 22, a single `tervory` command. Version pinned, with a changelog.
 2. **Sign-in:** personal access tokens.
-   - Created and revoked in the Workspace under Settings > Access tokens.
+   - Now device approval (`tervory login`), not pasted tokens. Each user sees and revokes their own sign-ins in the Workspace at `/cli/sign-ins` (review of #506, B3).
    - Stored hashed in Tank, scoped to one user, one tenant and one region box.
    - `tervory login` saves the token in the OS keychain, never in plain files or logs.
    - Founders see every tool; clients see only their own squad tools, enforced by Tank.
@@ -43,7 +43,7 @@ Mitigations in place: codes are single use and expire in 10 minutes; the approva
 (`workspace/app/cli/device/page.tsx`) shows the code, organization, device name and
 region and says to approve only a code the user's own terminal shows; ZA approvals use
 only the dedicated `TANK_DEVICE_APPROVAL_KEY` (two routes, user and tenant still
-required); `tervory logout` revokes the credential, and Tank has a member revoke route (the Workspace token page is still pending its Figma frame).
+required); `tervory logout` revokes the credential, and the Workspace **CLI sign-ins** page (`/cli/sign-ins`) lists every active sign-in with Revoke.
 Revisit if Tank gains per-tenant region residency rules (then refuse approval on a box
 outside the tenant's allowed regions) or if a code ever needs to carry a tenant hint.
 

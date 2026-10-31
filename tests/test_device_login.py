@@ -1,4 +1,6 @@
 """CLI device sign-in: real local Postgres, real routes, synthetic identities only."""
+import uuid
+
 import httpx
 import pytest
 import pytest_asyncio
@@ -241,8 +243,8 @@ async def test_za_device_approval_key_still_needs_user_and_tenant_and_reaches_no
     assert (await approve(client, code, headers={**APPROVER_WORKSPACE, 'x-tank-key': APPROVER + 'x'})).status_code == 401
     # Outside the two approval routes the approval key is refused.
     for method, path, body in (('GET', '/v1/command/tools', None), ('GET', '/v1/command/threads', None),
-                               ('POST', '/v1/command/threads', {}), ('GET', '/v1/personal-tokens', None),
-                               ('POST', '/v1/personal-tokens', {'name': 'x'})):
+                               ('POST', '/v1/command/threads', {}), ('POST', '/v1/personal-tokens', {'name': 'x'})):
+        # (Listing and revoking the user's own sign-ins is allowed: see the B3 tests below.)
         response = await client.request(method, path, json=body, headers=APPROVER_WORKSPACE)
         assert response.status_code == 401, (method, path, response.status_code)
     # Not on a us-east box, and not when TANK_DEVICE_APPROVAL_KEY is unset.
@@ -284,6 +286,81 @@ async def test_za_device_approval_key_never_approves_for_a_founder(device, monke
     issued = (await client.post('/v1/command/device/token', json={'device_code': grant['device_code']})).json()
     actor = await pat.identity(__import__('test_personal_tokens').request(issued['access_token'], path='/v1/command/threads'))
     assert actor.user_id == 'client' and not actor.founder and not actor.tenant_admin
+
+
+async def signed_in(client, name, headers=WORKSPACE):
+    grant = await start(client, name)
+    assert (await approve(client, grant['user_code'], headers=headers)).status_code == 200
+    return (await client.post('/v1/command/device/token', json={'device_code': grant['device_code']})).json()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('box', ['us-east', 'za'])
+async def test_cli_sign_ins_are_listed_and_revoked_by_their_owner_only(device, monkeypatch, box):
+    """Review of #506, B3: the Workspace 'CLI sign-ins' page lists and revokes the signed-in
+    user's own CLI credentials, per region (us-east: Workspace key; ZA: the dedicated key)."""
+    client, pool, rt = device
+    monkeypatch.setattr(rt, 'box_region', lambda: box)
+    monkeypatch.setenv('TANK_HOMES_KEY', HOMES)
+    monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', APPROVER)
+    key = WORKSPACE if box == 'us-east' else APPROVER_WORKSPACE
+    other = {**key, 'x-tervory-user': 'someone-else'}
+    other_tenant = {**key, 'x-tervory-tenant': str(OTHER)}
+    mine = await signed_in(client, 'stolen-by-phisher', key)
+    theirs = await signed_in(client, 'their-laptop', other)
+    bearer = {'authorization': 'Bearer ' + mine['access_token']}
+    assert (await client.get('/v1/command/tools', headers=bearer)).status_code == 200
+    listed = await client.get('/v1/personal-tokens', headers=key)
+    assert listed.status_code == 200 and listed.headers['cache-control'] == 'no-store'
+    rows = listed.json()
+    assert [r['device_name'] for r in rows] == ['stolen-by-phisher']
+    row = rows[0]
+    assert row['region'] == box and row['created_at'] and row['last_used_at'] and row['refresh_expires_at']
+    assert row['revoked_at'] is None and row['token_id'] == mine['credential_id']
+    for secret in (mine['access_token'], mine['refresh_token'], 'token_hash', 'refresh_hash', 'their-laptop'):
+        assert secret not in listed.text
+    assert (await client.get('/v1/personal-tokens', headers=other_tenant)).json() == []
+    # Neither another user nor another tenant can revoke it, and the answer is the same as unknown.
+    for headers in (other, other_tenant):
+        assert (await client.delete(f"/v1/personal-tokens/{mine['credential_id']}", headers=headers)).status_code == 404
+    assert (await client.get('/v1/command/tools', headers=bearer)).status_code == 200
+    # Revoke: the access token and the refresh token both stop at once.
+    revoked = await client.delete(f"/v1/personal-tokens/{mine['credential_id']}", headers=key)
+    assert revoked.status_code == 204
+    assert (await client.get('/v1/command/tools', headers=bearer)).status_code == 401
+    assert (await client.post('/v1/command/device/refresh', json={'refresh_token': mine['refresh_token']})).json() == {
+        'error': 'invalid_grant'}
+    assert (await client.get('/v1/personal-tokens', headers=key)).json()[0]['revoked_at'] is not None
+    # The other user's sign-in is untouched.
+    assert (await client.get('/v1/command/tools', headers={'authorization': 'Bearer ' + theirs['access_token']})).status_code == 200
+    # A CLI token can never list or revoke sign-ins.
+    theirs_bearer = {'authorization': 'Bearer ' + theirs['access_token']}
+    assert (await client.get('/v1/personal-tokens', headers=theirs_bearer)).status_code in {401, 404}
+    assert (await client.delete(f"/v1/personal-tokens/{theirs['credential_id']}", headers=theirs_bearer)).status_code in {401, 404}
+
+
+@pytest.mark.asyncio
+async def test_za_sign_in_key_lists_and_revokes_only_never_mints_and_never_for_founders(device, monkeypatch):
+    client, pool, rt = device
+    monkeypatch.setattr(rt, 'box_region', lambda: 'za')
+    monkeypatch.setenv('TANK_HOMES_KEY', HOMES)
+    monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', APPROVER)
+    founder = {**APPROVER_WORKSPACE, 'x-tervory-user': 'founder'}
+    target = uuid.uuid4()
+    assert (await client.get('/v1/personal-tokens', headers=founder)).status_code == 403
+    assert (await client.delete(f'/v1/personal-tokens/{target}', headers=founder)).status_code == 403
+    # Minting stays Workspace-key only; the homes key and a near-miss key reach nothing.
+    assert (await client.post('/v1/personal-tokens', json={'name': 'x'}, headers=APPROVER_WORKSPACE)).status_code == 401
+    for headers in (HOMES_WORKSPACE, {**APPROVER_WORKSPACE, 'x-tank-key': APPROVER + 'x'}):
+        assert (await client.get('/v1/personal-tokens', headers=headers)).status_code == 401
+        assert (await client.delete(f'/v1/personal-tokens/{target}', headers=headers)).status_code == 401
+    no_user = {k: v for k, v in APPROVER_WORKSPACE.items() if k != 'x-tervory-user'}
+    assert (await client.get('/v1/personal-tokens', headers=no_user)).status_code == 401
+    # Only on a ZA box.
+    monkeypatch.setattr(rt, 'box_region', lambda: 'us-east')
+    assert (await client.get('/v1/personal-tokens', headers=APPROVER_WORKSPACE)).status_code == 401
+    async with pool.acquire() as conn:
+        assert await conn.fetchval('SELECT count(*) FROM tank.personal_tokens') == 0
 
 
 def test_device_schema_is_additive_and_hash_only():

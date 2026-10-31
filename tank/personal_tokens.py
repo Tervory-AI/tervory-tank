@@ -58,6 +58,13 @@ def device_approval_key() -> str:
     return "" if not key or key in others else key
 
 
+# Review of #506, B3: the same key also lets the Boston Workspace's "CLI sign-ins"
+# page list the signed-in user's own ZA CLI sign-ins and revoke one. It cannot create
+# a token (POST stays Workspace-key only) and it is refused for founders as below.
+SIGN_IN_PATHS = {"GET": re.compile(r"/v1/personal-tokens\Z"),
+                 "DELETE": re.compile(r"/v1/personal-tokens/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")}
+
+
 def device_approval_key_may_approve(request: Request) -> bool:
     from main import box_region
     key = device_approval_key()
@@ -66,18 +73,37 @@ def device_approval_key_may_approve(request: Request) -> bool:
             and command.key_matches(request.headers.get("x-tank-key", ""), key))
 
 
+def device_approval_key_may_manage(request: Request) -> bool:
+    from main import box_region
+    key = device_approval_key()
+    pattern = SIGN_IN_PATHS.get(request.method)
+    return (bool(key) and box_region() == "za" and pattern is not None
+            and pattern.fullmatch(request.url.path) is not None
+            and command.key_matches(request.headers.get("x-tank-key", ""), key))
+
+
+async def sign_in_actor(request: Request) -> command.Actor:
+    """Workspace key, or (ZA box, list and revoke only) the dedicated key; never a CLI token."""
+    if device_approval_key_may_manage(request):
+        return await non_founder(request)
+    return await command.identity(request)
+
+
+async def non_founder(request: Request) -> command.Actor:
+    actor = await command.signed_in_actor(request)
+    admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
+    if actor.founder or actor.user_id in admins:
+        raise HTTPException(403, "Not available for this account here")
+    return actor
+
+
 async def device_approval_actor(request: Request) -> command.Actor:
     """Workspace key, or (ZA box, approval routes only) the dedicated device-approval key; user and tenant always required."""
     if device_approval_key_may_approve(request):
-        actor = await command.signed_in_actor(request)
+        actor = await non_founder(request)
         # Review of #506, should-fix 1: this key lives on the Boston Workspace and the
-        # user header is its assertion. It must never approve (and so mint) a CLI
-        # credential for a founder: a founder signs in to the ZA CLI with the ZA
-        # Workspace key path, never this one. Checked on the raw admin list, before
-        # any squad or role lookup could matter.
-        admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
-        if actor.founder or actor.user_id in admins:
-            raise HTTPException(403, "This sign-in cannot be approved here")
+        # user header is its assertion. non_founder() refuses founders (checked on the
+        # raw admin list) so it can never approve, and so mint, a founder CLI credential.
         return actor
     return await command.identity(request)
 
@@ -158,11 +184,12 @@ async def create_token(body: NewToken, response: Response,
 
 @router.get("")
 async def list_tokens(response: Response,
-                      actor: command.Actor = Depends(workspace_actor)) -> list[dict[str, Any]]:
+                      actor: command.Actor = Depends(sign_in_actor)) -> list[dict[str, Any]]:
     with tenant_scope(actor.tenant_id):
         async with command.db().acquire() as conn:
             rows = await conn.fetch(
-                "SELECT token_id,name,region,device_name,created_at,expires_at,last_used_at,revoked_at FROM tank.personal_tokens "
+                "SELECT token_id,name,region,device_name,created_at,expires_at,refresh_expires_at,last_used_at,revoked_at "
+                "FROM tank.personal_tokens "
                 "WHERE tenant_id=$1 AND user_id=$2 ORDER BY created_at DESC,token_id",
                 actor.tenant_id, actor.user_id,
             )
@@ -171,7 +198,7 @@ async def list_tokens(response: Response,
 
 
 @router.delete("/{token_id}", status_code=204)
-async def revoke_token(token_id: uuid.UUID, actor: command.Actor = Depends(workspace_actor)) -> Response:
+async def revoke_token(token_id: uuid.UUID, actor: command.Actor = Depends(sign_in_actor)) -> Response:
     with tenant_scope(actor.tenant_id):
         async with command.db().acquire() as conn:
             row = await conn.fetchrow(

@@ -261,6 +261,10 @@ jobs:
         # Regressions from the #496 review: no hang on error answers, 10 s bound on a silent Tank.
         run: |
           node --expose-gc tests/device_login_next_fetch.cjs
+      - name: CLI sign-ins list and revoke
+        # Review of #506, B3: per-region keys, active rows only, revoke scoped, bounded body, render.
+        run: |
+          node tests/cli_sign_ins.cjs
       - name: Build
         working-directory: workspace
         run: npx next build
