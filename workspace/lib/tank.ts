@@ -984,7 +984,12 @@ export async function commandRequest(identity: { tenantId: string; userId: strin
 /** Lane A derives this catalogue from the founder-controlled tenant_squad list. */
 export async function commandTools(identity: { tenantId: string; userId: string }): Promise<string[]> {
   const result: unknown = await (await commandRequest(identity, "tools")).json();
-  if (!Array.isArray(result) || !result.every(tool => typeof tool === "string" && /^[a-z_]+\.[a-z_]+$/.test(tool))) throw new Error("Tool access could not be loaded.");
+  if (!Array.isArray(result) || !result.every(tool => {
+    if (typeof tool !== "string") return false;
+    const segments = tool.split(".");
+    return segments.length >= 2 && segments.every(segment => segment.length > 0
+      && !/[^a-z_]/.test(segment) && !["__proto__", "prototype", "constructor"].includes(segment));
+  })) throw new Error("Tool access could not be loaded.");
   return result;
 }
 
