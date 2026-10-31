@@ -17,8 +17,11 @@ deploy". That was wrong. It shipped with #486 itself:
 
 What changed on ZA: `deepseek-flash` and `deepseek-pro` gained the same `model_info.offpeak`
 block as US (UTC; Mon-Fri 00-01, 04-06, 10-24; weekends all day; charge multiplier 0.5).
-It is only consulted for explicit `priority=offpeak` requests (`tank/priority_queue.py`);
-no seeded policy uses off-peak. Review found the values correct, so it is not reverted.
+Routing uses it only for requests whose priority is `offpeak`, set on the request or by its
+policy (`tank/main.py:649`, `:1345-1361`; `tank/priority_queue.py`), and Tank's model listing
+shows it (`tank/main.py:1616`). No seed or migration in the repo sets an `offpeak` policy;
+policies in the live database were not checked. Review found the values correct, so it is
+not reverted.
 `litellm/config.za.yaml` has not changed on main since `bd792fb8`.
 
 Not verified here: the running ZA LiteLLM container's loaded config. This record is from
