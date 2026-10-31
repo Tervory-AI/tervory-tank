@@ -9,6 +9,7 @@ real Postgres test (RIG_TEST_DATABASE_URL).
 """
 import asyncio
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -249,7 +250,9 @@ def test_locate_confirm_accept_responses_have_no_supplier_identity_or_cost(monke
         assert accepted.json()["ships_direct"] is True
     for response in (located, held, product, accepted):
         text = response.text
-        assert "606" not in text  # the supplier's live cost
+        # The supplier's live cost (606 USD). Random ids (hold token, request id,
+        # payment reference) are dropped first: their hex can contain "606".
+        assert re.search(r"(?<![0-9A-Za-z])606(?:\.0+)?(?![0-9A-Za-z])", re.sub(r'"(hold|request_id|reference)":"[^"]*"', "", text)) is None, text
         assert "neutral_slip" not in text and "landed" not in text
         for marker in ("other-store", "other.example", "RSR|POF02445", "RSR", "tiger"):
             assert marker not in text, (marker, text)
