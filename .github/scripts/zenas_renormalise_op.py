@@ -18,9 +18,15 @@ token stays in this job.
   The workflow also puts both renormalise ops in one fixed concurrency group.
 - The task is kept disabled with a yearly frequency, so it never runs on a
   schedule; it runs only when this op (or a founder in the dashboard) queues it.
-- A hard stop is covered too: SIGTERM becomes an exception (so the restore runs),
-  and the workflow's "if: cancelled() || failure()" step runs `restore`, which
-  puts the default dry-run command back and keeps the stored queued mark.
+- A hard stop is covered too. The workflow runs the op with `exec`, so the
+  runner's SIGINT/SIGTERM reach python: SIGINT is KeyboardInterrupt and SIGTERM
+  becomes an exception, and the in-process restore then runs with both signals
+  ignored. Just before it stores a command the op writes a marker file
+  ($RUNNER_TEMP/zenas-renormalise-stored) and deletes it once a restore has
+  succeeded; the workflow's "if: cancelled() || failure()" step runs `restore`,
+  which acts only while that marker is there (so a refused dispatch writes
+  nothing): it puts the marker's flags back with --dry-run and keeps the stored
+  queued mark.
 - Prints only a fixed projection of the job's JSON report (counts, resume id,
   changed rows' ids and suspect-space counts). The raw execution output and any
   API body are never printed.
@@ -34,6 +40,7 @@ import re
 import shlex
 import signal
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -71,6 +78,22 @@ _COUNT_KEY = re.compile(r"^[a-z :]{1,40}$")
 
 class OpError(Exception):
     """A fixed message that is safe to print."""
+
+
+STORED_MARKER = "zenas-renormalise-stored"
+
+
+def _marker() -> str:
+    """The file that says this job stored a command and has not restored it yet.
+    RUNNER_TEMP is per job on the runner and is set by the runner, not by inputs."""
+    return os.path.join(os.environ.get("RUNNER_TEMP") or tempfile.gettempdir(), STORED_MARKER)
+
+
+def _drop_marker() -> None:
+    try:
+        os.remove(_marker())
+    except FileNotFoundError:
+        pass
 
 
 class Terminated(Exception):
@@ -289,6 +312,7 @@ def summary(row: dict | None) -> dict:
 
 
 def run(call=api, env=os.environ, sleep=time.sleep, clock=time.monotonic) -> dict:
+    _drop_marker()  # a marker is only ever this run's own
     spec = inputs(env)
     app, task, container, task_row = _room(call, spec["region"])
     nightly = TARGETS[spec["region"]][2]
@@ -334,7 +358,21 @@ def run(call=api, env=os.environ, sleep=time.sleep, clock=time.monotonic) -> dic
                 return ""
         code, _ = call("PATCH", f"/applications/{app}/scheduled-tasks/{uuid}",
                        body(False, QUEUED_TIMEOUT if still_queued else IDLE_TIMEOUT))
-        return "" if _ok(code) else f"; restoring the dry-run command failed (HTTP {code}): set it in Coolify"
+        if not _ok(code):
+            return f"; restoring the dry-run command failed (HTTP {code}): set it in Coolify"
+        _drop_marker()  # restored here, so the workflow's restore step has nothing to do
+        return ""
+
+    def mark_stored() -> None:
+        """Written just before the storing PATCH/POST: from here until a restore
+        succeeds, the workflow's restore step must put a dry run back."""
+        flags = {"source": ",".join(spec["sources"]), "limit": "" if spec["limit"] is None else str(spec["limit"]),
+                 "after": spec["after"]}
+        try:
+            with open(_marker(), "w", encoding="utf-8") as handle:
+                json.dump(flags, handle)
+        except OSError:
+            raise OpError("writing the restore marker failed; nothing was stored") from None
 
     try:
         if task and task_row.get("timeout") != IDLE_TIMEOUT:
@@ -344,6 +382,7 @@ def run(call=api, env=os.environ, sleep=time.sleep, clock=time.monotonic) -> dic
             code, _ = call("PATCH", f"/applications/{app}/scheduled-tasks/{task}", body(False, IDLE_TIMEOUT))
             if not _ok(code):
                 raise OpError(f"clearing the stale queued mark failed (HTTP {code})")
+        mark_stored()
         if task:
             code, _ = call("PATCH", f"/applications/{app}/scheduled-tasks/{task}", body(spec["apply"], QUEUED_TIMEOUT))
             if not _ok(code):
@@ -391,12 +430,17 @@ def run(call=api, env=os.environ, sleep=time.sleep, clock=time.monotonic) -> dic
                 raise OpError("the run has not started" + note)
             latest = settle()
     except BaseException as exc:
-        if isinstance(exc, OpError) and "restoring the dry-run command" in str(exc):
-            raise
-        still_queued = state["queued"] and not state["started"]
-        note = restore(still_queued=still_queued)
-        if still_queued and not note and task:
-            settle()
+        # A cancel sends SIGINT, then SIGTERM 7.5 s later: neither may cut the restore.
+        held = _hold_signals()
+        try:
+            if isinstance(exc, OpError) and "restoring the dry-run command" in str(exc):
+                raise
+            still_queued = state["queued"] and not state["started"]
+            note = restore(still_queued=still_queued)
+            if still_queued and not note and task:
+                settle()
+        finally:
+            _release_signals(held)
         if isinstance(exc, OpError):
             raise OpError(str(exc) + note) from None
         if note:
@@ -427,24 +471,53 @@ def report(call=api, env=os.environ) -> dict:
 DEFAULT_DRY_RUN = {"apply": False, "sources": [], "limit": None, "after": ""}
 
 
+def _marked_flags() -> dict | None:
+    """The flags the run step stored, from its marker, or None when there is no marker
+    (the run step stored nothing, or restored it itself). The flags are validated again
+    and are always a dry run; an unreadable marker gives the default dry run."""
+    try:
+        with open(_marker(), encoding="utf-8") as handle:
+            raw = handle.read(4096)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        return dict(DEFAULT_DRY_RUN)
+    try:
+        flags = json.loads(raw)
+        spec = inputs({"REGION": "za", "APPLY": "false", "SOURCE": str(flags.get("source", "")),
+                       "LIMIT": str(flags.get("limit", "")), "AFTER": str(flags.get("after", ""))})
+    except (ValueError, AttributeError, OpError):
+        return dict(DEFAULT_DRY_RUN)
+    return {"apply": False, "sources": spec["sources"], "limit": spec["limit"], "after": spec["after"]}
+
+
 def restore_after_stop(call=api) -> dict:
-    """The workflow's cancelled()/failure() step. Fixed: no inputs are read. Puts the
-    default dry-run command on the task and keeps the stored timeout (the queued mark),
-    because a stopped run step may already have queued a run. Touches nothing else."""
+    """The workflow's cancelled()/failure() step. Reads no workflow inputs. Acts only
+    while the run step's marker is there (it stored a command and did not restore it):
+    puts the marker's flags back with --dry-run and keeps the stored timeout (the queued
+    mark), because the stopped run step may already have queued a run. Without the
+    marker (a refused dispatch, a failed Check inputs, a run that restored itself) it
+    makes no Coolify call at all."""
     region = "za"
+    spec = _marked_flags()
+    if spec is None:
+        return {"op": "zenas-renormalise-restore", "region": region, "restored": False,
+                "reason": "the run step stored nothing that needs restoring"}
     app, task, container, row = _room(call, region)
     if not task:
+        _drop_marker()
         return {"op": "zenas-renormalise-restore", "region": region, "task_uuid": "", "restored": False}
     timeout = row.get("timeout")
     if not (isinstance(timeout, int) and not isinstance(timeout, bool) and 1 <= timeout <= QUEUED_TIMEOUT):
         timeout = QUEUED_TIMEOUT  # unknown: mark it, so the next dispatch checks before queuing
     code, _ = call("PATCH", f"/applications/{app}/scheduled-tasks/{task}",
-                   {"name": TASK_NAME, "command": command(DEFAULT_DRY_RUN), "frequency": FREQUENCY,
+                   {"name": TASK_NAME, "command": command(spec), "frequency": FREQUENCY,
                     "container": container or None, "timeout": timeout, "enabled": False})
     if not _ok(code):
         raise OpError(f"restoring the dry-run command failed (HTTP {code}): set it in Coolify")
+    _drop_marker()
     return {"op": "zenas-renormalise-restore", "region": region, "task_uuid": task, "restored": True,
-            "command": command(DEFAULT_DRY_RUN), "queued_mark": timeout != IDLE_TIMEOUT}
+            "command": command(spec), "queued_mark": timeout != IDLE_TIMEOUT}
 
 
 def _on_sigterm(signum, frame):
@@ -452,9 +525,32 @@ def _on_sigterm(signum, frame):
     raise Terminated("SIGTERM")
 
 
+_STOP_SIGNALS = (signal.SIGINT, signal.SIGTERM)
+
+
+def _hold_signals() -> dict:
+    """Ignore SIGINT and SIGTERM (a restore must finish); returns the handlers to put back."""
+    held = {}
+    for signum in _STOP_SIGNALS:
+        try:
+            held[signum] = signal.signal(signum, signal.SIG_IGN)
+        except ValueError:  # not the main thread: signals are not delivered here anyway
+            pass
+    return held
+
+
+def _release_signals(held: dict) -> None:
+    for signum, handler in held.items():
+        signal.signal(signum, handler if handler is not None else signal.SIG_DFL)
+
+
 def main(argv=None, call=api) -> int:
     mode = (argv or sys.argv[1:] or [""])[0]
-    previous = signal.signal(signal.SIGTERM, _on_sigterm)
+    previous = {signum: signal.getsignal(signum) for signum in _STOP_SIGNALS}
+    if mode == "restore":
+        _hold_signals()  # the restore step itself must not be cut either
+    else:
+        signal.signal(signal.SIGTERM, _on_sigterm)
     try:
         if mode == "run":
             result = run(call)
@@ -467,11 +563,11 @@ def main(argv=None, call=api) -> int:
     except OpError as exc:
         print(f"::error title=zenas-renormalise::{exc}")
         return 1
-    except Exception as exc:  # noqa: BLE001 - never print bodies or messages
+    except (Exception, KeyboardInterrupt) as exc:  # noqa: BLE001 - never print bodies or messages
         print(f"::error title=zenas-renormalise::failed ({type(exc).__name__})")
         return 1
     finally:
-        signal.signal(signal.SIGTERM, previous)
+        _release_signals(previous)
     if mode == "restore":
         print(json.dumps(result, sort_keys=True))
         return 0

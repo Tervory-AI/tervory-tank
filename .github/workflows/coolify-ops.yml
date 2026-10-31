@@ -122,19 +122,23 @@ jobs:
       - name: ZA re-normalise in the deployed room (dry run unless apply=true)
         if: inputs.op == 'zenas-renormalise'
         timeout-minutes: 9
-        run: python3 .github/scripts/zenas_renormalise_op.py run
+        # exec: the runner signals the step's entry process on a cancel (SIGINT, then
+        # SIGTERM), so python must be that process for its in-process restore to run.
+        run: exec python3 .github/scripts/zenas_renormalise_op.py run
 
       # A cancel, a step timeout or a SIGKILL can stop the run step before its own
-      # restore. This fixed step (no inputs) puts the default dry-run command back on
-      # the task and keeps its queued mark, so the dashboard's Execute stays a dry run.
+      # restore. This fixed step (no workflow inputs) acts only when the run step left
+      # its $RUNNER_TEMP marker (it stored a command and did not restore it): it puts
+      # those flags back with --dry-run and keeps the queued mark. After a refusal or a
+      # failed Check inputs there is no marker, and it makes no Coolify call.
       - name: Put the ZA re-normalise task back to a dry run after a stop
         if: (cancelled() || failure()) && inputs.op == 'zenas-renormalise'
         timeout-minutes: 2
-        run: python3 .github/scripts/zenas_renormalise_op.py restore
+        run: exec python3 .github/scripts/zenas_renormalise_op.py restore
 
       - name: Read the last ZA re-normalise run
         if: inputs.op == 'zenas-renormalise-report'
-        run: python3 .github/scripts/zenas_renormalise_op.py report
+        run: exec python3 .github/scripts/zenas_renormalise_op.py report
 
       - name: Room setup (one op, nothing by hand)
         if: inputs.op == 'room-setup'

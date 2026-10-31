@@ -130,16 +130,27 @@ What the op does (`.github/scripts/zenas_renormalise_op.py`):
    `--dry-run`. So the **Execute** button in the Coolify dashboard only ever runs
    a dry run; `apply` goes only through this op.
    Hard stops are covered too:
-   - SIGINT and SIGTERM (a cancelled run, or the run step's 9-minute timeout)
-     unwind through the same restore.
-   - If the run step is killed before it can restore (SIGKILL after the cancel
-     grace period, or a timeout), the workflow's next step
-     (`if: (cancelled() || failure()) && inputs.op == 'zenas-renormalise'`)
-     runs `zenas_renormalise_op.py restore`. That fixed step reads no inputs: it
-     stores the default dry-run command and keeps the task's timeout as it is
-     (the queued mark stays), and touches nothing else. It cannot read the
-     command first, because Coolify hides it from tokens without
-     `read:sensitive`.
+   - A cancel (or the run step's 9-minute timeout) sends SIGINT, then SIGTERM
+     7.5 s later, then kills the step 2.5 s after that. The runner signals the
+     step's entry process, so the workflow runs the op as `exec python3 …`:
+     python is that process, not a bash parent that would swallow the signals.
+     SIGINT (KeyboardInterrupt) or SIGTERM unwinds through the same restore, and
+     that restore runs with both signals ignored, so the SIGTERM that follows a
+     SIGINT cannot cut it.
+   - Just before it stores a command, the op writes the marker file
+     `$RUNNER_TEMP/zenas-renormalise-stored` (the flags, never `--apply`), and
+     deletes it as soon as a restore has succeeded. If the run step is killed
+     before it can restore (SIGKILL after the grace period), the workflow's next
+     step (`if: (cancelled() || failure()) && inputs.op == 'zenas-renormalise'`)
+     runs `exec python3 .github/scripts/zenas_renormalise_op.py restore`. That
+     step reads no workflow inputs and acts only while the marker is there: it
+     stores the marker's flags with `--dry-run`, keeps the task's timeout as it is
+     (the queued mark stays), and touches nothing else. Without the marker (the
+     dispatch was refused, Check inputs failed, or the run step restored the
+     command itself) it makes no Coolify call at all, so it can neither move the
+     task's `updated_at` past a running execution nor rewrite the flags of a run
+     that is queued but not started. It cannot read the command first, because
+     Coolify hides it from tokens without `read:sensitive`.
    - Only a lost runner (the machine itself disappears) skips both. Then check
      the stored command in Coolify before anything else: if it ends with
      `--apply`, change it to `--dry-run`.

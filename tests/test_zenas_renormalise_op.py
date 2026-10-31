@@ -122,6 +122,22 @@ class FakeCoolify:
         raise AssertionError((method, path))
 
 
+@pytest.fixture(autouse=True)
+def runner_temp(tmp_path, monkeypatch):
+    """Each test gets its own $RUNNER_TEMP, as each workflow job does."""
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    return tmp_path
+
+
+def marker_file():
+    return Path(os.environ["RUNNER_TEMP"]) / op.STORED_MARKER
+
+
+def left_marker(**flags):
+    """What a run step that stored a command and was then stopped leaves behind."""
+    marker_file().write_text(json.dumps({"source": "", "limit": "", "after": "", **flags}))
+
+
 def env(**kw):
     base = {"REGION": "za", "APPLY": "false", "SOURCE": "", "LIMIT": "", "AFTER": ""}
     base.update(kw)
@@ -264,9 +280,9 @@ def test_workflow_wires_the_op_without_generic_api_shell():
     assert inputs["region"]["default"] == ""
     steps = workflow["jobs"]["op"]["steps"]
     run_step = next(s for s in steps if s.get("if") == "inputs.op == 'zenas-renormalise'")
-    assert run_step["run"] == "python3 .github/scripts/zenas_renormalise_op.py run"
+    assert run_step["run"] == "exec python3 .github/scripts/zenas_renormalise_op.py run"
     report_step = next(s for s in steps if s.get("if") == "inputs.op == 'zenas-renormalise-report'")
-    assert report_step["run"] == "python3 .github/scripts/zenas_renormalise_op.py report"
+    assert report_step["run"] == "exec python3 .github/scripts/zenas_renormalise_op.py report"
     generic = next(s for s in steps if s.get("name") == "Run")
     assert "inputs.op != 'zenas-renormalise'" in generic["if"]
     assert "inputs.op != 'zenas-renormalise-report'" in generic["if"]
@@ -595,6 +611,7 @@ def test_sigterm_while_waiting_restores_the_dry_run(capsys, monkeypatch):
 
 @pytest.mark.parametrize("timeout", [op.QUEUED_TIMEOUT, op.IDLE_TIMEOUT])
 def test_restore_step_puts_the_default_dry_run_back_and_keeps_the_mark(timeout, capsys):
+    left_marker()
     fake = FakeCoolify()
     stored(fake).update(command=DRY.replace("--dry-run", "--apply"), timeout=timeout)
     assert op.main(["restore"], call=fake) == 0
@@ -605,11 +622,13 @@ def test_restore_step_puts_the_default_dry_run_back_and_keeps_the_mark(timeout, 
     writes = [(m, p) for m, p, _ in fake.calls if m != "GET"]
     assert writes == [("PATCH", f"{BASE}/scheduled-tasks/{TASK}")]  # nothing else is touched
     assert "DO_NOT_PRINT" not in capsys.readouterr().out
+    assert not marker_file().exists()  # done: a second restore step would do nothing
 
 
 def test_restore_step_marks_a_task_with_an_unknown_timeout_and_ignores_inputs(monkeypatch):
     monkeypatch.setenv("SOURCE", "special-tribunal")
     monkeypatch.setenv("APPLY", "true")
+    left_marker()
     fake = FakeCoolify()
     stored(fake).pop("timeout")
     assert op.main(["restore"], call=fake) == 0
@@ -618,6 +637,7 @@ def test_restore_step_marks_a_task_with_an_unknown_timeout_and_ignores_inputs(mo
 
 
 def test_restore_step_without_a_task_writes_nothing():
+    left_marker()
     fake = FakeCoolify(existing=False)
     assert op.restore_after_stop(fake)["restored"] is False
     assert all(m == "GET" for m, _, _ in fake.calls)
@@ -629,7 +649,9 @@ def test_workflow_restores_after_a_cancel_or_failure():
     steps = job["steps"]
     run_step = next(s for s in steps if s.get("if") == "inputs.op == 'zenas-renormalise'")
     restore_step = next(s for s in steps if s.get("if") == "(cancelled() || failure()) && inputs.op == 'zenas-renormalise'")
-    assert restore_step["run"] == "python3 .github/scripts/zenas_renormalise_op.py restore"
+    assert restore_step["run"] == "exec python3 .github/scripts/zenas_renormalise_op.py restore"
+    # exec: the runner signals the step's entry process, so python must be it.
+    assert run_step["run"].startswith("exec python3 ")
     assert steps.index(restore_step) == steps.index(run_step) + 1
     # The run step times out before the job does, so the restore step still gets to run.
     assert run_step["timeout-minutes"] + restore_step["timeout-minutes"] < job["timeout-minutes"]
@@ -655,3 +677,145 @@ def test_a_5xx_that_did_queue_blocks_the_next_dispatch_until_it_starts():
     started_later(fake, 11)
     fake.execute_code, fake.start_after = 200, 1
     assert run(fake)["execution"]["status"] == "success"
+
+
+# --- Review of #512, round 3 ---------------------------------------------------------
+
+# Point 1: the restore step acts only when the run step stored a command and did not
+# restore it itself (the $RUNNER_TEMP marker).
+def test_the_marker_is_written_before_storing_and_dropped_after_the_restore():
+    fake = FakeCoolify()
+    original = fake.__call__
+    seen = []
+
+    def call(method, path, body=None):
+        if method in ("PATCH", "POST") and body and body.get("timeout") == op.QUEUED_TIMEOUT:
+            seen.append((body["command"].split()[-1], marker_file().exists()))
+        return original(method, path, body)
+
+    run_ok = op.run(call, env(**FLAGS), sleep=lambda s: None,
+                    clock=iter(range(0, 10_000, 5)).__next__)
+    assert run_ok["execution"]["status"] == "success"
+    assert seen[0] == ("--apply", True)  # the storing PATCH happens with the marker on disk
+    assert not marker_file().exists()  # restored in-process: nothing for the restore step
+
+
+def test_after_a_still_running_refusal_the_restore_step_makes_no_call():  # R1
+    fake = FakeCoolify(start_after=None)
+    nowait(fake, **FLAGS)  # dispatch 1: queued, not started; restored in-process
+    assert not marker_file().exists()
+    stamp = fake.now()
+    fake.executions.append({"id": 50, "status": "running", "created_at": stamp, "started_at": stamp})
+    fake.queued_at_poll = None
+    with pytest.raises(op.OpError, match="still running"):
+        nowait(fake, **FLAGS)  # dispatch 2 refused: the step fails, so the restore step runs
+    before, calls = dict(stored(fake)), len(fake.calls)
+    assert op.main(["restore"], call=fake) == 0
+    assert len(fake.calls) == calls and stored(fake) == before  # no Coolify call at all
+    fake.executions[-1].update(status="success", finished_at=fake.now(), message=OUTPUT)
+    fake.start_after = 1
+    assert run(fake, **FLAGS)["execution"]["status"] == "success"  # dispatch 3 is allowed
+
+
+def test_after_a_nightly_refusal_the_restore_step_makes_no_call():  # R1b
+    fake = FakeCoolify(start_after=None)
+    nowait(fake, **FLAGS)
+    started_later(fake, 51)  # the mark is stale now
+    fake.nightly[0]["status"] = "running"
+    with pytest.raises(op.OpError, match="zenas-pool-nightly is running"):
+        nowait(fake, **FLAGS)
+    calls = len(fake.calls)
+    assert op.restore_after_stop(fake)["restored"] is False
+    assert len(fake.calls) == calls
+    fake.nightly[0]["status"] = "success"
+    fake.start_after = 1
+    assert run(fake, **FLAGS)["execution"]["status"] == "success"
+
+
+def test_a_refusal_keeps_the_flags_of_a_queued_run():  # R2
+    fake = FakeCoolify(start_after=None)
+    nowait(fake, **FLAGS)  # queued, not started: cac --limit 20 --dry-run, marked
+    queued = stored(fake)["command"]
+    with pytest.raises(op.OpError, match="queued after the latest execution"):
+        nowait(fake)
+    assert op.restore_after_stop(fake)["restored"] is False
+    assert stored(fake)["command"] == queued == DRY
+
+
+def test_a_failed_check_inputs_leaves_no_marker_for_the_restore_step():
+    with pytest.raises(op.OpError):
+        op.run(FakeCoolify(), env(LIMIT="0"))
+    fake = FakeCoolify()
+    assert op.restore_after_stop(fake)["restored"] is False and fake.calls == []
+
+
+def test_a_stale_marker_from_an_earlier_step_is_dropped_by_the_next_run():
+    left_marker(source="cac")
+    fake = FakeCoolify(running=True)
+    with pytest.raises(op.OpError, match="still running"):
+        run(fake)
+    assert not marker_file().exists()
+
+
+def test_when_the_in_process_restore_fails_the_restore_step_puts_the_run_flags_back():
+    fake = FakeCoolify()
+    original = fake.__call__
+    fail = {"on": False}
+
+    def call(method, path, body=None):
+        if path.endswith("/execute"):
+            fail["on"] = True
+            code, _ = original(method, path, body)
+            raise TimeoutError  # the execute call is lost on the way back
+        if method == "PATCH" and fail["on"]:
+            return 502, None  # and Coolify is down for the in-process restore
+        return original(method, path, body)
+
+    with pytest.raises(op.OpError, match="restoring the dry-run command failed"):
+        op.run(call, env(**FLAGS), sleep=lambda s: None, clock=lambda: 0)
+    assert stored(fake)["command"].endswith("--apply")  # what the restore step is for
+    assert marker_file().exists()
+    result = op.restore_after_stop(fake)
+    assert result["restored"] is True and stored(fake)["command"] == DRY  # the run's own flags, dry
+    assert stored(fake)["timeout"] == op.QUEUED_TIMEOUT and not marker_file().exists()
+
+
+def test_a_tampered_marker_is_validated_and_never_stores_apply():
+    marker_file().write_text(json.dumps({"source": "cac; rm -rf /", "limit": "x", "apply": True}))
+    fake = FakeCoolify()
+    op.restore_after_stop(fake)
+    default = op.command(op.DEFAULT_DRY_RUN)
+    assert stored(fake)["command"] == default and default.endswith("--dry-run")
+
+
+# Point 2: GitHub's cancel order is SIGINT, then SIGTERM 7.5 s later. With exec, both
+# reach python; neither may cut the in-process restore.
+def test_sigint_then_sigterm_during_the_restore_still_leaves_a_dry_run(capsys, monkeypatch):  # R4
+    for name, value in env(**FLAGS).items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(op.time, "sleep", lambda s: None)
+    fake = FakeCoolify(start_after=None)
+    original = fake.__call__
+    sent = {"int": False, "term": False}
+
+    def call(method, path, body=None):
+        if path.endswith(f"{TASK}/executions") and fake.queued_at_poll is not None and not sent["int"]:
+            sent["int"] = True
+            os.kill(os.getpid(), signal.SIGINT)
+        if method == "PATCH" and sent["int"] and not sent["term"]:
+            sent["term"] = True
+            os.kill(os.getpid(), signal.SIGTERM)  # arrives during the restore PATCH
+        return original(method, path, body)
+
+    handlers = {s: signal.getsignal(s) for s in (signal.SIGINT, signal.SIGTERM)}
+    assert op.main(["run"], call=call) == 1
+    assert sent == {"int": True, "term": True}
+    assert "failed (KeyboardInterrupt)" in capsys.readouterr().out
+    assert stored(fake)["command"] == DRY and stored(fake)["timeout"] == op.QUEUED_TIMEOUT
+    assert not marker_file().exists()
+    assert {s: signal.getsignal(s) for s in handlers} == handlers  # put back after the op
+
+
+def test_doc_says_the_workflow_execs_python():
+    doc = " ".join((ROOT / "docs/ops/ZENAS-ZA-RENORMALISE.md").read_text().split())
+    assert "`exec python3 …`" in doc and "ignored" in doc and "SIGINT" in doc and "zenas-renormalise-stored" in doc
