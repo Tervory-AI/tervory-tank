@@ -33,6 +33,14 @@ on:
 permissions:
   contents: read
 
+# deploy and room-setup redeploy Coolify apps: they join deploy-on-merge's coolify-deploy
+# group and queue behind it (and it behind them). Read-only and metadata ops get their own
+# group per run, so a status read never waits on a deploy.
+concurrency:
+  group: ${{ (inputs.op == 'deploy' || inputs.op == 'room-setup') && 'coolify-deploy' || format('coolify-ops-{0}', github.run_id) }}
+  cancel-in-progress: false
+  queue: max
+
 jobs:
   op:
     runs-on: ubuntu-latest
