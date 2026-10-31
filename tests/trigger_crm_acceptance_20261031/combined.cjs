@@ -45,7 +45,9 @@ async function get(parts, query = '') {
   session.orgId = 'org_unconfigured';
   assert.equal((await get(['contacts'])).status, 503);
   session = { userId: 'offline-client', orgId: 'org_offline_crm' };
-  assert.equal((await get(['contacts'])).status, 404);
+  assert.equal((await get(['contacts'], '?page=2')).status, Number(process.env.CRM_EXPECT_CLIENT_STATUS));
+  session = { userId: 'offline-client', orgId: 'org_no_grant' };
+  assert.equal((await get(['contacts'])).status, 403);
   session = { userId: null, orgId: 'org_offline_crm' };
   assert.equal((await get(['contacts'])).status, 404);
   session = { userId: 'offline-founder', orgId: 'org_offline_crm' };
