@@ -1203,3 +1203,24 @@ export async function marketWarningRequest<T>(tenantId: string, operation: "list
   if (!response.ok) throw new MarketLabRequestError(response.status);
   return await response.json() as T;
 }
+/** Founder CRM reads: fixed same-box Tank only; no CRM credential reaches Workspace callers. */
+export async function triggerCrmRead(
+  identity: { tenantId: string; userId: string }, path: readonly string[], query: URLSearchParams,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const { crmReadPath, crmReadQuery } = await import("./trigger-crm");
+  const target = crmReadPath(path);
+  const parameters = crmReadQuery(query, path.length === 2);
+  if (!target || !parameters) throw new Error("invalid_crm_request");
+  if (!TANK_API_KEY) throw new Error("crm_unavailable");
+  const url = new URL(`/v1/trigger/crm/${target}`, TANK_URL);
+  url.search = parameters.toString();
+  return fetch(url, {
+    method: "GET", cache: "no-store", redirect: "error", signal,
+    headers: {
+      "accept": "application/json", "x-tank-key": TANK_API_KEY,
+      "x-tervory-user": identity.userId, "x-tervory-admin": identity.userId,
+      "x-tervory-tenant": identity.tenantId,
+    },
+  });
+}
