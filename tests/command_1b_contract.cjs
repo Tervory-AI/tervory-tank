@@ -73,7 +73,7 @@ const snapshot = {thread:{thread_id:'one',title:'Tank test-model',updated_at:'20
   const isolated=contract.applyReceipt({...snapshot,messages:[{message_id:'answer',role:'assistant',content:'Text'}],cards:[],steps:[]},pending,'answer');assert.equal(isolated.messages[0].receipt,undefined);assert.equal(isolated.job_receipts[0].step_id,'action');
   const first=contract.applyReceipt({...snapshot,messages:[{message_id:'answer',role:'assistant',content:'Text'}],cards:[],steps:[{step_id:'step',actor:'Tervory',status:'running'}]},receipt,'answer');
   const second=contract.applyReceipt(first,{...receipt,rows:[{...receipt.rows[0],ledger_id:'row-two'}]},'answer');assert.equal(second.messages[0].receipt.rows.length,2);assert.equal(second.messages[0].receipt.totals.cost_usd,.02);
-  // Auto is ledger evidence, never inferred from roster prices or event totals.
+  // Legacy Auto projections have no actual ledger proof; keep them unavailable.
   const autoRows = [
     {...receipt.rows[0], step_id:'answer', ledger_id:'auto-one', auto_cost_usd:null},
     {...receipt.rows[0], step_id:'work', ledger_id:'auto-two', auto_cost_usd:.004},
@@ -83,14 +83,15 @@ const snapshot = {thread:{thread_id:'one',title:'Tank test-model',updated_at:'20
   assert.equal(grouped.messages[0].receipt.totals.cost_usd,.01);
   assert.equal(grouped.messages[0].receipt.totals.auto_cost_usd,null);
   assert.equal(grouped.job_receipts[0].totals.cost_usd,.01);
-  assert.equal(grouped.job_receipts[0].totals.auto_cost_usd,.004);
+  assert.equal(grouped.job_receipts[0].totals.auto_cost_usd,null);
   const autoReload = contract.normalizeSnapshot({...snapshot,messages:[{message_id:'answer',role:'assistant',content:'Text'}],cards:[],steps:[],receipts:autoRows});
   assert.deepEqual(autoReload.messages[0].receipt,grouped.messages[0].receipt);
-  assert.equal(autoReload.job_receipts[0].totals.auto_cost_usd,.004);
+  assert.equal(autoReload.job_receipts[0].totals.auto_cost_usd,null);
   const delta = contract.applyReceipt(grouped,{...receipt,rows:[{...autoRows[0],auto_cost_usd:.003}]},'answer');
   assert.equal(delta.messages[0].receipt.rows.length,1);
-  assert.equal(delta.messages[0].receipt.totals.auto_cost_usd,.003);
+  assert.equal(delta.messages[0].receipt.totals.auto_cost_usd,null);
   assert.equal(contract.receiptFor([{...autoRows[0],auto_cost_usd:Infinity}]).totals.auto_cost_usd,null);
+  assert.equal(contract.receiptFor([{...autoRows[0],auto_cost_usd:NaN}]).totals.auto_cost_usd,null);
   assert.equal(contract.receiptFor([autoRows[1]],'work',true).totals.auto_cost_usd,null);
   assert.equal(contract.receiptFor(receipt.rows).totals.auto_cost_usd,undefined);
   const baselinePending={...receipt,rows:[{...receipt.rows[0],baseline_status:'baseline pending',saved_usd:null}]};
