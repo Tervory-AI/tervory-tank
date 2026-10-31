@@ -23,6 +23,8 @@ The token envelope selects `https://app.tervory.com` or `https://za.tervory.com`
 
 Receipt amounts are displayed exactly as Tank returns them. Auto comparisons require actual historical ledger evidence; otherwise they are unavailable. No price-book projection is presented as a measured cost. An interrupted stream is reported and never automatically retried, because a turn may have incurred cost.
 
-The `models`, known-action `run`, and owned task receipt endpoints are supplied by companion draft PR #465. This branch must be tested with that backend before founder acceptance. A confirmed action remains recorded in the thread; the CLI currently displays its confirmation response, and the thread can be reopened for its stored steps and receipts.
+The `models`, known-action `run`, and owned task receipt endpoints are supplied by companion draft PR #465. This branch must be tested with that backend before founder acceptance. Confirmed jobs are watched with read-only snapshot polls every 500 ms, for at most 240 polls; Ctrl-C cancels watching, never the already confirmed job. The CLI prints changed steps, produced links and ledger receipts and stops at completion, failure, unknown outcome or the polling bound. Reopen `chat <thread>` to show saved messages and resume watching. No failed or interrupted turn/action is automatically resubmitted.
+
+Interactive terminals show provisional answer text on a single stderr preview line; stdout receives the final answer once. Tank's `replace` event replaces the provisional answer, and duplicate sequence numbers are ignored. Non-interactive stdout receives only the validated final answer, avoiding stale previews in scripts.
 
 `npm test --prefix cli` runs fake-Tank tests with synthetic credentials and data only. No provider requests or live account changes occur. Evidence in `tests/cli_1_20261031/` is labeled offline fake-Tank proof and is not a founder-browser test.
