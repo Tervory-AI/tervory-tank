@@ -1,0 +1,34 @@
+name: cli
+on:
+  pull_request:
+    paths:
+      - 'cli/**'
+      - 'tank/personal_tokens.py'
+      - 'workspace/lib/tank.ts'
+      - 'workspace/app/v1/command/**'
+      - 'workspace/middleware.ts'
+      - '.github/workflows/cli.yml'
+permissions:
+  contents: read
+concurrency:
+  group: cli-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  fake-tank:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: cli
+      - run: node --check bin/tervory.mjs && node --check src/client.mjs
+        working-directory: cli
+      - run: npm test
+        working-directory: cli
+      - run: npm pack --dry-run
+        working-directory: cli
