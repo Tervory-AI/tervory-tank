@@ -1,0 +1,179 @@
+/* Figma client dashboard 12:2 and its approved states, scoped to this page. */
+.client-dashboard {
+  display: flex;
+  align-items: stretch;
+  min-height: 100vh;
+  background: #f4f6fa;
+  color: #001840;
+  color-scheme: light;
+  font-family: var(--font-inter), sans-serif;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: normal;
+}
+.client-dashboard * { box-sizing: border-box; }
+.client-dashboard p,
+.client-dashboard h1,
+.client-dashboard h2 { margin: 0; }
+.client-dashboard a { color: inherit; text-decoration: none; }
+.client-dashboard-sidebar {
+  display: flex;
+  flex: 0 0 220px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 22px 16px 0;
+  overflow: clip;
+  background: #001840;
+  color: #fff;
+}
+.client-dashboard-logo { padding-bottom: 18px; flex-shrink: 0; }
+.client-dashboard-logo img { display: block; width: 180px; height: 33px; object-fit: contain; }
+.client-dashboard-sidebar > a {
+  width: 100%;
+  flex-shrink: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.client-dashboard-sidebar > a[aria-current="page"] { background: #22345a; }
+.client-dashboard-main {
+  display: flex;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+  min-width: 1px;
+  padding: 48px 64px;
+  overflow: clip;
+}
+.client-dashboard-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  overflow: clip;
+}
+.client-dashboard h1 {
+  flex-shrink: 0;
+  min-height: 49px;
+  font-family: var(--font-jost), sans-serif;
+  font-size: 34px;
+  font-weight: 300;
+  line-height: normal;
+  white-space: nowrap;
+}
+.client-dashboard-header > p { margin-left: auto; color: #3d4a66; font-size: 14px; white-space: nowrap; }
+.client-dashboard-ask {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 16px 12px 16px 22px;
+  border: 1px solid #b8bfd0;
+  border-radius: 16px;
+  background: #fff;
+  overflow: clip;
+}
+.client-dashboard-ask input {
+  flex: 1 0 0;
+  min-width: 1px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #001840;
+  font: 400 18px / normal var(--font-inter), sans-serif;
+}
+.client-dashboard-ask input::placeholder { color: #8c94a6; opacity: 1; }
+.client-dashboard .client-dashboard-button {
+  display: block;
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border: 1px solid #b8bfd0;
+  border-radius: 10px;
+  background: #fff;
+  color: #001840;
+  font: 600 13px / normal var(--font-inter), sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.client-dashboard .client-dashboard-primary { border: 0; background: #001840; color: #fff; }
+.client-dashboard-totals { display: flex; gap: 16px; width: 100%; }
+.client-dashboard-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-width: 1px;
+  padding: 22px;
+  border: 1px solid #b8bfd0;
+  border-radius: 16px;
+  background: #fff;
+  overflow: clip;
+}
+.client-dashboard-total { flex: 1 0 0; gap: 6px; }
+.client-dashboard-label { color: #3d4a66; font-size: 14px; white-space: nowrap; }
+.client-dashboard-number { font: 300 40px / normal var(--font-jost), sans-serif; white-space: nowrap; }
+.client-dashboard-saved { color: #1e7a46; }
+.client-dashboard h2 { font: 600 17px / normal var(--font-inter), sans-serif; white-space: nowrap; }
+.client-dashboard-job { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 0; overflow: clip; }
+.client-dashboard-job-title { flex: 1 0 0; min-width: 1px; line-height: 18px; overflow-wrap: break-word; }
+.client-dashboard-status { flex-shrink: 0; color: #3d4a66; font-size: 14px; white-space: nowrap; }
+.client-dashboard-dot { flex: 0 0 10px; width: 10px; height: 10px; border-radius: 50%; }
+.client-dashboard-dot-queued { background: #8c94a6; }
+.client-dashboard-dot-running { background: #001840; }
+.client-dashboard-dot-done { background: #1e7a46; }
+.client-dashboard-dot-failed { background: #e80008; }
+.client-dashboard-empty { color: #3d4a66; font-size: 15px; line-height: 18px; }
+.client-dashboard-team { display: flex; gap: 12px; width: 100%; }
+.client-dashboard-member {
+  display: flex;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 1px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f4f6fa;
+  overflow: clip;
+  white-space: nowrap;
+}
+.client-dashboard-member > p:first-child { font-size: 15px; font-weight: 600; line-height: 18px; }
+.client-dashboard-member > p:last-child { color: #3d4a66; font-size: 13px; }
+
+/* Only the dashboard replaces the shared shell with its approved sidebar. */
+.app-shell:has(.client-dashboard) { display: block; }
+.app-shell:has(.client-dashboard) > .shell-side,
+.app-shell:has(.client-dashboard) > .shell-mobile,
+.app-shell:has(.client-dashboard) > .shell-skip,
+.app-shell:has(.client-dashboard) > .shell-dim { display: none; }
+.app-shell:has(.client-dashboard) > .shell-main,
+.app-shell:has(.client-dashboard) > .shell-main > main { width: 100%; max-width: none; margin: 0; padding: 0; }
+
+/* Preserve the existing client home's narrow-screen reflow without adding UI. */
+@media (max-width: 1100px) {
+  .client-dashboard-main { padding: 32px; }
+  .client-dashboard-sidebar { flex-basis: 180px; }
+}
+@media (max-width: 650px) {
+  .client-dashboard { display: block; }
+  .client-dashboard-sidebar { width: 100%; padding: 16px; flex-direction: row; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .client-dashboard-logo { padding: 0; margin-right: 10px; }
+  .client-dashboard-logo img { width: 88px; height: auto; }
+  .client-dashboard-sidebar > a { width: auto; padding: 8px; font-size: 13px; }
+  .client-dashboard-main { padding: 24px 16px; gap: 18px; }
+  .client-dashboard-header { flex-wrap: wrap; }
+  .client-dashboard h1 { font-size: 28px; white-space: normal; }
+  .client-dashboard-totals { flex-direction: column; }
+  .client-dashboard-card { padding: 18px; }
+  .client-dashboard-number { font-size: 36px; }
+  .client-dashboard-team { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .client-dashboard-ask { padding: 14px; flex-wrap: wrap; }
+  .client-dashboard-ask input { flex-basis: 100%; }
+}
