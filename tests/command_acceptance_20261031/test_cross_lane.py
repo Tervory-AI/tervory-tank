@@ -1,5 +1,8 @@
 """Offline acceptance: real command HTTP/SQL, fake worker progress, no model calls."""
 import json
+import os
+import subprocess
+from pathlib import Path
 import uuid
 
 import pytest
@@ -45,7 +48,8 @@ async def test_returning_viewer_replays_over_page_boundary_and_recovers_last_pan
         json={'status': 'awaiting_review', 'step_label': 'Offline review', 'pr_url': pr,
               'ci_status': 'passed', 'review_status': 'pending'})
     assert report.status_code == 200
-    replay = frames(await client.get(url + f'/events?after={cursor}'))
+    replay_response = await client.get(url + f'/events?after={cursor}')
+    replay = frames(replay_response)
     assert len(replay) == 504
     assert [e['seq'] for e in replay] == list(range(cursor + 1, cursor + 505))
     assert replay[-1]['link'] == pr and replay[-1]['review_status'] == 'pending'
@@ -54,6 +58,15 @@ async def test_returning_viewer_replays_over_page_boundary_and_recovers_last_pan
     assert all(step[key] == replay[-1][key] for key in
                ('status', 'label', 'link', 'ci_status', 'review_status'))
     assert frames(await client.get(url + f"/events?after={replay[-1]['seq']}")) == []
+    if os.environ.get('COMMAND_ACCEPTANCE_CLIENTS') == '1':
+        decoded = subprocess.run(
+            ['node', str(Path(__file__).with_name('consume_replay.cjs'))],
+            input=json.dumps({'sse': replay_response.text, 'snapshot': state}),
+            text=True, capture_output=True, timeout=30, check=False,
+        )
+        assert decoded.returncode == 0, decoded.stderr
+        assert decoded.stdout.startswith('PASS: 504 actual Tank events')
+        print(decoded.stdout.strip())
     for headers in ({'x-tervory-user': 'another-user'}, {'x-tervory-tenant': str(OTHER)},
                     {'x-tervory-home-region': 'za'}):
         denied = await client.get(url + f'/events?after={cursor}', headers=headers)
