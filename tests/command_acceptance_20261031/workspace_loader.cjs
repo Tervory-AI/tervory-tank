@@ -33,7 +33,7 @@ exports.workspace = function workspace({ env, fetch, mocks = {} }) {
     vm.runInNewContext(output, {
       module, exports: module.exports, require: local, process: { env },
       URL, URLSearchParams, Request, Response, Headers, Uint8Array, TextEncoder, TextDecoder, ReadableStream,
-      AbortController, setTimeout, clearTimeout, console, fetch,
+      AbortController, AbortSignal, setTimeout, clearTimeout, console, fetch,
     });
     return module.exports;
   }

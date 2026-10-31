@@ -20,6 +20,10 @@ export function deviceCode(value: unknown): string | null {
   return USER_CODE.test(text) ? text : null;
 }
 
+// Tank answers these in milliseconds. If it accepts the connection and never answers,
+// the /cli/device page render and the Approve action must not wait forever.
+export const DEVICE_TIMEOUT_MS = 10_000;
+
 const MESSAGES: Record<number, string> = {
   401: "This sign-in could not be verified. Sign in again and retry.",
   404: "This code has expired, was already used, or does not exist. Run tervory login again.",
@@ -43,15 +47,18 @@ export async function deviceApproval(identity: DeviceIdentity, region: Region, c
         "x-tervory-role": identity.tenantAdmin === true ? "org:admin" : "",
       },
       ...(action ? { body: JSON.stringify({ action }) } : {}),
-      cache: "no-store", redirect: "error",
+      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(DEVICE_TIMEOUT_MS),
     });
   } catch {
     return { ok: false, status: 502, message: "The sign-in service could not be reached. Try again." };
   }
   if (!response.ok) {
-    await response.body?.cancel();
+    // Drain rather than cancel: Next's render-time dedupe fetch tees GET bodies and
+    // cancel() on one branch never settles (tests/device_login_next_fetch.cjs, step 0).
+    await response.arrayBuffer().catch(() => undefined);
     return { ok: false, status: response.status, message: MESSAGES[response.status] ?? "This request could not be completed. Try again." };
   }
+  // A body that never finishes is cut off by the same timeout signal.
   const body: unknown = await response.json().catch(() => null);
   const device = body as Partial<PendingDevice> | null;
   if (!device || typeof device.device_name !== "string" || device.user_code !== code || typeof device.status !== "string") {

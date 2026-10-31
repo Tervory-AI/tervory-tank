@@ -103,16 +103,21 @@ export function approvalUrl(code, region) {
 }
 
 /** Unauthenticated device-login call to the region's public origin (Workspace for us-east, Tank for ZA). */
-export async function deviceCall(region, action, body, transport = fetch, headers = {}) {
+// Each device-login call is bounded: a Tank that accepts the connection and never
+// answers must not stall login (or the poll loop past its 10-minute deadline).
+export const DEVICE_TIMEOUT_MS = 10_000;
+
+export async function deviceCall(region, action, body, transport = fetch, headers = {}, timeoutMs = DEVICE_TIMEOUT_MS) {
   if (!ORIGINS[region] || !['code', 'token', 'refresh', 'revoke'].includes(action)) throw new Error('Login refused by Tank.');
-  let response;
+  const signal = AbortSignal.timeout(timeoutMs);
+  let response; let payload;
   try {
     response = await transport(`${ORIGINS[region]}/v1/command/device/${action}`, {
       method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify(body),
+      body: JSON.stringify(body), signal,
     });
+    payload = await response.json().catch(error => { if (signal.aborted) throw error; return {}; });
   } catch { throw new Error('Tank connection failed.'); }
-  const payload = await response.json().catch(() => ({}));
   if (response.ok) return payload;
   return { error: DEVICE_ERRORS.includes(payload?.error) ? payload.error : 'failed', status: response.status };
 }
