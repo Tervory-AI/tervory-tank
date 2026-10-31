@@ -32,7 +32,7 @@ async def claimed_build(client):
 
 
 @pytest.mark.asyncio
-async def test_returning_viewer_replays_over_page_boundary_and_recovers_last_panel(api):
+async def test_returning_viewer_replays_over_page_boundary_and_recovers_last_panel(api):  # noqa: F811 (imported pytest fixture)
     client, _ = api
     tid, bid = await claimed_build(client)
     url = f'/v1/command/threads/{tid}'
@@ -75,7 +75,7 @@ async def test_returning_viewer_replays_over_page_boundary_and_recovers_last_pan
 
 
 @pytest.mark.asyncio
-async def test_rejected_worker_receipt_leaves_panel_and_replay_unchanged(api):
+async def test_rejected_worker_receipt_leaves_panel_and_replay_unchanged(api):  # noqa: F811 (imported pytest fixture)
     client, pool = api
     tid, bid = await claimed_build(client)
     url = f'/v1/command/threads/{tid}'
@@ -99,7 +99,7 @@ async def test_rejected_worker_receipt_leaves_panel_and_replay_unchanged(api):
 
 
 @pytest.mark.asyncio
-async def test_persisted_pat_cannot_escalate_headers_or_cross_user_and_revokes(api):
+async def test_persisted_pat_cannot_escalate_headers_or_cross_user_and_revokes(api):  # noqa: F811 (imported pytest fixture)
     """CLI-lane auth + A command routes + real local schema; synthetic bearer only."""
     pat = pytest.importorskip('personal_tokens', reason='CLI/PAT lane not on this source tree')
     import command
