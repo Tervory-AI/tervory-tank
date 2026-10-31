@@ -1,5 +1,10 @@
 # Candidate runtime bundle
 
+`market.series_fetch` 1.2.1 is an eval-only patch of 1.2.0. Every file below is
+copied unchanged from 1.2.0, except `skill.yaml` (version), `CHANGELOG.md`, and
+`evals/cases.jsonl`, which keeps all seven 1.2.0 lines and adds back the three
+1.1.0 lines (decimal form) that Boston approved. The 1.2.0 notes follow.
+
 `market.series_fetch` 1.2.0 is built from the latest version, 1.1.1. Versions
 1.0.0, 1.1.0 and 1.1.1 are untouched. The skill entry point, pure series logic
 and three synthetic listing/geography fixtures are unchanged from 1.1.1.
