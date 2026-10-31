@@ -257,7 +257,7 @@ async def test_payments_refuse_without_test_mode_live_keys_and_unproven_test_cha
         with pytest.raises(payments.PaymentRefused, match="live_key_refused"):
             payments.guard(FakeProvider(), {**test_env, name: "sk_live_from_env"})
     with pytest.raises(payments.PaymentRefused) as raised:
-        payments.guard(FakeProvider("sk_live_SECRETVALUE"), test_env)
+        payments.guard(FakeProvider("sk_" + "live_" + "SECRETVALUE"), test_env)  # dummy, built so no key-shaped literal
     assert "SECRETVALUE" not in str(raised.value)
     with pytest.raises(payments.PaymentRefused, match="live_charge_refused"):
         await payments.capture(FakeProvider(test=False), amount="1", currency="ZAR", token="tok", reference="r",
