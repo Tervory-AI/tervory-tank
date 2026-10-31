@@ -6,6 +6,7 @@ A skill is a versioned package on disk:
         skill.yaml      id, version, agent, rung, task_type, description, schemas, eval_threshold
         run.py          async def run(input: dict, ctx: SkillContext) -> dict
         evals/cases.jsonl   one {"input":…, "expected":…, "tolerance":…} per line
+        evals/cases.<region>.jsonl   optional; same-name rows with this box's input
         CHANGELOG.md
 
 Phase 1 registry = this folder (Git) + tank.skills (Postgres).
@@ -30,6 +31,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -68,15 +70,43 @@ class SkillPackage:
         return f"{self.id}@{self.version}"
 
 
-def _load_cases(path: Path) -> list[dict[str, Any]]:
-    f = path / "evals" / "cases.jsonl"
-    if not f.exists():
-        return []
+def _read_jsonl(f: Path) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for line in f.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if line and not line.startswith("#"):
             out.append(json.loads(line))
+    return out
+
+
+def _load_cases(path: Path) -> list[dict[str, Any]]:
+    """cases.jsonl, with an optional evals/cases.<TANK_REGION>.jsonl for this box.
+
+    A regional row replaces the shared row with the same name, only for its
+    input: expected, tolerance, must_refuse and every other key must be equal,
+    and no case may be added or dropped. A bad regional file fails closed.
+    """
+    f = path / "evals" / "cases.jsonl"
+    if not f.exists():
+        return []
+    out = _read_jsonl(f)
+    region = os.environ.get("TANK_REGION", "us-east").strip().lower()
+    regional = path / "evals" / f"cases.{region}.jsonl"
+    if not re.fullmatch(r"[a-z][a-z0-9-]{0,30}", region) or not regional.exists():
+        return out
+    index = {case.get("name"): i for i, case in enumerate(out)}
+    if None in index or len(index) != len(out):
+        raise ValueError("regional eval cases need unique case names")
+    seen: set[str] = set()
+    for case in _read_jsonl(regional):
+        name = case.get("name")
+        if name not in index or name in seen:
+            raise ValueError(f"regional eval case {name!r} does not replace exactly one shared case")
+        shared = out[index[name]]
+        if {k: v for k, v in case.items() if k != "input"} != {k: v for k, v in shared.items() if k != "input"}:
+            raise ValueError(f"regional eval case {name!r} may change only its input")
+        seen.add(name)
+        out[index[name]] = case
     return out
 
 
