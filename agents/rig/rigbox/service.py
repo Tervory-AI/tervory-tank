@@ -42,7 +42,6 @@ from rigbox.logic import options_for
 from rigbox.logic import product_detail
 from rigbox.logic import _limit
 from rigbox.logic import public_product
-from rigbox.shopper_attributes import shopper_attributes
 from rigbox.logic import reprice
 from rigbox.logic import setups as build_setups
 from rigbox.rank import search as rank_room
@@ -581,8 +580,6 @@ class Service:
         products = []
         for row in await self._active(tenant_id):
             item = public_product(row)
-            # The model and the grounded sentence only see shopper-safe facts.
-            item["attributes"] = shopper_attributes(item["attributes"])
             item["family"] = str(row.get("family") or "")
             products.append(item)
         fits = await self._approved_fits(tenant_id)
