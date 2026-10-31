@@ -134,6 +134,8 @@ class SupplyStore:
 async def locate(store: Any, tenant: str, product: dict, *, now: datetime | None = None,
                  snapshot: tuple | None = None) -> dict:
     """Return separate public and store-only projections; no supplier data in public."""
+    if product.get("active") is False and product.get("supply_eligible") is not True:
+        return {"public": {"status": "unavailable"}}
     sources, offers, maps = snapshot if snapshot is not None else await SupplyStore(store).snapshot(tenant)
     approved = {s["id"]: s for s in sources if s.get("approved") is True and str(s.get("tenant_id")) == str(tenant)}
     offers = [o for o in offers if str(o.get("tenant_id")) == str(tenant) and o["source_id"] in approved]
