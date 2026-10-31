@@ -143,7 +143,9 @@ async def listing(resource: Resource, request: Request, actor: Annotated[Actor, 
             raise ValueError
     except ValueError:
         raise HTTPException(422, "Invalid CRM query") from None
-    raw = await upstream(actor, resource, params={**query, "page": page})
+    # Pinned BottleCRM views use DRF LimitOffsetPagination, not a page parameter.
+    params = {key: value for key, value in query.items() if key != "page"}
+    raw = await upstream(actor, resource, params={**params, "offset": (page - 1) * 10, "limit": 10})
     if resource == "leads":
         groups = [raw.get("open_leads"), raw.get("close_leads")]
         if not all(isinstance(group, dict) for group in groups):
