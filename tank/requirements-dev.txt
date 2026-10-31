@@ -1,5 +1,11 @@
 pytest==9.1.1
 pytest-asyncio==1.4.1
+# PR CI runs the full offline suite in parallel (.github/scripts/offline_suite.py):
+# xdist workers, a per-test timeout so a hang fails one test instead of the job,
+# and pytest-socket so in-process code can only reach loopback.
+pytest-xdist==3.8.0
+pytest-timeout==2.4.0
+pytest-socket==0.8.1
 ruff==0.17.2
 # Zenas seal tests import AES-GCM. The running box installs this from
 # agents/zenas/Dockerfile. Tank's image does not.
@@ -32,3 +38,6 @@ pgserver==0.1.4
 
 # Radix passive-scan DNS proof tests; same pin as the Radix image.
 dnspython==2.9.0
+
+# Trigger's style checks (tests/skala_intake, tests/trigger_*); same pin as agents/trigger/requirements.txt.
+proselint==0.16.0
