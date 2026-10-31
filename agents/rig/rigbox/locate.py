@@ -33,7 +33,9 @@ def gtin(value: Any) -> str:
 
 def needs_supply(product: dict) -> bool:
     stock = (product.get("attributes") or {}).get("stock") or {}
-    return product.get("active") is False or stock.get("status") == "out_of_stock"
+    if product.get("active") is False:
+        return product.get("supply_eligible") is True
+    return stock.get("status") == "out_of_stock"
 
 
 class SupplyStore:
