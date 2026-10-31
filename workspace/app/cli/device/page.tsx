@@ -3,6 +3,7 @@ import { activeTenant } from "@/lib/tenant";
 import { triggerIdentity } from "@/lib/trigger";
 import { deviceApproval, deviceCode, deviceRegion } from "@/lib/device-login";
 import { decideDevice } from "./actions";
+import { when } from "../sign-ins/list";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Approve CLI sign-in", referrer: "no-referrer" };
@@ -24,7 +25,8 @@ export default async function DeviceApprovalPage({ searchParams }: { searchParam
   const params = await searchParams;
   const result = one(params.result);
   if (result && RESULTS[result]) {
-    return <main className="device-approval"><h1>Tervory CLI sign-in</h1><p role="status">{RESULTS[result]}</p></main>;
+    return <main className="device-approval"><h1>Tervory CLI sign-in</h1><p role="status">{RESULTS[result]}</p>
+      <p>See or revoke your sign-ins under <a href="/cli/sign-ins">CLI sign-ins</a>.</p></main>;
   }
   const code = deviceCode(one(params.code));
   const region = deviceRegion(one(params.region) ?? "us-east");
@@ -38,11 +40,14 @@ export default async function DeviceApprovalPage({ searchParams }: { searchParam
   return (
     <main className="device-approval">
       <h1>Approve CLI sign-in?</h1>
-      <p>Only approve if you just ran <code>tervory login</code> and your terminal shows this code.</p>
+      <p>Only approve if you just ran <code>tervory login</code> yourself and your terminal shows this code.</p>
+      <p role="note"><strong>Did someone send you this link or code?</strong> Deny it. Approving gives whoever started this
+        sign-in your access to this organization until it is revoked.</p>
       <dl>
         <dt>Code</dt><dd><strong data-testid="device-code">{lookup.device.user_code}</strong></dd>
+        <dt>Code created</dt><dd data-testid="device-created">{lookup.device.created_at ? when(lookup.device.created_at) : "Unknown"}</dd>
         <dt>Organization</dt><dd data-testid="device-org">{tenant.orgName}</dd>
-        <dt>Device</dt><dd data-testid="device-name">{lookup.device.device_name}</dd>
+        <dt>Device (the name the device reported)</dt><dd data-testid="device-name">{lookup.device.device_name}</dd>
         <dt>Region</dt><dd>{REGION_LABEL[lookup.device.region]}</dd>
       </dl>
       <form action={decideDevice}>
@@ -51,7 +56,8 @@ export default async function DeviceApprovalPage({ searchParams }: { searchParam
         <button type="submit" name="action" value="approve">Approve</button>{" "}
         <button type="submit" name="action" value="deny">Deny</button>
       </form>
-      <p>The CLI gets a credential for this organization only. It expires and refreshes automatically; <code>tervory logout</code> revokes it.</p>
+      <p>The CLI gets a credential for this organization only. It expires and refreshes automatically; <code>tervory logout</code> revokes it,
+        and you can revoke any sign-in under <a href="/cli/sign-ins">CLI sign-ins</a>.</p>
     </main>
   );
 }

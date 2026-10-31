@@ -1,5 +1,6 @@
 """CLI device sign-in: real local Postgres, real routes, synthetic identities only."""
 import uuid
+from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -51,6 +52,11 @@ async def test_device_code_approval_poll_issue_and_single_use(device):
     # The approval page reads the pending code with the Workspace session only.
     shown = await client.get(f"/v1/command/device/approval/{grant['user_code']}", headers=WORKSPACE)
     assert shown.json()['device_name'] == 'zenas-laptop' and shown.json()['region'] == 'us-east'
+    # Review of #506, should-fix 6: the page shows when the code was created (a code the user did
+    # not just create is the phishing tell), and the name is only what the device reported.
+    created = datetime.fromisoformat(shown.json()['created_at'])
+    assert abs((datetime.now(timezone.utc) - created).total_seconds()) < 60
+    assert created < datetime.fromisoformat(shown.json()['expires_at'])
     assert (await approve(client, grant['user_code'])).json()['status'] == 'approved'
     issued = await client.post('/v1/command/device/token', json=poll)
     assert issued.status_code == 200, issued.text

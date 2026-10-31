@@ -11,7 +11,8 @@ import { boundedFetch } from "@/lib/tank";
 export const USER_CODE = /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/;
 
 export type DeviceIdentity = { tenantId: string; userId: string; tenantAdmin?: boolean };
-export type PendingDevice = { user_code: string; device_name: string; region: Region; status: string; expires_at?: string };
+export type PendingDevice = { user_code: string; device_name: string; region: Region; status: string; created_at?: string;
+                              expires_at?: string };
 export type DeviceResult = { ok: true; device: PendingDevice } | { ok: false; status: number; message: string };
 
 export function deviceRegion(value: unknown): Region | null {
@@ -90,5 +91,6 @@ export async function deviceApproval(identity: DeviceIdentity, region: Region, c
     return { ok: false, status: 502, message: "The sign-in service returned an unexpected answer." };
   }
   return { ok: true, device: { user_code: code, device_name: device.device_name, region: deviceRegion(device.region) ?? region,
-    status: device.status, expires_at: typeof device.expires_at === "string" ? device.expires_at : undefined } };
+    status: device.status, created_at: typeof device.created_at === "string" ? device.created_at : undefined,
+    expires_at: typeof device.expires_at === "string" ? device.expires_at : undefined } };
 }

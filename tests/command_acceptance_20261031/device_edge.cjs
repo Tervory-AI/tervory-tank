@@ -72,6 +72,7 @@ const transport = async (url, init) => {
       const shown = await approval.deviceApproval(identity, region, code);
       assert(shown.ok, JSON.stringify(shown));
       assert.equal(shown.device.device_name, `acceptance-${region}`);
+      assert.ok(Date.parse(shown.device.created_at) <= Date.now() + 5000, 'the page can show when the code was created');
       assert.equal(shown.device.region, region);
       const decided = await approval.deviceApproval(identity, region, code, 'approve');
       assert(decided.ok && decided.device.status === 'approved');

@@ -28,22 +28,35 @@
    - Tank answers `/v1/command/models` with 404 and a non-Auto pin with 403 ("Only Auto is available on this account", no model named) for everyone else. The app.tervory.com CLI corridor does not forward `models` at all. Receipts, steps, messages and streams carry model names, requested models and price-book rows to the founder only (customer views are allowlists).
 5. **Region:** the token's box decides where it talks: app.tervory.com or za.tervory.com. It never mixes the two.
 
-## Decision: ZA device codes are not bound to a tenant (review item 5, 31 Oct)
-Any signed-in organization can approve a ZA code into its own tenant on the ZA Tank.
-This is deliberate, not an omission:
-- The CLI has no identity when it asks for a code (RFC 8628 §3.1); the tenant comes from
-  the person who approves. There is nothing trustworthy to bind the code to at creation.
-- Binding a code to a tenant chosen at creation does not stop the phishing case the review
-  raised: an attacker who sends someone an approval link would simply create the code for
-  that person's tenant. The token is minted for the approving user in the approving
-  tenant, so an approval never grants access to anyone else's tenant.
-- Binding codes to a home region would close Chat to customers outside their home region,
-  and Tervory Chat must be open to all regions.
-Mitigations in place: codes are single use and expire in 10 minutes; the approval page
-(`workspace/app/cli/device/page.tsx`) shows the code, organization, device name and
-region and says to approve only a code the user's own terminal shows; ZA approvals use
-only the dedicated `TANK_DEVICE_APPROVAL_KEY` (two routes, user and tenant still
-required); `tervory logout` revokes the credential, and the Workspace **CLI sign-ins** page (`/cli/sign-ins`) lists every active sign-in with Revoke.
+## Decision: device codes are bound to a region, not to a tenant (review item 5 of #496; rewritten for #506 should-fix 6)
+Two different things, kept apart:
+- **Region (bound).** A code is created on one region's Tank (us-east or ZA) and can only be
+  approved, polled and redeemed on that Tank; the credential it yields works only there.
+  The Workspace records a ZA approval on the ZA Tank (`TANK_URL_ZA`) with the dedicated
+  `TANK_DEVICE_APPROVAL_KEY_ZA`, never the ZA homes key.
+- **Tenant (not bound at creation).** The CLI has no identity when it asks for a code
+  (RFC 8628 §3.1), so there is nothing trustworthy to bind a tenant to. The tenant and user
+  come from the person who approves: the credential is minted for the approving user in the
+  approving user's active organization, never for anyone else, and never as a founder through
+  the ZA key (Tank refuses founders there with 403).
+
+**What phishing gets an attacker, and why revoke matters.** An attacker can start
+`tervory login` on their own machine and send the code or approval link to a victim. If the
+victim approves, the attacker's machine holds a credential with **the victim's access** in the
+victim's organization and region (the CLI corridor only: chat, threads, receipts, build and
+confirm cards; a CLI token reaches no other route). Binding the code to a tenant would not
+stop this: the attacker would just create it for the victim's tenant. So the defences are:
+- the approval page (`workspace/app/cli/device/page.tsx`) shows the code, **when the code was
+  created**, the organization, the region and **"Device (the name the device reported)"**:
+  the hostname is whatever the requesting machine claims, so it is labelled as unverified;
+  it tells the user to deny any code they did not just create themselves;
+- codes are single use and expire after 10 minutes, with a cap on pending codes per box (`MAX_PENDING`);
+- the access token lasts 1 hour and the refresh token 30 days, rotating on every use;
+- **revoke**: the Workspace page **CLI sign-ins** (`/cli/sign-ins`) lists every active sign-in
+  (device name, region, signed in, last used) with Revoke, which ends the access and refresh
+  tokens at once; `tervory logout` revokes from the CLI side. Revocation is what ends a
+  phished sign-in, so it is one click from the approval page and the sidebar.
+
 Revisit if Tank gains per-tenant region residency rules (then refuse approval on a box
 outside the tenant's allowed regions) or if a code ever needs to carry a tenant hint.
 

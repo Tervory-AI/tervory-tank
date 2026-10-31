@@ -117,5 +117,32 @@ const within = (promise, ms, label) => Promise.race([promise,
   const empty = renderToStaticMarkup(React.createElement(SignInList, { regions: [us, { region: 'za', ok: false, message: 'Down.' }], action, notice: 'Revoked.' }));
   assert.match(empty, /No active CLI sign-ins/); assert.match(empty, /South Africa \(ZA\): Down\./); assert.match(empty, /role="status">Revoked\./);
   assert.equal(when(null), 'Never'); assert.equal(when('nope'), 'Unknown');
+  // 6. The real pages, with Clerk-bound modules mocked: the sign-ins page lists both regions, and the
+  //    device approval page (review should-fix 6) labels the reported name, shows when the code was
+  //    created, warns about forwarded codes, and links to CLI sign-ins.
+  const pageMocks = {
+    react: React, 'react/jsx-runtime': jsx,
+    'next/navigation': { redirect: to => { throw new Error(`redirect ${to}`); } },
+    '@/lib/tenant': { activeTenant: async () => ({}) },
+    '@/lib/trigger': { triggerIdentity: async () => ({ ...identity, orgName: 'Acme Ltd' }) },
+    './actions': { revokeCliSignIn: async () => {}, decideDevice: async () => {} },
+    '../../access/access.css': {},
+  };
+  const pages = workspace({ env, fetch: (...args) => recordingFetch(...args), mocks: pageMocks });
+  answer = url => url.endsWith('/v1/personal-tokens')
+    ? new Response(JSON.stringify([row(url.startsWith(ZA) ? MINE : OLD, url.startsWith(ZA) ? { region: 'za', device_name: 'za-laptop' } : {})]), { status: 200 })
+    : new Response(JSON.stringify({ user_code: 'BCDF-GHJK', device_name: '<b>attacker-box</b>', region: 'us-east', status: 'pending',
+        created_at: '2026-10-31T20:59:00+00:00', expires_at: '2026-10-31T21:09:00+00:00' }), { status: 200 });
+  const signInsPage = pages('app/cli/sign-ins/page.tsx').default;
+  const listed = renderToStaticMarkup(await signInsPage({ searchParams: Promise.resolve({ result: 'revoked' }) }));
+  assert.match(listed, /za-laptop/); assert.match(listed, /zenas-mbp/); assert.match(listed, /Revoked\. That sign-in stopped working/);
+  const devicePage = pages('app/cli/device/page.tsx').default;
+  const device = renderToStaticMarkup(await devicePage({ searchParams: Promise.resolve({ code: 'BCDF-GHJK', region: 'us-east' }) }));
+  assert.match(device, /<dt>Device \(the name the device reported\)<\/dt><dd data-testid="device-name">&lt;b&gt;attacker-box&lt;\/b&gt;<\/dd>/,
+               'the reported name is labelled as such and rendered as text');
+  assert.match(device, /<dt>Code created<\/dt><dd data-testid="device-created">Oct 31, 2026, 20:59 UTC<\/dd>/);
+  assert.match(device, /Did someone send you this link or code\?<\/strong> Deny it\. Approving gives whoever started this/);
+  assert.match(device, /href="\/cli\/sign-ins"/);
+  assert.match(device, /Acme Ltd/);
   console.log('cli_sign_ins: ok');
 })().catch(error => { console.error(error); process.exit(1); });

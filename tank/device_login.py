@@ -263,7 +263,7 @@ async def pending(conn: Any, code: str, box: str) -> Any:
     if not USER_CODE.fullmatch(code):
         raise HTTPException(404, "Sign-in code not found")
     row = await conn.fetchrow(
-        "SELECT device_hash,user_code,region,device_name,status,expires_at FROM tank.device_authorizations "
+        "SELECT device_hash,user_code,region,device_name,status,created_at,expires_at FROM tank.device_authorizations "
         "WHERE user_code=$1 AND region=$2 FOR UPDATE", code, box)
     if row is None or row["status"] != "pending" or row["expires_at"] <= now():
         raise HTTPException(404, "Sign-in code not found or expired")
@@ -277,7 +277,8 @@ async def approval(code: str, actor: command.Actor = Depends(pat.device_approval
         async with command.db().acquire() as conn:
             row = await pending(conn, code, box)
     return JSONResponse({"user_code": row["user_code"], "device_name": row["device_name"], "region": row["region"],
-                         "expires_at": row["expires_at"].isoformat(), "status": row["status"]}, headers=NO_STORE)
+                         "created_at": row["created_at"].isoformat(), "expires_at": row["expires_at"].isoformat(),
+                         "status": row["status"]}, headers=NO_STORE)
 
 
 @router.post("/approval/{code}")
