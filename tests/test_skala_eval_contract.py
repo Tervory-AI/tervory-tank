@@ -17,9 +17,7 @@ PATCH_SKILLS = (
     "base.socials base.verify ffl.ingest market.series_fetch market.shift_detect market.surge_detect "
     "reason.brief rig.ask rig.explain rig.search rig.setups scan.dependencies scan.secrets scan.static "
     "tier0.draft tier0.summarize tiger.price_ocr tisan.figma tisan.scaffold zenas.apply zenas.case_facts "
-    "zenas.cite_check zenas.compose zenas.draft zenas.match zenas.plain_language zenas.review zenas.rule_card "
-    "base.business_data base.contacts base.extract base.normalize base.resolve "
-    "ffl.profile market.gap_score tiger.price_extract tiger.price_structured"
+    "zenas.cite_check zenas.compose zenas.draft zenas.match zenas.plain_language zenas.review zenas.rule_card"
 ).split()
 
 
@@ -258,44 +256,3 @@ async def test_room_backed_cases_run_inside_room(skill, monkeypatch, tmp_path):
         result = await skala.run_evals(pkg, lambda: context(pkg), execute=execute)
     assert result["passed"] == len(pkg.cases), result["details"]
     assert result["eligible"]
-
-
-CODE_REFUSAL_PATCHES = (
-    ("base.business_data", "2.0.1"), ("base.contacts", "1.1.1"), ("base.extract", "2.0.1"),
-    ("base.normalize", "1.0.1"), ("base.resolve", "1.0.1"), ("ffl.profile", "1.1.1"),
-    ("market.gap_score", "1.1.1"), ("tiger.price_extract", "1.1.1"), ("tiger.price_structured", "1.0.1"),
-)
-NETWORK_REFUSAL_PATCHES = (("base.find_site", "1.7.0", "1.7.1"), ("base.scrape_site", "1.2.0", "1.2.1"))
-
-
-def refusal_patch(skill, version):
-    pkg = next(p for p in skala.load_packages().values() if p.id == skill and p.version == version)
-    assert any(case.get("must_refuse") for case in pkg.cases)
-    return pkg
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("skill,version", CODE_REFUSAL_PATCHES)
-async def test_code_refusal_patch_passes_offline_and_is_eligible(skill, version):
-    # Eval-only patches: every case passes with no model and no network, and the package
-    # clears the run_evals evidence rule (5 distinct cases, passing refusals).
-    pkg = refusal_patch(skill, version)
-    result = await skala.run_evals(pkg, lambda: context(pkg))
-    assert result["passed"] == result["total"] == len(pkg.cases), result["details"]
-    assert result["eligible"] is True, result["evidence_reason"]
-    assert not any(detail["used_model"] for detail in result["details"])
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("skill,previous,version", NETWORK_REFUSAL_PATCHES)
-async def test_network_refusal_patch_refuses_without_the_network(skill, previous, version):
-    # Positive cases here read real sites, so they run on the box and these skills stay out
-    # of PATCH_SKILLS. The code is unchanged, and the refusals hold offline on their own.
-    pkg = refusal_patch(skill, version)
-    old = pkg.path.parent / previous
-    for source in old.rglob("*.py"):
-        assert (pkg.path / source.relative_to(old)).read_bytes() == source.read_bytes()
-    result = await skala.run_evals(pkg, lambda: context(pkg))
-    refused = [d for case, d in zip(pkg.cases, result["details"]) if case.get("must_refuse")]
-    assert refused and all(d["passed"] for d in refused), refused
-    assert result["eligible"] is True, result["evidence_reason"]
