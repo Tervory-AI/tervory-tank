@@ -232,9 +232,8 @@ services:
     build:
       context: ./tank
       args:
-        # A local build can pass GIT_SHA. On Coolify, Tank reads SOURCE_COMMIT at run time
-        # (tank_sha in tank/main.py). Do not use SOURCE_COMMIT as a compose variable: Coolify
-        # then creates an empty app variable of that name, which hides the commit it injects.
+        # Coolify sets SOURCE_COMMIT at image build. GIT_SHA overrides it for a local build.
+        SOURCE_COMMIT: ${SOURCE_COMMIT:-}
         GIT_SHA: ${GIT_SHA:-}
     restart: unless-stopped
     environment:

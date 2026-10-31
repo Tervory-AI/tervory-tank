@@ -800,19 +800,8 @@ async def _shutdown() -> None:
 
 
 def tank_sha() -> str:
-    """The git commit this container runs.
-
-    TANK_GIT_SHA is baked in when the build gets GIT_SHA or SOURCE_COMMIT. Coolify
-    passes SOURCE_COMMIT to the build only when "include source commit in build" is
-    on (it is off for Tank). At run time it writes SOURCE_COMMIT into the .env that
-    every Compose service gets, unless the app has its own SOURCE_COMMIT variable.
-    Anything that is not a hex commit (empty, "unknown") reads as unknown.
-    """
-    for key in ("TANK_GIT_SHA", "SOURCE_COMMIT"):
-        value = os.environ.get(key, "").strip().lower()
-        if re.fullmatch(r"[0-9a-f]{7,40}", value):
-            return value
-    return "unknown"
+    """Git SHA baked into the image. Empty until a build sets TANK_GIT_SHA."""
+    return os.environ.get("TANK_GIT_SHA", "").strip() or "unknown"
 
 
 @app.get("/health")

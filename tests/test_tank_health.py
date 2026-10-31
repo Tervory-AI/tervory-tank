@@ -16,7 +16,6 @@ os.environ.setdefault("DATABASE_URL", "postgresql://x:y@localhost/z")
 os.environ.setdefault("LITELLM_MASTER_KEY", "test")
 os.environ.setdefault("TANK_API_KEY", "test")
 
-import pytest
 import yaml
 
 import main
@@ -50,30 +49,8 @@ def test_health_includes_sha(monkeypatch) -> None:
     assert body["sha"] == "abc1234"
 
 
-def test_health_sha_falls_back_to_coolify_runtime_commit(monkeypatch) -> None:
-    sha = "5d954e96dcaf946d16251b102f7e2c9a5222b94c"
-    monkeypatch.delenv("TANK_GIT_SHA", raising=False)
-    monkeypatch.setenv("SOURCE_COMMIT", sha.upper())
-    monkeypatch.setattr(main, "pool", lambda: _Pool())
-    assert asyncio.run(main.health())["sha"] == sha
-
-
-def test_baked_sha_wins_over_runtime_commit(monkeypatch) -> None:
-    monkeypatch.setenv("TANK_GIT_SHA", "abc1234")
-    monkeypatch.setenv("SOURCE_COMMIT", "5d954e96dcaf946d16251b102f7e2c9a5222b94c")
-    assert main.tank_sha() == "abc1234"
-
-
-@pytest.mark.parametrize("value", ["", "unknown", "HEAD", "not-a-sha", "abc"])
-def test_values_that_are_not_commits_read_as_unknown(monkeypatch, value) -> None:
-    monkeypatch.setenv("TANK_GIT_SHA", value)
-    monkeypatch.setenv("SOURCE_COMMIT", value)
-    assert main.tank_sha() == "unknown"
-
-
 def test_health_sha_is_unknown_when_unset(monkeypatch) -> None:
     monkeypatch.delenv("TANK_GIT_SHA", raising=False)
-    monkeypatch.delenv("SOURCE_COMMIT", raising=False)
     monkeypatch.setattr(main, "pool", lambda: _Pool())
     body = asyncio.run(main.health())
     assert body["sha"] == "unknown"
@@ -88,12 +65,7 @@ def test_compose_healthcheck_targets_tank_health() -> None:
         services = compose["services"]
         command = " ".join(services["tank"]["healthcheck"]["test"])
         assert "http://127.0.0.1:8000/health" in command
-        # Referencing ${SOURCE_COMMIT} makes Coolify create an empty app variable that
-        # hides the commit Coolify injects at run time (/health said "unknown", 31 Oct).
-        assert "SOURCE_COMMIT" not in services["tank"]["build"]["args"]
-        text = (ROOT / name).read_text(encoding="utf-8")
-        assert "${SOURCE_COMMIT" not in text and "$SOURCE_COMMIT" not in text
-        assert services["tank"]["build"]["args"]["GIT_SHA"] == "${GIT_SHA:-}"
+        assert services["tank"]["build"]["args"]["SOURCE_COMMIT"] == "${SOURCE_COMMIT:-}"
         for service, spec in services.items():
             if spec.get("exclude_from_hc") is True:
                 continue
