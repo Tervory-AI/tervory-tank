@@ -16,7 +16,9 @@ import pytest
 import uvicorn
 from fastapi import FastAPI
 
-ROOT = Path(os.environ.get('CRM_ASSEMBLED_ROOT', Path(__file__).resolve().parents[2]))
+if not os.environ.get('CRM_ASSEMBLED_ROOT'):
+    pytest.skip('Explicit frozen backend/Workspace assembly required; see EVIDENCE.md', allow_module_level=True)
+ROOT = Path(os.environ['CRM_ASSEMBLED_ROOT'])
 sys.path.insert(0, str(ROOT / 'tank'))
 import command
 import trigger_crm as crm
