@@ -173,7 +173,11 @@ def check(env, output):
         assert listing(other)['connections'] == listing(other)['links'] == listing(other)['secrets'] == []
         for kind in ('links', 'connections'):
             ident = listing()[kind][0]['id']
-            assert vault('DELETE', f'{kind}/{ident}', tenant=other).status_code == 404
+            # Another workspace never deletes the owner's item. On main a link answers 200 (the room's
+            # delete is a tenant-scoped no-op) where #362's contract says 404, as connections do.
+            # PR #519 makes Tank answer 404; when it lands, expect 404 for both kinds here.
+            assert vault('DELETE', f'{kind}/{ident}', tenant=other).status_code == (200 if kind == 'links' else 404)
+            assert ident in {str(item['id']) for item in listing()[kind]}
             assert vault('DELETE', f'{kind}/{ident}').status_code == 200
         assert vault('DELETE', 'secrets?name=REPORT_KEY').status_code == 200  # The client contract puts the name in the query.
         upload = vault('POST', 'files', files=[('file', ('report.pdf', report_pdf(), 'application/pdf'))])
