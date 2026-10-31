@@ -57,7 +57,7 @@ const within = (promise, ms, label) => Promise.race([
 
   // 1. Error answers to the page's lookup render promptly with the right message.
   for (const [status, text] of [[404, 'expired, was already used, or does not exist'], [401, 'Your Workspace session is fine'],
-                                [500, 'could not be completed'], [403, 'cannot approve a sign-in for this region']]) {
+                                [500, 'could not be completed'], [403, 'Founder accounts cannot sign the CLI in to this region; there is no other place to approve it']]) {
     answers.set(`GET /v1/command/device/approval/${CODE}`, { status, body: '{"detail":"x"}' });
     const shown = await within(deviceApproval(identity, 'us-east', CODE), 2000, `lookup ${status}`);
     assert.equal(shown.ok, false); assert.equal(shown.status, status); assert(shown.message.includes(text), shown.message);

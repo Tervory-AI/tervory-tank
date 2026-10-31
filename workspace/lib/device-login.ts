@@ -33,7 +33,8 @@ const MESSAGES: Record<number, string> = {
   // Workspace's service link to the region's Tank is refused, so "sign in again" would mislead.
   401: "Sign-in approval for this region is not available right now. Your Workspace session is fine; contact Tervory support.",
   // The ZA Tank refuses founder accounts on the Boston-held approval key (review of #506, should-fix 1).
-  403: "This account cannot approve a sign-in for this region here. Nothing was approved.",
+  // There is no other place to approve it (za.tervory.com has no Workspace), so say so.
+  403: "Founder accounts cannot sign the CLI in to this region; there is no other place to approve it. Nothing was approved. Use tervory login --region us-east instead.",
   404: "This code has expired, was already used, or does not exist. Run tervory login again.",
 };
 
