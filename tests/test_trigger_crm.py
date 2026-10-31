@@ -219,7 +219,8 @@ def test_pinned_schema_property_names_are_not_stripped_as_annotations():
     upstream=yaml.safe_load((Path(__file__).parents[1]/'ops/trigger-crm/openapi-cd7c12a.yml').read_text())['components']['schemas']
     excluded={'custom_fields','start_project','project_billing_type','public_link_enabled','deposit_percent'}
     for resource,name in ROOTS.items():
-        expected=set(upstream[name]['properties'])-({'custom_fields'} if resource!='estimates' else excluded)
+        excluded_for_resource = excluded if resource == 'estimates' else {'custom_fields', 'public_link_enabled'} if resource == 'invoices' else {'custom_fields'}
+        expected=set(upstream[name]['properties'])-excluded_for_resource
         assert set(SCHEMAS[name]['properties']) == expected
     crm.validate_data('leads',{'title':'Synthetic','description':'Offline','assigned_to':[],'contacts':[],'teams':[]})
     crm.validate_data('contacts',{'first_name':'Synthetic','last_name':'Offline','title':'Offline role','description':'Offline'})
@@ -297,3 +298,63 @@ def test_crm_middleware_attests_only_resolved_pat_org():
     req.headers={}
     req._pat=None
     assert 'X-Tervory-CRM-Organization' not in handler(req)
+
+
+@pytest.mark.asyncio
+async def test_invoice_read_uses_native_records_and_excludes_public_tokens(setup,monkeypatch):
+    def upstream(req):
+        invoice={'id':str(RECORD),'invoice_number':'OFFLINE-1','invoice_title':'Synthetic invoice','currency':'USD','total_amount':'123.45','amount_due':'123.45','amount_paid':'0.00','reminder_enabled':True,'reminder_frequency':'daily','public_token':'hidden','created_by':{'email':'hidden'}}
+        if req.url.path.endswith(str(RECORD)+'/'):
+            return httpx.Response(200,json={'invoice':invoice,'history':[{'private':'hidden'}]})
+        assert req.url.path == '/api/invoices/'
+        assert req.url.params['offset']=='10' and req.url.params['limit']=='10'
+        return httpx.Response(200,json={'results':[invoice],'count':1,'totals':{'private':'hidden'}})
+    fake_transport(monkeypatch,upstream)
+    listing=await request(setup,path='/v1/trigger/crm/invoices?page=2')
+    assert listing.status_code == 200 and listing.json()['resource']=='invoices'
+    assert listing.json()['items'][0]['total_amount']=='123.45'
+    assert 'hidden' not in listing.text
+    detail=await request(setup,path=f'/v1/trigger/crm/invoices/{RECORD}')
+    assert detail.status_code == 200 and detail.json()['item']['reminder_enabled'] is True
+    assert 'hidden' not in detail.text
+
+
+@pytest.mark.asyncio
+async def test_invoice_confirmed_put_preserves_reminder_settings_without_send_or_payment(setup,monkeypatch):
+    from trigger_crm_schema import SCHEMAS
+    frequency=SCHEMAS['ReminderFrequencyEnum']['enum'][0]
+    data={'account_id':str(RECORD),'contact_id':str(RECORD),'invoice_title':'Synthetic invoice','reminder_enabled':True,'reminder_frequency':frequency,'reminder_days_before':2,'reminder_days_after':1}
+    args={'resource':'invoices','record_id':str(RECORD),'data':data}
+    calls=[]
+    def upstream(req):
+        calls.append((req.method,req.url.path))
+        assert '/send/' not in req.url.path and '/payments/' not in req.url.path
+        if req.method=='GET':return httpx.Response(200,json={'results':[],'count':0})
+        assert req.method=='PUT' and json.loads(req.content)==data
+        return httpx.Response(200,json={'error':False,'invoice':{'id':str(RECORD),'invoice_title':data['invoice_title'],'reminder_enabled':True,'reminder_frequency':frequency}})
+    fake_transport(monkeypatch,upstream)
+    assert (await request(setup,'POST','/v1/trigger/crm/write',json=args)).status_code == 409
+    assert calls == []
+    monkeypatch.setitem(sys.modules,'trigger_routes',SimpleNamespace(code_receipt=AsyncMock(return_value=RECORD)))
+    token=trigger_commands.CONFIRMED.set((T,'offline-founder',RECORD,'trigger.crm.write',args))
+    try:
+        response=await request(setup,'POST','/v1/trigger/crm/write',json=args)
+        assert response.status_code == 200 and response.json()['item']['reminder_frequency']==frequency
+        assert calls == [('GET','/api/invoices/'),('PUT',f'/api/invoices/{RECORD}/')]
+    finally:trigger_commands.CONFIRMED.reset(token)
+
+
+@pytest.mark.parametrize('extra',[{'amount_paid':'1.00'},{'status':'paid'},{'public_link_enabled':True},{'payment_method':'stripe'},{'reminder_frequency':'invented'}])
+def test_invoice_record_write_never_accepts_payment_or_unapproved_sideeffects(extra):
+    data={'account_id':str(RECORD),'contact_id':str(RECORD),'invoice_title':'Synthetic',**extra}
+    with pytest.raises(ValueError):crm.validate_data('invoices',data)
+
+
+@pytest.mark.parametrize('suffix',['send','mark-paid','payments'])
+@pytest.mark.asyncio
+async def test_invoice_action_paths_are_not_proxied(setup,monkeypatch,suffix):
+    transport=AsyncMock()
+    monkeypatch.setattr(crm,'upstream',transport)
+    response=await request(setup,'POST',f'/v1/trigger/crm/invoices/{RECORD}/{suffix}')
+    assert response.status_code == 404
+    transport.assert_not_awaited()
