@@ -624,8 +624,10 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
     ghost_route = matched == "ghost" and (request.method, path) in __import__("ghost_routes").ROOM_METHODS
     vendor_write = request.method == "POST" and path == "/v1/ledger/vendor"
     batch_route = path == "/v1/route/batch" or (request.method == "GET" and path.startswith("/v1/route/batch/"))
+    # Its own queued background calls only; route_job checks the caller.
+    job_route = request.method == "GET" and path.startswith("/v1/route/jobs/") and path.count("/") == 4
     event_route = request.method == "POST" and path in {"/v1/events/publish", "/v1/events/receive", "/v1/events/settle"}
-    if path not in {"/health", "/v1/route"} and not batch_route and not skill_run and not vendor_write and not ghost_route and not event_route:
+    if path not in {"/health", "/v1/route"} and not batch_route and not job_route and not skill_run and not vendor_write and not ghost_route and not event_route:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
 
@@ -2544,9 +2546,17 @@ async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     row = await load_policy(body.task_type, body.tenant_id)
     if (body.priority or row["priority"]) == "offpeak" and row.get("moa_enabled"):
         raise HTTPException(422, "MoA policies require the foreground route")
+    background = _background_batch(body, row)
+    if background:
+        # Nobody is waiting: queue it like offpeak, so it goes through the
+        # provider batch at the batch discount when the seat has one (a seat
+        # without one runs from the queue, inside its off-peak window if any).
+        body = body.model_copy(update={"priority": "offpeak"})
     if not row.get("moa_enabled") or int(row.get("rung", 1)) in {3, 4} or graduate.is_skill(row.get("model")):
         result = await run_route(body, caller=caller)
         if isinstance(result, priority_queue.QueuedResponse):
+            if background:
+                result = await priority_queue.label_batch(__import__("sys").modules[__name__], result, body.tenant_id)
             priority_queue.kick(__import__("sys").modules[__name__], result.id, body.tenant_id)
         return result
     return await __import__("moa").routed_request(
@@ -2554,9 +2564,19 @@ async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     )
 
 
-@app.get("/v1/route/jobs/{job_id}", dependencies=[Depends(require_key)])
-async def route_job(job_id: uuid.UUID, tenant_id: uuid.UUID):
-    return await priority_queue.status(__import__("sys").modules[__name__], job_id, tenant_id)
+def _background_batch(body: RouteRequest, row: dict[str, Any]) -> bool:
+    """priority=batch with interactive=false: background work nobody waits on.
+
+    Only this explicit pair defers, so every interactive call (the default) is
+    answered at once as before; urgent/standard, or interactive=true, is the
+    opt-out for an urgent run. MoA policies keep the foreground route.
+    """
+    return (body.priority or row["priority"]) == "batch" and not body.interactive and not row.get("moa_enabled")
+
+
+@app.get("/v1/route/jobs/{job_id}")
+async def route_job(job_id: uuid.UUID, tenant_id: uuid.UUID, caller: str | None = Depends(require_key)):
+    return await priority_queue.status(__import__("sys").modules[__name__], job_id, tenant_id, caller=caller)
 
 
 # ---------- provider batches (independent of the task queue worker) ----------

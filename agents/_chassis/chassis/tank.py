@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
+import time
 from typing import Any
 
 import httpx
+
+# A provider batch may take its whole 24h window; allow an hour on top.
+_BACKGROUND_WAIT_S = 25 * 3600
+_FINISHED = {"completed", "failed", "uncertain"}
 
 
 class TankClient:
@@ -17,16 +24,64 @@ class TankClient:
     def __repr__(self) -> str:
         return f"TankClient(agent={self.agent!r})"
 
-    async def route(self, tenant_id: str, task_type: str, messages: list[dict[str, str]]) -> dict[str, Any]:
-        return await self._post(
-            "/v1/route",
-            {
-                "tenant_id": str(tenant_id),
-                "agent": self.agent,
-                "task_type": task_type,
-                "messages": messages,
-            },
-        )
+    async def route(
+        self,
+        tenant_id: str,
+        task_type: str,
+        messages: list[dict[str, str]],
+        *,
+        background: bool = False,
+    ) -> dict[str, Any]:
+        """One model call through Tank.
+
+        background=True is for work nobody is waiting on (nightly jobs, evals):
+        Tank queues it as priority=batch with interactive=false and, when the
+        seat supports it, answers through a provider batch at half price. This
+        waits for the queued job and returns the same answer shape. Leave it
+        False for anything a person is waiting on.
+        """
+        body: dict[str, Any] = {
+            "tenant_id": str(tenant_id),
+            "agent": self.agent,
+            "task_type": task_type,
+            "messages": messages,
+        }
+        if background:
+            body["priority"] = "batch"
+            body["interactive"] = False
+        data = await self._post("/v1/route", body)
+        if background and _queued(data):
+            return await self._wait_job(str(tenant_id), str(data["id"]))
+        return data
+
+    async def _wait_job(self, tenant_id: str, job_id: str) -> dict[str, Any]:
+        if not self._api_key:
+            raise RuntimeError("tank key is not set")
+        deadline = time.monotonic() + _wait_limit()
+        delay = 5.0
+        while True:
+            response = await self._http.get(
+                self._base + f"/v1/route/jobs/{job_id}",
+                params={"tenant_id": tenant_id},
+                headers={"X-Tank-Key": self._api_key},
+            )
+            if response.status_code >= 400:
+                raise RuntimeError(f"tank answered {response.status_code}")
+            job = response.json()
+            if not isinstance(job, dict):
+                raise RuntimeError("tank answer was not an object")
+            state = str(job.get("status") or "")
+            if state == "completed":
+                result = job.get("result")
+                if not isinstance(result, dict):
+                    raise RuntimeError("tank job finished without an answer")
+                return result
+            if state in _FINISHED:
+                raise RuntimeError(f"tank job {state}: {job.get('error') or 'no detail'}")
+            if time.monotonic() + delay > deadline:
+                raise RuntimeError("tank job is still queued; stopped waiting")
+            await asyncio.sleep(delay)
+            delay = min(delay * 1.5, 60.0)
 
     async def run_skill(self, tenant_id: str, skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return await self._post(
@@ -67,3 +122,16 @@ class TankClient:
         if not isinstance(data, dict):
             raise RuntimeError("tank answer was not an object")
         return data
+
+
+def _queued(data: dict[str, Any]) -> bool:
+    return data.get("status") == "queued" and "id" in data and "content" not in data
+
+
+def _wait_limit() -> float:
+    raw = os.environ.get("TANK_BACKGROUND_WAIT_S", "").strip()
+    try:
+        value = float(raw) if raw else _BACKGROUND_WAIT_S
+    except ValueError:
+        return _BACKGROUND_WAIT_S
+    return value if value > 0 else _BACKGROUND_WAIT_S
