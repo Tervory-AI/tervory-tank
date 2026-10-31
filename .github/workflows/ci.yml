@@ -217,10 +217,12 @@ jobs:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==
           CLERK_SECRET_KEY: sk_test_dummy
 
-  # Chat CLI cross-lane acceptance (#467). Runs the four tests in
+  # Chat CLI cross-lane acceptance (#467, extended on #496). Runs the six tests in
   # tests/command_acceptance_20261031/test_cross_lane.py with COMMAND_ACCEPTANCE_CLIENTS=1:
   # real Postgres + schema.sql, the full Tank app on loopback HTTP, the actual Workspace PAT
-  # adapter (workspace/lib/tank.ts) and the actual CLI (cli/src/client.mjs). No network,
+  # adapter (workspace/lib/tank.ts), the actual approval module (workspace/lib/device-login.ts)
+  # and the actual CLI (cli/src/client.mjs), including CLI device login for us-east (via the
+  # Workspace) and ZA (straight to Tank) with the approval click automated. No network,
   # no model calls, no secrets: every key and token here is a fixed dummy.
   # Any skipped or missing test fails the job, so it never passes silently.
   command-acceptance:
@@ -271,7 +273,13 @@ jobs:
           PYTHONPATH: tank:tests
           POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
         run: |
+          # Cross-lane (6, incl. CLI device login via Workspace and ZA direct to Tank),
+          # device-login + personal-token units on real Postgres, and the proof_prices
+          # fresh-deploy/paused syncs. One junit file, so the skip gate covers all of it.
           python -m pytest -q -s -rs tests/command_acceptance_20261031/test_cross_lane.py \
+            tests/test_device_login.py tests/test_personal_tokens.py \
+            tests/test_core1_proof.py::test_paused_ticks_do_not_create_runs_audits_or_reservations_and_resume \
+            tests/test_core1_proof.py::test_fresh_deploy_populates_proof_prices_idempotently_before_any_tick \
             --junitxml="$RUNNER_TEMP/command-acceptance.xml"
       - name: Fail if any acceptance test was skipped
         if: ${{ !cancelled() }}
@@ -283,8 +291,8 @@ jobs:
           suite = root if root.tag == "testsuite" else root.find("testsuite")
           counts = {k: int(suite.get(k, 0)) for k in ("tests", "skipped", "failures", "errors")}
           print(counts)
-          if counts["tests"] < 4 or counts["skipped"] or counts["failures"] or counts["errors"]:
-              sys.exit("Chat CLI acceptance must run all 4 cross-lane tests with zero skips.")
+          if counts["tests"] < 21 or counts["skipped"] or counts["failures"] or counts["errors"]:
+              sys.exit("Chat CLI acceptance must run all 21 tests (6 cross-lane, device login, proof_prices) with zero skips.")
           PY
 
   savings-page:

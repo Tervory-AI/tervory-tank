@@ -4,6 +4,9 @@ on:
     paths:
       - 'cli/**'
       - 'tank/personal_tokens.py'
+      - 'tank/device_login.py'
+      - 'workspace/lib/device-login.ts'
+      - 'workspace/app/cli/**'
       - 'workspace/lib/tank.ts'
       - 'workspace/app/v1/command/**'
       - 'workspace/middleware.ts'
