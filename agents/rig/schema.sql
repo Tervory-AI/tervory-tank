@@ -459,3 +459,7 @@ CREATE TABLE IF NOT EXISTS agent_rig.supply_sale_receipts (
 );
 -- Distinguish a feed's zero stock from a deliberately disabled catalogue item.
 ALTER TABLE agent_rig.products ADD COLUMN IF NOT EXISTS supply_eligible boolean NOT NULL DEFAULT false;
+-- Preserve the existing feed pricing scope identity instead of inventing one.
+ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT '';
+ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS site text NOT NULL DEFAULT '';
+ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS feed_id text NOT NULL DEFAULT '';
