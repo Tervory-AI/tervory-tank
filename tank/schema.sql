@@ -2264,3 +2264,22 @@ CREATE TABLE IF NOT EXISTS tank.personal_tokens (
     revoked_at timestamptz
 );
 CREATE INDEX IF NOT EXISTS personal_tokens_owner ON tank.personal_tokens(tenant_id,user_id);
+-- Follow an existing RLS rollout; do not turn it on for a legacy installation.
+DO $personal_tokens_rls$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        ALTER TABLE tank.personal_tokens ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE tank.personal_tokens FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.personal_tokens'::regclass AND polname='tenant_access') THEN
+            CREATE POLICY tenant_access ON tank.personal_tokens FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.personal_tokens'::regclass AND polname='tenant_boundary') THEN
+            CREATE POLICY tenant_boundary ON tank.personal_tokens AS RESTRICTIVE FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+    END IF;
+END
+$personal_tokens_rls$;
