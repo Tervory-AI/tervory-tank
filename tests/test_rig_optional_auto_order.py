@@ -37,7 +37,7 @@ READY = {**LOCATED, "source": {**LOCATED["source"], "vendor_name": SOURCE["vendo
 SHIP = {"address": {**ADDRESS, "country": "ZA"}}
 # A Rig supplier PO row, as rigbox.fulfilment writes it.
 PURCHASE = {"quote_id": "q1", "number": "PO-00040", "state": "draft", "source_id": "other-store",
-            "vendor_name": SOURCE["vendor_name"], "order_email": SOURCE["order_email"], "item_sku": "RSR|POF00307",
+            "vendor_name": SOURCE["vendor_name"], "order_email": SOURCE["order_email"], "item_sku": "RSR|POF90307",
             "item_url": "https://other.example/product/cam-pin/", "quantity": 1, "unit_cost": "45.00",
             "currency": "USD", "ship_to": SHIP["address"], "neutral_slip": True, "instructions": NEUTRAL_SLIP,
             "sent": None}
@@ -140,7 +140,7 @@ def test_supplier_email_carries_po_address_and_blind_instruction_but_no_shop_pri
     body = message.get_content()
     assert message["To"] == "orders@other.example" and message["Reply-To"] == "orders@customnation.example"
     assert message["Subject"] == "Purchase order PO-00040 from Custom Nation"
-    assert "Other Store Wholesale LLC" in body and "RSR|POF00307" in body and "45.00 USD" in body
+    assert "Other Store Wholesale LLC" in body and "RSR|POF90307" in body and "45.00 USD" in body
     assert "12 Long Street" in body and "Cape Town" in body and "SHIP BLIND" in body
     # The store's own shopper price, landed cost and margin never go to the supplier.
     for private in ("1125", "landed", "margin", "duty", "thandi@example.com"):
