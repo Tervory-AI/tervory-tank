@@ -16,6 +16,7 @@ import statistics
 import sys
 import threading
 import time
+from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -337,6 +338,32 @@ def _speed_ok(samples: list[float]) -> bool:
     _p50, p95, slowest = _percentiles(samples)
     over = sum(1 for sample in samples if sample >= SPEED_LIMIT_MS)
     return p95 < SPEED_LIMIT_MS and over <= SPEED_ALLOWED_OVER and slowest < SPEED_CEILING_MS
+
+
+def _retime_lone_outlier(samples: list[float], retime: Callable[[int], float]) -> dict[int, float]:
+    """Re-time a lone over-limit sample once. A runner pause won't repeat; a slow query will.
+
+    All 200 queries are distinct, so one slow sample can also be one slow query shape.
+    Two or more slow samples already fail ``_speed_ok`` and are not re-timed.
+    """
+    over = [index for index, sample in enumerate(samples) if sample >= SPEED_LIMIT_MS]
+    if len(over) != SPEED_ALLOWED_OVER:
+        return {}
+    return {index: retime(index) for index in over}
+
+
+def _timed_search(world: dict[str, Any], catalogue: str, text: str) -> float:
+    """One timed shop-page search over HTTP, in ms."""
+    client: TestClient = world["client"]
+    started = time.perf_counter()
+    response = client.get(
+        "/v1/rig/search",
+        params={"q": text, "limit": 12},
+        headers={"X-Rig-Key": world["keys"][catalogue], "Origin": world["origins"][catalogue]},
+    )
+    elapsed = (time.perf_counter() - started) * 1000
+    assert response.status_code == 200
+    return elapsed
 
 
 @pytest.fixture(scope="module")
@@ -753,34 +780,54 @@ def test_gate_4_one_retailer_never_sees_another() -> None:
 
 def test_gate_5_search_speed(world: dict[str, Any]) -> None:
     """Shop-page search stays under 300 ms. Report p50 and p95."""
-    client: TestClient = world["client"]
-    samples: list[float] = []
-    for catalogue, text, _ok in QUERIES:
-        started = time.perf_counter()
-        response = client.get(
-            "/v1/rig/search",
-            params={"q": text, "limit": 12},
-            headers={"X-Rig-Key": world["keys"][catalogue], "Origin": world["origins"][catalogue]},
-        )
-        samples.append((time.perf_counter() - started) * 1000)
-        assert response.status_code == 200
+    samples = [_timed_search(world, catalogue, text) for catalogue, text, _ok in QUERIES]
     p50, p95, slowest = _percentiles(samples)
-    over = sum(1 for sample in samples if sample >= 300)
+    over = sum(1 for sample in samples if sample >= SPEED_LIMIT_MS)
+    retimed = {
+        QUERIES[index][1]: round(ms, 3)
+        for index, ms in _retime_lone_outlier(
+            samples, lambda index: _timed_search(world, QUERIES[index][0], QUERIES[index][1])
+        ).items()
+    }
     payload = {
         "n": len(samples),
         "p50_ms": round(p50, 3),
         "p95_ms": round(p95, 3),
         "max_ms": round(slowest, 3),
         "over_300": over,
+        "retimed_ms": retimed,
         "path": "HTTP GET /v1/rig/search on the in-memory ranker (no Postgres in this run)",
     }
     _record("5_speed", payload)
     assert _speed_ok(samples), payload
+    assert all(ms < SPEED_LIMIT_MS for ms in retimed.values()), payload
+
+
+def _verdict(samples: list[float], retime: Callable[[int], float]) -> bool:
+    """The two gate 5 asserts as one bool, for the self-check."""
+    retimed = _retime_lone_outlier(samples, retime)
+    return _speed_ok(samples) and all(ms < SPEED_LIMIT_MS for ms in retimed.values())
 
 
 def test_gate_5_verdict_tolerates_one_pause_but_not_a_regression() -> None:
-    """One stalled sample under the ceiling passes. A hang, two slow samples or a slow p95 still fail."""
+    """One stalled sample that is fast on re-time passes. A slow query, a hang, two slow samples or a slow p95 fail."""
     fast = [10.0] * 200
+    retimed: list[int] = []
+
+    def pause_gone(index: int) -> float:
+        """A runner pause does not repeat: the re-time is fast."""
+        retimed.append(index)
+        return 10.0
+
+    one_pause_at_100 = fast[:100] + [859.59] + fast[101:]
+    assert _verdict(one_pause_at_100, pause_gone) and retimed == [100]
+    retimed.clear()
+    assert not _verdict(fast[:198] + [568.4, 859.59], pause_gone) and retimed == []
+    for constant_ms in (1500.0, 500.0):
+        slow_query = fast[:100] + [constant_ms] + fast[101:]
+        assert _speed_ok(slow_query)
+        assert not _verdict(slow_query, lambda _index, ms=constant_ms: ms)
+    assert _verdict(fast, pause_gone) and retimed == []
     assert _speed_ok(fast)
     one_pause = fast[:199] + [859.59]
     assert _speed_ok(one_pause)
