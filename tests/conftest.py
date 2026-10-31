@@ -5,7 +5,9 @@ tank.main (which imports skala) and lets the offline skill tests import skala.
 """
 import sys
 import os
+import ipaddress
 import shutil
+import socket
 from pathlib import Path
 
 import pytest
@@ -27,6 +29,35 @@ def pytest_configure(config: pytest.Config) -> None:
     if not config.getini("asyncio_default_fixture_loop_scope"):
         config._inicache["asyncio_default_fixture_loop_scope"] = "function"
     _worker_databases()
+    _block_dns(config)
+
+
+def _block_dns(config: pytest.Config) -> None:
+    """pytest-socket blocks connect() but not name lookups, so the offline suite
+    still sent real DNS queries (Autumbra Watch's lifespan loops alone resolve
+    tervory.com, api.github.com, tank, ...). Those lookups run in worker threads
+    that a cancelled task cannot stop, and on the CI runner a slow resolver held
+    TestClient teardown until the 300 s timeout killed the xdist worker. Under
+    --disable-socket, refuse every lookup that is not a loopback name or a literal
+    address, the same way a missing host fails."""
+    if not config.getoption("--disable-socket", default=False):
+        return
+    allowed = {"localhost", "testserver"}
+    for hosts in config.getoption("--allow-hosts", default=None) or []:
+        allowed.update(h.strip().lower() for h in str(hosts).split(",") if h.strip())
+    real = socket.getaddrinfo
+
+    def offline_getaddrinfo(host, *args, **kwargs):
+        name = host.decode() if isinstance(host, bytes) else host
+        if name is None or str(name).lower().rstrip(".") in allowed:
+            return real(host, *args, **kwargs)
+        try:
+            ipaddress.ip_address(str(name).split("%", 1)[0])
+        except ValueError:
+            raise socket.gaierror(socket.EAI_NONAME, f"offline suite: no DNS for {name}") from None
+        return real(host, *args, **kwargs)
+
+    socket.getaddrinfo = offline_getaddrinfo
 
 
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:
