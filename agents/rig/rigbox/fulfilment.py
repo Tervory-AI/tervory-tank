@@ -18,19 +18,27 @@ Sandbox only, like the rest of Locate ordering (RIG_LOCATE_ORDER_MODE=sandbox).
 Nothing here opens a socket or sends mail.
 
 The interface (Fulfilment) is what QuoteService calls. RigOrders is the only
-implementation in this stack. #463's Odoo adapter (OdooHandoff /
-RetailerHandoff.place_located_order) is left in place but is no longer called.
+implementation. There is no Odoo or other ERP order path.
 """
 
 from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import re
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
-from rigbox.quotes.senders import DeliveryError, sandbox_orders
+from rigbox.quotes.senders import DeliveryError
+
+ORDER_MODE_ENV = "RIG_LOCATE_ORDER_MODE"
+
+
+def sandbox_orders(env: dict[str, str] | None = None) -> None:
+    """Locate order placement is sandbox-only. Anything else refuses."""
+    if (os.environ if env is None else env).get(ORDER_MODE_ENV, "") != "sandbox":
+        raise DeliveryError("order_mode")
 
 # Printed on the supplier PO when the order ships blind and the approved source
 # is flagged neutral_slip_required.

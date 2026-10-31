@@ -24,7 +24,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from rigbox.quotes.senders import DeliveryError, sandbox_orders
+from rigbox.fulfilment import sandbox_orders
+from rigbox.quotes.senders import DeliveryError
 
 OUTBOX_ENV = "RIG_LOCATE_OUTBOX_DIR"
 EMAIL = re.compile(r"[^\s@<>,;\"]+@[^\s@<>,;\"]+\.[^\s@<>,;\"]+")

@@ -152,7 +152,7 @@ class QuoteService(Service):
 
         from rigbox import payments
         from rigbox.locate_live import Holds, LocateRefused, hold_secret, read_token
-        from rigbox.quotes.senders import sandbox_orders
+        from rigbox.fulfilment import sandbox_orders
 
         row = await self._locate_row(tenant_id, str(body.get("product_id") or ""))
         try:

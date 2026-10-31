@@ -1,6 +1,6 @@
 """Locate switch, live confirm, holds, test-only payments and sandbox-only orders.
 
-Offline. Checkers, payment providers and Odoo are test doubles here only; the
+Offline. Checkers, payment providers and the order step are test doubles here only; the
 product path wires the real checkers and no payment provider.
 """
 import json
@@ -18,7 +18,8 @@ from rigbox import payments
 from rigbox.locate import SupplyStore, catalogue, enabled
 from rigbox.locate_live import (Checkers, Holds, LiveResult, LocateRefused, SourceApiChecker, TigerChecker,
                                 confirm, hold_token, read_token)
-from rigbox.quotes.senders import DeliveryError, OdooHandoff, odoo_url, sandbox_orders
+from rigbox.fulfilment import sandbox_orders
+from rigbox.quotes.senders import DeliveryError
 from rigbox.quotes.privacy import shopper_body
 from rigbox.quotes.service import QuoteService
 from rigbox.quotes.store import MemoryQuotes
@@ -269,31 +270,11 @@ async def test_payments_refuse_without_test_mode_live_keys_and_unproven_test_cha
 
 # 5. Orders: sandbox only.
 
-def test_order_placement_refuses_outside_sandbox_and_http_only_for_loopback_sandbox(monkeypatch):
+def test_order_placement_refuses_outside_sandbox():
     for value in ("", "live", "production", "SANDBOX"):
         with pytest.raises(DeliveryError, match="order_mode"):
             sandbox_orders({"RIG_LOCATE_ORDER_MODE": value})
     sandbox_orders({"RIG_LOCATE_ORDER_MODE": "sandbox"})
-    monkeypatch.delenv("RIG_LOCATE_ORDER_MODE", raising=False)
-    with pytest.raises(DeliveryError):
-        odoo_url("http://127.0.0.1:18069")
-    monkeypatch.setenv("RIG_LOCATE_ORDER_MODE", "sandbox")
-    assert odoo_url("http://127.0.0.1:18069") == "http://127.0.0.1:18069"
-    for bad in ("http://odoo.example.com", "http://user:pw@127.0.0.1:8069", "ftp://127.0.0.1"):
-        with pytest.raises(DeliveryError):
-            odoo_url(bad)
-    assert odoo_url("https://odoo.example.com/") == "https://odoo.example.com"
-
-
-@pytest.mark.asyncio
-async def test_odoo_place_located_order_refuses_without_sandbox_mode_before_any_call(monkeypatch):
-    calls = []
-    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: calls.append(r) or httpx.Response(500))) as http:
-        sender = OdooHandoff(http, url="https://odoo.example.com", database="db", user="u", api_key="k")
-        monkeypatch.delenv("RIG_LOCATE_ORDER_MODE", raising=False)
-        with pytest.raises(DeliveryError, match="order_mode"):
-            await sender.place_located_order(tenant_id=TENANT, quote_id="q", located={})
-    assert calls == []
 
 
 class SandboxOrders:
@@ -308,7 +289,7 @@ class SandboxOrders:
     async def place_located_order(self, *, tenant_id, quote_id, located, price=None, ship=None):
         sandbox_orders()
         if self.fail:
-            raise DeliveryError("odoo_rejected")
+            raise DeliveryError("order_rejected")
         self.placed.append((tenant_id, quote_id, located["offer"]["sku"], located["live"]["price"]))
         return {"order": {"number": "S00001", "state": "placed"},
                 "purchase_order": {"number": "P00001", "state": "draft"}}

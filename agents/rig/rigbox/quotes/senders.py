@@ -1,20 +1,13 @@
 """Tenant-selected senders. Configuration and credentials never reach shoppers.
 
 Odoo uses its documented external JSON-RPC API (common.authenticate and
-object.execute_kw). Quote handoff creates draft sale.order records only: never
-confirm, invoice, take payment or send mail. client_order_ref reconciles a
-timed-out call.
-
-The one exception is Locate order placement (place_located_order). It runs
-only with RIG_LOCATE_ORDER_MODE=sandbox, against a sandbox Odoo, after a test
-mode payment: it confirms that sale.order and creates one draft supplier
-purchase.order. It never invoices, sends mail or confirms the purchase.
+object.execute_kw). Only draft sale.order records are created: never confirm,
+invoice, take payment or send mail. client_order_ref reconciles a timed-out call.
 """
 
 from __future__ import annotations
 
 import json
-from html import escape
 import os
 import re
 from typing import Any
@@ -36,29 +29,6 @@ def https_url(value: str) -> str:
     return value.rstrip("/")
 
 
-ORDER_MODE_ENV = "RIG_LOCATE_ORDER_MODE"
-LOOPBACK = {"127.0.0.1", "localhost", "::1"}
-
-
-def sandbox_orders(env: dict[str, str] | None = None) -> None:
-    """Locate order placement is sandbox-only. Anything else refuses."""
-    if (os.environ if env is None else env).get(ORDER_MODE_ENV, "") != "sandbox":
-        raise DeliveryError("order_mode")
-
-
-def odoo_url(value: str) -> str:
-    """https, or plain http to a loopback sandbox only in sandbox order mode."""
-    try:
-        parsed = urlsplit(value)
-    except ValueError:
-        raise DeliveryError("configuration") from None
-    if (parsed.scheme == "http" and parsed.hostname in LOOPBACK
-            and os.environ.get(ORDER_MODE_ENV, "") == "sandbox"
-            and not (parsed.username or parsed.password or parsed.query or parsed.fragment)):
-        return value.rstrip("/")
-    return https_url(value)
-
-
 def flow_for(tenant_id: str) -> dict[str, Any]:
     try:
         flows = json.loads(os.environ.get("RIG_QUOTE_FLOWS") or "{}")
@@ -75,7 +45,7 @@ class OdooHandoff:
         if not all((url, database, user, api_key)):
             raise DeliveryError("not_configured")
         self.http = http
-        self.url = odoo_url(url) + "/jsonrpc"
+        self.url = https_url(url) + "/jsonrpc"
         self.database, self.user, self.api_key = database, user, api_key
 
     async def _rpc(self, service: str, method: str, args: list[Any]) -> Any:
@@ -94,7 +64,9 @@ class OdooHandoff:
         except Exception:
             raise DeliveryError("odoo_unavailable") from None
 
-    async def _session(self) -> Any:
+    async def send(self, *, tenant_id: str, email: str | None, webhook: str | None,
+                   quote: dict[str, Any]) -> None:
+        del email, webhook
         version = await self._rpc("common", "version", [])
         info = version.get("server_version_info") if isinstance(version, dict) else None
         if not isinstance(info, list) or not info or info[0] not in (16, 17, 18):
@@ -107,88 +79,10 @@ class OdooHandoff:
             return await self._rpc("object", "execute_kw", [
                 self.database, uid, self.api_key, model, method, args, kwargs,
             ])
-        return execute
-
-    async def place_located_order(self, *, tenant_id: str, quote_id: str, located: dict[str, Any],
-                                  env: dict[str, str] | None = None) -> dict[str, Any]:
-        """Sandbox only: confirm the quote's sale.order, then draft one supplier PO.
-
-        Idempotent by client_order_ref (sale) and origin (purchase).
-        located holds the hold's private snapshot: source, offer and live cost.
-        """
-        sandbox_orders(env)
-        execute = await self._session()
-        reference = f"rig:{tenant_id}:{quote_id}"
-        orders = await execute("sale.order", "search_read", [[["client_order_ref", "=", reference]]],
-                               fields=["id", "state", "order_line"], limit=2)
-        if len(orders) != 1:
-            raise DeliveryError("odoo_order_missing")
-        order = orders[0]
-        if order["state"] in ("draft", "sent"):
-            await execute("sale.order", "action_confirm", [[order["id"]]])
-        elif order["state"] != "sale":
-            raise DeliveryError("odoo_order_state")
-        source, offer, live = located["source"], located["offer"], located["live"]
-        purchases = await execute("purchase.order", "search", [[["origin", "=", reference]]], limit=2)
-        if len(purchases) > 1:
-            raise DeliveryError("odoo_purchase_mapping")
-        if purchases:
-            purchase_id = purchases[0]
-        else:
-            vendor_ref = f"rig-supply:{tenant_id}:{source['id']}"
-            vendors = await execute("res.partner", "search", [[["ref", "=", vendor_ref]]], limit=2,
-                                    context={"active_test": False})
-            if len(vendors) > 1:
-                raise DeliveryError("odoo_partner_mapping")
-            vendor_id = vendors[0] if vendors else await execute("res.partner", "create", [{
-                "name": str(source.get("site") or source["id"]), "ref": vendor_ref, "is_company": True,
-                "supplier_rank": 1, "comment": "Rig Locate approved source"}])
-            currencies = await execute("res.currency", "search", [[["name", "=", live["currency"]]]],
-                                       limit=1, context={"active_test": False})
-            if not currencies:
-                raise DeliveryError("odoo_currency")
-            products = await execute("product.product", "search", [[["default_code", "=", located["product_sku"]]]],
-                                     limit=2)
-            if len(products) != 1:
-                raise DeliveryError("odoo_product_mapping")
-            purchase_id = await execute("purchase.order", "create", [{
-                "partner_id": vendor_id, "origin": reference, "currency_id": currencies[0],
-                "partner_ref": str(offer.get("sku") or ""),
-                "order_line": [[0, 0, {"product_id": products[0], "product_qty": 1,
-                    "name": f"Rig Locate {located['product_sku']} from {source['id']} ({offer.get('url') or ''})",
-                    "price_unit": float(live["price"]), "taxes_id": [[6, 0, []]]}]]}])
-        if not isinstance(purchase_id, int) or isinstance(purchase_id, bool) or purchase_id <= 0:
-            raise DeliveryError("odoo_rejected")
-        sale = await execute("sale.order", "read", [[order["id"]]], fields=["name", "state"])
-        purchase = await execute("purchase.order", "read", [[purchase_id]], fields=["name", "state"])
-        return {"sale_order": {"id": order["id"], "name": sale[0]["name"], "state": sale[0]["state"]},
-                "purchase_order": {"id": purchase_id, "name": purchase[0]["name"], "state": purchase[0]["state"]}}
-
-    async def send(self, *, tenant_id: str, email: str | None, webhook: str | None,
-                   quote: dict[str, Any]) -> None:
-        del email, webhook
-        execute = await self._session()
 
         reference = f"rig:{tenant_id}:{quote['id']}"
         existing = await execute("sale.order", "search", [[['client_order_ref', '=', reference]]], limit=1)
-        async def supplier_note(order_id: int) -> None:
-            located = quote["payload"].get("locate") or []
-            if not located:
-                return
-            # sale.order.note and line_note are customer-visible. Use an internal
-            # chatter note, never a sale line, supplier order or confirmation.
-            marker = "rig-supply:" + reference
-            messages = await execute("mail.message", "search", [[
-                ["model", "=", "sale.order"], ["res_id", "=", order_id],
-                ["body", "ilike", marker]]], limit=1)
-            if messages:
-                return
-            body = "<pre>" + escape(marker + "\n" + json.dumps(located, sort_keys=True)) + "</pre>"
-            await execute("sale.order", "message_post", [[order_id]], body=body,
-                          message_type="comment", subtype_xmlid="mail.mt_note")
-
         if existing:
-            await supplier_note(existing[0])
             return
         contact, payload = quote["contact"], quote["payload"]
         # Link requests may have no contact in older clients. Do not fabricate a
@@ -241,7 +135,6 @@ class OdooHandoff:
         order_id = await execute("sale.order", "create", [values])
         if not isinstance(order_id, int) or isinstance(order_id, bool) or order_id <= 0:
             raise DeliveryError("odoo_rejected")
-        await supplier_note(order_id)
 
 
 class EmailHandoff:
@@ -308,23 +201,6 @@ class RetailerHandoff:
                 raise
             except Exception:
                 raise DeliveryError("retailer_unavailable") from None
-
-    def _odoo(self, tenant_id: str) -> OdooHandoff:
-        flow = flow_for(tenant_id)
-        if flow.get("sender") not in {"odoo", "odoo+webhook"}:
-            raise DeliveryError("not_configured")
-        prefix = flow.get("env_prefix", "RIG_ODOO")
-        if not isinstance(prefix, str) or not re.fullmatch(r"RIG_ODOO(?:_[A-Z0-9]+)*", prefix):
-            raise DeliveryError("configuration")
-        return OdooHandoff(self.http, **{
-            name: os.environ.get(prefix + suffix, "") for name, suffix in
-            (("url", "_URL"), ("database", "_DATABASE"), ("user", "_USER"), ("api_key", "_API_KEY"))
-        })
-
-    async def place_located_order(self, *, tenant_id: str, quote_id: str, located: dict[str, Any]) -> dict[str, Any]:
-        sandbox_orders()
-        return await self._odoo(tenant_id).place_located_order(tenant_id=tenant_id, quote_id=quote_id,
-                                                               located=located)
 
     def portal(self, tenant_id: str) -> str | None:
         url = flow_for(tenant_id).get("portal_url")

@@ -1276,11 +1276,17 @@ async def run_route(
     transcript_messages = await _preflight_mask(req, policy, messages, task_id)
     identity = _cache_identity(req, policy, messages, max_tokens, route_seat)
     cache_policy, cache_probe = dict(policy), None
-    if priority != "urgent" and not _offpeak_dispatch and not holds_identifier and code_problem is None:
-        hit = await _cache_read(req, policy, identity)
+    # An exact repeat is served free at every priority: the tenant-sealed exact cache is a
+    # single indexed read, so urgent loses no time and pays no model call (#360). Urgent
+    # reads the exact match only (no semantic form) and still skips the encoder and every
+    # shadow (#424).
+    if not _offpeak_dispatch and not holds_identifier and code_problem is None:
+        exact_policy = policy if priority != "urgent" else {**policy, "semantic_cache": False}
+        hit = await _cache_read(req, exact_policy, identity)
         if hit is not None:
             await _check_route_task(req, task_id)
             return await _record_local(req, policy, model=model, rung=4, content=hit, task_id=task_id, route_seat=route_seat)
+    if priority != "urgent" and not _offpeak_dispatch and not holds_identifier and code_problem is None:
         cache_probe = await semantic_cache.lookup(__import__("sys").modules[__name__], req, cache_policy, identity, messages)
         if await semantic_cache.may_serve(__import__("sys").modules[__name__], req, cache_policy, cache_probe):
             await _check_route_task(req, task_id)
@@ -3640,23 +3646,33 @@ def _request_home(raw: bytes, query_home: str | None) -> str | None:
 
 ZENAS_TIMEOUT = 60.0
 ZENAS_LOAD_TIMEOUT_DEFAULT = 900.0
+ZENAS_SELFTEST_TIMEOUT_DEFAULT = 1800.0
 
 
-def zenas_timeout(path: str) -> float:
+def _seconds(name: str, default: float) -> float:
+    raw = os.environ.get(name, "").strip()
+    try:
+        value = float(raw) if raw else default
+    except ValueError:
+        value = default
+    return value if value > 0 else default
+
+
+def zenas_timeout(path: str, method: str = "GET") -> float:
     """Seconds Tank waits for the Zenas room.
 
     A source load (pool/sources/{id}/load) can run for minutes (the
     Constitutional Court waits between calls), so it gets ZENAS_LOAD_TIMEOUT
-    (default 900). Every other call keeps 60 seconds.
+    (default 900). Running the self-test (POST selftest) asks fifty questions
+    through the answer path, one model call or more each, so it gets
+    ZENAS_SELFTEST_TIMEOUT (default 1800); reading its scores (GET) does not.
+    Every other call keeps 60 seconds.
     """
     parts = path.strip().strip("/").split("/")
     if len(parts) == 4 and parts[0] == "pool" and parts[1] == "sources" and parts[3] == "load":
-        raw = os.environ.get("ZENAS_LOAD_TIMEOUT", "").strip()
-        try:
-            value = float(raw) if raw else ZENAS_LOAD_TIMEOUT_DEFAULT
-        except ValueError:
-            value = ZENAS_LOAD_TIMEOUT_DEFAULT
-        return value if value > 0 else ZENAS_LOAD_TIMEOUT_DEFAULT
+        return _seconds("ZENAS_LOAD_TIMEOUT", ZENAS_LOAD_TIMEOUT_DEFAULT)
+    if parts == ["selftest"] and method.upper() == "POST":
+        return _seconds("ZENAS_SELFTEST_TIMEOUT", ZENAS_SELFTEST_TIMEOUT_DEFAULT)
     return ZENAS_TIMEOUT
 
 
@@ -3688,7 +3704,7 @@ async def zenas_proxy(path: str, request: Request) -> Response:
             content=raw if raw else None,
             params=list(request.query_params.multi_items()),
             headers=headers,
-            timeout=zenas_timeout(path),
+            timeout=zenas_timeout(path, request.method),
         )
     except httpx.HTTPError:
         raise HTTPException(status_code=503, detail="Zenas room is unreachable") from None
