@@ -240,6 +240,8 @@ class MemoryStore(RetailerMemoryStore):
         self.searches: list[dict[str, Any]] = []
         self.training_events: list[dict[str, Any]] = []
         self.deleted_products: set[tuple[str, str]] = set()
+        # Rig-owned Locate orders: (tenant, quote) -> {"order", "purchase_order"}.
+        self.locate_orders: dict[tuple[str, str], dict[str, Any]] = {}
 
     async def deleted_skus(self, tenant_id: str) -> set[str]:
         return {sku for tenant, sku in self.deleted_products if tenant == str(tenant_id)}
@@ -404,6 +406,19 @@ class MemoryStore(RetailerMemoryStore):
         for row in self.quotes:
             if row["tenant_id"] == str(tenant_id) and row["id"] == quote_id:
                 row["payload"] = {**row["payload"], "locate_state": state}
+
+    async def place_locate_order(self, tenant_id: str, order: dict[str, Any],
+                                 purchase: dict[str, Any]) -> dict[str, Any]:
+        """Rig-owned Locate order and draft supplier PO. First write wins per (tenant, quote)."""
+        key = (str(tenant_id), order["quote_id"])
+        created = key not in self.locate_orders
+        if created:
+            self.locate_orders[key] = {"order": copy.deepcopy(order), "purchase_order": copy.deepcopy(purchase)}
+        return {**copy.deepcopy(self.locate_orders[key]), "created": created}
+
+    async def locate_order(self, tenant_id: str, quote_id: str) -> dict[str, Any] | None:
+        row = self.locate_orders.get((str(tenant_id), quote_id))
+        return copy.deepcopy(row) if row else None
 
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         for row in self.quotes:
@@ -979,6 +994,65 @@ class PgStore(RetailerPgStore):
                 " WHERE tenant_id = $1 AND id = $2",
                 _uuid(tenant_id), quote_id, _json(state),
             )
+
+    _ORDER_COLUMNS = "quote_id, number, state, product_id, price, currency, ship_to"
+    _PO_COLUMNS = ("quote_id, number, state, source_id, vendor_name, order_email, item_sku, item_url, quantity,"
+                   " unit_cost, currency, ship_to, neutral_slip, instructions")
+
+    async def place_locate_order(self, tenant_id: str, order: dict[str, Any],
+                                 purchase: dict[str, Any]) -> dict[str, Any]:
+        """Rig-owned Locate order and draft supplier PO, in one transaction.
+
+        ON CONFLICT DO NOTHING on (tenant, quote): a retry or a concurrent
+        second Accept reads back the first order instead of making another.
+        """
+        tenant = _uuid(tenant_id)
+        async with self.pool.acquire() as conn, conn.transaction():
+            created = await conn.fetchval(
+                "INSERT INTO agent_rig.locate_orders (tenant_id, quote_id, number, state, product_id, price, currency, ship_to)"
+                " VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) ON CONFLICT (tenant_id, quote_id) DO NOTHING RETURNING true",
+                tenant, order["quote_id"], order["number"], order["state"], order["product_id"],
+                Decimal(order["price"]), order["currency"],
+                None if order["ship_to"] is None else _json(order["ship_to"]))
+            if created:
+                await conn.execute(
+                    "INSERT INTO agent_rig.supplier_purchase_orders (tenant_id, quote_id, number, state, source_id,"
+                    " vendor_name, order_email, item_sku, item_url, quantity, unit_cost, currency, ship_to,"
+                    " neutral_slip, instructions)"
+                    " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15)",
+                    tenant, purchase["quote_id"], purchase["number"], purchase["state"], purchase["source_id"],
+                    purchase["vendor_name"], purchase["order_email"], purchase["item_sku"], purchase["item_url"],
+                    int(purchase["quantity"]), Decimal(purchase["unit_cost"]), purchase["currency"],
+                    None if purchase["ship_to"] is None else _json(purchase["ship_to"]),
+                    bool(purchase["neutral_slip"]), purchase["instructions"])
+            saved = await self._locate_order(conn, tenant, order["quote_id"])
+        assert saved is not None
+        return {**saved, "created": bool(created)}
+
+    async def locate_order(self, tenant_id: str, quote_id: str) -> dict[str, Any] | None:
+        async with self.pool.acquire() as conn:
+            return await self._locate_order(conn, _uuid(tenant_id), quote_id)
+
+    async def _locate_order(self, conn: Any, tenant: UUID, quote_id: str) -> dict[str, Any] | None:
+        order = await conn.fetchrow(
+            f"SELECT {self._ORDER_COLUMNS} FROM agent_rig.locate_orders WHERE tenant_id = $1 AND quote_id = $2",
+            tenant, quote_id)
+        purchase = await conn.fetchrow(
+            f"SELECT {self._PO_COLUMNS} FROM agent_rig.supplier_purchase_orders WHERE tenant_id = $1 AND quote_id = $2",
+            tenant, quote_id)
+        if order is None or purchase is None:
+            return None
+
+        def plain(row: Any) -> dict[str, Any]:
+            out = dict(row)
+            for key, value in out.items():
+                if isinstance(value, Decimal):
+                    out[key] = str(value.quantize(Decimal("0.01")))
+            if isinstance(out.get("ship_to"), str):
+                out["ship_to"] = json.loads(out["ship_to"])
+            return out
+
+        return {"order": plain(order), "purchase_order": plain(purchase)}
 
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         async with self.pool.acquire() as conn:

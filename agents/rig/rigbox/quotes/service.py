@@ -44,6 +44,9 @@ class QuoteService(Service):
     def __init__(self, store: Any, models: Any, handoff: Any, quotes: Any) -> None:
         super().__init__(store, models, handoff)
         self.quote_store = quotes
+        # Locate orders and supplier POs live in Rig's own database (no Odoo).
+        from rigbox.fulfilment import RigOrders
+        self.fulfilment: Any = RigOrders(store)
 
     async def validate_setup(self, tenant: str, setup: dict[str, Any]) -> None:
         parts = setup.get("parts")
@@ -140,8 +143,9 @@ class QuoteService(Service):
     async def locate_accept(self, tenant_id: str, body: dict[str, Any]) -> dict[str, Any]:
         """Shopper Accept on a held Locate price. Backend only, sandbox only.
 
-        hold -> stored quote (draft sale.order) -> test-mode capture ->
-        sandbox order (confirmed sale.order and draft supplier purchase.order).
+        hold -> stored quote (sent to the retailer) -> test-mode capture ->
+        Rig-owned order and draft supplier PO (rigbox.fulfilment, Rig's own
+        Postgres; Tervory no longer uses Odoo). A failed order is refunded.
         Each step is recorded in the quote's payload as locate_state.
         """
         from datetime import datetime, timezone
@@ -157,7 +161,7 @@ class QuoteService(Service):
             provider = payments.guard(self.payments)
         except (DeliveryError, LocateRefused, payments.PaymentRefused):
             raise RigError("unavailable", "Ordering from other stores is not available.", 503) from None
-        if not hasattr(self.handoff, "place_located_order"):
+        if self.fulfilment is None:
             raise RigError("unavailable", "Ordering from other stores is not available.", 503)
         self._quote_fields(body.get("contact"))
         token = str(body.get("payment_token") or "")
@@ -216,15 +220,15 @@ class QuoteService(Service):
         await record(state="paid", paid_at=datetime.now(timezone.utc).isoformat(),
                      payment={"reference": charge.reference, "provider": provider.name, "test": charge.test})
         try:
-            order = await self.handoff.place_located_order(tenant_id=tenant_id, quote_id=quote_id,
-                                                           located=held["private"],
-                                                           **({"ship": {"address": ship_to}} if ship_to else {}))
+            order = await self.fulfilment.place_located_order(
+                tenant_id=tenant_id, quote_id=quote_id, located=held["private"], price=price,
+                ship={"address": ship_to} if ship_to else None)
         except DeliveryError as exc:
             refunded = await payments.refund(provider, charge, "order_failed")
             await record(state="order_failed_refunded", error=str(exc), refund={"status": refunded.status})
             raise RigError("order", "The order could not be placed. The payment was refunded.", 502) from None
         await record(state="ordered", ordered_at=datetime.now(timezone.utc).isoformat(),
-                     sale_order=order["sale_order"]["name"], purchase_order=order["purchase_order"]["name"])
+                     order=order["order"]["number"], purchase_order=order["purchase_order"]["number"])
         body = {"request_id": quote_id, "state": "ordered", "price": price,
                 "payment": {"reference": charge.reference, "test": True}}
         if ship_to is not None:
