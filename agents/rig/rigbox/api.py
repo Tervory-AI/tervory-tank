@@ -196,6 +196,18 @@ async def search(
     return _ok(request, body)
 
 
+class LocateIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    product_id: str = Field(min_length=1, max_length=200)
+
+
+@router.post("/locate")
+async def locate(request: Request, payload: LocateIn) -> Response:
+    await _auth(request)
+    body = await _service(request).locate(_tenant(request), payload.product_id)
+    return _ok(request, body)
+
+
 @router.post("/search-events")
 async def settled_search(request: Request, payload: SearchEventIn) -> Response:
     await _auth(request)
@@ -332,3 +344,61 @@ async def _count(request: Request, event: str) -> None:
     counts = getattr(_service(request), "quote_store", None)
     if counts is not None:
         await counts.count(_tenant(request), event)
+
+
+class SupplySourceIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    id: str = Field(min_length=1, max_length=200)
+    approved: bool
+    priority: int = 0
+    max_offer_age_seconds: int = Field(gt=0)
+    provider: str = Field(default="", max_length=200)
+    site: str = Field(default="", max_length=200)
+    feed_id: str = Field(default="", max_length=200)
+
+
+class SupplyImportIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    source_id: str = Field(min_length=1, max_length=200)
+    record: dict[str, Any]
+    contents: str = Field(max_length=8_000_000)
+    seen_at: str
+
+
+class SupplyMapIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    product_sku: str = Field(min_length=1, max_length=200)
+    source_id: str = Field(min_length=1, max_length=200)
+    offer_sku: str = Field(min_length=1, max_length=200)
+
+
+async def _supply_operation(request: Request, operation: str, payload: BaseModel) -> Response:
+    from rigbox.locate import SupplyStore
+    await _admin(request)
+    store = SupplyStore(_service(request).store)
+    data = payload.model_dump()
+    try:
+        if operation == "source":
+            await store.source(_tenant(request), data)
+        elif operation == "import":
+            return _ok(request, await store.import_catalogue(_tenant(request), **data))
+        else:
+            await store.map_sku(_tenant(request), **data)
+    except (ValueError, TypeError, KeyError, OverflowError):
+        raise RigError("invalid", "The request is not valid.", 422) from None
+    return _ok(request, {"ok": True})
+
+
+@router.post("/admin/supply/sources")
+async def supply_source(request: Request, payload: SupplySourceIn) -> Response:
+    return await _supply_operation(request, "source", payload)
+
+
+@router.post("/admin/supply/import")
+async def supply_import(request: Request, payload: SupplyImportIn) -> Response:
+    return await _supply_operation(request, "import", payload)
+
+
+@router.post("/admin/supply/sku-map")
+async def supply_map(request: Request, payload: SupplyMapIn) -> Response:
+    return await _supply_operation(request, "map", payload)

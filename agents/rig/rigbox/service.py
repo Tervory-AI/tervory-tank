@@ -53,6 +53,7 @@ from rigbox.recall import part_query
 from rigbox.recall import parts_of
 from rigbox.recall import signature
 from rigbox.recall import whole_hit
+from rigbox.locate import catalogue as supply_catalogue, locate as supply_locate, needs_supply
 from rigbox.store import _fit_key
 from rigbox.quotes.limits import FailedKeyLimits, MemoryRateLimits, PgRateLimits
 
@@ -315,7 +316,7 @@ class Service:
 
             cap = _limit(limit)
             version = await self._catalogue_version(tenant_id)
-            products = await self.store.products(tenant_id)
+            products = await supply_catalogue(self.store, tenant_id)
             fits = await self._approved_fits(tenant_id)
             body = shop_search(
                 {
@@ -356,7 +357,7 @@ class Service:
             body = await self._body_from_saved(tenant_id, whole, pieces, host, cap)
             if body is not None:
                 return body
-        products = await self.store.products(tenant_id)
+        products = await supply_catalogue(self.store, tenant_id)
         reusable = False
         for piece in pieces:
             if part_hit(known, host, piece, cap) is not None:
@@ -475,7 +476,7 @@ class Service:
         if not ids:
             return []
         by_id: dict[str, dict[str, Any]] = {}
-        for row in await self.store.products(tenant_id):
+        for row in await supply_catalogue(self.store, tenant_id):
             if row.get("active", True) is False:
                 continue
             public = public_product(row)
@@ -643,7 +644,22 @@ class Service:
             payload = {"kind": "product", "product": product}
         else:
             raise RigError("invalid", "A setup or a product is required.", 422)
+        wanted = ([part["product"]["id"] for part in payload["setup"]["parts"]]
+                  if payload["kind"] == "setup" else [payload["product"]["id"]])
+        private = []
+        for row in await self.store.products(tenant_id):
+            if str(row["sku"]) in wanted and needs_supply(row):
+                result = await supply_locate(self.store, tenant_id, row)
+                private.append({"product_id": row["sku"], **result})
+        if private:
+            payload["locate"] = private
         return payload, contact
+
+    async def locate(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        row = next((p for p in await self.store.products(tenant_id) if p["sku"] == product_id), None)
+        if row is None:
+            raise RigError("not_found", "No such product.", 404)
+        return (await supply_locate(self.store, tenant_id, row))["public"]
 
     async def compare(self, tenant_id: str, product_ids: list[str]) -> dict[str, Any]:
         """Other sellers' prices for a selection the shopper already made.
@@ -724,7 +740,7 @@ class Service:
     async def suggested_fits(self, tenant_id: str) -> dict[str, Any]:
         names = {
             str(row.get("sku") or row.get("id") or ""): str(row.get("name") or "")
-            for row in await self.store.products(tenant_id)
+            for row in await supply_catalogue(self.store, tenant_id)
         }
         rows: list[dict[str, Any]] = []
         for row in await self.store.fits(tenant_id):
@@ -874,7 +890,7 @@ class Service:
         }
 
     async def _active(self, tenant_id: str) -> list[dict[str, Any]]:
-        return [row for row in await self.store.products(tenant_id) if row.get("active", True)]
+        return [row for row in await supply_catalogue(self.store, tenant_id) if row.get("active", True)]
 
     async def _approved_fits(self, tenant_id: str) -> list[dict[str, Any]]:
         kept: list[dict[str, Any]] = []
@@ -886,7 +902,7 @@ class Service:
         return kept
 
     async def _catalogue_version(self, tenant_id: str) -> str:
-        products = [_version_product(row) for row in await self.store.products(tenant_id)]
+        products = [_version_product(row) for row in await supply_catalogue(self.store, tenant_id)]
         fits = [_version_fit(row) for row in await self._approved_fits(tenant_id)]
         fits.sort(key=lambda row: (row["part_sku"], row["fits_sku"], row["fits_family"]))
         payload = {
@@ -1024,7 +1040,7 @@ class Service:
             return {"rows": 0, "rejected": []}
         if market.get("rejected"):
             return {"rows": 0, "rejected": list(market["rejected"])}
-        known = {str(row.get("sku") or "") for row in await self.store.products(tenant_id)}
+        known = {str(row.get("sku") or "") for row in await supply_catalogue(self.store, tenant_id)}
         unknown = [row for row in market.get("rows") or [] if str(row.get("sku") or "") not in known]
         if unknown:
             return {
@@ -1163,6 +1179,7 @@ def _version_product(row: dict[str, Any]) -> dict[str, Any]:
         "image": str(row.get("image_url") or row.get("image") or ""),
         "active": bool(row.get("active", True)),
         "attributes": attributes,
+        "availability": row.get("availability"),
     }
 
 

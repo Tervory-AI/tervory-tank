@@ -3,7 +3,7 @@
 import re
 from typing import Any
 
-_PRIVATE = re.compile(r"cost|duty|margin|landed|(^|_)vat($|_)|supplier_price|pricing_rule", re.I)
+_PRIVATE = re.compile(r"cost|duty|margin|landed|(^|_)vat($|_)|supplier|pricing_rule|^store$|^source_id$|ship.?from|^region$|^seen_at$", re.I)
 
 
 def shopper_body(value: Any) -> Any:

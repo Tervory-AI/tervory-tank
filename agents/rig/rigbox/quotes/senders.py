@@ -8,6 +8,7 @@ invoice, take payment or send mail. client_order_ref reconciles a timed-out call
 from __future__ import annotations
 
 import json
+from html import escape
 import os
 import re
 from typing import Any
@@ -82,7 +83,24 @@ class OdooHandoff:
 
         reference = f"rig:{tenant_id}:{quote['id']}"
         existing = await execute("sale.order", "search", [[['client_order_ref', '=', reference]]], limit=1)
+        async def supplier_note(order_id: int) -> None:
+            located = quote["payload"].get("locate") or []
+            if not located:
+                return
+            # sale.order.note and line_note are customer-visible. Use an internal
+            # chatter note, never a sale line, supplier order or confirmation.
+            marker = "rig-supply:" + reference
+            messages = await execute("mail.message", "search", [[
+                ["model", "=", "sale.order"], ["res_id", "=", order_id],
+                ["body", "ilike", marker]]], limit=1)
+            if messages:
+                return
+            body = "<pre>" + escape(marker + "\n" + json.dumps(located, sort_keys=True)) + "</pre>"
+            await execute("sale.order", "message_post", [[order_id]], body=body,
+                          message_type="comment", subtype_xmlid="mail.mt_note")
+
         if existing:
+            await supplier_note(existing[0])
             return
         contact, payload = quote["contact"], quote["payload"]
         # Link requests may have no contact in older clients. Do not fabricate a
@@ -135,6 +153,7 @@ class OdooHandoff:
         order_id = await execute("sale.order", "create", [values])
         if not isinstance(order_id, int) or isinstance(order_id, bool) or order_id <= 0:
             raise DeliveryError("odoo_rejected")
+        await supplier_note(order_id)
 
 
 class EmailHandoff:

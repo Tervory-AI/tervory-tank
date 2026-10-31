@@ -404,3 +404,62 @@ CREATE TABLE IF NOT EXISTS agent_rig.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
+
+-- Prompt2: approved store supplier network. Private inputs never selected as products.
+ALTER TABLE agent_rig.products ADD COLUMN IF NOT EXISTS mpn text;
+CREATE TABLE IF NOT EXISTS agent_rig.supply_sources (
+    tenant_id uuid NOT NULL,
+    id text NOT NULL,
+    approved boolean NOT NULL DEFAULT false,
+    priority integer NOT NULL DEFAULT 0,
+    max_offer_age_seconds integer NOT NULL CHECK (max_offer_age_seconds > 0),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE TABLE IF NOT EXISTS agent_rig.supply_offers (
+    tenant_id uuid NOT NULL,
+    source_id text NOT NULL,
+    sku text NOT NULL,
+    gtin text,
+    brand text NOT NULL,
+    mpn text,
+    quantity numeric CHECK (quantity >= 0 AND quantity < 'Infinity'::numeric),
+    status text NOT NULL CHECK (status IN ('available', 'unavailable', 'unknown')),
+    eta text,
+    ship_days integer CHECK (ship_days >= 0),
+    region text NOT NULL,
+    cost numeric NOT NULL CHECK (cost >= 0 AND cost < 'Infinity'::numeric),
+    currency text NOT NULL,
+    seen_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, source_id, sku),
+    FOREIGN KEY (tenant_id, source_id) REFERENCES agent_rig.supply_sources(tenant_id, id)
+);
+CREATE TABLE IF NOT EXISTS agent_rig.supply_sku_map (
+    tenant_id uuid NOT NULL,
+    product_sku text NOT NULL,
+    source_id text NOT NULL,
+    offer_sku text NOT NULL,
+    PRIMARY KEY (tenant_id, product_sku, source_id, offer_sku),
+    FOREIGN KEY (tenant_id, product_sku) REFERENCES agent_rig.products(tenant_id, sku),
+    FOREIGN KEY (tenant_id, source_id, offer_sku) REFERENCES agent_rig.supply_offers(tenant_id, source_id, sku)
+);
+
+-- Located counts mean persisted quote requests, never sales or estimates.
+ALTER TABLE agent_rig.widget_counts ADD COLUMN IF NOT EXISTS located_count bigint NOT NULL DEFAULT 0 CHECK (located_count >= 0);
+ALTER TABLE agent_rig.widget_counts ADD COLUMN IF NOT EXISTS kept_revenue jsonb NOT NULL DEFAULT '{}'::jsonb;
+CREATE TABLE IF NOT EXISTS agent_rig.supply_sale_receipts (
+    tenant_id uuid NOT NULL,
+    receipt_id text NOT NULL,
+    quote_id text NOT NULL,
+    product_id text NOT NULL,
+    amount numeric NOT NULL CHECK (amount > '-Infinity'::numeric AND amount < 'Infinity'::numeric),
+    currency text NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
+    source_ref text NOT NULL,
+    received_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, receipt_id)
+);
+-- Distinguish a feed's zero stock from a deliberately disabled catalogue item.
+ALTER TABLE agent_rig.products ADD COLUMN IF NOT EXISTS supply_eligible boolean NOT NULL DEFAULT false;
+-- Preserve the existing feed pricing scope identity instead of inventing one.
+ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT '';
+ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS site text NOT NULL DEFAULT '';
+ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS feed_id text NOT NULL DEFAULT '';
