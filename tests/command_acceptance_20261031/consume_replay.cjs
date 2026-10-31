@@ -37,10 +37,15 @@ function stream() {
   for await (const event of cli.events(new Response(stream()))) cliEvents.push(event);
   assert.deepEqual(cliEvents.map(event => event.data), browserEvents.map(event => event.data));
   assert.equal(cliEvents.at(-1).data.link, durable.link);
-  const legacy = {step_id:'legacy', ledger_id:'real-row', model:'pinned', tokens_in:2, tokens_out:3,
-    cost_usd:.01, baseline_cost_usd:.03, saved_usd:.02, requested_model:'pinned', auto_cost_usd:987.654,
-    auto_cost_status:'priced'};
-  assert.equal(contract.receiptFor([legacy]).totals.auto_cost_usd, null);
-  assert(!cli.receiptLines({rows:[legacy]}).join('').includes('987.654'));
-  process.stdout.write('PASS: 504 actual Tank events drained by browser and CLI; durable panel matches; pending and legacy Auto stay unproven\n');
+  // COMMAND-1 pinned-turn Auto comparison: Tank's priced value is shown as-is by
+  // both clients (never computed client-side); a pending comparison shows no number.
+  const pinned = {step_id:'pinned', ledger_id:'real-row', model:'pinned', tokens_in:2, tokens_out:3,
+    cost_usd:.01, baseline_cost_usd:.03, saved_usd:.02, requested_model:'pinned', auto_model:'luna',
+    auto_cost_usd:987.654, auto_cost_status:'priced'};
+  assert.equal(contract.receiptFor([pinned]).totals.auto_cost_usd, 987.654);
+  assert(cli.receiptLines({rows:[pinned]}).join('').includes('987.654'));
+  const pending = {...pinned, auto_cost_usd:null, auto_cost_status:'pending'};
+  assert.equal(contract.receiptFor([pending]).totals.auto_cost_usd, null);
+  assert.match(cli.receiptLines({rows:[pending]}).join(''), /Auto comparison pending/);
+  process.stdout.write('PASS: 504 actual Tank events drained by browser and CLI; durable panel matches; Auto comparison shown only when Tank priced it\n');
 })().catch(error => { console.error(error); process.exitCode = 1; });

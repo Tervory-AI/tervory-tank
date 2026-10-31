@@ -16,6 +16,31 @@ Initial evidence captured 2026-10-31 01:59 PDT / 08:59 UTC; final combined evide
 - Verified B artifacts are **375×812** and **1440×1120**, explicitly offline fixtures. Verified CLI asciinema v2 header is **120×28**, explicitly scripted OFFLINE fake-Tank output. These satisfy offline artifact coverage; they are not founder acceptance or native OS-keychain proof.
 - Still missing: actual historical Auto-comparison ledger evidence; founder browser acceptance; approved Settings Access tokens frame and exact copy on Client `5:114` / Founder `5:115`. Existing Chats frames `3:2`, `4:84`, `4:114` were rejected per B owner; current approved Chats frame/text is also missing. No UI was invented.
 
+## #496 build — device login, ZA path, header totals, proof_prices (31 Oct 2026, afternoon PT)
+
+This entry covers the commits added on top of the combined branch after `83c9f259`. PASS still means an offline or local assertion passed; none of this is founder acceptance.
+
+- **Auto comparison (main's COMMAND-1, #224) restored.** `consume_replay.cjs` now asserts that both clients show Tank's priced value unchanged, and show no number while the status is pending.
+- **CLI device login.** The cross-lane test count goes from 4 to 6:
+  - `test_cli_device_login_through_workspace_with_automated_approval`: CLI → actual Workspace public adapter → Tank.
+  - `test_za_cli_talks_straight_to_tank_with_device_login`: CLI → `za.tervory.com` = Tank, with no Workspace.
+
+  In both, the approval click is automated by calling the actual `workspace/lib/device-login.ts` with a signed-in identity. Each runs a pinned turn with Tank's Auto comparison, then forced refresh rotation (the old token is refused), then logout → revoke → "Login required". DB assertions cover:
+  - the credential row: region, user, device, hashes, expiry, last_used_at, revoked_at
+  - `device_authorizations.status='consumed'`
+  - the ledger region and cost
+  - the receipt's Auto fields
+- `tests/test_device_login.py` has 5 tests on real Postgres. They cover:
+  - single-use device codes and RFC 8628 errors, including `slow_down`
+  - refresh rotation, reuse refusal, expiry and revoke, with no existence oracle
+  - deny
+  - region mismatch
+  - approval requiring the Workspace service identity: a CLI bearer cannot approve
+  - additive, hash-only schema
+- `cli/test/client.test.mjs` has 35 tests, all passing.
+- **proof_prices on a fresh deploy.** `test_fresh_deploy_populates_proof_prices_idempotently_before_any_tick` and the updated paused-tick test. CI runs all 21 of these tests in one job with a zero-skip gate.
+- **Local end-to-end run** (`local_e2e.cjs`). This was a real uvicorn Tank per region (us-east and ZA, separate databases) on local Postgres, with RLS roles (non-bypass app role plus BYPASSRLS admin role). The LiteLLM proxy (1.x) was real, but its upstream was a **fake provider** (`mock_response`), because no box provider key was usable: the OpenAI, Gemini and xAI keys were rejected, and DeepSeek returned "insufficient balance". Costs come from LiteLLM's own pricing of the configured per-token rates. Next could not run signed in without Clerk keys, so the Workspace adapter, the approval module and the `/chats/api` route ran as their actual TypeScript modules with an injected signed-in identity. The log is in the #496 PR body.
+
 Final commands (working directory `/tmp/tervory-command-assembled-20261031`):
 
 ```sh
@@ -106,7 +131,7 @@ npm ci --ignore-scripts --no-audit --no-fund --prefix cli
 COMMAND_TEST_TOOLS=/tmp/tervory-command-workspace-20261031/workspace/node_modules COMMAND_ACCEPTANCE_CLIENTS=1 PYTHONPATH=tank:tests POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55439/postgres /tmp/base-reliability-venv/bin/python -m pytest -q -s tests/command_acceptance_20261031/test_cross_lane.py
 ```
 
-Result: **3 passed, 1 warning, 8.24s**, zero skips. Log `/tmp/command-acceptance-clients-pat.log`, including `PASS: 504 actual Tank events drained by browser and CLI; durable panel matches; pending and legacy Auto stay unproven`. Run with `COMMAND_ACCEPTANCE_CLIENTS=1` in assembled source to require both actual decoders; ordinary main-only run does not claim that coverage and skips PAT when its lane is absent.
+Result: **3 passed, 1 warning, 8.24s**, zero skips. Log `/tmp/command-acceptance-clients-pat.log`, including `PASS: 504 actual Tank events drained by browser and CLI; durable panel matches; pending and legacy Auto stay unproven` (superseded on #496: with main's Auto comparison restored, the harness now asserts `Auto comparison shown only when Tank priced it`). Run with `COMMAND_ACCEPTANCE_CLIENTS=1` in assembled source to require both actual decoders; ordinary main-only run does not claim that coverage and skips PAT when its lane is absent.
 
 ```sh
 ln -s /tmp/tervory-command-workspace-20261031/workspace/node_modules workspace/node_modules

@@ -161,3 +161,56 @@ async def test_cli_public_adapter_reaches_real_tank_with_cancel_barrier(streamin
             "SELECT state FROM tank.command_threads WHERE tenant_id=$1 AND user_id='founder'", TENANT))
         assert len(state['cards']) == 1
         assert next(iter(state['cards'].values()))['status'] == 'cancelled'
+
+
+async def device_login_edge(b, region):
+    async with b.pool.acquire() as conn:
+        # Tank prices the pinned turn's Auto comparison from the policy model's live price row.
+        await conn.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) "
+                           "VALUES('luna','openai/gpt',0.000001,0.000004) ON CONFLICT(model) DO NOTHING")
+    decoded = await asyncio.to_thread(subprocess.run,
+        ['node', str(Path(__file__).with_name('device_edge.cjs'))],
+        input=json.dumps({'origin': str(b.api.base_url).rstrip('/'), 'tenant': str(TENANT), 'region': region,
+                          'pin': 'fixture-pin'}),
+        text=True, capture_output=True, timeout=60, check=False)
+    assert decoded.returncode == 0, decoded.stderr
+    assert decoded.stdout.startswith(f'PASS: CLI device login {region}')
+    print(decoded.stdout.splitlines()[0])
+    thread = uuid.UUID(json.loads(decoded.stdout.splitlines()[1])['thread'])
+    async with b.pool.acquire() as conn:
+        token = await conn.fetchrow("SELECT * FROM tank.personal_tokens WHERE tenant_id=$1", TENANT)
+        auth = await conn.fetchrow("SELECT * FROM tank.device_authorizations")
+        owner = await conn.fetchval("SELECT user_id FROM tank.command_threads WHERE thread_id=$1", thread)
+        ledger = await conn.fetchrow("SELECT * FROM tank.ledger WHERE tenant_id=$1 ORDER BY ts DESC LIMIT 1", TENANT)
+        state = json.loads(await conn.fetchval("SELECT state FROM tank.command_threads WHERE thread_id=$1", thread))
+    # One org-scoped credential for the approving user, used, rotated, then revoked.
+    assert (token['region'], token['user_id'], token['device_name']) == (region, 'offline-client', f'acceptance-{region}')
+    assert token['last_used_at'] is not None and token['revoked_at'] is not None
+    assert token['expires_at'] is not None and token['refresh_hash'] is not None
+    assert (auth['status'], auth['token_id'], auth['tenant_id']) == ('consumed', token['token_id'], TENANT)
+    assert owner == 'offline-client'  # identity came from the credential row, not headers
+    assert ledger['region'] == region and ledger['cost_usd'] is not None
+    receipt = next(r for receipts in state['receipts'].values() for r in receipts) if isinstance(state['receipts'], dict) \
+        else state['receipts'][0]
+    assert receipt['ledger_id'] == str(ledger['id'])
+    assert (receipt['requested_model'], receipt['auto_model'], receipt['auto_cost_status']) == ('fixture-pin', 'luna', 'priced')
+    assert receipt['auto_cost_usd'] is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.environ.get('COMMAND_ACCEPTANCE_CLIENTS') != '1',
+                    reason='Requires assembled CLI/Workspace and local-only client dependencies')
+async def test_cli_device_login_through_workspace_with_automated_approval(streaming):  # noqa: F811
+    await device_login_edge(streaming, 'us-east')
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.environ.get('COMMAND_ACCEPTANCE_CLIENTS') != '1',
+                    reason='Requires assembled CLI/Workspace and local-only client dependencies')
+async def test_za_cli_talks_straight_to_tank_with_device_login(streaming, monkeypatch):  # noqa: F811
+    """B: za.tervory.com is Tank only (no Workspace). Approval still happens on the
+    one Workspace, which records it on the ZA Tank via TANK_URL_ZA/TANK_API_KEY_ZA."""
+    monkeypatch.setenv('TANK_REGION', 'za')
+    # A ZA Tank process reads TANK_REGION=za at import; mirror that for the ledger.
+    monkeypatch.setattr(streaming.tank, 'DEFAULT_REGION', 'za')
+    await device_login_edge(streaming, 'za')
