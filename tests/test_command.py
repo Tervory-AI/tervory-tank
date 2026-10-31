@@ -965,7 +965,7 @@ async def test_squad_audit_failure_rolls_back_permission(api):
 
 
 @pytest.mark.asyncio
-async def test_auto_comparison_prices_same_tokens_with_frozen_tenant_policy(api, runtime, monkeypatch):
+async def test_auto_comparison_stays_unavailable_despite_pricebook_and_policy(api, runtime, monkeypatch):
     client, pool = api
     runtime.list_models = AsyncMock(return_value=[{'name': 'fixture-pin'}])
     async with pool.acquire() as conn:
@@ -991,19 +991,15 @@ async def test_auto_comparison_prices_same_tokens_with_frozen_tenant_policy(api,
     route.assert_awaited_once()
     data = (await client.get(f'/v1/command/threads/{thread}')).json()
     receipt = data['receipts'][0]
-    assert receipt['auto_model'] == 'fixture-auto'
-    assert receipt['auto_cost_usd'] == pytest.approx(10 * 0.001 + 20 * 0.002)
-    assert receipt['auto_cost_status'] == 'priced' and receipt['auto_priced_at']
-    assert 'same tokens' in receipt['auto_cost_label'] and 'not a separate model run' in receipt['auto_cost_basis']
+    assert receipt['auto_model'] is None
+    assert receipt['auto_cost_usd'] is None
+    assert receipt['auto_cost_status'] == 'pending' and receipt['auto_priced_at'] is None
+    assert receipt['ledger_id'] == str(ledger_id)
     assert receipt['cost_usd'] == 0.02
     replay = await client.get(f'/v1/command/threads/{thread}/events')
-    assert '"auto_cost_usd": 0.05' in replay.text
-    async with pool.acquire() as conn:
-        other = await command.auto_price_snapshot(conn, OTHER)
-        assert other['model'] == 'fixture-platform'
-        await conn.execute("UPDATE tank.proof_prices SET active=false WHERE model='fixture-platform'")
-        missing = await command.auto_price_snapshot(conn, OTHER)
-        assert missing['model'] == 'fixture-platform' and missing['input_usd'] is None
+    assert '"auto_cost_usd": null' in replay.text
+    assert '"auto_cost_usd": 0.05' not in replay.text
+    assert (await client.get('/v1/command/threads')).json()[0]['spent_usd'] == 0.02
 
 
 @pytest.mark.asyncio
