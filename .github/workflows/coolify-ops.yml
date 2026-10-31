@@ -9,7 +9,8 @@
 # - env-refs only ever writes references of the form {{project.NAME}}, never a secret value.
 # - zenas-renormalise runs agents.zenas.pool.renormalise inside the deployed ZA Zenas room as a
 #   Coolify scheduled task on that app (same container as zenas-pool-nightly). Dry run unless
-#   apply=true. zenas-renormalise-report reads the last run. See docs/ops/ZENAS-ZA-RENORMALISE.md.
+#   apply=true. zenas-renormalise-report reads the last run. Both share the fixed concurrency group
+#   coolify-zenas-renormalise. See docs/ops/ZENAS-ZA-RENORMALISE.md.
 # - room-setup generates a room's secrets inside this job (masked, never printed, never seen by anyone)
 #   and writes them straight into Coolify on the main app and the room. Existing values are never replaced.
 name: coolify-ops
@@ -42,7 +43,7 @@ on:
         type: boolean
         default: false
       source:
-        description: "zenas-renormalise: comma-separated source ids (default: every PDF court source)"
+        description: "zenas-renormalise: comma-separated source ids (default: every PDF court source except special-tribunal, which waits for #502)"
         required: false
         default: ""
       limit:
@@ -61,7 +62,9 @@ permissions:
 # group and queue behind it (and it behind them). Read-only and metadata ops get their own
 # group per run, so a status read never waits on a deploy.
 concurrency:
-  group: ${{ (inputs.op == 'deploy' || inputs.op == 'room-setup') && 'coolify-deploy' || format('coolify-ops-{0}', github.run_id) }}
+  # deploy/room-setup queue with deploy-on-merge; both renormalise ops share one fixed
+  # group so two never run side by side; every other op runs on its own.
+  group: ${{ (inputs.op == 'deploy' || inputs.op == 'room-setup') && 'coolify-deploy' || (inputs.op == 'zenas-renormalise' || inputs.op == 'zenas-renormalise-report') && 'coolify-zenas-renormalise' || format('coolify-ops-{0}', github.run_id) }}
   cancel-in-progress: false
   queue: max
 

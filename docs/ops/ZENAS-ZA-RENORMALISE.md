@@ -19,7 +19,10 @@ from the row's own URL and extracts it with the fixed `pdf_text`.
 
 - Reads current ZA case rows (`effective_to IS NULL`, not superseded) from the
   court sources that store PDF text: cac, comptrib, concourt, sca, sars-taxcourt,
-  landcourt, ocj-highcourt, labour-court, labour-appeal, special-tribunal. SAFLII is HTML and is not touched.
+  landcourt, ocj-highcourt, labour-court, labour-appeal. SAFLII is HTML and is not touched.
+- **special-tribunal waits for #502.** It is not in the default set, and
+  `--apply` with `--source special-tribunal` is refused ("wait for #502"). A dry
+  run may still name it.
 - Works in `document_id` order, `--batch-size` rows at a time, with a pause
   between fetches (`--pause`, default `ZA_CASE_MIN_INTERVAL` or 1 s).
 - Keeps citation, title, court and date from the stored row, so the document id
@@ -73,35 +76,62 @@ Inputs (all optional except `region`):
 | ------ | ------- |
 | region | must be `za`; the job exists only on the ZA box |
 | apply  | `true` adds `--apply`. Anything else (default `false`) runs `--dry-run` |
-| source | comma-separated source ids, e.g. `cac,comptrib`. Default: every PDF court source listed above (this includes `special-tribunal`; name the sources to leave it out) |
-| limit  | stop after this many rows |
+| source | comma-separated source ids, e.g. `cac,comptrib`. Default: every PDF court source listed above, **without `special-tribunal`**. `apply=true` with `special-tribunal` is refused: wait for #502 |
+| limit  | stop after this many rows (ASCII digits only) |
 | after  | resume after this `document_id` |
 
 What the op does (`.github/scripts/zenas_renormalise_op.py`):
 
 1. Verifies the application is `agent-zenas-za` and reads the container name
    from the existing `zenas-pool-nightly` task.
-2. Creates (once) or updates the scheduled task `zenas-za-renormalise` with the
+2. Refuses to start, before writing anything, while:
+   - an earlier renormalise execution is still running;
+   - a run it queued has not started yet. Coolify creates an execution row only
+     when a worker starts the job, so the op marks the task while a run is
+     queued (timeout 36000) and clears the mark (timeout 35999) once it has
+     seen the run start. A task updated after its latest execution and still
+     marked is refused;
+   - `zenas-pool-nightly` is running (both write `zenas_pool.documents`). Of
+     the nightly task the op may only read its executions.
+   Both renormalise ops also share the fixed concurrency group
+   `coolify-zenas-renormalise` (`cancel-in-progress: false`), so two dispatches
+   never run side by side.
+3. Creates (once) or updates the scheduled task `zenas-za-renormalise` with the
    exact command, e.g.
    `python -m agents.zenas.pool.renormalise --batch-size 25 --source cac --limit 20 --dry-run`.
-   Every value is validated and shell-quoted. The task is kept **disabled** with
-   a yearly frequency, so it never runs on a schedule; timeout 36000 s
-   (Coolify's maximum, resume with `after` if a run is cut).
-3. Refuses to start while an earlier renormalise execution is still running.
+   Without `source` it names every default source explicitly (not
+   `special-tribunal`), so an older room image cannot widen the set. Every value
+   is validated and shell-quoted. The task is kept **disabled** with a yearly
+   frequency, so it never runs on a schedule. A run is cut at Coolify's maximum
+   of 10 hours; resume with `after`.
 4. Queues one execution (Coolify "Execute now") and waits up to about 7
    minutes. If it finished, it prints a fixed projection of the job's report
    (`dry_run`, `counts`, up to 50 changed `document_id`s with suspect-space
    counts, `last_document_id`). If it is still running, use
    `op=zenas-renormalise-report` later. The raw execution output is never printed.
+5. **The stored command is a dry run whenever this op is not queuing a run.** As
+   soon as the queued run has started, and on any failure after the command
+   was stored (update, create or execute refused, an error while waiting, a run
+   that has not started at the wait limit), the op puts the same flags back with
+   `--dry-run`. So the **Execute** button in the Coolify dashboard only ever runs
+   a dry run; `apply` goes only through this op.
+6. If Coolify hides the execution output (a token without `read:sensitive`
+   gets no `message`), both ops print
+   `output hidden: COOLIFY_TOKEN lacks read:sensitive` and exit 1 instead of
+   reporting success without a report.
 
-It is not a deploy: it does not join the `coolify-deploy` concurrency group, so
+It is not a deploy: it has its own concurrency group, not `coolify-deploy`, so
 it neither waits for nor blocks a deploy. A room redeploy while it runs stops
-the execution; resume with `after`.
+the execution; resume with `after`. `zenas-pool-nightly` runs daily at 02:00 (Coolify server time); a long
+`apply` run should be started so that it ends before then. The op refuses to
+start while the nightly runs, but it cannot stop the nightly from starting
+during a long run.
 
 If the installed Coolify does not support executing a scheduled task through
-its API, the op fails with "queuing the renormalise run failed (HTTP n)". The
-task is still created with the right command; a founder can press
-**Execute now** on it in the Coolify dashboard.
+its API, the op fails with "queuing the renormalise run failed (HTTP n)" and
+leaves the task holding the dry-run command. A founder may press **Execute** on
+it in the Coolify dashboard: that is always a dry run. Writing (`apply`) needs
+the op.
 
 ## By hand on the ZA box (pool-loader image), only if the op cannot be used
 

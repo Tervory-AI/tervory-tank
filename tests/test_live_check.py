@@ -189,13 +189,17 @@ def workflow(name):
 
 
 def group_for(expression, op):
-    """Evaluate coolify-ops' concurrency group expression for one op (tiny subset)."""
+    """Evaluate coolify-ops' concurrency group expression for one op (tiny subset):
+    `(op == 'a' || op == 'b') && 'group' || (...) && 'group2' || format(...)`."""
+    import re
     body = expression.strip()[3:-2].strip()
-    condition, rest = body.split(' && ', 1)
-    deploy_group, fallback = rest.split(' || ', 1)
-    ops = [part.split("== '", 1)[1].rstrip("')") for part in condition.strip('()').split(' || ')]
-    return deploy_group.strip("'") if op in ops else fallback.replace(
-        "format('coolify-ops-{0}', github.run_id)", 'coolify-ops-RUN')
+    pairs = re.findall(r"\(([^()]*)\) && '([^']+)' \|\| ", body)
+    fallback = re.sub(r"^(?:\([^()]*\) && '[^']+' \|\| )+", '', body)
+    for condition, group in pairs:
+        ops = [part.split("== '", 1)[1].rstrip("'") for part in condition.split(' || ')]
+        if op in ops:
+            return group
+    return fallback.replace("format('coolify-ops-{0}', github.run_id)", 'coolify-ops-RUN')
 
 
 class WorkflowTests(unittest.TestCase):
@@ -221,9 +225,12 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(ops['queue'], 'max')
         for op in ['deploy', 'room-setup']:
             self.assertEqual(group_for(ops['group'], op), 'coolify-deploy')
-        for op in ['status', 'env-refs', 'create-room', 'backup-scope', 'nightly-status',
-                   'zenas-renormalise', 'zenas-renormalise-report']:
+        for op in ['status', 'env-refs', 'create-room', 'backup-scope', 'nightly-status']:
             self.assertEqual(group_for(ops['group'], op), 'coolify-ops-RUN')
+        # Both renormalise ops share one fixed group (never the deploy group), so two
+        # dispatches can never run side by side.
+        for op in ['zenas-renormalise', 'zenas-renormalise-report']:
+            self.assertEqual(group_for(ops['group'], op), 'coolify-zenas-renormalise')
 
     def test_live_check_probes_through_the_coolify_gate(self):
         flow = workflow('live-check.yml')
