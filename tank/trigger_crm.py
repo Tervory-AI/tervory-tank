@@ -16,12 +16,15 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from trigger_crm_schema import ROOTS, SCHEMAS
 
 router = APIRouter(prefix="/v1/trigger/crm", tags=["trigger-crm"])
-Resource = Literal["leads", "contacts", "estimates"]
-PATHS = {"leads": "/api/leads/", "contacts": "/api/contacts/", "estimates": "/api/invoices/estimates/"}
+Resource = Literal["leads", "contacts", "estimates", "invoices"]
+PATHS = {"leads": "/api/leads/", "contacts": "/api/contacts/", "estimates": "/api/invoices/estimates/", "invoices": "/api/invoices/"}
 FIELDS = frozenset({"id", "title", "first_name", "last_name", "email", "phone", "status", "source",
                     "organization", "company_name", "city", "state", "country", "description", "created_at",
                     "estimate_number", "client_name", "account_name", "contact_name", "issue_date", "expiry_date",
-                    "total_amount", "currency", "is_expired", "introduction", "notes", "terms"})
+                    "total_amount", "currency", "is_expired", "introduction", "notes", "terms",
+                    "invoice_number", "invoice_title", "due_date", "amount_due", "amount_paid", "is_overdue",
+                    "reminder_enabled", "reminder_days_before", "reminder_days_after", "reminder_frequency",
+                    "last_reminder_sent", "reminder_count", "account", "contact"})
 STATUSES = {"assigned", "closed", "converted", "in process", "recycled"}
 
 
@@ -180,7 +183,7 @@ async def listing(resource: Resource, request: Request, actor: Annotated[Actor, 
 async def detail(resource: Resource, record_id: UUID, actor: Annotated[Actor, Depends(identity)]):
     actor = await authority(actor)
     raw = await upstream(actor, resource, record_id=record_id)
-    key = {"leads": "lead_obj", "contacts": "contact_obj", "estimates": "estimate"}[resource]
+    key = {"leads": "lead_obj", "contacts": "contact_obj", "estimates": "estimate", "invoices": "invoice"}[resource]
     return {"resource": resource, "item": project(raw.get(key))}
 
 
@@ -203,8 +206,8 @@ async def write(request: Request, actor: Annotated[Actor, Depends(identity)]):
     confirmation(actor, "trigger.crm.write", canonical)
     result = await upstream(actor, args.resource, record_id=args.record_id,
                             method="PUT" if args.record_id else "POST", data=args.data)
-    key = {"leads": "lead_obj", "contacts": "contact_obj", "estimates": "estimate"}[args.resource]
-    item = result.get(key, result.get({"leads": "lead", "contacts": "contact", "estimates": "estimate"}[args.resource]))
+    key = {"leads": "lead_obj", "contacts": "contact_obj", "estimates": "estimate", "invoices": "invoice"}[args.resource]
+    item = result.get(key, result.get({"leads": "lead", "contacts": "contact", "estimates": "estimate", "invoices": "invoice"}[args.resource]))
     if item is None:
         item = {"id": result.get("id", str(args.record_id) if args.record_id else None)}
     return {"resource": args.resource, "item": project(item), "model_calls": 0, "cost_usd": 0,
