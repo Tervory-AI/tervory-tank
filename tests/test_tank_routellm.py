@@ -157,10 +157,12 @@ async def test_real_tank_off_shadow_cost_judge_isolation_and_founder_gate(real_t
     row = await turn(b, other)
     assert row["routellm_status"] is None
     # Re-applying startup schema preserves the founder's opt-in and NULL defaults.
-    async with b.pool.acquire() as conn:
+    # Startup applies the schema outside a tenant transaction; doing it inside one
+    # holds DDL locks while load_policy waits on another connection (a deadlock).
+    async with b.pool.acquire(autocommit=True) as conn:
         await conn.execute(Path("tank/schema.sql").read_text())
-        assert (await b.tank.load_policy("routellm.proof", a))["routellm_weak_model"] == "flash-lite"
-        assert (await b.tank.load_policy("routellm.proof", other))["routellm_weak_model"] is None
+    assert (await b.tank.load_policy("routellm.proof", a))["routellm_weak_model"] == "flash-lite"
+    assert (await b.tank.load_policy("routellm.proof", other))["routellm_weak_model"] is None
     # Source fixtures for the browser proof come from the actual Tank report.
     output = os.environ.get("ROUTELLM_PROOF_OUTPUT")
     if output:

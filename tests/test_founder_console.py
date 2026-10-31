@@ -393,7 +393,9 @@ def test_schema_additions_are_idempotent():
     assert "RENAME " not in sql.upper()
 
 
-def test_allowlist_matches_stripped_ids_only():
+def test_allowlist_matches_stripped_ids_only(monkeypatch):
+    # Set the key here: another module in this worker may have set a different one first.
+    monkeypatch.setenv("TANK_API_KEY", "test")
     os.environ["TERVORY_ADMIN_USER_IDS"] = " user_founder , user_other "
     assert admin.founder_allowed("test", "user_founder")
     assert admin.founder_allowed("test", "user_other")
