@@ -53,7 +53,7 @@ async def authority(actor: Actor) -> Actor:
     return actor
 
 
-def binding(actor: Actor) -> tuple[str, str]:
+def binding(actor: Actor) -> tuple[str, str, str]:
     """Configuration is founder-supplied. No Clerk/BottleCRM org identity is inferred."""
     try:
         bindings = json.loads(os.environ.get("TRIGGER_CRM_TENANT_BINDINGS", "{}"))
@@ -83,19 +83,24 @@ def binding(actor: Actor) -> tuple[str, str]:
         if not ((parsed.scheme == "https" and parsed.netloc == "crm.tervory.com") or
                 (parsed.scheme == "http" and parsed.netloc == "trigger-crm-backend:8000")):
             raise ValueError
-        return url, token
+        return url, token, str(UUID(selected["organization_id"]))
     except (ValueError, TypeError, KeyError, AttributeError):
         raise HTTPException(503, "CRM is not configured for this tenant") from None
 
 
 async def upstream(actor: Actor, resource: Resource, *, record_id: UUID | None = None,
                    method: str = "GET", data: dict | None = None, params: dict | None = None) -> dict:
-    url, token = binding(actor)
+    url, token, organization = binding(actor)
+    if method != "GET":
+        # An old/unmodified CRM must fail before any write, not after a side effect.
+        await upstream(actor, resource, params={"offset": 0, "limit": 1})
+        actor = await authority(actor)
     path = PATHS[resource] + (f"{record_id}/" if record_id else "")
     try:
         async with (
             httpx.AsyncClient(timeout=httpx.Timeout(20), follow_redirects=False, trust_env=False) as client,
-            client.stream(method, url + path, headers={"Authorization": "Bearer " + token},
+            client.stream(method, url + path, headers={"Authorization": "Bearer " + token,
+                                                             "X-Tervory-CRM-Organization": organization},
                           params=params, json=data) as response,
         ):
             if response.status_code == 404:
@@ -104,6 +109,12 @@ async def upstream(actor: Actor, resource: Resource, *, record_id: UUID | None =
                 raise HTTPException(503, "CRM access is not configured")
             if not 200 <= response.status_code < 300:
                 raise HTTPException(502, "CRM could not complete the request")
+            try:
+                attested = str(UUID(response.headers.get("X-Tervory-CRM-Organization", "")))
+            except (ValueError, TypeError):
+                raise HTTPException(502, "CRM organization binding is unavailable") from None
+            if attested != organization:
+                raise HTTPException(502, "CRM organization binding refused")
             content = bytearray()
             async for chunk in response.aiter_bytes():
                 content.extend(chunk)
