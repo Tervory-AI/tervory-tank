@@ -51,6 +51,8 @@ def services(output):
                     {'content-type': self.headers.get('content-type', 'application/octet-stream'), 'x-tank-key': self.headers.get('x-tank-key', '')})
                 reply = connection.getresponse()
                 result = reply.read()
+                if reply.status >= 400:  # Tank turns room errors into a bare 503; keep the room's answer.
+                    print(f'room {room} {self.command} {dest.path} -> {reply.status} {result[:500]!r}', flush=True)
                 self.send_response(reply.status)
                 self.send_header('Content-Type', reply.getheader('content-type', 'application/json'))
                 self.send_header('Content-Length', str(len(result)))
@@ -158,8 +160,10 @@ def check(env, output):
         asyncio.run(sealed_record())
         assert vault('POST', 'secrets/resolve', value={'name': 'REPORT_KEY'}).json() == {'found': True, 'value': value}
         assert vault('POST', 'secrets/resolve', tenant=other, value={'name': 'REPORT_KEY'}).json() == {'found': False}
-        assert vault('POST', 'links', value={'url': 'https://example.com/reports', 'label': 'Reports', 'frequency': 'weekly'}).status_code == 200
-        assert vault('POST', 'connections', value={'name': 'Reports', 'server_url': 'https://example.com/connect', 'auth_type': 'token', 'token': value}).status_code == 200
+        added = vault('POST', 'links', value={'url': 'https://example.com/reports', 'label': 'Reports', 'frequency': 'weekly'})
+        assert added.status_code == 200, added.text
+        added = vault('POST', 'connections', value={'name': 'Reports', 'server_url': 'https://example.com/connect', 'auth_type': 'token', 'token': value})
+        assert added.status_code == 200, added.text
         assert value not in json.dumps(listing())
         assert listing(other)['connections'] == listing(other)['links'] == listing(other)['secrets'] == []
         for kind in ('links', 'connections'):

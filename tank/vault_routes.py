@@ -249,6 +249,12 @@ def build_router(tank):
         except ValueError:
             fail(404, 'Not found')
         if room == 'market_lab' and kind == 'links':
+            # The room owns links (#421) and its delete is an idempotent no-op for an id this
+            # tenant does not have. The vault contract (#362) answers 404 for that, as for
+            # files and connections, so check the tenant's own links first.
+            links = await room_call(room, 'GET', '/market/feeds', owner)
+            if ident not in {str(link.get('id')) for link in links.get('links', [])}:
+                fail(404, 'Not found')
             await room_call(room, 'DELETE', f'/market/feeds/{ident}', owner)
             async with tank.pool().acquire() as conn:
                 await conn.execute("DELETE FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 AND kind='links' AND name=$3", owner, vault, ident)
