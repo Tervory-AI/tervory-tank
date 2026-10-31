@@ -380,3 +380,17 @@ def test_device_schema_is_additive_and_hash_only():
         assert statement in section
     assert 'DROP ' not in section and 'RENAME' not in section
     assert 'device_code text' not in section and 'access_token' not in section
+
+
+def test_deploy_passes_the_device_approval_keys_to_the_services_that_read_them():
+    """Self-review of #506: the compose files list env explicitly, so a key the code reads but
+    compose does not pass would leave ZA approval and ZA CLI sign-ins unavailable after deploy."""
+    from pathlib import Path
+    import yaml
+    root = Path(__file__).resolve().parents[1]
+    za = yaml.safe_load((root / 'docker-compose.za.yml').read_text())['services']['tank']['environment']
+    boston = yaml.safe_load((root / 'docker-compose.yml').read_text())['services']['workspace']
+    assert za['TANK_DEVICE_APPROVAL_KEY'] == '${TANK_DEVICE_APPROVAL_KEY:-}'
+    assert boston['environment']['TANK_DEVICE_APPROVAL_KEY_ZA'] == '${TANK_DEVICE_APPROVAL_KEY_ZA:-}'
+    # Review should-fix 4: the Workspace image builds the CLI release from cli/.
+    assert boston['build']['additional_contexts'] == {'cli': './cli'}
