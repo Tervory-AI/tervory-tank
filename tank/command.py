@@ -16,7 +16,6 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -223,6 +222,17 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
     }
 
 
+def public_receipt(receipt: dict) -> dict:
+    # Older saved receipts may contain a price-book projection. Do not rewrite
+    # durable evidence, but never publish that projection as an observed cost.
+    result = dict(receipt)
+    if result.get("requested_model") not in (None, "auto") or "auto_cost_usd" in result:
+        result.update(auto_model=None, auto_cost_usd=None, auto_cost_status="pending", auto_priced_at=None)
+        result.pop("auto_cost_label", None)
+        result.pop("auto_cost_basis", None)
+    return result
+
+
 def totals(rows: list[dict]) -> dict:
     complete = all(r["saved_usd"] is not None for r in rows)
     return {
@@ -242,6 +252,12 @@ def thread_totals(state: dict) -> dict:
             "saved_usd": None if pending else recorded["saved_usd"],
             "receipt_status": "pending" if pending else "recorded",
             "recorded_spent_usd": sum(r["cost_usd"] for r in state["receipts"] if r["cost_usd"] is not None)}
+
+
+@router.get("/models")
+async def models(actor: Actor = Depends(identity)) -> list[dict]:
+    from main import list_models
+    return await list_models()
 
 
 @router.get("/tools")
@@ -334,7 +350,26 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
                        "recorded_spent_usd": amounts["recorded_spent_usd"]},
             "messages": state["messages"], "steps": list(state["steps"].values()),
             "cards": [public_card(c) for c in state["cards"].values()],
-            "receipts": state["receipts"]}
+            "receipts": [public_receipt(r) for r in state["receipts"]], "seq": row["seq"]}
+
+
+@router.get("/tasks/{task_id}/receipts")
+async def task_receipts(task_id: uuid.UUID, actor: Actor = Depends(identity)) -> dict:
+    async with db().acquire() as conn:
+        task = await conn.fetchrow(
+            "SELECT t.ledger_id,to_jsonb(l) AS data FROM tank.tasks t "
+            "LEFT JOIN tank.ledger l ON l.id=t.ledger_id AND l.tenant_id=t.tenant_id "
+            "WHERE t.id=$1 AND t.tenant_id=$2 AND t.created_by=$3",
+            task_id, actor.tenant_id, actor.user_id,
+        )
+    if task is None:
+        raise HTTPException(404, "no such task for this tenant")
+    if task["ledger_id"] is not None and task["data"] is None:
+        raise HTTPException(409, "Receipt evidence is missing or outside this tenant")
+    rows = [receipt_row(unpack(task["data"]), str(task_id))] if task["data"] is not None else []
+    return {"rows": rows, "totals": totals(rows) if rows else
+            {"cost_usd": None, "baseline_cost_usd": None, "saved_usd": None},
+            "status": "recorded" if rows and rows[0]["cost_usd"] is not None else "pending"}
 
 
 @router.patch("/threads/{thread_id}")
@@ -363,6 +398,8 @@ async def replay(thread_id: uuid.UUID, actor: Actor, after: int, *, turn_id: str
             )
         for item in events:
             data = unpack(item["data"])
+            if item["kind"] == "receipt":
+                data = {**data, "rows": [public_receipt(r) for r in data.get("rows", [])]}
             after = data["seq"]
             yield sse(item["kind"], data)
         if len(events) == 500:
@@ -400,20 +437,6 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
         override["_on_token"] = on_token
     return await run_route(RouteRequest(tenant_id=actor.tenant_id, agent="orchestrator", task_type="command.turn",
                                        home_region=box_region(), messages=[Message(**m) for m in messages], priority=priority), **override)
-
-
-async def auto_price_snapshot(conn: Any, tenant_id: uuid.UUID) -> dict:
-    # Freeze the policy model and price book at acceptance, before paid work.
-    # This is a same-token comparison, not another model execution.
-    row = await conn.fetchrow(
-        "SELECT p.model,q.input_usd,q.output_usd,q.updated_at FROM tank.policy p "
-        "LEFT JOIN tank.proof_prices q ON q.model=p.model AND q.active "
-        "WHERE p.task_type='command.turn' AND (p.tenant_id=$1 OR p.tenant_id IS NULL) "
-        "ORDER BY p.tenant_id NULLS LAST LIMIT 1", tenant_id)
-    return {"model": row["model"] if row else None,
-            "input_usd": str(row["input_usd"]) if row and row["input_usd"] is not None else None,
-            "output_usd": str(row["output_usd"]) if row and row["output_usd"] is not None else None,
-            "priced_at": row["updated_at"].isoformat() if row and row["updated_at"] else None}
 
 
 async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages: list[dict], model: str | None = None,
@@ -556,7 +579,7 @@ async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity
                 "SELECT build_id,tenant_id,$3 FROM tank.command_builds WHERE thread_id=$1 AND tenant_id=$2 "
                 "AND status IN ('queued','running','awaiting_review')", thread_id, actor.tenant_id, body.text,
             )
-        comparison = await auto_price_snapshot(conn, actor.tenant_id) if body.model not in (None, "auto") else None
+        comparison = None  # No recorded Auto execution: a price-book projection is not ledger evidence.
         await step(conn, row, state, {"step_id": turn_id, "label": "Preparing answer", "actor": "Tervory", "status": "running",
                                       "requested_model": body.model or "auto", "auto_comparison": comparison})
         messages = message_context(state["messages"])
@@ -1088,6 +1111,15 @@ def public_card(card: dict) -> dict:
     return {k: v for k, v in card.items() if k not in {"payload", "evidence_ids"}}
 
 
+@router.post("/threads/{thread_id}/actions")
+async def propose_tool(thread_id: uuid.UUID, body: PlannedAction, actor: Actor = Depends(identity)) -> dict:
+    async with editing(thread_id, actor) as (conn, row, state):
+        actor = await authorized_actor(actor, conn)
+        action = validate_action(body, actor)
+        card = await propose_action(conn, row, state, action, actor)
+    return public_card(card)
+
+
 async def propose_action(conn: Any, row: dict, state: dict, action: PlannedAction, actor: Actor | None = None) -> dict:
     if action.tool.startswith("trigger."):
         from trigger_commands import prepare
@@ -1247,15 +1279,10 @@ async def record_receipts(conn: Any, row: dict, state: dict, step_id: str, ids: 
         receipt = receipt_row(by_id[str(ledger_id)], step_id)
         requested_model = state["steps"].get(step_id, {}).get("requested_model")
         if requested_model not in (None, "auto"):
-            price = state["steps"].get(step_id, {}).get("auto_comparison") or {}
-            priced = receipt["cost_usd"] is not None and all(price.get(k) is not None for k in ("model", "input_usd", "output_usd"))
-            auto_cost = (Decimal(str(receipt["tokens_in"])) * Decimal(price["input_usd"])
-                         + Decimal(str(receipt["tokens_out"])) * Decimal(price["output_usd"])) if priced else None
-            receipt.update(requested_model=requested_model, auto_model=price.get("model"),
-                           auto_cost_usd=float(auto_cost) if auto_cost is not None else None,
-                           auto_cost_status="priced" if priced else "pending", auto_priced_at=price.get("priced_at"),
-                           auto_cost_label="What Auto would have cost (same tokens at policy model prices)",
-                           auto_cost_basis="Same recorded tokens, priced from the price book at turn acceptance; not a separate model run.")
+            # A pinned execution has no observed Auto cost. Preserve the API
+            # fields without projecting prices or running another model to compare.
+            receipt.update(requested_model=requested_model, auto_model=None,
+                           auto_cost_usd=None, auto_cost_status="pending", auto_priced_at=None)
         existing = next((r for r in state["receipts"] if r["ledger_id"] == str(ledger_id)), None)
         if existing and existing["step_id"] != step_id:
             raise HTTPException(409, "Ledger evidence already belongs to another step")
