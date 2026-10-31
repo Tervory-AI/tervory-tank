@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { run, Tank, originFor, receiptLines, safe, events } from '../src/client.mjs';
+import { run, Tank, originFor, receiptLines, safe, events, StreamSanitizer, showTurn } from '../src/client.mjs';
 
 // Synthetic credentials exist only in this fake-Tank harness, never live data.
 const TOKEN = `tv1.us-east.${'0'.repeat(32)}.${'x'.repeat(43)}`;
@@ -162,6 +162,54 @@ test('SSE handles UTF-8 and event boundaries split across reads', async () => {
 test('stream truncation is not silently accepted or retried', async () => {
   const response = new Response('event: token\ndata: {"text":"hello"}');
   await assert.rejects(async () => { for await (const _ of events(response)) {} }, /interrupted/);
+});
+
+test('stateful sanitizer redacts synthetic credentials and controls at every character boundary', () => {
+  const cases = [
+    [TOKEN, '[redacted]'],
+    [`before ${TOKEN} after`, 'before [redacted] after'],
+    ['héllo \x1b[2Jworld', 'héllo world'],
+    ['before\x1b]52;c;ZXZpbA==\x07after', 'beforeafter'],
+    ['before\x1b]52;c;ZXZpbA==\x1b\\after', 'beforeafter'],
+    ['before\x9d52;c;ZXZpbA==\x9cafter', 'beforeafter'],
+    [`${TOKEN.slice(0, 20)}\x1b[31m${TOKEN.slice(20)}`, '[redacted]'],
+    ['before\x1b]unfinished', 'before'],
+  ];
+  for (const [raw, expected] of cases) {
+    for (let cut = 0; cut <= raw.length; cut++) {
+      const sanitizer = new StreamSanitizer();
+      assert.equal(sanitizer.write(raw.slice(0, cut)) + sanitizer.write(raw.slice(cut)) + sanitizer.end(), expected,
+        `cut ${cut}`);
+    }
+    const sanitizer = new StreamSanitizer();
+    assert.equal([...raw].map(char => sanitizer.write(char)).join('') + sanitizer.end(), expected);
+  }
+});
+
+test('actual showTurn path redacts split tokens and controls while streaming ordinary text', async () => {
+  const attack = `héllo ${TOKEN} \x1b]52;c;ZXZpbA==\x1b\\ safe`;
+  for (let cut = 0; cut <= attack.length; cut++) {
+    let output = '';
+    const tank = { request: async () => new Response(
+      encode('token', { text: attack.slice(0, cut) }) + encode('token', { text: attack.slice(cut) }) + encode('done', {})) };
+    await showTurn(tank, 'fake-thread', 'test', 'auto', [], { write: text => { output += text; } });
+    assert.equal(output, 'héllo [redacted]  safe', `SSE split ${cut}`);
+  }
+  const sanitizer = new StreamSanitizer();
+  assert.equal(sanitizer.write('ordinary streamed answer'), 'ordinary streamed answer');
+});
+
+test('UTF-8 transport splits at every byte preserve sanitizer state', async () => {
+  const wire = encode('token', { text: `héllo ${TOKEN}` }) + encode('token', { text: '\x1b[2J world' });
+  const bytes = new TextEncoder().encode(wire);
+  for (let cut = 0; cut <= bytes.length; cut++) {
+    const response = new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(bytes.slice(0, cut)); controller.enqueue(bytes.slice(cut)); controller.close();
+    } }));
+    const sanitizer = new StreamSanitizer(); let output = '';
+    for await (const event of events(response)) output += sanitizer.write(event.data.text);
+    output += sanitizer.end(); assert.equal(output, 'héllo [redacted] world', `byte ${cut}`);
+  }
 });
 
 // Reuse the production run/stream/receipt code for a clearly labeled recording.
