@@ -302,3 +302,111 @@ def test_unknown_main_head_deploys_every_wanted_app(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
     assert mod.main() == 0
     assert order == ["main", "tervory-tank-za"]
+
+
+# --- Waiting on a slow ZA build (31 Oct: ZA deployment 882 took 22 min) ----------
+
+
+def _clock(monkeypatch: pytest.MonkeyPatch, mod) -> list[float]:
+    """Fake time: sleep advances the clock, so the waits run instantly."""
+    now = [0.0]
+    monkeypatch.setattr(mod.time, "time", lambda: now[0])
+    monkeypatch.setattr(mod.time, "sleep", lambda s: now.__setitem__(0, now[0] + s))
+    return now
+
+
+def test_wait_follows_the_queued_deployment_not_the_newest_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _script(monkeypatch)
+    now = _clock(monkeypatch, mod)
+    calls: list[str] = []
+
+    def api(method: str, path: str):
+        calls.append(f"{method} {path}")
+        if method == "POST":
+            return 200, {"deployments": [{"resource_uuid": "za-uuid", "deployment_uuid": "dep-882"}]}
+        if path == "/deployments/dep-882":
+            # Still building for 19 minutes, then finished: longer than the old 900 s wait.
+            return 200, {"status": "in_progress" if now[0] < 19 * 60 else "finished"}
+        return 200, [{"status": "failed"}]  # an older or unrelated row must not be read
+
+    monkeypatch.setattr(mod, "api", api)
+    assert mod.deploy("za-uuid", "tervory-tank-za")
+    assert mod.wait_for("za-uuid", "tervory-tank-za", mod.ZA_TIMEOUT_S) is True
+    assert all("/deployments/applications/" not in c for c in calls)
+
+
+def test_a_deployment_still_building_at_the_deadline_is_reported_as_in_progress(
+        monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    mod = _script(monkeypatch)
+    _clock(monkeypatch, mod)
+    mod._queued["za-uuid"] = "dep-882"
+    monkeypatch.setattr(mod, "api", lambda method, path: (200, {"status": "in_progress"}))
+    assert mod.wait_for("za-uuid", "tervory-tank-za", 600) is False
+    out = capsys.readouterr().out
+    assert "still in_progress after 600s (deployment dep-882)" in out
+    assert "may still finish in Coolify" in out
+    assert "deploy failed" not in out
+
+
+def test_a_failed_deployment_is_reported_as_failed(monkeypatch: pytest.MonkeyPatch,
+                                                   capsys: pytest.CaptureFixture[str]) -> None:
+    mod = _script(monkeypatch)
+    _clock(monkeypatch, mod)
+    mod._queued["za-uuid"] = "dep-1"
+    monkeypatch.setattr(mod, "api", lambda method, path: (200, {"status": "failed"}))
+    assert mod.wait_for("za-uuid", "tervory-tank-za", 600) is False
+    assert "ended with failed" in capsys.readouterr().out
+
+
+def test_without_a_queued_id_the_wait_reads_the_latest_deployment(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _script(monkeypatch)
+    _clock(monkeypatch, mod)
+    mod._queued.clear()
+    seen: list[str] = []
+    monkeypatch.setattr(mod, "api", lambda method, path: seen.append(path) or (200, [{"status": "finished"}]))
+    assert mod.wait_for("room-uuid", "agent-zenas") is True
+    assert seen == ["/deployments/applications/room-uuid?take=1"]
+
+
+def test_each_stage_gets_its_own_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _script(monkeypatch)
+    waits: dict[str, int] = {}
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["tank/main.py", "agents/zenas/app.py"])
+    monkeypatch.setattr(mod, "api", lambda method, path: (200, _apps()))
+    monkeypatch.setattr(mod, "deploy", lambda uuid, name: True)
+    monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: waits.setdefault(name, timeout_s) or True)
+    assert mod.main() == 0
+    assert waits == {"main": mod.MAIN_TIMEOUT_S, "tervory-tank-za": mod.ZA_TIMEOUT_S,
+                     "agent-zenas": mod.ROOM_TIMEOUT_S, "agent-zenas-za": mod.ROOM_TIMEOUT_S}
+    # The two ZA builds on 31 Oct took 19 and 22 minutes.
+    assert mod.ZA_TIMEOUT_S >= 40 * 60
+
+
+def test_deploy_job_has_room_for_every_wait() -> None:
+    import yaml
+    flow = yaml.safe_load((ROOT / ".github/workflows/deploy-on-merge.yml").read_text(encoding="utf-8"))
+    path = ROOT / ".github" / "scripts" / "deploy_changed.py"
+    text = path.read_text(encoding="utf-8")
+    assert "MAIN_TIMEOUT_S = 1800" in text and "ZA_TIMEOUT_S = 2700" in text
+    assert flow["jobs"]["deploy"]["timeout-minutes"] * 60 > 1800 + 2700 + 900
+
+
+def test_sa_stack_that_failed_last_time_is_retried_without_main(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _script(monkeypatch)
+    order: list[str] = []
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["docs/readme.txt"])
+    monkeypatch.setattr(mod, "api", _api_with_failed(_apps(), {"za-uuid"}))
+    monkeypatch.setattr(mod, "deploy", lambda uuid, name: order.append(name) or True)
+    monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
+    assert mod.main() == 0
+    assert order == ["tervory-tank-za"]
+
+
+def test_sa_stack_retry_respects_za_offline(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _script(monkeypatch)
+    order: list[str] = []
+    mod.ZA_OFFLINE = True
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["docs/readme.txt"])
+    monkeypatch.setattr(mod, "api", _api_with_failed(_apps(), {"za-uuid"}))
+    monkeypatch.setattr(mod, "deploy", lambda uuid, name: order.append(name) or True)
+    assert mod.main() == 0 and order == []

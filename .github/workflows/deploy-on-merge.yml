@@ -28,7 +28,9 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # deploy_changed.py waits up to 30 min for main and 45 min for ZA (a ZA build
+    # that reinstalls tank/requirements.txt took 22 min on 31 Oct), then 15 min per room.
+    timeout-minutes: 150
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
