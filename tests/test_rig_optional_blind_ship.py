@@ -36,7 +36,7 @@ from test_rig_locate_checkout import TENANT, FakeProvider, Live, available, rate
 
 ADDRESS = {"name": "Thandi Mokoena", "street": "12 Long Street", "city": "Cape Town", "zip": "8001",
            "state": "Western Cape", "country": "za", "phone": "+27 21 000 0000"}
-SUPPLIER = ("other-store", "other.example", "RSR|POF00307", "RSR", "/product/cam-pin")
+SUPPLIER = ("other-store", "other.example", "RSR|POF90307", "RSR", "/product/cam-pin")
 
 
 class HandoffDouble:
@@ -147,7 +147,7 @@ async def test_blind_accept_records_a_rig_order_and_a_neutral_slip_po_to_the_sho
     assert po["ship_to"] == {**ADDRESS, "country": "ZA"}
     assert po["neutral_slip"] is True and po["instructions"] == NEUTRAL_SLIP
     assert (po["item_sku"], po["item_url"], po["unit_cost"], po["currency"]) == (
-        "RSR|POF00307", "https://other.example/product/cam-pin/", "45.00", "USD")
+        "RSR|POF90307", "https://other.example/product/cam-pin/", "45.00", "USD")
     quote = next(q for q in store.quotes if q["id"] == result["request_id"])
     assert quote["payload"]["ship_to"]["city"] == "Cape Town"
     state = quote["payload"]["locate_state"]
@@ -263,7 +263,7 @@ def test_locate_confirm_accept_responses_have_no_supplier_identity_or_cost(monke
 
 LOCATED = {"product_sku": "part-1",
            "source": {"id": "other-store", "site": "https://other.example", "neutral_slip_required": True},
-           "offer": {"sku": "RSR|POF00307", "url": "https://other.example/product/cam-pin/"},
+           "offer": {"sku": "RSR|POF90307", "url": "https://other.example/product/cam-pin/"},
            "live": {"price": "45.00", "currency": "USD"}}
 PRICE = {"amount": "1125.00", "currency": "ZAR"}
 SHIP = {"address": {**ADDRESS, "country": "ZA"}}
