@@ -260,6 +260,7 @@ def map_catalogue(record: dict, contents: str | bytes) -> dict[str, Any]:
             if len(amount) == 2 and amount[1].upper() == record["currency"]:
                 values["price"] = amount[0]
             active = values.get("active", "true").lower() in {"true", "yes", "1", "active", "in_stock", "in stock", "instock", "available"}
+            catalogue_active = active
             if values.get("quantity"):
                 from rigbox.pricing import number
                 quantity = number(values["quantity"])
@@ -267,6 +268,7 @@ def map_catalogue(record: dict, contents: str | bytes) -> dict[str, Any]:
                 active = active and in_stock
             values["active"] = "true" if active else "false"
             product = _product_row(values, index)
+            product["supply_eligible"] = bool(catalogue_active and values.get("quantity") and quantity == 0)
             product["mpn"] = values.get("mpn") or None
             product["quantity"] = str(quantity) if values.get("quantity") else None
             product["eta"] = values.get("eta") or None
