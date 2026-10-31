@@ -339,7 +339,7 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
                        "recorded_spent_usd": amounts["recorded_spent_usd"]},
             "messages": state["messages"], "steps": list(state["steps"].values()),
             "cards": [public_card(c) for c in state["cards"].values()],
-            "receipts": state["receipts"]}
+            "receipts": state["receipts"], "seq": row["seq"]}
 
 
 @router.patch("/threads/{thread_id}")
