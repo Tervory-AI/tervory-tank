@@ -217,10 +217,22 @@ class QuoteService(Service):
             return {"request_id": quote_id, "state": "confirmed", "price": price,
                     "message": "Your request is saved. No payment was taken."}
         reference = f"rig:{tenant_id}:{quote_id}"
+        metadata = {"quote_id": quote_id, "product_id": row["sku"]}
         try:
-            charge = await payments.capture(provider, amount=price["amount"], currency=price["currency"],
-                                            token=token, reference=reference,
-                                            metadata={"quote_id": quote_id, "product_id": row["sku"]})
+            if payments.intents(provider):
+                # Pay on Accept: an intent for the held price, then capture. Both
+                # are keyed by the quote reference, so a retry never charges twice.
+                intent = await payments.create_intent(provider, amount=price["amount"], currency=price["currency"],
+                                                      token=token, reference=reference, metadata=metadata)
+                await record(state="payment_pending",
+                             payment={"intent": intent.reference, "provider": provider.name, "test": intent.test})
+                if intent.status != "requires_capture":
+                    await record(state="payment_failed")
+                    raise RigError("payment", "The payment was not taken.", 402)
+                charge = await payments.capture_intent(provider, intent, reference=reference)
+            else:
+                charge = await payments.capture(provider, amount=price["amount"], currency=price["currency"],
+                                                token=token, reference=reference, metadata=metadata)
         except payments.PaymentRefused:
             await record(state="payment_refused")
             raise RigError("payment", "The payment was not taken.", 402) from None
@@ -259,6 +271,41 @@ class QuoteService(Service):
         if ship_to is not None:
             body["ships_direct"] = True
         return body
+
+    async def payment_webhook(self, body: bytes, signature: str) -> dict[str, Any]:
+        """Verified provider webhook. Records the event on its quote, once.
+
+        No shopper key: the HMAC signature is the authentication. Refused
+        (503) unless payments are in test mode with an adapter configured.
+        Events are an audit trail only; they never move an order forward.
+        """
+        import re
+        from datetime import datetime, timezone
+        from uuid import UUID
+
+        from chassis.tenant_db import tenant_scope
+
+        from rigbox import payments
+
+        try:
+            event = payments.verify_webhook(self.payments, body, signature)
+        except payments.PaymentRefused as exc:
+            if str(exc) in {"webhook_signature", "webhook_stale", "webhook_payload"}:
+                raise RigError("signature", "The webhook could not be verified.", 400) from None
+            raise RigError("unavailable", "Payments are not available.", 503) from None
+        match = re.fullmatch(r"rig:([0-9a-fA-F-]{36}):(req_[0-9a-f]{32})", str(event["data"].get("reference") or ""))
+        try:
+            tenant = str(UUID(match.group(1))) if match else ""
+        except ValueError:
+            tenant = ""
+        if not tenant:
+            return {"received": True, "recorded": False}
+        # The signed reference is the authentication; scope the write to its tenant.
+        with tenant_scope(tenant):
+            recorded = await self.store.payment_event(tenant, match.group(2), {
+                "id": event["id"], "type": event["type"][:64],
+                "received_at": datetime.now(timezone.utc).isoformat()})
+        return {"received": True, "recorded": recorded}
 
     async def deliver(self, tenant: str, quote_id: str) -> None:
         quote = await self.quote_store.claim(tenant, quote_id)

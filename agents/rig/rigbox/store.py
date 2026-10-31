@@ -408,6 +408,17 @@ class MemoryStore(RetailerMemoryStore):
             if row["tenant_id"] == str(tenant_id) and row["id"] == quote_id:
                 row["payload"] = {**row["payload"], "locate_state": state}
 
+    async def payment_event(self, tenant_id: str, quote_id: str, event: dict[str, Any]) -> bool:
+        """Append a verified payment webhook event once per event id. Tenant scoped."""
+        for row in self.quotes:
+            if row["tenant_id"] == str(tenant_id) and row["id"] == quote_id:
+                seen = list(row["payload"].get("payment_events") or [])
+                if any(item.get("id") == event["id"] for item in seen):
+                    return False
+                row["payload"] = {**row["payload"], "payment_events": [*seen, event]}
+                return True
+        return False
+
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         for row in self.quotes:
             if row["tenant_id"] == str(tenant_id) and row["id"] == quote_id:
@@ -988,6 +999,18 @@ class PgStore(RetailerPgStore):
                 " WHERE tenant_id = $1 AND id = $2",
                 _uuid(tenant_id), quote_id, _json(state),
             )
+
+    async def payment_event(self, tenant_id: str, quote_id: str, event: dict[str, Any]) -> bool:
+        """Append a verified payment webhook event once per event id, in one statement."""
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(
+                "UPDATE agent_rig.quotes SET payload = jsonb_set(payload, '{payment_events}',"
+                " COALESCE(payload->'payment_events', '[]'::jsonb) || jsonb_build_array($3::jsonb))"
+                " WHERE tenant_id = $1 AND id = $2"
+                " AND NOT COALESCE(payload->'payment_events', '[]'::jsonb) @> jsonb_build_array(jsonb_build_object('id', $4::text))",
+                _uuid(tenant_id), quote_id, _json(event), str(event["id"]),
+            )
+        return result.endswith(" 1")
 
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         async with self.pool.acquire() as conn:

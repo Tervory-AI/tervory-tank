@@ -238,6 +238,20 @@ async def locate_accept(request: Request, payload: LocateAcceptIn) -> Response:
     return _ok(request, body)
 
 
+@router.post("/locate/payments/webhook")
+async def locate_payment_webhook(request: Request) -> Response:
+    """Payment provider webhook. HMAC signature, no shopper key. Test mode only."""
+    service = _service(request)
+    if not hasattr(service, "payment_webhook"):
+        raise RigError("unavailable", "Payments are not available.", 503)
+    from rigbox.payments import SIGNATURE_HEADER, WEBHOOK_MAX_BYTES
+    body = await request.body()
+    if len(body) > WEBHOOK_MAX_BYTES:
+        raise RigError("signature", "The webhook could not be verified.", 400)
+    result = await service.payment_webhook(body, request.headers.get(SIGNATURE_HEADER) or "")
+    return _ok(request, result)
+
+
 @router.post("/search-events")
 async def settled_search(request: Request, payload: SearchEventIn) -> Response:
     await _auth(request)
