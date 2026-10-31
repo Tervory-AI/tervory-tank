@@ -1066,6 +1066,7 @@ async def test_customer_receipts_carry_no_model_names_but_keep_the_auto_dollar_f
         # the names in durable state: make this one by pinning while briefly an admin.
         monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', f'founder,{user}')
         reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Hello', 'model': 'fixture-pin'}, headers=headers)
+        assert reply.status_code == 200, reply.text
         monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
         snapshot = await client.get(f'/v1/command/threads/{thread}', headers=headers)
         events = await client.get(f'/v1/command/threads/{thread}/events', headers=headers)
