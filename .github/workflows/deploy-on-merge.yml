@@ -28,14 +28,20 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # deploy_changed.py waits up to 30 min for main and 45 min for ZA (a ZA build
-    # that reinstalls tank/requirements.txt took 22 min on 31 Oct), then 15 min per room.
-    timeout-minutes: 150
+    # Worst case, a shared room change (tests/test_deploy_changed.py recomputes this from
+    # the room folders in the repo): waits of main 30 min + ZA 45 min + 9 rooms x 15 min
+    # + 1 ZA room (agent-zenas-za) x 30 min = 240 min (14400 s); Coolify calls 52 x 30 s
+    # = 1560 s, poll overrun 12 x 45 s = 540 s, checkout 60 s: 16560 s = 276 min.
+    # DEPLOY_BUDGET_S is 280 min: deploy_changed.py starts no room whose wait would end
+    # past it, so the job ends by about 283 min, well before GitHub's 290-min kill. A room
+    # not started is deployed by the next run (stale()).
+    timeout-minutes: 290
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
       ZA_OFFLINE: ${{ vars.ZA_OFFLINE || '' }}
       AFTER: ${{ github.sha }}
+      DEPLOY_BUDGET_S: "16800"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 
 from backup_runtime_scope import verify_main_scope
@@ -57,7 +58,12 @@ def api(method: str, path: str) -> tuple[int, object]:
             body = r.read().decode() or "null"
             return r.status, json.loads(body)
     except urllib.error.HTTPError as e:
-        return e.code, (e.read().decode()[:300])
+        return e.code, (e.read().decode(errors="replace")[:300])
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        # A dropped connection, a socket timeout, or a 200 whose body is not JSON (a
+        # proxy's HTML error page; json.JSONDecodeError is a ValueError) is one failed
+        # call, not the end of the run: callers treat code 0 as "no answer" and go on.
+        return 0, type(e).__name__
 
 
 def changed_paths() -> list[str]:
@@ -87,7 +93,19 @@ def wanted(paths: list[str]) -> tuple[bool, set[str], bool]:
 MAIN_TIMEOUT_S = 1800
 ZA_TIMEOUT_S = 2700
 ROOM_TIMEOUT_S = 900
+# A ZA room builds on the same slow ZA host: agent-zenas-za took 18m00s, 14m35s and
+# 19m49s (deployments 767, 874 and 694), past the 15-minute room wait.
+ZA_ROOM_TIMEOUT_S = 1800
 POLL_S = 15
+# The deploy job's own budget (deploy-on-merge.yml sets it below the job's
+# timeout-minutes). A room whose full wait no longer fits is not started: it is
+# reported, and the next run deploys it because it is behind its code (stale()).
+DEPLOY_BUDGET_S = int(os.environ.get("DEPLOY_BUDGET_S") or 0)
+_run_started = time.time()
+
+
+def room_timeout(name: str) -> int:
+    return ZA_ROOM_TIMEOUT_S if name.endswith("-za") else ROOM_TIMEOUT_S
 # deploy() records the deployment Coolify queued, so wait_for follows that exact
 # deployment rather than whichever deployment of the app is newest.
 _queued: dict[str, str] = {}
@@ -112,6 +130,14 @@ def wait_for(uuid: str, name: str, timeout_s: int = ROOM_TIMEOUT_S) -> bool:
     while time.time() < deadline:
         if deployment:
             code, body = api("GET", f"/deployments/{deployment}")
+            if code == 404:
+                # "Deployment already queued for this commit": Coolify answers with an id it
+                # minted but never saved (DeployController.php:517, :529-530), so the id
+                # 404s. The deployment really running is the app's newest one: follow that.
+                print(f"::notice title=queued id unknown::{name}: deployment {deployment} not found; "
+                      "following the app's newest deployment")
+                deployment = ""
+                continue
             row = body if code == 200 and isinstance(body, dict) else None
         else:
             code, body = api("GET", f"/deployments/applications/{uuid}?take=1")
@@ -135,13 +161,86 @@ def wait_for(uuid: str, name: str, timeout_s: int = ROOM_TIMEOUT_S) -> bool:
     return False
 
 
+def _latest(uuid: str) -> dict | None:
+    code, body = api("GET", f"/deployments/applications/{uuid}?take=1")
+    rows = _rows(body) if code == 200 else []
+    return rows[0] if rows else None
+
+
 def last_failed(uuid: str) -> bool:
     """True when the app's most recent Coolify deployment failed, so it is retried on its own."""
-    code, body = api("GET", f"/deployments/applications/{uuid}?take=1")
-    if code != 200:
+    row = _latest(uuid)
+    return row is not None and (row.get("status") or "").lower() in ("failed", "error")
+
+
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _git(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", REPO, *args], capture_output=True, text=True)
+
+
+def _shallow_roots() -> set[str]:
+    path = os.path.join(REPO, _git("rev-parse", "--git-path", "shallow").stdout.strip())
+    try:
+        with open(path, encoding="utf-8") as f:
+            return {line.strip() for line in f if line.strip()}
+    except OSError:
+        return set()
+
+
+def room_folder(name: str) -> str:
+    """agents/<folder>/ for a room app (agent-market-lab-za -> market_lab), or ""."""
+    best = ""
+    agents = os.path.join(REPO, "agents")
+    for folder in sorted(os.listdir(agents)) if os.path.isdir(agents) else []:
+        app = "agent-" + folder.replace("_", "-")
+        if not folder.startswith("_") and (name == app or name.startswith(app + "-")) and len(folder) > len(best):
+            best = folder
+    return best
+
+
+def code_paths(name: str) -> tuple[str, ...]:
+    """The paths whose changes the app deploys (the same rules as wanted())."""
+    if name in ("main", SA_APP):
+        return MAIN_PREFIXES
+    folder = room_folder(name)
+    return (f"agents/{folder}/", *ALL_ROOMS_PREFIXES) if folder else ()
+
+
+def stale(uuid: str, name: str, row: dict | None = None) -> bool:
+    """True when the app's last finished deployment predates the newest commit to its code.
+
+    This is what retries an app that a run never deployed: a room skipped because main or
+    ZA did not deploy or the job's budget ran out, or any app whose deploy or wait hit a
+    failed call to Coolify. last_failed() only sees deployments that Coolify ran and that
+    failed. Anything unknown (no commit on the row, a commit outside this checkout, a
+    deployment still running) is not stale, so an unknown never redeploys everything.
+    """
+    paths = code_paths(name)
+    if paths and row is None:
+        row = _latest(uuid)
+    if not paths or row is None or (row.get("status") or "").lower() not in ("finished", "success"):
         return False
-    rows = _rows(body)
-    return bool(rows) and (rows[0].get("status") or "").lower() in ("failed", "error")
+    deployed = (row.get("commit") or "").strip().lower()
+    if len(deployed) != 40 or _git("cat-file", "-e", f"{deployed}^{{commit}}").returncode != 0:
+        return False
+    changed = _git("log", "-1", "--format=%H", AFTER, "--", *paths).stdout.strip()
+    if not changed or changed in _shallow_roots():
+        return False  # the shallow clone's first commit looks like it changed everything
+    return _git("merge-base", "--is-ancestor", changed, deployed).returncode != 0
+
+
+def behind(uuid: str, name: str) -> bool:
+    """True when the app needs a deploy this run although nothing it builds changed."""
+    row = _latest(uuid)  # one call for both checks
+    if row is not None and (row.get("status") or "").lower() in ("failed", "error"):
+        print(f"::notice title=retry::{name} failed last time and is retried")
+        return True
+    if stale(uuid, name, row):
+        print(f"::notice title=retry::{name} last deployed before the latest change to its code and is deployed")
+        return True
+    return False
 
 
 def already_live(uuid: str, name: str) -> bool:
@@ -167,10 +266,17 @@ def deploy(uuid: str, name: str) -> bool:
     if not 200 <= code < 300:
         print(f"::error title=deploy {name}::HTTP {code} {str(body)[:200]}")
         return False
-    queued = [r.get("deployment_uuid") for r in _rows(body) if r.get("deployment_uuid")]
-    if queued:
-        _queued[uuid] = queued[0]
-    print(f"::notice title=queued::{name}" + (f" (deployment {queued[0]})" if queued else ""))
+    rows = _rows(body)
+    queued = [r.get("deployment_uuid") for r in rows if r.get("deployment_uuid")]
+    if not queued:
+        # Coolify answers 200 with only a message when it queued nothing ("Resource not
+        # found", "Unauthorized to deploy", queue full; DeployController.php:433-434).
+        # Waiting then would read the previous deployment and call it a success.
+        message = "; ".join(str(r.get("message")) for r in rows if r.get("message")) or str(body)[:200]
+        print(f"::error title=deploy {name}::Coolify queued no deployment: {message[:200]}")
+        return False
+    _queued[uuid] = queued[0]
+    print(f"::notice title=queued::{name} (deployment {queued[0]})")
     return True
 
 
@@ -191,19 +297,18 @@ def main() -> int:
     else:
         # A room folder deploys its app and any regional copy (e.g. agent-zenas-za).
         targets = {n: u for n, u in room_apps.items() if any(n == r or n.startswith(r + "-") for r in rooms)}
-    # An app whose last deployment failed is retried by itself; nothing else is redeployed for it.
+    # An app whose last deployment failed, or that is behind its own code (a run that never
+    # deployed it), is deployed by itself; nothing else is redeployed for it.
     for name, uuid in sorted(room_apps.items()):
-        if name not in targets and last_failed(uuid):
-            print(f"::notice title=retry::{name} failed last time and is retried")
+        if name in targets:
+            continue
+        if behind(uuid, name):
             targets[name] = uuid
-    if not want_main and last_failed(MAIN_APP):
-        print("::notice title=retry::main failed last time and is retried")
+    if not want_main and behind(MAIN_APP, "main"):
         want_main = True
-    # tervory-tank-za is deployed with main; if its last deployment failed it is
-    # retried on its own, as main and the rooms are.
-    za_retry = not want_main and not ZA_OFFLINE and bool(by_name.get(SA_APP)) and last_failed(by_name[SA_APP])
-    if za_retry:
-        print(f"::notice title=retry::{SA_APP} failed last time and is retried")
+    # tervory-tank-za is deployed with main; if its last deployment failed or it is
+    # behind main's code it is deployed on its own, as main and the rooms are.
+    za_retry = not want_main and not ZA_OFFLINE and bool(by_name.get(SA_APP)) and behind(by_name[SA_APP], SA_APP)
     if not want_main and not za_retry and not targets:
         print("::notice title=nothing to deploy::no app code changed")
         return 0
@@ -240,7 +345,13 @@ def main() -> int:
     for name, uuid in sorted(targets.items()):
         if already_live(uuid, name):
             continue
-        ok = (deploy(uuid, name) and wait_for(uuid, name, ROOM_TIMEOUT_S)) and ok
+        wait = room_timeout(name)
+        if DEPLOY_BUDGET_S and time.time() - _run_started + wait > DEPLOY_BUDGET_S:
+            print(f"::error title=out of time::{name} not started: its {wait}s wait no longer fits the "
+                  f"{DEPLOY_BUDGET_S}s job budget; the next run deploys it")
+            ok = False
+            continue
+        ok = (deploy(uuid, name) and wait_for(uuid, name, wait)) and ok
     return 0 if ok else 1
 
 
