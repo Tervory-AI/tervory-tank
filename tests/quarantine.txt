@@ -1,7 +1,9 @@
 # Tests that already fail on main, quarantined so the full offline suite can gate PRs.
 #
 # Format: <pytest node id or prefix> | xfail|skip | <reason>
-#   xfail: still runs and is reported (XFAIL; XPASS once fixed, then delete the line).
+#   xfail: still runs and is reported as XFAIL. Strict: once it passes (XPASS) the run
+#          fails, so the PR that fixes it must delete the line. Use exact node ids
+#          (with [params]) so passing siblings stay gated.
 #   skip:  not run (it hangs or burns minutes before failing); say why.
 # Every entry is printed with its outcome at the end of each CI run.
 # Remove an entry in the PR that fixes the test. Do not add entries for new failures:
@@ -9,25 +11,10 @@
 #
 # Added 31 Oct 2026 (#486): failures found when the whole suite ran again on main fd5fc1a5.
 # None of these tests ran in PR CI since 27 Oct (#351), so each drifted from the code it checks.
-tests/test_room_seal.py::test_no_room_service_would_leak_when_coolify_deploys_it | xfail | docassemble compose files (agents/zenas/docker-compose.docassemble*.yml) join the non-internal Coolify app network; fix the compose or the seal rule, do not just relax the test
-tests/test_perplexity_research.py::test_schema_applies_twice_and_preserves_policy | xfail | schema now also seeds trigger.write and trigger.check policy rows; expected set not updated
-tests/test_moa_integration.py | xfail | tank/main.py:2545 reads row["priority"]; the policy rows the MoA tests fake have no "priority" key (KeyError)
-tests/test_za_region.py::test_za_zenas_room_is_its_own_resource_on_the_corridor | xfail | agent-zenas ZA compose now also joins the "assembly" network (docassemble); test expects only "gw"
-tests/test_models2_roster.py::test_regions_serve_identical_rosters_and_fallbacks | xfail | US and ZA LiteLLM rosters differ at deepseek-flash (off-peak pricing block); one region's config was not updated
-tests/test_model_roster.py::test_policy_seeds_and_the_switch_name_roster_models | xfail | schema policy seeds name a model "code" that is not in the LiteLLM roster
-tests/test_agent_memory_records.py::test_all_agent_schema_files_use_one_generator | xfail | agents/market_lab/schema.sql no longer ends with the generated agent-memory block (hermes/record_schema.py); regenerate it
-tests/test_case_study_reports.py::test_optional_audit_uses_upstream_measurement_and_only_this_tenants_verdicts | xfail | tank.base_audits now ships in schema.sql (#390); the test still creates its own table (DuplicateTableError)
-tests/test_base_engine_terms_approved.py::test_flat_app_layout_boots_and_reads_only_the_named_version | xfail | Base pipeline.py now imports base_source_scores (#413), which the flat app layout does not copy (ModuleNotFoundError)
-tests/test_base_engine_terms_approved.py::test_flat_app_layout_without_skills_dir_boots_empty | xfail | same as above: base_source_scores missing from the flat app layout
+# 17 of the 22 found were fixed in #486; these remain.
+tests/test_room_seal.py::test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.yml] | xfail | docassemble is sealed on the internal assembly network, but the file is not raw compose, so Coolify would add its internet-facing app network; mark it raw compose (after checking the live resource) or decide the seal rule, do not relax the test
+tests/test_room_seal.py::test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.za.yml] | xfail | docassemble is sealed on the internal assembly network, but the file is not raw compose, so Coolify would add its internet-facing app network; mark it raw compose (after checking the live resource) or decide the seal rule, do not relax the test
 tests/test_chat_graduation.py::test_chat_exact_repeat_has_zero_cost_both_jobs_in_savings_and_tenants_sealed | xfail | the exact-repeat chat stream has no "event: done" (it shows step/waiting/receipt events); the test expects done
-tests/test_radix_osv_real.py::test_osv_is_fetched_only_at_build_and_the_seal_is_unchanged | xfail | Radix compose no longer sets "mem_limit: 256m" (the seal the test checks)
-tests/test_c10_rooms.py::test_radix_reaches_one_host_only_through_the_proxy | xfail | Radix now also joins the passive-egress network; test expects egress-proxy only
-tests/test_candidate_eval_runtime.py::CandidateEvalRuntimeTests::test_bundled_feeds_and_fixtures_match_existing_sources | xfail | bundled copies in the market skill packages differ byte-for-byte from the current agents/market_lab sources
-tests/test_feeds_boundaries.py::test_industry_words_stay_in_the_engine | xfail | tests/rig_no_live_demo/* fixtures contain industry words the boundary check forbids outside the engine
-tests/test_pages_fix.py::test_rig_does_not_read_room_files | xfail | "Rig did not answer" is no longer in the workspace rig/lab.tsx page
-tests/test_schema.py::test_schema_statements_are_idempotent | xfail | the shape check does not accept CREATE OR REPLACE TRIGGER or the to_regclass-guarded case_study_clients DO block; decide the rule, then fix the check or the SQL
-tests/test_skills_offline.py::test_rung3_offline_cases | xfail | 5 approved trigger.* 1.0.0 skills fail their "empty text refused" case (they answer "error: Text must contain 1 to 20000 characters") and trigger.languagetool fails all 22 cases without its LanguageTool service; approved skills cannot be edited in place
-tests/test_tenant_scoping.py::test_v1_routes_with_tenant_id_scope_their_sql | xfail | guard reports "route_job: takes tenant_id but runs no SQL the guard can see"; the guard or the route needs updating
+tests/test_candidate_eval_runtime.py::CandidateEvalRuntimeTests::test_bundled_feeds_and_fixtures_match_existing_sources | xfail | agents/market_lab/feeds/runner.py changed (skips disabled specs) after market.series_fetch 1.2.1 was approved; approved packages are immutable, so the fix is a new 1.2.2 package with the current feeds through Skala evals and approval
 tests/test_backup_deploy_persistence.py::test_boston_backup_survives_default_deployment_composition | xfail | `docker compose --dry-run up --pull never` exits 1 on the GitHub runner (the test does not capture stderr); it was skipped where Docker was absent
 tests/test_rig_3d_deployment.py::test_docker_cmd_preserves_public_api_health_and_private_brain | xfail | Rig 3D docker CMD check fails at its line-28 assertion after "chassis ready"; needs a look by the Rig 3D owner
-tests/test_candidate_eval_runtime.py::CandidateEvalRuntimeTests::test_every_package_case_has_the_gold_startup_import_shape | xfail | requires an "expected" dict in every eval case, but 7 approved trigger.* 1.0.0 refusal cases use must_refuse + expected_error instead; the rule needs to allow refusal cases

@@ -104,6 +104,12 @@ class CandidateEvalRuntimeTests(unittest.TestCase):
             for case in pkg.cases:
                 with self.subTest(package=pkg.ref, case=case.get("name")):
                     self.assertIsInstance(case["input"], dict)
+                    if "expected" not in case:
+                        # gold.import_packages skips refusal cases (expected_error only);
+                        # Skala scores them as must_refuse checks.
+                        self.assertIs(case.get("must_refuse"), True)
+                        self.assertIsInstance(case.get("expected_error"), dict)
+                        continue
                     self.assertIsInstance(case["expected"], dict)
         cases = [json.loads(line) for line in (PACKAGE / "evals/cases.jsonl").read_text().splitlines()]
         self.assertTrue(all("expected_error" not in case for case in cases))
