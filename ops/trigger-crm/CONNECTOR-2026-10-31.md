@@ -60,9 +60,9 @@ Evidence: pinned repository OpenAPI, not a live capability claim.
 | Leads, contacts, estimates | `/api/leads/`, `/api/contacts/`, `/api/invoices/estimates/` with list/detail/create/update | Implemented core slice, tenant mapping/runtime setup pending |
 | Invoice data, send, PDF, payments | `/api/invoices/`, `/{id}/send/`, `/{id}/pdf/`, `/{invoice_id}/payments/` | Not exposed; payments/Stripe/platform billing are outside this job |
 | Estimate email/send and PDF | `/api/invoices/estimates/{id}/send/`, `/{id}/pdf/` | Not exposed; requires explicit send action/confirmation and real mail configuration |
-| Automation | `/api/automation/catalogue/`, `/rules/`, `/rules/{id}/runs/`, `/rules/{id}/try/`, `/rules/reorder/` | Existing upstream APIs; current connector PAT deliberately excludes automation scopes |
+| Automation | `/api/automation/catalogue/`, `/rules/`, `/rules/{id}/runs/`, `/rules/{id}/try/`, `/rules/reorder/` | Upstream interactive-user features. Actual pinned `common/scopes.py` puts automation in CREDENTIAL_PATHS: **no PAT scope can access it**. Do not propose adding a PAT scope or unrestricted token as a workaround |
 | Inbound email | `/api/cases/inbound/email/` | Existing specialized case ingestion, not a general mailbox/chat/messages API |
-| General chat/messages | No named general chat/messages endpoints in the pinned OpenAPI | Existing Tank Chats must be reused, not duplicated |
+| General chat/messages | `/api/interactions/` logs calls/meetings/messages on records; no general mailbox/chat endpoint is claimed | Reuse existing logged-interaction features and Tank Chats where appropriate, not an invented mail/chat provider |
 | Reminders | InvoiceBodyRequest: reminder_enabled, reminder_days_before/after, reminder_frequency; Invoice: last_reminder_sent/reminder_count; OrgSettings: lead_reminder_minutes. Tasks + notifications exist. | Existing upstream reminder features, not yet exposed by this connector; no generic daily-reminder capability is claimed |
 | Other historical CRM modules | `/api/accounts/`, `/api/opportunities/`, `/api/cases/`, `/api/tasks/`, `/api/invoices/` | Five of the historical eight CRM modules are not yet wired through this connector; no whole-CRM completion claim. Additional module scopes require founder-supplied narrow PAT configuration; existing scopes are not silently broadened |
 
@@ -87,3 +87,5 @@ Follow-up commands/results:
 3. Ruff on the connector, schema, new tests and both WSGI files: **passed**. Full-file Ruff on existing `command.py` reports preexisting findings; accidental automatic cleanup was reverted before committing, preserving only the required CRM hunks.
 4. Read-only YAML assertions for config source existence, read-only mounts and WSGI command: **passed**.
 5. Broader `tests/test_command.py` attempt: **17 passed, 26 skipped, 32 setup errors** because this narrow local environment lacks Redis and the remaining heavy Tank runtime dependencies. This is not a passing broad suite; hosted actual new-head CI remains required.
+
+Capability correction verified against upstream `backend/common/scopes.py` at the pinned commit: automation is credential-denied, and auth/profile is JWT-only. Scope expansion cannot enable either path. Accounts/opportunities/cases/tasks/notifications are named resources, but their additional narrow scopes are not silently added to the existing leads/contacts/invoices connector PAT.
