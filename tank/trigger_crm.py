@@ -9,11 +9,10 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 import httpx
+from command import Actor, authorized_actor, identity
 from fastapi import APIRouter, Depends, HTTPException, Request
 from jsonschema import Draft4Validator, FormatChecker
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-from command import Actor, authorized_actor, identity
 from trigger_crm_schema import ROOTS, SCHEMAS
 
 router = APIRouter(prefix="/v1/trigger/crm", tags=["trigger-crm"])
@@ -59,7 +58,7 @@ def binding(actor: Actor) -> tuple[str, str]:
     try:
         bindings = json.loads(os.environ.get("TRIGGER_CRM_TENANT_BINDINGS", "{}"))
         if not isinstance(bindings, dict):
-            raise ValueError
+            raise TypeError
         names, orgs, tokens = set(), set(), set()
         for tenant, item in bindings.items():
             UUID(tenant)
@@ -70,7 +69,7 @@ def binding(actor: Actor) -> tuple[str, str]:
                 raise ValueError
             token = os.environ.get(name, "")
             # Duplicate credentials/orgs could accidentally bind two tenants to one CRM org.
-            if not token or name in names or org in orgs or token in tokens:
+            if not token or len(token) > 4096 or not token.isascii() or any(c.isspace() for c in token) or name in names or org in orgs or token in tokens:
                 raise ValueError
             names.add(name)
             orgs.add(org)
@@ -94,20 +93,22 @@ async def upstream(actor: Actor, resource: Resource, *, record_id: UUID | None =
     url, token = binding(actor)
     path = PATHS[resource] + (f"{record_id}/" if record_id else "")
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(20), follow_redirects=False, trust_env=False) as client:
-            async with client.stream(method, url + path, headers={"Authorization": "Bearer " + token},
-                                     params=params, json=data) as response:
-                if response.status_code == 404:
-                    raise HTTPException(404, "CRM record unavailable")
-                if response.status_code in {401, 403}:
-                    raise HTTPException(503, "CRM access is not configured")
-                if not 200 <= response.status_code < 300:
-                    raise HTTPException(502, "CRM could not complete the request")
-                content = bytearray()
-                async for chunk in response.aiter_bytes():
-                    content.extend(chunk)
-                    if len(content) > 2_000_000:
-                        raise HTTPException(502, "CRM response exceeds the limit")
+        async with (
+            httpx.AsyncClient(timeout=httpx.Timeout(20), follow_redirects=False, trust_env=False) as client,
+            client.stream(method, url + path, headers={"Authorization": "Bearer " + token},
+                          params=params, json=data) as response,
+        ):
+            if response.status_code == 404:
+                raise HTTPException(404, "CRM record unavailable")
+            if response.status_code in {401, 403}:
+                raise HTTPException(503, "CRM access is not configured")
+            if not 200 <= response.status_code < 300:
+                raise HTTPException(502, "CRM could not complete the request")
+            content = bytearray()
+            async for chunk in response.aiter_bytes():
+                content.extend(chunk)
+                if len(content) > 2_000_000:
+                    raise HTTPException(502, "CRM response exceeds the limit")
         result = json.loads(content)
         if not isinstance(result, dict) or result.get("error") is True:
             raise ValueError
@@ -147,7 +148,10 @@ async def listing(resource: Resource, request: Request, actor: Annotated[Actor, 
         groups = [raw.get("open_leads"), raw.get("close_leads")]
         if not all(isinstance(group, dict) for group in groups):
             raise HTTPException(502, "Invalid CRM response")
-        rows = groups[0].get("open_leads", []) + groups[1].get("close_leads", [])
+        opened, closed = groups[0].get("open_leads"), groups[1].get("close_leads")
+        if not isinstance(opened, list) or not isinstance(closed, list):
+            raise HTTPException(502, "Invalid CRM response")
+        rows = opened + closed
         counts = [group.get("leads_count") for group in groups]
         count = sum(counts) if all(type(n) is int and n >= 0 for n in counts) else None
     else:
