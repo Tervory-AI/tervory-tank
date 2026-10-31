@@ -554,12 +554,28 @@ _MISS_QUOTES = 6
 # the PII mask runs, and these shapes are cut out wherever they appear.
 _SECRET_ENV = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD|PASSWD|DSN|DATABASE_URL|CREDENTIAL|PRIVATE)", re.IGNORECASE)
 _SECRET_SHAPES = (
+    # PEM private-key blocks first: they span lines, and the text is not folded yet.
+    re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\Z)"),
     re.compile(r"sk-[A-Za-z0-9_-]{8,}"),
-    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}"),
+    re.compile(r"\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{8,}"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"),
+    re.compile(r"\bAIza[0-9A-Za-z_-]{30,}"),
+    re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),
+    re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[abprs]-[A-Za-z0-9-]{10,})\b"),
+    # Laravel Sanctum / Coolify API tokens: "<id>|<40+ chars>".
+    re.compile(r"\b\d+\|[A-Za-z0-9]{40,}\b"),
+    re.compile(r"(?i)\bauthorization\b[\"']?\s*[:=]\s*[\"']?(?:bearer|token|basic|digest)?\s*[A-Za-z0-9._~+/=|-]{8,}[\"']?"),
+    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=|-]{8,}"),
     re.compile(r"(?i)\b[a-z][a-z0-9+.-]*://[^\s/@:]+:[^\s/@]+@\S+"),
     re.compile(r"(?i)\bhttps?://\S*(?:api_key|token|password|secret|[?&]key)=\S*"),
-    re.compile(r"(?i)\b(?:api[_-]?key|token|password|secret)\s*[=:]\s*\S+"),
-    re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[abpr]-[A-Za-z0-9-]{10,})\b"),
+    # key = value, key: value and JSON "key": "value", for key-like names such as
+    # api_key, aws_secret_access_key, client_secret, access_token, password.
+    re.compile(
+        r"(?i)[\"']?\b[a-z0-9_-]*(?:api[_-]?key|secret[_-]?access[_-]?key|access[_-]?key[_-]?id|secret|token|password|passwd)"
+        r"[\"']?\s*[=:]\s*[\"']?[^\s\"',;}]+[\"']?"
+    ),
+    # Long hex runs (R2/HMAC secrets, digests) carry no legal meaning in an answer.
+    re.compile(r"\b[0-9A-Fa-f]{32,}\b"),
 )
 QUOTE_CHECKS = (
     "supported, in the answer",
@@ -577,6 +593,23 @@ def _env_secrets() -> list[str]:
         for name, value in os.environ.items()
         if _SECRET_ENV.search(name) and len(value.strip()) >= 8
     ]
+
+
+def _cut_secrets(value: Any) -> str:
+    """Secrets only: the shapes above and this process's secret env values. No PII mask."""
+    text = str(value or "")
+    for shape in _SECRET_SHAPES:
+        text = shape.sub("[redacted]", text)
+    for secret in _env_secrets():
+        folded = " ".join(secret.split())
+        text = text.replace(secret, "")
+        text = re.sub(re.escape(folded), "", text, flags=re.IGNORECASE)
+    return " ".join(text.split())
+
+
+def _citation_text(value: Any) -> str:
+    """A citation keeps its case number ('GP 09/2025'): only secrets are cut, not PII."""
+    return _bounded(_cut_secrets(value), 80)
 
 
 def _diagnostic_text(value: Any) -> str:
@@ -650,7 +683,7 @@ def _quote_checks(
         quotes.append({"quote": _bounded(_diagnostic_text(quote), _MISS_PIECE_CHARS), "check": check})
     return {
         "quotes": quotes[:_MISS_QUOTES],
-        "other_citations": [_bounded(_diagnostic_text(item), 80) for item in others[:_MISS_QUOTES]],
+        "other_citations": [_citation_text(item) for item in others[:_MISS_QUOTES]],
         "library_chars": len(text),
     }
 
@@ -1083,7 +1116,7 @@ def _public_misses(raw: Any) -> list[dict[str, Any]]:
             ]
         others = item.get("other_citations")
         if isinstance(others, list):
-            miss["other_citations"] = [_bounded(_diagnostic_text(row), 80) for row in others[:_MISS_QUOTES]]
+            miss["other_citations"] = [_citation_text(row) for row in others[:_MISS_QUOTES]]
         out.append(miss)
     return out
 

@@ -12,6 +12,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -144,3 +146,67 @@ def test_excerpt_is_bounded_even_with_many_quotes():
     excerpt = selftest._answer_excerpt(masked)
     assert len(excerpt) <= selftest._MISS_ANSWER_CHARS
     assert excerpt.startswith("Para 0")
+
+
+# Review of #512, point 6: one runtime-built fake per secret shape. Every fake is
+# assembled from pieces so no committed line looks like a key (the scanner is untouched).
+def _fill(n, alphabet="AbCdEfGhJkMnPqRsTuVwXyZ23456789"):
+    return "".join(alphabet[(i * 7) % len(alphabet)] for i in range(n))
+
+
+_HEX = "0123456789abcdef"
+SHAPES = {
+    "stripe live secret": ("sk" + "_live_" + _fill(24),),
+    "stripe restricted": ("rk" + "_live_" + _fill(24),),
+    "github fine-grained pat": ("github" + "_pat_" + _fill(22) + "_" + _fill(59),),
+    "google api key": ("AI" + "za" + _fill(35),),
+    "jwt": ("ey" + "J" + _fill(24) + "." + "ey" + "J" + _fill(30) + "." + _fill(43),),
+    "pem private key": (
+        "-----BEGIN " + "RSA PRIVATE" + " KEY-----\n" + _fill(64) + "\n" + _fill(64) + "\n-----END " + "RSA PRIVATE" + " KEY-----",
+    ),
+    "json api_key": ('{"api' + '_key": "' + _fill(32) + '"}', _fill(32)),
+    "authorization token header": ("Authorization: " + "Token " + _fill(40),),
+    "aws secret access key": ("aws_secret" + "_access_key = " + _fill(40),),
+    "coolify sanctum token": ("12" + "|" + _fill(48),),
+    "long hex secret": (_fill(64, _HEX),),
+    "hex after a key word": ("r2 secret " + _fill(40, _HEX),),
+}
+
+
+@pytest.mark.parametrize("name", sorted(SHAPES))
+def test_each_secret_shape_is_cut(name):
+    secret, *inner = SHAPES[name]
+    text = f"The court held the appeal fails. {secret} Costs follow."
+    cleaned = selftest._diagnostic_text(text)
+    check = inner[0] if inner else secret
+    assert check not in cleaned, name
+    # No long run of the fake survives either (catches partial masking such as digit-only cuts).
+    body = check.replace("\n", "")
+    for start in range(0, max(1, len(body) - 12), 6):
+        assert body[start : start + 12] not in cleaned.replace(" ", ""), name
+    assert "The court held the appeal fails." in cleaned and "Costs follow." in cleaned
+
+
+def test_secret_shapes_are_cut_in_citations_too():
+    for name, (secret, *inner) in SHAPES.items():
+        assert (inner[0] if inner else secret) not in selftest._citation_text(f"CAC 1 {secret}"), name
+
+
+# Review of #512, point 7: a citation keeps its case number. Only secrets are cut.
+def test_other_citations_keep_za_case_numbers(monkeypatch):
+    memo = "CAC 108 dismissed the appeal."
+    quotes = [("CAC 108", HOLDING), ("GP 09/2025", QUOTE), ("[2025] ZAGPJHC 1234", QUOTE)]
+    made, detail = _run(monkeypatch, lambda i, q: _card(memo, quotes))
+    miss = made["misses"][0]
+    assert miss["other_citations"] == ["GP 09/2025", "[2025] ZAGPJHC 1234"]
+    assert detail["misses"][0]["other_citations"] == ["GP 09/2025", "[2025] ZAGPJHC 1234"]
+    # The same string run through the PII mask loses its number, which is why it is not masked.
+    assert "09/2025" not in selftest._diagnostic_text("GP 09/2025")
+
+
+def test_old_rows_keep_citation_numbers_on_read(monkeypatch):
+    monkeypatch.setenv("ZENAS_FAKE_API_TOKEN", ENV_SECRET)
+    out = selftest._public_misses([{"case": "real-01", "kind": "real", "citation": "CAC 108",
+                                    "reason": selftest.MISS_REASONS[7], "other_citations": ["GP 09/2025", "x " + ENV_SECRET]}])
+    assert out[0]["other_citations"][0] == "GP 09/2025"
+    assert ENV_SECRET not in json.dumps(out)
