@@ -1,28 +1,7 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono, Jost } from "next/font/google";
+import "./fonts.css";
 import "./globals.css";
 import { homeDescription, homeTitle } from "../lib/site";
-
-const jost = Jost({
-  subsets: ["latin"],
-  weight: ["300", "400"],
-  variable: "--font-jost",
-  display: "swap",
-});
-
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-inter",
-  display: "swap",
-});
-
-const mono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["400"],
-  variable: "--font-jetbrains",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://tervory.com"),
@@ -37,7 +16,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${jost.variable} ${inter.variable} ${mono.variable}`}>
+    <html lang="en">
+      <head>
+        <link rel="preload" href="/fonts/9dd75fadc5b3df29-s.p.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+        <link rel="preload" href="/fonts/e4af272ccee01ff0-s.p.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+        <link rel="preload" href="/fonts/427e4a37d3642943-s.p.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+      </head>
       <body>{children}</body>
     </html>
   );
