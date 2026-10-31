@@ -250,12 +250,17 @@ def build_router(tank):
             fail(404, 'Not found')
         if room == 'market_lab' and kind == 'links':
             # The room owns links (#421) and its delete is an idempotent no-op for an id this
-            # tenant does not have. The vault contract (#362) answers 404 for that, as for
-            # files and connections, so check the tenant's own links first.
+            # tenant does not have. Links saved before #421 may still sit in tank.vault_items
+            # (never migrated; the listing above still shows them). The vault contract (#362)
+            # answers 404 only when neither place has the id, as for files and connections.
             links = await room_call(room, 'GET', '/market/feeds', owner)
-            if ident not in {str(link.get('id')) for link in links.get('links', [])}:
+            in_room = ident in {str(link.get('id')) for link in links.get('links', [])}
+            async with tank.pool().acquire() as conn:
+                legacy = await conn.fetchval("SELECT count(*) FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 AND kind='links' AND name=$3", owner, vault, ident)
+            if not in_room and not legacy:
                 fail(404, 'Not found')
-            await room_call(room, 'DELETE', f'/market/feeds/{ident}', owner)
+            if in_room:
+                await room_call(room, 'DELETE', f'/market/feeds/{ident}', owner)
             async with tank.pool().acquire() as conn:
                 await conn.execute("DELETE FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 AND kind='links' AND name=$3", owner, vault, ident)
             return reply({'ok': True})

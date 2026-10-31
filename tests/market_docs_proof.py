@@ -173,12 +173,30 @@ def check(env, output):
         assert listing(other)['connections'] == listing(other)['links'] == listing(other)['secrets'] == []
         for kind in ('links', 'connections'):
             ident = listing()[kind][0]['id']
-            # Another workspace never deletes the owner's item. On main a link answers 200 (the room's
-            # delete is a tenant-scoped no-op) where #362's contract says 404, as connections do.
-            # PR #519 makes Tank answer 404; when it lands, expect 404 for both kinds here.
-            assert vault('DELETE', f'{kind}/{ident}', tenant=other).status_code == (200 if kind == 'links' else 404)
+            assert vault('DELETE', f'{kind}/{ident}', tenant=other).status_code == 404
             assert ident in {str(item['id']) for item in listing()[kind]}
             assert vault('DELETE', f'{kind}/{ident}').status_code == 200
+        # A link saved before #421 moved links into the room still sits in tank.vault_items (never
+        # migrated). The listing shows it, so its owner must be able to delete it; others get 404.
+        legacy = str(uuid4())
+        async def legacy_rows(insert=False):
+            conn = await asyncpg.connect(database_url())
+            try:
+                if insert:
+                    await conn.execute("INSERT INTO tank.vault_items(tenant_id,vault,kind,name,metadata) VALUES($1,'lab.vault','links',$2,$3::jsonb)", UUID(owner), legacy,
+                        json.dumps({'id': legacy, 'url': 'https://example.com/old', 'label': 'Old', 'frequency': 'weekly', 'last_checked': None, 'status': 'not_checked'}))
+                return await conn.fetchval("SELECT count(*) FROM tank.vault_items WHERE tenant_id=$1 AND vault='lab.vault' AND kind='links' AND name=$2", UUID(owner), legacy)
+            finally:
+                await conn.close()
+        assert asyncio.run(legacy_rows(insert=True)) == 1
+        assert legacy in {str(item['id']) for item in listing()['links']}
+        assert vault('DELETE', f'links/{legacy}', tenant=other).status_code == 404
+        assert asyncio.run(legacy_rows()) == 1
+        assert vault('DELETE', f'links/{legacy}').status_code == 200
+        assert asyncio.run(legacy_rows()) == 0
+        assert legacy not in {str(item['id']) for item in listing()['links']}
+        assert vault('DELETE', f'links/{legacy}').status_code == 404
+        assert vault('DELETE', f'links/{uuid4()}').status_code == 404
         assert vault('DELETE', 'secrets?name=REPORT_KEY').status_code == 200  # The client contract puts the name in the query.
         upload = vault('POST', 'files', files=[('file', ('report.pdf', report_pdf(), 'application/pdf'))])
         assert upload.status_code == 200, upload.text
