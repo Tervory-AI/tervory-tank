@@ -1,4 +1,6 @@
 import { readFile } from 'node:fs/promises';
+import { basename, extname } from 'node:path';
+import { parse } from 'csv-parse/sync';
 
 const ORIGINS = Object.freeze({ 'us-east': 'https://app.tervory.com', za: 'https://za.tervory.com' });
 const ENVELOPE = /^tv1\.(us-east|za)\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/;
@@ -179,8 +181,16 @@ export async function run(argv, { store, transport, io }) {
     if (rest.length !== 2) throw new Error('Run requires an agent and task.');
     let arguments_ = {};
     try { arguments_ = flags.args ? JSON.parse(flags.args) : {}; } catch { throw new Error('Invalid task arguments.'); }
-    if (flags.file) arguments_.file = await readFile(flags.file, 'utf8');
     const tool = `${rest[0]}.${rest[1]}`;
+    if (flags.file) {
+      if (tool !== 'base.batch') throw new Error('Invalid file option for this tool; use --args with its Tank schema.');
+      const text = await readFile(flags.file, 'utf8');
+      if (Buffer.byteLength(text) > 2_000_000) throw new Error('Invalid file size.');
+      try {
+        arguments_.records = parse(text, { columns: true, bom: true, skip_empty_lines: true, max_record_size: 200_000 });
+      } catch { throw new Error('Invalid CSV file.'); }
+      arguments_.batch ??= basename(flags.file, extname(flags.file));
+    }
     const allowed = await tank.json('/v1/command/tools');
     if (!allowed.includes(tool)) throw new Error('This tool is not available to this user.');
     const card = await tank.json(`/v1/command/threads/${encodeURIComponent(thread)}/actions`, { tool, arguments: arguments_ });
