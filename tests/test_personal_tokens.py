@@ -18,10 +18,11 @@ TENANT = uuid.UUID('00000000-0000-0000-0000-000000000011')
 TOKEN = f'tv1.us-east.{TENANT.hex}.' + 'x' * 43
 
 
-def request(token=TOKEN, **headers):
+def request(token=TOKEN, method='GET', path='/v1/command/tools', **headers):
     if token is not None:
         headers['authorization'] = 'Bearer ' + token
-    return Request({'type': 'http', 'headers': [(k.encode(), v.encode()) for k, v in headers.items()]})
+    return Request({'type': 'http', 'method': method, 'path': path, 'query_string': b'', 'server': ('fixture', 80),
+                    'scheme': 'http', 'headers': [(k.encode(), v.encode()) for k, v in headers.items()]})
 
 
 @pytest.fixture

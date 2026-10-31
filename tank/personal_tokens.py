@@ -73,10 +73,33 @@ async def device_approval_actor(request: Request) -> command.Actor:
     return await command.identity(request)
 
 
+# A CLI credential authenticates the CLI corridor and nothing else. register() puts
+# this dependency in place of command.identity app-wide, and on ZA the CLI talks to
+# the public Tank directly, so without this list a CLI token would also reach every
+# other route built on command.identity (access, event bus, triggers, case studies,
+# squads, repo, attachments, worker follow-ups...). It mirrors the Workspace corridor
+# (workspace/lib/tank.ts personalCommandRequest) plus the founder-only model roster,
+# which the route itself answers 404 for everyone else. Review of #506, self-review (b)/(c).
+_UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+CLI_ROUTES = {
+    "GET": re.compile(rf"/v1/command/(models|tools|threads|threads/{_UUID}(/events)?|tasks/{_UUID}/receipts)\Z"),
+    "POST": re.compile(rf"/v1/command/(threads|threads/{_UUID}/(turn|actions)|cards/{_UUID}|build)\Z"),
+    "PATCH": re.compile(rf"/v1/command/threads/{_UUID}\Z"),
+}
+
+
+def cli_route(request: Request) -> bool:
+    pattern = CLI_ROUTES.get(request.method)
+    return pattern is not None and pattern.fullmatch(request.url.path) is not None
+
+
 async def identity(request: Request) -> command.Actor:
     authorization = request.headers.get("authorization")
     if authorization is None:
         return await command.identity(request)
+    if not cli_route(request):
+        # Same answer as an unknown route; no database lookup, nothing about the token.
+        raise HTTPException(404, "Not Found")
     scheme, _, token = authorization.partition(" ")
     match = TOKEN.fullmatch(token) if scheme.lower() == "bearer" else None
     if match is None:
