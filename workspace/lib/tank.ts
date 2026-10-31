@@ -55,13 +55,15 @@ export async function boundedFetch<T>(url: URL | string, init: RequestInit, time
  * heartbeat every 0.25 s while a turn runs), if it is not finished within totalMs (when
  * given), or if the downstream cancels. Each read is raced against a timer, so a stalled
  * upstream cannot pin the request forever even when undici ignores its abort signal.
+ * onStop is required: it must abort the upstream fetch (its AbortController), so a stop
+ * closes the connection to Tank instead of only cancelling the reader.
  */
 export function boundedBody(body: ReadableStream<Uint8Array>, limits: { idleMs: number; totalMs?: number },
-                            onStop?: () => void): ReadableStream<Uint8Array> {
+                            onStop: () => void): ReadableStream<Uint8Array> {
   const reader = body.getReader();
   const end = limits.totalMs === undefined ? Infinity : Date.now() + limits.totalMs;
   let stopped = false;
-  const stop = () => { if (stopped) return; stopped = true; onStop?.(); reader.cancel().catch(() => undefined); };
+  const stop = () => { if (stopped) return; stopped = true; onStop(); reader.cancel().catch(() => undefined); };
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -78,11 +80,6 @@ export function boundedBody(body: ReadableStream<Uint8Array>, limits: { idleMs: 
     },
     cancel() { stop(); },
   });
-}
-
-/** boundedBody with an idle bound only (streams that legitimately run long). */
-export function idleBoundedBody(body: ReadableStream<Uint8Array>, idleMs: number, onStop?: () => void): ReadableStream<Uint8Array> {
-  return boundedBody(body, { idleMs }, onStop);
 }
 
 export const DEVICE_PROXY_TIMEOUT_MS = 10_000;
@@ -187,26 +184,30 @@ export async function personalCommandRequest(request: Request, path: string[],
       for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
     }
   }
+  // Aborted when the body is stopped (idle, total deadline, or the client went away), so
+  // the connection to Tank is closed, not just the reader cancelled.
+  const stop = new AbortController();
+  const signal = AbortSignal.any([request.signal, stop.signal]);
   try {
     // The deadline covers the headers (card confirmations answer only once the action ran);
     // the body is then passed through with an idle bound so a stalled Tank cannot pin it.
     const response = await boundedFetch(url, {
-      method: request.method, body: body as BodyInit | undefined, signal: request.signal,
+      method: request.method, body: body as BodyInit | undefined, signal,
       headers: { Authorization: `Bearer ${token[1]}`, "Content-Type": "application/json" },
       cache: "no-store",
     }, limits.headersMs, async response => response);
-    if (!response.ok) { await response.body?.cancel().catch(() => undefined); return refused(response.status); }
+    if (!response.ok) { stop.abort(); await response.body?.cancel().catch(() => undefined); return refused(response.status); }
     const type = response.headers.get("content-type") ?? "";
     if (!type.startsWith("application/json") && !type.startsWith("text/event-stream")) {
-      await response.body?.cancel().catch(() => undefined); return refused(502);
+      stop.abort(); await response.body?.cancel().catch(() => undefined); return refused(502);
     }
     // Event streams: idle bound (Tank heartbeats). JSON: idle bound and a total deadline.
     const bodyLimits = type.startsWith("text/event-stream") ? { idleMs: limits.idleMs }
       : { idleMs: limits.idleMs, totalMs: limits.bodyMs ?? COMMAND_BODY_TIMEOUT_MS };
-    return new Response(response.body && boundedBody(response.body, bodyLimits), { status: response.status, headers: {
+    return new Response(response.body && boundedBody(response.body, bodyLimits, () => stop.abort()), { status: response.status, headers: {
       ...headers, "Content-Type": type, "X-Accel-Buffering": "no", "X-Content-Type-Options": "nosniff",
     } });
-  } catch { return refused(502); }
+  } catch { stop.abort(); return refused(502); }
 }
 
 /** Founder memory inspection; identity comes from the server's goldIdentity check. */

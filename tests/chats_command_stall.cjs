@@ -11,7 +11,8 @@
  *   sending heartbeats past the idle bound (must NOT be cut); a redirect (never followed);
  *   a stalled roster read; commandRequest under Next's render-time dedupe fetch; and a JSON
  *   body that trickles a byte every 300 ms forever (beats the idle bound, so only the
- *   total body deadline ends it) through both the /chats route and the CLI PAT proxy.
+ *   total body deadline ends it) through both the /chats route and the CLI PAT proxy, plus
+ *   a stalled PAT proxy JSON body; each PAT proxy stop must close its upstream connection.
  * Run with: node --expose-gc tests/chats_command_stall.cjs. Synthetic: dummy keys, loopback. */
 const assert = require('node:assert/strict');
 const http = require('node:http');
@@ -79,7 +80,15 @@ const server = http.createServer((req, res) => {
     tank.ROSTER_TIMEOUT_MS.value = BOUND;
     return { tank, route: load('app/chats/api/[...path]/route.ts') };
   };
-  const { tank, route } = make(globalThis.fetch);
+  // Records the signal each upstream fetch got, so a stop can be shown to abort the fetch
+  // itself (a reader cancel alone also closes a healthy socket, so that is checked too).
+  const sent = [];
+  const recording = (url, init) => {
+    const p = new URL(String(url)).pathname;
+    sent.push({ url: String(url), signal: init?.signal, kind: p === '/v1/models' ? mode.roster ?? 'ok' : mode[p] ?? 'silent' });
+    return globalThis.fetch(url, init);
+  };
+  const { tank, route } = make(recording);
   const call = (target, method = 'GET', body) => route[method](new Request(`https://app.tervory.com/chats/api/${target}`, {
     method, headers: { origin: 'https://app.tervory.com', host: 'app.tervory.com', 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body) }), { params: Promise.resolve({ path: target.split('/') }) });
@@ -151,21 +160,42 @@ const server = http.createServer((req, res) => {
 
   // 10. The same trickle through the CLI PAT proxy (personalCommandRequest): the JSON read
   //     ends at its total bound (bodyMs, 60 s by default), not only an idle bound.
+  //     Each stop must also close the upstream connection (the proxy aborts its fetch, not
+  //     only the reader): checked per path right after the stop, before anything else runs.
   const pat = `tv1.us-east.${'0'.repeat(32)}.${'A'.repeat(43)}`;
-  const proxied = await within(tank.personalCommandRequest(new Request(`https://app.tervory.com/v1/command/threads/${ID}`, {
-    headers: { host: 'app.tervory.com', authorization: `Bearer ${pat}` } }), ['threads', ID],
-    { headersMs: BOUND, idleMs: BOUND, deviceMs: BOUND, bodyMs: BOUND }), BOUND * 3, 'pat headers');
+  const PAT_LIMITS = { headersMs: BOUND, idleMs: BOUND, deviceMs: BOUND, bodyMs: BOUND };
+  const viaPat = id => within(tank.personalCommandRequest(new Request(`https://app.tervory.com/v1/command/threads/${id}`, {
+    headers: { host: 'app.tervory.com', authorization: `Bearer ${pat}` } }), ['threads', id], PAT_LIMITS), BOUND * 3, `pat headers ${id}`);
+  const closedSoon = async (p, label) => {
+    const until = Date.now() + 1000;
+    while (!closed.includes(p) && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 25));
+    assert(closed.includes(p), `${label}: upstream ${p} was closed after the stop`);
+    const call = sent.filter(entry => new URL(entry.url).pathname === p).at(-1);
+    assert(call?.signal?.aborted, `${label}: the upstream fetch for ${p} was aborted, not only its reader cancelled`);
+  };
+  const PAT_TRICKLE = '00000000-0000-4000-8000-000000000003', PAT_STALL = '00000000-0000-4000-8000-000000000004';
+  mode = { [`/v1/command/threads/${PAT_TRICKLE}`]: 'trickle-json', [`/v1/command/threads/${PAT_STALL}`]: 'stalled-json' };
+  const proxied = await viaPat(PAT_TRICKLE);
   assert.equal(proxied.status, 200);
   const patBegan = Date.now();
   await assert.rejects(within(proxied.text(), BOUND * 3, 'pat json trickle'), error => error.name === 'DeadlineError');
   const patTook = Date.now() - patBegan;
   assert(patTook < BOUND * 2.5, `pat total body bound (${patTook} ms)`);
+  await closedSoon(`/v1/command/threads/${PAT_TRICKLE}`, 'pat total deadline');
+  //     A JSON body that stalls (idle stop) through the PAT proxy: same, socket closed.
+  const stalledPat = await viaPat(PAT_STALL);
+  await assert.rejects(within(stalledPat.text(), BOUND * 3, 'pat json stall'), error => error.name === 'DeadlineError');
+  await closedSoon(`/v1/command/threads/${PAT_STALL}`, 'pat idle stop');
 
   clearInterval(collect);
   // Every stalled upstream connection was closed by the Workspace, not left open.
   await new Promise(resolve => setTimeout(resolve, 300));
   for (const p of ['/v1/command/threads', `/v1/command/threads/${ID}`, `/v1/command/threads/${ID}/turn`, '/v1/models'])
     assert(closed.includes(p), `upstream ${p} was closed`);
+  // And every upstream fetch that met a stall (silent, stalled body, trickle) was aborted.
+  const stalls = sent.filter(entry => ['silent', 'stalled-json', 'stalled-error', 'stalled-stream', 'trickle-json', 'stall'].includes(entry.kind));
+  assert(stalls.length >= 8, `stalled fetches recorded (${stalls.length})`);
+  for (const entry of stalls) assert(entry.signal?.aborted, `upstream fetch ${new URL(entry.url).pathname} (${entry.kind}) was aborted`);
   server.closeAllConnections(); server.close();
   console.log('chats_command_stall: commandRequest, the roster read and the PAT proxy JSON end at their bounds under stalls, trickles + gc; heartbeats keep streams alive');
 })().catch(error => { console.error(error); process.exit(1); });
