@@ -5,6 +5,14 @@ const nextConfig: NextConfig = {
   async headers() {
     // The CLI approval page grants a credential: never framed, never cached.
     return [{
+      // Self-hosted CLI: the pointer and installer must not be cached; a versioned
+      // release never changes once published.
+      source: "/cli/:file(latest.json|install.sh)",
+      headers: [{ key: "Cache-Control", value: "no-cache" }, { key: "X-Content-Type-Options", value: "nosniff" }],
+    }, {
+      source: "/cli/releases/:path*",
+      headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }, { key: "X-Content-Type-Options", value: "nosniff" }],
+    }, {
       source: "/cli/device",
       headers: [
         { key: "X-Frame-Options", value: "DENY" },

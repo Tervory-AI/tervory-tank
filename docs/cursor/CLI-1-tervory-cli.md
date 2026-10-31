@@ -9,7 +9,7 @@
 - `.env.example` (names only);
 - tests.
 
-1. **Package:** `cli/`, published as `@tervory/cli` (Node 22, a single `tervory` command; works on macOS, Linux and Windows). Version pinned, with a changelog.
+1. **Package:** `cli/` (`"private": true`, never published to npm or any third-party registry), distributed only from Tervory's own Workspace at `https://app.tervory.com/cli/` (install.sh, latest.json, versioned per-platform tarballs with a SHA-256 manifest; `tervory update`). Node 22, a single `tervory` command. Version pinned, with a changelog.
 2. **Sign-in:** personal access tokens.
    - Created and revoked in the Workspace under Settings > Access tokens.
    - Stored hashed in Tank, scoped to one user, one tenant and one region box.

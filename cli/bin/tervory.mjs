@@ -4,6 +4,7 @@ import { clearLine, cursorTo } from 'node:readline';
 import { spawn } from 'node:child_process';
 import { hostname } from 'node:os';
 import { keychain, run, safe } from '../src/client.mjs';
+import { updateNotice } from '../src/update.mjs';
 
 // Sign-in is a browser device approval: no credential is typed, pasted, passed
 // in argv or the environment, or written anywhere except the OS keychain.
@@ -21,6 +22,13 @@ let readline;
 const controller = new AbortController();
 const cancel = () => { controller.abort(); readline?.close(); };
 process.on('SIGINT', cancel);
+// Passive "new version available" check for copies installed with install.sh: at
+// most once a day, 1.5 s budget, from app.tervory.com/cli only, never fails a command.
+// TERVORY_NO_UPDATE_CHECK=1 turns it off; a TERVORY_CLI_VERSION pin turns it off too.
+const command = process.argv[2];
+const notice = command && command !== 'update' && process.env.TERVORY_NO_UPDATE_CHECK !== '1'
+  && !(process.env.TERVORY_CLI_VERSION ?? '').trim()
+  ? updateNotice({ transport: fetch }) : Promise.resolve(null);
 try {
   if (Number(process.versions.node.split('.')[0]) !== 22) throw new Error('Node 22 is required.');
   await run(process.argv.slice(2), {
@@ -54,7 +62,11 @@ try {
   });
 } catch (error) {
   // Never print native-keychain or transport errors: they can include input.
-  const known = /^(?:Personal token refused\.|Tank |Login |Signed |Node 22|Unknown command|Invalid |A thread|Command |Run requires|This tool)/;
+  const known = /^(?:Personal token refused\.|Tank |Login |Signed |Node 22|Unknown command|Invalid |A thread|Command |Run requires|This tool|Update )/;
   process.stderr.write(known.test(error.message) ? `${safe(error.message)}\n` : 'Command failed. Check your OS keychain and Tank connection.\n');
   process.exitCode = 1;
-} finally { readline?.close(); process.off('SIGINT', cancel); }
+} finally {
+  readline?.close(); process.off('SIGINT', cancel);
+  const line = await notice;
+  if (line) process.stderr.write(safe(line));
+}

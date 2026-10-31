@@ -10,6 +10,8 @@ on:
       - 'workspace/lib/tank.ts'
       - 'workspace/app/v1/command/**'
       - 'workspace/middleware.ts'
+      - 'workspace/next.config.ts'
+      - 'workspace/public/cli/**'
       - '.github/workflows/cli.yml'
 permissions:
   contents: read
@@ -35,3 +37,24 @@ jobs:
         working-directory: cli
       - run: npm pack --dry-run
         working-directory: cli
+      - name: Never publishable to a registry
+        run: |
+          node -e '
+            const p = require("./cli/package.json");
+            if (p.private !== true) { console.error("cli/package.json must keep \"private\": true (self-hosted only, no npm)."); process.exit(1); }
+            if (p.publishConfig?.registry !== "https://registry.invalid/") { console.error("cli publishConfig.registry must stay https://registry.invalid/."); process.exit(1); }'
+      - name: Workspace serves the release files signed-out
+        run: |
+          for route in '"/cli/install.sh"' '"/cli/latest.json"' '"/cli/releases(.*)"'; do
+            grep -qF "$route" workspace/middleware.ts || { echo "workspace/middleware.ts isPublic is missing $route"; exit 1; }
+          done
+      - name: Committed self-hosted release matches a clean rebuild
+        run: |
+          node cli/scripts/build-release.mjs --out "$RUNNER_TEMP/cli-release"
+          diff -r "$RUNNER_TEMP/cli-release" workspace/public/cli \
+            || { echo "Rebuild with: node cli/scripts/build-release.mjs --out workspace/public/cli (bump cli version for any change)"; exit 1; }
+      - name: Published versions are immutable
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          changed=$(git diff --name-only --diff-filter=MDR FETCH_HEAD -- workspace/public/cli/releases)
+          if [ -n "$changed" ]; then echo "Published CLI release files changed (bump the version instead):"; echo "$changed"; exit 1; fi

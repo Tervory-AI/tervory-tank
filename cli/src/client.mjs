@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 import { parse } from 'csv-parse/sync';
+import { installedRelease, packageVersion, update } from './update.mjs';
 
 const ORIGINS = Object.freeze({ 'us-east': 'https://app.tervory.com', za: 'https://za.tervory.com' });
 const ENVELOPE = /^tv1\.(us-east|za)\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/;
@@ -367,7 +368,7 @@ export function options(argv) {
   for (let i = 0; i < argv.length; i++) {
     if (!argv[i].startsWith('--')) { args.push(argv[i]); continue; }
     const flag = argv[i].slice(2);
-    if (!['model', 'thread', 'file', 'args', 'region'].includes(flag) || flags[flag] !== undefined || !argv[i + 1] || argv[i + 1].startsWith('--')) {
+    if (!['model', 'thread', 'file', 'args', 'region', 'version'].includes(flag) || flags[flag] !== undefined || !argv[i + 1] || argv[i + 1].startsWith('--')) {
       throw new Error('Invalid command option.');
     }
     flags[flag] = argv[++i];
@@ -375,10 +376,24 @@ export function options(argv) {
   return { args, flags };
 }
 
-export async function run(argv, { store, transport, io }) {
+export async function run(argv, { store, transport, io, env = process.env }) {
   const { args, flags } = options(argv); const [name, ...rest] = args;
   if (!name || name === 'help') {
-    io.write('tervory login [--region us-east|za] | logout | chat [thread] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] | build "change" | receipts <thread|task> | models\n');
+    io.write('tervory login [--region us-east|za] | logout | chat [thread] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] | build "change" | receipts <thread|task> | models | update [--version X.Y.Z] | version\n');
+    return;
+  }
+  if (name === 'update') {
+    const { version, ...other } = flags;
+    if (rest.length || Object.keys(other).length) throw new Error('Update accepts only --version X.Y.Z.');
+    // Pin: TERVORY_CLI_VERSION (the same variable install.sh honours) when --version is not given.
+    const pinned = (env.TERVORY_CLI_VERSION ?? '').trim() || undefined;
+    return update({ transport: transport ?? fetch, io, version: version ?? pinned });
+  }
+  if (flags.version !== undefined) throw new Error('Invalid command option.');
+  if (name === 'version') {
+    if (rest.length || Object.keys(flags).length) throw new Error('Invalid command option.');
+    const release = await installedRelease();
+    io.write(`tervory ${release ? `${release.version} (${release.platform})` : `${await packageVersion()} (development checkout)`}\n`);
     return;
   }
   if (name === 'login') {
