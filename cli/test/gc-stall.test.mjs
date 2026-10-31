@@ -101,3 +101,52 @@ test('Ctrl-C (the caller signal) still aborts a stalled stream at once', async (
     assert.match(result.error.message, /Command cancelled/);
   } finally { close(); }
 });
+
+// Review of #506 round 2 (should-fix, applied to the CLI too): when events() stops early
+// it aborts the upstream fetch itself and the server sees the connection close, for an
+// idle stall, an invalid event, and a caller that leaves the loop (e.g. on an error event).
+test('every early stop of events() aborts the upstream fetch and closes the connection', async () => {
+  const closedAt = [];
+  const { transport, close } = await stallingServer((req, res) => {
+    res.on('close', () => closedAt.push(req.url));
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.write(req.url.endsWith('/bad/turn') ? 'event: step\ndata: {not json\n\n' : 'event: error\ndata: {}\n\n');
+  });
+  const signals = [];
+  const recording = (url, init) => { signals.push(init.signal); return transport(url, init); };
+  const closedSoon = async path => {
+    for (let i = 0; i < 40 && !closedAt.some(url => url.endsWith(path)); i++) await new Promise(resolve => setTimeout(resolve, 25));
+    assert(closedAt.some(url => url.endsWith(path)), `connection for ${path} closed`);
+  };
+  try {
+    const tank = new Tank(TOKEN, recording);
+    await withGc(async () => {
+      const idle = await tank.request('/v1/command/threads/idle/turn', { text: 'x' });
+      const stalled = await bounded((async () => { for await (const _ of events(idle, { idleMs: 300 })); })(), 250, 3000);
+      assert.match(stalled.error.message, /Tank stream stalled/);
+      assert(signals.at(-1).aborted, 'idle stop aborted the fetch'); await closedSoon('/idle/turn');
+
+      const bad = await tank.request('/v1/command/threads/bad/turn', { text: 'x' });
+      await assert.rejects(async () => { for await (const _ of events(bad, { idleMs: 60_000 })); }, /invalid event/);
+      assert(signals.at(-1).aborted, 'invalid event aborted the fetch'); await closedSoon('/bad/turn');
+
+      const left = await tank.request('/v1/command/threads/left/turn', { text: 'x' });
+      for await (const event of events(left, { idleMs: 60_000 })) { assert.equal(event.kind, 'error'); break; }
+      assert(signals.at(-1).aborted, 'leaving the loop aborted the fetch'); await closedSoon('/left/turn');
+    });
+  } finally { close(); }
+});
+
+test('a stream that finishes normally is not aborted', async () => {
+  const { transport, close } = await stallingServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end('event: done\ndata: {}\n\n');
+  });
+  const signals = [];
+  try {
+    const tank = new Tank(TOKEN, (url, init) => { signals.push(init.signal); return transport(url, init); });
+    const response = await tank.request('/v1/command/threads/x/turn', { text: 'x' });
+    const kinds = []; for await (const event of events(response)) kinds.push(event.kind);
+    assert.deepEqual(kinds, ['done']);
+    assert.equal(signals.at(-1).aborted, false);
+  } finally { close(); }
+});

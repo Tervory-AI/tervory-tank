@@ -217,11 +217,12 @@ export class Tank {
     this.transport = transport;
     this.signal = signal;
   }
-  async #call(path, body, method, timeoutMs, read) {
+  async #call(path, body, method, timeoutMs, read, stop) {
     if (!/^\/v1\/command\/[A-Za-z0-9/?=&._%-]+$/.test(path)) throw new Error('Command path refused.');
+    const signal = stop && this.signal ? AbortSignal.any([this.signal, stop]) : stop ?? this.signal;
     try {
       return await boundedFetch(this.transport, this.origin + path, {
-        method, signal: this.signal, headers: { Authorization: `Bearer ${this.#token}`, 'Content-Type': 'application/json' },
+        method, signal, headers: { Authorization: `Bearer ${this.#token}`, 'Content-Type': 'application/json' },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }, timeoutMs, async response => {
         if (!response.ok) {
@@ -242,7 +243,10 @@ export class Tank {
   }
   /** A streaming response: the deadline covers the headers; events() bounds each read. */
   async request(path, body, method = body === undefined ? 'GET' : 'POST') {
-    return this.#call(path, body, method, HEADERS_TIMEOUT_MS, response => response);
+    const stop = new AbortController();
+    const response = await this.#call(path, body, method, HEADERS_TIMEOUT_MS, answer => answer, stop.signal);
+    STREAM_STOPS.set(response, stop);
+    return response;
   }
   /** A JSON answer: the deadline covers the whole call, body included. */
   async json(path, body, method = body === undefined ? 'GET' : 'POST') {
@@ -250,13 +254,20 @@ export class Tank {
   }
 }
 
+// The abort for each streaming response from Tank.request, so events() closes the
+// connection itself (not only the reader) whenever it stops early: idle, cancel, an
+// invalid or oversized event, or the caller leaving the loop.
+const STREAM_STOPS = new WeakMap();
+
 export async function* events(response, { idleMs = STREAM_IDLE_MS, signal } = {}) {
   if (!response.body) throw new Error('Tank stream missing.');
   const reader = response.body.getReader();
+  const abortUpstream = () => { STREAM_STOPS.get(response)?.abort(); reader.cancel().catch(() => {}); };
+  let finished = false;
   // Every read is raced against an idle deadline and the caller's signal, so a stalled
   // stream cannot hang the CLI even if undici ignores the abort (see http.mjs).
   const read = () => new Promise((resolve, reject) => {
-    const stop = error => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); reader.cancel().catch(() => {}); reject(error); };
+    const stop = error => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); abortUpstream(); reject(error); };
     const onAbort = () => stop(new Error('Command cancelled; no action was retried.'));
     const timer = setTimeout(() => stop(new Error('Tank stream stalled; the turn was not retried. Reopen the thread to see its state.')), idleMs);
     if (signal?.aborted) return onAbort();
@@ -287,11 +298,15 @@ export async function* events(response, { idleMs = STREAM_IDLE_MS, signal } = {}
         }
       }
       if (done) {
+        finished = true;
         if (buffer.trim()) throw new Error('Tank stream interrupted.');
         break;
       }
     }
-  } finally { try { reader.releaseLock(); } catch { /* a cancelled read is still settling */ } }
+  } finally {
+    if (!finished) abortUpstream();
+    try { reader.releaseLock(); } catch { /* a cancelled read is still settling */ }
+  }
 }
 
 const amount = value => value === null || value === undefined ? 'pending' : String(value);

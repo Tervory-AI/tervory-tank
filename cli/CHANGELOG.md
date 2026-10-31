@@ -2,7 +2,7 @@
 
 ## 0.1.1 — 2026-10-31
 
-- Every CLI network call has a hard deadline that covers the body (device calls 10 s, JSON 300 s, request headers 30 s, live events 120 s per read, update 15 s JSON / 180 s tarball), and redirects are refused, never followed.
+- Every CLI network call has a hard deadline that covers the body (device calls 10 s, JSON 300 s, request headers 30 s, live events 120 s per read, update 15 s JSON / 180 s tarball); a stream that stops early (stall, cancel, bad event, or the caller leaving) closes its connection to Tank; redirects are refused, never followed.
 - Browser device-approval login (us-east via Workspace, ZA direct to Tank; the login itself shipped in 0.1.0): a 401/403 while polling stops login. Each sign-in can be seen and revoked in the Workspace under CLI sign-ins.
 - Answers use Auto. `tervory models` and `--model` pinning are founder-only; customers never see model names, and customer receipts show dollar figures and "What Auto would have cost" only.
 - Self-hosted install from app.tervory.com/cli (install.sh, SHA-256 manifest, `tervory update`, `TERVORY_CLI_VERSION` pinning). Never published to npm.
