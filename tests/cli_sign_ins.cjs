@@ -14,6 +14,7 @@ const { renderToStaticMarkup } = require(path.join(tools, 'react-dom/server'));
 
 const HOME = 'https://tank-us.test';
 const ZA = 'https://tank-za.test';
+const isZa = url => new URL(url).origin === ZA;
 const MINE = '11111111-1111-4111-8111-111111111111';
 const OLD = '22222222-2222-4222-8222-222222222222';
 const GONE = '33333333-3333-4333-8333-333333333333';
@@ -40,13 +41,13 @@ const within = (promise, ms, label) => Promise.race([promise,
 
 (async () => {
   // 1. Each region is asked with that region's approval key, scoped to this user and org, no role.
-  answer = url => new Response(JSON.stringify(url.startsWith(ZA)
+  answer = url => new Response(JSON.stringify(isZa(url)
     ? [row(MINE, { region: 'za', device_name: 'za-laptop', last_used_at: '2026-10-31T21:00:00Z' })]
     : [row(OLD), row(GONE, { revoked_at: past }), row('44444444-4444-4444-8444-444444444444', { refresh_expires_at: past }),
        row('not-a-uuid'), { token_id: OLD }]), { status: 200 });
   const regions = await lib.listSignIns(identity);
   assert.deepEqual(calls.map(c => [c.method, c.url]).sort(), [['GET', `${HOME}/v1/personal-tokens`], ['GET', `${ZA}/v1/personal-tokens`]]);
-  const byUrl = Object.fromEntries(calls.map(c => [c.url.startsWith(ZA) ? 'za' : 'us', c]));
+  const byUrl = Object.fromEntries(calls.map(c => [isZa(c.url) ? 'za' : 'us', c]));
   assert.equal(byUrl.us.headers['x-tank-key'], 'dummy-workspace-key');
   assert.equal(byUrl.za.headers['x-tank-key'], 'dummy-za-approval-key', 'ZA uses the dedicated approval key, never the ZA Workspace key');
   for (const c of calls) {
@@ -62,12 +63,12 @@ const within = (promise, ms, label) => Promise.race([promise,
 
   // 2. A refused or missing region is a message, never a crash, and the other region still lists.
   calls.length = 0;
-  answer = url => url.startsWith(ZA) ? new Response('{"detail":"Not available for this account here"}', { status: 403 })
+  answer = url => isZa(url) ? new Response('{"detail":"Not available for this account here"}', { status: 403 })
                                      : new Response('[]', { status: 200 });
   let [us, za] = await lib.listSignIns(identity);
   assert.deepEqual(plain(us), { region: 'us-east', ok: true, items: [] });
   assert.equal(za.ok, false); assert.match(za.message, /managed by Tervory support/);
-  answer = url => url.startsWith(ZA) ? new Response('', { status: 302, headers: { location: 'https://evil.test/' } })
+  answer = url => isZa(url) ? new Response('', { status: 302, headers: { location: 'https://evil.test/' } })
                                      : new Response('{}', { status: 200 });
   [us, za] = await lib.listSignIns(identity);
   assert.equal(us.ok, false); assert.match(us.message, /could not be loaded/);
@@ -130,7 +131,7 @@ const within = (promise, ms, label) => Promise.race([promise,
   };
   const pages = workspace({ env, fetch: (...args) => recordingFetch(...args), mocks: pageMocks });
   answer = url => url.endsWith('/v1/personal-tokens')
-    ? new Response(JSON.stringify([row(url.startsWith(ZA) ? MINE : OLD, url.startsWith(ZA) ? { region: 'za', device_name: 'za-laptop' } : {})]), { status: 200 })
+    ? new Response(JSON.stringify([row(isZa(url) ? MINE : OLD, isZa(url) ? { region: 'za', device_name: 'za-laptop' } : {})]), { status: 200 })
     : new Response(JSON.stringify({ user_code: 'BCDF-GHJK', device_name: '<b>attacker-box</b>', region: 'us-east', status: 'pending',
         created_at: '2026-10-31T20:59:00+00:00', expires_at: '2026-10-31T21:09:00+00:00' }), { status: 200 });
   const signInsPage = pages('app/cli/sign-ins/page.tsx').default;
