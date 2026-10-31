@@ -2,7 +2,7 @@
 # Tervory CLI installer, served by Tervory at https://app.tervory.com/cli/install.sh
 #
 #   curl -fsSL https://app.tervory.com/cli/install.sh | sh
-#   curl -fsSL https://app.tervory.com/cli/install.sh | TERVORY_CLI_VERSION=0.1.0 sh
+#   curl -fsSL https://app.tervory.com/cli/install.sh | TERVORY_CLI_VERSION=0.1.1 sh
 #
 # No npm registry and no third-party host: the release tarball, its manifest and
 # its SHA-256 come from app.tervory.com. The tarball is refused unless its SHA-256

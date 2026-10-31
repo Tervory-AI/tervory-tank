@@ -67,6 +67,16 @@ test('release is reproducible and the manifest matches the bytes', { skip: !supp
   assert(compareVersions('0.10.0', '0.9.9') > 0);
 });
 
+test('a default build (as the Workspace image runs it) offers cli/package.json\'s version', { skip: !supported && 'host platform has no build' }, () => {
+  const { version } = JSON.parse(readFileSync(join(CLI, 'package.json'), 'utf8'));
+  const dir = join(work, 'default');
+  buildRelease({ out: dir, platforms: [PLATFORM] });
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'latest.json'), 'utf8')), { version, manifest: `releases/${version}/manifest.json` });
+  assert.equal(JSON.parse(readFileSync(join(dir, `releases/${version}/manifest.json`), 'utf8')).version, version);
+  const lock = JSON.parse(readFileSync(join(CLI, 'package-lock.json'), 'utf8'));
+  assert.equal(lock.version, version); assert.equal(lock.packages[''].version, version);
+});
+
 test('install.sh installs latest, honours TERVORY_CLI_VERSION, and refuses a tampered tarball', { skip: !supported && 'host platform has no build' }, async () => {
   const home = mkdtempSync(join(work, 'home-'));
   const latest = await install({}, home);

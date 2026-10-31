@@ -8,9 +8,9 @@ The CLI is never published to npm or any other third-party registry: `cli/packag
 
 ```
 curl -fsSL https://app.tervory.com/cli/install.sh | sh                          # latest
-curl -fsSL https://app.tervory.com/cli/install.sh | TERVORY_CLI_VERSION=0.1.0 sh  # pinned
+curl -fsSL https://app.tervory.com/cli/install.sh | TERVORY_CLI_VERSION=0.1.1 sh  # pinned
 tervory update                      # latest, or TERVORY_CLI_VERSION when set
-tervory update --version 0.1.0      # a specific version (also downgrades)
+tervory update --version 0.1.1      # a specific version (also downgrades)
 tervory version
 ```
 
