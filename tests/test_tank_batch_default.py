@@ -6,7 +6,7 @@ stubbed. The client and Zenas tests need neither a database nor a network.
 import asyncio
 import json
 import uuid
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
