@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import time
+import urllib.parse
 from pathlib import Path
 
 import pytest
@@ -210,3 +212,96 @@ def test_old_rows_keep_citation_numbers_on_read(monkeypatch):
                                     "reason": selftest.MISS_REASONS[7], "other_citations": ["GP 09/2025", "x " + ENV_SECRET]}])
     assert out[0]["other_citations"][0] == "GP 09/2025"
     assert ENV_SECRET not in json.dumps(out)
+
+
+# Review of #514 round 2. Fakes are built at runtime from pieces (the scanner is untouched).
+
+STRIPE = "sk" + "_live_" + _fill(24)
+JWT = "ey" + "J" + _fill(24) + "." + "ey" + "J" + _fill(30) + "." + _fill(43)
+SANCTUM = "7" + "|" + _fill(48)
+OPAQUE = _fill(20) + "9"
+
+
+def _no_run_of(body, cleaned):
+    flat = cleaned.replace(" ", "")
+    return all(body[i : i + 12] not in flat for i in range(0, max(1, len(body) - 12), 4))
+
+
+# Point 1: URL-encoded secrets. %3D / %7C / %3A%20 hide the boundaries the shapes need.
+URL_ENCODED = {
+    "stripe key": (urllib.parse.quote("key=" + STRIPE), STRIPE[8:]),
+    "jwt": (urllib.parse.quote("t=" + JWT), JWT.split(".")[2]),
+    "sanctum token": (urllib.parse.quote(SANCTUM), SANCTUM[2:]),
+    "authorization header": (urllib.parse.quote("Authorization: " + "Bearer " + OPAQUE), OPAQUE),
+    "double-encoded stripe key": (urllib.parse.quote(urllib.parse.quote("key=" + STRIPE)), STRIPE[8:]),
+}
+
+
+@pytest.mark.parametrize("name", sorted(URL_ENCODED))
+def test_url_encoded_secrets_are_cut_on_write_and_read(name):
+    encoded, core = URL_ENCODED[name]
+    text = f"See https://x.example/cb?{encoded} for the record."
+    for cleaned in (selftest._diagnostic_text(text), selftest._citation_text(encoded),
+                    json.dumps(selftest._public_misses([{"case": "x", "answer": text, "question": text,
+                                                         "other_citations": [encoded],
+                                                         "quotes": [{"quote": text, "check": "cite-check failed"}]}]))):
+        assert core not in cleaned, name
+        assert _no_run_of(core, cleaned), name
+
+
+def test_url_encoded_text_without_a_secret_is_left_exactly_as_it_was():
+    text = "Interest at 15% a year; see https://x.example/a%20b?q=court%20order."
+    assert selftest._cut_secrets(text) == text
+
+
+# Point 2: a quoted value is cut up to its closing quote, spaces and all.
+@pytest.mark.parametrize("text", [
+    '{"pass' + 'word": "abcd efgh ' + OPAQUE + '"}',
+    "client" + "_secret: 'abcd efgh " + OPAQUE + "'",
+    '"api' + '_key" = "abcd efgh ' + OPAQUE,  # no closing quote: cut to the end of the line
+])
+def test_quoted_values_with_spaces_are_cut_whole(text):
+    cleaned = selftest._diagnostic_text(text + "\nCosts follow.")
+    assert "abcd" not in cleaned and "efgh" not in cleaned and OPAQUE not in cleaned
+    assert "Costs follow." in cleaned
+
+
+# Point 3: bare words in legal text are not cut; credential-looking values and
+# identifier-style keys still are.
+@pytest.mark.parametrize("text", [
+    "The secret: the parties agreed to keep the formula confidential.",
+    "The token: a payment of the deposit was made.",
+    "password: not disclosed to the court",
+    "The trade secret = the recipe, as pleaded.",
+])
+def test_bare_words_do_not_cut_legal_text(text):
+    assert selftest._cut_secrets(text) == text
+
+
+@pytest.mark.parametrize("text,core", [
+    ("password: " + "hunter" + _fill(6) + "42", "hunter" + _fill(6) + "42"),
+    ("secret=" + _fill(12) + "7", _fill(12) + "7"),
+    ("client" + "_secret: plainwords", "plainwords"),
+    ("access" + "_token = " + OPAQUE, OPAQUE),
+    ("SECRET" + "_KEY=" + OPAQUE, OPAQUE),
+])
+def test_credentials_after_key_words_are_still_cut(text, core):
+    assert core not in selftest._diagnostic_text("Held: " + text)
+
+
+def test_redaction_stays_linear_on_long_runs():
+    for text in ("a_" * 20000, "a-" * 20000 + ":", "secret_" * 5000 + ": ", "%41" * 20000,
+                 '"pass' + 'word": "' + "x " * 20000, "x" * 40000 + "%3D"):
+        start = time.monotonic()
+        selftest._cut_secrets(text)
+        assert time.monotonic() - start < 1.0
+
+
+# Point 4: the read path redacts the error field too.
+def test_public_misses_redact_the_error_field(monkeypatch):
+    monkeypatch.setenv("ZENAS_FAKE_API_TOKEN", ENV_SECRET)
+    error = f"TimeoutError {STRIPE} {ENV_SECRET} {EMAIL}"
+    out = selftest._public_misses([{"case": "x", "kind": "made_up", "reason": selftest.MISS_REASONS[0], "error": error}])
+    dumped = json.dumps(out)
+    assert STRIPE not in dumped and ENV_SECRET not in dumped and EMAIL not in dumped
+    assert out[0]["error"].startswith("TimeoutError")

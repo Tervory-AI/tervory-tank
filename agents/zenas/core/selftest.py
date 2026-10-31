@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import urllib.parse
 from collections import defaultdict
 from typing import Any
 
@@ -553,6 +554,9 @@ _MISS_QUOTES = 6
 # Secrets never reach a miss record. Values of these env names are cut out before
 # the PII mask runs, and these shapes are cut out wherever they appear.
 _SECRET_ENV = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD|PASSWD|DSN|DATABASE_URL|CREDENTIAL|PRIVATE)", re.IGNORECASE)
+# A secret value: a quoted value up to its closing quote (or the end of the line),
+# else a run without spaces, quotes or separators.
+_SECRET_VALUE = r"(?:\"[^\"\n]*\"?|'[^'\n]*'?|[^\s\"',;}]+)"
 _SECRET_SHAPES = (
     # PEM private-key blocks first: they span lines, and the text is not folded yet.
     re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\Z)"),
@@ -566,13 +570,27 @@ _SECRET_SHAPES = (
     re.compile(r"\b\d+\|[A-Za-z0-9]{40,}\b"),
     re.compile(r"(?i)\bauthorization\b[\"']?\s*[:=]\s*[\"']?(?:bearer|token|basic|digest)?\s*[A-Za-z0-9._~+/=|-]{8,}[\"']?"),
     re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=|-]{8,}"),
-    re.compile(r"(?i)\b[a-z][a-z0-9+.-]*://[^\s/@:]+:[^\s/@]+@\S+"),
+    # The scheme starts where its run starts and is bounded: linear time on "a-a-a-…".
+    re.compile(r"(?i)(?<![a-z0-9+.-])[a-z][a-z0-9+.-]{0,30}://[^\s/@:]+:[^\s/@]+@\S+"),
     re.compile(r"(?i)\bhttps?://\S*(?:api_key|token|password|secret|[?&]key)=\S*"),
-    # key = value, key: value and JSON "key": "value", for key-like names such as
-    # api_key, aws_secret_access_key, client_secret, access_token, password.
+    # key = value, key: value and JSON "key": "value" for identifier-style keys: a
+    # quoted key, an api/access key name (api_key, X-Api-Key, aws_secret_access_key),
+    # or secret/token/password joined to another word (client_secret, access_token,
+    # secret_key). A quoted value is cut up to its closing quote, spaces and all.
     re.compile(
-        r"(?i)[\"']?\b[a-z0-9_-]*(?:api[_-]?key|secret[_-]?access[_-]?key|access[_-]?key[_-]?id|secret|token|password|passwd)"
-        r"[\"']?\s*[=:]\s*[\"']?[^\s\"',;}]+[\"']?"
+        # A key starts where an identifier run starts (never mid-run) and is bounded,
+        # so a long run such as "a_a_a_…" costs linear time, not quadratic.
+        r"(?i)(?:[\"'][a-z0-9_-]{0,60}(?:api[_-]?key|secret|token|password|passwd)[a-z0-9_-]{0,60}[\"']"
+        r"|(?<![a-z0-9_-])[a-z0-9_-]{0,60}(?:api[_-]?key|secret[_-]?access[_-]?key|access[_-]?key[_-]?id)[a-z0-9_-]{0,60}"
+        r"|(?<![a-z0-9_-])[a-z0-9_-]{0,60}[_-](?:secret|token|password|passwd)[a-z0-9_-]{0,60}"
+        r"|(?<![a-z0-9_-])(?:secret|token|password|passwd)[_-][a-z0-9_-]{1,60})"
+        r"\s*[=:]\s*" + _SECRET_VALUE
+    ),
+    # A bare word ("The secret: the parties agreed", "token: R500 was paid") is legal
+    # text unless the value looks like a credential: 8+ characters, no spaces, a digit.
+    re.compile(
+        r"(?i)\b(?:secret|token|password|passwd)\s*[=:]\s*([\"']?)"
+        r"(?=[^\s\"',;}]{0,200}[0-9])[^\s\"',;}]{8,}\1"
     ),
     # Long hex runs (R2/HMAC secrets, digests) carry no legal meaning in an answer.
     re.compile(r"\b[0-9A-Fa-f]{32,}\b"),
@@ -595,11 +613,40 @@ def _env_secrets() -> list[str]:
     ]
 
 
-def _cut_secrets(value: Any) -> str:
-    """Secrets only: the shapes above and this process's secret env values. No PII mask."""
-    text = str(value or "")
+def _cut_plain_shapes(text: str) -> str:
     for shape in _SECRET_SHAPES:
         text = shape.sub("[redacted]", text)
+    return text
+
+
+# A run without spaces that holds a %XX escape: "key%3Dsk_live_…", "1%7C…",
+# "Authorization%3A%20Bearer%20…". The escapes hide the boundaries the shapes need.
+_URL_ENCODED = re.compile(r"(?<!\S)\S*%[0-9A-Fa-f]{2}\S*")  # whole runs only: linear time
+
+
+def _cut_shapes(text: str) -> str:
+    """The secret shapes over the text, and over the URL-decoded form of every run
+    that holds %XX escapes. A run whose decoded form holds a secret is replaced by
+    the decoded run with that secret cut; other runs are left exactly as they were."""
+    text = _cut_plain_shapes(text)
+
+    def decoded(match: re.Match[str]) -> str:
+        run = match.group(0)
+        plain = run
+        for _ in range(3):  # double-encoded values too
+            step = urllib.parse.unquote(plain)
+            if step == plain:
+                break
+            plain = step
+        cut = _cut_plain_shapes(plain)
+        return cut if cut != plain else run
+
+    return _URL_ENCODED.sub(decoded, text)
+
+
+def _cut_secrets(value: Any) -> str:
+    """Secrets only: the shapes above and this process's secret env values. No PII mask."""
+    text = _cut_shapes(str(value or ""))
     for secret in _env_secrets():
         folded = " ".join(secret.split())
         text = text.replace(secret, "")
@@ -617,10 +664,7 @@ def _diagnostic_text(value: Any) -> str:
     existing PII redaction (engine._clean_piece, the same mask as rule cards)."""
     from agents.zenas.core.engine import _clean_piece
 
-    text = str(value or "")
-    for shape in _SECRET_SHAPES:
-        text = shape.sub("[redacted]", text)
-    return _clean_piece(text, _env_secrets())
+    return _clean_piece(_cut_shapes(str(value or "")), _env_secrets())
 
 
 def _bounded(text: str, limit: int) -> str:
@@ -1092,7 +1136,7 @@ def _public_misses(raw: Any) -> list[dict[str, Any]]:
         if miss["reason"] not in MISS_REASONS:
             miss["reason"] = MISS_REASONS[0] if item.get("error") else "unknown"
         if item.get("error"):
-            miss["error"] = _bounded(" ".join(str(item["error"]).split()), 200)
+            miss["error"] = _bounded(_diagnostic_text(item["error"]), 200)
         if item.get("refusal"):
             miss["refusal"] = _bounded(_diagnostic_text(item["refusal"]), 200)
         for key, limit in (("question", _MISS_PIECE_CHARS), ("expected_quote", _MISS_PIECE_CHARS)):
