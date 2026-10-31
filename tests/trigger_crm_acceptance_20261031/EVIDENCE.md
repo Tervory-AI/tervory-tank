@@ -83,3 +83,31 @@ Backend advanced to `c8628bf37c27090ff2587b9d96913d90636f8251` during verificati
 The same loopback test was repeated on that exact updated assembly: **1 passed, zero skips, 1 existing warning, 2.17s**. Its coverage remains founder reads plus denied client Workspace paths; it does not establish client access completion. Workspace still returns 404 for every non-founder, so client integration is not complete across both layers. Coordinator notified. The full eight-section historical design is also not delivered by this three-resource connector. Configured `organization_id` is a founder-supplied declaration, not an independent upstream membership authentication claim; no stronger guarantee is inferred.
 
 Hosted checks were read with `gh pr checks 498` / `gh pr checks 497`; pending latest CodeQL analyses were present. No blanket CI clearance, production health, approved UI, secret setup, complete CRM, or founder acceptance is claimed.
+
+## Organization attestation update — 31 October 2026, 12:20 PDT / 19:20 UTC
+
+Backend exact head `cb482eae2dacacedc7594a3c66bd3c7466b0858a`, Workspace unchanged `135e764befd79b33bc56556f2818d4c8bddaab3a`; isolated assembly `e7a807af776490a83b27468ef539cf9501b7483f`. Harness source `986b3d05`.
+
+The old declared-org-only limitation is addressed in this backend revision. Independently reviewed the entire organization-attestation delta: appended middleware runs after pinned BottleCRM `common.middleware.get_company.GetProfileAndOrg`, whose actual upstream source resolves PAT `request.org` / `request._pat`. It rejects a mismatched expected organization before the CRM view, strips preexisting response attestations, and emits the resolved org only for successful authenticated responses. Tank requires that attestation for reads; mutations first require an attested read plus fresh entitlement check, and send expected org on the write, where the same middleware restricts execution. No token-derived organization is guessed by Tank.
+
+Actual independent commands in the assembly:
+
+```sh
+PYTHONPATH=tank /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q tests/test_trigger_crm.py tests/test_trigger_crm_wsgi.py tests/test_secrets.py
+# 44 passed, zero skips, 1 existing Pydantic warning, 26.43s.
+```
+
+This includes the real pinned Django WSGI smoke using synthetic settings/auth, plus wrong/missing attestation, pre-write read barrier and persisted Trigger grant/revocation tests. The earlier attempt using a Tank-only Python runtime produced 38 passed / 1 skipped because Django was absent; that is not the final result. The full command above uses the existing isolated CRM test runtime with Django present and has zero skips.
+
+Updated the independent fake CRM to assert the expected org request header and return its authenticated-org attestation. Actual Workspace -> Tank -> fake CRM command on the exact new assembly:
+
+```sh
+CRM_ASSEMBLED_ROOT=/home/ammosync/.codex/trigger-crm-combined-20261031 PYTHONPATH=/home/ammosync/.codex/trigger-crm-acceptance-deps-20261031 /tmp/tervory-rls-merge-python/bin/python -m pytest -q -s tests/trigger_crm_acceptance_20261031/test_combined.py
+# 1 passed, zero skips, 1 existing Pydantic warning, 2.55s.
+/home/ammosync/trigger-crm-venv312/bin/ruff check tests/trigger_crm_acceptance_20261031
+# All checks passed.
+```
+
+Read-only upstream source command: `gh api 'repos/Django-CRM/Django-CRM/contents/backend/common/middleware/get_company.py?ref=cd7c12a607df1719518fcdaf289864f6ba7d0bcd' --jq .content | base64 -d` (selected implementation lines inspected, no live CRM request). The first attempted `backend/requirements.txt` lookup returned 404; dependency evidence instead uses the existing pinned runtime and backend uv.lock reference, not an invented requirements path.
+
+**Bounded backend source review clear at cb482eae. Full client flow remains uncleared:** Workspace exact head still rejects every non-founder. No latest-head blanket hosted-CI clearance or live deployment/CRM acceptance is claimed.
