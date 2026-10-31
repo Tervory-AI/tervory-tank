@@ -133,3 +133,114 @@ def test_quote_does_not_stop_at_notice_no():
         "See para. 7 below.",
         "Costs follow the result.",
     ]
+
+
+# Zenas, 31 Oct: a real-case quote passes when it is verbatim ANYWHERE in the
+# stored, normalised judgment and supports the answer, not only its first sentence.
+HOLDING = "The Tribunal was entitled to find that the conduct was an abuse of dominance."
+OTHER_DOC = {
+    "name": "Other Firm (Pty) Ltd v Competition Commission",
+    "citation": "CAC 200",
+    "quote": "This appeal concerns a merger that was never notified to the Commission.",
+    "text": "[1] This appeal concerns a merger that was never notified to the Commission. "
+    "[2] The parties must notify every intermediate merger before it is implemented.",
+}
+LONG_DOC = {
+    **DOC,
+    "text": "[1] " + QUOTE + " [2] The facts are not in dispute. [3] " + HOLDING + " The appeal is dismissed with costs.",
+}
+
+
+def _card_answer(citation, quote, memo_text=None):
+    return {
+        "ok": True,
+        "memo": {"text": memo_text if memo_text is not None else f"{citation}: “{quote}”"},
+        "rule_card": {"elements": [{"id": "holding", "test": quote, "citation": citation, "quote": quote}]},
+    }
+
+
+def _real_run(monkeypatch, real_answer, library):
+    def answers(index, question):
+        return _memo(TRAP_OK) if index < 40 else real_answer(index, question)
+
+    monkeypatch.setattr("agents.zenas.core.service.answer_question", _fake(answers))
+    ladder = LadderMemory()
+    return asyncio.run(selftest.run_made_up_test(ladder, ladder, object(), library=library, region="za"))
+
+
+def test_verbatim_holding_mid_judgment_passes(monkeypatch):
+    result = _real_run(monkeypatch, lambda i, q: _card_answer("CAC 108", HOLDING), [LONG_DOC])
+    assert HOLDING != LONG_DOC["quote"]  # not the first sentence
+    assert result["passed"] == 50 and result["misses"] == []
+    assert result["skills_may_be_approved"] is True
+
+
+def test_paraphrased_quote_fails(monkeypatch):
+    paraphrase = "The Tribunal could properly find that the conduct amounted to abuse of dominance."
+    result = _real_run(monkeypatch, lambda i, q: _card_answer("CAC 108", paraphrase), [LONG_DOC])
+    assert result["passed"] == 40
+    assert {m["reason"] for m in result["misses"]} == {"real: the answer does not quote the court's sentence"}
+    assert result["skills_may_be_approved"] is False
+
+
+def test_slightly_changed_quote_fails(monkeypatch):
+    changed = HOLDING.replace("entitled", "permitted")
+    result = _real_run(monkeypatch, lambda i, q: _card_answer("CAC 108", changed), [LONG_DOC])
+    assert result["passed"] == 40
+
+
+def test_quote_from_a_different_judgment_fails(monkeypatch):
+    other = "The parties must notify every intermediate merger before it is implemented."
+
+    def answer(index, question):
+        if "CAC 108" in question:
+            # Cited as CAC 108, but the words are CAC 200's.
+            return _card_answer("CAC 108", other, memo_text=f"CAC 108: “{other}”")
+        return _card_answer("CAC 200", OTHER_DOC["quote"])
+
+    result = _real_run(monkeypatch, answer, [LONG_DOC, OTHER_DOC])
+    reasons = {m["citation"]: m["reason"] for m in result["misses"]}
+    assert reasons == {"CAC 108": "real: the answer does not quote the court's sentence"}
+    assert result["passed"] == 45
+
+
+def test_quote_attributed_to_another_case_fails(monkeypatch):
+    # The words are CAC 108's, but the card cites them to CAC 200.
+    def answer(index, question):
+        return {
+            "ok": True,
+            "memo": {"text": f"CAC 108. CAC 200: “{HOLDING}”"},
+            "rule_card": {"elements": [{"citation": "CAC 200", "quote": HOLDING}]},
+        }
+
+    result = _real_run(monkeypatch, answer, [LONG_DOC])
+    assert result["passed"] == 40
+
+
+def test_card_quote_not_in_the_answer_fails(monkeypatch):
+    result = _real_run(
+        monkeypatch,
+        lambda i, q: _card_answer("CAC 108", HOLDING, memo_text="CAC 108 dismissed the appeal."),
+        [LONG_DOC],
+    )
+    assert result["passed"] == 40
+
+
+def test_a_fragment_is_not_a_quote(monkeypatch):
+    result = _real_run(monkeypatch, lambda i, q: _card_answer("CAC 108", "abuse of dominance."), [LONG_DOC])
+    assert result["passed"] == 40
+
+
+def test_supported_quotes_keeps_only_verbatim_cited_quotes():
+    result = {
+        "rule_card": {
+            "elements": [
+                {"citation": "CAC 108", "quote": HOLDING},
+                {"citation": "CAC 108", "quote": "The Tribunal could find abuse of dominance here, we think."},
+                {"citation": "CAC 200", "quote": HOLDING},
+            ]
+        }
+    }
+    assert selftest.supported_quotes(result, "CAC 108", LONG_DOC["text"]) == [HOLDING]
+    assert selftest.supported_quotes(None, "CAC 108", LONG_DOC["text"]) == []
+    assert selftest.supported_quotes(result, "CAC 108", "") == []

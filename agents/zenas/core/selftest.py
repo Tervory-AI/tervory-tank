@@ -548,8 +548,67 @@ MISS_REASONS = (
 _MISS_ANSWER_CHARS = 300
 
 
-def _miss_reason(item: dict[str, str], answer: str, *, ok_result: bool, raised: str, quote: str) -> str:
-    """The first check this answer failed, as one of MISS_REASONS. Empty when it passed."""
+# A quote shorter than this is not the court's words but a phrase. Same floor as _sentence_ok.
+_QUOTE_MIN_WORDS = 5
+_QUOTE_MIN_CHARS = 25
+
+
+def _fold(value: Any) -> str:
+    return " ".join(str(value or "").split())
+
+
+def supported_quotes(result: dict[str, Any] | None, citation: str, judgment_text: str) -> list[str]:
+    """Quotes in this answer's rule card that the named judgment says word for word.
+
+    A quote counts only when its element cites this case, the quote sits VERBATIM
+    (whitespace folded, nothing else) in the stored, normalised judgment text, and
+    cite-check passes it against that judgment alone. A paraphrase, or a sentence
+    from a different judgment, is never returned.
+    """
+    from agents.zenas.core.engine import cite_check
+
+    text = _fold(judgment_text)
+    wanted = _fold(citation)
+    card = (result or {}).get("rule_card") if isinstance(result, dict) else None
+    elements = (card or {}).get("elements") if isinstance(card, dict) else None
+    if not text or not wanted or not isinstance(elements, list):
+        return []
+    passage = [{"citation": wanted, "text": text, "status": "in_force"}]
+    out: list[str] = []
+    for element in elements:
+        if not isinstance(element, dict) or _fold(element.get("citation")) != wanted:
+            continue
+        quote = _fold(element.get("quote"))
+        if len(quote.split()) < _QUOTE_MIN_WORDS or len(quote) < _QUOTE_MIN_CHARS or quote not in text:
+            continue
+        if not cite_check([{"citation": wanted, "quote": quote}], passage).get("passed"):
+            continue
+        out.append(quote)
+    return out
+
+
+def _quotes_the_judgment(answer: str, quote: str, supported: list[str]) -> bool:
+    """The answer quotes the court: the library sentence, or any verbatim, cite-checked quote from it."""
+    folded = _fold(answer)
+    if quote and (quote in answer or _fold(quote) in folded):
+        return True
+    return any(item in folded for item in supported)
+
+
+def _miss_reason(
+    item: dict[str, str],
+    answer: str,
+    *,
+    ok_result: bool,
+    raised: str,
+    quote: str,
+    supported: list[str] | None = None,
+) -> str:
+    """The first check this answer failed, as one of MISS_REASONS. Empty when it passed.
+
+    A real case passes on a quote that is verbatim anywhere in the named judgment
+    and supports the answer (see supported_quotes), not only on its first sentence.
+    """
     if raised:
         return MISS_REASONS[0]
     if item["kind"] == "trap":
@@ -568,7 +627,7 @@ def _miss_reason(item: dict[str, str], answer: str, *, ok_result: bool, raised: 
         return MISS_REASONS[6]
     if not quote:
         return MISS_REASONS[8]
-    if quote not in answer:
+    if not _quotes_the_judgment(answer, quote, supported or []):
         return MISS_REASONS[7]
     return ""
 
@@ -625,6 +684,7 @@ async def run_made_up_test(
     passed = 0
     misses: list[dict[str, str]] = []
     quotes = {document["citation"]: document["quote"] for document in documents}
+    texts = {document["citation"]: document["text"] for document in documents}
     for item in questions:
         raised = ""
         refusal = ""
@@ -650,8 +710,14 @@ async def run_made_up_test(
         except Exception as exc:  # noqa: BLE001 - one case does not stop the run; the class is kept
             answer = ""
             raised = type(exc).__name__
+            result = {}
         quote = (quotes.get(item["citation"]) or item.get("quote") or "") if item["kind"] == "real" else ""
-        reason = _miss_reason(item, answer, ok_result=ok_result, raised=raised, quote=quote)
+        supported = (
+            supported_quotes(result, item["citation"], texts.get(item["citation"], ""))
+            if item["kind"] == "real" and ok_result
+            else []
+        )
+        reason = _miss_reason(item, answer, ok_result=ok_result, raised=raised, quote=quote, supported=supported)
         if not reason:
             passed += 1
         else:
