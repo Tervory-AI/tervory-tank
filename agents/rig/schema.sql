@@ -457,3 +457,5 @@ CREATE TABLE IF NOT EXISTS agent_rig.supply_sale_receipts (
     received_at timestamptz NOT NULL,
     PRIMARY KEY (tenant_id, receipt_id)
 );
+-- Distinguish a feed's zero stock from a deliberately disabled catalogue item.
+ALTER TABLE agent_rig.products ADD COLUMN IF NOT EXISTS supply_eligible boolean NOT NULL DEFAULT false;
