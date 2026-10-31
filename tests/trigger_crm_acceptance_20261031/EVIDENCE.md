@@ -111,3 +111,22 @@ CRM_ASSEMBLED_ROOT=/home/ammosync/.codex/trigger-crm-combined-20261031 PYTHONPAT
 Read-only upstream source command: `gh api 'repos/Django-CRM/Django-CRM/contents/backend/common/middleware/get_company.py?ref=cd7c12a607df1719518fcdaf289864f6ba7d0bcd' --jq .content | base64 -d` (selected implementation lines inspected, no live CRM request). The first attempted `backend/requirements.txt` lookup returned 404; dependency evidence instead uses the existing pinned runtime and backend uv.lock reference, not an invented requirements path.
 
 **Bounded backend source review clear at cb482eae. Full client flow remains uncleared:** Workspace exact head still rejects every non-founder. No latest-head blanket hosted-CI clearance or live deployment/CRM acceptance is claimed.
+
+## Client corridor verified — 31 October 2026, 12:22 PDT / 19:22 UTC
+
+Supersedes the earlier founder-only Workspace mismatch for this exact reviewed head: Workspace PR 497 `a3954f2` (runtime change `378fb6e`), backend PR 498 `cb482eae2dacacedc7594a3c66bd3c7466b0858a`. Assembly `46ac68905f401873cf4f0a26344a3b03eaa56a71`; independent harness `ad0d3630`.
+
+Independently reviewed the Workspace change: it removes only the obsolete founder prefilter. Signed-in user plus active organization remain mandatory, identity still comes from Clerk/session and server tenant alias mapping, and Tank remains authoritative for persisted Trigger grants and authenticated organization binding. No client role, grant or founder privilege is created by the proxy.
+
+The actual loopback integration now runs the same client twice. With a synthetic persisted Trigger grant, the actual Tank `authorized_actor` reads the tenant-scoped `tenant_squad` predicate and the client receives 200 through Workspace. With that grant revoked, the same user/organization request receives 403 and causes zero additional CRM requests. An unrelated no-grant tenant also receives 403. Only the persistence adapter is synthetic; the actual authorization predicate/function executes. The test is not a real Postgres/RLS deployment claim.
+
+A final mismatched authenticated organization response returns 502 before any record projection. Founder reads, exact limit/offset, no user/tenant assertion forwarding, synthetic credential metadata redaction, wrong-region refusal and unconfirmed mutation barriers remain covered.
+
+```sh
+CRM_ASSEMBLED_ROOT=/home/ammosync/.codex/trigger-crm-combined-20261031 PYTHONPATH=/home/ammosync/.codex/trigger-crm-acceptance-deps-20261031 /tmp/tervory-rls-merge-python/bin/python -m pytest -q -s tests/trigger_crm_acceptance_20261031/test_combined.py
+# 1 passed, zero skips, 1 existing warning, 2.81s.
+/home/ammosync/trigger-crm-venv312/bin/ruff check tests/trigger_crm_acceptance_20261031
+# All checks passed before commit.
+```
+
+Source clearance covers this bounded client corridor, not invented UI or every historical CRM resource. Fresh `gh pr checks 497` / `498` still showed pending latest analyses/service checks at 12:22 PDT; no all-CI-ready statement is made. Parent coordinates subsequent catalog/invoice extensions and their own exact-head proof.
