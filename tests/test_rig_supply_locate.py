@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents" / "rig"))
-from rigbox.locate import SupplyStore, catalogue, locate
+from rigbox.locate import SupplyStore, locate
 from rigbox.service import Service
 from rigbox.store import MemoryStore
 from rigbox.quotes.privacy import shopper_body
