@@ -43,6 +43,7 @@ import httpx
 import yaml
 
 from gold import PLATFORM_TENANT
+from skala_patch import patch_refusal
 
 SKILLS_DIR = Path(os.environ.get("SKILLS_DIR", os.path.join(os.path.dirname(__file__), "skills")))
 
@@ -455,6 +456,11 @@ def approval_reason(pkg: SkillPackage, target: dict[str, Any], approved: dict[st
         version_key(pkg.version)
     except ValueError as exc:
         return str(exc)
+    # A patch release must keep the code of the release before it
+    # (skala_patch.py; the same rule as tests/test_skala_patch_code_unchanged.py).
+    patch = patch_refusal(pkg.id, pkg.version, pkg.path)
+    if patch:
+        return patch
     if target["state"] != "staging" or not target["present"]:
         return "Run evals until this version reaches staging first."
     distinct = {evidence_hash([c["input"], c.get("model")]) for c in pkg.cases}
