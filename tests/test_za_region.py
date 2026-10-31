@@ -53,7 +53,7 @@ def test_za_compose_is_a_tank_stack_with_its_own_stores() -> None:
     assert data["networks"]["tervory-gw-zenas"]["name"] == "tervory-gw-zenas"
     assert "external" not in data["networks"]["default"]
     assert "external" not in data["networks"]["tervory-gw-zenas"]
-    assert set(data["volumes"]) == {"za_pgdata", "za_redisdata", "za_qdrantdata", "za_backups", "za_r2_backup_spool"}
+    assert set(data["volumes"]) == {"za_pgdata", "za_redisdata", "za_qdrantdata", "za_backups", "za_r2_backup_spool", "za_litellm_chatgpt_token"}
     assert "tervory-gw-zenas" in data["services"]["postgres"]["networks"]
     assert "tervory-gw-zenas" in data["services"]["tank"]["networks"]
     assert "tervory-gw-zenas" in data["services"]["hermes"]["networks"]
@@ -75,9 +75,11 @@ def test_za_zenas_room_is_its_own_resource_on_the_corridor() -> None:
     room = yaml.safe_load(ROOM_COMPOSE)
     assert set(room["services"]) == {"agent-zenas", "pool-loader"}
     assert room["networks"]["gw"] == {"external": True, "name": "tervory-gw-zenas"}
+    assert room["networks"]["assembly"] == {"external": True, "name": "tervory-zenas-assembly"}
     for name, service in room["services"].items():
         assert service["environment"]["TANK_REGION"] == "za", name
-        assert service["networks"] == ["gw"], name
+        # agent-zenas also reaches its Docassemble resource on the private assembly network (#415).
+        assert service["networks"] == (["gw", "assembly"] if name == "agent-zenas" else ["gw"]), name
         assert "ports" not in service, name
         assert "env_file" not in service, name
         for banned in ("POSTGRES_PASSWORD", "POSTGRES_USER", "LITELLM_MASTER_KEY", "TANK_API_KEY", "QDRANT_API_KEY"):

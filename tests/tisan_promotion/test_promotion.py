@@ -125,7 +125,13 @@ async def test_exact_promotion_rollback_and_durable_audit(rig):
     ('artifact', 'commit:' + OLD), ('high', 1), ('high', False), ('critical', 1), ('scan_id', ''),
     ('completed_at', ''), ('completed_at', None), ('completed_at', datetime.now(timezone.utc).replace(tzinfo=None).isoformat()),
     ('completed_at', (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()),
-    ('completed_at', (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat())])
+    ('completed_at', (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat())],
+    # Fixed ids: timestamp values differ between pytest-xdist workers, so ids built
+    # from them make each worker collect a different test list.
+    ids=['allowed-false', 'allowed-string', 'status-pending', 'status-error', 'tenant-other',
+         'target-other', 'artifact-old', 'high-1', 'high-false', 'critical-1', 'scan_id-empty',
+         'completed_at-empty', 'completed_at-none', 'completed_at-naive', 'completed_at-stale',
+         'completed_at-future'])
 async def test_gate_fail_closed(rig, field, value):
     fake, _, service, _, gate = rig
     gate[field] = value

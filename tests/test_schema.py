@@ -59,7 +59,12 @@ def _split_statements(sql: str) -> list[str]:
 def _idempotent(statement: str) -> bool:
     if re.match(r"^DO\s+\$\$", statement, re.IGNORECASE):
         # A one-time data change must guard itself, e.g. IF NOT EXISTS (marker in tank.policy_log).
-        return re.search(r"\bIF\s+NOT\s+EXISTS\b", statement, re.IGNORECASE) is not None
+        if re.search(r"\bIF\s+NOT\s+EXISTS\b", statement, re.IGNORECASE):
+            return True
+        # Or it only inserts, and every insert skips rows it already wrote.
+        inserts = re.findall(r"\bINSERT\b.*?(?:;|END\s+IF)", statement, re.IGNORECASE | re.DOTALL)
+        return bool(inserts) and all(re.search(r"\bON\s+CONFLICT\b", i, re.IGNORECASE) for i in inserts) \
+            and not re.search(r"\b(UPDATE|DELETE|DROP|TRUNCATE|ALTER)\b", statement, re.IGNORECASE)
     head = re.match(r"^(CREATE|ALTER|INSERT|UPDATE)\b", statement, re.IGNORECASE)
     if head is None:
         return False
@@ -67,6 +72,8 @@ def _idempotent(statement: str) -> bool:
     if kind == "CREATE":
         if re.match(r"^CREATE\s+OR\s+REPLACE\s+FUNCTION\b", statement, re.IGNORECASE):
             return True  # Same signature/body replaces itself; exercised twice on Postgres.
+        if re.match(r"^CREATE\s+OR\s+REPLACE\s+TRIGGER\b", statement, re.IGNORECASE):
+            return True  # PostgreSQL 14+: replaces the same trigger; exercised twice on Postgres.
         return re.search(r"\bIF\s+NOT\s+EXISTS\b", statement, re.IGNORECASE) is not None
     if kind == "ALTER":
         if re.fullmatch(r"ALTER\s+TABLE\s+tank\.policy\s+ALTER\s+COLUMN\s+auto_promote\s+SET\s+DEFAULT\s+false", statement, re.IGNORECASE):

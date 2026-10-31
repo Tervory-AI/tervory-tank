@@ -28,6 +28,12 @@ SA_APP = "tervory-tank-za"
 # Repo variable ZA_OFFLINE=true: the ZA stack is switched off on purpose (box being moved).
 # Skip it and every -za room with a notice, and do not fail the run. Unset: today's behaviour.
 ZA_OFFLINE = os.environ.get("ZA_OFFLINE", "").strip().lower() == "true"
+# The commit at the tip of main when this run started (set by the workflow). Coolify always
+# builds the tip of main, so a queued run whose app already finished a deploy of that commit
+# would only restart it. Five merges in six minutes (31 Oct) made three queued runs redeploy
+# 3f57590c on Boston and ZA again; each ZA restart cut the ZA room's case loads mid-run.
+# Empty: unknown, every wanted app deploys as before.
+MAIN_HEAD = os.environ.get("MAIN_HEAD", "").strip().lower()
 
 # Paths that rebuild the main stack (Tank, Workspace, LiteLLM, Hermes, SearXNG, site, shared compose).
 MAIN_PREFIXES = (
@@ -106,6 +112,24 @@ def last_failed(uuid: str) -> bool:
     return (rows[0].get("status") or "").lower() in ("failed", "error")
 
 
+def already_live(uuid: str, name: str) -> bool:
+    """True when the app's latest Coolify deployment finished on MAIN_HEAD, so a deploy would only restart it."""
+    if len(MAIN_HEAD) != 40:
+        return False
+    code, body = api("GET", f"/deployments/applications/{uuid}?take=1")
+    if code != 200:
+        return False
+    rows = body.get("deployments", body) if isinstance(body, dict) else body
+    if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+        return False
+    row = rows[0]
+    live = (row.get("status") or "").lower() in ("finished", "success") \
+        and (row.get("commit") or "").strip().lower() == MAIN_HEAD
+    if live:
+        print(f"::notice title=already live::{name} already runs {MAIN_HEAD[:8]}; not restarted")
+    return live
+
+
 def deploy(uuid: str, name: str) -> bool:
     code, body = api("POST", f"/deploy?uuid={uuid}&force=false")
     if not 200 <= code < 300:
@@ -145,7 +169,9 @@ def main() -> int:
         # Refuse drift before replacing the live stack, rather than losing backups.
         if not verify_main_scope(api):
             return 1
-        if not deploy(MAIN_APP, "main") or not wait_for(MAIN_APP, "main"):
+        if already_live(MAIN_APP, "main"):
+            pass
+        elif not deploy(MAIN_APP, "main") or not wait_for(MAIN_APP, "main"):
             print("::error title=stopped::main did not deploy; rooms were not touched")
             return 1
     za_ok = True
@@ -156,7 +182,9 @@ def main() -> int:
               + (" and " + ", ".join(skipped) if skipped else "") + " skipped on purpose")
     elif want_main:
         za_uuid = by_name.get(SA_APP)
-        if not za_uuid or not deploy(za_uuid, SA_APP) or not wait_for(za_uuid, SA_APP):
+        if za_uuid and already_live(za_uuid, SA_APP):
+            pass
+        elif not za_uuid or not deploy(za_uuid, SA_APP) or not wait_for(za_uuid, SA_APP):
             # The ZA box failing (for example a power outage there) must not hold back
             # Boston's rooms. ZA rooms wait until tervory-tank-za deploys again.
             za_ok = False
@@ -166,6 +194,8 @@ def main() -> int:
     # One room at a time: deploy, then wait until it is healthy before the next.
     # Starting every room at once took every product page down together (28 Oct, #403).
     for name, uuid in sorted(targets.items()):
+        if already_live(uuid, name):
+            continue
         ok = (deploy(uuid, name) and wait_for(uuid, name)) and ok
     return 0 if ok else 1
 

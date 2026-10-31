@@ -226,7 +226,7 @@ async def finish(rt: Any, req: Any, policy: dict, identity: tuple, messages: lis
 
 def schedule(rt: Any, req: Any, policy: dict, identity: tuple, messages: list[dict],
              probe: Probe | None, ledger_id: uuid.UUID, content: str, cost: float) -> None:
-    if probe is None:
+    if probe is None or str(policy.get("model") or "").strip().lower().startswith("build-"):
         return
     task = asyncio.create_task(finish(rt, req, policy, identity, messages, probe, ledger_id, content, cost))
     rt._background.add(task)

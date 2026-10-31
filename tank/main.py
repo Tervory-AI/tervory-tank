@@ -21,6 +21,7 @@ Endpoints
   GET  /v1/base/records?tenant_id=       proxy: enriched records, newest first
   GET  /v1/policy                        the routing policy rows
   PUT  /v1/policy/{task_type}            change a policy row (no deploy needed)
+  DELETE /v1/policy/{task_type}?tenant_id=  drop one tenant's own row (never the platform default)
   GET  /v1/models                       the roster LiteLLM serves, with USD per million tokens
   GET  /v1/rig/search                    proxy: one tenant's catalogue search
   GET  /v1/rig/graph/{id}                proxy: fit graph for one product
@@ -64,6 +65,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 import batch_providers
+import prompt_cache
 import priority_queue
 import graduate
 import semantic_cache
@@ -85,6 +87,12 @@ ZA_HOME_MESSAGE = "needs the South Africa region"
 US_HOME_MESSAGE = "needs the United States region"
 IDENTIFIER_REFUSAL = "A personal identifier cannot be sent to a provider outside South Africa."
 ALLOW_REFUSAL = "This provider is not on the tenant's allow-list."
+# Build-only models (the ChatGPT sign-in). Every alias starts with build- and is
+# reachable only for Tervory's own build tenants: evals, self-tests, samples.
+# Never customer or tenant traffic. See docs/ops/CHATGPT-BUILD-MODEL.md.
+BUILD_MODEL_PREFIX = "build-"
+BUILD_ONLY_REFUSAL = "This model is for Tervory's own build and test work only."
+_PLATFORM_TENANT_ID = "00000000-0000-0000-0000-000000000001"
 _pii_detect = None
 _skill_home: contextvars.ContextVar[str | None] = contextvars.ContextVar("zenas_skill_home", default=None)
 
@@ -217,6 +225,29 @@ def sa_hosted_models() -> frozenset[str]:
             if name:
                 names.add(name)
     return frozenset(names)
+
+
+def is_build_only_model(name: Any, provider_model: Any = None) -> bool:
+    """True for a build-only alias (build-*) or any ChatGPT-subscription deployment."""
+    alias = str(name or "").strip().lower()
+    provider = str(provider_model or "").strip().lower()
+    return alias.startswith(BUILD_MODEL_PREFIX) or provider.startswith("chatgpt/")
+
+
+def build_tenants() -> frozenset[str]:
+    """Tenants whose calls may use a build-only model: the platform tenant, plus
+    TANK_BUILD_TENANTS (comma-separated ids of internal test tenants, no customers)."""
+    extra = {part.strip().lower() for part in os.environ.get("TANK_BUILD_TENANTS", "").split(",") if part.strip()}
+    return frozenset({_PLATFORM_TENANT_ID, *extra})
+
+
+def build_model_refusal(model: Any, tenant_id: Any) -> str | None:
+    """The wall: a build-only model for anyone other than a build tenant is refused."""
+    if not is_build_only_model(model):
+        return None
+    if tenant_id is not None and str(tenant_id).strip().lower() in build_tenants():
+        return None
+    return BUILD_ONLY_REFUSAL
 
 
 def tenant_allowlist(tenant_id: str) -> frozenset[str] | None:
@@ -380,6 +411,9 @@ def model_call_refusal(
     permitted SA model at all? Pure-code skills do not call this.
     """
     here = normalize_box(box)
+    build = build_model_refusal(model, tenant_id) if model is not None else None
+    if build:
+        return build
     allow = tenant_allowlist(tenant_id)
     public_record = _pool_read_candidate(text, caller=caller, task_type=task_type, skill=skill) and pool_read
     if here != ZA_REGION:
@@ -591,8 +625,10 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
     ghost_route = matched == "ghost" and (request.method, path) in __import__("ghost_routes").ROOM_METHODS
     vendor_write = request.method == "POST" and path == "/v1/ledger/vendor"
     batch_route = path == "/v1/route/batch" or (request.method == "GET" and path.startswith("/v1/route/batch/"))
+    # Its own queued background calls only; route_job checks the caller.
+    job_route = request.method == "GET" and path.startswith("/v1/route/jobs/") and path.count("/") == 4
     event_route = request.method == "POST" and path in {"/v1/events/publish", "/v1/events/receive", "/v1/events/settle"}
-    if path not in {"/health", "/v1/route"} and not batch_route and not skill_run and not vendor_write and not ghost_route and not event_route:
+    if path not in {"/health", "/v1/route"} and not batch_route and not job_route and not skill_run and not vendor_write and not ghost_route and not event_route:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
 
@@ -635,6 +671,9 @@ class RouteResponse(BaseModel):
     batch: bool = False
     baseline_cost_usd: float | None = None
     discount_usd: float | None = None
+    # Provider prompt-cache tokens included in tokens_in (0 when none were reported).
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
 
 
 class PolicyRow(BaseModel):
@@ -814,6 +853,21 @@ async def list_policy(tenant_id: uuid.UUID) -> list[dict[str, Any]]:
     return out
 
 
+def build_policy_problem(body: "PolicyRow") -> str | None:
+    """A build-only model may sit only on a build tenant's own row, never the platform
+    default (tenant_id null) that every customer inherits, never batched, never cached."""
+    named = [body.model, body.escalation_model]
+    if not any(is_build_only_model(name) for name in named if name):
+        return None
+    if body.tenant_id is None:
+        return BUILD_ONLY_REFUSAL + " It cannot be the default policy for every tenant."
+    if build_model_refusal(BUILD_MODEL_PREFIX, body.tenant_id):
+        return BUILD_ONLY_REFUSAL
+    if body.batch_eligible or body.cache_scope != "none" or body.semantic_cache:
+        return BUILD_ONLY_REFUSAL + " Set batch_eligible false, cache_scope none and semantic_cache false."
+    return None
+
+
 @app.put("/v1/policy/{task_type}", dependencies=[Depends(require_key)])
 async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
     if body.task_type != task_type:
@@ -821,6 +875,9 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
     body.model = body.model.strip()
     if graduate.router_cannot_serve(body.model) or (graduate.is_skill(body.model) and body.rung != 3):
         raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
+    build_problem = build_policy_problem(body)
+    if build_problem:
+        raise HTTPException(status_code=403, detail=build_problem)
     if graduate.is_skill(body.model):
         parsed = graduate.parse_skill(body.model)
         pkg = get_package(*parsed)
@@ -846,6 +903,18 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
             body.semantic_cache, body.matter_matching, body.max_cost_usd,
         )
     return {"ok": True}
+
+
+@app.delete("/v1/policy/{task_type}", dependencies=[Depends(require_key)])
+async def delete_tenant_policy(task_type: str, tenant_id: uuid.UUID) -> dict[str, Any]:
+    """Remove one tenant's own policy row so that tenant follows the platform default again.
+    The platform default row (tenant_id null) is never deleted here. Used to switch a build
+    tenant back off a build-only model after a test run."""
+    async with pool().acquire() as conn:
+        status = await conn.execute(
+            "DELETE FROM tank.policy WHERE task_type=$1 AND tenant_id=$2", task_type, tenant_id,
+        )
+    return {"ok": True, "deleted": int(str(status).rsplit(" ", 1)[-1] or 0)}
 
 
 # ---------- the one call ----------
@@ -1164,7 +1233,9 @@ async def run_route(
     if policy["system_prompt"]:
         messages = [{"role": "system", "content": policy["system_prompt"]}, *messages]
     if req.task_type == "zenas.case_facts" and any(str(message.get("content", "")).startswith(_CONVERT_HEAD) for message in messages):
-        messages.insert(0, {"role": "system", "content": (
+        # Fixed text first, so the provider prompt cache sees one stable prefix:
+        # the policy prompt, then this fixed instruction, then the judgment.
+        prompt_cache.insert_fixed(messages, bool(policy["system_prompt"]), {"role": "system", "content": (
             "For this judgment conversion use facts_pointer and element quote_pointer objects instead of copying text. "
             "Each pointer is {\"paragraphs\":[1,2]} or {\"first\":\"first eight words\",\"last\":\"last eight words\"}. "
             "Select at least 200 characters of facts. Return question, holding, elements and citations as JSON."
@@ -1351,6 +1422,9 @@ async def run_route(
     usage = data.get("usage") or {}
     tokens_in = int(usage.get("prompt_tokens") or 0)
     tokens_out = int(usage.get("completion_tokens") or 0)
+    # Provider prompt-cache tokens, part of tokens_in. LiteLLM prices them with the
+    # roster cache rates (litellm/config.yaml) in the cost header below.
+    cache_read, cache_write = prompt_cache.cache_tokens(usage)
     # LiteLLM reports the cost it computed from config.yaml prices in this header.
     cost_usd = float(r.headers.get("x-litellm-response-cost") or 0.0)
     cost_status = "set"
@@ -1375,10 +1449,12 @@ async def run_route(
             """
             INSERT INTO tank.ledger
               (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat,escalation,accept_after,sent_at,offpeak_job_id,cost_status)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16,$17,$18::jsonb,now()+make_interval(secs=>$19),$20,$21,$22)
+               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat,escalation,accept_after,sent_at,offpeak_job_id,cost_status,
+               cache_read_tokens,cache_write_tokens)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16,$17,$18::jsonb,now()+make_interval(secs=>$19),$20,$21,$22,$23,$24)
             ON CONFLICT(id) DO UPDATE SET model=EXCLUDED.model,rung=EXCLUDED.rung,
               tokens_in=EXCLUDED.tokens_in,tokens_out=EXCLUDED.tokens_out,cost_usd=EXCLUDED.cost_usd,
+              cache_read_tokens=EXCLUDED.cache_read_tokens,cache_write_tokens=EXCLUDED.cache_write_tokens,
               latency_ms=EXCLUDED.latency_ms,outcome=EXCLUDED.outcome,error=EXCLUDED.error,
               route_seat=EXCLUDED.route_seat,escalation=EXCLUDED.escalation,accept_after=EXCLUDED.accept_after,
               sent_at=EXCLUDED.sent_at,cost_status=EXCLUDED.cost_status,
@@ -1392,7 +1468,7 @@ async def run_route(
             ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
             req.task_type, policy["rung"], answered, priority, tokens_in, tokens_out, cost_usd,
             latency_ms, outcome, task_id, error, route_seat, json.dumps(escalation), int(policy.get("acceptance_window_s", 86400)),
-            sent_at, _receipt_id, cost_status,
+            sent_at, _receipt_id, cost_status, cache_read, cache_write,
         )
 
     if outcome == "failed":
@@ -1434,11 +1510,14 @@ async def run_route(
     return RouteResponse(
         ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
         tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd if cost_status == "set" else None, latency_ms=latency_ms,
-        finish_reason=finish_reason, escalation=escalation,
+        finish_reason=finish_reason, escalation=escalation, cache_read_tokens=cache_read, cache_write_tokens=cache_write,
     )
 
 
 async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int, *, receipt: dict | None = None) -> tuple[str, float]:
+    if is_build_only_model(model):
+        # Shadow runs on live tenant traffic; a build-only model never sees it.
+        raise RuntimeError(BUILD_ONLY_REFUSAL)
     messages = _plain_messages(messages)
     if _contains_html(messages):
         raise ValueError("HTML is not model input; supply extracted text")
@@ -1494,6 +1573,12 @@ _ROSTER_TTL_S = 300
 _roster_cache: tuple[float, list[dict[str, Any]]] | None = None
 
 
+def _build_row(row: dict[str, Any]) -> bool:
+    """Build-only models are not on the roster: no model picker, override, bench,
+    price search or graduation candidate can see them. Only a build tenant's policy row can."""
+    return is_build_only_model(row.get("model_name"), (row.get("litellm_params") or {}).get("model"))
+
+
 def _roster_row(item: Any) -> dict[str, Any] | None:
     """One served model in roster shape: name, provider model and prices only, never a key."""
     if not isinstance(item, dict):
@@ -1520,6 +1605,8 @@ def _roster_row(item: Any) -> dict[str, Any] | None:
         "model_info": {
             "input_cost_per_token": price("input_cost_per_token"),
             "output_cost_per_token": price("output_cost_per_token"),
+            **{key: value for key in ("cache_read_input_token_cost", "cache_creation_input_token_cost")
+               if (value := price(key)) is not None},
             **({"offpeak": info["offpeak"]} if isinstance(info.get("offpeak"), dict) else {}),
         },
     }
@@ -1545,6 +1632,8 @@ async def _roster_models() -> list[dict[str, Any]]:
                 seen: set[str] = set()
                 for item in data or []:
                     row = _roster_row(item)
+                    if row is not None and _build_row(row):
+                        continue
                     if row is not None and row["model_name"] not in seen:
                         seen.add(row["model_name"])
                         rows.append(row)
@@ -1559,7 +1648,7 @@ async def _roster_models() -> list[dict[str, Any]]:
     import yaml
 
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return [row for row in (_roster_row(item) for item in raw.get("model_list") or []) if row]
+    return [row for row in (_roster_row(item) for item in raw.get("model_list") or []) if row and not _build_row(row)]
 
 
 async def _live_price_quotes() -> list[graduate.Quote]:
@@ -1824,6 +1913,9 @@ async def _load_evidence(conn: Any, policy: dict[str, Any]) -> graduate.Evidence
 
 async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by: str) -> None:
     task_type = before["task_type"]
+    if move.action == "promote" and is_build_only_model(move.policy.get("model")):
+        log.warning("graduation %s: build-only model not promoted", task_type)
+        return
     if move.action == "promote":
         updated = await conn.execute(
             """
@@ -2223,6 +2315,8 @@ async def set_candidate(task_type: str, body: CandidateBody) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail="no such platform policy")
         if body.candidate_model and body.candidate_model == row["model"]:
             raise HTTPException(status_code=400, detail="candidate must differ from the current model")
+        if is_build_only_model(body.candidate_model):
+            raise HTTPException(status_code=403, detail=BUILD_ONLY_REFUSAL)
         if graduate.is_skill(body.candidate_model):
             problem = await _check_code_candidate(conn, str(body.candidate_model))
             if problem:
@@ -2465,9 +2559,17 @@ async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     row = await load_policy(body.task_type, body.tenant_id)
     if (body.priority or row["priority"]) == "offpeak" and row.get("moa_enabled"):
         raise HTTPException(422, "MoA policies require the foreground route")
+    background = _background_batch(body, row)
+    if background:
+        # Nobody is waiting: queue it like offpeak, so it goes through the
+        # provider batch at the batch discount when the seat has one (a seat
+        # without one runs from the queue, inside its off-peak window if any).
+        body = body.model_copy(update={"priority": "offpeak"})
     if not row.get("moa_enabled") or int(row.get("rung", 1)) in {3, 4} or graduate.is_skill(row.get("model")):
         result = await run_route(body, caller=caller)
         if isinstance(result, priority_queue.QueuedResponse):
+            if background:
+                result = await priority_queue.label_batch(__import__("sys").modules[__name__], result, body.tenant_id)
             priority_queue.kick(__import__("sys").modules[__name__], result.id, body.tenant_id)
         return result
     return await __import__("moa").routed_request(
@@ -2475,9 +2577,19 @@ async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     )
 
 
-@app.get("/v1/route/jobs/{job_id}", dependencies=[Depends(require_key)])
-async def route_job(job_id: uuid.UUID, tenant_id: uuid.UUID):
-    return await priority_queue.status(__import__("sys").modules[__name__], job_id, tenant_id)
+def _background_batch(body: RouteRequest, row: dict[str, Any]) -> bool:
+    """priority=batch with interactive=false: background work nobody waits on.
+
+    Only this explicit pair defers, so every interactive call (the default) is
+    answered at once as before; urgent/standard, or interactive=true, is the
+    opt-out for an urgent run. MoA policies keep the foreground route.
+    """
+    return (body.priority or row["priority"]) == "batch" and not body.interactive and not row.get("moa_enabled")
+
+
+@app.get("/v1/route/jobs/{job_id}")
+async def route_job(job_id: uuid.UUID, tenant_id: uuid.UUID, caller: str | None = Depends(require_key)):
+    return await priority_queue.status(__import__("sys").modules[__name__], job_id, tenant_id, caller=caller)
 
 
 # ---------- provider batches (independent of the task queue worker) ----------
@@ -2514,7 +2626,11 @@ async def _batch_price(model: str) -> dict[str, Any]:
     provider, _, name = native.partition("/")
     return {"input": float(info["input_cost_per_token"]), "output": float(info["output_cost_per_token"]),
             "provider": provider, "native": name,
-            "discount": batch_providers.charge_multiplier(provider, name) or 1.0}
+            "discount": batch_providers.charge_multiplier(provider, name) or 1.0,
+            # Provider prompt-cache rates, only when the roster states them.
+            **{short: float(info[key]) for short, key in (("cache_read", "cache_read_input_token_cost"),
+                                                          ("cache_write", "cache_creation_input_token_cost"))
+               if info.get(key) is not None}}
 
 
 def _call_upper(messages: list[dict[str, str]], max_tokens: int, prices: dict[str, Any]) -> float:
@@ -2703,8 +2819,9 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
         return
     usage = data.get("usage") or {}
     tokens_in, tokens_out = int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
+    cache_read, cache_write = prompt_cache.cache_tokens(usage)
     prices, snapshot = _batch_obj(item["prices"]), _batch_obj(item["policy"])
-    baseline = Decimal(tokens_in)*Decimal(str(prices["input"])) + Decimal(tokens_out)*Decimal(str(prices["output"]))
+    baseline = prompt_cache.token_cost(prices, tokens_in, tokens_out, cache_read, cache_write)
     actual = baseline*Decimal(str(prices["discount"]))
     req = RouteRequest.model_validate(_batch_obj(item["request"]))
     ledger_id = uuid.UUID(snapshot["offpeak_job_id"]) if snapshot.get("offpeak_job_id") else uuid.uuid4()
@@ -2716,11 +2833,13 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
         await conn.execute(
             """INSERT INTO tank.ledger(id,tenant_id,region,agent,skill,task_type,rung,model,priority,
             tokens_in,tokens_out,cost_usd,latency_ms,outcome,batch,batch_id,baseline_model,baseline_cost_usd,
-            baseline_status,escalation,accept_after,batch_baseline_cost_usd,batch_discount_usd,sent_at,offpeak_job_id)
+            baseline_status,escalation,accept_after,batch_baseline_cost_usd,batch_discount_usd,sent_at,offpeak_job_id,
+            cache_read_tokens,cache_write_tokens)
             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$16,$9,$10,$11,0,'delivered',true,$12,$8,$13,'measured',$14::jsonb,
-                   now()+make_interval(secs=>$15),$13,$13::numeric-$11::numeric,$17,$18)
+                   now()+make_interval(secs=>$15),$13,$13::numeric-$11::numeric,$17,$18,$19,$20)
             ON CONFLICT(id) DO UPDATE SET model=EXCLUDED.model,rung=EXCLUDED.rung,
               tokens_in=EXCLUDED.tokens_in,tokens_out=EXCLUDED.tokens_out,cost_usd=EXCLUDED.cost_usd,
+              cache_read_tokens=EXCLUDED.cache_read_tokens,cache_write_tokens=EXCLUDED.cache_write_tokens,
               latency_ms=EXCLUDED.latency_ms,outcome=EXCLUDED.outcome,cost_status='set',
               escalation=EXCLUDED.escalation,accept_after=EXCLUDED.accept_after,sent_at=EXCLUDED.sent_at,
               batch=EXCLUDED.batch,batch_id=EXCLUDED.batch_id,
@@ -2735,7 +2854,7 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
             snapshot["routing"]["rung"], batch["model"], tokens_in, tokens_out, actual,
             batch["id"], baseline, json.dumps(snapshot["escalation"]), int(snapshot["routing"]["acceptance_window_s"]),
             "offpeak" if snapshot.get("offpeak_job_id") else "batch", batch["submitted_at"],
-            ledger_id if snapshot.get("offpeak_job_id") else None,
+            ledger_id if snapshot.get("offpeak_job_id") else None, cache_read, cache_write,
         )
         await conn.execute("""INSERT INTO tank.transcripts(ledger_id,tenant_id,task_type,messages,content)
             VALUES($1,$2,$3,$4::jsonb,$5)""", ledger_id, req.tenant_id, req.task_type,

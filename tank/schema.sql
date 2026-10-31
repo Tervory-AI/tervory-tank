@@ -2196,6 +2196,11 @@ CREATE OR REPLACE TRIGGER policy_skill_revalidation
     AFTER INSERT OR UPDATE OF model ON tank.policy
     FOR EACH ROW EXECUTE FUNCTION tank.queue_skill_revalidations();
 
+-- Provider prompt caching: cache read/write tokens reported by the provider,
+-- already included in tokens_in. Additive; existing rows read as zero.
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS cache_read_tokens integer NOT NULL DEFAULT 0;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS cache_write_tokens integer NOT NULL DEFAULT 0;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (

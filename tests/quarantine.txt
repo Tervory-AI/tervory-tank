@@ -1,0 +1,19 @@
+# Tests that already fail on main, quarantined so the full offline suite can gate PRs.
+#
+# Format: <pytest node id or prefix> | xfail|skip | <reason>
+#   xfail: still runs and is reported as XFAIL. Strict: once it passes (XPASS) the run
+#          fails, so the PR that fixes it must delete the line. Use exact node ids
+#          (with [params]) so passing siblings stay gated.
+#   skip:  not run (it hangs or burns minutes before failing); say why.
+# Every entry is printed with its outcome at the end of each CI run.
+# Remove an entry in the PR that fixes the test. Do not add entries for new failures:
+# a PR that breaks a passing test must fix it.
+#
+# Added 31 Oct 2026 (#486): failures found when the whole suite ran again on main fd5fc1a5.
+# None of these tests ran in PR CI since 27 Oct (#351), so each drifted from the code it checks.
+# 19 of the 22 found were fixed in #486. These 4 entries (3 problems) remain: each is a
+# product or release decision, not a test flaw. Strict xfail: each fails the run once it passes.
+tests/test_room_seal.py::test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.yml] | xfail | live leak, not test drift: zenas-docassemble (Boston) and zenas-docassemble-za deploy in Coolify's normal mode, so the Docassemble container sits on Coolify's internet-facing app network as well as the internal assembly network. Fix in one change: add the raw-compose marker, pin the backup volume to its live name, tick Raw Compose Deployment on the resource (Coolify UI only) and redeploy
+tests/test_room_seal.py::test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.za.yml] | xfail | live leak, not test drift: zenas-docassemble (Boston) and zenas-docassemble-za deploy in Coolify's normal mode, so the Docassemble container sits on Coolify's internet-facing app network as well as the internal assembly network. Fix in one change: add the raw-compose marker, pin the backup volume to its live name, tick Raw Compose Deployment on the resource (Coolify UI only) and redeploy
+tests/test_chat_graduation.py::test_chat_exact_repeat_has_zero_cost_both_jobs_in_savings_and_tenants_sealed | xfail | product conflict, not test drift: #424 made priority=urgent skip all cache reuse, and command.turn's policy is urgent, so #360's free exact repeat of a chat question is off (the repeat is paid again). Decide: let urgent read the tenant-sealed exact cache, or drop the #360 promise. (The test's stale httpx fake is fixed in #486; it now fails only on this.)
+tests/test_candidate_eval_runtime.py::CandidateEvalRuntimeTests::test_bundled_feeds_and_fixtures_match_existing_sources | xfail | 9 bundled feed files differ from agents/market_lab/feeds (runner, adapters, fetch, live, keys, licences, reader, ffl sources/lists) and adapters.py now imports new modules (keyless, which needs feedparser; Tank's requirements do not carry it). Approved packages are immutable and #487 refuses a patch with changed code, so the fix is a market.series_fetch 1.3.0 release with the new dependency closure, through Skala evals and approval

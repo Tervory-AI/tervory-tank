@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import subprocess
 import tempfile
 import threading
@@ -11,6 +10,8 @@ import time
 import types
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import ClassVar
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,46 +26,218 @@ def workflow_python(name):
     return '\n'.join(line[10:] for line in script.splitlines())
 
 
+def load_gate():
+    """Import .github/scripts/live_check_gate.py with an offline watchdog.norm_status."""
+    import importlib.util
+    import sys
+    watchdog = types.ModuleType('watchdog')
+    watchdog.norm_status = lambda value: str(value or '').strip().lower()
+    sys.modules['watchdog'] = watchdog
+    spec = importlib.util.spec_from_file_location(
+        'live_check_gate_offline', ROOT / '.github/scripts/live_check_gate.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class FakeCoolify:
+    """Scripted Coolify: each snapshot (one GET /applications) reads the next state.
+
+    A state maps app name -> (status, latest deployment id, latest deployment status).
+    The last state repeats. Records the order of snapshots and probes.
+    """
+
+    UUIDS: ClassVar[dict[str, str]] = {'main': 'main-id', 'agent-rig': 'rig-id', 'agent-zenas': 'zenas-id',
+             'agent-zenas-za': 'zenas-za-id', 'agent-template': 'template-id',
+             'tervory-tank-za': 'za-id'}
+
+    def __init__(self, states):
+        self.states, self.index, self.events = states, -1, []
+
+    def state(self):
+        return self.states[min(self.index, len(self.states) - 1)]
+
+    def api(self, method, path):
+        assert method == 'GET', (method, path)
+        if path == '/applications':
+            self.index += 1
+            self.events.append('read')
+            return 200, [{'uuid': self.UUIDS[name], 'name': name if name != 'main' else 'tervory-tank:main',
+                          'status': row[0]} for name, row in self.state().items()]
+        uuid = path.split('/deployments/applications/', 1)[1].split('?', 1)[0]
+        name = next(n for n, u in self.UUIDS.items() if u == uuid)
+        _, deployment, status = self.state()[name]
+        return 200, {'deployments': [{'deployment_uuid': deployment, 'status': status}]}
+
+    def probe(self, codes):
+        codes = list(codes)
+
+        def run():
+            self.events.append('probe')
+            return codes.pop(0)
+        return run
+
+
+def quiet(main='d1', rig='r1', zenas='z1', **over):
+    """Settled Coolify. A string sets that app's latest deployment id; a tuple sets the row."""
+    def row(value):
+        return value if isinstance(value, tuple) else ('running:healthy', value, 'finished')
+    state = {'main': row(main), 'agent-rig': row(rig), 'agent-zenas': row(zenas),
+             # ZA and the template never hold back a Boston check.
+             'agent-zenas-za': ('exited', 'za1', 'in_progress'), 'agent-template': ('exited', 't1', 'failed'),
+             'tervory-tank-za': ('running:unhealthy', 'za2', 'queued')}
+    state.update(over)
+    return state
+
+
+class Clock:
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+
+class GateTests(unittest.TestCase):
+    def setUp(self):
+        self.gate = load_gate()
+        self.clock = Clock()
+        patcher = patch('builtins.print')
+        self.printed = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def run_gate(self, coolify, codes, **kw):
+        return self.gate.run(coolify.api, 'main-id', coolify.probe(codes), clock=self.clock,
+                             sleep=self.clock.sleep, **kw)
+
+    def output(self):
+        return '\n'.join(' '.join(map(str, call.args)) for call in self.printed.call_args_list)
+
+    def test_probe_waits_for_deploy_to_finish_and_health_on_two_reads(self):
+        coolify = FakeCoolify([
+            quiet(main=('running:healthy', 'd2', 'queued')),
+            quiet(main=('running:healthy', 'd2', 'in_progress')),
+            quiet(main=('running:unknown', 'd2', 'finished')),
+            quiet(main=('running:healthy', 'd2', 'finished')),
+            quiet(main=('running:healthy', 'd2', 'finished')),
+        ])
+        self.assertEqual(self.run_gate(coolify, [0]), 0)
+        self.assertEqual(coolify.events, ['read'] * 5 + ['probe'])
+
+    def test_one_green_read_is_not_enough_when_a_new_deploy_appears(self):
+        coolify = FakeCoolify([quiet(main='d1'), quiet(main='d2'), quiet(main='d2')])
+        self.assertEqual(self.run_gate(coolify, [0]), 0)
+        self.assertEqual(coolify.events, ['read', 'read', 'read', 'probe'])
+
+    def test_31_oct_overlap_is_rechecked_after_the_other_deploy_settles(self):
+        # #471: Coolify was settled, then an API deploy of main replaced containers while the
+        # browser probed, so every Workspace host returned 503. That is not a site failure.
+        coolify = FakeCoolify([
+            quiet(main='d829'), quiet(main='d829'),                    # settled before probe
+            quiet(main=('running:healthy', 'd831', 'in_progress')),    # read after the failed probe
+            quiet(main=('running:healthy', 'd831', 'in_progress')),
+            quiet(main='d831'), quiet(main='d831'),                    # settled again
+        ])
+        self.assertEqual(self.run_gate(coolify, [1, 0]), 0)
+        self.assertEqual(coolify.events, ['read', 'read', 'probe', 'read', 'read', 'read', 'read', 'probe'])
+        self.assertIn('main redeployed', self.output())
+
+    def test_failure_while_coolify_stayed_quiet_is_real_and_not_retried(self):
+        coolify = FakeCoolify([quiet()])
+        self.assertEqual(self.run_gate(coolify, [1, 0]), 1)
+        self.assertEqual(coolify.events.count('probe'), 1)
+        self.assertIn('no deploy ran', self.output())
+
+    def test_room_deploy_during_probe_counts_as_overlap(self):
+        coolify = FakeCoolify([quiet(), quiet(), quiet(zenas='z2'), quiet(zenas='z2')])
+        self.assertEqual(self.run_gate(coolify, [1, 0]), 0)
+        self.assertIn('agent-zenas redeployed', self.output())
+
+    def test_overlap_on_every_attempt_fails_bounded(self):
+        states = []
+        for n in range(1, 4):
+            states += [quiet(main=f'd{n}'), quiet(main=f'd{n}')]
+        states.append(quiet(main='d9'))
+        coolify = FakeCoolify(states)
+        self.assertEqual(self.run_gate(coolify, [1, 1, 1, 0], attempts=3), 1)
+        self.assertEqual(coolify.events.count('probe'), 3)
+
+    def test_never_settles_times_out_without_probing(self):
+        for state in [quiet(main=('running:unknown', 'd1', 'finished')),
+                      quiet(main=('running:healthy', 'd1', 'in_progress')),
+                      {k: v for k, v in quiet().items() if k != 'agent-rig'}]:
+            with self.subTest(state=state):
+                self.clock.now = 0
+                coolify = FakeCoolify([state])
+                with self.assertRaises(SystemExit) as error:
+                    self.run_gate(coolify, [0], total_s=120)
+                self.assertEqual(error.exception.code, 1)
+                self.assertNotIn('probe', coolify.events)
+
+    def test_unreadable_coolify_is_not_settled(self):
+        with self.assertRaises(SystemExit):
+            self.gate.settle(lambda *_: (502, 'bad gateway'), 'main-id', 30, clock=self.clock,
+                             sleep=self.clock.sleep)
+
+
+def workflow(name):
+    import yaml
+    return yaml.safe_load((ROOT / '.github/workflows' / name).read_text())
+
+
+def group_for(expression, op):
+    """Evaluate coolify-ops' concurrency group expression for one op (tiny subset)."""
+    body = expression.strip()[3:-2].strip()
+    condition, rest = body.split(' && ', 1)
+    deploy_group, fallback = rest.split(' || ', 1)
+    ops = [part.split("== '", 1)[1].rstrip("')") for part in condition.strip('()').split(' || ')]
+    return deploy_group.strip("'") if op in ops else fallback.replace(
+        "format('coolify-ops-{0}', github.run_id)", 'coolify-ops-RUN')
+
+
 class WorkflowTests(unittest.TestCase):
-    def test_coolify_waits_for_both_apps_and_rejects_unknown(self):
-        script = workflow_python('Wait for Coolify to report the public apps healthy')
-        for status in ['running:healthy', 'running:unknown', 'running:unhealthy']:
-            with self.subTest(status=status):
-                deploy = types.ModuleType('deploy_changed')
-                deploy.MAIN_APP = 'main-id'
-                calls = []
+    def test_deploy_on_merge_queues_one_deploy_and_live_check_at_a_time(self):
+        flow = workflow('deploy-on-merge.yml')
+        self.assertEqual(flow['concurrency'], {'group': 'coolify-deploy', 'cancel-in-progress': False,
+                                               'queue': 'max'})
+        check = flow['jobs']['live-check']
+        # The live check is a job of the same run, so the group is held until it finishes.
+        self.assertEqual(check['needs'], 'deploy')
+        self.assertEqual(check['uses'], './.github/workflows/live-check.yml')
+        self.assertNotIn('concurrency', flow['jobs']['deploy'])
 
-                def api(method, path):
-                    calls.append((method, path))
-                    return 200, [
-                        {'uuid': 'main-id', 'name': 'arbitrary-main-name', 'status': status},
-                        {'uuid': 'rig-id', 'name': 'agent-rig', 'status': 'running:healthy'},
-                    ]
+    def test_every_workflow_that_redeploys_coolify_shares_the_group(self):
+        deployers = {}
+        for path in sorted((ROOT / '.github/workflows').glob('*.yml')):
+            text = path.read_text()
+            if any(marker in text for marker in ['/deploy?', 'deploy_changed.py', 'room_setup.py']):
+                deployers[path.name] = yaml_load(path)
+        self.assertEqual(set(deployers), {'deploy-on-merge.yml', 'coolify-ops.yml'})
+        ops = deployers['coolify-ops.yml']['concurrency']
+        self.assertFalse(ops['cancel-in-progress'])
+        self.assertEqual(ops['queue'], 'max')
+        for op in ['deploy', 'room-setup']:
+            self.assertEqual(group_for(ops['group'], op), 'coolify-deploy')
+        for op in ['status', 'env-refs', 'create-room', 'backup-scope', 'nightly-status']:
+            self.assertEqual(group_for(ops['group'], op), 'coolify-ops-RUN')
 
-                deploy.api = api
-                watchdog = types.ModuleType('watchdog')
-                watchdog.norm_status = str
-                with patch.dict('sys.modules', deploy_changed=deploy, watchdog=watchdog), \
-                        patch('time.monotonic', side_effect=[0, 601]), patch('builtins.print'):
-                    if status == 'running:healthy':
-                        exec(compile(script, '<health-workflow>', 'exec'), {})
-                    else:
-                        with self.assertRaises(SystemExit) as error:
-                            exec(compile(script, '<health-workflow>', 'exec'), {})
-                        self.assertEqual(error.exception.code, 1)
-                self.assertEqual(calls, [('GET', '/applications')])
-
-    def test_coolify_missing_rig_does_not_pass(self):
-        deploy = types.ModuleType('deploy_changed')
-        deploy.MAIN_APP = 'main-id'
-        deploy.api = lambda *_: (200, [{'uuid': 'main-id', 'status': 'running:healthy'}])
-        watchdog = types.ModuleType('watchdog')
-        watchdog.norm_status = str
-        with patch.dict('sys.modules', deploy_changed=deploy, watchdog=watchdog), \
-                patch('time.monotonic', side_effect=[0, 601]), patch('builtins.print'):
-            with self.assertRaises(SystemExit):
-                exec(compile(workflow_python('Wait for Coolify to report the public apps healthy'),
-                             '<health-workflow>', 'exec'), {})
+    def test_live_check_probes_through_the_coolify_gate(self):
+        flow = workflow('live-check.yml')
+        self.assertNotIn('inputs', flow[True]['workflow_call'])
+        job = flow['jobs']['check']
+        self.assertEqual(job['concurrency']['queue'], 'max')
+        self.assertFalse(job['concurrency']['cancel-in-progress'])
+        steps = {step.get('name'): step for step in job['steps']}
+        live = steps['Open every live host signed out']
+        self.assertIn('python3 .github/scripts/live_check_gate.py --output "$LIVE_CHECK_OUTPUT"', live['run'])
+        self.assertNotIn('node ops/live_check.mjs', live['run'])
+        self.assertEqual(live['env']['COOLIFY_TOKEN'], '${{ secrets.COOLIFY_TOKEN }}')
+        self.assertNotIn('Wait for Coolify to report the public apps healthy', steps)
+        self.assertIn('.github/scripts/live_check_gate.py', flow[True]['pull_request']['paths'])
+        self.assertIn('.github/workflows/coolify-ops.yml', flow[True]['pull_request']['paths'])
 
     def test_failure_issue_is_updated_without_duplicates(self):
         opened = {}
@@ -108,6 +281,11 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(events[0][1], 'Live check failed: bad.example')
         self.assertIn('bad.example-375.png', events[0][2])
         self.assertIn('https://github.com/offline/artifacts/456', events[0][2])
+
+
+def yaml_load(path):
+    import yaml
+    return yaml.safe_load(path.read_text())
 
 
 class Pages(BaseHTTPRequestHandler):

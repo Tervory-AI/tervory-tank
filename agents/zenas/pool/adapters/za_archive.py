@@ -2,16 +2,19 @@
 
 The checkpoint table already stores one text cursor. The archive cursor is:
 
-    za-archive-1
+    za-archive-2
     {1 if the archive is caught up, else 0}
     {scope}
     {year}
     {page}
     {comma-separated sha256 prefixes of URLs already handled}
 
-A cursor that does not start with ``za-archive-1`` is ignored, so a URL left
+A cursor that does not start with ``za-archive-2`` is ignored, so a URL left
 by an older newest-page load does not skip the rest of the archive. Ingest
 still hashes the document, so that newest page is not stored twice.
+Version 2 re-reads every file once: version 1 took the first neutral citation
+anywhere in a judgment (often a case it cites) and a file-name title. The new
+judgment replaces the old row for the same file (see ``store.url_replaces``).
 
 ``ZENAS_ZA_ARCHIVE_MAX`` counts judgment files this run starts to download.
 Listing pages, criminal captions, and files that are not judgments do not
@@ -23,6 +26,7 @@ back catalogue again.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import re
@@ -30,6 +34,7 @@ from collections import Counter
 from urllib.parse import unquote, urlsplit
 
 from agents.zenas.pool.adapters.za_case_common import (
+    caption_title,
     case_bytes,
     case_pause,
     env_int,
@@ -42,7 +47,7 @@ from agents.zenas.pool.adapters.za_common import pause, reject_credential_url
 
 log = logging.getLogger(__name__)
 
-MARKER = "za-archive-1"
+MARKER = "za-archive-2"
 ZA_ARCHIVE_SOURCES = frozenset(
     {
         "concourt",
@@ -396,8 +401,9 @@ async def accept_pdf(
         run.skip("not a judgment")
         run.mark(url)
         return b""
-    text = pdf_text(got.body)
-    heading = title or slug_title(url)
+    text = await asyncio.to_thread(pdf_text, got.body)  # CPU-bound; keep the room answering
+    # The listing title, else the judgment's own caption, else the file name.
+    heading = title or caption_title(text) or slug_title(url)
     if title_for is not None:
         heading = title_for(url, text) or heading
     if is_criminal_caption(heading, text):

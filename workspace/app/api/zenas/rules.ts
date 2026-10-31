@@ -282,7 +282,7 @@ export function presentAnswer(payload: unknown, matterId: string | null = null):
   if (!payload || typeof payload !== "object") return { kind: "error", message: ASK_ERROR };
   const row = payload as Record<string, unknown>;
   if (row.ok !== true) {
-    if (row.reason === "could not verify") return { kind: "unverified", message: ASK_UNVERIFIED, matterId };
+    if (typeof row.reason === "string" && row.reason.startsWith("could not verify")) return { kind: "unverified", message: ASK_UNVERIFIED, matterId };
     return askRefusal(422, row);
   }
   if (row.state !== "released") return { kind: "in_review", message: ASK_IN_REVIEW, matterId };
