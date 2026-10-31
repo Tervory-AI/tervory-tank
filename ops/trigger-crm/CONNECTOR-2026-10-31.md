@@ -1,6 +1,6 @@
 # Trigger CRM connector checkpoint
 
-Updated **31 October 2026, 11:58 PDT / 18:58 UTC**. Earlier 11:29 checkpoint results are retained and superseded where noted below. Draft PR #498. This is implementation and offline evidence, not founder acceptance or a live deployment claim.
+Updated **31 October 2026, 12:23 PDT / 19:23 UTC**. Earlier 11:29 checkpoint results are retained and superseded where noted below. Draft PR #498. This is implementation and offline evidence, not founder acceptance or a live deployment claim.
 
 ## What changed
 
@@ -10,7 +10,7 @@ Updated **31 October 2026, 11:58 PDT / 18:58 UTC**. Earlier 11:29 checkpoint res
 | `tank/trigger_crm.py:48` | Recheck existing Command identity and actual persisted tenant Trigger entitlement; no default grant or cross-tenant founder fallback. Client integration was explicitly authorized after the initial founder-only checkpoint. Voice administration remains founder/tenant-admin only. |
 | `tank/trigger_crm.py:56` | Explicit Tank tenant -> actual BottleCRM organization + connector token setting name mapping. Missing, duplicate organizations, setting names or credential values fail closed. Mapping is founder-supplied configuration. A matching authenticated CRM organization attestation is now required on every upstream read; writes additionally require attested read preflight and server-side expected-org check before the CRM view executes. |
 | `tank/trigger_crm.py:91` | Fixed allowlisted BottleCRM paths, bounded response/timeout, no redirects/proxy environment, sanitized errors, no upstream user/token/org metadata projected to Workspace. |
-| `tank/trigger_crm.py:143` | GET leads/contacts/estimates list. Public `page` translated to pinned DRF limit/offset (10 rows); leads have independently paged open/closed groups, combined only after strict shape checks. |
+| `tank/trigger_crm.py:143` | GET leads/contacts/estimates/invoices list. Public `page` translated to pinned DRF limit/offset (10 rows); leads have independently paged open/closed groups, combined only after strict shape checks. |
 | `tank/trigger_crm.py:180` | GET one UUID record. |
 | `tank/trigger_crm.py:188` | POST execution only with exact existing durable Command confirmed-card context; no boolean approval bypass, no automatic retry. Successful code mutation gets an actual zero-cost ledger row. |
 | `tank/trigger_crm_schema.py:1` | Write contracts copied from `ops/trigger-crm/openapi-cd7c12a.yml`, pinned upstream `cd7c12a`. Countries/currencies and required fields preserved; arbitrary custom fields excluded. |
@@ -24,10 +24,10 @@ Updated **31 October 2026, 11:58 PDT / 18:58 UTC**. Earlier 11:29 checkpoint res
 
 ## Workspace contract
 
-- `GET /v1/trigger/crm/{leads|contacts|estimates}` -> `{resource,items,page,count}`. `count` is unknown/null if unavailable, never invented.
+- `GET /v1/trigger/crm/{leads|contacts|estimates|invoices}` -> `{resource,items,page,count}`. `count` is unknown/null if unavailable, never invented.
 - Query: `page=1..10000`; contacts optionally `name`; leads optionally `title`, `status` (`assigned`, `closed`, `converted`, `in process`, `recycled`). No tenant, organization, URL or duplicate query parameters.
 - `GET /v1/trigger/crm/{resource}/{uuid}` -> `{resource,item}`.
-- CRM changes go through the existing Command action/card/confirm contract as `trigger.crm.write`: `{resource,record_id?,data}`. Do not expose a raw browser write proxy. PUT edits use pinned full-body requirements: contacts first_name/last_name; leads assigned_to/contacts/teams; estimates account_id/contact_id/title. No delete, send, convert, pay, order or automation action is implemented.
+- CRM changes go through the existing Command action/card/confirm contract as `trigger.crm.write`: `{resource,record_id?,data}`. Do not expose a raw browser write proxy. PUT edits use pinned full-body requirements: contacts first_name/last_name; leads assigned_to/contacts/teams; estimates account_id/contact_id/title; invoices account_id/contact_id/invoice_title. Invoice reminder settings use their existing pinned fields, under the same Confirm barrier. No delete, send, convert, pay, order or automation action is implemented.
 - Client backend integration is authorized under an actual persisted Trigger grant. No grant is created. Client dashboard layout/copy still needs approved Figma frames; API permission is not visual approval.
 
 ## Required runtime settings (names only)
@@ -58,13 +58,13 @@ Evidence: pinned repository OpenAPI, not a live capability claim.
 | Capability | Existing contract | Connector status |
 |---|---|---|
 | Leads, contacts, estimates | `/api/leads/`, `/api/contacts/`, `/api/invoices/estimates/` with list/detail/create/update | Implemented core slice, tenant mapping/runtime setup pending |
-| Invoice data, send, PDF, payments | `/api/invoices/`, `/{id}/send/`, `/{id}/pdf/`, `/{invoice_id}/payments/` | Not exposed; payments/Stripe/platform billing are outside this job |
+| Business invoice data + reminder settings | `/api/invoices/`, `/{id}/` using existing invoices scopes | List/detail/create/full-PUT exposed under tenant/org/Confirm barriers; payment records, send/PDF/mark-paid, Stripe and platform billing are not exposed |
 | Estimate email/send and PDF | `/api/invoices/estimates/{id}/send/`, `/{id}/pdf/` | Not exposed; requires explicit send action/confirmation and real mail configuration |
 | Automation | `/api/automation/catalogue/`, `/rules/`, `/rules/{id}/runs/`, `/rules/{id}/try/`, `/rules/reorder/` | Upstream interactive-user features. Actual pinned `common/scopes.py` puts automation in CREDENTIAL_PATHS: **no PAT scope can access it**. Do not propose adding a PAT scope or unrestricted token as a workaround |
 | Inbound email | `/api/cases/inbound/email/` | Existing specialized case ingestion, not a general mailbox/chat/messages API |
 | General chat/messages | `/api/interactions/` logs calls/meetings/messages on records; no general mailbox/chat endpoint is claimed | Reuse existing logged-interaction features and Tank Chats where appropriate, not an invented mail/chat provider |
-| Reminders | InvoiceBodyRequest: reminder_enabled, reminder_days_before/after, reminder_frequency; Invoice: last_reminder_sent/reminder_count; OrgSettings: lead_reminder_minutes. Tasks + notifications exist. | Existing upstream reminder features, not yet exposed by this connector; no generic daily-reminder capability is claimed |
-| Other historical CRM modules | `/api/accounts/`, `/api/opportunities/`, `/api/cases/`, `/api/tasks/`, `/api/invoices/` | Five of the historical eight CRM modules are not yet wired through this connector; no whole-CRM completion claim. Additional module scopes require founder-supplied narrow PAT configuration; existing scopes are not silently broadened |
+| Reminders | InvoiceBodyRequest: reminder_enabled, reminder_days_before/after, reminder_frequency; Invoice: last_reminder_sent/reminder_count; OrgSettings: lead_reminder_minutes. Tasks + notifications exist. | Invoice reminder configuration now exposed through confirmed invoice writes; no scheduler trigger/send endpoint or generic daily-reminder service is claimed |
+| Other historical CRM modules | `/api/accounts/`, `/api/opportunities/`, `/api/cases/`, `/api/tasks/` | Four of the historical eight CRM modules are not yet wired through this connector; no whole-CRM completion claim. Additional module scopes require founder-supplied narrow PAT configuration; existing scopes are not silently broadened |
 
 ## Still incomplete
 
@@ -89,3 +89,22 @@ Follow-up commands/results:
 5. Broader `tests/test_command.py` attempt: **17 passed, 26 skipped, 32 setup errors** because this narrow local environment lacks Redis and the remaining heavy Tank runtime dependencies. This is not a passing broad suite; hosted actual new-head CI remains required.
 
 Capability correction verified against upstream `backend/common/scopes.py` at the pinned commit: automation is credential-denied, and auth/profile is JWT-only. Scope expansion cannot enable either path. Accounts/opportunities/cases/tasks/notifications are named resources, but their additional narrow scopes are not silently added to the existing leads/contacts/invoices connector PAT.
+
+
+## Business invoices + actual CI regression follow-up
+
+Founder explicitly requested client business invoices and reminders; these are not platform pricing/billing or Stripe work. The connector now includes a fourth resource, `invoices`, under the existing approved `invoices:read`/`invoices:write` PAT scope names. Uses pinned `InvoiceBodyRequest`, `InvoicePage`, `InvoiceDetail` and `InvoiceSaved` shapes. Required create/PUT fields: `account_id`, `contact_id`, `invoice_title`. Existing reminder fields are preserved. `status`, `amount_paid`, payment methods, arbitrary custom fields and public-link changes are rejected as write inputs. No email/payment/mark-paid endpoint is proxied or invoked; ordinary upstream reminder delivery, if later configured and confirmed by a client, remains the existing CRM's job.
+
+The **actual** hosted failures at old `cb482eae` were inspected rather than retried: Tank job `124628534095`, run `41232081152`, reported one failure and 5278 passed; isolation job `124628295003`, run `41232081147`, reported one failure and 382 passed. Both were the same existing test `test_tenant_squad_grants_are_founder_only_isolated_and_logged`, hardcoding seven rows after authorized Trigger made the catalog eight. Fixed to assert the exact eight-agent set and verify Trigger is **disabled by default**, retaining all founder-only grant changes, audit and foreign-tenant assertions. No test was skipped or permission check removed.
+
+Affected real-database verification (synthetic isolated database only):
+
+- `docker run --rm -d --name codex-trigger-crm-test-20261031 --memory 512m --cpus 0.5 -e POSTGRES_HOST_AUTH_METHOD=trust --tmpfs /var/lib/postgresql/data -p 127.0.0.1::5432 postgres:16.15` -> own disposable container, loopback port 32773, no password generated.
+- `TMPDIR=/home/ammosync/trigger-crm-tmp PYTHONPATH=tank POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32773/postgres /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q tests/test_command.py::test_tenant_squad_grants_are_founder_only_isolated_and_logged --tb=short` -> **1 passed, one existing warning, 3.11s**.
+- `docker stop codex-trigger-crm-test-20261031` -> stopped and `--rm` removed own temporary database after proof; no production container or data touched.
+
+Invoice/schema/org/role/confirmation/WSGI checks:
+
+- `TMPDIR=/home/ammosync/trigger-crm-tmp PYTHONPATH=tank /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q tests/test_trigger_crm.py tests/test_trigger_crm_wsgi.py tests/test_secrets.py --tb=short` -> **54 passed, one existing warning, 17.81s** at runtime/test head `bb8fb8f1` (48 CRM + 4 WSGI + 2 secret checks).
+- `/home/ammosync/trigger-crm-venv312/bin/ruff check --fix tank/trigger_crm.py tank/trigger_crm_schema.py tests/test_trigger_crm.py tests/test_trigger_crm_wsgi.py ops/trigger-crm/tervory_crm_middleware.py ops/trigger-crm/tervory_connector_wsgi.py` -> **All checks passed**, no new automatic changes required.
+- `git diff --check` -> **passed**. Every finished file pushed; no push failure. Current runtime freeze requires new exact-head CI and independent review; old green or failed heads are not substituted.
