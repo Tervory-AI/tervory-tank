@@ -196,6 +196,18 @@ async def search(
     return _ok(request, body)
 
 
+class LocateIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    product_id: str = Field(min_length=1, max_length=200)
+
+
+@router.post("/locate")
+async def locate(request: Request, payload: LocateIn) -> Response:
+    await _auth(request)
+    body = await _service(request).locate(_tenant(request), payload.product_id)
+    return _ok(request, body)
+
+
 @router.post("/search-events")
 async def settled_search(request: Request, payload: SearchEventIn) -> Response:
     await _auth(request)
