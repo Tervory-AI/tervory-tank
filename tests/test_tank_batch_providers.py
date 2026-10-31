@@ -38,7 +38,9 @@ class LiteLLMStub:
                 for row in self.rows:
                     assert row['params']['model'] == NATIVE[self.provider]
                     assert row['params']['max_tokens'] == 1024
-                    assert row['params']['system'] == [{'type': 'text', 'text': 'Offline system instruction'}]
+                    # One prompt-cache breakpoint after the fixed system text (prompt caching).
+                    assert row['params']['system'] == [{'type': 'text', 'text': 'Offline system instruction',
+                                                        'cache_control': {'type': 'ephemeral'}}]
                     assert all(m['role'] != 'system' for m in row['params']['messages'])
                 return httpx.Response(200, json={'id': self.batch_id, 'processing_status': 'in_progress'})
             if path.endswith('/cancel'):
