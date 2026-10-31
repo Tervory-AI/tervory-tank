@@ -1,5 +1,4 @@
 """Offline supplier network tests. Never import fixture data into a live store."""
-import copy
 import json
 import sys
 from datetime import datetime, timedelta, timezone
@@ -22,7 +21,7 @@ async def network():
     store = MemoryStore()
     product = dict(sku="desk", id="desk", gtin="000000000123", mpn="D-1", name="Desk", brand="Workshop",
                    category="furniture", price="70", currency="USD", image_url="https://example.com/desk.png",
-                   active=False, attributes={})
+                   active=False, supply_eligible=True, attributes={})
     await store.upsert_product(TENANT, product)
     await store.save_rule(TENANT, {"freight": "5", "duty_percent": "0", "margin_percent": "20"})
     supply = SupplyStore(store)
@@ -222,6 +221,23 @@ async def test_real_postgres_schema_twice_import_isolation_and_receipt_atomicity
                 assert row["n"] == 1
                 rows = await conn.fetch("SELECT kept_revenue FROM agent_rig.widget_counts WHERE tenant_id=$1", __import__('uuid').UUID(TENANT))
                 assert any(json.loads(r["kept_revenue"]).get("USD") == "53.21" for r in rows)
+                # Policy activation is opt-in; exercise it only in this disposable DB.
+                policy = (Path(__file__).resolve().parents[1] / "db/migrations/tenant_rls/agent_rig.sql").read_text()
+                await conn.execute(policy)
+                await conn.execute("CREATE ROLE rig_supply_test_reader")
+                try:
+                    await conn.execute("GRANT USAGE ON SCHEMA agent_rig TO rig_supply_test_reader")
+                    await conn.execute("GRANT SELECT ON ALL TABLES IN SCHEMA agent_rig TO rig_supply_test_reader")
+                    await conn.execute("SET ROLE rig_supply_test_reader")
+                    await conn.execute("SELECT set_config('app.tenant_id',$1,false)", OTHER)
+                    for table in ("supply_sources", "supply_offers", "supply_sku_map", "supply_sale_receipts"):
+                        assert await conn.fetchval("SELECT count(*) FROM agent_rig." + table) == 0
+                    await conn.execute("SELECT set_config('app.tenant_id',$1,false)", TENANT)
+                    assert await conn.fetchval("SELECT count(*) FROM agent_rig.supply_offers") == 1
+                finally:
+                    await conn.execute("RESET ROLE")
+                    await conn.execute("DROP OWNED BY rig_supply_test_reader")
+                    await conn.execute("DROP ROLE rig_supply_test_reader")
         finally:
             await pool.close()
     finally:
@@ -268,3 +284,94 @@ async def test_odoo_supplier_note_internal_and_retry_reconciles_lost_response():
     assert "supplier-desk" not in json.dumps(order)
     assert "supplier-desk" in stub.notes[0]
     assert all(method not in ("action_confirm", "action_invoice_create", "action_post") for _, method, _, _ in stub.calls)
+
+
+@pytest.mark.asyncio
+async def test_disabled_product_is_not_resurrected_by_available_offer():
+    store, _, product, _ = await network()
+    product["supply_eligible"] = False
+    await store.upsert_product(TENANT, product)
+    assert not (await Service(store).search(TENANT, "Desk", 12))["results"]
+    assert (await Service(store).locate(TENANT, "desk"))["status"] == "unavailable"
+
+
+@pytest.mark.asyncio
+async def test_feed_retains_explicit_disabled_versus_zero_stock():
+    from rigbox.feeds.catalogue import map_catalogue
+    raw = "sku,name,brand,category,price,image_url,quantity,active\nx,Desk,Workshop,furniture,40,https://example.com/x.png,0,true\n"
+    row = map_catalogue({"format": "csv", "currency": "USD"}, raw)["rows"][0]
+    assert row["supply_eligible"] and not row["active"]
+    row = map_catalogue({"format": "csv", "currency": "USD"}, raw.replace(",0,true", ",0,false"))["rows"][0]
+    assert not row["supply_eligible"] and not row["active"]
+
+
+@pytest.mark.asyncio
+async def test_http_locate_and_admin_ingestion_boundaries(monkeypatch):
+    """Route authorization calls use stand-ins; existing auth suite covers keys."""
+    import httpx
+    from fastapi import FastAPI
+    from rigbox.api import mount
+    from rigbox.service import RigError, RecordingHandoff
+    from rigbox.quotes.api import router as admin_router
+    from rigbox.quotes.service import QuoteService
+    from rigbox.quotes.store import MemoryQuotes
+    store, _, _, _ = await network()
+    service = QuoteService(store, None, RecordingHandoff(), MemoryQuotes(store))
+    async def public_auth(role, address):
+        if role not in ("public-test-role", "other-test-role"):
+            raise RigError("unauthorized", "The request is not valid.", 401)
+        return {"tenant_id": OTHER if role == "other-test-role" else TENANT, "origins": []}
+    async def admin_auth(role):
+        if role != "admin-test-role":
+            raise RigError("unauthorized", "The request is not valid.", 401)
+        return {"tenant_id": TENANT}
+    monkeypatch.setattr(service, "authenticate", public_auth)
+    monkeypatch.setattr(service, "authenticate_admin", admin_auth)
+    app = FastAPI()
+    app.state.rig = service
+    mount(app)
+    app.include_router(admin_router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://offline.example") as http:
+        assert (await http.post("/v1/rig/locate", json={"product_id": "desk"})).status_code == 401
+        public_headers = {"X-Rig-Key": "public-test-role"}
+        found = await http.post("/v1/rig/locate", headers=public_headers, json={"product_id": "desk"})
+        assert found.status_code == 200 and found.json()["status"] == "available_to_order"
+        assert set(found.json()) == {"status", "eta", "price"}
+        assert (await http.post("/v1/rig/locate", headers={"X-Rig-Key": "other-test-role"}, json={"product_id": "desk"})).status_code == 404
+        data = dict(id="new-source", approved=True, max_offer_age_seconds=500)
+        assert (await http.post("/v1/rig/admin/supply/sources", headers=public_headers, json=data)).status_code == 401
+        admin_headers = {"X-Rig-Key": "admin-test-role"}
+        assert (await http.post("/v1/rig/admin/supply/sources", headers=admin_headers, json=data)).status_code == 200
+        raw = (Path(__file__).resolve().parents[1] / "agents/rig/catalogues/samples/distributor.csv").read_text()
+        request = dict(source_id="new-source", record={"format": "csv", "currency": "USD"}, contents=raw, seen_at=NOW.isoformat())
+        response = await http.post("/v1/rig/admin/supply/import", headers=admin_headers, json=request)
+        assert response.status_code == 200 and response.json()["imported"] == 1
+        mapping = dict(product_sku="desk", source_id="new-source", offer_sku="SAMPLE-DESK")
+        assert (await http.post("/v1/rig/admin/supply/sku-map", headers=admin_headers, json=mapping)).status_code == 200
+        response = await http.get("/v1/rig/admin/analytics", headers=admin_headers)
+        assert response.status_code == 200 and response.json()["supply"]["kept_revenue"] is None
+
+
+@pytest.mark.asyncio
+async def test_supplier_rule_overrides_region_and_priority_breaks_ties():
+    store, supply, product, offer = await network()
+    await supply.source(TENANT, dict(id="approved", approved=True, priority=5, max_offer_age_seconds=3600,
+                                    provider="existing-provider", site="existing-site", feed_id="existing-feed"))
+    await store.save_rule(TENANT, {"freight": "99", "scopes": {
+        "region:US": {"freight": "10"},
+        "supplier:existing-provider:existing-site:existing-feed": {"freight": "1"}}})
+    assert (await locate(store, TENANT, product))["public"]["price"]["amount"] == "41.00"
+    await supply.source(TENANT, dict(id="second", approved=True, priority=1, max_offer_age_seconds=3600,
+                                    provider="existing-provider", site="existing-site", feed_id="existing-feed"))
+    store.supply_state[TENANT]["offers"].append({**offer, "source_id": "second"})
+    assert (await locate(store, TENANT, product))["store"]["source_id"] == "second"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quantity", ["NaN", "Infinity", "-1"])
+async def test_import_rejects_invalid_quantity_atomically(quantity):
+    store, supply, _, _ = await network()
+    raw = "sku,name,brand,category,price,image_url,quantity\nx,Desk,Workshop,furniture,40,https://example.com/x.png," + quantity + "\n"
+    result = await supply.import_catalogue(TENANT, "approved", {"format": "csv", "currency": "USD"}, raw, NOW)
+    assert result["imported"] == 0 and result["rejected"]
+    assert len((await supply.snapshot(TENANT))[1]) == 1
