@@ -79,13 +79,11 @@ async def prepare(b, monkeypatch, *, window=True, cap=1):
 
 
 @pytest.mark.asyncio
-async def test_urgent_skips_all_shadows_and_semantic_cache(ladder, monkeypatch):  # noqa: F811 (pytest fixture parameter)
+async def test_urgent_skips_all_shadows_and_cache(ladder, monkeypatch):  # noqa: F811 (pytest fixture parameter)
     b = ladder
     await prepare(b, monkeypatch)
-    # Urgent reads the exact cache (#360: an exact repeat is free) but never the semantic form.
-    exact = AsyncMock(return_value=None)
-    monkeypatch.setattr(b.tank, '_cache_read', exact)
-    monkeypatch.setattr(b.tank, '_shadow', AsyncMock(side_effect=AssertionError('urgent shadow')))
+    for name in ('_cache_read', '_shadow'):
+        monkeypatch.setattr(b.tank, name, AsyncMock(side_effect=AssertionError('urgent shadow/cache')))
     monkeypatch.setattr(b.tank.semantic_cache, 'lookup', AsyncMock(side_effect=AssertionError('urgent encoder')))
     monkeypatch.setattr(b.tank.semantic_cache, 'schedule', Mock(side_effect=AssertionError('urgent shadow')))
     monkeypatch.setattr(b.tank.routellm_shadow, 'configuration', Mock(side_effect=AssertionError('urgent router')))
@@ -95,32 +93,6 @@ async def test_urgent_skips_all_shadows_and_semantic_cache(ladder, monkeypatch):
         row = await conn.fetchrow('SELECT * FROM tank.ledger WHERE id=$1 AND tenant_id=$2', result.ledger_id, b.tenants[0])
         assert row['priority'] == 'urgent' and row['sent_at'] is not None
         assert await conn.fetchval('SELECT count(*) FROM tank.offpeak_jobs WHERE tenant_id=$1', b.tenants[0]) == 0
-    exact.assert_awaited_once()
-    assert exact.await_args.args[1]['semantic_cache'] is False
-
-
-@pytest.mark.asyncio
-async def test_urgent_exact_repeat_is_free_and_tenant_sealed(ladder, monkeypatch):  # noqa: F811 (pytest fixture parameter)
-    b = ladder
-    await prepare(b, monkeypatch)
-    monkeypatch.setattr(b.tank.semantic_cache, 'lookup', AsyncMock(side_effect=AssertionError('urgent encoder')))
-    monkeypatch.setattr(b.tank.semantic_cache, 'schedule', Mock(side_effect=AssertionError('urgent shadow')))
-    await policy(b, b.tenants[1], model='deepseek-flash', rung=1, max_cost_usd=1)
-    async with b.pool.acquire() as conn:
-        # semantic_cache on: urgent must still match the exact input only.
-        await conn.execute("""UPDATE tank.policy SET cache_scope='tenant', semantic_cache=true
-            WHERE task_type='base.normalize' AND tenant_id = ANY($1::uuid[])""", list(b.tenants[:2]))
-    first = await b.tank.run_route(request(b, b.tenants[0], text='Offline input', priority='urgent'))
-    repeat = await b.tank.run_route(request(b, b.tenants[0], text='Offline input', priority='urgent'))
-    assert len(b.sent) == 1 and repeat.content == first.content
-    assert repeat.rung == 4 and repeat.cost_usd == 0
-    # Another tenant pays its own first call; a different text is not an exact repeat.
-    await b.tank.run_route(request(b, b.tenants[1], text='Offline input', priority='urgent'))
-    await b.tank.run_route(request(b, b.tenants[0], text='Offline input, reworded', priority='urgent'))
-    assert len(b.sent) == 3
-    async with b.pool.acquire() as conn:
-        hits = await conn.fetch('SELECT cache_hit, priority FROM tank.ledger WHERE tenant_id=$1 ORDER BY ts', b.tenants[0])
-    assert [r['cache_hit'] for r in hits] == [False, True, False]
 
 
 @pytest.mark.asyncio

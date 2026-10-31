@@ -1276,17 +1276,11 @@ async def run_route(
     transcript_messages = await _preflight_mask(req, policy, messages, task_id)
     identity = _cache_identity(req, policy, messages, max_tokens, route_seat)
     cache_policy, cache_probe = dict(policy), None
-    # An exact repeat is served free at every priority: the tenant-sealed exact cache is a
-    # single indexed read, so urgent loses no time and pays no model call (#360). Urgent
-    # reads the exact match only (no semantic form) and still skips the encoder and every
-    # shadow (#424).
-    if not _offpeak_dispatch and not holds_identifier and code_problem is None:
-        exact_policy = policy if priority != "urgent" else {**policy, "semantic_cache": False}
-        hit = await _cache_read(req, exact_policy, identity)
+    if priority != "urgent" and not _offpeak_dispatch and not holds_identifier and code_problem is None:
+        hit = await _cache_read(req, policy, identity)
         if hit is not None:
             await _check_route_task(req, task_id)
             return await _record_local(req, policy, model=model, rung=4, content=hit, task_id=task_id, route_seat=route_seat)
-    if priority != "urgent" and not _offpeak_dispatch and not holds_identifier and code_problem is None:
         cache_probe = await semantic_cache.lookup(__import__("sys").modules[__name__], req, cache_policy, identity, messages)
         if await semantic_cache.may_serve(__import__("sys").modules[__name__], req, cache_policy, cache_probe):
             await _check_route_task(req, task_id)
