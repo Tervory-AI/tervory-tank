@@ -47,7 +47,9 @@ export class Tank {
     } catch { throw new Error('Tank connection failed.'); }
     if (!response.ok) {
       // Do not print error bodies, request objects or transport exceptions.
-      throw new Error(response.status === 401 ? 'Personal token refused.' : `Tank refused the command (${response.status}).`);
+      const error = new Error(response.status === 401 ? 'Personal token refused.' : `Tank refused the command (${response.status}).`);
+      error.status = response.status;
+      throw error;
     }
     return response;
   }
@@ -163,8 +165,14 @@ export async function run(argv, { store, transport, io }) {
   }
   if (name === 'receipts') {
     if (!rest[0]) throw new Error('A thread or task identifier is required.');
-    const result = await tank.json(`/v1/command/threads/${encodeURIComponent(rest[0])}`);
-    io.write(receiptLines({ rows: result.receipts ?? result.thread?.receipts ?? [] }).map(safe).join('\n') + '\n'); return;
+    let result;
+    try {
+      result = await tank.json(`/v1/command/threads/${encodeURIComponent(rest[0])}`);
+    } catch (error) {
+      if (error.status !== 404) throw error;
+      result = await tank.json(`/v1/command/tasks/${encodeURIComponent(rest[0])}/receipts`);
+    }
+    io.write(receiptLines({ rows: result.rows ?? result.receipts ?? [] }).map(safe).join('\n') + '\n'); return;
   }
   if (!['ask', 'chat', 'run', 'build'].includes(name)) throw new Error('Unknown command.');
   if (name !== 'chat' && !rest.length) throw new Error('Command text is required.');
