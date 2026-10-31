@@ -1,22 +1,10 @@
 """Shopper serialization guard: pricing inputs stay on the server."""
 
-import re
 from typing import Any
 
-from rigbox.shopper_attributes import shopper_attributes
+from rigbox.shopper_attributes import _PRIVATE, PRIVATE_KEY_PATTERN, private_key, shopper_attributes
 
-# Private pricing inputs and supplier provenance, matched anywhere in a key.
-# export_* (e.g. Custom Nation's export_usd), wholesale, buy/purchase prices,
-# markup and profit are pricing inputs just like cost, landed, duty and margin.
-_PRIVATE = re.compile(
-    r"cost|duty|margin|landed|markup|profit|wholesale|(^|_)export|(^|_)(buy|purchase|dealer|trade)_?price"
-    r"|(^|_)vat($|_)|(^|_)fx($|_)|exchange_rate|supplier|pricing_rule|^store$|^source_id$|ship.?from|^region$|^seen_at$",
-    re.I,
-)
-
-
-def private_key(key: Any) -> bool:
-    return bool(_PRIVATE.search(str(key)))
+__all__ = ["PRIVATE_KEY_PATTERN", "_PRIVATE", "private_key", "shopper_body"]
 
 
 def shopper_body(value: Any) -> Any:

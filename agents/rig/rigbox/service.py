@@ -42,7 +42,7 @@ from rigbox.logic import options_for
 from rigbox.logic import product_detail
 from rigbox.logic import _limit
 from rigbox.logic import public_product
-from rigbox.shopper_attributes import shopper_attributes
+from rigbox.shopper_attributes import shopper_attributes, shopper_rows
 from rigbox.logic import reprice
 from rigbox.logic import setups as build_setups
 from rigbox.rank import search as rank_room
@@ -316,7 +316,7 @@ class Service:
 
             cap = _limit(limit)
             version = await self._catalogue_version(tenant_id)
-            products = await self.store.products(tenant_id)
+            products = await self._shopper_products(tenant_id)
             fits = await self._approved_fits(tenant_id)
             body = shop_search(
                 {
@@ -357,7 +357,7 @@ class Service:
             body = await self._body_from_saved(tenant_id, whole, pieces, host, cap)
             if body is not None:
                 return body
-        products = await self.store.products(tenant_id)
+        products = await self._shopper_products(tenant_id)
         reusable = False
         for piece in pieces:
             if part_hit(known, host, piece, cap) is not None:
@@ -876,8 +876,16 @@ class Service:
             "templates": await self.store.templates_for(tenant_id),
         }
 
+    async def _shopper_products(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Catalogue rows for shopper search, ranking and answers: attributes allowlisted.
+
+        rigbox.logic (mirrored into Skala) indexes every attribute it is given,
+        so private keys are removed here, before any search or setup sees a row.
+        """
+        return shopper_rows(await self.store.products(tenant_id))
+
     async def _active(self, tenant_id: str) -> list[dict[str, Any]]:
-        return [row for row in await self.store.products(tenant_id) if row.get("active", True)]
+        return [row for row in await self._shopper_products(tenant_id) if row.get("active", True)]
 
     async def _approved_fits(self, tenant_id: str) -> list[dict[str, Any]]:
         kept: list[dict[str, Any]] = []
