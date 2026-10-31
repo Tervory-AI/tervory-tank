@@ -61,3 +61,5 @@ def test_tank_image_installs_feedparser():
     market = (Path(__file__).resolve().parents[1] / "agents/market_lab/feeds/requirements.txt").read_text()
     pin = next(line for line in market.splitlines() if line.startswith("feedparser=="))
     assert pin in reqs.splitlines()
+    # feedparser 6.0.14 requires feedparser-sgmllib>=2,<3; pin the audited version too.
+    assert "feedparser-sgmllib==2.1.0" in reqs.splitlines()
