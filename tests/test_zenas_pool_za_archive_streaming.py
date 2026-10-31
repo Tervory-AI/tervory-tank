@@ -20,7 +20,30 @@ from agents.zenas.pool.adapters.za_archive import _SINK, streaming, url_key
 from agents.zenas.pool.bulk import load_wave
 from agents.zenas.pool.catalogue import CATALOGUE
 from agents.zenas.pool.store import MemoryStore
-from tests.test_zenas_pool_za_archive import tiny_pdf
+
+def tiny_pdf(text: str) -> bytes:
+    safe = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    stream = f"BT /F1 12 Tf 36 120 Td ({safe}) Tj ET\n".encode()
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+        b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"endstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for index, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{index} 0 obj\n".encode() + body + b"\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n".encode()
+    out += b"0000000000 65535 f \n"
+    for off in offsets[1:]:
+        out += f"{off:010d} 00000 n \n".encode()
+    out += f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return bytes(out)
+
 
 ON = date(2026, 10, 19)
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "za" / "archive"
