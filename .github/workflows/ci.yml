@@ -192,6 +192,20 @@ jobs:
         # F401 in base.socials/1.0.0/run.py is a pre-existing unused import.
         # This lane cannot edit an approved skill in place.
         run: ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+      - name: Prepare test databases
+        # tests/test_radix_passive.py insists on a database named radix_passive_test and a
+        # URL without a password, so the password comes from a pgpass file in runner.temp.
+        run: |
+          printf '127.0.0.1:5432:radix_passive_test:postgres:postgres\n' > "$RUNNER_TEMP/pgpass"
+          chmod 600 "$RUNNER_TEMP/pgpass"
+          python - <<'PY'
+          import asyncio, asyncpg
+          async def main():
+              conn = await asyncpg.connect("postgresql://postgres:postgres@127.0.0.1:5432/pooltest")
+              await conn.execute("CREATE DATABASE radix_passive_test")
+              await conn.close()
+          asyncio.run(main())
+          PY
       - name: Full offline test suite
         # The whole suite gates every PR again (it was cut to 3 files on 27 Oct, #351,
         # because it took 10-15 minutes serially and had not passed for three days).
@@ -204,18 +218,19 @@ jobs:
           PYTHONPATH: tank
           # One Postgres service. tests/conftest.py gives each xdist worker its own
           # database cloned by name from this one (pooltest_gw0, ...).
-          POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
-          ZENAS_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
+          POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          ZENAS_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
           # Opt-in database tests: CI has a disposable Postgres, so they run here too.
-          MEMORY_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
-          BASE_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
-          RLS_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
-          RADIX_PASSIVE_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
-          SKALA_B3_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
-          SKALA_INTAKE_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
-          TIGER_MAIL_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
-          RIG_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
-          TRAINING_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
+          MEMORY_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          BASE_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          RLS_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          RADIX_PASSIVE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/radix_passive_test
+          PGPASSFILE: ${{ runner.temp }}/pgpass
+          SKALA_B3_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          SKALA_INTAKE_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          TIGER_MAIL_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          RIG_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          TRAINING_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
 
   workspace:
     needs: [changes, runner]

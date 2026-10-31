@@ -40,7 +40,9 @@ def clean_env() -> dict[str, str]:
 def main(extra: list[str]) -> int:
     workers = os.environ.get("SUITE_WORKERS", "auto")
     common = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfE",
-              "-n", workers, "--dist", "loadfile", "--timeout", os.environ.get("SUITE_TEST_TIMEOUT", "300"),
+              "-n", workers, "--dist", "loadfile",
+              # thread: a hung test (or its teardown) kills only its worker, which xdist replaces.
+              "--timeout", os.environ.get("SUITE_TEST_TIMEOUT", "300"), "--timeout-method", "thread",
               "--disable-socket", "--allow-unix-socket", "--allow-hosts=127.0.0.1,localhost,::1",
               "--durations", "15"]
     runs = [
