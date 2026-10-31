@@ -8,6 +8,8 @@ import { mootCanonicalRedirectUrl, productHostRewritePath, publicReturnUrl } fro
 // The squad consoles (/base, /tiger, /market-lab, /tisan, /radix, /skala, /tank) need sign-in.
 // Founder console /admin/autumbra stays private.
 const isPublic = createRouteMatcher([
+  // CLI corridor authenticates bearer PATs in Tank, never Clerk cookies.
+  "/v1/command(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/health",
