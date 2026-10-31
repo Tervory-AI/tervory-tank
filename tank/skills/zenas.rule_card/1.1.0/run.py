@@ -1,6 +1,8 @@
 """zenas.rule_card 1.1.0 — top tier once per law version, then the approved card is free.
 
-The prompt asks for quotes with no dates or identifiers (QUOTE_RULE).
+Quotes are cite-checked UNMASKED, word for word, then masked for output
+(card_from_proposal(..., verify_unmasked=True)). The prompt hint (QUOTE_RULE) only
+asks for quotes without dates or identifiers; it is not the fix.
 """
 
 from __future__ import annotations
@@ -10,13 +12,10 @@ from pathlib import Path
 from typing import Any
 
 # The room's rule-card prompt carries the same line (agents/zenas/core/service.py).
-# A date, amount or identifier in a quote is masked before cite-check, so the quote can
-# never match the judgment and the whole answer becomes "could not verify".
 QUOTE_RULE = (
-    "Quote whole sentences that contain no dates, amounts, patent or case numbers, ID or phone "
+    "Prefer whole sentences that contain no dates, amounts, patent or case numbers, ID or phone "
     "numbers, email or street addresses, and keep those out of every other field too. They are "
-    "masked before the card is checked, so a quote that contains one cannot be verified and a "
-    "card that contains one is refused."
+    "masked in the card, so a quote without them reads clearly and is checked most simply."
 )
 
 
@@ -79,6 +78,7 @@ async def run(payload: dict, ctx: Any) -> dict:
         list(body.get("passages") or []),
         question=question,
         secrets=secrets,
+        verify_unmasked=True,
     )
     problem = engine.law_only_problem(card, secrets)
     return {
