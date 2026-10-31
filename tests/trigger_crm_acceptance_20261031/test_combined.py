@@ -21,6 +21,7 @@ from fastapi import FastAPI
 
 ROOT = Path(os.environ['CRM_ASSEMBLED_ROOT'])
 sys.path.insert(0, str(ROOT / 'tank'))
+import command
 import trigger_crm as crm
 
 RECORD = '00000000-0000-0000-0000-000000000013'
@@ -42,6 +43,23 @@ def test_actual_workspace_tank_corridor_and_unconfirmed_write(monkeypatch):
     monkeypatch.setenv('TRIGGER_CRM_TENANT_BINDINGS', json.dumps({tenant: {'organization_id': ORG, 'token_env': 'TRIGGER_CRM_PAT_TEST'}}))
     monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(TANK_API_KEY='dummy-workspace-key', box_region=lambda: 'us-east'))
     calls = []
+    grant = {'enabled': True}
+    attestation = {'org': ORG}
+
+    class Connection:
+        async def fetch(self, sql, *values):
+            assert 'SELECT agent FROM tank.tenant_squad WHERE tenant_id=$1' in sql
+            assert len(values) == 1
+            return [{'agent': 'trigger'}] if str(values[0]) == tenant and grant['enabled'] else []
+
+    class Acquire:
+        async def __aenter__(self):
+            return Connection()
+
+        async def __aexit__(self, *args):
+            pass
+
+    monkeypatch.setattr(command, 'db', lambda: SimpleNamespace(acquire=Acquire))
 
     def upstream(request):
         assert request.method == 'GET', 'No mutation may reach the fake CRM'
@@ -59,7 +77,7 @@ def test_actual_workspace_tank_corridor_and_unconfirmed_write(monkeypatch):
         else:
             assert request.url.path == '/api/invoices/estimates/'
             data = {'results': [row], 'count': 1}
-        return httpx.Response(200, json=data, headers={'X-Tervory-CRM-Organization': ORG})
+        return httpx.Response(200, json=data, headers={'X-Tervory-CRM-Organization': attestation['org']})
 
     real_client = httpx.AsyncClient
     def fake_client(**kwargs):
@@ -81,19 +99,29 @@ def test_actual_workspace_tank_corridor_and_unconfirmed_write(monkeypatch):
             time.sleep(.025)
         assert server.started
         env = {**os.environ, 'CRM_ASSEMBLED_ROOT': str(ROOT), 'TANK_URL': f'http://127.0.0.1:{port}'}
-        result = subprocess.run(['node', str(Path(__file__).with_name('combined.cjs'))], env=env, capture_output=True, text=True, timeout=30, check=False)
-        assert result.returncode == 0, result.stdout + result.stderr
-        assert calls == ['/api/leads/', '/api/contacts/', '/api/invoices/estimates/']
+        for expected_status in (200, 403):
+            env['CRM_EXPECT_CLIENT_STATUS'] = str(expected_status)
+            result = subprocess.run(['node', str(Path(__file__).with_name('combined.cjs'))], env=env, capture_output=True, text=True, timeout=30, check=False)
+            assert result.returncode == 0, result.stdout + result.stderr
+            grant['enabled'] = False
+        assert calls == ['/api/leads/', '/api/contacts/', '/api/invoices/estimates/', '/api/contacts/',
+                         '/api/leads/', '/api/contacts/', '/api/invoices/estimates/']
         headers = {'x-tank-key': 'dummy-workspace-key', 'x-tervory-user': 'offline-founder', 'x-tervory-tenant': tenant}
         with httpx.Client(base_url=f'http://127.0.0.1:{port}', trust_env=False) as client:
             response = client.post('/v1/trigger/crm/write', headers={**headers, 'x-confirmed': 'true'}, json={
                 'resource': 'contacts', 'data': {'first_name': 'Offline', 'last_name': 'Synthetic'}})
             assert response.status_code == 409
-            assert len(calls) == 3
+            assert len(calls) == 7
             response = client.get('/v1/trigger/crm/contacts', headers={**headers, 'x-tervory-home-region': 'za'})
             assert response.status_code == 403
-            assert len(calls) == 3
+            assert len(calls) == 7
+            attestation['org'] = '00000000-0000-0000-0000-000000000015'
+            response = client.get('/v1/trigger/crm/contacts?page=2', headers=headers)
+            assert response.status_code == 502
+            assert 'Offline' not in response.text
+            assert len(calls) == 8
         print(result.stdout.strip())
+        print('PASS client persisted grant -> 200; revoked grant -> 403 with zero additional CRM calls; wrong organization -> 502 before projection')
     finally:
         server.should_exit = True
         thread.join(timeout=5)
