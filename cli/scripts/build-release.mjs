@@ -65,7 +65,7 @@ export function buildRelease({ out, platforms = Object.keys(PLATFORMS), version 
       rmSync(join(root, 'node_modules', '.package-lock.json'), { force: true });
       writeFileSync(join(root, 'RELEASE.json'), JSON.stringify({ name: 'tervory-cli', version, platform: name }, null, 2) + '\n');
       const file = `${top}-${name}.tar.gz`; const tarFile = join(work, `${file}.tar`);
-      run('tar', ['--sort=name', '--mtime=@0', '--owner=0', '--group=0', '--numeric-owner', '--format=ustar',
+      run('tar', ['--sort=name', '--mtime=@0', '--owner=0', '--group=0', '--numeric-owner', '--mode=u=rwX,go=rX', '--format=ustar',
                   '-cf', tarFile, '-C', stage, top]);
       writeFileSync(join(releaseDir, file), execFileSync('gzip', ['-n', '-9', '-c', tarFile], { maxBuffer: 1 << 28 }));
       artifacts[name] = { file, sha256: sha256(join(releaseDir, file)), size: statSync(join(releaseDir, file)).size };

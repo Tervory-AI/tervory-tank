@@ -71,5 +71,11 @@ jobs:
           grep -qxF 'COPY --from=cli-release /out/cli ./public/cli' workspace/Dockerfile || { echo "workspace/Dockerfile must copy the CLI release into public/cli"; exit 1; }
           docker buildx build --build-context cli=cli -f workspace/Dockerfile --target cli-files \
             --output "type=local,dest=$RUNNER_TEMP/cli-image" workspace
-          diff -r "$RUNNER_TEMP/cli-a" "$RUNNER_TEMP/cli-image"
+          if ! diff -r "$RUNNER_TEMP/cli-a" "$RUNNER_TEMP/cli-image"; then
+            # Show what differs inside each tarball (modes, owners, sizes, names), then fail.
+            for f in "$RUNNER_TEMP"/cli-a/releases/*/*.tar.gz; do
+              diff <(tar -tvzf "$f") <(tar -tvzf "$RUNNER_TEMP/cli-image/${f#"$RUNNER_TEMP"/cli-a/}") || true
+            done
+            exit 1
+          fi
           test -s "$RUNNER_TEMP/cli-image/install.sh" && test -s "$RUNNER_TEMP/cli-image/latest.json"
