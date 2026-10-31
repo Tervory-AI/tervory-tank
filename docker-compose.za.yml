@@ -150,7 +150,7 @@ services:
       TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       # Homes-only key: POST /v1/zenas/tenants with home za, nothing else.
       TANK_HOMES_KEY: ${TANK_HOMES_KEY:-}
-      # CLI sign-in approval from the Boston Workspace (two approval routes, plus the user's own
+      # CLI sign-in approval from the primary-region web app (two approval routes, plus the user's own
       # sign-in list/revoke; never founders). Must differ from TANK_API_KEY and TANK_HOMES_KEY.
       TANK_DEVICE_APPROVAL_KEY: ${TANK_DEVICE_APPROVAL_KEY:-}
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
