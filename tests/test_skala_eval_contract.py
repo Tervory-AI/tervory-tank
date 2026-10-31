@@ -17,7 +17,7 @@ PATCH_SKILLS = (
     "base.socials base.verify ffl.ingest market.series_fetch market.shift_detect market.surge_detect "
     "reason.brief rig.ask rig.explain rig.search rig.setups scan.dependencies scan.secrets scan.static "
     "tier0.draft tier0.summarize tiger.price_ocr tisan.figma tisan.scaffold zenas.apply zenas.case_facts "
-    "zenas.cite_check zenas.compose zenas.draft zenas.match zenas.plain_language zenas.review zenas.rule_card"
+    "zenas.cite_check zenas.compose zenas.draft zenas.match zenas.plain_language zenas.review zenas.rule_card zenas.pii zenas.retrieve"
 ).split()
 
 
@@ -256,3 +256,39 @@ async def test_room_backed_cases_run_inside_room(skill, monkeypatch, tmp_path):
         result = await skala.run_evals(pkg, lambda: context(pkg), execute=execute)
     assert result["passed"] == len(pkg.cases), result["details"]
     assert result["eligible"]
+
+
+REFUSAL_PATCHES = (
+    ("market.series_fetch", "1.2.1"), ("market.shift_detect", "1.0.2"), ("market.surge_detect", "1.0.2"),
+    ("zenas.pii", "1.1.1"), ("zenas.retrieve", "1.0.1"), ("zenas.apply", "1.0.2"),
+)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("skill,version", REFUSAL_PATCHES)
+async def test_refusal_patch_passes_offline_and_is_eligible(skill, version):
+    # These patches only add eval lines. Every case must pass offline with no live model,
+    # and the package must clear the run_evals evidence rule (5 distinct, passing refusals).
+    pkg = next(p for p in skala.load_packages().values() if p.id == skill and p.version == version)
+    assert any(case.get("must_refuse") for case in pkg.cases)
+    result = await skala.run_evals(pkg, lambda: context(pkg))
+    assert result["passed"] == result["total"] == len(pkg.cases), result["details"]
+    assert result["eligible"] is True, result["evidence_reason"]
+
+
+# Approved on a live box when these patches were written: (skill, box, approved version, patch).
+APPROVED_BASELINES = (
+    ("market.series_fetch", "boston", "1.1.0", "1.2.1"), ("market.series_fetch", "za", "1.2.0", "1.2.1"),
+    ("market.shift_detect", "boston", "1.0.0", "1.0.2"), ("market.shift_detect", "za", "1.0.1", "1.0.2"),
+    ("market.surge_detect", "boston", "1.0.0", "1.0.2"), ("market.surge_detect", "za", "1.0.1", "1.0.2"),
+)
+
+
+@pytest.mark.parametrize("skill,box,approved,patch", APPROVED_BASELINES)
+def test_patch_keeps_every_approved_case_fingerprint(skill, box, approved, patch):
+    # approval_reason refuses a version that drops or changes any approved case. The hash is
+    # over the parsed JSON, so 10.0 and 10 differ: the approved lines must be carried verbatim.
+    packages = {(p.id, p.version): p for p in skala.load_packages().values()}
+    old = {skala.evidence_hash(case) for case in packages[(skill, approved)].cases}
+    new = {skala.evidence_hash(case) for case in packages[(skill, patch)].cases}
+    assert old <= new, f"{skill} {patch} drops {len(old - new)} of {box}'s approved {approved} cases"
