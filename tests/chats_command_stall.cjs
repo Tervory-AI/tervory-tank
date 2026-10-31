@@ -9,7 +9,9 @@
  *   headers never come; headers then a stalled JSON body; an error status with a stalled
  *   body; a turn stream that stalls after its first event; a live stream that keeps
  *   sending heartbeats past the idle bound (must NOT be cut); a redirect (never followed);
- *   a stalled roster read; and commandRequest under Next's render-time dedupe fetch.
+ *   a stalled roster read; commandRequest under Next's render-time dedupe fetch; and a JSON
+ *   body that trickles a byte every 300 ms forever (beats the idle bound, so only the
+ *   total body deadline ends it) through both the /chats route and the CLI PAT proxy.
  * Run with: node --expose-gc tests/chats_command_stall.cjs. Synthetic: dummy keys, loopback. */
 const assert = require('node:assert/strict');
 const http = require('node:http');
@@ -41,6 +43,10 @@ const server = http.createServer((req, res) => {
   if (kind === 'silent') return; // accept, never answer
   if (kind === 'stalled-json') { res.writeHead(200, { 'content-type': 'application/json' }); res.write('{"thread_id":'); return; }
   if (kind === 'stalled-error') { res.writeHead(500, { 'content-type': 'application/json' }); res.write('{"detail":'); return; }
+  if (kind === 'trickle-json') { // never idle, never finishes: only a total deadline ends it
+    res.writeHead(200, { 'content-type': 'application/json' }); res.write('{"threads":[');
+    const drip = setInterval(() => res.write(' '), 300); res.on('close', () => clearInterval(drip)); return;
+  }
   if (kind === 'redirect') { res.writeHead(302, { location: 'http://127.0.0.1:1/elsewhere' }); res.end(); return; }
   if (kind === 'stalled-stream') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write('event: step\ndata: {"seq":1,"label":"Reading","actor":"Auto"}\n\n'); return; }
   if (kind === 'heartbeats') {
@@ -137,11 +143,29 @@ const server = http.createServer((req, res) => {
   await assert.rejects(within(paged.tank.commandRequest({ tenantId: TENANT, userId: 'user_chat' }, 'threads'), BOUND * 3, 'page headers stall'),
     error => error.status === 504 && error.code === 'timeout');
 
+  // 9. A JSON body that never goes idle and never ends: the total body deadline ends it.
+  mode = { [`/v1/command/threads/${ID}`]: 'trickle-json' };
+  ({ result, took } = await timed('chats json trickle', () => call(`threads/${ID}`)));
+  assert.equal(result.status, 502);
+  assert(took >= BOUND - 100 && took < BOUND * 2.5, `chats total body bound (${took} ms)`);
+
+  // 10. The same trickle through the CLI PAT proxy (personalCommandRequest): the JSON read
+  //     ends at its total bound (bodyMs, 60 s by default), not only an idle bound.
+  const pat = `tv1.us-east.${'0'.repeat(32)}.${'A'.repeat(43)}`;
+  const proxied = await within(tank.personalCommandRequest(new Request(`https://app.tervory.com/v1/command/threads/${ID}`, {
+    headers: { host: 'app.tervory.com', authorization: `Bearer ${pat}` } }), ['threads', ID],
+    { headersMs: BOUND, idleMs: BOUND, deviceMs: BOUND, bodyMs: BOUND }), BOUND * 3, 'pat headers');
+  assert.equal(proxied.status, 200);
+  const patBegan = Date.now();
+  await assert.rejects(within(proxied.text(), BOUND * 3, 'pat json trickle'), error => error.name === 'DeadlineError');
+  const patTook = Date.now() - patBegan;
+  assert(patTook < BOUND * 2.5, `pat total body bound (${patTook} ms)`);
+
   clearInterval(collect);
   // Every stalled upstream connection was closed by the Workspace, not left open.
   await new Promise(resolve => setTimeout(resolve, 300));
   for (const p of ['/v1/command/threads', `/v1/command/threads/${ID}`, `/v1/command/threads/${ID}/turn`, '/v1/models'])
     assert(closed.includes(p), `upstream ${p} was closed`);
   server.closeAllConnections(); server.close();
-  console.log('chats_command_stall: commandRequest and the roster read end at their bounds under stalls + gc; heartbeats keep streams alive');
+  console.log('chats_command_stall: commandRequest, the roster read and the PAT proxy JSON end at their bounds under stalls, trickles + gc; heartbeats keep streams alive');
 })().catch(error => { console.error(error); process.exit(1); });
