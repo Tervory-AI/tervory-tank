@@ -17,6 +17,7 @@ on:
       - 'docker-compose.yml'
       - '.github/workflows/cli-release.yml'
       - '.github/workflows/cli.yml'
+      - '.github/scripts/cli_version_guard.sh'
 permissions:
   contents: read
 concurrency:
@@ -33,6 +34,16 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: cli/package-lock.json
+      - name: CLI changed means a version bump (published versions are immutable)
+        # A change to cli/bin, cli/src, cli/install.sh, cli/package-lock.json or cli/scripts
+        # needs a version above the base branch's, the same version in package-lock.json and
+        # a CHANGELOG entry. A base branch without cli/ has nothing to compare against.
+        # Inputs reach the script only as environment variables.
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "refs/heads/$BASE_REF"
+          sh .github/scripts/cli_version_guard.sh FETCH_HEAD
       - run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: cli
       - run: node --check bin/tervory.mjs && node --check src/client.mjs
@@ -62,6 +73,15 @@ jobs:
           node cli/scripts/build-release.mjs --out "$RUNNER_TEMP/cli-a"
           node cli/scripts/build-release.mjs --out "$RUNNER_TEMP/cli-b"
           diff -r "$RUNNER_TEMP/cli-a" "$RUNNER_TEMP/cli-b"
+          # The release, latest.json and therefore install.sh / tervory update offer cli/package.json's version.
+          want=$(node -p 'require("./cli/package.json").version')
+          node -e '
+            const fs = require("fs"), [dir, want] = process.argv.slice(1);
+            const latest = JSON.parse(fs.readFileSync(dir + "/latest.json"));
+            const m = JSON.parse(fs.readFileSync(dir + "/" + latest.manifest));
+            if (latest.version !== want || m.version !== want || latest.manifest !== "releases/" + want + "/manifest.json")
+              throw new Error("release offers " + latest.version + " / manifest " + m.version + ", package.json is " + want);
+            console.log("release offers " + want);' "$RUNNER_TEMP/cli-a" "$want"
       - name: The Workspace image builds and serves the same release at /cli/
         # Same command the deploy runs (docker-compose.yml additional_contexts.cli=./cli),
         # stopped at the release stage; the build stage copies it into public/cli so Next serves it.
