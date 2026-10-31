@@ -52,19 +52,24 @@ export async function boundedFetch<T>(url: URL | string, init: RequestInit, time
 
 /**
  * Pass an upstream body through, failing it if no bytes arrive for idleMs (Tank sends a
- * heartbeat every 0.25 s while a turn runs) or if the downstream cancels. Each read is
- * raced against a timer, so a stalled upstream cannot pin the request forever.
+ * heartbeat every 0.25 s while a turn runs), if it is not finished within totalMs (when
+ * given), or if the downstream cancels. Each read is raced against a timer, so a stalled
+ * upstream cannot pin the request forever even when undici ignores its abort signal.
  */
-export function idleBoundedBody(body: ReadableStream<Uint8Array>, idleMs: number, onStop?: () => void): ReadableStream<Uint8Array> {
+export function boundedBody(body: ReadableStream<Uint8Array>, limits: { idleMs: number; totalMs?: number },
+                            onStop?: () => void): ReadableStream<Uint8Array> {
   const reader = body.getReader();
-  const stop = () => { onStop?.(); reader.cancel().catch(() => undefined); };
+  const end = limits.totalMs === undefined ? Infinity : Date.now() + limits.totalMs;
+  let stopped = false;
+  const stop = () => { if (stopped) return; stopped = true; onStop?.(); reader.cancel().catch(() => undefined); };
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
+        const wait = Math.max(0, Math.min(limits.idleMs, end - Date.now()));
         const item = await Promise.race([
           reader.read(),
-          new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new DeadlineError()), idleMs); }),
+          new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new DeadlineError()), wait); }),
         ]);
         if (item.done) controller.close(); else controller.enqueue(item.value);
       } catch (error) {
@@ -75,9 +80,22 @@ export function idleBoundedBody(body: ReadableStream<Uint8Array>, idleMs: number
   });
 }
 
+/** boundedBody with an idle bound only (streams that legitimately run long). */
+export function idleBoundedBody(body: ReadableStream<Uint8Array>, idleMs: number, onStop?: () => void): ReadableStream<Uint8Array> {
+  return boundedBody(body, { idleMs }, onStop);
+}
+
 export const DEVICE_PROXY_TIMEOUT_MS = 10_000;
 export const PROXY_HEADERS_TIMEOUT_MS = 300_000;
 export const PROXY_IDLE_MS = 120_000;
+/** Total for a non-stream Tank answer body once its headers arrived (JSON, files up to 5 MB). */
+export const COMMAND_BODY_TIMEOUT_MS = 60_000;
+/**
+ * Bounds for commandRequest (the /chats loop). Headers: 300 s, because card confirmations
+ * answer only once the action ran. Event streams: 120 s idle (Tank heartbeats every
+ * 0.25 s). Other bodies: 60 s total. Exported as an object so tests can shorten them.
+ */
+export const COMMAND_LIMITS = { headersMs: PROXY_HEADERS_TIMEOUT_MS, idleMs: PROXY_IDLE_MS, bodyMs: COMMAND_BODY_TIMEOUT_MS };
 
 const DEVICE_ERRORS = new Set(["authorization_pending", "slow_down", "access_denied", "expired_token", "invalid_grant", "invalid_request"]);
 
@@ -125,7 +143,7 @@ async function personalDeviceRequest(request: Request, path: string[], timeoutMs
 
 /** CLI-only public corridor. No Clerk cookies or service-key identity assertions. */
 export async function personalCommandRequest(request: Request, path: string[],
-                                             limits = { headersMs: PROXY_HEADERS_TIMEOUT_MS, idleMs: PROXY_IDLE_MS, deviceMs: DEVICE_PROXY_TIMEOUT_MS }): Promise<Response> {
+                                             limits: { headersMs: number; idleMs: number; deviceMs: number; bodyMs?: number } = { headersMs: PROXY_HEADERS_TIMEOUT_MS, idleMs: PROXY_IDLE_MS, deviceMs: DEVICE_PROXY_TIMEOUT_MS, bodyMs: COMMAND_BODY_TIMEOUT_MS }): Promise<Response> {
   const headers = { "Cache-Control": "no-store" };
   const refused = (status: number) => Response.json({}, { status, headers });
   if (path[0] === "device") return personalDeviceRequest(request, path, limits.deviceMs);
@@ -182,7 +200,10 @@ export async function personalCommandRequest(request: Request, path: string[],
     if (!type.startsWith("application/json") && !type.startsWith("text/event-stream")) {
       await response.body?.cancel().catch(() => undefined); return refused(502);
     }
-    return new Response(response.body && idleBoundedBody(response.body, limits.idleMs), { status: response.status, headers: {
+    // Event streams: idle bound (Tank heartbeats). JSON: idle bound and a total deadline.
+    const bodyLimits = type.startsWith("text/event-stream") ? { idleMs: limits.idleMs }
+      : { idleMs: limits.idleMs, totalMs: limits.bodyMs ?? COMMAND_BODY_TIMEOUT_MS };
+    return new Response(response.body && boundedBody(response.body, bodyLimits), { status: response.status, headers: {
       ...headers, "Content-Type": type, "X-Accel-Buffering": "no", "X-Content-Type-Options": "nosniff",
     } });
   } catch { return refused(502); }
@@ -322,8 +343,15 @@ function priceOrNull(value: unknown): number | null {
 }
 
 /** The roster LiteLLM serves, cheapest first, with USD per million tokens. No key and no missing-key flag. */
+/** The /chats loop reads the roster on every request, so it gets a hard deadline, body included. */
+export const ROSTER_TIMEOUT_MS = { value: 15_000 };
 export async function listRoster(): Promise<RosterModel[]> {
-  const rows = await tank<unknown>("/v1/models", { method: "GET" });
+  const rows = await boundedFetch(`${TANK_URL}/v1/models`, {
+    method: "GET", cache: "no-store", headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY },
+  }, ROSTER_TIMEOUT_MS.value, async res => {
+    if (!res.ok) { const text = await res.text(); throw new Error(`Tank /v1/models ${res.status}: ${text.slice(0, 300)}`); }
+    return (await res.json()) as unknown;
+  });
   if (!Array.isArray(rows)) return [];
   const models: RosterModel[] = [];
   for (const row of rows) {
@@ -1151,7 +1179,25 @@ export async function commandRequest(identity: { tenantId: string; userId: strin
   // Never turn a caller header into tool authority.
   headers.delete("x-tervory-squad");
   headers.set("x-tervory-role", identity.tenantAdmin === true ? "org:admin" : "");
-  const response = await fetch(url, { ...init, headers, cache: "no-store", redirect: "error" });
+  // Review of #506, B1: hard deadline on the headers (boundedFetch, redirect:"manual",
+  // 3xx refused) and a bound on the body that cancels it: idle for event streams, idle
+  // plus total for everything else, error bodies included. Works under undici 6's
+  // redirect:"error" + GC hang because every wait is raced against a timer.
+  const stop = new AbortController();
+  const signal = init.signal ? AbortSignal.any([init.signal, stop.signal]) : stop.signal;
+  let upstream: Response;
+  try {
+    upstream = await boundedFetch(url, { ...init, headers, cache: "no-store", signal }, COMMAND_LIMITS.headersMs, async answer => answer);
+  } catch (error) {
+    if (error instanceof DeadlineError) throw new CommandRequestError(504, "timeout", "The conversation service did not answer in time. Reload the chat before trying again.");
+    throw new CommandRequestError(502, "request_failed", "This request could not be completed. Reload the chat before trying again.");
+  }
+  const stream = upstream.ok && (upstream.headers.get("content-type") ?? "").includes("text/event-stream");
+  const limits = stream ? { idleMs: COMMAND_LIMITS.idleMs } : { idleMs: COMMAND_LIMITS.bodyMs, totalMs: COMMAND_LIMITS.bodyMs };
+  const empty = [204, 205, 304].includes(upstream.status);
+  if (empty) upstream.body?.cancel().catch(() => undefined);
+  const response = new Response(empty || !upstream.body ? null : boundedBody(upstream.body, limits, () => stop.abort()),
+    { status: upstream.status, statusText: upstream.statusText, headers: upstream.headers });
   if (!response.ok) {
     const detail = await response.json().then(body => body.detail).catch(() => undefined);
     if (response.status === 409 && detail === "Pinned models await a router capability; choose Auto") throw new CommandRequestError(409, "pin_pending", "Choosing a specific answer option is not supported yet. Choose Auto to continue.");

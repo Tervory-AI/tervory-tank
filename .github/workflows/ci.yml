@@ -261,6 +261,11 @@ jobs:
         # Regressions from the #496 review: no hang on error answers, 10 s bound on a silent Tank.
         run: |
           node --expose-gc tests/device_login_next_fetch.cjs
+      - name: Chats loop (commandRequest, roster) ends at its bounds under stalls + GC
+        # Review of #506, B1 for /chats: headers, JSON body, error body, stalled stream, roster;
+        # heartbeats keep a live stream open; redirects refused; Next render fetch.
+        run: |
+          node --expose-gc tests/chats_command_stall.cjs
       - name: CLI sign-ins list and revoke
         # Review of #506, B3: per-region keys, active rows only, revoke scoped, bounded body, render.
         run: |
