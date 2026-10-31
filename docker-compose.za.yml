@@ -2,7 +2,7 @@
 # Coolify deploys this file on the SA server and attaches za.tervory.com to tank
 # (port 8000). Every other service stays internal.
 # Own Postgres, Redis, Qdrant, Hermes, Tank, LiteLLM, files and backups.
-# Opt-in r2-backup-za profile archives encrypted dumps to R2_BUCKET_ZENAS_ZA.
+# r2-backup-za archives encrypted Postgres dumps and Qdrant snapshots nightly to R2_BUCKET_ZENAS_ZA.
 # The Zenas room deploys separately: agents/zenas/docker-compose.za.yml.
 # No replication. No shared network with the other region. Do not add a US hostname here.
 
@@ -167,17 +167,19 @@ services:
       retries: 10
       start_period: 20s
 
-  # ZA only. Opt-in profile; not started by normal Coolify deploy.
-  # Writes encrypted Postgres dumps to founder bucket tervory-zenas-za.
+  # ZA only. Runs on every ordinary Coolify deploy (no profile), so redeploys
+  # keep it. Nightly 02:00 UTC: encrypted Postgres dump (Tank and the Zenas
+  # room share database tervory) plus Qdrant snapshots (mem_<agent> memory is
+  # a primary store, not rebuildable) to founder bucket tervory-zenas-za.
+  # Every value is compose interpolation from Coolify env, so the .env that
+  # Coolify writes on each deploy is enough; no side env_file is needed.
   # Uses the Zenas R2 pair (same names as agents/zenas/docker-compose.za.yml).
-  # Founder sets R2_BUCKET_ZENAS_ZA=tervory-zenas-za and R2_BACKUP_RECIPIENT,
-  # then enables profile r2-backup-za. Private age identity never mounts here.
+  # Public age recipient only. Private age identity never mounts here.
   r2-backup-za:
-    profiles: ["r2-backup-za"]
     build:
       context: .
       dockerfile: jobs/train/Dockerfile.backup
-    restart: "no"
+    restart: unless-stopped
     mem_limit: 512m
     cpus: 0.5
     read_only: true
@@ -190,21 +192,26 @@ services:
       TANK_REGION: za
       AGENT_NAME: zenas
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_BUCKET_ZENAS_ZA: ${R2_BUCKET_ZENAS_ZA:-}
       R2_BUCKET: ${R2_BUCKET_ZENAS_ZA:-}
       R2_ACCESS_KEY_ID_ZENAS: ${R2_ACCESS_KEY_ID_ZENAS:-}
       R2_SECRET_ACCESS_KEY_ZENAS: ${R2_SECRET_ACCESS_KEY_ZENAS:-}
       R2_BACKUP_RECIPIENT: ${R2_BACKUP_RECIPIENT:-}
-    command: ["python", "jobs/train/backup.py", "--owner", "zenas", "--nightly"]
+    command: ["python", "jobs/train/backup.py", "--owner", "zenas", "--target", "all", "--nightly"]
+    # Offline readiness only; completed backups are proved by their R2 manifests.
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, 'jobs/train'); from backup import dump_configuration; dump_configuration()"]
+      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, 'jobs/train'); from backup import dump_configuration, qdrant_configuration; dump_configuration(); qdrant_configuration()"]
       interval: 60s
       timeout: 5s
       retries: 3
       start_period: 10s
     depends_on:
       postgres:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
     networks:
       - default
