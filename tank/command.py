@@ -979,7 +979,7 @@ class TriggerFeedbackArgs(Body):
 
 
 class TriggerCRMWriteArgs(Body):
-    resource: Literal["leads", "contacts", "estimates"]
+    resource: Literal["leads", "contacts", "estimates", "invoices"]
     record_id: uuid.UUID | None = None
     data: dict[str, Any] = Field(min_length=1)
 
