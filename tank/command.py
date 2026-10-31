@@ -222,6 +222,17 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
     }
 
 
+def public_receipt(receipt: dict) -> dict:
+    # Older saved receipts may contain a price-book projection. Do not rewrite
+    # durable evidence, but never publish that projection as an observed cost.
+    result = dict(receipt)
+    if result.get("requested_model") not in (None, "auto") or "auto_cost_usd" in result:
+        result.update(auto_model=None, auto_cost_usd=None, auto_cost_status="pending", auto_priced_at=None)
+        result.pop("auto_cost_label", None)
+        result.pop("auto_cost_basis", None)
+    return result
+
+
 def totals(rows: list[dict]) -> dict:
     complete = all(r["saved_usd"] is not None for r in rows)
     return {
@@ -339,7 +350,7 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
                        "recorded_spent_usd": amounts["recorded_spent_usd"]},
             "messages": state["messages"], "steps": list(state["steps"].values()),
             "cards": [public_card(c) for c in state["cards"].values()],
-            "receipts": state["receipts"], "seq": row["seq"]}
+            "receipts": [public_receipt(r) for r in state["receipts"]], "seq": row["seq"]}
 
 
 @router.patch("/threads/{thread_id}")
@@ -368,6 +379,8 @@ async def replay(thread_id: uuid.UUID, actor: Actor, after: int, *, turn_id: str
             )
         for item in events:
             data = unpack(item["data"])
+            if item["kind"] == "receipt":
+                data = {**data, "rows": [public_receipt(r) for r in data.get("rows", [])]}
             after = data["seq"]
             yield sse(item["kind"], data)
         if len(events) == 500:
