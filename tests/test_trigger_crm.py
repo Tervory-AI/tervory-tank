@@ -47,7 +47,7 @@ def fake_transport(monkeypatch, callback):
 @pytest.mark.asyncio
 async def test_read_projection_and_explicit_auth(setup, monkeypatch):
     def upstream(req):
-        assert str(req.url) == 'http://trigger-crm-backend:8000/api/contacts/?page=1'
+        assert str(req.url) == 'http://trigger-crm-backend:8000/api/contacts/?offset=0&limit=10'
         assert req.headers['authorization'] == 'Bearer dummy-crm-token'
         assert 'x-tervory-tenant' not in req.headers
         return httpx.Response(200, json={'count': 1, 'contact_obj_list': [{'id': str(RECORD), 'first_name': 'Synthetic', 'password': 'hidden', 'users': [{'email': 'hidden'}]}], 'users': [{'email': 'hidden'}]})
@@ -96,6 +96,7 @@ async def test_pinned_lead_pagination_and_detail(setup, monkeypatch):
     def upstream(req):
         if req.url.path.endswith(str(RECORD)+'/'):
             return httpx.Response(200,json={'lead_obj':{'id':str(RECORD),'title':'Synthetic'},'users':[{'email':'private'}]})
+        assert req.url.params['offset'] == '10' and req.url.params['limit'] == '10'
         return httpx.Response(200,json={'open_leads':{'open_leads':[{'id':str(RECORD),'title':'Synthetic'}],'leads_count':1},'close_leads':{'close_leads':[],'leads_count':0}})
     fake_transport(monkeypatch, upstream)
     r = await request(setup,path='/v1/trigger/crm/leads?page=2&status=in%20process')
