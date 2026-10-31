@@ -96,3 +96,38 @@ async def test_rejected_worker_receipt_leaves_panel_and_replay_unchanged(api):
     assert valid.status_code == 200
     assert valid.json()['receipt_status'] == 'pending'
     assert (await client.get(url)).json()['thread']['spent_usd'] is None
+
+
+@pytest.mark.asyncio
+async def test_persisted_pat_cannot_escalate_headers_or_cross_user_and_revokes(api):
+    """CLI-lane auth + A command routes + real local schema; synthetic bearer only."""
+    pat = pytest.importorskip('personal_tokens', reason='CLI/PAT lane not on this source tree')
+    import command
+    client, pool = api
+    client._transport.app.dependency_overrides[command.identity] = pat.identity
+    # Deliberately non-random test credential. Never accepted by a live service.
+    token = f'tv1.us-east.{TENANT.hex}.' + 'x' * 43
+    async with pool.acquire() as conn:
+        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash) "
+                           "VALUES($1,'offline-client','us-east','offline-only',$2)", TENANT, pat.digest(token))
+    headers = {'authorization': 'Bearer ' + token, 'x-tervory-user': 'founder',
+               'x-tervory-tenant': str(OTHER), 'x-tervory-role': 'org:admin'}
+    created = await client.post('/v1/command/threads', json={}, headers=headers)
+    assert created.status_code == 200
+    tid = created.json()['thread_id']
+    async with pool.acquire() as conn:
+        owner = await conn.fetchrow('SELECT tenant_id,user_id FROM tank.command_threads WHERE thread_id=$1', uuid.UUID(tid))
+        assert owner['tenant_id'] == TENANT and owner['user_id'] == 'offline-client'
+    denied = await client.post('/v1/command/build', headers=headers,
+                              json={'thread_id': tid, 'brief_markdown': 'Denied offline build'})
+    assert denied.status_code == 403
+    assert (await client.get('/v1/command/tools', headers=headers)).json() == []
+    # Workspace founder in the same tenant still cannot read this user's thread.
+    assert (await client.get(f'/v1/command/threads/{tid}')).status_code == 404
+    wrong_box = {**headers, 'authorization': 'Bearer ' + token.replace('us-east', 'za')}
+    assert (await client.get('/v1/command/threads', headers=wrong_box)).status_code == 403
+    async with pool.acquire() as conn:
+        await conn.execute('UPDATE tank.personal_tokens SET revoked_at=now() WHERE tenant_id=$1 AND token_hash=$2',
+                           TENANT, pat.digest(token))
+    refused = await client.get(f'/v1/command/threads/{tid}', headers=headers)
+    assert refused.status_code == 401 and token not in refused.text
