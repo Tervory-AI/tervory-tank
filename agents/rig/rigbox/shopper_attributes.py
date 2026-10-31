@@ -15,10 +15,13 @@ private pricing inputs there too (Custom Nation's POF USA rows carry
 ``rigbox.logic`` is byte-mirrored into approved, immutable Skala packages, so
 it is not changed; its callers hand it rows that are already allowlisted.
 
-Allowlist, not denylist, at every depth: a key a store invents tomorrow stays
-private until it is added here on purpose. Structured attributes have fixed
-shapes (``_SHAPES``); any other allowlisted key may hold a scalar or a list of
-scalars only.
+Top-level keys and the fields inside structured attributes are allowlisted:
+a key a store invents tomorrow stays private until it is added here on
+purpose. Structured attributes have fixed shapes (``_SHAPES``); any other
+allowlisted key may hold a scalar or a list of scalars only. Free-form names
+chosen by the store (option names, option labels, default names, a verified
+fact's ``name``) cannot be allowlisted, so they are screened against the
+private-key pattern instead (a denylist): ``options: {"rsr": [...]}`` passes.
 """
 
 from __future__ import annotations
@@ -129,11 +132,24 @@ def _price_history(value: Any) -> Any:
     return None
 
 
+def _verified_entry(entry: Any) -> Any:
+    """A {name,value,source,note} fact, or a plain scalar.
+
+    The entry's ``name`` is a key in all but form, so a private-looking name
+    (``{"name": "export_usd", "value": ...}``) drops the whole entry. Nested
+    lists (``["export_usd", 437]``) are dropped too.
+    """
+    if isinstance(entry, dict):
+        if private_key(entry.get("name")):
+            return None
+        return _pick(entry, VERIFIED_KEYS)
+    return entry if _scalar(entry) else None
+
+
 def _verified(value: Any) -> Any:
     if isinstance(value, list):
-        return [item for item in ((_pick(entry, VERIFIED_KEYS) if isinstance(entry, dict) else _scalars(entry))
-                                  for entry in value) if item is not None]
-    return _scalars(value)
+        return [item for item in (_verified_entry(entry) for entry in value) if item is not None]
+    return value if _scalar(value) else None
 
 
 _SHAPES = {

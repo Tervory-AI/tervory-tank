@@ -320,9 +320,17 @@ ALTER TABLE agent_rig.feed_receipts ADD COLUMN IF NOT EXISTS feed_id text NOT NU
 -- (Custom Nation's export_usd) live here, never in agent_rig.products.attributes.
 -- Store-only: no shopper query reads this table. The import moves them on
 -- write (rigbox.catalogue._product_row), and the two statements below move keys
--- already stored. Both are repeat-safe: copy first (an existing private value
--- wins), then strip, so a second run finds nothing to move. The pattern is
--- rigbox.shopper_attributes.PRIVATE_KEY_PATTERN (a test keeps them identical).
+-- already stored. Both are repeat-safe: copy first, then strip, so a second
+-- run finds nothing to move. On conflict the value still in attributes wins,
+-- because it came from the newest import (for example a re-import after a
+-- rollback). The pattern is rigbox.shopper_attributes.PRIVATE_KEY_PATTERN
+-- (a test keeps them identical). PgStore.apply_schema logs how many products
+-- still carry a matching key afterwards, so a silent no-op (for example under
+-- forced RLS with no tenant set) shows up in the startup log.
+-- Reverse (rollback to a build that reads costs from attributes), run by hand:
+--   UPDATE agent_rig.products p SET attributes = p.attributes || x.attributes
+--   FROM agent_rig.product_private_attributes x
+--   WHERE x.tenant_id = p.tenant_id AND x.sku = p.sku
 CREATE TABLE IF NOT EXISTS agent_rig.product_private_attributes (
     tenant_id uuid NOT NULL,
     sku text NOT NULL,
@@ -340,7 +348,7 @@ WHERE jsonb_typeof(p.attributes) = 'object'
   AND EXISTS (SELECT 1 FROM jsonb_object_keys(p.attributes) AS k(key)
               WHERE k.key ~* 'cost|duty|margin|landed|markup|profit|wholesale|(^|_)export|(^|_)(buy|purchase|dealer|trade)_?price|(^|_)vat($|_)|(^|_)fx($|_)|exchange_rate|supplier|pricing_rule|^store$|^source_id$|ship.?from|^region$|^seen_at$')
 ON CONFLICT (tenant_id, sku) DO UPDATE
-    SET attributes = EXCLUDED.attributes || agent_rig.product_private_attributes.attributes, updated_at = now();
+    SET attributes = agent_rig.product_private_attributes.attributes || EXCLUDED.attributes, updated_at = now();
 UPDATE agent_rig.products p SET attributes = coalesce((
     SELECT jsonb_object_agg(e.key, e.value) FROM jsonb_each(p.attributes) AS e(key, value)
     WHERE NOT e.key ~* 'cost|duty|margin|landed|markup|profit|wholesale|(^|_)export|(^|_)(buy|purchase|dealer|trade)_?price|(^|_)vat($|_)|(^|_)fx($|_)|exchange_rate|supplier|pricing_rule|^store$|^source_id$|ship.?from|^region$|^seen_at$'), '{}'::jsonb)

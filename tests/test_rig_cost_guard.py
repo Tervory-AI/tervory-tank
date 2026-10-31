@@ -1,9 +1,13 @@
 """Private pricing inputs in catalogue attributes never reach a shopper.
 
-Fixture rows are six real Custom Nation POF USA catalogue rows
-(tests/fixtures/rig/pof-usa-cost-guard.csv, taken from the 714-row export).
-Each carries ``attributes.export_usd`` (the supplier's export price), the
-leak this guards against.
+Fixture rows (tests/fixtures/rig/sample-cost-guard.csv) are invented: SKUs,
+GTINs, names, prices and costs are synthetic, shaped like Custom Nation's
+catalogue rows. This repo is public, so real supplier costs never go in it.
+Real data is checked only by the full-export test, which reads the CSV from
+the box (RIG_CN_EXPORT) and skips when it is absent (CI).
+Each costed row carries ``attributes.export_usd`` (the supplier's export
+price), the leak this guards against, plus the same cost hidden inside
+``verified`` in the two shapes a store could use.
 
 Two kinds of store are exercised:
 - ``imported``: rows go through the catalogue import, which moves pricing
@@ -47,7 +51,7 @@ from rigbox.service import RecordingHandoff, Service  # noqa: E402
 from rigbox.shopper_attributes import PRIVATE_KEY_PATTERN, SHOPPER_ATTRIBUTES, shopper_attributes  # noqa: E402
 from rigbox.store import MemoryStore, PgStore  # noqa: E402
 
-FIXTURE = ROOT / "tests" / "fixtures" / "rig" / "pof-usa-cost-guard.csv"
+FIXTURE = ROOT / "tests" / "fixtures" / "rig" / "sample-cost-guard.csv"
 # The full Custom Nation export holds every real supplier cost, so it is not
 # committed. Point RIG_CN_EXPORT at it (the shared box keeps a copy here).
 CN_EXPORT = Path(os.environ.get("RIG_CN_EXPORT") or "/workspace/rig-smtp-quote/pof-usa-rig-products.csv")
@@ -55,7 +59,7 @@ HEADERS = {"X-Rig-Key": KEY, "Origin": "http://127.0.0.1:8001"}
 CONTACT = {"name": "Sample Shopper", "email": "shopper@example.com"}
 EXTRA = {"supplier_cost": 1, "landed_zar": 2, "markup_pct": 3, "wholesale": 4}
 SECRETS = ("export_usd", "supplier_cost", "landed_zar", "markup_pct", "wholesale", "internal_note")
-ARCHON_SHOP = {"search": True, "centre_sku": "02445", "not_stocked": []}
+ARCHON_SHOP = {"search": True, "centre_sku": "90101", "not_stocked": []}
 
 
 class Echo:
@@ -67,7 +71,7 @@ class Echo:
     async def complete(self, tenant_id: str, task_type: str, messages: list[dict[str, str]]) -> str:
         del tenant_id, task_type
         self.prompts.append(messages[-1]["content"])
-        return json.dumps({"answer": "The export_usd is 606.", "cites": ["02445"]})
+        return json.dumps({"answer": "The export_usd is 437.", "cites": ["90101"]})
 
 
 def _rows(path: Path = FIXTURE) -> list[dict[str, Any]]:
@@ -76,9 +80,20 @@ def _rows(path: Path = FIXTURE) -> list[dict[str, Any]]:
     return parsed["rows"]
 
 
+def _hidden_in_verified(row: dict[str, Any]) -> dict[str, Any]:
+    """The cost again, inside ``verified``: a fact named like a private key, and a bare pair."""
+    cost = row["private_attributes"].get("export_usd")
+    if cost is None:
+        return row
+    verified = [{"name": "export_usd", "value": cost, "source": "https://sample-arms.example/"},
+                ["export_usd", cost]]
+    return {**row, "attributes": {**row["attributes"], "verified": verified}}
+
+
 def _legacy(row: dict[str, Any]) -> dict[str, Any]:
     """The row as live stores hold it before the migration: cost inside attributes."""
-    attributes = {**row["attributes"], **row["private_attributes"], **EXTRA, "internal_note": "buy from RSR"}
+    row = _hidden_in_verified(row)
+    attributes = {**row["attributes"], **row["private_attributes"], **EXTRA, "internal_note": "buy from ZEPHYR"}
     return {key: value for key, value in {**row, "attributes": attributes}.items() if key != "private_attributes"}
 
 
@@ -89,7 +104,8 @@ def _clean_row(row: dict[str, Any]) -> dict[str, Any]:
 
 async def _load(store: Any, rows: list[dict[str, Any]], mode: str) -> None:
     for row in rows:
-        await store.upsert_product(TENANT, {"imported": row, "legacy": _legacy(row), "clean": _clean_row(row)}[mode])
+        await store.upsert_product(TENANT, {"imported": _hidden_in_verified(row), "legacy": _legacy(row),
+                                            "clean": _clean_row(row)}[mode])
 
 
 def _app(mode: str) -> tuple[FastAPI, QuoteService, Echo]:
@@ -111,8 +127,8 @@ def _app(mode: str) -> tuple[FastAPI, QuoteService, Echo]:
 def _clean(text: str) -> None:
     for word in SECRETS:
         assert word not in text, word
-    assert "606" not in text  # 02445's export_usd value
-    assert "RSR" not in text
+    assert "437" not in text  # 90101's export_usd value
+    assert "ZEPHYR" not in text
 
 
 def test_import_moves_export_usd_out_of_attributes() -> None:
@@ -121,19 +137,19 @@ def test_import_moves_export_usd_out_of_attributes() -> None:
     for row in rows:
         assert "export_usd" not in row["attributes"], row["sku"]
         assert isinstance(row["private_attributes"]["export_usd"], (int, float)), row["sku"]
-    first = next(row for row in rows if row["sku"] == "02445")
+    first = next(row for row in rows if row["sku"] == "90101")
     assert first["attributes"] == {"color": "BLACK"}
-    assert first["private_attributes"] == {"export_usd": 606}
+    assert first["private_attributes"] == {"export_usd": 437}
 
     async def stored() -> None:
         store = MemoryStore()
         await _load(store, rows, "imported")
         kept = {row["sku"]: row for row in await store.products(TENANT)}
         assert all("private_attributes" not in row and "export_usd" not in row["attributes"] for row in kept.values())
-        assert await store.product_private_attributes(TENANT, "02445") == {"export_usd": 606}
+        assert await store.product_private_attributes(TENANT, "90101") == {"export_usd": 437}
         # A re-import without the key clears the stale private value.
         await store.upsert_product(TENANT, {**first, "private_attributes": {}})
-        assert await store.product_private_attributes(TENANT, "02445") == {}
+        assert await store.product_private_attributes(TENANT, "90101") == {}
 
     asyncio.run(stored())
 
@@ -148,22 +164,22 @@ def test_main_shopper_routes_never_return_export_usd(mode: str) -> None:
         first = found.json()["results"][0]
         # Shopper-safe attributes still pass.
         assert first["attributes"].get("color") == "BLACK"
-        for sku in ("02445", "02450", "01235"):
+        for sku in ("90101", "90102", "90106"):
             detail = client.get(f"/v1/rig/products/{sku}", headers=HEADERS)
             assert detail.status_code == 200, detail.text
             _clean(detail.text)
-        for path, body in (("/v1/rig/compare", {"product_ids": ["02445", "02450"]}),
-                           ("/v1/rig/setups", {"product_id": "02445"})):
+        for path, body in (("/v1/rig/compare", {"product_ids": ["90101", "90102"]}),
+                           ("/v1/rig/setups", {"product_id": "90101"})):
             response = client.post(path, headers=HEADERS, json=body)
             assert response.status_code == 200, (path, response.text)
             _clean(response.text)
         asked = client.post("/v1/rig/ask", headers=HEADERS,
-                            json={"product_id": "02445", "question": "What does the PST-7 suppressor cost?"})
+                            json={"product_id": "90101", "question": "What does the KX-9 suppressor cost?"})
         assert asked.status_code == 200, asked.text
         _clean(asked.text)
         for prompt in echo.prompts:
             _clean(prompt)
-        product = client.get("/v1/rig/products/02445", headers=HEADERS).json()
+        product = client.get("/v1/rig/products/90101", headers=HEADERS).json()
         setup = {"centre": product, "parts": [{"role": "Item", "product": product}]}
         quote = client.post("/v1/rig/quote", headers=HEADERS, json={"setup": setup, "contact": CONTACT})
         assert quote.status_code == 200, quote.text
@@ -206,8 +222,8 @@ async def _oracle(rows: list[dict[str, Any]], shop: dict[str, Any] | None, store
     """Every cost number and private key name: same results as a store with no costs at all.
 
     ``strict`` also asserts the owning row is absent unless the number is in
-    its public text (the review's probe). The full export has costs such as
-    4.15 that fuzzy-match other public text, so there only equality holds.
+    its public text (the review's probe). The full export has costs (decimals,
+    small integers) that fuzzy-match other public text, so there only equality holds.
     """
     probe = await _service(rows, "legacy", shop, store)
     imported = await _service(rows, "imported", shop)
@@ -224,7 +240,7 @@ async def _oracle(rows: list[dict[str, Any]], shop: dict[str, Any] | None, store
             if strict and cost not in re.findall(r"[0-9]+", public):
                 assert sku not in expected, (cost, sku)
         checked += 1
-    for word in (*SECRETS, "rsr", "buy from"):
+    for word in (*SECRETS, "zephyr", "buy from"):
         for service in (probe, imported):
             assert _ids(await service.search(TENANT, word, 24)) == [], word
     return checked
@@ -235,10 +251,10 @@ def test_search_is_not_a_cost_oracle(shop: dict[str, Any] | None) -> None:
     rows = _rows()
     checked = asyncio.run(_oracle(rows, shop))
     assert checked == 6
-    # The review's exact probes: q=606 used to return only 02445.
+    # The review's exact probes: q=437 used to return only 90101.
     async def probes() -> None:
         legacy = await _service(rows, "legacy", shop)
-        assert "02445" not in _ids(await legacy.search(TENANT, "606", 24))
+        assert "90101" not in _ids(await legacy.search(TENANT, "437", 24))
         assert _ids(await legacy.search(TENANT, "export_usd", 24)) == []
     asyncio.run(probes())
 
@@ -257,16 +273,18 @@ def test_full_custom_nation_export_is_not_a_cost_oracle(shop: dict[str, Any] | N
 NESTED = {
     "color": "BLACK",
     "stock": {"status": "in_stock", "qty": 3, "location": "Showroom", "lead": "today", "label": "Stock",
-              "source": "RSR Group", "vendor": "POF-USA Direct", "usd": 606},
-    "options": {"finish": {"BLACK": {"price": 19800, "rsr_price": 606, "vendor_sku": "RSR-POF02445"}},
-                "barrel": [{"code": "b-43", "label": "4.3in", "delta": 0, "sku": "", "vendor_sku": "RSR-B43",
-                            "rsr_price": 606}, "plain"],
-                "export_usd": [606]},
-    "defaults": {"finish": "BLACK", "supplier": "RSR", "cost": 606, "odd": {"vendor": "RSR"}},
-    "price_history": [{"price": 19800, "buy": 606, "vendor": "RSR", "on": "2 Oct"}],
-    "verified": [{"name": "thread", "value": "5/8x24", "source": "https://pof-usa.com/", "vendor": "RSR"}],
-    "features": ["titanium", {"vendor": "RSR"}],
-    "thread": {"vendor": "RSR"},
+              "source": "Zephyr Group", "vendor": "Sample Direct", "usd": 437},
+    "options": {"finish": {"BLACK": {"price": 18810, "zephyr_price": 437, "vendor_sku": "ZEPHYR-90101"}},
+                "barrel": [{"code": "b-43", "label": "4.3in", "delta": 0, "sku": "", "vendor_sku": "ZEPHYR-B43",
+                            "zephyr_price": 437}, "plain"],
+                "export_usd": [437]},
+    "defaults": {"finish": "BLACK", "supplier": "ZEPHYR", "cost": 437, "odd": {"vendor": "ZEPHYR"}},
+    "price_history": [{"price": 18810, "buy": 437, "vendor": "ZEPHYR", "on": "2 Oct"}],
+    "verified": [{"name": "thread", "value": "5/8x24", "source": "https://sample-arms.example/", "vendor": "ZEPHYR"},
+                 {"name": "export_usd", "value": 437}, {"name": "Supplier cost", "value": 437},
+                 ["export_usd", 437], "in stock"],
+    "features": ["titanium", {"vendor": "ZEPHYR"}],
+    "thread": {"vendor": "ZEPHYR"},
 }
 
 
@@ -275,15 +293,16 @@ def test_nested_shapes_are_allowlisted() -> None:
     assert shown == {
         "color": "BLACK",
         "stock": {"status": "in_stock", "qty": 3, "location": "Showroom", "lead": "today", "label": "Stock"},
-        "options": {"finish": {"BLACK": {"price": 19800}},
+        "options": {"finish": {"BLACK": {"price": 18810}},
                     "barrel": [{"code": "b-43", "label": "4.3in", "delta": 0, "sku": ""}, "plain"]},
         "defaults": {"finish": "BLACK"},
-        "price_history": [{"price": 19800, "on": "2 Oct"}],
-        "verified": [{"name": "thread", "value": "5/8x24", "source": "https://pof-usa.com/"}],
+        "price_history": [{"price": 18810, "on": "2 Oct"}],
+        "verified": [{"name": "thread", "value": "5/8x24", "source": "https://sample-arms.example/"},
+                     "in stock"],
         "features": ["titanium"],
     }
     text = json.dumps(shown)
-    for word in ("RSR", "606", "vendor", "source\": \"RSR", "rsr_price", "buy"):
+    for word in ("ZEPHYR", "437", "vendor", "source\": \"ZEPHYR", "zephyr_price", "buy"):
         assert word not in text, word
     # The archon catalogue's real shapes pass unchanged.
     archon = {"stock": {"status": "low_stock", "location": "Custom Nation showroom", "lead": "Collect today",
@@ -303,7 +322,7 @@ def test_nested_private_keys_never_reach_shopper_routes_or_search(shop: dict[str
         async def nest() -> None:
             rows = {row["sku"]: row for row in await rig.store.products(TENANT)}
             await rig.store.upsert_product(
-                TENANT, {**rows["02445"], "attributes": {**rows["02445"]["attributes"], **nested}})
+                TENANT, {**rows["90101"], "attributes": {**rows["90101"]["attributes"], **nested}})
             if shop is not None:
                 async def _shop(tenant_id: str) -> dict[str, Any]:
                     del tenant_id
@@ -317,24 +336,24 @@ def test_nested_private_keys_never_reach_shopper_routes_or_search(shop: dict[str
     app = nested_app(NESTED)
     control_app = nested_app(shopper_attributes(NESTED))
     with TestClient(app) as client, TestClient(control_app) as control:
-        detail = client.get("/v1/rig/products/02445", headers=HEADERS)
+        detail = client.get("/v1/rig/products/90101", headers=HEADERS)
         assert detail.status_code == 200, detail.text
         _clean(detail.text)
-        assert "vendor" not in detail.text and "rsr_price" not in detail.text
-        for query in ("suppressor", "PST-7", "RSR", "vendor", "POF-USA Direct", "rsr_price", "buy", "606"):
+        assert "vendor" not in detail.text and "zephyr_price" not in detail.text
+        for query in ("suppressor", "KX-9", "ZEPHYR", "vendor", "Sample Direct", "zephyr_price", "buy", "437"):
             found = client.get("/v1/rig/search", params={"q": query}, headers=HEADERS)
             assert found.status_code == 200, found.text
             body = {key: value for key, value in found.json().items() if key != "parts"}  # parts echoes q
             _clean(json.dumps(body))
-            assert "vendor_sku" not in json.dumps(body) and "rsr_price" not in json.dumps(body)
+            assert "vendor_sku" not in json.dumps(body) and "zephyr_price" not in json.dumps(body)
             expected = control.get("/v1/rig/search", params={"q": query}, headers=HEADERS)
             assert _ids(found.json()) == _ids(expected.json()), query
-            if query in ("RSR", "vendor", "buy", "606"):
-                assert "02445" not in _ids(found.json()), query
+            if query in ("ZEPHYR", "vendor", "buy", "437"):
+                assert "90101" not in _ids(found.json()), query
 
 
 def test_allowlist_drops_unknown_keys_and_keeps_fit_facts() -> None:
-    assert shopper_attributes({"export_usd": 606, "color": "BLACK", "thread": "5/8x24", "new_key": 1}) == {
+    assert shopper_attributes({"export_usd": 437, "color": "BLACK", "thread": "5/8x24", "new_key": 1}) == {
         "color": "BLACK", "thread": "5/8x24"}
     assert shopper_attributes("not a dict") == {}
     assert not any(private_key(key) for key in SHOPPER_ATTRIBUTES), "an allowlisted key looks private"
@@ -348,10 +367,24 @@ def test_cost_filter_catches_export_and_pricing_keys_anywhere() -> None:
     for key in ("color", "price", "price_label", "summary", "currency", "amount", "id"):
         assert not private_key(key), key
     nested = {"results": [{"price": {"amount": 1}, "attributes": {"stock": {"status": "in", "cost": 9},
-                                                                  "export_usd": 606}}],
+                                                                  "export_usd": 437}}],
               "meta": {"export_usd": 1, "lines": [{"landed_zar": 2, "name": "x"}]}}
     assert shopper_body(nested) == {"results": [{"price": {"amount": 1}, "attributes": {"stock": {"status": "in"}}}],
                                     "meta": {"lines": [{"name": "x"}]}}
+
+
+def test_private_pattern_breadth_is_deliberate() -> None:
+    """These keys move to the private table too: hidden from shoppers, kept for the store.
+
+    The pattern is broad on purpose (a missed cost key is a leak; a moved
+    spec key is only hidden). Store-facing code must read them from
+    product_private_attributes. Change this list only on purpose.
+    """
+    moved = ("heavy_duty", "duty_rating", "export_restricted", "itar_export", "supplier_warranty", "costume",
+             "fx_rate", "exported")
+    assert all(private_key(key) for key in moved)
+    for key in ("calibre", "thread", "rail", "colour", "finish", "length", "weight"):
+        assert not private_key(key), key
 
 
 def test_schema_migration_uses_the_same_private_pattern() -> None:
@@ -410,15 +443,18 @@ def test_postgres_search_is_not_a_cost_oracle_and_migration_moves_costs() -> Non
             assert not found & set(owners), (cost, found)
         for word in SECRETS:
             assert await store.search_rows(TENANT, word, 24) == [], word
-        assert {row["sku"] for row in await store.search_rows(TENANT, "BLACK", 24)} >= {"02445"}
+        assert {row["sku"] for row in await store.search_rows(TENANT, "BLACK", 24)} >= {"90101"}
         # Migration: schema.sql copies then strips. Run it twice: repeat-safe.
         pool = pools[0]
         async with pool.acquire() as conn:
             before = await conn.fetchval(
                 "SELECT count(*) FROM agent_rig.products WHERE attributes ? 'export_usd'")
             assert before == 6
-        # A private value written by an import after the cost moved wins over the stale attribute.
+        # A stale private value (export_usd 1) loses to the value still in
+        # attributes: that came from the newest import (re-import after a rollback).
         await store.upsert_product(TENANT, {**_legacy(rows[0]), "private_attributes": {"export_usd": 1}})
+        async with pool.acquire() as conn:
+            assert await store._log_cost_guard(conn) == 6
         await store.apply_schema()
         await store.apply_schema()
         async with pool.acquire() as conn:
@@ -428,15 +464,14 @@ def test_postgres_search_is_not_a_cost_oracle_and_migration_moves_costs() -> Non
             moved = {row["sku"]: json.loads(row["attributes"]) if isinstance(row["attributes"], str) else row["attributes"]
                      for row in await conn.fetch("SELECT sku, attributes FROM agent_rig.product_private_attributes")}
             colour = await conn.fetchval(
-                "SELECT attributes->>'color' FROM agent_rig.products WHERE tenant_id=$1 AND sku='02445'",
+                "SELECT attributes->>'color' FROM agent_rig.products WHERE tenant_id=$1 AND sku='90101'",
                 __import__("uuid").UUID(TENANT))
         assert set(moved) == {row["sku"] for row in rows}
         for row in rows:
-            expected = {**row["private_attributes"], **EXTRA}
-            if row["sku"] == rows[0]["sku"]:
-                expected = {**EXTRA, "export_usd": 1}
-            assert moved[row["sku"]] == expected, row["sku"]
+            assert moved[row["sku"]] == {**row["private_attributes"], **EXTRA}, row["sku"]
         assert colour == "BLACK"
+        async with pool.acquire() as conn:
+            assert await store._log_cost_guard(conn) == 0
         # Import path on Postgres: the cost goes to the private table, not attributes.
         await store.upsert_product(TENANT, rows[1])
         assert await store.product_private_attributes(TENANT, rows[1]["sku"]) == rows[1]["private_attributes"]

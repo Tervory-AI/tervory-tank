@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -15,7 +16,9 @@ from chassis.tenant_db import TenantPool
 from rigbox.logic import public_product
 from rigbox.recall import SEARCH_RECALL_CAP
 from rigbox.retailer_store import RetailerMemoryStore, RetailerPgStore
-from rigbox.shopper_attributes import SHOPPER_ATTRIBUTES
+from rigbox.shopper_attributes import PRIVATE_KEY_PATTERN, SHOPPER_ATTRIBUTES
+
+_log = logging.getLogger("rigbox.store")
 
 _SEARCH_KEYS = sorted(SHOPPER_ATTRIBUTES)
 
@@ -631,6 +634,29 @@ class PgStore(RetailerPgStore):
                         if present == 1:
                             continue
                     raise
+            await self._log_cost_guard(conn)
+
+    async def _log_cost_guard(self, conn: Any) -> int:
+        """Products whose attributes still carry a private key after the migration.
+
+        Logged on every startup. Zero visible products, or a non-zero count,
+        means the migration did not run as intended (for example under forced
+        RLS with no tenant set). Shoppers stay safe either way: every shopper
+        path allowlists attributes.
+        """
+        try:
+            visible, left = await conn.fetchrow(
+                "SELECT count(*), count(*) FILTER (WHERE jsonb_typeof(attributes) = 'object' AND EXISTS ("
+                "SELECT 1 FROM jsonb_object_keys(attributes) AS k(key) WHERE k.key ~* $1)) "
+                "FROM agent_rig.products",
+                PRIVATE_KEY_PATTERN,
+            )
+        except Exception:  # noqa: BLE001 - a log line must never stop startup
+            _log.warning("cost-guard: could not count products after the migration", exc_info=True)
+            return -1
+        level = logging.WARNING if left else logging.INFO
+        _log.log(level, "cost-guard: %d products visible, %d still carry private keys in attributes", visible, left)
+        return int(left)
 
     async def product_exists(self, tenant_id: str, sku: str) -> bool:
         async with self.pool.acquire() as conn:
