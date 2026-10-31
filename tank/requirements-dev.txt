@@ -10,6 +10,7 @@ eyecite==2.7.8
 # Official ZA judgment adapters extract PDF text. The pool-loader image
 # installs the same pin from agents/zenas/requirements.txt.
 pypdf==6.21.2
+pypdfium2==5.14.0
 
 # READ-1 visibility regressions must execute in a real browser in CI.
 playwright==1.64.1
