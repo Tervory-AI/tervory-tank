@@ -282,6 +282,8 @@ async def test_existing_switch_audit_records_who_old_new(conn):
 
 def test_existing_switch_route_refuses_non_founder(monkeypatch):
     monkeypatch.setenv('TANK_API_KEY', 'test')
+    # main reads TANK_API_KEY once at import; another module may have imported it first.
+    monkeypatch.setattr(main, 'TANK_API_KEY', 'test')
     monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder-fixture')
     client = TestClient(main.app)
     assert client.post('/v1/graduation/base.extract/promote', headers={'x-tank-key':'test', 'x-tervory-admin':'other-user'}, json={}).status_code == 404

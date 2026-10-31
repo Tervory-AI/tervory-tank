@@ -409,7 +409,9 @@ async def test_schema_applies_twice_and_preserves_policy(harness):
                   "zenas.scope", "zenas.rule_card", "zenas.case_facts", "zenas.apply",
                   "zenas.compose", "zenas.plain_language", "zenas.draft", "zenas.review", "zenas.selftest"}
         current = {(row["task_type"], row["tenant_id"]): row for row in after}
-        assert set(current) == {(r["task_type"], r["tenant_id"]) for r in before} | {("base.normalize", None)}
+        # Later additive seeds: base.normalize, and Trigger's first build (trigger.write, trigger.check).
+        added = {("base.normalize", None), ("trigger.write", None), ("trigger.check", None)}
+        assert set(current) == {(r["task_type"], r["tenant_id"]) for r in before} | added
         for old in before:
             new = current[old["task_type"], old["tenant_id"]]
             changed = {"baseline_model"}

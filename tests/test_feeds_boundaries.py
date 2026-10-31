@@ -115,6 +115,11 @@ def test_industry_words_stay_in_the_engine() -> None:
                 continue
             if path.name.startswith("test_") and "feeds" not in path.name:
                 continue
+            # Under tests/, only the feed engine's own tests and fixtures. Other products'
+            # fixtures (Base FFL proof, Rig catalogue, Zenas law recordings) name their
+            # industry by design; the boundary is the Market Lab feed engine.
+            if root.name == "tests" and "feeds" not in path.relative_to(root).as_posix():
+                continue
             text = path.read_text(encoding="utf-8")
             if BANNED.search(text):
                 offenders.append(str(path.relative_to(ROOT)))

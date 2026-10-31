@@ -37,13 +37,14 @@ def _triggers(workflow: dict) -> dict:
 def test_docs_only_changes_skip_on_push_and_pull_request(path: Path) -> None:
     triggers = _triggers(_load(path))
     assert set(triggers) == {"pull_request", "push"}
+    # The security job runs on every PR, docs-only included, so there is no
+    # paths-ignore. Build jobs skip docs-only changes through ci_scope.py instead.
     for event in ("pull_request", "push"):
-        ignored = triggers[event]["paths-ignore"]
-        assert "docs/**" in ignored
-        assert "**/*.md" in ignored
-        # paths-ignore cannot be mixed with paths on the same event.
-        assert "paths" not in triggers[event]
+        assert "paths-ignore" not in (triggers[event] or {})
     assert triggers["push"]["branches"] == ["main"]
+    scope = _scope_module().select(["docs/ops/self-hosted-runner.md", "README.md"])
+    assert scope["run"] is False
+    assert "needs.changes.outputs.run == 'true'" in _load(path)["jobs"]["tank"]["if"]
 
 
 @pytest.mark.parametrize("path", [CI], ids=lambda p: p.name)
@@ -286,9 +287,9 @@ def test_workflows_use_scope_and_do_not_hide_failed_detection():
         assert changes["steps"][1]["run"] == "python3 .github/scripts/ci_scope.py"
     assert "needs.changes.result == 'success'" in ci["tank"]["if"]
     assert "needs.changes.outputs.full == 'true'" in ci["workspace"]["if"]
-    # Founder, 27 Oct (#351): the merge check is lint, the secret scan and Tank start only.
-    step = next(step for step in ci["tank"]["steps"] if step.get("name") == "Secret scan and Tank starts")
-    assert step["run"] == "python3 -m pytest -q tests/test_secrets.py tests/test_tank_boots.py"
+    # The whole offline suite gates PRs again (27 Oct #351 had cut it to three files).
+    step = next(step for step in ci["tank"]["steps"] if step.get("name") == "Full offline test suite")
+    assert step["run"] == "python3 .github/scripts/offline_suite.py"
     assert "needs.changes.outputs.savings == 'true'" in ci["savings-page"]["if"]
 
 

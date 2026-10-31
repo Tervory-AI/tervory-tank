@@ -11,6 +11,19 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _without_dependency_waits(compose: dict) -> None:
+    """Drop depends_on from the temporary copy. These tests check which services an
+    ordinary `up` selects, not start order. With depends_on, a dry-run `up` still
+    waits on each dependency's simulated container, and on a loaded CI runner Compose
+    sometimes looked before that container was listed and stopped with
+    "agent-roles is missing dependency postgres" (31 Oct, #486). No service here
+    depends on a profiled service, so dropping depends_on cannot change selection;
+    the loop checks that no dependency is profiled."""
+    for name, service in compose["services"].items():
+        for dependency in service.pop("depends_on", None) or []:
+            assert not compose["services"][dependency].get("profiles"), (name, dependency)
+
+
 @pytest.mark.parametrize("directory", ["deployment-artifact", "saved-coolify-compose"])
 def test_boston_backup_survives_default_deployment_composition(tmp_path, directory):
     if shutil.which("docker") is None:
@@ -19,6 +32,13 @@ def test_boston_backup_survives_default_deployment_composition(tmp_path, directo
     # Coolify consumes this metadata before handing the file to Compose.
     for service in compose["services"].values():
         service.pop("exclude_from_hc", None)
+    # Corridor networks are created once on the live host (docker network create), so a
+    # fresh runner has none and Compose stops at "declared as external, but could not be
+    # found". This test is about which services an ordinary up selects, not networks.
+    for network in (compose.get("networks") or {}).values():
+        if network:
+            network.pop("external", None)
+    _without_dependency_waits(compose)
     target = tmp_path / directory
     target.mkdir()
     source = target / "docker-compose.yaml"
@@ -29,11 +49,13 @@ def test_boston_backup_survives_default_deployment_composition(tmp_path, directo
     # --no-deps avoids unrelated services' runtime dependency waits in dry-run.
     command = ["docker", "compose", "--project-name", "backup-regression", "--dry-run",
                "-f", str(source), "up", "-d", "--no-build", "--pull", "never", "--no-deps"]
-    first = subprocess.run(command, env=env, capture_output=True, text=True, check=True)
+    first = subprocess.run(command, env=env, capture_output=True, text=True)
+    assert first.returncode == 0, first.stdout + first.stderr
     expected = "Container backup-regression-r2-backup-1"
     assert expected in first.stdout + first.stderr, "ordinary redeploy drops the profiled backup"
     # A fresh resolution at the same path must retain the worker without a repair/profile flag.
-    again = subprocess.run(command, env=env, capture_output=True, text=True, check=True)
+    again = subprocess.run(command, env=env, capture_output=True, text=True)
+    assert again.returncode == 0, again.stdout + again.stderr
     assert expected in again.stdout + again.stderr
     worker = compose["services"]["r2-backup"]
     assert worker["restart"] == "unless-stopped"
@@ -66,6 +88,14 @@ def test_za_backup_survives_default_deployment_composition(tmp_path):
     compose = yaml.safe_load((ROOT / "docker-compose.za.yml").read_text())
     for service in compose["services"].values():
         service.pop("exclude_from_hc", None)
+    # Corridor networks are created once on the live host (docker network create), so a
+    # fresh runner has none and Compose stops at "declared as external, but could not be
+    # found". This test is about which services an ordinary up selects, not networks.
+    for network in (compose.get("networks") or {}).values():
+        if network:
+            network.pop("external", None)
+    _without_dependency_waits(compose)
+    for service in compose["services"].values():
         service["env_file"] = [".env"]  # what Coolify writes on every deploy
     (tmp_path / ".env").write_text("")
     source = tmp_path / "docker-compose.yaml"

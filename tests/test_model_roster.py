@@ -57,8 +57,13 @@ def test_fallbacks_run_cheapest_available_first() -> None:
 
 
 def test_policy_seeds_and_the_switch_name_roster_models() -> None:
-    seeded = set(re.findall(r"\('[a-z0-9_.]+',\s*\d+,\s*'([a-z0-9-]+)'", SCHEMA))
-    switched = set(re.findall(r"THEN '([a-z0-9-]+)'", SCHEMA)) | set(re.findall(r"ELSE '([a-z0-9-]+)'", SCHEMA))
+    rows = re.findall(r"\('[a-z0-9_.]+',\s*(\d+),\s*'([a-z0-9-]+)'", SCHEMA)
+    # Rung 3 runs code, not a model: its seeds name the marker "code" (trigger.check).
+    assert all(rung == "3" for rung, model in rows if model == "code")
+    seeded = {model for rung, model in rows if not (rung == "3" and model == "code")}
+    # Only CASE expressions that pick a model; other CASEs map product names (ghost -> autumbra).
+    picks = " ".join(st for st in SCHEMA.split(";") if re.search(r"\bmodel\b", st))
+    switched = set(re.findall(r"THEN '([a-z0-9-]+)'", picks)) | set(re.findall(r"ELSE '([a-z0-9-]+)'", picks))
     assert seeded and switched
     assert seeded <= NAMES, seeded - NAMES
     assert switched <= NAMES, switched - NAMES
