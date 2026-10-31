@@ -108,8 +108,13 @@ def services(output):
 async def prepare(owner, other):
     from core.ledger import PostgresLedger
     from core.jobs import perform_refresh
+    from chassis.db import ensure_schema
     conn = await asyncpg.connect(database_url())
     try:
+        # The room runs with --lifespan off, so do its startup step here (chassis/app.py):
+        # the jobs and schedules tables. Without it the links PUT failed whenever no other
+        # Market Lab proof had created them in this database first.
+        await ensure_schema(conn, 'market_lab')
         ledger = PostgresLedger(conn)
         await ledger.apply_schema()
         await ledger.apply_schema()
