@@ -54,7 +54,9 @@ jobs:
           diff -r "$RUNNER_TEMP/cli-release" workspace/public/cli \
             || { echo "Rebuild with: node cli/scripts/build-release.mjs --out workspace/public/cli (bump cli version for any change)"; exit 1; }
       - name: Published versions are immutable
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
           changed=$(git diff --name-only --diff-filter=MDR FETCH_HEAD -- workspace/public/cli/releases)
           if [ -n "$changed" ]; then echo "Published CLI release files changed (bump the version instead):"; echo "$changed"; exit 1; fi
