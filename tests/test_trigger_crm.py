@@ -161,3 +161,44 @@ def test_shared_token_or_org_cannot_cross_tenants(setup,monkeypatch):
 def test_ssrf_and_query_secret_destinations_refused(setup,monkeypatch,url):
     monkeypatch.setenv('TRIGGER_CRM_URL',url)
     with pytest.raises(HTTPException):crm.binding(FOUNDER)
+
+
+@pytest.mark.asyncio
+async def test_real_identity_requires_service_key_user_and_home_box(setup,monkeypatch):
+    setup.dependency_overrides.clear()
+    monkeypatch.setitem(sys.modules,'main',SimpleNamespace(TANK_API_KEY='dummy-workspace-key',box_region=lambda:'us-east'))
+    fake_transport(monkeypatch,lambda req:httpx.Response(200,json={'results':[],'count':0}))
+    assert (await request(setup)).status_code == 401
+    headers={'X-Tank-Key':'dummy-workspace-key','X-Tervory-User':'offline-founder','X-Tervory-Tenant':str(T),'X-Tervory-Home-Region':'us-east'}
+    assert (await request(setup,headers=headers)).status_code == 200
+    assert (await request(setup,headers={**headers,'X-Tervory-Home-Region':'za'})).status_code == 403
+    assert (await request(setup,headers={**headers,'X-Tervory-Tenant':str(OTHER)})).status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_existing_durable_card_gate_checks_executing_payload_and_owner(setup,monkeypatch):
+    args={'resource':'contacts','data':{'first_name':'Synthetic','last_name':'Offline'}}
+    action=command.validate_action(command.PlannedAction(tool='trigger.crm.write',arguments=args),FOUNDER)
+    state={'cards':{str(RECORD):{'status':'proposed','payload':action.model_dump(mode='json')}}}
+    class Connection:
+        async def fetchval(self,sql,*values):
+            assert values == (RECORD,T,'offline-founder')
+            assert 'tenant_id=$2 AND user_id=$3' in sql
+            return state
+    class Acquire:
+        async def __aenter__(self):return Connection()
+        async def __aexit__(self,*args):pass
+    monkeypatch.setattr(command,'db',lambda:SimpleNamespace(acquire=lambda:Acquire()))
+    dispatched=AsyncMock(return_value=(200,{'item':{'id':str(RECORD)}}))
+    monkeypatch.setattr(command,'dispatch_action',dispatched)
+    with pytest.raises(HTTPException) as exc:
+        await trigger_commands.dispatch_confirmed(action,FOUNDER,RECORD,str(RECORD))
+    assert exc.value.status_code == 409
+    dispatched.assert_not_awaited()
+    state['cards'][str(RECORD)]['status']='executing'
+    async def bound_dispatch(sent,actor):
+        assert trigger_commands.confirmation(actor,'trigger.crm.write',args) == RECORD
+        return 200,{'item':{'id':str(RECORD)}}
+    monkeypatch.setattr(command,'dispatch_action',bound_dispatch)
+    assert (await trigger_commands.dispatch_confirmed(action,FOUNDER,RECORD,str(RECORD)))[0] == 200
+    assert trigger_commands.CONFIRMED.get() is None
