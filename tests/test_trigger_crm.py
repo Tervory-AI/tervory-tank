@@ -36,11 +36,16 @@ async def request(app, method='GET', path='/v1/trigger/crm/contacts', **kw):
         return await c.request(method, path, **kw)
 
 
-def fake_transport(monkeypatch, callback):
+def fake_transport(monkeypatch, callback, *, attest=True):
     real = httpx.AsyncClient
+    def call(req):
+        response = callback(req)
+        if attest and 200 <= response.status_code < 300:
+            response.headers.setdefault("X-Tervory-CRM-Organization", ORG)
+        return response
     def client(**kw):
         assert kw['follow_redirects'] is False and kw['trust_env'] is False
-        return real(**kw, transport=httpx.MockTransport(callback))
+        return real(**kw, transport=httpx.MockTransport(call))
     monkeypatch.setattr(crm, 'httpx', SimpleNamespace(AsyncClient=client, Timeout=httpx.Timeout, HTTPError=httpx.HTTPError))
 
 
@@ -138,7 +143,7 @@ def test_strict_write_schema_rejects_hidden_authority(extra):
     assert exc.value.status_code == 422
 
 
-def test_tool_is_founder_only_and_pinned_estimate_sideeffects_denied():
+def test_tool_requires_trigger_entitlement_and_estimate_sideeffects_denied():
     assert 'trigger.crm.write' not in command.allowed_tools(command.Actor(T,'client',False))
     assert 'trigger.crm.write' in command.allowed_tools(command.Actor(T,'client',False,frozenset({'trigger'})))
     with pytest.raises(HTTPException):command.validate_action(command.PlannedAction(tool='trigger.crm.write',arguments={}),command.Actor(T,'client',False))
@@ -241,3 +246,54 @@ async def test_client_actual_grant_recheck_and_admin_voice_boundary(setup,monkey
     granted=False
     with pytest.raises(HTTPException) as exc:await crm.authority(actor)
     assert exc.value.status_code == 403
+
+
+@pytest.mark.parametrize('attested',[None,str(OTHER),'not-a-uuid'])
+@pytest.mark.asyncio
+async def test_wrong_or_missing_authenticated_org_never_leaks_or_writes(setup,monkeypatch,attested):
+    calls=[]
+    def upstream(req):
+        calls.append(req.method)
+        headers={} if attested is None else {'X-Tervory-CRM-Organization':attested}
+        return httpx.Response(200,json={'results':[{'id':str(RECORD),'first_name':'FOREIGN'}],'count':1},headers=headers)
+    fake_transport(monkeypatch,upstream,attest=False)
+    response=await request(setup)
+    assert response.status_code == 502 and 'FOREIGN' not in response.text
+    args={'resource':'contacts','data':{'first_name':'Synthetic','last_name':'Offline'}}
+    token=trigger_commands.CONFIRMED.set((T,'offline-founder',RECORD,'trigger.crm.write',args))
+    try:
+        response=await request(setup,'POST','/v1/trigger/crm/write',json=args)
+        assert response.status_code == 502
+        assert calls == ['GET','GET']  # Write blocked by attested read preflight.
+    finally:trigger_commands.CONFIRMED.reset(token)
+
+
+def middleware_class():
+    import importlib.util
+    from pathlib import Path
+    path=Path(__file__).parents[1]/'ops/trigger-crm/tervory_crm_middleware.py'
+    spec=importlib.util.spec_from_file_location('offline_crm_middleware',path)
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.OrganizationBinding
+
+
+@pytest.mark.parametrize('expected,has_pat',[(str(OTHER),True),(ORG,False),('invalid',True)])
+def test_crm_middleware_refuses_wrong_org_before_view(monkeypatch,expected,has_pat):
+    monkeypatch.setitem(sys.modules,'django.http',SimpleNamespace(JsonResponse=lambda data,status:SimpleNamespace(status_code=status,data=data)))
+    calls=[]
+    handler=middleware_class()(lambda request:calls.append(request))
+    req=SimpleNamespace(headers={'X-Tervory-CRM-Organization':expected},org=SimpleNamespace(id=UUID(ORG)),_pat=object() if has_pat else None)
+    assert handler(req).status_code == 403
+    assert calls == []
+
+
+def test_crm_middleware_attests_only_resolved_pat_org():
+    class Response(dict):status_code=200
+    response=Response({'X-Tervory-CRM-Organization':'forged'})
+    handler=middleware_class()(lambda req:response)
+    req=SimpleNamespace(headers={'X-Tervory-CRM-Organization':ORG},org=SimpleNamespace(id=UUID(ORG)),_pat=object())
+    assert handler(req)['X-Tervory-CRM-Organization'] == ORG
+    req.headers={}
+    req._pat=None
+    assert 'X-Tervory-CRM-Organization' not in handler(req)
