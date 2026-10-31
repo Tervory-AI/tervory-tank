@@ -913,7 +913,8 @@ async def test_tenant_squad_grants_are_founder_only_isolated_and_logged(api, mon
     log = (await client.get('/v1/command/squads/log')).json()
     assert len(log) == 1 and log[0]['changed_by'] == 'founder' and log[0]['enabled'] is True
     grants = (await client.get('/v1/command/squads')).json()
-    assert len(grants) == 7
+    assert {g["agent"] for g in grants} == {"base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas", "trigger"}
+    assert next(g for g in grants if g["agent"] == "trigger")["enabled"] is False
     assert next(g for g in grants if g['agent'] == 'tiger')['enabled_by'] == 'founder'
     assert (await client.get('/v1/command/tools', headers=client_headers)).json() == ['tiger.read', 'tiger.watch']
     assert (await client.get('/v1/command/tools', headers={**client_headers, 'x-tervory-tenant': str(OTHER)})).json() == []
