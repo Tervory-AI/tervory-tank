@@ -4,6 +4,67 @@
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
+/** CLI-only public corridor. No Clerk cookies or service-key identity assertions. */
+export async function personalCommandRequest(request: Request, path: string[]): Promise<Response> {
+  const headers = { "Cache-Control": "no-store" };
+  const refused = (status: number) => Response.json({}, { status, headers });
+  const authorization = request.headers.get("authorization") ?? "";
+  const token = /^Bearer (tv1\.(us-east|za)\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43})$/i.exec(authorization);
+  if (!token) return refused(401);
+  const host = (request.headers.get("host") ?? new URL(request.url).host).toLowerCase();
+  const region = host === "app.tervory.com" ? "us-east" : host === "za.tervory.com" ? "za" : null;
+  if (!region || token[2] !== region) return refused(403);
+  const id = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+  const target = path.join("/");
+  const routes: Record<string, RegExp> = {
+    GET: new RegExp(`^(tools|models|threads|threads/${id}(/events)?|tasks/${id}/receipts)$`),
+    POST: new RegExp(`^(threads|threads/${id}/(turn|actions)|cards/${id}|build)$`),
+    PATCH: new RegExp(`^threads/${id}$`),
+  };
+  if (path.some(segment => !/^[a-z0-9-]+$/.test(segment)) || !routes[request.method]?.test(target)) return refused(404);
+  const query = new URL(request.url).searchParams;
+  for (const key of query.keys()) if (key !== "after" || !target.endsWith("/events")) return refused(400);
+  const after = query.getAll("after");
+  if (after.length > 1 || (after.length && !/^\d{1,15}$/.test(after[0]))) return refused(400);
+  // Never select TANK_URL_ZA or a caller URL; this Workspace talks to its own box.
+  const url = new URL(`/v1/command/${target}`, TANK_URL);
+  if (after.length) url.searchParams.set("after", after[0]);
+  let body: Uint8Array | undefined;
+  if (request.method !== "GET") {
+    if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return refused(415);
+    const reader = request.body?.getReader();
+    if (reader) {
+      const chunks: Uint8Array[] = []; let size = 0;
+      try {
+        while (true) {
+          const item = await reader.read(); if (item.done) break;
+          size += item.value.byteLength;
+          if (size > 2_000_000) return refused(413);
+          chunks.push(item.value);
+        }
+      } catch { return refused(400); }
+      finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+      body = new Uint8Array(size); let offset = 0;
+      for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
+    }
+  }
+  try {
+    const response = await fetch(url, {
+      method: request.method, body: body as BodyInit | undefined, signal: request.signal,
+      headers: { Authorization: `Bearer ${token[1]}`, "Content-Type": "application/json" },
+      redirect: "error", cache: "no-store",
+    });
+    if (!response.ok) { await response.body?.cancel(); return refused(response.status); }
+    const type = response.headers.get("content-type") ?? "";
+    if (!type.startsWith("application/json") && !type.startsWith("text/event-stream")) {
+      await response.body?.cancel(); return refused(502);
+    }
+    return new Response(response.body, { status: response.status, headers: {
+      ...headers, "Content-Type": type, "X-Accel-Buffering": "no", "X-Content-Type-Options": "nosniff",
+    } });
+  } catch { return refused(502); }
+}
+
 /** Founder memory inspection; identity comes from the server's goldIdentity check. */
 export function memoryRecord(identity: { tenantId: string; userId: string; role: string }, id: string): Promise<Response> {
   return fetch(new URL(`/v1/memory/records/${encodeURIComponent(id)}`, TANK_URL), {
