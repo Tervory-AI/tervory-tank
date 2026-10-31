@@ -71,7 +71,14 @@ services:
         python manage.py migrate --noinput
         python manage.py create_default_admin
         python manage.py collectstatic --noinput
-        exec gunicorn crm.wsgi:application --bind 0.0.0.0:8000 --workers 3 --threads 4
+        exec gunicorn --pythonpath /run/tervory tervory_connector_wsgi:application --bind 0.0.0.0:8000 --workers 3 --threads 4
+    configs:
+      - source: trigger_crm_binding_middleware
+        target: /run/tervory/tervory_crm_middleware.py
+        mode: 0444
+      - source: trigger_crm_binding_wsgi
+        target: /run/tervory/tervory_connector_wsgi.py
+        mode: 0444
     depends_on:
       redis:
         condition: service_healthy
@@ -235,3 +242,10 @@ networks:
   gw:
     external: true
     name: tervory-gw-trigger-crm
+
+# Repository-owned nonsecret source; Compose validates each config file exists.
+configs:
+  trigger_crm_binding_middleware:
+    file: ./tervory_crm_middleware.py
+  trigger_crm_binding_wsgi:
+    file: ./tervory_connector_wsgi.py
