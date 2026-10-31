@@ -16,7 +16,7 @@ let upstreamCalls = 0;
 const upstreamStatuses = [];
 vm.runInNewContext(source, {module:moduleValue,exports:moduleValue.exports,
   process:{env:{TANK_URL:input.origin,TANK_API_KEY:'dummy-workspace-key'}},
-  URL,Request,Response,Headers,Uint8Array,fetch:async(url,init)=>{
+  URL,Request,Response,Headers,Uint8Array,ReadableStream,AbortController,AbortSignal,setTimeout,clearTimeout,fetch:async(url,init)=>{
     assert.equal(new URL(url).origin,input.origin);
     assert.deepEqual(Object.keys(init.headers).sort(),['Authorization','Content-Type']);
     upstreamCalls++; const response = await fetch(url,init);

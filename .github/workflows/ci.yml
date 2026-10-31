@@ -260,8 +260,7 @@ jobs:
       - name: CLI device page error paths and timeouts under Next's render fetch
         # Regressions from the #496 review: no hang on error answers, 10 s bound on a silent Tank.
         run: |
-          node tests/device_login_next_fetch.cjs
-          node tests/device_login_timeout.cjs
+          node --expose-gc tests/device_login_next_fetch.cjs
       - name: Build
         working-directory: workspace
         run: npx next build

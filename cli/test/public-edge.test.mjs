@@ -14,7 +14,7 @@ const TOKEN = `tv1.us-east.${TENANT.replaceAll('-', '')}.${'x'.repeat(43)}`;
 function edge(upstream) {
   const module = { exports: {} };
   vm.runInNewContext(code, { exports: module.exports, module, process: { env: { TANK_URL: 'http://fake-tank:8000', TANK_API_KEY: 'dummy-must-not-forward' } },
-    URL, Request, Response, Headers, Uint8Array, fetch: upstream });
+    URL, Request, Response, Headers, Uint8Array, ReadableStream, AbortController, AbortSignal, setTimeout, clearTimeout, fetch: upstream });
   return module.exports.personalCommandRequest;
 }
 function request(path, { token = TOKEN, host = 'app.tervory.com', method = 'GET', body, extra = {} } = {}) {
@@ -32,7 +32,7 @@ test('public adapter forwards only PAT and content type to fixed local Tank', as
   assert.equal(received.url, 'http://fake-tank:8000/v1/command/tools');
   assert.deepEqual(Object.keys(received.headers).sort(), ['Authorization', 'Content-Type']);
   assert.equal(received.headers.Authorization, `Bearer ${TOKEN}`);
-  assert.equal(received.redirect, 'error');
+  assert.equal(received.redirect, 'manual');
   assert(!JSON.stringify(received).includes('dummy-must-not-forward'));
 });
 
@@ -56,9 +56,13 @@ test('public path rejects foreign region malformed tokens worker endpoints and i
 test('public path preserves replay cursor SSE and cancellation signal', async () => {
   let received;
   const proxy = edge(async (url, init) => { received = { url: String(url), ...init }; return new Response('event: done\ndata: {}\n\n', { headers: { 'Content-Type': 'text/event-stream' } }); });
-  const req = request(`threads/${ID}/events?after=42`);
+  const client = new AbortController();
+  const req = new Request(request(`threads/${ID}/events?after=42`), { signal: client.signal });
   const result = await proxy(req, ['threads', ID, 'events']);
-  assert.match(received.url, /after=42$/); assert.equal(received.signal, req.signal);
+  assert.match(received.url, /after=42$/);
+  // The upstream signal combines the caller's with the hard deadline: a client hang-up aborts it.
+  assert.equal(received.signal.aborted, false); client.abort(); assert.equal(received.signal.aborted, true);
+  assert.equal(received.redirect, 'manual');
   assert.equal(await result.text(), 'event: done\ndata: {}\n\n');
   assert.equal(result.headers.get('cache-control'), 'no-store');
 });

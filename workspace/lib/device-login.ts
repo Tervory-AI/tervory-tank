@@ -6,6 +6,7 @@
 // routes only. TANK_API_KEY_ZA (the ZA homes key) is never used here: it cannot
 // approve sign-ins. za.tervory.com has no Workspace and no Clerk login of its own.
 import { homeRegion, regionTank, type Region } from "@/app/api/zenas/tank";
+import { boundedFetch } from "@/lib/tank";
 
 export const USER_CODE = /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/;
 
@@ -51,9 +52,11 @@ export async function deviceApproval(identity: DeviceIdentity, region: Region, c
   if (!USER_CODE.test(code)) return { ok: false, status: 404, message: MESSAGES[404] };
   const tank = approvalTank(region);
   if (!tank || !tank.key) return { ok: false, status: 503, message: "Sign-in for this region is not connected here." };
-  let response: Response;
+  // Hard deadline over the whole call, body included: undici 6 with redirect:"error"
+  // ignores the abort of a stalled body after a GC (lib/tank.ts boundedFetch).
+  let answer: { response: Response; body: unknown };
   try {
-    response = await fetch(new URL(`/v1/command/device/approval/${code}`, tank.url), {
+    answer = await boundedFetch(new URL(`/v1/command/device/approval/${code}`, tank.url), {
       method: action ? "POST" : "GET",
       headers: {
         "content-type": "application/json",
@@ -63,19 +66,23 @@ export async function deviceApproval(identity: DeviceIdentity, region: Region, c
         "x-tervory-role": identity.tenantAdmin === true ? "org:admin" : "",
       },
       ...(action ? { body: JSON.stringify({ action }) } : {}),
-      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(DEVICE_TIMEOUT_MS),
+      cache: "no-store", signal: AbortSignal.timeout(DEVICE_TIMEOUT_MS),
+    }, DEVICE_TIMEOUT_MS, async response => {
+      if (!response.ok) {
+        // Drain rather than cancel: Next's render-time dedupe fetch tees GET bodies and
+        // cancel() on one branch never settles (tests/device_login_next_fetch.cjs, step 0).
+        await response.arrayBuffer().catch(() => undefined);
+        return { response, body: null };
+      }
+      return { response, body: await response.json().catch(() => null) };
     });
   } catch {
     return { ok: false, status: 502, message: "The sign-in service could not be reached. Try again." };
   }
+  const { response, body } = answer;
   if (!response.ok) {
-    // Drain rather than cancel: Next's render-time dedupe fetch tees GET bodies and
-    // cancel() on one branch never settles (tests/device_login_next_fetch.cjs, step 0).
-    await response.arrayBuffer().catch(() => undefined);
     return { ok: false, status: response.status, message: MESSAGES[response.status] ?? "This request could not be completed. Try again." };
   }
-  // A body that never finishes is cut off by the same timeout signal.
-  const body: unknown = await response.json().catch(() => null);
   const device = body as Partial<PendingDevice> | null;
   if (!device || typeof device.device_name !== "string" || device.user_code !== code || typeof device.status !== "string") {
     return { ok: false, status: 502, message: "The sign-in service returned an unexpected answer." };

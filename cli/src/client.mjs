@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 import { parse } from 'csv-parse/sync';
 import { installedRelease, packageVersion, update } from './update.mjs';
+import { boundedFetch, DeadlineError } from './http.mjs';
 
 const ORIGINS = Object.freeze({ 'us-east': 'https://app.tervory.com', za: 'https://za.tervory.com' });
 const ENVELOPE = /^tv1\.(us-east|za)\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/;
@@ -110,15 +111,16 @@ export const DEVICE_TIMEOUT_MS = 10_000;
 
 export async function deviceCall(region, action, body, transport = fetch, headers = {}, timeoutMs = DEVICE_TIMEOUT_MS) {
   if (!ORIGINS[region] || !['code', 'token', 'refresh', 'revoke'].includes(action)) throw new Error('Login refused by Tank.');
-  const signal = AbortSignal.timeout(timeoutMs);
-  let response; let payload;
+  // Hard deadline over the whole call, body included (http.mjs: undici + GC can ignore the signal).
+  let result;
   try {
-    response = await transport(`${ORIGINS[region]}/v1/command/device/${action}`, {
-      method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify(body), signal,
-    });
-    payload = await response.json().catch(error => { if (signal.aborted) throw error; return {}; });
+    result = await boundedFetch(transport, `${ORIGINS[region]}/v1/command/device/${action}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
+    }, timeoutMs, async response => ({ response, payload: await response.json().catch(error => {
+      if (error?.name === 'AbortError') throw error; return {};
+    }) }));
   } catch { throw new Error('Tank connection failed.'); }
+  const { response, payload } = result;
   if (response.ok) return payload;
   return { error: DEVICE_ERRORS.includes(payload?.error) ? payload.error : 'failed', status: response.status };
 }
@@ -200,6 +202,13 @@ async function logout({ store, transport, io }) {
     : 'Signed out. Removed from the OS keychain.\n');
 }
 
+// Bounds for authenticated calls. JSON answers include synchronous card confirmations,
+// so the bound is generous; a stream only has to start within HEADERS_TIMEOUT_MS and then
+// must deliver bytes (Tank sends a heartbeat every 0.25 s while a turn runs) every STREAM_IDLE_MS.
+export const HEADERS_TIMEOUT_MS = 30_000;
+export const JSON_TIMEOUT_MS = 300_000;
+export const STREAM_IDLE_MS = 120_000;
+
 export class Tank {
   #token;
   constructor(token, transport = fetch, signal) {
@@ -208,34 +217,58 @@ export class Tank {
     this.transport = transport;
     this.signal = signal;
   }
-  async request(path, body, method = body === undefined ? 'GET' : 'POST') {
+  async #call(path, body, method, timeoutMs, read) {
     if (!/^\/v1\/command\/[A-Za-z0-9/?=&._%-]+$/.test(path)) throw new Error('Command path refused.');
-    let response;
     try {
-      response = await this.transport(this.origin + path, {
-        method, redirect: 'error', signal: this.signal, headers: { Authorization: `Bearer ${this.#token}`, 'Content-Type': 'application/json' },
+      return await boundedFetch(this.transport, this.origin + path, {
+        method, signal: this.signal, headers: { Authorization: `Bearer ${this.#token}`, 'Content-Type': 'application/json' },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }, timeoutMs, async response => {
+        if (!response.ok) {
+          // Do not print error bodies, request objects or transport exceptions.
+          await response.body?.cancel?.().catch(() => {});
+          const error = new Error(response.status === 401 ? 'Personal token refused.' : `Tank refused the command (${response.status}).`);
+          error.status = response.status; error.tank = true;
+          throw error;
+        }
+        return read(response);
       });
-    } catch { throw new Error(this.signal?.aborted ? 'Command cancelled; no action was retried.' : 'Tank connection failed.'); }
-    if (!response.ok) {
-      // Do not print error bodies, request objects or transport exceptions.
-      const error = new Error(response.status === 401 ? 'Personal token refused.' : `Tank refused the command (${response.status}).`);
-      error.status = response.status;
-      throw error;
+    } catch (error) {
+      if (error.tank) throw error;
+      if (this.signal?.aborted) throw new Error('Command cancelled; no action was retried.');
+      if (error instanceof DeadlineError) throw new Error('Tank did not answer in time; nothing was retried. Reopen the thread to see its state.');
+      throw new Error('Tank connection failed.');
     }
-    return response;
   }
-  async json(path, body, method) { return (await this.request(path, body, method)).json(); }
+  /** A streaming response: the deadline covers the headers; events() bounds each read. */
+  async request(path, body, method = body === undefined ? 'GET' : 'POST') {
+    return this.#call(path, body, method, HEADERS_TIMEOUT_MS, response => response);
+  }
+  /** A JSON answer: the deadline covers the whole call, body included. */
+  async json(path, body, method = body === undefined ? 'GET' : 'POST') {
+    return this.#call(path, body, method, JSON_TIMEOUT_MS, response => response.json());
+  }
 }
 
-export async function* events(response) {
+export async function* events(response, { idleMs = STREAM_IDLE_MS, signal } = {}) {
   if (!response.body) throw new Error('Tank stream missing.');
   const reader = response.body.getReader();
+  // Every read is raced against an idle deadline and the caller's signal, so a stalled
+  // stream cannot hang the CLI even if undici ignores the abort (see http.mjs).
+  const read = () => new Promise((resolve, reject) => {
+    const stop = error => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); reader.cancel().catch(() => {}); reject(error); };
+    const onAbort = () => stop(new Error('Command cancelled; no action was retried.'));
+    const timer = setTimeout(() => stop(new Error('Tank stream stalled; the turn was not retried. Reopen the thread to see its state.')), idleMs);
+    if (signal?.aborted) return onAbort();
+    signal?.addEventListener('abort', onAbort, { once: true });
+    reader.read().then(value => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); resolve(value); },
+      error => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); reject(error); });
+  });
   const decoder = new TextDecoder();
   let buffer = '';
   try {
     while (true) {
-      const { value, done } = await reader.read();
+      const { value, done } = await read();
       buffer += decoder.decode(value, { stream: !done });
       buffer = buffer.replace(/\r\n/g, '\n');
       if (buffer.length > 2_000_000) throw new Error('Tank event exceeds the limit.');
@@ -258,7 +291,7 @@ export async function* events(response) {
         break;
       }
     }
-  } finally { reader.releaseLock(); }
+  } finally { try { reader.releaseLock(); } catch { /* a cancelled read is still settling */ } }
 }
 
 const amount = value => value === null || value === undefined ? 'pending' : String(value);
@@ -297,7 +330,7 @@ export async function showTurn(tank, thread, text, model, attachments, io) {
   const response = await tank.request(`/v1/command/threads/${encodeURIComponent(thread)}/turn`, { text, model, attachments });
   const cards = new Map(); const receipts = []; let complete = false; let lastSeq = 0;
   let sanitizer = new StreamSanitizer(); let answer = '';
-  for await (const event of events(response)) {
+  for await (const event of events(response, { signal: tank.signal })) {
     if (Number.isSafeInteger(event.data.seq)) {
       if (event.data.seq <= lastSeq) continue;
       lastSeq = event.data.seq;

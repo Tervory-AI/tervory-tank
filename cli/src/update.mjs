@@ -7,6 +7,7 @@ import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:f
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { boundedFetch, DeadlineError, RedirectError } from './http.mjs';
 
 export const RELEASE_BASE = 'https://app.tervory.com/cli';
 export const INSTALL_HINT = 'curl -fsSL https://app.tervory.com/cli/install.sh | sh';
@@ -36,14 +37,33 @@ export async function packageVersion(root = PACKAGE_ROOT) {
   return JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;
 }
 
-async function getJson(transport, path, signal) {
-  const response = await transport(`${RELEASE_BASE}/${path}`, { method: 'GET', redirect: 'error', cache: 'no-store', signal });
-  if (!response.ok) { await response.arrayBuffer().catch(() => {}); const e = new Error(`Update failed: ${path} returned ${response.status}.`); e.status = response.status; throw e; }
-  return response.json();
+// Hard deadlines over each whole call, body included (http.mjs, review of #506 B1).
+export const JSON_TIMEOUT_MS = 15_000;
+export const DOWNLOAD_TIMEOUT_MS = 180_000;
+
+async function get(transport, path, signal, timeoutMs, read) {
+  try {
+    return await boundedFetch(transport, `${RELEASE_BASE}/${path}`, { method: 'GET', cache: 'no-store', signal }, timeoutMs, async response => {
+      if (!response.ok) {
+        await response.body?.cancel?.().catch(() => {});
+        const e = new Error(`Update failed: ${path} returned ${response.status}.`); e.status = response.status; e.http = true; throw e;
+      }
+      return read(response);
+    });
+  } catch (error) {
+    if (error.http) throw error;
+    if (error instanceof DeadlineError) throw new Error(`Update failed: ${path} did not arrive in time. Nothing was changed.`);
+    if (error instanceof RedirectError) throw new Error(`Update failed: ${path} redirected (${error.status}); redirects are refused.`);
+    throw new Error(`Update failed: could not reach ${RELEASE_BASE}.`);
+  }
 }
 
-export async function latestVersion(transport, signal) {
-  const latest = await getJson(transport, 'latest.json', signal);
+async function getJson(transport, path, signal, timeoutMs = JSON_TIMEOUT_MS) {
+  return get(transport, path, signal, timeoutMs, response => response.json());
+}
+
+export async function latestVersion(transport, signal, timeoutMs = JSON_TIMEOUT_MS) {
+  const latest = await getJson(transport, 'latest.json', signal, timeoutMs);
   if (!VERSION.test(latest?.version ?? '')) throw new Error('Update failed: invalid latest.json.');
   return latest.version;
 }
@@ -71,10 +91,24 @@ export async function update({ transport, io, version, root = PACKAGE_ROOT, tar 
     throw new Error(`Update failed: version ${target} has no valid build for ${release.platform}.`);
   }
   io.write(`Downloading Tervory CLI ${target} (${release.platform})\n`);
-  const response = await transport(`${RELEASE_BASE}/releases/${target}/${artifact.file}`, { method: 'GET', redirect: 'error', cache: 'no-store', signal: io.signal });
-  if (!response.ok) { await response.arrayBuffer().catch(() => {}); throw new Error(`Update failed: download returned ${response.status}.`); }
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length > MAX_TARBALL) throw new Error('Update failed: download too large.');
+  const bytes = await get(transport, `releases/${target}/${artifact.file}`, io.signal, DOWNLOAD_TIMEOUT_MS, async response => {
+    const declared = Number(response.headers?.get?.('content-length'));
+    if (declared > MAX_TARBALL) throw new Error('Update failed: download too large.');
+    if (!response.body?.getReader) return Buffer.from(await response.arrayBuffer());
+    // Stream with a running cap so a lying or missing Content-Length cannot fill memory.
+    const reader = response.body.getReader(); const chunks = []; let size = 0;
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_TARBALL) { await reader.cancel().catch(() => {}); throw new Error('Update failed: download too large.'); }
+      chunks.push(value);
+    }
+    return Buffer.concat(chunks);
+  });
+  if (bytes.length > MAX_TARBALL || bytes.length !== artifact.size && Number.isInteger(artifact.size)) {
+    throw new Error(bytes.length > MAX_TARBALL ? 'Update failed: download too large.' : 'Update refused: size does not match the manifest. Nothing was changed.');
+  }
   const got = createHash('sha256').update(bytes).digest('hex');
   if (got !== artifact.sha256) {
     throw new Error(`Update refused: checksum mismatch for ${artifact.file} (expected ${artifact.sha256}, got ${got}). Nothing was changed.`);
@@ -115,7 +149,7 @@ export async function updateNotice({ transport, now = Date.now, root = PACKAGE_R
     try { state = JSON.parse(await readFile(stateFile, 'utf8')); } catch { /* first check */ }
     let latest = VERSION.test(state.latest ?? '') ? state.latest : null;
     if (!(Number(state.checked_at) > now() - CHECK_EVERY_MS)) {
-      latest = await latestVersion(transport, AbortSignal.timeout(timeoutMs));
+      latest = await latestVersion(transport, undefined, timeoutMs);
       await mkdir(release.cliDir, { recursive: true });
       await writeFile(stateFile, JSON.stringify({ checked_at: now(), latest }) + '\n');
     }

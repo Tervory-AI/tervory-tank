@@ -19,7 +19,7 @@ function harness({ answers = [], token = TOKEN, refusal = false } = {}) {
   };
   const transport = async (url, init) => {
     calls.push({ url, ...init, body: init.body ? JSON.parse(init.body) : null });
-    assert.equal(init.redirect, 'error');
+    assert.equal(init.redirect, 'manual');
     assert.equal(init.headers.Authorization, `Bearer ${token}`);
     assert.equal(new URL(url).origin, originFor(token));
     if (refusal) return new Response('must not print secret detail', { status: 401 });
@@ -59,7 +59,7 @@ function deviceHarness({ region = 'us-east', outcomes = ['authorization_pending'
   const transport = async (url, init) => {
     const call = { url, path: new URL(url).pathname, origin: new URL(url).origin, body: JSON.parse(init.body), headers: init.headers };
     calls.push(call);
-    assert.equal(init.redirect, 'error'); assert.equal(init.method, 'POST');
+    assert.equal(init.redirect, 'manual'); assert.equal(init.method, 'POST');
     assert.equal(init.headers.Authorization, undefined);
     if (call.path.endsWith('/device/code')) {
       return Response.json({ device_code: `tvd1.${region}.${'d'.repeat(43)}`, user_code: 'BCDF-GHJK', interval: 5, expires_in: 600,

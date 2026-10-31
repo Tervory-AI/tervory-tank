@@ -10,6 +10,11 @@
  * dedupe fetch from workspace/node_modules/next in front of a real loopback HTTP Tank
  * stub, i.e. the same fetch layer `next start` uses for a page render. Clerk is not
  * needed: the page's Clerk check runs before this call and is not what hung.
+ *
+ * Section 5 (review of #506, B1) runs in this same process after the lib/tank.ts adapter
+ * tests: Tank stalls (no headers, or headers then a stalled body) and a GC runs mid-stall.
+ * On Node 22 / undici 6.29.1 a redirect:"error" fetch then ignores its abort; every
+ * CLI corridor must still end at its bound. Run with: node --expose-gc <this file>.
  * Synthetic only: dummy keys, loopback, no network. */
 const assert = require('node:assert/strict');
 const http = require('node:http');
@@ -87,5 +92,55 @@ const within = (promise, ms, label) => Promise.race([
   assert.equal(device.status, 404);
 
   server.close();
-  console.log('device-login under Next dedupe fetch: lookup/decide/adapter error paths answer promptly');
+
+  // 5. Stalls + GC, same process, after section 4 (formerly tests/device_login_timeout.cjs).
+  assert.equal(typeof globalThis.gc, 'function', 'run with node --expose-gc');
+  const held = [];
+  const stall = http.createServer((req, res) => {
+    held.push(res);
+    // GET: accept and never answer. POST: headers, a partial body, then silence.
+    if (req.method === 'POST') { res.writeHead(200, { 'content-type': req.url.includes('/approval/') || req.url.includes('/device/') ? 'application/json' : 'text/event-stream' }); res.write(req.url.includes('/turn') ? 'event: step\ndata: {}\n\n' : '{"user_code":'); }
+  });
+  await new Promise(resolve => stall.listen(0, '127.0.0.1', resolve));
+  const stalled = `http://127.0.0.1:${stall.address().port}`;
+  const quiet = workspace({
+    env: { TANK_URL: stalled, TANK_API_KEY: 'dummy-workspace-key', TANK_REGION: 'us-east' },
+    fetch: nextFetch,
+  });
+  const quietLogin = quiet('lib/device-login.ts');
+  const quietTank = quiet('lib/tank.ts');
+  assert.equal(quietLogin.DEVICE_TIMEOUT_MS, 10_000);
+  const collect = setInterval(() => globalThis.gc(), 500);
+  const began = Date.now();
+  const [lookup, decide] = await within(Promise.all([
+    quietLogin.deviceApproval(identity, 'us-east', CODE),
+    quietLogin.deviceApproval(identity, 'us-east', CODE, 'approve'),
+  ]), 13_000, 'silent/stalled Tank + gc');
+  assert.equal(lookup.ok, false); assert.equal(lookup.status, 502); assert.match(lookup.message, /could not be reached/);
+  assert.equal(decide.ok, false); assert.equal(decide.status, 502);
+  assert(Date.now() - began >= 9_000, 'the bound is the 10 s timeout, not an early failure');
+
+  // The CLI corridor through lib/tank.ts: device poll with a stalled body, a command whose
+  // headers never come, and a turn stream that stalls after its first event.
+  const limits = { deviceMs: 1500, headersMs: 1500, idleMs: 1500 };
+  const begun = Date.now();
+  const deviceStall = await within(quietTank.personalCommandRequest(new Request('https://app.tervory.com/v1/command/device/token', {
+    method: 'POST', headers: { host: 'app.tervory.com', 'content-type': 'application/json' }, body: '{}' }), ['device', 'token'], limits), 4000, 'device stall + gc');
+  assert.equal(deviceStall.status, 502);
+  const headerStall = await within(quietTank.personalCommandRequest(new Request('https://app.tervory.com/v1/command/threads', {
+    headers: { host: 'app.tervory.com', authorization: `Bearer ${token}` } }), ['threads'], limits), 4000, 'header stall + gc');
+  assert.equal(headerStall.status, 502);
+  const ID = '00000000-0000-4000-8000-000000000002';
+  const turn = await within(quietTank.personalCommandRequest(new Request(`https://app.tervory.com/v1/command/threads/${ID}/turn`, {
+    method: 'POST', headers: { host: 'app.tervory.com', authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: '{"text":"x"}' }),
+    ['threads', ID, 'turn'], limits), 4000, 'turn headers');
+  assert.equal(turn.status, 200);
+  const reader = turn.body.getReader();
+  assert.match(new TextDecoder().decode((await within(reader.read(), 4000, 'first event')).value), /event: step/);
+  await assert.rejects(within(reader.read(), 4000, 'stalled stream + gc'), error => error.name === 'DeadlineError');
+  assert(Date.now() - begun < 8000);
+  clearInterval(collect);
+  held.forEach(res => res.destroy()); stall.close();
+
+  console.log('device-login under Next dedupe fetch: lookup/decide/adapter error paths answer promptly; stalls + gc end at their bounds');
 })().catch(error => { console.error(error); process.exit(1); });

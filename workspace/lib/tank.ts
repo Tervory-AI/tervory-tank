@@ -4,6 +4,81 @@
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
+// Bounded server-side fetches for the CLI corridors (review of #506, B1). Kept in this
+// import-free module because several test harnesses load lib/tank.ts on its own.
+//
+// Node 22 / undici 6.29.1: a fetch made with redirect:"error" whose body stalls after
+// the headers never aborts once a GC has run, whatever the signal. So these helpers:
+//  - use redirect:"manual" and refuse any 3xx / opaqueredirect (still no redirects), and
+//  - race the whole call, body read included, against a hard deadline that aborts the
+//    request and cancels the body when it fires, without relying on undici honouring it.
+// A signal is always set, which also keeps Next's render-time dedupe fetch (tee'd GET
+// bodies whose cancel() never settles) out of the way.
+
+export class DeadlineError extends Error { constructor() { super("deadline"); this.name = "DeadlineError"; } }
+export class RedirectError extends Error {
+  status: number;
+  constructor(status: number) { super(`redirect ${status}`); this.name = "RedirectError"; this.status = status; }
+}
+
+export const isRedirect = (response: Response) =>
+  response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400);
+
+/** fetch(url, init) then read(response), all within timeoutMs. init.signal still aborts early. */
+export async function boundedFetch<T>(url: URL | string, init: RequestInit, timeoutMs: number,
+                                      read: (response: Response) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const signal = init.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
+  let response: Response | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new DeadlineError());
+      controller.abort();
+      try { response?.body?.cancel().catch(() => undefined); } catch { /* locked by the reader */ }
+    }, timeoutMs);
+  });
+  const work = (async () => {
+    response = await fetch(url, { ...init, redirect: "manual", signal });
+    if (isRedirect(response)) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new RedirectError(response.status);
+    }
+    return read(response);
+  })();
+  work.catch(() => undefined);
+  try { return await Promise.race([work, deadline]); } finally { clearTimeout(timer); }
+}
+
+/**
+ * Pass an upstream body through, failing it if no bytes arrive for idleMs (Tank sends a
+ * heartbeat every 0.25 s while a turn runs) or if the downstream cancels. Each read is
+ * raced against a timer, so a stalled upstream cannot pin the request forever.
+ */
+export function idleBoundedBody(body: ReadableStream<Uint8Array>, idleMs: number, onStop?: () => void): ReadableStream<Uint8Array> {
+  const reader = body.getReader();
+  const stop = () => { onStop?.(); reader.cancel().catch(() => undefined); };
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const item = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new DeadlineError()), idleMs); }),
+        ]);
+        if (item.done) controller.close(); else controller.enqueue(item.value);
+      } catch (error) {
+        stop(); controller.error(error);
+      } finally { clearTimeout(timer); }
+    },
+    cancel() { stop(); },
+  });
+}
+
+export const DEVICE_PROXY_TIMEOUT_MS = 10_000;
+export const PROXY_HEADERS_TIMEOUT_MS = 300_000;
+export const PROXY_IDLE_MS = 120_000;
+
 const DEVICE_ERRORS = new Set(["authorization_pending", "slow_down", "access_denied", "expired_token", "invalid_grant", "invalid_request"]);
 
 /**
@@ -11,7 +86,7 @@ const DEVICE_ERRORS = new Set(["authorization_pending", "slow_down", "access_den
  * revoke). This Workspace fronts only its own us-east box; ZA CLIs call the ZA
  * Tank directly. Approval is never reachable here: it needs a Clerk session.
  */
-async function personalDeviceRequest(request: Request, path: string[]): Promise<Response> {
+async function personalDeviceRequest(request: Request, path: string[], timeoutMs = DEVICE_PROXY_TIMEOUT_MS): Promise<Response> {
   const headers = { "Cache-Control": "no-store" };
   const refused = (status: number) => Response.json({}, { status, headers });
   const host = (request.headers.get("host") ?? new URL(request.url).host).toLowerCase();
@@ -30,11 +105,15 @@ async function personalDeviceRequest(request: Request, path: string[]): Promise<
   }
   try {
     // Never select TANK_URL_ZA or a caller URL; this Workspace talks to its own box.
-    const response = await fetch(new URL(`/v1/command/device/${action}`, TANK_URL), {
-      method: "POST", body: text, headers: forward, signal: request.signal, redirect: "error", cache: "no-store",
+    // Hard deadline over the whole call, body included (boundedFetch above).
+    const { response, payload } = await boundedFetch(new URL(`/v1/command/device/${action}`, TANK_URL), {
+      method: "POST", body: text, headers: forward, signal: request.signal, cache: "no-store",
+    }, timeoutMs, async response => {
+      const type = response.headers.get("content-type") ?? "";
+      const payload: unknown = type.startsWith("application/json") ? await response.json().catch(() => null)
+        : (await response.body?.cancel().catch(() => undefined), null);
+      return { response, payload };
     });
-    const type = response.headers.get("content-type") ?? "";
-    const payload: unknown = type.startsWith("application/json") ? await response.json().catch(() => null) : (await response.body?.cancel(), null);
     if (response.ok && payload && typeof payload === "object") return Response.json(payload, { status: response.status, headers });
     const error = payload && typeof payload === "object" ? (payload as { error?: unknown }).error : undefined;
     if (typeof error === "string" && DEVICE_ERRORS.has(error)) {
@@ -45,10 +124,11 @@ async function personalDeviceRequest(request: Request, path: string[]): Promise<
 }
 
 /** CLI-only public corridor. No Clerk cookies or service-key identity assertions. */
-export async function personalCommandRequest(request: Request, path: string[]): Promise<Response> {
+export async function personalCommandRequest(request: Request, path: string[],
+                                             limits = { headersMs: PROXY_HEADERS_TIMEOUT_MS, idleMs: PROXY_IDLE_MS, deviceMs: DEVICE_PROXY_TIMEOUT_MS }): Promise<Response> {
   const headers = { "Cache-Control": "no-store" };
   const refused = (status: number) => Response.json({}, { status, headers });
-  if (path[0] === "device") return personalDeviceRequest(request, path);
+  if (path[0] === "device") return personalDeviceRequest(request, path, limits.deviceMs);
   const authorization = request.headers.get("authorization") ?? "";
   const token = /^Bearer (tv1\.(us-east|za)\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43})$/i.exec(authorization);
   if (!token) return refused(401);
@@ -90,17 +170,19 @@ export async function personalCommandRequest(request: Request, path: string[]): 
     }
   }
   try {
-    const response = await fetch(url, {
+    // The deadline covers the headers (card confirmations answer only once the action ran);
+    // the body is then passed through with an idle bound so a stalled Tank cannot pin it.
+    const response = await boundedFetch(url, {
       method: request.method, body: body as BodyInit | undefined, signal: request.signal,
       headers: { Authorization: `Bearer ${token[1]}`, "Content-Type": "application/json" },
-      redirect: "error", cache: "no-store",
-    });
-    if (!response.ok) { await response.body?.cancel(); return refused(response.status); }
+      cache: "no-store",
+    }, limits.headersMs, async response => response);
+    if (!response.ok) { await response.body?.cancel().catch(() => undefined); return refused(response.status); }
     const type = response.headers.get("content-type") ?? "";
     if (!type.startsWith("application/json") && !type.startsWith("text/event-stream")) {
-      await response.body?.cancel(); return refused(502);
+      await response.body?.cancel().catch(() => undefined); return refused(502);
     }
-    return new Response(response.body, { status: response.status, headers: {
+    return new Response(response.body && idleBoundedBody(response.body, limits.idleMs), { status: response.status, headers: {
       ...headers, "Content-Type": type, "X-Accel-Buffering": "no", "X-Content-Type-Options": "nosniff",
     } });
   } catch { return refused(502); }
