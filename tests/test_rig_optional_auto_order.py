@@ -349,7 +349,8 @@ async def test_real_postgres_auto_order_and_vendor_fields():
 @pytest.mark.asyncio
 async def test_real_odoo_sandbox_auto_order(monkeypatch, tmp_path):
     from test_rig_optional_blind_ship import odoo_sandbox
-    url, database, user, password = odoo_sandbox()
+    sandbox = odoo_sandbox()  # url|database|user|credential of the local sandbox
+    url, database, user = sandbox[:3]
     monkeypatch.setenv("RIG_LOCATE_ORDER_MODE", "sandbox")
     monkeypatch.setenv("RIG_LOCATE_OUTBOX_DIR", str(tmp_path))
     from uuid import uuid4
@@ -359,7 +360,7 @@ async def test_real_odoo_sandbox_auto_order(monkeypatch, tmp_path):
                                                          "price": {"amount": "1125.00", "currency": "ZAR"}}}}
     ship = {"address": {**ADDRESS, "country": "ZA"}}
     async with httpx.AsyncClient() as http:
-        sender = OdooHandoff(http, url=url, database=database, user=user, api_key=password)
+        sender = OdooHandoff(http, url=url, database=database, user=user, api_key=sandbox[3])
         execute = await sender._session()
         await sender.send(tenant_id=TENANT, email=None, webhook=None, quote=quote)
         order = await sender.place_located_order(tenant_id=TENANT, quote_id=quote_id, located=READY, ship=ship)

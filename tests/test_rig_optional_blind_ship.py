@@ -403,7 +403,8 @@ def odoo_sandbox():
 
 @pytest.mark.asyncio
 async def test_real_odoo_sandbox_blind_dropship(monkeypatch):
-    url, database, user, password = odoo_sandbox()
+    sandbox = odoo_sandbox()  # url|database|user|credential of the local sandbox
+    url, database, user = sandbox[:3]
     monkeypatch.setenv("RIG_LOCATE_ORDER_MODE", "sandbox")
     from uuid import uuid4
     quote_id = "blind-" + uuid4().hex[:8]
@@ -411,7 +412,7 @@ async def test_real_odoo_sandbox_blind_dropship(monkeypatch):
              "payload": {"kind": "product", "product": {"id": "part-1", "name": "Locate test part",
                                                          "price": {"amount": "1125.00", "currency": "ZAR"}}}}
     async with httpx.AsyncClient() as http:
-        sender = OdooHandoff(http, url=url, database=database, user=user, api_key=password)
+        sender = OdooHandoff(http, url=url, database=database, user=user, api_key=sandbox[3])
         execute = await sender._session()
         await sender.send(tenant_id=TENANT, email=None, webhook=None, quote=quote)
         ship = {"address": {**ADDRESS, "country": "ZA"}}
