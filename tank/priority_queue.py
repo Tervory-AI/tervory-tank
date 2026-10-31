@@ -129,13 +129,30 @@ async def enqueue(tank, item, *, caller=None, task_id=None, model_override=None)
     return QueuedResponse(id=job_id, ledger_id=job_id)
 
 
-async def status(tank, job_id, tenant_id) -> dict:
+async def label_batch(tank, queued: QueuedResponse, tenant_id) -> QueuedResponse:
+    """Mark a queued receipt as background batch work (it queued as offpeak).
+
+    Only the label differs: same job, same receipt, same dispatch and pricing.
+    The router's receipt updates never rewrite priority, so it stays 'batch'.
+    """
     async with tank.pool().acquire() as conn:
-        row = await conn.fetchrow("""SELECT id,status,created_at,sent_at,finished_at,result,error
-            FROM tank.offpeak_jobs WHERE id=$1 AND tenant_id=$2 AND region=$3""", job_id, tenant_id, tank.box_region())
-    if row is None:
+        await conn.execute("""UPDATE tank.ledger SET priority='batch'
+            WHERE id=$1 AND tenant_id=$2 AND offpeak_job_id=$1""", queued.id, tenant_id)
+    return queued.model_copy(update={'priority': 'batch'})
+
+
+async def status(tank, job_id, tenant_id, *, caller=None) -> dict:
+    # The Workspace key (caller None) reads any job; an agent key reads only
+    # the jobs it queued itself.
+    async with tank.pool().acquire() as conn:
+        row = await conn.fetchrow("""SELECT j.id,j.status,j.created_at,j.sent_at,j.finished_at,j.result,j.error,
+            coalesce(l.priority,'offpeak') AS priority,j.caller
+            FROM tank.offpeak_jobs j LEFT JOIN tank.ledger l ON l.id=j.id AND l.tenant_id=j.tenant_id
+            WHERE j.id=$1 AND j.tenant_id=$2 AND j.region=$3""", job_id, tenant_id, tank.box_region())
+    if row is None or (caller is not None and row['caller'] != caller):
         raise HTTPException(404, 'No job for this tenant')
-    return {**dict(row), 'result': unpack(row['result']), 'ledger_id': job_id, 'priority': 'offpeak'}
+    view = {key: value for key, value in dict(row).items() if key != 'caller'}
+    return {**view, 'result': unpack(row['result']), 'ledger_id': job_id}
 
 
 async def _finish(tank, conn, job, result=None, *, error=None, uncertain=False):
