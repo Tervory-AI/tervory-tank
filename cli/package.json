@@ -7,5 +7,5 @@
   "bin": { "tervory": "bin/tervory.mjs" },
   "files": ["bin/", "src/", "CHANGELOG.md", "README.md"],
   "scripts": { "test": "node --test test/*.test.mjs" },
-  "dependencies": { "@napi-rs/keyring": "2.1.2" }
+  "dependencies": { "@napi-rs/keyring": "2.1.2", "csv-parse": "7.0.3" }
 }
