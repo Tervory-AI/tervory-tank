@@ -19,7 +19,8 @@ from agents.zenas.pool.adapters.za_archive import (
 )
 from agents.zenas.pool.adapters.za_case_common import (
     absolute_url,
-    neutral_citation,
+    header_case_number,
+    own_citation,
     parse_case_blob,
 )
 from agents.zenas.pool.adapters.za_common import html_headers
@@ -28,6 +29,8 @@ from agents.zenas.pool.model import LegalDocument, SourceSpec
 INDEX = "https://www.comptrib.co.za/decided-cases"
 _PDF = re.compile(r"""href=["']([^"']+\.pdf[^"']*)["']""", re.I)
 _CASE = re.compile(r"\b((?:LM|CR|SA)\d{2,}[A-Za-z]{3}\d{2})\b", re.I)
+# Interim relief, consent orders, exemptions and other Tribunal case codes (IR165Nov20, CO026May20).
+_ANY_CASE = re.compile(r"\b([A-Z]{2,4}\d{2,4}(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d{2})\b", re.I)
 
 
 def _keep(name: str) -> bool:
@@ -57,12 +60,18 @@ def decision_pdfs(page: bytes, base: str = "https://www.comptrib.co.za/") -> lis
 
 
 def _citation(url: str, text: str) -> str:
-    found = neutral_citation(text)
+    found = own_citation(text, ("ZACT",), url=url)
     if found:
         return found
     match = _CASE.search(unquote(url))
     if match:
         return f"CompTrib {match.group(1).upper()}"
+    match = _ANY_CASE.search(unquote(url).replace("_", " "))
+    if match:
+        return f"CompTrib {match.group(1).upper()}"
+    number = header_case_number(text)
+    if number:
+        return f"CompTrib {number}"
     return ""
 
 

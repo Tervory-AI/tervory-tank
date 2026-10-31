@@ -23,7 +23,7 @@ from agents.zenas.pool.adapters.za_case_common import (
     absolute_url,
     env_int,
     is_criminal_caption,
-    neutral_citation,
+    own_citation,
     parse_case_blob,
     parse_date,
 )
@@ -182,7 +182,7 @@ class ScaAdapter:
                         interval_env="SCA_MIN_INTERVAL",
                         headers=html_headers(),
                         citation_for=lambda file_url, text, titles=by_send: (
-                            neutral_citation(titles.get(file_url, ("", ""))[0]) or neutral_citation(text)
+                            own_citation(text, ("ZASCA", "ZAEC"), url=file_url, title=titles.get(file_url, ("", ""))[0])
                         ),
                         title_for=lambda file_url, text, titles=by_send: (
                             titles.get(file_url, ("", ""))[0] or text.split("\n", 1)[0][:180]
