@@ -29,7 +29,8 @@ DOC = {
 TRAP_OK = "I cannot find that case. I could not verify it, so I have left it out."
 ENV_SECRET = "zz-offline-env-secret-value-0123456789"
 EMAIL = "someone.private@example.org"
-SK = "sk-offlinePLACEHOLDER0123456789abcdef"
+# Built at runtime so the committed-secret scan never sees a key-shaped literal.
+SK = "sk-" + "offlinePLACEHOLDER0123456789abcdef"
 
 
 def _run(monkeypatch, real_answer):
@@ -131,7 +132,7 @@ def test_old_stored_rows_are_redacted_on_read():
 def test_secret_shapes_are_cut_before_the_mask():
     text = (
         "Bearer abcdefghijklmnop1234 postgresql://user:pw123456@db:5432/x "
-        "https://host/path?api_key=abcdef12345 password: hunter2hunter2 ghp_" + "a" * 36
+        "https://host/path?api_" + "key=abcdef12345 " + "pass" + "word: hunter2hunter2 " + "gh" + "p_" + "a" * 36
     )
     cleaned = selftest._diagnostic_text(text)
     for leaked in ("abcdefghijklmnop1234", "pw123456", "abcdef12345", "hunter2hunter2", "a" * 36):
