@@ -7,6 +7,20 @@ COPY package.json package-lock.json* ./
 # (7.x), which cannot load next.config.ts. --include=dev keeps the pinned 5.9.3.
 RUN npm install --include=dev --no-audit --no-fund
 
+# Self-hosted CLI release (served as /cli/): built here from the cli/ package, never
+# committed (review of #506, should-fix 4). `cli` is a named build context:
+# docker-compose.yml sets additional_contexts.cli=./cli; by hand:
+#   docker build --build-context cli=cli -f workspace/Dockerfile workspace
+# The build is reproducible (fixed mtimes, sorted tar, gzip -n, npm ci from the lockfile).
+FROM node:22-slim AS cli-release
+WORKDIR /src
+COPY --from=cli . ./cli
+RUN node cli/scripts/build-release.mjs --out /out/cli
+
+# Just the release files, for CI to compare against a direct build (--target cli-files).
+FROM scratch AS cli-files
+COPY --from=cli-release /out/cli /
+
 FROM node:22-slim AS build
 WORKDIR /app
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
@@ -19,6 +33,7 @@ ENV NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in \
     NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+COPY --from=cli-release /out/cli ./public/cli
 RUN npm run build
 
 FROM node:22-slim AS run

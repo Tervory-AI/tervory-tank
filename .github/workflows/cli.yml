@@ -12,6 +12,10 @@ on:
       - 'workspace/middleware.ts'
       - 'workspace/next.config.ts'
       - 'workspace/public/cli/**'
+      - 'workspace/Dockerfile'
+      - 'workspace/.gitignore'
+      - 'docker-compose.yml'
+      - '.github/workflows/cli-release.yml'
       - '.github/workflows/cli.yml'
 permissions:
   contents: read
@@ -48,15 +52,24 @@ jobs:
           for route in '"/cli/install.sh"' '"/cli/latest.json"' '"/cli/releases(.*)"'; do
             grep -qF "$route" workspace/middleware.ts || { echo "workspace/middleware.ts isPublic is missing $route"; exit 1; }
           done
-      - name: Committed self-hosted release matches a clean rebuild
+      - name: No CLI release artifacts are committed (build outputs only)
         run: |
-          node cli/scripts/build-release.mjs --out "$RUNNER_TEMP/cli-release"
-          diff -r "$RUNNER_TEMP/cli-release" workspace/public/cli \
-            || { echo "Rebuild with: node cli/scripts/build-release.mjs --out workspace/public/cli (bump cli version for any change)"; exit 1; }
-      - name: Published versions are immutable
-        env:
-          BASE_REF: ${{ github.base_ref }}
+          committed=$(git ls-files workspace/public/cli)
+          if [ -n "$committed" ]; then echo "CLI release files are build outputs (workspace/Dockerfile cli-release stage); remove:"; echo "$committed"; exit 1; fi
+          grep -qxF '/public/cli/' workspace/.gitignore || { echo "workspace/.gitignore must ignore /public/cli/"; exit 1; }
+      - name: Release build is reproducible
         run: |
-          git fetch --no-tags --depth=1 origin "$BASE_REF"
-          changed=$(git diff --name-only --diff-filter=MDR FETCH_HEAD -- workspace/public/cli/releases)
-          if [ -n "$changed" ]; then echo "Published CLI release files changed (bump the version instead):"; echo "$changed"; exit 1; fi
+          node cli/scripts/build-release.mjs --out "$RUNNER_TEMP/cli-a"
+          node cli/scripts/build-release.mjs --out "$RUNNER_TEMP/cli-b"
+          diff -r "$RUNNER_TEMP/cli-a" "$RUNNER_TEMP/cli-b"
+      - name: The Workspace image builds and serves the same release at /cli/
+        # Same command the deploy runs (docker-compose.yml additional_contexts.cli=./cli),
+        # stopped at the release stage: byte-identical to the direct build above, and the
+        # build stage copies it into public/cli so Next serves it.
+        run: |
+          grep -qE '^\s+cli: \./cli$' docker-compose.yml || { echo "docker-compose.yml workspace build needs additional_contexts.cli: ./cli"; exit 1; }
+          grep -qxF 'COPY --from=cli-release /out/cli ./public/cli' workspace/Dockerfile || { echo "workspace/Dockerfile must copy the CLI release into public/cli"; exit 1; }
+          docker buildx build --build-context cli=cli -f workspace/Dockerfile --target cli-files \
+            --output "type=local,dest=$RUNNER_TEMP/cli-image" workspace
+          diff -r "$RUNNER_TEMP/cli-a" "$RUNNER_TEMP/cli-image"
+          test -s "$RUNNER_TEMP/cli-image/install.sh" && test -s "$RUNNER_TEMP/cli-image/latest.json"

@@ -382,6 +382,9 @@ services:
   workspace:
     build:
       context: ./workspace
+      # The image builds the self-hosted CLI release from cli/ (served at /cli/).
+      additional_contexts:
+        cli: ./cli
       args:
         NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
     restart: unless-stopped
