@@ -17,7 +17,7 @@ PATCH_SKILLS = (
     "base.socials base.verify ffl.ingest market.series_fetch market.shift_detect market.surge_detect "
     "reason.brief rig.ask rig.explain rig.search rig.setups scan.dependencies scan.secrets scan.static "
     "tier0.draft tier0.summarize tiger.price_ocr tisan.figma tisan.scaffold zenas.apply zenas.case_facts "
-    "zenas.cite_check zenas.compose zenas.draft zenas.match zenas.plain_language zenas.review zenas.rule_card"
+    "zenas.cite_check zenas.compose zenas.draft zenas.match zenas.plain_language zenas.review zenas.rule_card zenas.scope"
 ).split()
 
 
@@ -256,3 +256,16 @@ async def test_room_backed_cases_run_inside_room(skill, monkeypatch, tmp_path):
         result = await skala.run_evals(pkg, lambda: context(pkg), execute=execute)
     assert result["passed"] == len(pkg.cases), result["details"]
     assert result["eligible"]
+
+
+@pytest.mark.asyncio
+async def test_zenas_scope_latest_reaches_staging_gate_without_a_model():
+    # zenas.scope 1.2.0 passed every case but could never leave candidate: no case was
+    # marked must_refuse. The newest version must pass all cases offline and be eligible.
+    pkg = package("zenas.scope")
+    refusals = [case for case in pkg.cases if case.get("must_refuse")]
+    assert refusals and all(case["expected"]["criminal"] and not case["expected"]["in_scope"] for case in refusals)
+    result = await skala.run_evals(pkg, lambda: context(pkg))
+    assert result["passed"] == result["total"] == len(pkg.cases)
+    assert result["eligible"] is True, result["evidence_reason"]
+    assert not any(detail["used_model"] for detail in result["details"])
