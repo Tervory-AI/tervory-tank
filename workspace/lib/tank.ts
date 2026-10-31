@@ -4,10 +4,51 @@
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
+const DEVICE_ERRORS = new Set(["authorization_pending", "slow_down", "access_denied", "expired_token", "invalid_grant", "invalid_request"]);
+
+/**
+ * CLI device sign-in corridor (unauthenticated: create a code, poll, refresh,
+ * revoke). This Workspace fronts only its own us-east box; ZA CLIs call the ZA
+ * Tank directly. Approval is never reachable here: it needs a Clerk session.
+ */
+async function personalDeviceRequest(request: Request, path: string[]): Promise<Response> {
+  const headers = { "Cache-Control": "no-store" };
+  const refused = (status: number) => Response.json({}, { status, headers });
+  const host = (request.headers.get("host") ?? new URL(request.url).host).toLowerCase();
+  if (host !== "app.tervory.com") return refused(404);
+  const action = path.length === 2 ? path[1] : "";
+  if (request.method !== "POST" || !["code", "token", "refresh", "revoke"].includes(action)) return refused(404);
+  if (new URL(request.url).search) return refused(400);
+  if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return refused(415);
+  const text = await request.text().catch(() => null);
+  if (text === null) return refused(400);
+  if (text.length > 4096) return refused(413);
+  const forward: Record<string, string> = { "Content-Type": "application/json" };
+  if (action === "revoke") {
+    const bearer = /^Bearer (tv1\.us-east\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43})$/i.exec(request.headers.get("authorization") ?? "");
+    if (bearer) forward.Authorization = `Bearer ${bearer[1]}`;
+  }
+  try {
+    // Never select TANK_URL_ZA or a caller URL; this Workspace talks to its own box.
+    const response = await fetch(new URL(`/v1/command/device/${action}`, TANK_URL), {
+      method: "POST", body: text, headers: forward, signal: request.signal, redirect: "error", cache: "no-store",
+    });
+    const type = response.headers.get("content-type") ?? "";
+    const payload: unknown = type.startsWith("application/json") ? await response.json().catch(() => null) : (await response.body?.cancel(), null);
+    if (response.ok && payload && typeof payload === "object") return Response.json(payload, { status: response.status, headers });
+    const error = payload && typeof payload === "object" ? (payload as { error?: unknown }).error : undefined;
+    if (typeof error === "string" && DEVICE_ERRORS.has(error)) {
+      return Response.json({ error }, { status: response.status === 429 ? 429 : 400, headers });
+    }
+    return refused(response.ok ? 502 : response.status);
+  } catch { return refused(502); }
+}
+
 /** CLI-only public corridor. No Clerk cookies or service-key identity assertions. */
 export async function personalCommandRequest(request: Request, path: string[]): Promise<Response> {
   const headers = { "Cache-Control": "no-store" };
   const refused = (status: number) => Response.json({}, { status, headers });
+  if (path[0] === "device") return personalDeviceRequest(request, path);
   const authorization = request.headers.get("authorization") ?? "";
   const token = /^Bearer (tv1\.(us-east|za)\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43})$/i.exec(authorization);
   if (!token) return refused(401);

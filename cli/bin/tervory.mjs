@@ -1,34 +1,20 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline/promises';
 import { clearLine, cursorTo } from 'node:readline';
+import { spawn } from 'node:child_process';
+import { hostname } from 'node:os';
 import { keychain, run, safe } from '../src/client.mjs';
 
-// A token is read only from a local terminal with echo disabled. No argv,
-// environment-variable, file or shell-history credential transport exists.
-async function secret(label) {
-  if (!process.stdin.isTTY || !process.stdin.setRawMode) throw new Error('Login requires an interactive terminal.');
-  process.stdout.write(label);
-  const previous = Boolean(process.stdin.isRaw);
-  process.stdin.setRawMode(true); process.stdin.resume();
-  return new Promise((resolve, reject) => {
-    let value = '';
-    function finish(error) {
-      process.stdin.off('data', onData);
-      process.stdin.setRawMode(previous); process.stdin.pause();
-      process.stdout.write('\n');
-      error ? reject(error) : resolve(value);
-    }
-    function onData(chunk) {
-      for (const char of chunk.toString('utf8')) {
-        if (char === '\u0003' || char === '\u0004') { finish(new Error('Login cancelled.')); return; }
-        if (char === '\r' || char === '\n') { finish(); return; }
-        if (char === '\u007f' || char === '\b') value = value.slice(0, -1);
-        else if (/^[A-Za-z0-9._-]$/.test(char) && value.length < 200) value += char;
-        else { finish(new Error('Personal token refused.')); return; }
-      }
-    }
-    process.stdin.on('data', onData);
-  });
+// Sign-in is a browser device approval: no credential is typed, pasted, passed
+// in argv or the environment, or written anywhere except the OS keychain.
+function openBrowser(url) {
+  if (!/^https:\/\/app\.tervory\.com\/cli\/device\?/.test(url)) return;
+  const [command, args] = process.platform === 'darwin' ? ['open', [url]]
+    : process.platform === 'win32' ? ['rundll32', ['url.dll,FileProtocolHandler', url]] : ['xdg-open', [url]];
+  try {
+    const child = spawn(command, args, { stdio: 'ignore', detached: true });
+    child.on('error', () => {}); child.unref();
+  } catch { /* The printed link still works. */ }
 }
 
 let readline;
@@ -54,7 +40,8 @@ try {
         const width = Math.max(1, (process.stderr.columns || 80) - 1);
         process.stderr.write(Array.from(safe(value).replace(/\s/g, ' ')).slice(-width).join(''));
       },
-      secret,
+      open: openBrowser,
+      deviceName: () => hostname(),
       prompt: async label => {
         if (!process.stdin.isTTY) return null;
         if (!readline) {
@@ -67,7 +54,7 @@ try {
   });
 } catch (error) {
   // Never print native-keychain or transport errors: they can include input.
-  const known = /^(?:Personal token refused\.|Tank |Login |Node 22|Unknown command|Invalid |A thread|Command |Run requires|This tool)/;
+  const known = /^(?:Personal token refused\.|Tank |Login |Signed |Node 22|Unknown command|Invalid |A thread|Command |Run requires|This tool)/;
   process.stderr.write(known.test(error.message) ? `${safe(error.message)}\n` : 'Command failed. Check your OS keychain and Tank connection.\n');
   process.exitCode = 1;
 } finally { readline?.close(); process.off('SIGINT', cancel); }

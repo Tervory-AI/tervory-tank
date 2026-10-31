@@ -16,7 +16,9 @@ export function safe(value) {
   const sanitizer = new StreamSanitizer();
   return sanitizer.write(value) + sanitizer.end();
 }
-const redact = value => value.replace(/tv1\.(?:us-east|za)\.[0-9a-f]{32}\.[A-Za-z0-9_-]+/g, '[redacted]');
+// Access (tv1), refresh (tvr1) and device-code (tvd1) credentials are never shown.
+const redact = value => value.replace(/tv[rd]?1\.(?:us-east|za)\.[A-Za-z0-9_.-]+/g, '[redacted]');
+const PREFIXES = ['tv1.', 'tvr1.', 'tvd1.'];
 
 /** Keep terminal-control and credential state across arbitrary SSE chunks. */
 export class StreamSanitizer {
@@ -30,7 +32,7 @@ export class StreamSanitizer {
         if (/^[A-Za-z0-9_.-]$/.test(char)) return;
         this.#dropping = false;
       }
-      if (this.#candidate.startsWith('tv1.')) {
+      if (PREFIXES.some(prefix => this.#candidate.startsWith(prefix))) {
         if (/^[A-Za-z0-9_.-]$/.test(char)) {
           this.#candidate += char;
           if (this.#candidate.length > 256) {
@@ -41,7 +43,7 @@ export class StreamSanitizer {
         out += redact(this.#candidate); this.#candidate = '';
       }
       this.#candidate += char;
-      while (this.#candidate && !'tv1.'.startsWith(this.#candidate)) {
+      while (this.#candidate && !PREFIXES.some(prefix => prefix.startsWith(this.#candidate))) {
         out += this.#candidate[0]; this.#candidate = this.#candidate.slice(1);
       }
     };
@@ -86,6 +88,108 @@ export async function keychain() {
     set: value => entry.setPassword(value),
     remove: () => entry.deletePassword(),
   };
+}
+
+const REFRESH = /^tvr1\.(us-east|za)\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/;
+const USER_CODE = /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/;
+const DEVICE_ERRORS = ['authorization_pending', 'slow_down', 'access_denied', 'expired_token', 'invalid_grant'];
+// Clerk sign-in exists only on the us-east Workspace. ZA approval happens there
+// too; that Workspace records the decision on the ZA box (za.tervory.com is Tank only).
+export const APPROVAL_ORIGIN = ORIGINS['us-east'];
+
+export function approvalUrl(code, region) {
+  if (!USER_CODE.test(code) || !ORIGINS[region]) throw new Error('Login refused by Tank.');
+  return `${APPROVAL_ORIGIN}/cli/device?${new URLSearchParams({ code, region })}`;
+}
+
+/** Unauthenticated device-login call to the region's public origin (Workspace for us-east, Tank for ZA). */
+export async function deviceCall(region, action, body, transport = fetch, headers = {}) {
+  if (!ORIGINS[region] || !['code', 'token', 'refresh', 'revoke'].includes(action)) throw new Error('Login refused by Tank.');
+  let response;
+  try {
+    response = await transport(`${ORIGINS[region]}/v1/command/device/${action}`, {
+      method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+    });
+  } catch { throw new Error('Tank connection failed.'); }
+  const payload = await response.json().catch(() => ({}));
+  if (response.ok) return payload;
+  return { error: DEVICE_ERRORS.includes(payload?.error) ? payload.error : 'failed', status: response.status };
+}
+
+function credential(grant, region) {
+  if (!grant || !ENVELOPE.test(grant.access_token) || !REFRESH.test(grant.refresh_token)
+      || grant.access_token.split('.')[1] !== region || grant.refresh_token.split('.')[1] !== region
+      || !Number.isFinite(Date.parse(grant.expires_at)) || !Number.isFinite(Date.parse(grant.refresh_expires_at))) {
+    throw new Error('Login refused by Tank.');
+  }
+  const { access_token, refresh_token, expires_at, refresh_expires_at } = grant;
+  return JSON.stringify({ version: 1, region, access_token, refresh_token, expires_at, refresh_expires_at });
+}
+
+function stored(raw) {
+  if (typeof raw !== 'string' || !raw) return null;
+  // A personal token saved by CLI 0.1 keeps working until it is revoked.
+  if (ENVELOPE.test(raw)) return { legacy: true, access_token: raw };
+  try {
+    const value = JSON.parse(raw);
+    if (value?.version === 1 && ENVELOPE.test(value.access_token) && REFRESH.test(value.refresh_token)) return value;
+  } catch { /* fall through */ }
+  return null;
+}
+
+/** A valid access token, refreshed (and rotated in the keychain) shortly before expiry. */
+export async function session(store, transport = fetch, now = Date.now) {
+  const value = stored(await store.get());
+  if (!value) throw new Error('Login required. Run tervory login.');
+  if (value.legacy || Date.parse(value.expires_at) - now() > 60_000) return value.access_token;
+  if (Date.parse(value.refresh_expires_at) <= now()) throw new Error('Login expired. Run tervory login.');
+  const grant = await deviceCall(value.region, 'refresh', { refresh_token: value.refresh_token }, transport);
+  if (grant.error) {
+    throw new Error(grant.error === 'invalid_grant' ? 'Login expired or revoked. Run tervory login.' : 'Tank refused the login refresh.');
+  }
+  await store.set(credential(grant, value.region));
+  return grant.access_token;
+}
+
+async function login(region, { store, transport, io }) {
+  const name = String(io.deviceName?.() ?? 'tervory-cli').replace(/[\x00-\x1f\x7f-\x9f]/g, '').trim().slice(0, 100) || 'tervory-cli';
+  const start = await deviceCall(region, 'code', { device_name: name }, transport);
+  if (start.error || typeof start.device_code !== 'string' || !USER_CODE.test(start.user_code)) throw new Error('Login refused by Tank.');
+  // Built here, not taken from the server: the browser only ever opens the Workspace.
+  const url = approvalUrl(start.user_code, region);
+  io.write(`Approve this device in your browser (${safe(name)}, ${region}):\n  ${url}\nConfirm the page shows code ${start.user_code}.\n`);
+  await Promise.resolve(io.open?.(url)).catch(() => {});
+  const sleep = io.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  let interval = Math.max(1, Number(start.interval) || 5) * 1000;
+  const deadline = Date.now() + Math.max(1, Number(start.expires_in) || 600) * 1000;
+  while (Date.now() < deadline) {
+    if (io.signal?.aborted) throw new Error('Login cancelled.');
+    await sleep(interval);
+    const grant = await deviceCall(region, 'token', { device_code: start.device_code }, transport);
+    if (!grant.error) {
+      await store.set(credential(grant, region));
+      io.write(`Signed in on ${region}. Credential saved in the OS keychain; it refreshes automatically.\n`);
+      return;
+    }
+    if (grant.error === 'authorization_pending') continue;
+    if (grant.error === 'slow_down') { interval += 5000; continue; }
+    if (grant.error === 'access_denied') throw new Error('Login denied in the browser.');
+    if (grant.error === 'expired_token') break;
+    throw new Error('Login refused by Tank.');
+  }
+  throw new Error('Login code expired. Run tervory login again.');
+}
+
+async function logout({ store, transport, io }) {
+  const value = stored(await store.get().catch(() => null));
+  if (value && !value.legacy) {
+    // Best effort: the server credential stops working even if this copy leaked.
+    await deviceCall(value.region, 'revoke', { refresh_token: value.refresh_token }, transport).catch(() => {});
+  }
+  await store.remove();
+  io.write(value && !value.legacy ? 'Signed out. The credential is revoked and removed from the OS keychain.\n'
+    : 'Signed out. Removed from the OS keychain.\n');
 }
 
 export class Tank {
@@ -247,7 +351,7 @@ export function options(argv) {
   for (let i = 0; i < argv.length; i++) {
     if (!argv[i].startsWith('--')) { args.push(argv[i]); continue; }
     const flag = argv[i].slice(2);
-    if (!['model', 'thread', 'file', 'args'].includes(flag) || flags[flag] !== undefined || !argv[i + 1] || argv[i + 1].startsWith('--')) {
+    if (!['model', 'thread', 'file', 'args', 'region'].includes(flag) || flags[flag] !== undefined || !argv[i + 1] || argv[i + 1].startsWith('--')) {
       throw new Error('Invalid command option.');
     }
     flags[flag] = argv[++i];
@@ -258,19 +362,17 @@ export function options(argv) {
 export async function run(argv, { store, transport, io }) {
   const { args, flags } = options(argv); const [name, ...rest] = args;
   if (!name || name === 'help') {
-    io.write('tervory login | logout | chat [thread] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] | build "change" | receipts <thread|task> | models\n');
+    io.write('tervory login [--region us-east|za] | logout | chat [thread] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] | build "change" | receipts <thread|task> | models\n');
     return;
   }
   if (name === 'login') {
-    if (rest.length || Object.keys(flags).length) throw new Error('Login accepts no arguments.');
-    const token = await io.secret('Personal token: ');
-    const tank = new Tank(token, transport);
-    await tank.json('/v1/command/tools'); // Validate revocation before persistence.
-    await store.set(token);
-    io.write('Personal token saved in the OS keychain.\n'); return;
+    const { region = 'us-east', ...other } = flags;
+    if (rest.length || Object.keys(other).length || !ORIGINS[region]) throw new Error('Login accepts only --region us-east or --region za.');
+    return login(region, { store, transport, io });
   }
-  if (name === 'logout') { await store.remove(); io.write('Personal token removed from the OS keychain.\n'); return; }
-  const token = await store.get();
+  if (flags.region !== undefined) throw new Error('Invalid command option.');
+  if (name === 'logout') return logout({ store, transport, io });
+  const token = await session(store, transport);
   const tank = new Tank(token, transport, io.signal);
   if (name === 'models') { io.write(safe(JSON.stringify(await tank.json('/v1/command/models'), null, 2)) + '\n'); return; }
   if (name === 'threads') {

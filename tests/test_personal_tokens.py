@@ -26,7 +26,8 @@ def request(token=TOKEN, **headers):
 
 @pytest.fixture
 def runtime(monkeypatch):
-    conn = SimpleNamespace(fetchrow=AsyncMock(return_value={'user_id': 'client'}),
+    conn = SimpleNamespace(fetchrow=AsyncMock(return_value={'token_id': uuid.uuid4(), 'user_id': 'client', 'stale': None}),
+                           execute=AsyncMock(),
                            fetch=AsyncMock(return_value=[{'agent': 'tiger'}]))
     @asynccontextmanager
     async def acquire():

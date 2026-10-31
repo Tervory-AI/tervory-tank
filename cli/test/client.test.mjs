@@ -15,7 +15,6 @@ function harness({ answers = [], token = TOKEN, refusal = false } = {}) {
   let saved = token; let output = ''; const calls = []; const stored = [];
   const io = {
     write: value => { output += value; },
-    secret: async () => token,
     prompt: async () => answers.shift() ?? null,
   };
   const transport = async (url, init) => {
@@ -47,19 +46,127 @@ function harness({ answers = [], token = TOKEN, refusal = false } = {}) {
     output: () => output };
 }
 
-test('login validates with Tank and writes only to keychain interface, never terminal', async () => {
-  const h = harness(); await run(['login'], h);
-  assert.deepEqual(h.stored, [TOKEN]);
-  assert.equal(h.calls.length, 1); assert.match(h.calls[0].url, /\/command\/tools$/);
-  assert(!h.output().includes(TOKEN));
+const TENANT_HEX = '0'.repeat(32);
+const dummyToken = (prefix, region, n) => `${prefix}.${region}.${TENANT_HEX}.${String(n).repeat(43).slice(0, 43)}`;
+const grantFor = (region, n, now = Date.now()) => ({
+  token_type: 'Bearer', access_token: dummyToken('tv1', region, n),
+  refresh_token: dummyToken('tvr1', region, n + 1),
+  expires_at: new Date(now + 3600_000).toISOString(), refresh_expires_at: new Date(now + 30 * 86400_000).toISOString(),
 });
 
-test('revoked token refused before keychain write or command execution', async () => {
+function deviceHarness({ region = 'us-east', outcomes = ['authorization_pending', 'slow_down', 'grant'] } = {}) {
+  let saved = null; let output = ''; const calls = []; const opened = []; const slept = [];
+  const transport = async (url, init) => {
+    const call = { url, path: new URL(url).pathname, origin: new URL(url).origin, body: JSON.parse(init.body), headers: init.headers };
+    calls.push(call);
+    assert.equal(init.redirect, 'error'); assert.equal(init.method, 'POST');
+    assert.equal(init.headers.Authorization, undefined);
+    if (call.path.endsWith('/device/code')) {
+      return Response.json({ device_code: `tvd1.${region}.${'d'.repeat(43)}`, user_code: 'BCDF-GHJK', interval: 5, expires_in: 600,
+        verification_uri_complete: 'https://evil.example/phish' });
+    }
+    if (call.path.endsWith('/device/token')) {
+      const next = outcomes.shift();
+      return next === 'grant' ? Response.json(grantFor(region, 1)) : Response.json({ error: next, detail: 'must not print' }, { status: 400 });
+    }
+    if (call.path.endsWith('/device/refresh')) return Response.json(grantFor(region, 3));
+    if (call.path.endsWith('/device/revoke')) return Response.json({ revoked: true });
+    throw new Error(`Unexpected fake route ${call.path}`);
+  };
+  const io = { write: value => { output += value; }, open: url => { opened.push(url); }, sleep: async ms => { slept.push(ms); },
+    deviceName: () => 'zenas-laptop\x1b[31m' };
+  return { transport, io, calls, opened, slept, output: () => output,
+    store: { get: async () => saved, set: async value => { saved = value; }, remove: async () => { saved = null; } },
+    saved: () => saved };
+}
+
+test('login is a browser device approval: no paste prompt, polls, stores a refreshable credential', async () => {
+  const h = deviceHarness();
+  await run(['login'], h);
+  assert.deepEqual(h.calls.map(call => call.path), ['/v1/command/device/code', ...Array(3).fill('/v1/command/device/token')]);
+  assert(h.calls.every(call => call.origin === 'https://app.tervory.com'));
+  assert.deepEqual(h.calls[0].body, { device_name: 'zenas-laptop[31m' });
+  // The browser opens the Workspace page built by the CLI, never a server-chosen URL.
+  assert.deepEqual(h.opened, ['https://app.tervory.com/cli/device?code=BCDF-GHJK&region=us-east']);
+  assert.deepEqual(h.slept, [5000, 5000, 10000]);
+  const saved = JSON.parse(h.saved());
+  assert.equal(saved.region, 'us-east'); assert.match(saved.access_token, /^tv1\.us-east\./); assert.match(saved.refresh_token, /^tvr1\.us-east\./);
+  assert.match(h.output(), /BCDF-GHJK/);
+  for (const secret of [saved.access_token, saved.refresh_token, 'tvd1.']) assert(!h.output().includes(secret));
+  assert(!h.output().includes('must not print'));
+});
+
+test('ZA login goes straight to the ZA Tank and approval still opens the one Workspace', async () => {
+  const h = deviceHarness({ region: 'za', outcomes: ['grant'] });
+  await run(['login', '--region', 'za'], h);
+  assert(h.calls.every(call => call.origin === 'https://za.tervory.com'));
+  assert.deepEqual(h.opened, ['https://app.tervory.com/cli/device?code=BCDF-GHJK&region=za']);
+  assert.equal(JSON.parse(h.saved()).region, 'za');
+  await assert.rejects(run(['login', '--region', 'eu'], h), /only --region/);
+  await assert.rejects(run(['models', '--region', 'za'], h), /Invalid command option/);
+});
+
+test('denied and expired approvals store nothing', async () => {
+  for (const [outcome, message] of [['access_denied', /denied in the browser/], ['expired_token', /code expired/], ['invalid_grant', /refused by Tank/]]) {
+    const h = deviceHarness({ outcomes: [outcome] });
+    await assert.rejects(run(['login'], h), message);
+    assert.equal(h.saved(), null);
+  }
+});
+
+test('expiring access token refreshes once, rotates the keychain copy, then calls Tank', async () => {
+  const h = deviceHarness();
+  await h.store.set(JSON.stringify({ version: 1, region: 'us-east', ...grantFor('us-east', 1, Date.now() - 3570_000) }));
+  const before = JSON.parse(h.saved());
+  const tankCalls = [];
+  const transport = async (url, init) => {
+    if (new URL(url).pathname.startsWith('/v1/command/device/')) return h.transport(url, init);
+    tankCalls.push(init.headers.Authorization);
+    return Response.json([{ name: 'fake-model' }]);
+  };
+  await run(['models'], { ...h, transport });
+  const after = JSON.parse(h.saved());
+  assert.deepEqual(h.calls.map(call => call.path), ['/v1/command/device/refresh']);
+  assert.deepEqual(h.calls[0].body, { refresh_token: before.refresh_token });
+  assert.notEqual(after.refresh_token, before.refresh_token);
+  assert.deepEqual(tankCalls, [`Bearer ${after.access_token}`]);
+  // A fresh token is used without another refresh.
+  await run(['models'], { ...h, transport });
+  assert.equal(h.calls.length, 1);
+});
+
+test('expired or revoked refresh asks for login; logout revokes on the server and clears the keychain', async () => {
+  const h = deviceHarness();
+  await h.store.set(JSON.stringify({ version: 1, region: 'us-east', ...grantFor('us-east', 1, Date.now() - 31 * 86400_000) }));
+  await assert.rejects(run(['models'], h), /Login expired/);
+  assert.equal(h.calls.length, 0);
+  const value = { version: 1, region: 'za', ...grantFor('za', 1) };
+  await h.store.set(JSON.stringify(value));
+  await run(['logout'], h);
+  assert.equal(h.saved(), null);
+  assert.equal(h.calls.at(-1).url, 'https://za.tervory.com/v1/command/device/revoke');
+  assert.deepEqual(h.calls.at(-1).body, { refresh_token: value.refresh_token });
+  assert(!h.output().includes(value.refresh_token));
+  await assert.rejects(run(['models'], h), /Login required/);
+  const revoked = deviceHarness();
+  await revoked.store.set(JSON.stringify({ version: 1, region: 'us-east', ...grantFor('us-east', 1, Date.now() - 3600_000) }));
+  const refuse = async (url, init) => { revoked.calls.push(url); return Response.json({ error: 'invalid_grant' }, { status: 400 }); };
+  await assert.rejects(run(['models'], { ...revoked, transport: refuse }), /expired or revoked/);
+});
+
+test('revoked token refused before command execution', async () => {
   const h = harness({ refusal: true });
-  await assert.rejects(run(['login'], h), /Personal token refused/);
-  assert.deepEqual(h.stored, []);
   await assert.rejects(run(['ask', 'hello'], h), /Personal token refused/);
   assert(!h.output().includes('secret detail'));
+});
+
+test('refresh and device codes are redacted from terminal output', () => {
+  const refresh = `tvr1.za.${TENANT_HEX}.${'r'.repeat(43)}`;
+  const device = `tvd1.us-east.${'d'.repeat(43)}`;
+  assert.equal(safe(`a ${refresh} b ${device} c`), 'a [redacted] b [redacted] c');
+  const sanitizer = new StreamSanitizer();
+  const out = [...`x ${refresh} y`].map(char => sanitizer.write(char)).join('') + sanitizer.end();
+  assert.equal(out, 'x [redacted] y');
 });
 
 test('chat streams steps tokens receipt and N cancels without confirm', async () => {

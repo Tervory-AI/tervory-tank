@@ -52,10 +52,15 @@ async def identity(request: Request) -> command.Actor:
     with tenant_scope(tenant):
         async with command.db().acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT user_id FROM tank.personal_tokens "
-                "WHERE tenant_id=$1 AND region=$2 AND token_hash=$3 AND revoked_at IS NULL",
+                "SELECT token_id,user_id,last_used_at < now() - interval '1 minute' AS stale FROM tank.personal_tokens "
+                "WHERE tenant_id=$1 AND region=$2 AND token_hash=$3 AND revoked_at IS NULL "
+                "AND (expires_at IS NULL OR expires_at > now())",
                 tenant, region, digest(token),
             )
+            if row is not None and row.get("stale") is not False:
+                # At most one write a minute per credential; NULL means never used.
+                await conn.execute("UPDATE tank.personal_tokens SET last_used_at=now() WHERE tenant_id=$1 AND token_id=$2",
+                                   tenant, row["token_id"])
         if row is None:
             raise HTTPException(401, "Personal token refused")
         # Headers for user, tenant, role and squad are never used on this path.
@@ -88,7 +93,7 @@ async def list_tokens(response: Response,
     with tenant_scope(actor.tenant_id):
         async with command.db().acquire() as conn:
             rows = await conn.fetch(
-                "SELECT token_id,name,region,created_at,revoked_at FROM tank.personal_tokens "
+                "SELECT token_id,name,region,device_name,created_at,expires_at,last_used_at,revoked_at FROM tank.personal_tokens "
                 "WHERE tenant_id=$1 AND user_id=$2 ORDER BY created_at DESC,token_id",
                 actor.tenant_id, actor.user_id,
             )
@@ -112,6 +117,8 @@ async def revoke_token(token_id: uuid.UUID, actor: command.Actor = Depends(works
 
 def register(app: Any) -> None:
     app.include_router(router)
+    # CLI sign-in by device approval issues rows in this same table.
+    app.include_router(__import__("device_login").router)
     # The same command endpoints, validation, confirms and receipts serve both
     # clients. Do not broaden Tank's global service-key dependency.
     app.dependency_overrides[command.identity] = identity
