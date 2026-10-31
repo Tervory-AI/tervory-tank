@@ -45,12 +45,17 @@ class Conn:
         self.readonly_transactions: list[dict] = []
         self.acquisitions = 0
 
-    def acquire(self):
+    def acquire(self, **options):
         self.acquisitions += 1
+        if options:
+            self.readonly_transactions.append(options)
         return self
 
     def transaction(self, **options):
-        self.readonly_transactions.append(options)
+        # Like tank.tenant_db.TenantPool: every checkout is already inside a read-committed
+        # transaction, so asyncpg rejects a nested transaction with other isolation/readonly.
+        if options.get("isolation") not in (None, "read_committed") or options.get("readonly"):
+            raise RuntimeError("nested transaction has a different isolation level")
         return self
 
     async def __aenter__(self):
