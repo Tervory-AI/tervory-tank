@@ -1,5 +1,4 @@
 import { auth } from "@clerk/nextjs/server";
-import { isFounder } from "@/lib/admin";
 import { tenantIdFor } from "@/lib/tenant";
 import { triggerCrmRead } from "@/lib/tank";
 import { crmReadPath, crmReadQuery } from "@/lib/trigger-crm";
@@ -13,12 +12,13 @@ const empty = (status: number) => new Response(null, { status, headers });
 export async function GET(request: Request, context: { params: Promise<{ path: string[] }> }) {
   try {
     const session = await auth();
-    if (!session.userId || !session.orgId || !isFounder(session.userId)) return empty(404);
+    if (!session.userId || !session.orgId) return empty(404);
     const { path } = await context.params;
     const target = crmReadPath(path);
     const query = crmReadQuery(new URL(request.url).searchParams, path.length === 2);
     if (!target || !query) return empty(404);
-    // Derive the active tenant without creating an org or trusting browser-supplied assertions.
+    // Tank checks the persisted Trigger grant and CRM organization binding for this signed-in tenant.
+    // Derive identity without creating an org or trusting browser-supplied assertions.
     const response = await triggerCrmRead({ userId: session.userId, tenantId: tenantIdFor(session.orgId) }, path, query, request.signal);
     if (!response.ok) return empty([403, 404, 422, 502, 503].includes(response.status) ? response.status : 502);
     const data: unknown = await response.json();
