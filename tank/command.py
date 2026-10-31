@@ -353,6 +353,25 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
             "receipts": [public_receipt(r) for r in state["receipts"]], "seq": row["seq"]}
 
 
+@router.get("/tasks/{task_id}/receipts")
+async def task_receipts(task_id: uuid.UUID, actor: Actor = Depends(identity)) -> dict:
+    async with db().acquire() as conn:
+        task = await conn.fetchrow(
+            "SELECT t.ledger_id,to_jsonb(l) AS data FROM tank.tasks t "
+            "LEFT JOIN tank.ledger l ON l.id=t.ledger_id AND l.tenant_id=t.tenant_id "
+            "WHERE t.id=$1 AND t.tenant_id=$2 AND t.created_by=$3",
+            task_id, actor.tenant_id, actor.user_id,
+        )
+    if task is None:
+        raise HTTPException(404, "no such task for this tenant")
+    if task["ledger_id"] is not None and task["data"] is None:
+        raise HTTPException(409, "Receipt evidence is missing or outside this tenant")
+    rows = [receipt_row(unpack(task["data"]), str(task_id))] if task["data"] is not None else []
+    return {"rows": rows, "totals": totals(rows) if rows else
+            {"cost_usd": None, "baseline_cost_usd": None, "saved_usd": None},
+            "status": "recorded" if rows and rows[0]["cost_usd"] is not None else "pending"}
+
+
 @router.patch("/threads/{thread_id}")
 async def rename_thread(thread_id: uuid.UUID, body: Rename, actor: Actor = Depends(identity)) -> dict:
     async with editing(thread_id, actor) as (conn, row, state):
