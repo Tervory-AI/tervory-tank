@@ -22,16 +22,26 @@ count. When the cap is hit the cursor remembers the page, and the next Load
 continues. A caught-up archive re-reads only the front page (and any year
 newer than the cursor) so a new judgment is picked up without fetching the
 back catalogue again.
+
+A Load streams: ``load_source`` hands the walk a sink (``streaming``), and
+each judgment goes to the store as soon as it is read instead of being held
+until the whole walk ends. The sink saves the cursor every few files, so
+counts rise during a long walk, memory stays flat, and a room restart loses
+only the last few files rather than hours of reads. Without a sink (tests,
+``fetch``) the walk returns its judgments as before.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import hashlib
 import http.client
 import logging
 import re
 from collections import Counter
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
 from urllib.parse import unquote, urlsplit
 
 from agents.zenas.pool.adapters.za_case_common import (
@@ -79,6 +89,40 @@ class ChallengePage(Exception):
 
     def __init__(self) -> None:
         super().__init__("challenge page")
+
+
+# Takes the run and one judgment's bytes; answers True when it was kept.
+ArchiveSink = Callable[["ArchiveRun", bytes], Awaitable[bool]]
+_SINK: contextvars.ContextVar[ArchiveSink | None] = contextvars.ContextVar("za_archive_sink", default=None)
+
+
+@contextmanager
+def streaming(sink: ArchiveSink) -> Iterator[None]:
+    """Send each judgment this task's walk reads to ``sink`` instead of returning it.
+
+    A context variable, so each Load's task has its own sink and loads that
+    run side by side do not see each other's.
+    """
+    token = _SINK.set(sink)
+    try:
+        yield
+    finally:
+        _SINK.reset(token)
+
+
+async def hand_over(run: "ArchiveRun", url: str, payload: bytes) -> bytes:
+    """Give one judgment to this task's sink, or back to the walk when there is none.
+
+    With a sink the judgment is stored before its URL is marked handled, so a
+    saved cursor never names a judgment the store does not hold.
+    """
+    sink = _SINK.get()
+    if sink is None:
+        run.mark(url)
+        return payload
+    if await sink(run, payload):
+        run.mark(url)
+    return b""
 
 
 def archive_max() -> int:
@@ -387,8 +431,14 @@ async def accept_pdf(
     headers: dict[str, str],
     citation_for,
     title_for=None,
+    shape=None,
 ) -> bytes:
-    """Download one judgment, or record why it was skipped. Unchanged URLs are not fetched."""
+    """Download one judgment, or record why it was skipped. Unchanged URLs are not fetched.
+
+    ``shape`` rewrites the judgment's bytes before they are handed over (an
+    empty answer drops it). With a sink (see ``streaming``) the judgment goes
+    to the store now and b"" is returned.
+    """
     if "saflii.org" in url.lower():
         run.skip("not a judgment")
         return b""
@@ -449,5 +499,9 @@ async def accept_pdf(
         run.skip("criminal" if is_criminal_caption(heading, text) else "not a judgment")
         run.mark(url)
         return b""
-    run.mark(url)
-    return payload
+    if shape is not None:
+        payload = shape(payload)
+        if not payload:
+            run.mark(url)
+            return b""
+    return await hand_over(run, url, payload)
