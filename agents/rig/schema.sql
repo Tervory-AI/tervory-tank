@@ -442,3 +442,18 @@ CREATE TABLE IF NOT EXISTS agent_rig.supply_sku_map (
     FOREIGN KEY (tenant_id, product_sku) REFERENCES agent_rig.products(tenant_id, sku),
     FOREIGN KEY (tenant_id, source_id, offer_sku) REFERENCES agent_rig.supply_offers(tenant_id, source_id, sku)
 );
+
+-- Located counts mean persisted quote requests, never sales or estimates.
+ALTER TABLE agent_rig.widget_counts ADD COLUMN IF NOT EXISTS located_count bigint NOT NULL DEFAULT 0 CHECK (located_count >= 0);
+ALTER TABLE agent_rig.widget_counts ADD COLUMN IF NOT EXISTS kept_revenue jsonb NOT NULL DEFAULT '{}'::jsonb;
+CREATE TABLE IF NOT EXISTS agent_rig.supply_sale_receipts (
+    tenant_id uuid NOT NULL,
+    receipt_id text NOT NULL,
+    quote_id text NOT NULL,
+    product_id text NOT NULL,
+    amount numeric NOT NULL CHECK (amount > '-Infinity'::numeric AND amount < 'Infinity'::numeric),
+    currency text NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
+    source_ref text NOT NULL,
+    received_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, receipt_id)
+);
