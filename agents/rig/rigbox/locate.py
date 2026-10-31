@@ -61,16 +61,17 @@ class SupplyStore:
         if not identity or age <= 0 or not isinstance(source.get("approved"), bool):
             raise ValueError("A source, explicit approval and maximum age are required.")
         row = {"id": identity, "approved": source["approved"], "priority": int(source.get("priority", 0)),
-               "max_offer_age_seconds": age, "tenant_id": str(tenant)}
+               "max_offer_age_seconds": age, "tenant_id": str(tenant),
+               **{key: str(source.get(key) or "") for key in ("provider", "site", "feed_id")}}
         if self.pool is None:
             state = self.store.supply_state.setdefault(str(tenant), {})
             state["sources"] = [s for s in state.get("sources", []) if s["id"] != identity] + [row]
             return
         async with self.pool.acquire() as conn:
             await conn.execute("""INSERT INTO agent_rig.supply_sources
-                (tenant_id,id,approved,priority,max_offer_age_seconds) VALUES($1,$2,$3,$4,$5)
-                ON CONFLICT(tenant_id,id) DO UPDATE SET approved=$3,priority=$4,max_offer_age_seconds=$5""",
-                UUID(str(tenant)), identity, row["approved"], row["priority"], age)
+                (tenant_id,id,approved,priority,max_offer_age_seconds,provider,site,feed_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+                ON CONFLICT(tenant_id,id) DO UPDATE SET approved=$3,priority=$4,max_offer_age_seconds=$5,provider=$6,site=$7,feed_id=$8""",
+                UUID(str(tenant)), identity, row["approved"], row["priority"], age, row["provider"], row["site"], row["feed_id"])
 
     async def import_catalogue(self, tenant: str, source_id: str, record: dict, contents: str | bytes,
                                seen_at: Any) -> dict:
@@ -162,7 +163,7 @@ async def locate(store: Any, tenant: str, product: dict, *, now: datetime | None
             continue
         # No guessed FX or pricing. Reuse the store's confirmed price rule.
         try:
-            rule = resolved_rule(settings, {"provider": offer["source_id"], "site": "", "country": offer["region"]})
+            rule = resolved_rule(settings, {**approved[offer["source_id"]], "country": offer["region"]})
             rate = await store.rate(tenant, offer["currency"], product["currency"])
             amount = indicative_price(offer["cost"], rule, rate)
             landed = indicative_price(offer["cost"], {**rule, "margin_percent": 0}, rate)
