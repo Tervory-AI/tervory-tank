@@ -202,6 +202,11 @@ jobs:
       - name: typecheck
         working-directory: workspace
         run: npx tsc --noEmit
+      - name: Chats contract and header
+        # Offline: the real chats contract/route and a server render of the window header.
+        run: |
+          node tests/command_1b_contract.cjs
+          node tests/command_window_header.cjs
       - name: Build
         working-directory: workspace
         run: npx next build

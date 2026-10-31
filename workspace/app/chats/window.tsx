@@ -29,6 +29,13 @@ function CostReceipt({ receipt, founder, threadId, messageId }: { receipt: Recei
   return <section className="cw-receipt" id={`cost-${messageId}`} aria-label="Answer cost"><div className="cw-receipt-desktop"><header><strong>Receipt{pending ? " · Cost pending" : ""}</strong><small>Each step links to its cost details</small></header>{rows}</div><details className="cw-receipt-mobile"><summary>Receipt{pending ? " · Cost pending" : ""} · {dollars(receipt.totals.cost_usd)} · would have cost {dollars(receipt.totals.baseline_cost_usd)} · saved {dollars(receipt.totals.saved_usd)}</summary>{rows}</details></section>;
 }
 
+/** Header totals belong to a selected chat; with none selected there is nothing to total. */
+export function ThreadTotals({ selected, snapshot }: { selected: string | null; snapshot: Snapshot | null }) {
+  if (!selected) return null;
+  const evidence = `/chats/evidence/${encodeURIComponent(selected)}`;
+  return <div className="cw-totals">{snapshot?.thread.receipt_status === "pending" && <span>Cost pending</span>}<a href={evidence}>Spent {dollars(snapshot?.thread.spent_usd)}</a><a className="cw-saving" href={evidence}>Saved {dollars(snapshot?.thread.saved_usd)}</a></div>;
+}
+
 export function CommandWindow({ initialThreads, models, founder, account, initialTools = [], initialError = "" }: { initialThreads: Thread[]; models: ModelOption[]; founder: boolean; account: string; initialTools?: string[]; initialError?: string }) {
   const [availableTools, setAvailableTools] = useState(initialTools);
   const [pendingAsk, setPendingAsk] = useState("");
@@ -264,7 +271,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
       <nav className="cw-bottom-nav">{founder && <a href="/ledger">Ledger</a>}<a href="/billing">Billing</a><a href="/data">Files</a><a href="/onboarding">Settings</a></nav>
     </aside>
     <main className="cw-chat" inert={menu || work ? true : undefined}>
-      <header className="cw-thread-header"><div><h1>{snapshot ? snapshot.thread.title : selected ? "Loading chat…" : "A new conversation"}</h1>{snapshot && <button className="cw-rename" disabled={sending || busy || !!cardBusy} onClick={() => { setTitle(snapshot.thread.title); setRenaming(true); }}>Rename</button>}</div><button className="cw-work-tab" ref={workButton} onClick={() => setWork(true)} aria-expanded={work}>Work {done}/{steps.length}</button><div className="cw-totals">{snapshot?.thread.receipt_status === "pending" && <span>Cost pending</span>}<a href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Spent {dollars(snapshot?.thread.spent_usd)}</a><a className="cw-saving" href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Saved {dollars(snapshot?.thread.saved_usd)}</a></div></header>
+      <header className="cw-thread-header"><div><h1>{snapshot ? snapshot.thread.title : selected ? "Loading chat…" : "A new conversation"}</h1>{snapshot && <button className="cw-rename" disabled={sending || busy || !!cardBusy} onClick={() => { setTitle(snapshot.thread.title); setRenaming(true); }}>Rename</button>}</div><button className="cw-work-tab" ref={workButton} onClick={() => setWork(true)} aria-expanded={work}>Work {done}/{steps.length}</button><ThreadTotals selected={selected} snapshot={snapshot} /></header>
       {renaming && <form className="cw-rename-form" onSubmit={rename}><label>Chat name<input autoFocus value={title} maxLength={160} required onChange={event => setTitle(event.target.value)} /></label><button disabled={busy}>Save</button><button type="button" onClick={() => setRenaming(false)}>Cancel</button></form>}
       {error && <div className="cw-error" role="alert">{error}<button disabled={sending || busy} onClick={() => { setError(""); void (selected ? load(selected) : refreshThreads()).catch(err => setError(problem(err))); }}>Reload</button></div>}
       <div className="cw-messages" aria-label="Conversation" aria-busy={sending || busy}>
