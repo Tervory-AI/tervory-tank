@@ -263,3 +263,42 @@ def test_main_scope_gate_runs_before_any_deployment(monkeypatch):
     monkeypatch.setattr(mod, "deploy", lambda *args: calls.append("deploy") or True)
     assert mod.main() == 1
     assert calls == ["scope"]
+
+
+def _live_api(live: dict[str, str]):
+    """Coolify fake: app list, and per-app latest deployment {status, commit}."""
+    def api(method: str, path: str):
+        if path == "/applications":
+            return 200, _apps()
+        for uuid, commit in live.items():
+            if path.startswith(f"/deployments/applications/{uuid}"):
+                return 200, {"deployments": [{"status": "finished", "commit": commit}]}
+        return 200, {"deployments": [{"status": "finished", "commit": "0" * 40}]}
+    return api
+
+
+def test_a_queued_run_does_not_restart_apps_already_on_the_tip_of_main(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _script(monkeypatch)
+    head = "3f57590c87dafe693ebe5aa4a8bb2a14b6ce2939"
+    monkeypatch.setattr(mod, "MAIN_HEAD", head)
+    order: list[str] = []
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["tank/main.py", "agents/zenas/app.py"])
+    monkeypatch.setattr(mod, "api", _live_api({mod.MAIN_APP: head, "za-uuid": head, "room-uuid": head}))
+    monkeypatch.setattr(mod, "deploy", lambda uuid, name: order.append(name) or True)
+    monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
+    assert mod.main() == 0
+    # Only the room whose last deploy is an older commit is deployed.
+    assert order == ["agent-zenas-za"]
+
+
+def test_unknown_main_head_deploys_every_wanted_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _script(monkeypatch)
+    head = "3f57590c87dafe693ebe5aa4a8bb2a14b6ce2939"
+    monkeypatch.setattr(mod, "MAIN_HEAD", "")
+    order: list[str] = []
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["tank/main.py"])
+    monkeypatch.setattr(mod, "api", _live_api({mod.MAIN_APP: head, "za-uuid": head}))
+    monkeypatch.setattr(mod, "deploy", lambda uuid, name: order.append(name) or True)
+    monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
+    assert mod.main() == 0
+    assert order == ["main", "tervory-tank-za"]

@@ -49,6 +49,11 @@ jobs:
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy-on-merge.yml/runs?branch=main&status=completed&per_page=20" \
             | jq -r '[.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure")][0].head_sha // empty')
           if [ -n "$prev" ] && git cat-file -e "$prev^{commit}" 2>/dev/null; then echo "BEFORE=$prev" >> "$GITHUB_ENV"; fi
+          # Tip of main now: an app whose last Coolify deploy finished on it is not restarted
+          # again by a queued run (deploy_changed.py MAIN_HEAD). Unknown: deploy as before.
+          head=$(curl -sS -H "Authorization: Bearer ${{ github.token }}" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/main" | jq -r '.sha // empty')
+          case "$head" in [0-9a-f][0-9a-f]*) [ ${#head} -eq 40 ] && echo "MAIN_HEAD=$head" >> "$GITHUB_ENV" ;; esac
       - name: Deploy changed apps
         run: |
           case "$COOLIFY_URL" in https://*) ;; *) echo "::error::COOLIFY_URL must be https"; exit 1 ;; esac
