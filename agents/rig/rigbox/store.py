@@ -222,6 +222,9 @@ def _fit_key(row: dict[str, Any]) -> tuple[str, str, str]:
     )
 
 
+_OPEN_PAYMENT_STATES = frozenset({"payment_pending", "paid", "reconciling"})
+
+
 class MemoryStore(RetailerMemoryStore):
     """In-memory stand-in. Tests never open a database."""
 
@@ -409,6 +412,24 @@ class MemoryStore(RetailerMemoryStore):
         for row in self.quotes:
             if row["tenant_id"] == str(tenant_id) and row["id"] == quote_id:
                 row["payload"] = {**row["payload"], "locate_state": state}
+
+    async def swap_locate_state(self, tenant_id: str, quote_id: str, old: dict[str, Any],
+                                new: dict[str, Any]) -> bool:
+        """Compare-and-swap the quote's locate_state. Tenant scoped."""
+        for row in self.quotes:
+            if row["tenant_id"] == str(tenant_id) and row["id"] == quote_id:
+                if row["payload"].get("locate_state") != old:
+                    return False
+                row["payload"] = {**row["payload"], "locate_state": copy.deepcopy(new)}
+                return True
+        return False
+
+    async def open_locate_payments(self, tenant_id: str, limit: int = 100) -> list[tuple[str, dict[str, Any]]]:
+        """Locate quotes at payment_pending, paid or reconciling, oldest first."""
+        rows = [(row["id"], copy.deepcopy(row["payload"]["locate_state"])) for row in self.quotes
+                if row["tenant_id"] == str(tenant_id)
+                and (row["payload"].get("locate_state") or {}).get("state") in _OPEN_PAYMENT_STATES]
+        return rows[:max(1, min(int(limit), 1000))]
 
     async def payment_event(self, tenant_id: str, quote_id: str, event: dict[str, Any]) -> bool:
         """Append a verified payment webhook event once per event id. Tenant scoped."""
@@ -1041,6 +1062,28 @@ class PgStore(RetailerPgStore):
                 " WHERE tenant_id = $1 AND id = $2",
                 _uuid(tenant_id), quote_id, _json(state),
             )
+
+    async def swap_locate_state(self, tenant_id: str, quote_id: str, old: dict[str, Any],
+                                new: dict[str, Any]) -> bool:
+        """Compare-and-swap the quote's locate_state in one statement (jsonb equality)."""
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(
+                "UPDATE agent_rig.quotes SET payload = jsonb_set(payload, '{locate_state}', $4::jsonb)"
+                " WHERE tenant_id = $1 AND id = $2 AND payload->'locate_state' = $3::jsonb",
+                _uuid(tenant_id), quote_id, _json(old), _json(new),
+            )
+        return result.endswith(" 1")
+
+    async def open_locate_payments(self, tenant_id: str, limit: int = 100) -> list[tuple[str, dict[str, Any]]]:
+        """Locate quotes at payment_pending, paid or reconciling, oldest first."""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT id, payload->'locate_state' AS state FROM agent_rig.quotes"
+                " WHERE tenant_id = $1 AND payload->'locate_state'->>'state' = ANY($2::text[])"
+                " ORDER BY created_at LIMIT $3",
+                _uuid(tenant_id), sorted(_OPEN_PAYMENT_STATES), max(1, min(int(limit), 1000)),
+            )
+        return [(row["id"], json.loads(row["state"]) if isinstance(row["state"], str) else row["state"]) for row in rows]
 
     async def payment_event(self, tenant_id: str, quote_id: str, event: dict[str, Any]) -> bool:
         """Append a verified payment webhook event once per event id, in one statement."""

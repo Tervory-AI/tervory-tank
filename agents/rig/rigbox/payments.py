@@ -9,7 +9,8 @@ Two adapter shapes pass the same guard:
 
 * PaymentProvider: one-shot capture(token) and refund (the #463 shape).
 * PaymentAdapter: pay on Accept. create_intent on Accept, capture, refund,
-  each keyed by an idempotency key, plus webhook events verified with an
+  and cancel_intent (void an authorization that was not captured), each
+  keyed by an idempotency key, plus webhook events verified with an
   HMAC-SHA256 signature (verify_webhook). TestAdapter is the built-in fake
   used by tests. It is never wired into the app, and there is no live mode.
 """
@@ -64,7 +65,9 @@ class PaymentProvider(Protocol):
 @dataclass(frozen=True)
 class Intent:
     reference: str
-    status: str  # "requires_capture" | "failed" | "canceled"
+    # "requires_capture" | "failed" | "canceled", or "captured" when a cancel
+    # was refused because the intent had already been captured.
+    status: str
     amount: Decimal
     currency: str
     test: bool
@@ -89,6 +92,11 @@ class PaymentAdapter(Protocol):
                             idempotency_key: str, metadata: dict[str, str]) -> Intent: ...
 
     async def capture_intent(self, *, intent: Intent, idempotency_key: str) -> Charge: ...
+
+    async def cancel_intent(self, *, intent: Intent, idempotency_key: str) -> Intent:
+        """Void an authorization. Returns status "canceled", or "captured" when
+        the intent was already captured (then nothing is voided)."""
+        ...
 
     async def refund(self, *, charge: Charge, reason: str) -> Charge: ...
 
@@ -132,7 +140,7 @@ async def refund(provider: PaymentProvider | None, charge: Charge, reason: str,
 
 def intents(provider: Any) -> bool:
     """True when the configured adapter supports pay on Accept (intent then capture)."""
-    return all(callable(getattr(provider, name, None)) for name in ("create_intent", "capture_intent"))
+    return all(callable(getattr(provider, name, None)) for name in ("create_intent", "capture_intent", "cancel_intent"))
 
 
 def _proven(value: Any, kind: type) -> Any:
@@ -156,6 +164,14 @@ async def capture_intent(provider: Any, intent: Intent, *, reference: str,
     checked = guard(provider, env)
     charge = await checked.capture_intent(intent=_proven(intent, Intent), idempotency_key=f"{reference}:capture")
     return _proven(charge, Charge)
+
+
+async def cancel_intent(provider: Any, intent: Intent, *, reference: str,
+                        env: dict[str, str] | None = None) -> Intent:
+    """Void an uncaptured authorization, keyed by the quote reference."""
+    checked = guard(provider, env)
+    voided = await checked.cancel_intent(intent=_proven(intent, Intent), idempotency_key=f"{reference}:cancel")
+    return _proven(voided, Intent)
 
 
 # Webhooks. Header: "t=<unix seconds>,v1=<hex hmac-sha256 of '<t>.<raw body>'>".
@@ -209,9 +225,11 @@ def verify_webhook(provider: Any, body: bytes, header: str, *, now: float | None
 class TestAdapter:
     """Built-in fake PaymentAdapter for tests. Deterministic, never moves money.
 
-    token "tok_decline" declines the intent, "tok_capture_fails" fails capture.
-    Same idempotency key -> same object, and each intent is captured and each
-    charge refunded at most once (counted in .calls).
+    token "tok_decline" declines the intent, "tok_capture_fails" fails capture,
+    "tok_capture_lost" captures but loses the response (raises ConnectionError).
+    Same idempotency key -> same object, and each intent is captured, canceled
+    and each charge refunded at most once (counted in .calls). A canceled
+    intent cannot be captured; a captured one cannot be canceled.
     """
 
     __test__ = False  # not a pytest class
@@ -222,6 +240,7 @@ class TestAdapter:
         self.intents: dict[str, Intent] = {}
         self.charges: dict[str, Charge] = {}
         self.refunds: dict[str, Charge] = {}
+        self.canceled: dict[str, Intent] = {}
         self.tokens: dict[str, str] = {}
         self.calls: list[tuple[str, str]] = []
 
@@ -244,10 +263,24 @@ class TestAdapter:
     async def capture_intent(self, *, intent: Intent, idempotency_key: str) -> Charge:
         if idempotency_key not in self.charges:
             self.calls.append(("capture", idempotency_key))
-            ok = intent.status == "requires_capture" and self.tokens.get(intent.reference) != "tok_capture_fails"
+            voided = any(item.reference == intent.reference and item.status == "canceled"
+                         for item in self.canceled.values())
+            ok = intent.status == "requires_capture" and not voided \
+                and self.tokens.get(intent.reference) != "tok_capture_fails"
             self.charges[idempotency_key] = Charge(intent.reference.replace("pi_", "ch_", 1),
                                                    "captured" if ok else "failed", intent.amount, intent.currency, True)
+            if self.tokens.get(intent.reference) == "tok_capture_lost":
+                raise ConnectionError("capture response lost")
         return self.charges[idempotency_key]
+
+    async def cancel_intent(self, *, intent: Intent, idempotency_key: str) -> Intent:
+        if idempotency_key not in self.canceled:
+            self.calls.append(("cancel_intent", idempotency_key))
+            charge = intent.reference.replace("pi_", "ch_", 1)
+            captured = any(item.reference == charge and item.status == "captured" for item in self.charges.values())
+            self.canceled[idempotency_key] = Intent(intent.reference, "captured" if captured else "canceled",
+                                                    intent.amount, intent.currency, True)
+        return self.canceled[idempotency_key]
 
     async def refund(self, *, charge: Charge, reason: str) -> Charge:
         if charge.reference not in self.refunds:

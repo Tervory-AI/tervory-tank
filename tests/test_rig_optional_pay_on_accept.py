@@ -193,7 +193,7 @@ async def test_order_failure_refunds_the_captured_payment(monkeypatch, tmp_path)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("token,calls", [("tok_decline", ["create_intent"]),
-                                         ("tok_capture_fails", ["create_intent", "capture"])])
+                                         ("tok_capture_fails", ["create_intent", "capture", "cancel_intent"])])
 async def test_declined_or_failed_capture_places_no_order(monkeypatch, tmp_path, token, calls):
     store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
     with pytest.raises(RigError) as raised:
@@ -201,6 +201,120 @@ async def test_declined_or_failed_capture_places_no_order(monkeypatch, tmp_path,
     assert raised.value.status == 402 and kinds(service.payments) == calls
     assert store.quotes[-1]["payload"]["locate_state"]["state"] == "payment_failed"
     assert store.locate_orders == {} and list(tmp_path.iterdir()) == []
+    if token == "tok_capture_fails":  # the authorization is voided, not left to expire
+        assert store.quotes[-1]["payload"]["locate_state"]["cancel"] == {"status": "canceled"}
+        assert list(service.payments.canceled.values())[0].status == "canceled"
+
+
+class CancelFailsOnce(payments.TestAdapter):
+    """The cancel call after a failed capture is lost once (provider outage)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.cancel_failures = 1
+
+    async def cancel_intent(self, *, intent, idempotency_key):
+        if self.cancel_failures:
+            self.cancel_failures -= 1
+            raise ConnectionError("cancel response lost")
+        return await super().cancel_intent(intent=intent, idempotency_key=idempotency_key)
+
+
+def later(minutes=20):
+    from datetime import datetime, timedelta, timezone
+    return datetime.now(timezone.utc) + timedelta(minutes=minutes)
+
+
+@pytest.mark.asyncio
+async def test_a_lost_capture_response_is_resolved_by_the_cancel_call(monkeypatch, tmp_path):
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
+    result = await service.locate_accept(TENANT, {**body, "payment_token": "tok_capture_lost"})
+    # cancel reports "captured": the shopper was charged, so the order goes ahead (once).
+    assert result["state"] == "ordered"
+    assert kinds(service.payments) == ["create_intent", "capture", "cancel_intent"]
+    assert store.quotes[-1]["payload"]["locate_state"]["state"] == "supplier_ordered"
+    assert service.payments.refunds == {} and len(list(tmp_path.iterdir())) == 1
+
+
+@pytest.mark.asyncio
+async def test_capture_failure_with_a_lost_cancel_is_settled_by_reconcile(monkeypatch, tmp_path):
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path, adapter=CancelFailsOnce())
+    with pytest.raises(RigError) as raised:
+        await service.locate_accept(TENANT, {**body, "payment_token": "tok_capture_fails"})
+    state = store.quotes[-1]["payload"]["locate_state"]
+    assert raised.value.status == 502 and state["state"] == "payment_pending"
+    assert state["note"] == "capture_unconfirmed" and store.locate_orders == {}
+    assert (await service.reconcile_payments(TENANT))["reconciled"] == []  # too recent: maybe in flight
+    fixed = await service.reconcile_payments(TENANT, now=later())
+    assert fixed == {"checked": 1, "reconciled": [{"quote_id": store.quotes[-1]["id"], "from": "payment_pending",
+                                                   "to": "payment_failed"}]}
+    state = store.quotes[-1]["payload"]["locate_state"]
+    assert state["reconciled"] is True and state["cancel"] == {"status": "canceled"}
+    assert service.payments.refunds == {} and store.locate_orders == {}
+    assert await service.reconcile_payments(TENANT, now=later()) == {"checked": 0, "reconciled": []}
+
+
+@pytest.mark.asyncio
+async def test_reconcile_refunds_a_paid_quote_with_no_order_once(monkeypatch, tmp_path):
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
+
+    async def crash(**kwargs):
+        raise RuntimeError("worker killed after capture")
+    service.fulfilment.place_located_order = crash
+    with pytest.raises(RuntimeError):
+        await service.locate_accept(TENANT, body)
+    quote_id = store.quotes[-1]["id"]
+    assert store.quotes[-1]["payload"]["locate_state"]["state"] == "paid"
+    assert (await service.reconcile_payments(TENANT, now=later(5)))["reconciled"] == []
+    both = await asyncio.gather(service.reconcile_payments(TENANT, now=later()),
+                                service.reconcile_payments(TENANT, now=later()))
+    assert sum(len(item["reconciled"]) for item in both) == 1  # claimed once
+    state = store.quotes[-1]["payload"]["locate_state"]
+    assert state["state"] == "order_failed_refunded" and state["refund"] == {"status": "refunded"}
+    assert kinds(service.payments) == ["create_intent", "capture", "refund"]
+    assert [item["quote_id"] for result in both for item in result["reconciled"]] == [quote_id]
+    assert store.locate_orders == {}
+
+
+@pytest.mark.asyncio
+async def test_reconcile_records_an_order_placed_before_the_crash_and_never_refunds_it(monkeypatch, tmp_path):
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
+    result = await service.locate_accept(TENANT, body)
+    row = store.quotes[-1]
+    row["payload"]["locate_state"] = {**row["payload"]["locate_state"], "state": "paid"}  # crash before "ordered"
+    fixed = await service.reconcile_payments(TENANT, now=later())
+    assert fixed["reconciled"] == [{"quote_id": result["request_id"], "from": "paid", "to": "ordered"}]
+    state = row["payload"]["locate_state"]
+    assert state["order"].startswith("RIG-") and state["purchase_order"].startswith("PO-")
+    assert "refund" not in kinds(service.payments)
+
+
+@pytest.mark.asyncio
+async def test_reconcile_refunds_a_pending_intent_that_was_captured_before_the_crash(monkeypatch, tmp_path):
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
+    original = service.payments.capture_intent
+
+    async def capture_then_crash(**kwargs):
+        await original(**kwargs)
+        raise SystemExit("worker killed after capture")  # not caught by Accept
+    service.payments.capture_intent = capture_then_crash
+    with pytest.raises(SystemExit):
+        await service.locate_accept(TENANT, body)
+    service.payments.capture_intent = original
+    assert store.quotes[-1]["payload"]["locate_state"]["state"] == "payment_pending"
+    fixed = await service.reconcile_payments(TENANT, now=later())
+    assert fixed["reconciled"][0]["to"] == "order_failed_refunded"
+    assert kinds(service.payments) == ["create_intent", "capture", "cancel_intent", "refund"]
+    assert list(service.payments.refunds.values())[0].status == "refunded" and store.locate_orders == {}
+
+
+@pytest.mark.asyncio
+async def test_reconcile_is_test_mode_only(monkeypatch, tmp_path):
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
+    monkeypatch.setenv("RIG_LOCATE_PAYMENTS_MODE", "live")
+    with pytest.raises(payments.PaymentRefused):
+        await service.reconcile_payments(TENANT, now=later())
+    assert service.payments.calls == []
 
 
 @pytest.mark.asyncio
@@ -272,3 +386,53 @@ async def test_real_postgres_payment_events_are_deduplicated_atomically():
             await pool.close()
     finally:
         await _drop_database(admin, name)
+
+
+@pytest.mark.asyncio
+async def test_real_postgres_reconcile_claims_each_stuck_quote_once(monkeypatch, tmp_path):
+    import asyncpg
+    from uuid import uuid4
+    from test_rig_postgres import _admin_url, _create_database, _database_url, _drop_database
+    from rigbox.store import PgStore
+    from chassis.tenant_db import tenant_scope
+    _, service, _, _, _ = await paid_shop(monkeypatch, tmp_path)
+    admin = _admin_url()
+    name = "rig_payrec_" + uuid4().hex[:12]
+    await _create_database(admin, name)
+    try:
+        pool = await asyncpg.create_pool(_database_url(admin, name))
+        try:
+            store = PgStore(pool)
+            await store.apply_schema()
+            service.store = store
+            price = {"amount": "1125.00", "currency": "ZAR"}
+            paid, pending, done = ("req_" + uuid4().hex for _ in range(3))
+            with tenant_scope(TENANT):
+                for quote_id, state in ((paid, {"state": "paid", "paid_at": "2026-10-31T00:00:00+00:00",
+                                                 "price": price, "payment": {"reference": "ch_test_pg"}}),
+                                        (pending, {"state": "payment_pending", "pending_at": later(-1).isoformat(),
+                                                   "price": price, "payment": {"intent": "pi_test_pg"}}),
+                                        (done, {"state": "supplier_ordered", "price": price})):
+                    await store.add_quote(TENANT, quote_id, {"kind": "product", "locate_state": state}, {"name": "T"})
+                listed = await store.open_locate_payments(TENANT)
+                assert [quote_id for quote_id, _ in listed] == [paid, pending]
+                assert await store.open_locate_payments(str(uuid4())) == []
+                old = listed[0][1]
+                swaps = await asyncio.gather(*(store.swap_locate_state(TENANT, paid, old, {**old, "n": i})
+                                               for i in range(5)))
+                assert sorted(swaps) == [False, False, False, False, True]
+                await store.swap_locate_state(TENANT, paid, (await store.open_locate_payments(TENANT))[0][1], old)
+                both = await asyncio.gather(service.reconcile_payments(TENANT), service.reconcile_payments(TENANT))
+                settled = await pool.fetch("SELECT id, payload->'locate_state'->>'state' AS state"
+                                           " FROM agent_rig.quotes ORDER BY created_at")
+            assert [item for result in both for item in result["reconciled"]] == [
+                {"quote_id": paid, "from": "paid", "to": "order_failed_refunded"}]  # pending is too recent
+            assert {row["id"]: row["state"] for row in settled} == {
+                paid: "order_failed_refunded", pending: "payment_pending", done: "supplier_ordered"}
+            assert kinds(service.payments) == ["refund"]
+            print("RIG_PAY_RECONCILE_PG", json.dumps(both, sort_keys=True))
+        finally:
+            await pool.close()
+    finally:
+        await _drop_database(admin, name)
+
