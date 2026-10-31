@@ -70,7 +70,7 @@ async def main():
                 contexts.append(ctx)
                 return ctx
             result = await skala.run_evals(pkg, context)
-            expected = (3 if version == "1.0.0" else 7) if name == "market.series_fetch" else 7
+            expected = {"1.0.0": 3, "1.2.0": 7}.get(version, 10) if name == "market.series_fetch" else 7
             assert result["total"] == expected, result
             assert result["passed"] == expected and result["score"] == 1.0, result
             assert all(ctx.calls == 0 and ctx.cost_usd == 0 for ctx in contexts)
@@ -120,7 +120,10 @@ class CandidateEvalRuntimeTests(unittest.TestCase):
         previous = {skala.evidence_hash(case) for case in baseline.cases}
         current = {skala.evidence_hash(case) for case in candidate.cases}
         self.assertEqual(previous - current, set())
-        self.assertEqual(len(current - previous), 2)
+        # 1.2.0 added two cases; 1.2.1 also carries Boston's approved 1.1.0 lines verbatim.
+        self.assertEqual(len(current - previous), 5)
+        approved = {skala.evidence_hash(case) for case in packages[("market.series_fetch", "1.1.0")].cases}
+        self.assertEqual(approved - current, set())
 
     def test_radix_eval_rows_and_source_links_all_use_platform_tenant(self):
         tenant = platform_tenant()
@@ -169,7 +172,7 @@ class CandidateEvalRuntimeTests(unittest.TestCase):
     def test_newest_eval_runner_and_feed_cases_in_tank_only_process(self):
         report = self.run_isolated(PACKAGE.name)
         self.assertEqual(len(report), 7)
-        self.assertEqual(report["market.series_fetch"], {"passed": 7, "total": 7})
+        self.assertEqual(report["market.series_fetch"], {"passed": 10, "total": 10})
         self.assertEqual(report["bundled_feed_cases"], {"passed": 10, "total": 10})
 
     def run_isolated(self, version):
