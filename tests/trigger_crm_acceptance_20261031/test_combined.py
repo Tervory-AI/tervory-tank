@@ -20,8 +20,7 @@ if not os.environ.get('CRM_ASSEMBLED_ROOT'):
     pytest.skip('Explicit frozen backend/Workspace assembly required; see EVIDENCE.md', allow_module_level=True)
 ROOT = Path(os.environ['CRM_ASSEMBLED_ROOT'])
 sys.path.insert(0, str(ROOT / 'tank'))
-import command
-import trigger_crm as crm
+import trigger_crm as crm  # noqa: E402
 
 RECORD = '00000000-0000-0000-0000-000000000013'
 ORG = '00000000-0000-0000-0000-000000000014'
