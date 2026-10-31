@@ -36,6 +36,7 @@ class StubCtx:
     def __init__(self) -> None:
         self.http = StubHttp()
         self.env: dict[str, str] = {}
+        self.tenant_id = "00000000-0000-0000-0000-000000000001"  # platform tenant, as Skala evals run
 
     async def model(self, *_args: object, **_kwargs: object) -> str:
         raise RuntimeError("offline stub: model is not available")
@@ -80,7 +81,10 @@ def test_every_skill_package_has_required_files() -> None:
 
 
 @pytest.mark.asyncio
-async def test_rung3_offline_cases() -> None:
+async def test_rung3_offline_cases(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Room-backed checkers (trigger.languagetool) need a room key before they call the
+    # room; a placeholder lets them reach the stub http, so their cases count as network-bound.
+    monkeypatch.setenv("TANK_KEY_TRIGGER", "offline-placeholder")
     packages = [pkg for pkg in skala.load_packages(SKILLS).values()
                 if pkg.rung == 3 and pkg.id not in {"tisan.figma", "tisan.scaffold"}]
     assert packages, "no rung-3 skills found"
@@ -98,10 +102,19 @@ async def test_rung3_offline_cases() -> None:
                 if _from_network(exc):
                     skipped += 1
                     continue
+                # Same rule as skala.run_evals: a must_refuse case passes when run() raises
+                # exactly the expected exception type and message.
+                expected_error = case.get("expected_error") or {}
+                if (case.get("must_refuse") and type(exc).__name__ == expected_error.get("type")
+                        and str(exc) == expected_error.get("message")):
+                    passed += 1
+                    continue
                 failed += 1
                 failures.append(f"{pkg.ref} / {name}: error: {exc}")
                 continue
             ok, why = skala.score_case(case.get("expected") or {}, output, case.get("tolerance") or "exact")
+            if case.get("expected_error"):
+                ok, why = False, "expected refusal exception was not raised"
             if ok:
                 passed += 1
             elif ctx.http.called:

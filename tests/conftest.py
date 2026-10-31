@@ -97,8 +97,9 @@ def _worker_databases() -> None:
 # --- Quarantine ---------------------------------------------------------------
 #
 # tests/quarantine.txt lists tests that already fail on main, each with its
-# reason. They still run and are reported (xfail, not hidden); a quarantined
-# test that starts passing shows as XPASS so its entry can be removed. Entries
+# reason. They still run and are reported (xfail, not hidden). xfail is strict:
+# a quarantined test that starts passing (XPASS) fails the run until its entry
+# is removed, so no fixed test stays ungated. Entries
 # marked "skip" are not run at all (they hang or take minutes before failing).
 # The CI summary prints every entry with its outcome.
 
@@ -139,7 +140,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         if entry[1] == "skip":
             item.add_marker(pytest.mark.skip(reason=reason))
         else:
-            item.add_marker(pytest.mark.xfail(reason=reason, strict=False))
+            item.add_marker(pytest.mark.xfail(reason=reason, strict=True))
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ARG001

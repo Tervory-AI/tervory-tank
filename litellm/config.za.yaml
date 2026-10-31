@@ -129,6 +129,17 @@ model_list:
     model_info:
       input_cost_per_token: 0.0000003
       output_cost_per_token: 0.0000012
+      # Guaranteed recurring off-peak periods (UTC, end exclusive).
+      # Public holidays also qualify; only explicitly verified dates may be added.
+      offpeak:
+        timezone: UTC
+        charge_multiplier: 0.5
+        cache_read_input_cost_per_token: 0.000000006
+        windows:
+          - {days: [0, 1, 2, 3, 4], start: '00:00', end: '01:00'}
+          - {days: [0, 1, 2, 3, 4], start: '04:00', end: '06:00'}
+          - {days: [0, 1, 2, 3, 4], start: '10:00', end: '24:00'}
+          - {days: [5, 6], start: '00:00', end: '24:00'}
 
   # Price checked 2026-10-21: https://api-docs.deepseek.com/quick_start/pricing/
   # USD per MTok: $1.32 input / $3.96 output at peak, half off-peak.
@@ -141,6 +152,15 @@ model_list:
     model_info:
       input_cost_per_token: 0.00000132
       output_cost_per_token: 0.00000396
+      offpeak:
+        timezone: UTC
+        charge_multiplier: 0.5
+        cache_read_input_cost_per_token: 0.000000044
+        windows:
+          - {days: [0, 1, 2, 3, 4], start: '00:00', end: '01:00'}
+          - {days: [0, 1, 2, 3, 4], start: '04:00', end: '06:00'}
+          - {days: [0, 1, 2, 3, 4], start: '10:00', end: '24:00'}
+          - {days: [5, 6], start: '00:00', end: '24:00'}
 
   # ---------- Moonshot Kimi (API key) ----------
   # Price checked 2026-10-21: https://platform.kimi.ai/ (K3 price card)
