@@ -243,6 +243,12 @@ def thread_totals(state: dict) -> dict:
             "recorded_spent_usd": sum(r["cost_usd"] for r in state["receipts"] if r["cost_usd"] is not None)}
 
 
+@router.get("/models")
+async def models(actor: Actor = Depends(identity)) -> list[dict]:
+    from main import list_models
+    return await list_models()
+
+
 @router.get("/tools")
 async def tools(actor: Actor = Depends(identity)) -> list[str]:
     return allowed_tools(actor)
@@ -1071,6 +1077,15 @@ def planning_message(actor: Actor) -> dict:
 
 def public_card(card: dict) -> dict:
     return {k: v for k, v in card.items() if k not in {"payload", "evidence_ids"}}
+
+
+@router.post("/threads/{thread_id}/actions")
+async def propose_tool(thread_id: uuid.UUID, body: PlannedAction, actor: Actor = Depends(identity)) -> dict:
+    async with editing(thread_id, actor) as (conn, row, state):
+        actor = await authorized_actor(actor, conn)
+        action = validate_action(body, actor)
+        card = await propose_action(conn, row, state, action, actor)
+    return public_card(card)
 
 
 async def propose_action(conn: Any, row: dict, state: dict, action: PlannedAction, actor: Actor | None = None) -> dict:
