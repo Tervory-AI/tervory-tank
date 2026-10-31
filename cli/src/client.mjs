@@ -19,6 +19,66 @@ export function safe(value) {
     .replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '');
 }
 
+/** Keep terminal-control and credential state across arbitrary SSE chunks. */
+export class StreamSanitizer {
+  #escape = '';
+  #candidate = '';
+  #dropping = false;
+  write(value) {
+    let out = '';
+    const printable = char => {
+      if (this.#dropping) {
+        if (/^[A-Za-z0-9_.-]$/.test(char)) return;
+        this.#dropping = false;
+      }
+      if (this.#candidate.startsWith('tv1.')) {
+        if (/^[A-Za-z0-9_.-]$/.test(char)) {
+          this.#candidate += char;
+          if (this.#candidate.length > 256) {
+            out += '[redacted]'; this.#candidate = ''; this.#dropping = true;
+          }
+          return;
+        }
+        out += safe(this.#candidate); this.#candidate = '';
+      }
+      this.#candidate += char;
+      while (this.#candidate && !'tv1.'.startsWith(this.#candidate)) {
+        out += this.#candidate[0]; this.#candidate = this.#candidate.slice(1);
+      }
+    };
+    for (const char of String(value)) {
+      if (this.#escape === 'esc') {
+        this.#escape = char === '[' ? 'csi' : [']', 'P', '^', '_'].includes(char) ? 'string' : '';
+        continue;
+      }
+      if (this.#escape === 'csi') {
+        if (/^[\x40-\x7e]$/.test(char)) this.#escape = '';
+        continue;
+      }
+      if (this.#escape === 'string') {
+        if (char === '\x07' || char === '\x9c') this.#escape = '';
+        else if (char === '\x1b') this.#escape = 'string-esc';
+        continue;
+      }
+      if (this.#escape === 'string-esc') {
+        this.#escape = char === '\\' ? '' : char === '\x1b' ? 'string-esc' : 'string';
+        continue;
+      }
+      if (char === '\x1b') { this.#escape = 'esc'; continue; }
+      if (char === '\x9b') { this.#escape = 'csi'; continue; }
+      if (['\x90', '\x9d', '\x9e', '\x9f'].includes(char)) { this.#escape = 'string'; continue; }
+      if (/[\x00-\x08\x0b-\x1f\x7f-\x9f]/.test(char)) continue;
+      printable(char);
+    }
+    return out;
+  }
+  end() {
+    const out = safe(this.#candidate);
+    this.#candidate = ''; this.#escape = ''; this.#dropping = false;
+    return out;
+  }
+}
+
 export async function keychain() {
   const { Entry } = await import('@napi-rs/keyring');
   const entry = new Entry('@tervory/cli', 'personal-token', { linux: { store: 'secret-service' } });
@@ -114,16 +174,19 @@ export async function confirmCard(tank, card, io) {
 export async function showTurn(tank, thread, text, model, attachments, io) {
   const response = await tank.request(`/v1/command/threads/${encodeURIComponent(thread)}/turn`, { text, model, attachments });
   const cards = []; let complete = false;
+  const sanitizer = new StreamSanitizer();
+  const write = text => io.write(sanitizer.write(text));
   for await (const event of events(response)) {
     switch (event.kind) {
-      case 'token': io.write(safe(event.data.text)); break;
-      case 'step': io.write(`\n[${safe(event.data.status)}] ${safe(event.data.actor)}: ${safe(event.data.label)}\n`); break;
-      case 'receipt': io.write(`\n${receiptLines(event.data).map(safe).join('\n')}\n`); break;
+      case 'token': write(event.data.text); break;
+      case 'step': write(`\n[${safe(event.data.status)}] ${safe(event.data.actor)}: ${safe(event.data.label)}\n`); break;
+      case 'receipt': write(`\n${receiptLines(event.data).map(safe).join('\n')}\n`); break;
       case 'card': if (!event.data.status || event.data.status === 'pending') cards.push(event.data); break;
       case 'error': throw new Error('Tank could not complete the turn.');
       case 'done': complete = true; break;
     }
   }
+  io.write(sanitizer.end());
   if (!complete) throw new Error('Tank stream interrupted; the turn was not retried.');
   for (const card of cards) await confirmCard(tank, card, io);
 }
