@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { run, Tank, originFor, receiptLines, safe, events, StreamSanitizer, showTurn } from '../src/client.mjs';
+import { run, Tank, originFor, receiptLines, safe, events, StreamSanitizer, showTurn, followThread } from '../src/client.mjs';
 
 // Synthetic credentials exist only in this fake-Tank harness, never live data.
 const TOKEN = `tv1.us-east.${'0'.repeat(32)}.${'x'.repeat(43)}`;
@@ -38,8 +38,8 @@ function harness({ answers = [], token = TOKEN, refusal = false } = {}) {
         + encode('done', { message_id: 'fake-message' }), { headers: { 'Content-Type': 'text/event-stream' } });
     }
     if (path.endsWith('/actions') || path.endsWith('/build')) return Response.json({ card_id: 'fake-card', summary: 'Fake action', status: 'pending' });
-    if (path.includes('/cards/')) return Response.json({ status: calls.at(-1).body.action === 'confirm' ? 'confirmed' : 'cancelled' });
-    if (path.endsWith('/fake-thread')) return Response.json({ receipts: [row] });
+    if (path.includes('/cards/')) return Response.json({ card_id: 'fake-card', status: calls.at(-1).body.action === 'confirm' ? 'confirmed' : 'cancelled' });
+    if (path.endsWith('/fake-thread')) return Response.json({ receipts: [row], steps: [{ step_id: 'fake-card', status: 'done', actor: 'base', label: 'Fake work done' }] });
     throw new Error(`Unexpected fake route ${path}`);
   };
   return { io, transport, calls, stored,
@@ -99,7 +99,7 @@ test('known squad action uses code, creates pending card, requires explicit yes'
   const action = h.calls.find(c => c.url.endsWith('/actions'));
   assert.deepEqual(action.body, { tool: 'base.search', arguments: { q: 'synthetic' } });
   assert(!h.calls.some(c => c.url.endsWith('/turn')));
-  assert.equal(h.calls.at(-1).body.action, 'confirm');
+  assert.equal(h.calls.find(c => c.url.includes('/cards/')).body.action, 'confirm');
 });
 
 test('CSV file intake maps existing batch records without model', async () => {
@@ -210,6 +210,72 @@ test('UTF-8 transport splits at every byte preserve sanitizer state', async () =
     for await (const event of events(response)) output += sanitizer.write(event.data.text);
     output += sanitizer.end(); assert.equal(output, 'héllo [redacted] world', `byte ${cut}`);
   }
+});
+
+test('authoritative replace discards preview and seq duplicates never duplicate the final answer', async () => {
+  let output = ''; const previews = []; let requests = 0;
+  const tank = { request: async () => { requests++; return new Response(
+    encode('token', { text: 'Provisional text', seq: 1 })
+    + encode('token', { text: 'Provisional text', seq: 1 })
+    + encode('token', { text: 'Validated final answer.', replace: true, seq: 2 })
+    + encode('token', { text: 'Validated final answer.', replace: true, seq: 2 })
+    + encode('done', { seq: 3 })); } };
+  await showTurn(tank, 'fake-thread', 'test', 'auto', [], { write: text => { output += text; }, preview: text => previews.push(text) });
+  assert.equal(output, 'Validated final answer.');
+  assert(previews.some(value => value.startsWith('Provisional tex'))); assert.equal(requests, 1);
+});
+
+test('whole-string output strips C1 controls in titles cards models and receipts', () => {
+  assert.equal(safe('title\x9d52;c;bad\x9c visible\x9b2J'), 'title visible');
+  assert.equal(safe(`card ${TOKEN}`), 'card [redacted]');
+});
+
+test('job watcher observes steps and receipts until terminal state with read-only polls', async () => {
+  let polls = 0; let waits = 0; let output = '';
+  const tank = { json: async path => {
+    assert.equal(path, '/v1/command/threads/fake-thread'); polls++;
+    return { steps: [{ step_id: 'build', status: polls === 1 ? 'running' : 'done', actor: 'worker', label: 'Fake build', link: 'https://example.invalid/fake-pr' }],
+      receipts: polls === 1 ? [] : [{ ...row, step_id: 'build' }] };
+  } };
+  await followThread(tank, 'fake-thread', { card_id: 'card', build_id: 'build' }, {
+    write: text => { output += text; }, wait: async () => { waits++; },
+  });
+  assert.equal(polls, 2); assert.equal(waits, 1);
+  assert.match(output, /\[running\]/); assert.match(output, /\[done\]/);
+  assert.match(output, /fake-ledger-1/); assert.match(output, /fake-pr/);
+});
+
+test('job watcher stops at its bound and does not repeat action or turn', async () => {
+  let polls = 0; let output = '';
+  await followThread({ json: async () => { polls++; return { steps: [{ step_id: 'card', status: 'running', actor: 'base', label: 'Fake work' }] }; } },
+    'fake-thread', { card_id: 'card' }, { write: text => { output += text; }, wait: async () => {} }, { limit: 2, interval: 0 });
+  assert.equal(polls, 2); assert.match(output, /Reopen thread fake-thread/);
+  assert.equal(output.match(/Fake work/g).length, 1);
+});
+
+test('job watcher cancellation and failed state stop without retry', async () => {
+  const controller = new AbortController(); controller.abort(); let polls = 0;
+  await assert.rejects(followThread({ json: async () => { polls++; } }, 'fake-thread', {},
+    { signal: controller.signal, write() {} }), /cancelled/);
+  assert.equal(polls, 0);
+  await followThread({ json: async () => { polls++; return { cards: [{ card_id: 'card', status: 'unknown' }] }; } },
+    'fake-thread', { card_id: 'card' }, { write() {} });
+  assert.equal(polls, 1);
+});
+
+test('reopened chat shows saved messages and follows existing job without another model turn', async () => {
+  let polls = 0; let output = '';
+  const h = harness({ answers: ['/exit'] });
+  h.transport = async (url, init) => {
+    assert.equal(init.method, 'GET'); assert(url.endsWith('/threads/fake-thread')); polls++;
+    return Response.json({ messages: [{ role: 'assistant', content: 'Saved answer' }],
+      cards: [{ card_id: 'card', status: 'confirmed', build_id: 'build' }],
+      steps: [{ step_id: 'build', actor: 'worker', label: 'Saved work', status: polls === 1 ? 'running' : 'done' }] });
+  };
+  h.io.write = text => { output += text; };
+  await run(['chat', 'fake-thread'], h);
+  assert.match(output, /Saved answer/); assert.match(output, /Saved work/);
+  assert.equal(polls, 2);
 });
 
 // Reuse the production run/stream/receipt code for a clearly labeled recording.
