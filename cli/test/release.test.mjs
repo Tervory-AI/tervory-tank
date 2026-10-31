@@ -127,6 +127,17 @@ test('tervory update: latest, TERVORY_CLI_VERSION pin, and checksum refusal', { 
   const launched = await run(join(home, 'bin/tervory'), ['version'], { env: { PATH: process.env.PATH, HOME: home } });
   assert.equal(launched.stdout, `tervory 0.1.0 (${PLATFORM})\n`);
 
+  // Review of #506 should-fix 3: latest.json pointing below the installed copy (a rollback,
+  // a stale cache or a tampered mirror) is refused unless --version / the pin asks for it.
+  const stale = (url, init) => String(url).endsWith('/latest.json')
+    ? Promise.resolve(Response.json({ version: '0.1.0', manifest: 'releases/0.1.0/manifest.json' }))
+    : transport(url, init);
+  const before = readlinkSync(join(cliDir, 'current'));
+  await assert.rejects(newer.run(['update'], { transport: stale, io, env: {} }),
+    /Update refused: latest\.json offers 0\.1\.0, older than the installed 0\.1\.1\. Use tervory update --version 0\.1\.0 to downgrade\./);
+  assert.equal(readlinkSync(join(cliDir, 'current')), before);
+  assert(existsSync(join(cliDir, '0.1.1/RELEASE.json')));
+
   // Development checkouts never self-update.
   const { run: devRun } = await import('../src/client.mjs');
   await assert.rejects(devRun(['update'], { transport, io, env: {} }), /only available for copies installed with: curl -fsSL https:\/\/app\.tervory\.com\/cli\/install\.sh \| sh/);

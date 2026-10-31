@@ -80,6 +80,11 @@ export async function update({ transport, io, version, root = PACKAGE_ROOT, tar 
   if (version !== undefined && !VERSION.test(version)) throw new Error('Update failed: invalid version.');
   const target = version ?? await latestVersion(transport, io.signal);
   if (target === release.version) { io.write(`Tervory CLI ${release.version} is already installed.\n`); return; }
+  // latest.json pointing below this copy is refused (a rollback or a stale cache must not
+  // silently downgrade); an explicit --version or TERVORY_CLI_VERSION may go down.
+  if (version === undefined && compareVersions(target, release.version) < 0) {
+    throw new Error(`Update refused: latest.json offers ${target}, older than the installed ${release.version}. Use tervory update --version ${target} to downgrade.`);
+  }
   let manifest;
   try { manifest = await getJson(transport, `releases/${target}/manifest.json`, io.signal); } catch (error) {
     if (error.status === 404) throw new Error(`Update failed: version ${target} is not available.`);
