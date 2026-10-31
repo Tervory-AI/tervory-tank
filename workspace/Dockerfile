@@ -11,7 +11,7 @@ RUN npm install --include=dev --no-audit --no-fund
 # committed (review of #506, should-fix 4). `cli` is a named build context:
 # docker-compose.yml sets additional_contexts.cli=./cli; by hand:
 #   docker build --build-context cli=cli -f workspace/Dockerfile workspace
-# The build is reproducible (fixed mtimes, sorted tar, gzip -n, npm ci from the lockfile).
+# The build is reproducible on a given host (fixed mtimes and modes, sorted tar, gzip -n, npm ci from the lockfile).
 FROM node:22-slim AS cli-release
 WORKDIR /src
 COPY --from=cli . ./cli
