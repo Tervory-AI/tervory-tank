@@ -39,7 +39,7 @@ global.fetch = async (target, init) => {
   assert.equal(init.redirect, 'error');
   assert.deepEqual(init.headers, {
     accept: 'application/json', 'x-tank-key': 'dummy-workspace-key',
-    'x-tervory-user': 'offline-founder', 'x-tervory-admin': 'offline-founder',
+    'x-tervory-user': session.userId, 'x-tervory-admin': session.userId,
     'x-tervory-tenant': tenantIdFor('org_offline'),
   });
   assert.equal(url.searchParams.has('tenant_id'), false);
@@ -52,7 +52,7 @@ async function get(parts = ['leads'], query = '') {
   }), { params: Promise.resolve({ path: parts }) });
 }
 (async () => {
-  for (const denied of [null, 'offline-client']) {
+  for (const denied of [null]) {
     session = { userId: denied, orgId: 'org_offline' };
     assert.equal((await get()).status, 404);
   }
@@ -74,6 +74,13 @@ async function get(parts = ['leads'], query = '') {
   assert.equal(ok.headers.get('x-content-type-options'), 'nosniff');
   assert.deepEqual(await ok.json(), { resource: 'leads', items: [], page: 1, count: 0 });
   assert.equal(tenantIdFor('org_previous'), tenantIdFor('org_offline'));
+  session = { userId: 'offline-client', orgId: 'org_offline' };
+  // Tank, not Workspace's founder flag, decides the persisted grant and CRM organization authority.
+  upstream = () => Response.json({ resource: 'leads', items: [], page: 1, count: 0 });
+  assert.equal((await get()).status, 200);
+  upstream = () => new Response(null, { status: 403 });
+  assert.equal((await get()).status, 403);
+  session = { userId: 'offline-founder', orgId: 'org_offline' };
   for (const resource of ['contacts', 'estimates']) {
     upstream = () => Response.json({ resource, item: { id } });
     assert.equal((await get([resource, id])).status, 200);
@@ -96,5 +103,5 @@ async function get(parts = ['leads'], query = '') {
   await assert.rejects(triggerCrmRead({ userId: 'offline-founder', tenantId: 'ignored' }, ['../admin'], new URLSearchParams()), /invalid_crm_request/);
   assert.equal(count, before);
   assert.deepEqual(Object.keys(route).sort(), ['GET', 'dynamic', 'runtime']);
-  console.log('PASS: founder isolation, active-tenant aliases, path/query allowlists, no mutation export, same-box forwarding, empty errors, response envelope checks');
+  console.log('PASS: signed-in client forwarding with Tank authorization, active-tenant aliases, path/query allowlists, no mutation export, same-box forwarding, empty errors, response envelope checks');
 })().catch(error => { console.error(error); process.exitCode = 1; });
