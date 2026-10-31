@@ -977,7 +977,7 @@ async def test_auto_comparison_stays_unavailable_despite_pricebook_and_policy(ap
 
     async def answer(actor, messages, model=None, *, task_id=None, on_token=None):
         assert model == 'fixture-pin'
-        # A price or policy edit during the call must not rewrite its comparison.
+        # Price-book data cannot become an observed Auto execution cost.
         async with pool.acquire() as conn:
             await conn.execute("UPDATE tank.proof_prices SET input_usd=5 WHERE model='fixture-auto'")
             await conn.execute("UPDATE tank.policy SET model='fixture-platform' WHERE tenant_id=$1 AND task_type='command.turn'", TENANT)
@@ -1143,3 +1143,64 @@ async def test_moa_case_ref_separates_bench_samples_without_changing_seat(shared
     assert len(cache.entries) == 2 and len(calls) == 2
     ledger = [c.args for c in conn.execute.call_args_list if 'INSERT INTO tank.ledger' in c.args[0]]
     assert all(receipt_seat(row) == 'writer' for row in ledger)
+
+
+@pytest.mark.asyncio
+async def test_command_roster_reuses_existing_models_and_requires_identity(api, runtime):
+    client, _ = api
+    roster = [{'name': 'fixture-pin', 'input_usd_per_million': 1.0}]
+    runtime.list_models = AsyncMock(return_value=roster)
+    assert (await client.get('/v1/command/models')).json() == roster
+    runtime.list_models.assert_awaited_once_with()
+    refused = await client.get('/v1/command/models', headers={'x-tank-key': ''})
+    assert refused.status_code == 401
+    assert runtime.list_models.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_code_first_proposal_never_routes_or_dispatches_until_confirm(api, monkeypatch):
+    client, pool = api
+    route = AsyncMock(side_effect=AssertionError('Proposal must use code'))
+    dispatch = AsyncMock(return_value=(200, {'ok': True}))
+    monkeypatch.setattr(command, 'route_turn', route)
+    monkeypatch.setattr(command, 'dispatch_action', dispatch)
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    path = f'/v1/command/threads/{thread}/actions'
+    action = {'tool': 'skala.approve', 'arguments': {'skill_id': 'base.find_site', 'version': '1.0.0'}}
+    result = await client.post(path, json=action)
+    assert result.status_code == 200
+    card = result.json()
+    assert card['status'] == 'pending' and card['kind'] == 'approve_skill'
+    assert 'payload' not in card
+    dispatch.assert_not_awaited()
+    route.assert_not_awaited()
+    # The card and planned step survive a fresh polling request.
+    saved = (await client.get(f'/v1/command/threads/{thread}')).json()
+    assert saved['cards'] == [card] and saved['steps'][0]['status'] == 'planned'
+    assert saved['seq'] == 2
+    assert (await client.get(f"/v1/command/threads/{thread}/events?after={saved['seq']}")).text == ''
+    assert saved['messages'] == [] and saved['receipts'] == []
+    assert (await client.post(path, json={**action, 'arguments': {**action['arguments'], 'tenant_id': str(OTHER)}})).status_code == 422
+    assert (await client.post(path, json=action, headers={'x-tervory-tenant': str(OTHER)})).status_code == 404
+    assert (await client.post(path, json=action, headers={'x-tervory-user': 'client'})).status_code == 404
+    async with pool.acquire() as conn:
+        assert await conn.fetchval('SELECT count(*) FROM tank.tasks') == 0
+    confirmed = await client.post(f"/v1/command/cards/{card['card_id']}", json={'action': 'confirm'})
+    assert confirmed.json()['status'] == 'confirmed'
+    dispatch.assert_awaited_once()
+    route.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_code_first_proposal_rechecks_roles_and_cancel_has_no_side_effect(api, monkeypatch):
+    client, _ = api
+    dispatch = AsyncMock(side_effect=AssertionError('Cancelled action must not dispatch'))
+    monkeypatch.setattr(command, 'dispatch_action', dispatch)
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    path = f'/v1/command/threads/{thread}/actions'
+    action = {'tool': 'worker.build', 'arguments': {'brief_markdown': 'Offline test brief'}}
+    card = (await client.post(path, json=action)).json()
+    assert (await client.post(f"/v1/command/cards/{card['card_id']}", json={'action': 'cancel'})).json()['status'] == 'cancelled'
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', '')
+    assert (await client.post(path, json=action)).status_code == 403
+    dispatch.assert_not_awaited()
