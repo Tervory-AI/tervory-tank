@@ -1147,3 +1147,111 @@ async def test_moa_case_ref_separates_bench_samples_without_changing_seat(shared
     assert len(cache.entries) == 2 and len(calls) == 2
     ledger = [c.args for c in conn.execute.call_args_list if 'INSERT INTO tank.ledger' in c.args[0]]
     assert all(receipt_seat(row) == 'writer' for row in ledger)
+
+
+@pytest.mark.asyncio
+async def test_command_roster_reuses_existing_models_and_requires_identity(api, runtime):
+    client, _ = api
+    roster = [{'name': 'fixture-pin', 'input_usd_per_million': 1.0}]
+    runtime.list_models = AsyncMock(return_value=roster)
+    assert (await client.get('/v1/command/models')).json() == roster
+    runtime.list_models.assert_awaited_once_with()
+    refused = await client.get('/v1/command/models', headers={'x-tank-key': ''})
+    assert refused.status_code == 401
+    assert runtime.list_models.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_code_first_proposal_never_routes_or_dispatches_until_confirm(api, monkeypatch):
+    client, pool = api
+    route = AsyncMock(side_effect=AssertionError('Proposal must use code'))
+    dispatch = AsyncMock(return_value=(200, {'ok': True}))
+    monkeypatch.setattr(command, 'route_turn', route)
+    monkeypatch.setattr(command, 'dispatch_action', dispatch)
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    path = f'/v1/command/threads/{thread}/actions'
+    action = {'tool': 'skala.approve', 'arguments': {'skill_id': 'base.find_site', 'version': '1.0.0'}}
+    result = await client.post(path, json=action)
+    assert result.status_code == 200
+    card = result.json()
+    assert card['status'] == 'pending' and card['kind'] == 'approve_skill'
+    assert 'payload' not in card
+    dispatch.assert_not_awaited()
+    route.assert_not_awaited()
+    # The card and planned step survive a fresh polling request.
+    saved = (await client.get(f'/v1/command/threads/{thread}')).json()
+    assert saved['cards'] == [card] and saved['steps'][0]['status'] == 'planned'
+    assert saved['seq'] == 2
+    assert (await client.get(f"/v1/command/threads/{thread}/events?after={saved['seq']}")).text == ''
+    assert saved['messages'] == [] and saved['receipts'] == []
+    assert (await client.post(path, json={**action, 'arguments': {**action['arguments'], 'tenant_id': str(OTHER)}})).status_code == 422
+    assert (await client.post(path, json=action, headers={'x-tervory-tenant': str(OTHER)})).status_code == 404
+    assert (await client.post(path, json=action, headers={'x-tervory-user': 'client'})).status_code == 404
+    async with pool.acquire() as conn:
+        assert await conn.fetchval('SELECT count(*) FROM tank.tasks') == 0
+    confirmed = await client.post(f"/v1/command/cards/{card['card_id']}", json={'action': 'confirm'})
+    assert confirmed.json()['status'] == 'confirmed'
+    dispatch.assert_awaited_once()
+    route.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_code_first_proposal_rechecks_roles_and_cancel_has_no_side_effect(api, monkeypatch):
+    client, _ = api
+    dispatch = AsyncMock(side_effect=AssertionError('Cancelled action must not dispatch'))
+    monkeypatch.setattr(command, 'dispatch_action', dispatch)
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    path = f'/v1/command/threads/{thread}/actions'
+    action = {'tool': 'worker.build', 'arguments': {'brief_markdown': 'Offline test brief'}}
+    card = (await client.post(path, json=action)).json()
+    assert (await client.post(f"/v1/command/cards/{card['card_id']}", json={'action': 'cancel'})).json()['status'] == 'cancelled'
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', '')
+    assert (await client.post(path, json=action)).status_code == 403
+    dispatch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_owned_task_receipts_require_owner_and_exact_ledger(api, monkeypatch):
+    client, pool = api
+    ledger = await seed_ledger(pool)
+    monkeypatch.setattr(command, 'route_turn', AsyncMock(return_value=SimpleNamespace(ledger_id=ledger, content='Recorded answer')))
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Offline task test'})
+    assert 'event: done' in reply.text
+    saved = (await client.get(f'/v1/command/threads/{thread}')).json()
+    task_id = saved['messages'][-1]['message_id']
+    path = f'/v1/command/tasks/{task_id}/receipts'
+    response = await client.get(path)
+    assert response.status_code == 200
+    assert response.json()['rows'] == saved['receipts']
+    assert response.json()['totals']['cost_usd'] == 0.02
+    assert response.json()['totals']['baseline_cost_usd'] is None
+    assert response.json()['status'] == 'recorded'
+    assert (await client.get(path, headers={'x-tervory-user': 'client'})).status_code == 404
+    assert (await client.get(path, headers={'x-tervory-tenant': str(OTHER)})).status_code == 404
+    assert (await client.get(path, headers={'x-tank-key': ''})).status_code == 401
+    async with pool.acquire() as conn:
+        # Other runs are readable only when created by this exact user.
+        unlinked = uuid.uuid4()
+        await conn.execute("INSERT INTO tank.tasks(id,tenant_id,created_by,task_type,title,input,ledger_id) VALUES($1,$2,'founder','command.turn','offline','{}',$3)", unlinked, TENANT, ledger)
+        assert (await client.get(f'/v1/command/tasks/{unlinked}/receipts')).json()['rows'][0]['ledger_id'] == str(ledger)
+        await conn.execute("UPDATE tank.tasks SET created_by='someone-else' WHERE id=$1", unlinked)
+        assert (await client.get(f'/v1/command/tasks/{unlinked}/receipts')).status_code == 404
+        await conn.execute('UPDATE tank.tasks SET ledger_id=NULL WHERE id=$1', uuid.UUID(task_id))
+    pending = (await client.get(path)).json()
+    assert pending == {'rows': [], 'totals': {'cost_usd': None, 'baseline_cost_usd': None, 'saved_usd': None}, 'status': 'pending'}
+    async with pool.acquire() as conn:
+        await conn.execute('UPDATE tank.tasks SET ledger_id=$2 WHERE id=$1', uuid.UUID(task_id), ledger)
+        await conn.execute("UPDATE tank.ledger SET cost_usd=0,cost_status='not_set' WHERE id=$1", ledger)
+    unknown = (await client.get(path)).json()
+    assert unknown['rows'][0]['cost_usd'] is None and unknown['totals']['cost_usd'] is None
+    assert unknown['status'] == 'pending'
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE tank.ledger SET cost_status='set' WHERE id=$1", ledger)
+    zero = (await client.get(path)).json()
+    assert zero['rows'][0]['cost_usd'] == zero['totals']['cost_usd'] == 0
+    assert zero['status'] == 'recorded'
+    foreign = await seed_ledger(pool, tenant=OTHER)
+    async with pool.acquire() as conn:
+        await conn.execute('UPDATE tank.tasks SET ledger_id=$2 WHERE id=$1', uuid.UUID(task_id), foreign)
+    assert (await client.get(path)).status_code == 409
