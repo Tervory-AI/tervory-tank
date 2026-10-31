@@ -65,6 +65,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 import batch_providers
+import prompt_cache
 import priority_queue
 import graduate
 import semantic_cache
@@ -668,6 +669,9 @@ class RouteResponse(BaseModel):
     batch: bool = False
     baseline_cost_usd: float | None = None
     discount_usd: float | None = None
+    # Provider prompt-cache tokens included in tokens_in (0 when none were reported).
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
 
 
 class PolicyRow(BaseModel):
@@ -1227,7 +1231,9 @@ async def run_route(
     if policy["system_prompt"]:
         messages = [{"role": "system", "content": policy["system_prompt"]}, *messages]
     if req.task_type == "zenas.case_facts" and any(str(message.get("content", "")).startswith(_CONVERT_HEAD) for message in messages):
-        messages.insert(0, {"role": "system", "content": (
+        # Fixed text first, so the provider prompt cache sees one stable prefix:
+        # the policy prompt, then this fixed instruction, then the judgment.
+        prompt_cache.insert_fixed(messages, bool(policy["system_prompt"]), {"role": "system", "content": (
             "For this judgment conversion use facts_pointer and element quote_pointer objects instead of copying text. "
             "Each pointer is {\"paragraphs\":[1,2]} or {\"first\":\"first eight words\",\"last\":\"last eight words\"}. "
             "Select at least 200 characters of facts. Return question, holding, elements and citations as JSON."
@@ -1414,6 +1420,9 @@ async def run_route(
     usage = data.get("usage") or {}
     tokens_in = int(usage.get("prompt_tokens") or 0)
     tokens_out = int(usage.get("completion_tokens") or 0)
+    # Provider prompt-cache tokens, part of tokens_in. LiteLLM prices them with the
+    # roster cache rates (litellm/config.yaml) in the cost header below.
+    cache_read, cache_write = prompt_cache.cache_tokens(usage)
     # LiteLLM reports the cost it computed from config.yaml prices in this header.
     cost_usd = float(r.headers.get("x-litellm-response-cost") or 0.0)
     cost_status = "set"
@@ -1438,10 +1447,12 @@ async def run_route(
             """
             INSERT INTO tank.ledger
               (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat,escalation,accept_after,sent_at,offpeak_job_id,cost_status)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16,$17,$18::jsonb,now()+make_interval(secs=>$19),$20,$21,$22)
+               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat,escalation,accept_after,sent_at,offpeak_job_id,cost_status,
+               cache_read_tokens,cache_write_tokens)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16,$17,$18::jsonb,now()+make_interval(secs=>$19),$20,$21,$22,$23,$24)
             ON CONFLICT(id) DO UPDATE SET model=EXCLUDED.model,rung=EXCLUDED.rung,
               tokens_in=EXCLUDED.tokens_in,tokens_out=EXCLUDED.tokens_out,cost_usd=EXCLUDED.cost_usd,
+              cache_read_tokens=EXCLUDED.cache_read_tokens,cache_write_tokens=EXCLUDED.cache_write_tokens,
               latency_ms=EXCLUDED.latency_ms,outcome=EXCLUDED.outcome,error=EXCLUDED.error,
               route_seat=EXCLUDED.route_seat,escalation=EXCLUDED.escalation,accept_after=EXCLUDED.accept_after,
               sent_at=EXCLUDED.sent_at,cost_status=EXCLUDED.cost_status,
@@ -1455,7 +1466,7 @@ async def run_route(
             ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
             req.task_type, policy["rung"], answered, priority, tokens_in, tokens_out, cost_usd,
             latency_ms, outcome, task_id, error, route_seat, json.dumps(escalation), int(policy.get("acceptance_window_s", 86400)),
-            sent_at, _receipt_id, cost_status,
+            sent_at, _receipt_id, cost_status, cache_read, cache_write,
         )
 
     if outcome == "failed":
@@ -1497,7 +1508,7 @@ async def run_route(
     return RouteResponse(
         ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
         tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd if cost_status == "set" else None, latency_ms=latency_ms,
-        finish_reason=finish_reason, escalation=escalation,
+        finish_reason=finish_reason, escalation=escalation, cache_read_tokens=cache_read, cache_write_tokens=cache_write,
     )
 
 
@@ -1592,6 +1603,8 @@ def _roster_row(item: Any) -> dict[str, Any] | None:
         "model_info": {
             "input_cost_per_token": price("input_cost_per_token"),
             "output_cost_per_token": price("output_cost_per_token"),
+            **{key: value for key in ("cache_read_input_token_cost", "cache_creation_input_token_cost")
+               if (value := price(key)) is not None},
             **({"offpeak": info["offpeak"]} if isinstance(info.get("offpeak"), dict) else {}),
         },
     }
@@ -2593,7 +2606,11 @@ async def _batch_price(model: str) -> dict[str, Any]:
     provider, _, name = native.partition("/")
     return {"input": float(info["input_cost_per_token"]), "output": float(info["output_cost_per_token"]),
             "provider": provider, "native": name,
-            "discount": batch_providers.charge_multiplier(provider, name) or 1.0}
+            "discount": batch_providers.charge_multiplier(provider, name) or 1.0,
+            # Provider prompt-cache rates, only when the roster states them.
+            **{short: float(info[key]) for short, key in (("cache_read", "cache_read_input_token_cost"),
+                                                          ("cache_write", "cache_creation_input_token_cost"))
+               if info.get(key) is not None}}
 
 
 def _call_upper(messages: list[dict[str, str]], max_tokens: int, prices: dict[str, Any]) -> float:
@@ -2782,8 +2799,9 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
         return
     usage = data.get("usage") or {}
     tokens_in, tokens_out = int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
+    cache_read, cache_write = prompt_cache.cache_tokens(usage)
     prices, snapshot = _batch_obj(item["prices"]), _batch_obj(item["policy"])
-    baseline = Decimal(tokens_in)*Decimal(str(prices["input"])) + Decimal(tokens_out)*Decimal(str(prices["output"]))
+    baseline = prompt_cache.token_cost(prices, tokens_in, tokens_out, cache_read, cache_write)
     actual = baseline*Decimal(str(prices["discount"]))
     req = RouteRequest.model_validate(_batch_obj(item["request"]))
     ledger_id = uuid.UUID(snapshot["offpeak_job_id"]) if snapshot.get("offpeak_job_id") else uuid.uuid4()
@@ -2795,11 +2813,13 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
         await conn.execute(
             """INSERT INTO tank.ledger(id,tenant_id,region,agent,skill,task_type,rung,model,priority,
             tokens_in,tokens_out,cost_usd,latency_ms,outcome,batch,batch_id,baseline_model,baseline_cost_usd,
-            baseline_status,escalation,accept_after,batch_baseline_cost_usd,batch_discount_usd,sent_at,offpeak_job_id)
+            baseline_status,escalation,accept_after,batch_baseline_cost_usd,batch_discount_usd,sent_at,offpeak_job_id,
+            cache_read_tokens,cache_write_tokens)
             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$16,$9,$10,$11,0,'delivered',true,$12,$8,$13,'measured',$14::jsonb,
-                   now()+make_interval(secs=>$15),$13,$13::numeric-$11::numeric,$17,$18)
+                   now()+make_interval(secs=>$15),$13,$13::numeric-$11::numeric,$17,$18,$19,$20)
             ON CONFLICT(id) DO UPDATE SET model=EXCLUDED.model,rung=EXCLUDED.rung,
               tokens_in=EXCLUDED.tokens_in,tokens_out=EXCLUDED.tokens_out,cost_usd=EXCLUDED.cost_usd,
+              cache_read_tokens=EXCLUDED.cache_read_tokens,cache_write_tokens=EXCLUDED.cache_write_tokens,
               latency_ms=EXCLUDED.latency_ms,outcome=EXCLUDED.outcome,cost_status='set',
               escalation=EXCLUDED.escalation,accept_after=EXCLUDED.accept_after,sent_at=EXCLUDED.sent_at,
               batch=EXCLUDED.batch,batch_id=EXCLUDED.batch_id,
@@ -2814,7 +2834,7 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
             snapshot["routing"]["rung"], batch["model"], tokens_in, tokens_out, actual,
             batch["id"], baseline, json.dumps(snapshot["escalation"]), int(snapshot["routing"]["acceptance_window_s"]),
             "offpeak" if snapshot.get("offpeak_job_id") else "batch", batch["submitted_at"],
-            ledger_id if snapshot.get("offpeak_job_id") else None,
+            ledger_id if snapshot.get("offpeak_job_id") else None, cache_read, cache_write,
         )
         await conn.execute("""INSERT INTO tank.transcripts(ledger_id,tenant_id,task_type,messages,content)
             VALUES($1,$2,$3,$4::jsonb,$5)""", ledger_id, req.tenant_id, req.task_type,

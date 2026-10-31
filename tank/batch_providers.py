@@ -45,6 +45,9 @@ def anthropic_params(body: dict[str, Any]) -> dict[str, Any]:
     result['messages'] = [m for m in body['messages'] if m['role'] != 'system']
     system = [{'type': 'text', 'text': m['content']} for m in body['messages'] if m['role'] == 'system']
     if system:
+        # One prompt-cache breakpoint after the fixed system text. Anthropic ignores it
+        # below the model's minimum cacheable length; items sharing it read it at 0.1x.
+        system[-1] = {**system[-1], 'cache_control': {'type': 'ephemeral'}}
         result['system'] = system
     return result
 
@@ -104,11 +107,12 @@ def anthropic_result(row: dict[str, Any]) -> dict[str, Any]:
     if result['type'] != 'succeeded':
         raise ValueError('unknown_batch_result')
     message = result['message']
-    usage = message['usage']
+    from prompt_cache import anthropic_usage
     text = ''.join(block['text'] for block in message['content'] if block['type'] == 'text')
     return {'custom_id': row['custom_id'], 'response': {'status_code': 200, 'body': {
         'choices': [{'message': {'content': text}, 'finish_reason': message.get('stop_reason')}],
-        'usage': {'prompt_tokens': usage['input_tokens'], 'completion_tokens': usage['output_tokens']}}}}
+        # input_tokens excludes cache reads and writes; the booked prompt total includes them.
+        'usage': anthropic_usage(message['usage'])}}}
 
 
 async def results(gateway, batch, file_id: str) -> dict[str, Any]:
