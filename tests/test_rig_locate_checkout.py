@@ -297,7 +297,7 @@ async def test_odoo_place_located_order_refuses_without_sandbox_mode_before_any_
 
 
 class SandboxOrders:
-    """Test double for the retailer's sandbox Odoo."""
+    """Test double for the retailer handoff and the order step (rigbox.fulfilment)."""
 
     def __init__(self, fail=False):
         self.sent, self.placed, self.fail = [], [], fail
@@ -305,13 +305,13 @@ class SandboxOrders:
     async def send(self, *, tenant_id, email, webhook, quote):
         self.sent.append((tenant_id, quote["id"]))
 
-    async def place_located_order(self, *, tenant_id, quote_id, located):
+    async def place_located_order(self, *, tenant_id, quote_id, located, price=None, ship=None):
         sandbox_orders()
         if self.fail:
             raise DeliveryError("odoo_rejected")
         self.placed.append((tenant_id, quote_id, located["offer"]["sku"], located["live"]["price"]))
-        return {"sale_order": {"name": "S00001", "state": "sale"},
-                "purchase_order": {"name": "P00001", "state": "draft"}}
+        return {"order": {"number": "S00001", "state": "placed"},
+                "purchase_order": {"number": "P00001", "state": "draft"}}
 
 
 async def checkout(monkeypatch, *, fail=False, provider=None):
@@ -323,6 +323,7 @@ async def checkout(monkeypatch, *, fail=False, provider=None):
     store = await rate_stub(await shop())
     orders = SandboxOrders(fail)
     service = QuoteService(store, None, orders, MemoryQuotes(store))
+    service.fulfilment = orders
     service.locate_checker = Live(available("45.00"))
     service.payments = provider or FakeProvider()
     held = await service.locate_confirm(TENANT, "part-1")
@@ -339,7 +340,7 @@ async def test_accept_pays_in_test_mode_then_orders_and_records_each_state(monke
     assert result["price"] == held["price"] == {"amount": "1125.00", "currency": "ZAR"}
     quote = next(q for q in store.quotes if q["id"] == result["request_id"])
     state = quote["payload"]["locate_state"]
-    assert state["state"] == "ordered" and state["sale_order"] == "S00001" and state["purchase_order"] == "P00001"
+    assert state["state"] == "ordered" and state["order"] == "S00001" and state["purchase_order"] == "P00001"
     assert state["payment"] == {"reference": "ch_test_1", "provider": "test-double", "test": True}
     assert quote["payload"]["product"]["price"] == held["price"]
     assert orders.placed == [(TENANT, result["request_id"], "RSR|POF00307", "45.00")]

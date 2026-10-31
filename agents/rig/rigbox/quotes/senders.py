@@ -8,14 +8,7 @@ timed-out call.
 The one exception is Locate order placement (place_located_order). It runs
 only with RIG_LOCATE_ORDER_MODE=sandbox, against a sandbox Odoo, after a test
 mode payment: it confirms that sale.order and creates one draft supplier
-purchase.order. It never invoices or sends mail. Only the optional auto-order
-step (send_supplier_order, per store, off by default) confirms that purchase
-order, and it writes the supplier email to a local sandbox outbox, never SMTP.
-
-Blind ship (optional, per store): the sale.order gets the shopper's delivery
-address, its line takes Odoo's Dropship route, and Odoo's own procurement
-drafts the supplier purchase.order to that address (dest_address_id). Nothing
-about the other store is written to customer-facing records.
+purchase.order. It never invoices, sends mail or confirms the purchase.
 """
 
 from __future__ import annotations
@@ -77,13 +70,6 @@ def flow_for(tenant_id: str) -> dict[str, Any]:
         raise DeliveryError("configuration") from None
 
 
-# Printed on the supplier's purchase order (purchase.order.notes) when the
-# approved source is flagged neutral_slip_required.
-BLIND_INSTRUCTION = ("<p><strong>Ship blind.</strong> This parcel goes straight to our customer. "
-                     "No supplier branding, prices, invoice or branded packing slip in the parcel. "
-                     "Use a plain packing slip or none.</p>")
-
-
 class OdooHandoff:
     def __init__(self, http: Any, *, url: str, database: str, user: str, api_key: str) -> None:
         if not all((url, database, user, api_key)):
@@ -124,13 +110,11 @@ class OdooHandoff:
         return execute
 
     async def place_located_order(self, *, tenant_id: str, quote_id: str, located: dict[str, Any],
-                                  env: dict[str, str] | None = None,
-                                  ship: dict[str, Any] | None = None) -> dict[str, Any]:
+                                  env: dict[str, str] | None = None) -> dict[str, Any]:
         """Sandbox only: confirm the quote's sale.order, then draft one supplier PO.
 
         Idempotent by client_order_ref (sale) and origin (purchase).
         located holds the hold's private snapshot: source, offer and live cost.
-        ship (blind ship only) holds the shopper's delivery address.
         """
         sandbox_orders(env)
         execute = await self._session()
@@ -140,10 +124,6 @@ class OdooHandoff:
         if len(orders) != 1:
             raise DeliveryError("odoo_order_missing")
         order = orders[0]
-        if ship is not None:
-            # Blind ship confirms only after the address and Dropship route are set.
-            return await self._blind_order(execute, tenant_id=tenant_id, reference=reference, order=order,
-                                           located=located, ship=ship)
         if order["state"] in ("draft", "sent"):
             await execute("sale.order", "action_confirm", [[order["id"]]])
         elif order["state"] != "sale":
@@ -155,7 +135,14 @@ class OdooHandoff:
         if purchases:
             purchase_id = purchases[0]
         else:
-            vendor_id = await self._vendor(execute, tenant_id, source)
+            vendor_ref = f"rig-supply:{tenant_id}:{source['id']}"
+            vendors = await execute("res.partner", "search", [[["ref", "=", vendor_ref]]], limit=2,
+                                    context={"active_test": False})
+            if len(vendors) > 1:
+                raise DeliveryError("odoo_partner_mapping")
+            vendor_id = vendors[0] if vendors else await execute("res.partner", "create", [{
+                "name": str(source.get("site") or source["id"]), "ref": vendor_ref, "is_company": True,
+                "supplier_rank": 1, "comment": "Rig Locate approved source"}])
             currencies = await execute("res.currency", "search", [[["name", "=", live["currency"]]]],
                                        limit=1, context={"active_test": False})
             if not currencies:
@@ -176,168 +163,6 @@ class OdooHandoff:
         purchase = await execute("purchase.order", "read", [[purchase_id]], fields=["name", "state"])
         return {"sale_order": {"id": order["id"], "name": sale[0]["name"], "state": sale[0]["state"]},
                 "purchase_order": {"id": purchase_id, "name": purchase[0]["name"], "state": purchase[0]["state"]}}
-
-    async def _vendor(self, execute: Any, tenant_id: str, source: dict[str, Any]) -> int:
-        """The approved source's vendor res.partner, keyed by ref.
-
-        Uses the source's real vendor name and order email when the store set
-        them (auto-order needs both); the site URL is only a fallback name.
-        """
-        vendor_ref = f"rig-supply:{tenant_id}:{source['id']}"
-        name = str(source.get("vendor_name") or "").strip()
-        email = str(source.get("order_email") or "").strip()
-        vendors = await execute("res.partner", "search", [[["ref", "=", vendor_ref]]], limit=2,
-                                context={"active_test": False})
-        if len(vendors) > 1:
-            raise DeliveryError("odoo_partner_mapping")
-        if vendors and name:
-            await execute("res.partner", "write", [vendors, {"name": name, **({"email": email} if email else {})}])
-        vendor_id = vendors[0] if vendors else await execute("res.partner", "create", [{
-            "name": name or str(source.get("site") or source["id"]), "ref": vendor_ref, "is_company": True,
-            **({"email": email} if email else {}), **({"website": source["site"]} if source.get("site") else {}),
-            "supplier_rank": 1, "comment": "Rig Locate approved source"}])
-        if not isinstance(vendor_id, int) or isinstance(vendor_id, bool) or vendor_id <= 0:
-            raise DeliveryError("odoo_partner_mapping")
-        return vendor_id
-
-    async def _blind_order(self, execute: Any, *, tenant_id: str, reference: str, order: dict[str, Any],
-                           located: dict[str, Any], ship: dict[str, Any]) -> dict[str, Any]:
-        """Dropship to the shopper: delivery address, Dropship route, Odoo drafts the PO.
-
-        Idempotent: the delivery partner is keyed by ref, the supplier price by
-        vendor and product, and the purchase.order is found through its link to
-        this sale.order's line. Customer-facing records (sale.order, its lines
-        and the delivery address) never name the other store.
-        """
-        source, offer, live = located["source"], located["offer"], located["live"]
-        address = ship["address"]
-        sale = (await execute("sale.order", "read", [[order["id"]]],
-                              fields=["name", "state", "partner_id", "partner_shipping_id"]))[0]
-        customer = sale["partner_id"][0] if sale.get("partner_id") else None
-        if not isinstance(customer, int):
-            raise DeliveryError("odoo_partner_mapping")
-        countries = await execute("res.country", "search", [[["code", "=", address["country"]]]], limit=1)
-        if not countries:
-            raise DeliveryError("odoo_country")
-        values: dict[str, Any] = {"type": "delivery", "parent_id": customer, "ref": reference + ":ship",
-            "country_id": countries[0], "comment": "from Rig, not verified",
-            **{key: address[key] for key in ("name", "street", "street2", "city", "zip", "phone") if address.get(key)}}
-        if address.get("state"):
-            states = await execute("res.country.state", "search", [[["country_id", "=", countries[0]], "|",
-                ["code", "=ilike", address["state"]], ["name", "=ilike", address["state"]]]], limit=1)
-            if states:
-                values["state_id"] = states[0]
-        found = await execute("res.partner", "search", [[["ref", "=", values["ref"]]]], limit=2,
-                              context={"active_test": False})
-        if len(found) > 1:
-            raise DeliveryError("odoo_partner_mapping")
-        ship_id = found[0] if found else await execute("res.partner", "create", [values])
-        if not isinstance(ship_id, int) or isinstance(ship_id, bool) or ship_id <= 0:
-            raise DeliveryError("odoo_partner_mapping")
-        routes = await execute("ir.model.data", "search_read", [[["module", "=", "stock_dropshipping"],
-            ["name", "=", "route_drop_shipping"], ["model", "=", "stock.route"]]], fields=["res_id"], limit=1)
-        if not routes:
-            raise DeliveryError("odoo_dropship_missing")
-        products = await execute("product.product", "search_read", [[["default_code", "=", located["product_sku"]]]],
-                                 fields=["id", "product_tmpl_id"], limit=2)
-        if len(products) != 1:
-            raise DeliveryError("odoo_product_mapping")
-        product = products[0]
-        lines = await execute("sale.order.line", "search", [[["order_id", "=", order["id"]],
-                                                           ["product_id", "=", product["id"]]]], limit=2)
-        if len(lines) != 1:
-            raise DeliveryError("odoo_product_mapping")
-        vendor_id = await self._vendor(execute, tenant_id, source)
-        if sale["state"] in ("draft", "sent"):
-            currencies = await execute("res.currency", "search", [[["name", "=", live["currency"]]]],
-                                       limit=1, context={"active_test": False})
-            if not currencies:
-                raise DeliveryError("odoo_currency")
-            # Odoo's Dropship procurement drafts the PO from this vendor price.
-            seller = {"partner_id": vendor_id, "product_tmpl_id": product["product_tmpl_id"][0],
-                      "product_id": product["id"], "price": float(live["price"]), "currency_id": currencies[0],
-                      "min_qty": 1, "product_code": str(offer.get("sku") or "")}
-            sellers = await execute("product.supplierinfo", "search", [[["partner_id", "=", vendor_id],
-                                                                       ["product_id", "=", product["id"]]]], limit=1)
-            if sellers:
-                await execute("product.supplierinfo", "write", [sellers, seller])
-            else:
-                await execute("product.supplierinfo", "create", [seller])
-            await execute("sale.order", "write", [[order["id"]], {"partner_shipping_id": ship_id}])
-            await execute("sale.order.line", "write", [lines, {"route_id": routes[0]["res_id"]}])
-            await execute("sale.order", "action_confirm", [[order["id"]]])
-        elif sale["state"] != "sale":
-            raise DeliveryError("odoo_order_state")
-        links = await execute("purchase.order.line", "search_read", [[["sale_line_id", "in", lines]]],
-                              fields=["order_id"], limit=10)
-        purchase_ids = sorted({link["order_id"][0] for link in links if link.get("order_id")})
-        if len(purchase_ids) != 1:
-            raise DeliveryError("odoo_purchase_mapping")
-        purchase_id = purchase_ids[0]
-        purchase = (await execute("purchase.order", "read", [[purchase_id]],
-                                  fields=["name", "state", "partner_id", "dest_address_id"]))[0]
-        if (not purchase.get("dest_address_id") or purchase["dest_address_id"][0] != ship_id
-                or purchase["partner_id"][0] != vendor_id):
-            raise DeliveryError("odoo_dropship_mapping")
-        if purchase["state"] in ("draft", "sent"):
-            update: dict[str, Any] = {"partner_ref": str(offer.get("sku") or "")}
-            if source.get("neutral_slip_required") is True:
-                update["notes"] = BLIND_INSTRUCTION
-            await execute("purchase.order", "write", [[purchase_id], update])
-        sale = (await execute("sale.order", "read", [[order["id"]]], fields=["name", "state"]))[0]
-        return {"sale_order": {"id": order["id"], "name": sale["name"], "state": sale["state"]},
-                "purchase_order": {"id": purchase_id, "name": purchase["name"], "state": purchase["state"],
-                                   "dropship": True}}
-
-    async def send_supplier_order(self, *, tenant_id: str, quote_id: str, located: dict[str, Any],
-                                  order: dict[str, Any], ship: dict[str, Any] | None = None,
-                                  store_name: str = "", store_email: str | None = None,
-                                  env: dict[str, str] | None = None) -> dict[str, Any]:
-        """Auto-order, sandbox only: confirm the drafted PO, then email it to the source.
-
-        "Email" is the local sandbox outbox (rigbox.supplier_orders); nothing is
-        sent. Confirm first, so a supplier never gets an order Odoo refused; if
-        the outbox write fails, the PO is cancelled and the caller refunds.
-        Idempotent: confirm only a draft PO, one outbox file per order.
-        """
-        from rigbox import supplier_orders
-
-        sandbox_orders(env)
-        supplier_orders.outbox(env)
-        source = located["source"]
-        if not supplier_orders.supplier_ready(source):
-            raise DeliveryError("supplier_not_configured")
-        execute = await self._session()
-        purchase_id = order["purchase_order"]["id"]
-        vendor_id = await self._vendor(execute, tenant_id, source)
-        purchase = (await execute("purchase.order", "read", [[purchase_id]],
-                                  fields=["name", "state", "partner_id"]))[0]
-        if purchase["partner_id"][0] != vendor_id:
-            raise DeliveryError("odoo_purchase_mapping")
-        if purchase["state"] in ("draft", "sent"):
-            await execute("purchase.order", "button_confirm", [[purchase_id]])
-        elif purchase["state"] not in ("purchase", "done"):
-            raise DeliveryError("odoo_purchase_state")
-        message = supplier_orders.compose(tenant_id=tenant_id, quote_id=quote_id, store_name=store_name,
-                                          store_email=store_email, located=located, purchase=purchase, ship=ship)
-        try:
-            sent = supplier_orders.write(message, tenant_id=tenant_id, quote_id=quote_id, env=env)
-        except DeliveryError:
-            try:
-                await execute("purchase.order", "button_cancel", [[purchase_id]])
-            except DeliveryError:
-                pass  # The refund still happens; the store sees the open PO.
-            raise
-        marker = f"rig-supplier-order:{tenant_id}:{quote_id}"
-        notes = await execute("mail.message", "search", [[["model", "=", "purchase.order"], ["res_id", "=", purchase_id],
-                                                         ["body", "ilike", marker]]], limit=1)
-        if not notes:
-            await execute("purchase.order", "message_post", [[purchase_id]], body="<pre>" + escape(
-                f"{marker}\nSandbox outbox only, not sent: {sent['file']} to {source['order_email']}") + "</pre>",
-                message_type="comment", subtype_xmlid="mail.mt_note")
-        state = (await execute("purchase.order", "read", [[purchase_id]], fields=["state"]))[0]["state"]
-        return {"purchase_order": {"id": purchase_id, "name": purchase["name"], "state": state},
-                "supplier_order": sent}
 
     async def send(self, *, tenant_id: str, email: str | None, webhook: str | None,
                    quote: dict[str, Any]) -> None:
@@ -496,19 +321,10 @@ class RetailerHandoff:
             (("url", "_URL"), ("database", "_DATABASE"), ("user", "_USER"), ("api_key", "_API_KEY"))
         })
 
-    async def place_located_order(self, *, tenant_id: str, quote_id: str, located: dict[str, Any],
-                                  ship: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def place_located_order(self, *, tenant_id: str, quote_id: str, located: dict[str, Any]) -> dict[str, Any]:
         sandbox_orders()
         return await self._odoo(tenant_id).place_located_order(tenant_id=tenant_id, quote_id=quote_id,
-                                                               located=located, ship=ship)
-
-    async def send_supplier_order(self, *, tenant_id: str, quote_id: str, located: dict[str, Any],
-                                  order: dict[str, Any], ship: dict[str, Any] | None = None,
-                                  store_name: str = "", store_email: str | None = None) -> dict[str, Any]:
-        sandbox_orders()
-        return await self._odoo(tenant_id).send_supplier_order(
-            tenant_id=tenant_id, quote_id=quote_id, located=located, order=order, ship=ship,
-            store_name=store_name, store_email=store_email)
+                                                               located=located)
 
     def portal(self, tenant_id: str) -> str | None:
         url = flow_for(tenant_id).get("portal_url")

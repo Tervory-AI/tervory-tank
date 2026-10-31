@@ -1,4 +1,7 @@
-"""Optional auto-order: send the confirmed purchase order to the approved source.
+"""Optional auto-order: send Rig's supplier purchase order to the approved source.
+
+The PO is Rig's own row (agent_rig.supplier_purchase_orders, rigbox.fulfilment);
+Tervory no longer uses Odoo.
 
 Sandbox only. There is no live sender: the only transport is a local outbox
 directory (one RFC 5322 .eml file per order), written with
@@ -25,8 +28,6 @@ from rigbox.quotes.senders import DeliveryError, sandbox_orders
 
 OUTBOX_ENV = "RIG_LOCATE_OUTBOX_DIR"
 EMAIL = re.compile(r"[^\s@<>,;\"]+@[^\s@<>,;\"]+\.[^\s@<>,;\"]+")
-BLIND_TEXT = ("SHIP BLIND: this parcel goes straight to our customer. No supplier branding, prices, "
-              "invoice or branded packing slip in the parcel. Use a plain packing slip or none.")
 
 
 def supplier_ready(source: dict[str, Any]) -> bool:
@@ -48,41 +49,45 @@ def outbox(env: dict[str, str] | None = None) -> Path:
 
 
 def compose(*, tenant_id: str, quote_id: str, store_name: str, store_email: str | None,
-            located: dict[str, Any], purchase: dict[str, Any], ship: dict[str, Any] | None) -> EmailMessage:
-    """The supplier-facing order. Supplier identity belongs here, never in shopper text."""
-    source, offer, live = located["source"], located["offer"], located["live"]
-    if not supplier_ready(source):
+            purchase: dict[str, Any]) -> EmailMessage:
+    """The supplier-facing order, from Rig's PO row. Supplier identity belongs here, never in shopper text.
+
+    The PO row holds only supplier-side facts (item, quantity, the source's own
+    live price, ship-to, slip instruction); the shopper price never reaches it.
+    """
+    if not supplier_ready(purchase):
         raise DeliveryError("supplier_not_configured")
     reference = f"rig:{tenant_id}:{quote_id}"
+    number = purchase["number"]
     message = EmailMessage()
-    message["To"] = str(source["order_email"])
+    message["To"] = str(purchase["order_email"])
     message["From"] = f"{store_name or 'Rig'} <orders@rig.tervory.com>"
     if store_email and EMAIL.fullmatch(store_email):
         message["Reply-To"] = store_email
-    message["Subject"] = f"Purchase order {purchase['name']} from {store_name or 'Rig'}"
+    message["Subject"] = f"Purchase order {number} from {store_name or 'Rig'}"
     message["Message-ID"] = f"<po-{hashlib.sha256(reference.encode()).hexdigest()[:24]}@rig.tervory.com>"
     message["Date"] = format_datetime(datetime.now(timezone.utc))
     message["X-Rig-Reference"] = reference
     lines = [
-        f"Hello {source['vendor_name']},",
+        f"Hello {purchase['vendor_name']},",
         "",
-        f"Please supply the following on our purchase order {purchase['name']}.",
+        f"Please supply the following on our purchase order {number}.",
         "",
-        f"  Your item: {offer.get('sku') or ''}",
-        f"  Page: {offer.get('url') or ''}",
-        "  Quantity: 1",
-        f"  Agreed price: {live['price']} {live['currency']} (your live price when we checked)",
+        f"  Your item: {purchase.get('item_sku') or ''}",
+        f"  Page: {purchase.get('item_url') or ''}",
+        f"  Quantity: {purchase.get('quantity') or 1}",
+        f"  Agreed price: {purchase['unit_cost']} {purchase['currency']} (your live price when we checked)",
         "",
     ]
-    if ship is not None:
-        address = ship["address"]
+    address = purchase.get("ship_to")
+    if address:
         lines += ["Ship directly to:"] + [f"  {address[key]}" for key in
                   ("name", "street", "street2", "city", "state", "zip", "country", "phone") if address.get(key)] + [""]
-        if source.get("neutral_slip_required") is True:
-            lines += [BLIND_TEXT, ""]
+        if purchase.get("neutral_slip") is True and purchase.get("instructions"):
+            lines += [str(purchase["instructions"]), ""]
     else:
         lines += [f"Ship to {store_name or 'us'} at the address on your account.", ""]
-    lines += [f"Please reply with the tracking number and quote {purchase['name']}.", "", "Thank you."]
+    lines += [f"Please reply with the tracking number and quote {number}.", "", "Thank you."]
     message.set_content("\n".join(lines))
     return message
 

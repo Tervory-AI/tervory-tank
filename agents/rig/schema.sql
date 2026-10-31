@@ -492,3 +492,51 @@ CREATE TABLE IF NOT EXISTS agent_rig.supply_holds (
     PRIMARY KEY (tenant_id, id)
 );
 CREATE INDEX IF NOT EXISTS supply_holds_expiry ON agent_rig.supply_holds (expires_at);
+
+-- Locate orders live in Rig's own database (Tervory no longer uses Odoo).
+-- One row per paid Locate Accept, keyed by its quote, so a retry never makes
+-- a second order. Private store records: never returned to a shopper.
+CREATE TABLE IF NOT EXISTS agent_rig.locate_orders (
+    tenant_id uuid NOT NULL,
+    quote_id text NOT NULL,
+    number text NOT NULL,
+    state text NOT NULL DEFAULT 'placed' CHECK (state IN ('placed', 'cancelled')),
+    product_id text NOT NULL,
+    price numeric(14, 2) NOT NULL CHECK (price > 0),
+    currency text NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
+    -- Blind ship only: the shopper's delivery address. NULL ships to the store.
+    ship_to jsonb,
+    cancel_reason text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, quote_id),
+    UNIQUE (tenant_id, number)
+);
+-- The store's purchase order to the approved source, one per Locate order.
+-- unit_cost is the source's live price: supplier-side only.
+CREATE TABLE IF NOT EXISTS agent_rig.supplier_purchase_orders (
+    tenant_id uuid NOT NULL,
+    quote_id text NOT NULL,
+    number text NOT NULL,
+    state text NOT NULL DEFAULT 'draft' CHECK (state IN ('draft', 'sent', 'cancelled')),
+    source_id text NOT NULL,
+    vendor_name text NOT NULL DEFAULT '',
+    order_email text NOT NULL DEFAULT '',
+    item_sku text NOT NULL DEFAULT '',
+    item_url text NOT NULL DEFAULT '',
+    quantity integer NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    unit_cost numeric(14, 2) NOT NULL CHECK (unit_cost > 0),
+    currency text NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
+    -- Blind ship: ship straight to this address with a neutral slip if required.
+    ship_to jsonb,
+    neutral_slip boolean NOT NULL DEFAULT false,
+    instructions text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, quote_id),
+    UNIQUE (tenant_id, number),
+    FOREIGN KEY (tenant_id, quote_id) REFERENCES agent_rig.locate_orders (tenant_id, quote_id)
+);
+-- Auto-order: the sandbox outbox record once the PO is emailed to the source.
+ALTER TABLE agent_rig.supplier_purchase_orders ADD COLUMN IF NOT EXISTS sent jsonb;
+ALTER TABLE agent_rig.supplier_purchase_orders ADD COLUMN IF NOT EXISTS sent_at timestamptz;
