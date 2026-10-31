@@ -53,7 +53,7 @@ def test_za_compose_is_a_tank_stack_with_its_own_stores() -> None:
     assert data["networks"]["tervory-gw-zenas"]["name"] == "tervory-gw-zenas"
     assert "external" not in data["networks"]["default"]
     assert "external" not in data["networks"]["tervory-gw-zenas"]
-    assert set(data["volumes"]) == {"za_pgdata", "za_redisdata", "za_qdrantdata", "za_backups", "za_r2_backup_spool"}
+    assert set(data["volumes"]) == {"za_pgdata", "za_redisdata", "za_qdrantdata", "za_backups", "za_r2_backup_spool", "za_litellm_chatgpt_token"}
     assert "tervory-gw-zenas" in data["services"]["postgres"]["networks"]
     assert "tervory-gw-zenas" in data["services"]["tank"]["networks"]
     assert "tervory-gw-zenas" in data["services"]["hermes"]["networks"]

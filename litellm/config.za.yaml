@@ -655,6 +655,23 @@ model_list:
       licence: MIT
       licence_url: https://huggingface.co/zai-org/GLM-5.3-Flash/blob/main/LICENSE
 
+  # ---------- BUILD ONLY: ChatGPT subscription (OAuth device-code sign-in, no API key) ----------
+  # Added 31 Oct 2026 on the founder's instruction: "this is a part of the build, not selling to
+  # customers". For Tervory's own evals, the Zenas made-up-case self-test and test samples.
+  # Tank refuses every build-* model for any tenant except the platform tenant and
+  # TANK_BUILD_TENANTS, keeps it off the roster (no picker, override, bench, price search or
+  # graduation), never caches its answers and never lets it be the default policy row.
+  # No fallbacks to or from it. Sign-in and revoke: docs/ops/CHATGPT-BUILD-MODEL.md.
+  # The token lives in CHATGPT_TOKEN_DIR on a writable volume (see the compose file).
+  # $0 per token: the subscription is flat-rate, so spend shows as zero in the ledger.
+  - model_name: build-chatgpt
+    litellm_params:
+      model: chatgpt/gpt-6.1-sol
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      build_only: true
+
 litellm_settings:
   # Return the gateway's actual priced usage at the end of Command streams.
   include_cost_in_streaming_usage: true

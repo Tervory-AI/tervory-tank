@@ -13,6 +13,13 @@ NAMES = {m["model_name"] for m in CONFIG["model_list"]}
 def test_every_model_has_a_price_and_a_key_from_the_environment() -> None:
     for m in CONFIG["model_list"]:
         info = m.get("model_info") or {}
+        if info.get("build_only"):
+            # The ChatGPT sign-in (docs/ops/CHATGPT-BUILD-MODEL.md): no API key, no
+            # per-token price, and Tank keeps it off customer traffic.
+            assert m["model_name"].startswith("build-"), m["model_name"]
+            assert m["litellm_params"]["model"].startswith("chatgpt/"), m["model_name"]
+            assert "api_key" not in m["litellm_params"], m["model_name"]
+            continue
         assert info.get("input_cost_per_token", 0) > 0, m["model_name"]
         assert info.get("output_cost_per_token", 0) > 0, m["model_name"]
         assert str(m["litellm_params"]["api_key"]).startswith("os.environ/"), m["model_name"]
