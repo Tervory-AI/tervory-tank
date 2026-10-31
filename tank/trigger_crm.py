@@ -28,8 +28,6 @@ STATUSES = {"assigned", "closed", "converted", "in process", "recycled"}
 
 def validate_data(resource: str, data: dict, update: bool = False) -> dict:
     schema = dict(SCHEMAS[ROOTS[resource]])
-    if update:
-        schema.pop("required", None)
     schema["components"] = {"schemas": SCHEMAS}
     if not data or list(Draft4Validator(schema, format_checker=FormatChecker()).iter_errors(data)):
         raise ValueError("Invalid CRM data")
@@ -190,5 +188,7 @@ async def write(request: Request, actor: Annotated[Actor, Depends(identity)]):
                             method="PUT" if args.record_id else "POST", data=args.data)
     key = {"leads": "lead_obj", "contacts": "contact_obj", "estimates": "estimate"}[args.resource]
     item = result.get(key, result.get({"leads": "lead", "contacts": "contact", "estimates": "estimate"}[args.resource]))
+    if item is None:
+        item = {"id": result.get("id", str(args.record_id) if args.record_id else None)}
     return {"resource": args.resource, "item": project(item), "model_calls": 0, "cost_usd": 0,
             "ledger_id": str(await code_receipt(actor.tenant_id, "trigger.crm.write"))}
