@@ -43,7 +43,7 @@ from agents.zenas.pool.adapters.za_case_common import (
     pdf_text,
     slug_title,
 )
-from agents.zenas.pool.adapters.za_common import pause, reject_credential_url
+from agents.zenas.pool.adapters.za_common import pause, pdf_headers, reject_credential_url
 
 log = logging.getLogger(__name__)
 
@@ -358,6 +358,18 @@ async def _rest(interval_env: str, pause_default: str | None) -> None:
     await pause(interval_env, pause_default)
 
 
+def file_headers(headers: dict[str, str] | None) -> dict[str, str]:
+    """The caller's headers with a PDF Accept, for fetching one judgment file.
+
+    Adapters hand over the headers they used for the HTML listing. IIS hosts such
+    as www.justice.gov.za negotiate on Accept and answer a PDF asked for with
+    ``Accept: text/html`` with HTTP 406, so the Accept is always replaced here.
+    """
+    merged = {key: value for key, value in (headers or {}).items() if key.lower() != "accept"}
+    merged["Accept"] = pdf_headers()["Accept"]
+    return merged
+
+
 async def accept_pdf(
     run: ArchiveRun,
     http_get,
@@ -389,7 +401,7 @@ async def accept_pdf(
         run.stopped = True
         return b""
     run.downloaded += 1
-    got = await polite_get(http_get, url, headers, interval_env)
+    got = await polite_get(http_get, url, file_headers(headers), interval_env)
     if got.challenge:
         run.skip("challenge page")
         run.mark(url)
