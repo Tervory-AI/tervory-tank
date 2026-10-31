@@ -46,6 +46,7 @@ def test_actual_workspace_tank_corridor_and_unconfirmed_write(monkeypatch):
     def upstream(request):
         assert request.method == 'GET', 'No mutation may reach the fake CRM'
         assert request.headers['authorization'] == 'Bearer dummy-crm-token'
+        assert request.headers['x-tervory-crm-organization'] == ORG
         assert request.url.host == 'trigger-crm-backend'
         assert request.url.params['offset'] == '10' and request.url.params['limit'] == '10'
         assert 'tenant_id' not in request.url.params and 'x-tervory-tenant' not in request.headers
@@ -58,7 +59,7 @@ def test_actual_workspace_tank_corridor_and_unconfirmed_write(monkeypatch):
         else:
             assert request.url.path == '/api/invoices/estimates/'
             data = {'results': [row], 'count': 1}
-        return httpx.Response(200, json=data)
+        return httpx.Response(200, json=data, headers={'X-Tervory-CRM-Organization': ORG})
 
     real_client = httpx.AsyncClient
     def fake_client(**kwargs):
