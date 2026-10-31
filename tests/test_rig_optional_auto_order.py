@@ -2,8 +2,9 @@
 
 Per-store ``auto_order`` switch, off by default. Sandbox only: the supplier
 "email" is a file in a local outbox (RIG_LOCATE_OUTBOX_DIR); nothing is sent.
-The vendor is a real res.partner (store-entered vendor name and order inbox),
-not the source's URL. Idempotent, and any failure after payment refunds.
+The PO is Rig's own row (agent_rig.supplier_purchase_orders; Tervory no longer
+uses Odoo), addressed to the store-entered vendor name and order inbox.
+Idempotent, and any failure after payment cancels Rig's order and refunds.
 """
 import email
 import json
@@ -11,7 +12,6 @@ import smtplib
 import sys
 from pathlib import Path
 
-import httpx
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,20 +20,28 @@ sys.path.insert(0, str(ROOT / "tests"))
 from rigbox import supplier_orders
 from rigbox.locate import SupplyStore
 from rigbox.quotes.privacy import shopper_body
-from rigbox.quotes.senders import DeliveryError, OdooHandoff, sandbox_orders
+from rigbox.fulfilment import NEUTRAL_SLIP, RigOrders, numbers
+from rigbox.quotes.senders import DeliveryError
 from rigbox.quotes.service import QuoteService
 from rigbox.quotes.store import MemoryQuotes
 from rigbox.retailer import Retailer
 from rigbox.service import RigError, Service
 from test_rig_locate_checkout import TENANT, FakeProvider, Live, available, rate_stub, shop
-from test_rig_optional_blind_ship import ADDRESS, LOCATED, OdooDouble
+from test_rig_optional_blind_ship import ADDRESS, LOCATED, PRICE, HandoffDouble
 
 SOURCE = dict(id="other-store", approved=True, priority=1, max_offer_age_seconds=3600, provider="tiger",
               site="https://other.example", neutral_slip_required=True, vendor_name="Other Store Wholesale LLC",
               order_email="orders@other.example")
 READY = {**LOCATED, "source": {**LOCATED["source"], "vendor_name": SOURCE["vendor_name"],
                                "order_email": SOURCE["order_email"]}}
-PURCHASE = {"id": 40, "name": "P00040", "state": "draft"}
+SHIP = {"address": {**ADDRESS, "country": "ZA"}}
+# A Rig supplier PO row, as rigbox.fulfilment writes it.
+PURCHASE = {"quote_id": "q1", "number": "PO-00040", "state": "draft", "source_id": "other-store",
+            "vendor_name": SOURCE["vendor_name"], "order_email": SOURCE["order_email"], "item_sku": "RSR|POF00307",
+            "item_url": "https://other.example/product/cam-pin/", "quantity": 1, "unit_cost": "45.00",
+            "currency": "USD", "ship_to": SHIP["address"], "neutral_slip": True, "instructions": NEUTRAL_SLIP,
+            "sent": None}
+SANDBOX = {"RIG_LOCATE_ORDER_MODE": "sandbox"}
 
 
 @pytest.fixture(autouse=True)
@@ -54,31 +62,10 @@ def env(monkeypatch, outbox):
         monkeypatch.delenv(name, raising=False)
 
 
-class AutoOrders:
-    """Sandbox Odoo double; the supplier email goes through the real outbox code."""
-
-    def __init__(self, *, fail_supplier=False):
-        self.sent, self.placed, self.supplied, self.fail_supplier = [], [], [], fail_supplier
-
-    async def send(self, *, tenant_id, email, webhook, quote):
-        self.sent.append(quote["id"])
-
-    async def place_located_order(self, *, tenant_id, quote_id, located, ship=None):
-        sandbox_orders()
-        self.placed.append(quote_id)
-        return {"sale_order": {"name": "S00001", "state": "sale"},
-                "purchase_order": dict(PURCHASE, dropship=ship is not None)}
-
-    async def send_supplier_order(self, *, tenant_id, quote_id, located, order, ship=None, store_name="",
-                                  store_email=None):
-        if self.fail_supplier:
-            raise DeliveryError("odoo_rejected")
-        message = supplier_orders.compose(tenant_id=tenant_id, quote_id=quote_id, store_name=store_name,
-                                          store_email=store_email, located=located,
-                                          purchase=order["purchase_order"], ship=ship)
-        sent = supplier_orders.write(message, tenant_id=tenant_id, quote_id=quote_id)
-        self.supplied.append(sent)
-        return {"purchase_order": {**order["purchase_order"], "state": "purchase"}, "supplier_order": sent}
+def broken_outbox(monkeypatch):
+    def broken(*args, **kwargs):
+        raise DeliveryError("outbox_unavailable")
+    monkeypatch.setattr(supplier_orders, "write", broken)
 
 
 async def auto_shop(monkeypatch, outbox, *, auto=True, blind=True, source=SOURCE, fail_supplier=False):
@@ -86,7 +73,9 @@ async def auto_shop(monkeypatch, outbox, *, auto=True, blind=True, source=SOURCE
     store = await rate_stub(await shop())
     await store.put_retailer(TENANT, "shop", "shop@example.com", None, "Shop", blind_ship=blind, auto_order=auto)
     await SupplyStore(store).source(TENANT, dict(source))
-    orders = AutoOrders(fail_supplier=fail_supplier)
+    if fail_supplier:
+        broken_outbox(monkeypatch)
+    orders = HandoffDouble()
     service = QuoteService(store, None, orders, MemoryQuotes(store))
     service.locate_checker = Live(available("45.00"))
     service.payments = FakeProvider()
@@ -147,29 +136,31 @@ def test_there_is_no_live_transport():
 
 def test_supplier_email_carries_po_address_and_blind_instruction_but_no_shop_pricing(tmp_path):
     message = supplier_orders.compose(tenant_id=TENANT, quote_id="q1", store_name="Custom Nation",
-                                      store_email="orders@customnation.example", located=READY,
-                                      purchase=PURCHASE, ship={"address": {**ADDRESS, "country": "ZA"}})
+                                      store_email="orders@customnation.example", purchase=PURCHASE)
     body = message.get_content()
     assert message["To"] == "orders@other.example" and message["Reply-To"] == "orders@customnation.example"
-    assert message["Subject"] == "Purchase order P00040 from Custom Nation"
+    assert message["Subject"] == "Purchase order PO-00040 from Custom Nation"
     assert "Other Store Wholesale LLC" in body and "RSR|POF00307" in body and "45.00 USD" in body
     assert "12 Long Street" in body and "Cape Town" in body and "SHIP BLIND" in body
     # The store's own shopper price, landed cost and margin never go to the supplier.
     for private in ("1125", "landed", "margin", "duty", "thandi@example.com"):
         assert private not in body
     unflagged = supplier_orders.compose(tenant_id=TENANT, quote_id="q1", store_name="Custom Nation", store_email=None,
-        located={**READY, "source": {**READY["source"], "neutral_slip_required": False}}, purchase=PURCHASE,
-        ship={"address": {**ADDRESS, "country": "ZA"}})
+        purchase={**PURCHASE, "neutral_slip": False, "instructions": ""})
     assert "SHIP BLIND" not in unflagged.get_content() and unflagged["Reply-To"] is None
+    to_store = supplier_orders.compose(tenant_id=TENANT, quote_id="q1", store_name="Shop", store_email=None,
+        purchase={**PURCHASE, "ship_to": None})
+    assert "Ship to Shop at the address on your account." in to_store.get_content()
+    assert "Long Street" not in to_store.get_content() and "SHIP BLIND" not in to_store.get_content()
     with pytest.raises(DeliveryError, match="supplier_not_configured"):
         supplier_orders.compose(tenant_id=TENANT, quote_id="q1", store_name="x", store_email=None,
-                                located=LOCATED, purchase=PURCHASE, ship=None)
+                                purchase={**PURCHASE, "order_email": ""})
 
 
 def test_outbox_write_is_idempotent(tmp_path):
     values = {"RIG_LOCATE_ORDER_MODE": "sandbox", "RIG_LOCATE_OUTBOX_DIR": str(tmp_path)}
     message = supplier_orders.compose(tenant_id=TENANT, quote_id="q1", store_name="Shop", store_email=None,
-                                      located=READY, purchase=PURCHASE, ship=None)
+                                      purchase=PURCHASE)
     first = supplier_orders.write(message, tenant_id=TENANT, quote_id="q1", env=values)
     second = supplier_orders.write(message, tenant_id=TENANT, quote_id="q1", env=values)
     assert first["duplicate"] is False and second["duplicate"] is True and first["file"] == second["file"]
@@ -187,11 +178,19 @@ async def test_accept_auto_orders_once_through_the_sandbox_outbox(monkeypatch, t
     result = await service.locate_accept(TENANT, body)
     assert result["state"] == "ordered" and result["ships_direct"] is True
     state = store.quotes[-1]["payload"]["locate_state"]
-    assert state["state"] == "supplier_ordered" and state["purchase_order_state"] == "purchase"
+    assert state["state"] == "supplier_ordered" and state["purchase_order_state"] == "sent"
     assert state["supplier_order"]["transport"] == "sandbox_outbox" and state["supplier_order"]["duplicate"] is False
     assert len(list(tmp_path.iterdir())) == 1 and len(service.payments.captured) == 1
+    saved = await store.locate_order(TENANT, result["request_id"])
+    po_number = numbers(TENANT, result["request_id"])[1]
+    assert saved["order"]["state"] == "placed" and saved["purchase_order"]["number"] == po_number
+    assert saved["purchase_order"]["state"] == "sent" and saved["purchase_order"]["sent"]["file"] == state[
+        "supplier_order"]["file"]
+    parsed = email.message_from_bytes(next(tmp_path.iterdir()).read_bytes())
+    assert parsed["To"] == "orders@other.example" and po_number in parsed["Subject"]
+    assert "Cape Town" in parsed.get_payload() and "SHIP BLIND" in parsed.get_payload()
     text = json.dumps(shopper_body(result))
-    for marker in ("other-store", "other.example", "Other Store Wholesale", "orders@", "outbox", "P00040"):
+    for marker in ("other-store", "other.example", "Other Store Wholesale", "orders@", "outbox", po_number):
         assert marker not in text
     with pytest.raises(RigError) as raised:  # the hold is single use: no second payment or order
         await service.locate_accept(TENANT, body)
@@ -208,6 +207,9 @@ async def test_supplier_order_failure_refunds(monkeypatch, tmp_path):
     state = store.quotes[-1]["payload"]["locate_state"]
     assert state["state"] == "supplier_order_failed_refunded" and state["refund"] == {"status": "refunded"}
     assert service.payments.refunded == ["supplier_order_failed"] and list(tmp_path.iterdir()) == []
+    saved = await store.locate_order(TENANT, store.quotes[-1]["id"])
+    assert saved["order"]["state"] == "cancelled" and saved["purchase_order"]["state"] == "cancelled"
+    assert saved["order"]["cancel_reason"] == "supplier_order_failed:outbox_unavailable"
 
 
 @pytest.mark.asyncio
@@ -217,7 +219,7 @@ async def test_source_without_vendor_or_inbox_refuses_before_payment(monkeypatch
     with pytest.raises(RigError) as raised:
         await service.locate_accept(TENANT, body)
     assert raised.value.status == 503
-    assert service.payments.captured == [] and orders.placed == [] and orders.sent == []
+    assert service.payments.captured == [] and store.locate_orders == {} and orders.sent == []
 
 
 @pytest.mark.asyncio
@@ -226,7 +228,7 @@ async def test_missing_outbox_refuses_before_hold_or_payment(monkeypatch, tmp_pa
     monkeypatch.setenv("RIG_LOCATE_OUTBOX_DIR", str(tmp_path / "missing"))
     with pytest.raises(RigError) as raised:
         await service.locate_accept(TENANT, body)
-    assert raised.value.status == 503 and service.payments.captured == []
+    assert raised.value.status == 503 and service.payments.captured == [] and store.locate_orders == {}
     assert store.supply_state[TENANT]["holds"][held["hold"].split(".")[0]]["used_at"] is None
 
 
@@ -235,83 +237,53 @@ async def test_switch_off_keeps_the_draft_po_and_writes_nothing(monkeypatch, tmp
     store, service, orders, _, body = await auto_shop(monkeypatch, tmp_path, auto=False)
     assert (await service.locate_accept(TENANT, body))["state"] == "ordered"
     assert store.quotes[-1]["payload"]["locate_state"]["state"] == "ordered"
-    assert orders.supplied == [] and list(tmp_path.iterdir()) == []
+    assert list(tmp_path.iterdir()) == []
+    [row] = store.locate_orders.values()
+    assert row["purchase_order"]["state"] == "draft" and row["purchase_order"]["sent"] is None
 
 
-# 4. Odoo adapter (JSON-RPC double): confirm once, cancel when the outbox fails.
+# 4. RigOrders.send_supplier_order: Rig's PO, sent once, sandbox only.
 
-class SupplierOdoo(OdooDouble):
-    def __init__(self, state="draft"):
-        super().__init__()
-        self.po_state = state
-
-    def answer(self, model, method, args, kwargs):
-        if (model, method) == ("res.partner", "search"):
-            return [13]
-        if (model, method) == ("purchase.order", "read"):
-            return [{"name": "P00040", "state": self.po_state, "partner_id": [13, "Other Store Wholesale LLC"]}]
-        if (model, method) == ("purchase.order", "button_confirm"):
-            self.po_state = "purchase"
-            return True
-        if (model, method) == ("purchase.order", "button_cancel"):
-            self.po_state = "cancel"
-            return True
-        if model == "mail.message":
-            return []
-        if method == "message_post":
-            return 1
-        return super().answer(model, method, args, kwargs)
-
-
-async def supply(double, tmp_path):
-    async with httpx.AsyncClient(transport=httpx.MockTransport(double)) as http:
-        sender = OdooHandoff(http, url="https://odoo.example.com", database="db", user="u", api_key="k")
-        return await sender.send_supplier_order(tenant_id=TENANT, quote_id="q1", located=READY,
-                                                order={"purchase_order": PURCHASE}, store_name="Shop",
-                                                env={"RIG_LOCATE_ORDER_MODE": "sandbox",
-                                                     "RIG_LOCATE_OUTBOX_DIR": str(tmp_path)})
+async def placed(store, quote_id="q1"):
+    await RigOrders(store).place_located_order(tenant_id=TENANT, quote_id=quote_id, located=READY, price=PRICE,
+                                               ship=SHIP, env=SANDBOX)
 
 
 @pytest.mark.asyncio
-async def test_odoo_supplier_order_confirms_once_and_names_the_real_vendor(tmp_path):
-    double = SupplierOdoo()
-    first = await supply(double, tmp_path)
-    second = await supply(double, tmp_path)
-    assert first["purchase_order"]["state"] == "purchase" and first["supplier_order"]["duplicate"] is False
-    assert second["supplier_order"]["duplicate"] is True
-    assert double.calls.count(("purchase.order", "button_confirm")) == 1
-    assert ("res.partner", [13], {"name": "Other Store Wholesale LLC", "email": "orders@other.example"}) in double.writes
+async def test_rig_supplier_order_sends_once_and_marks_the_po_sent(tmp_path):
+    from rigbox.store import MemoryStore
+    store = MemoryStore()
+    await placed(store)
+    values = {**SANDBOX, "RIG_LOCATE_OUTBOX_DIR": str(tmp_path)}
+    first = await RigOrders(store).send_supplier_order(tenant_id=TENANT, quote_id="q1", store_name="Shop", env=values)
+    second = await RigOrders(store).send_supplier_order(tenant_id=TENANT, quote_id="q1", store_name="Shop", env=values)
+    assert first["purchase_order"] == {"number": numbers(TENANT, "q1")[1], "state": "sent", "recorded": True}
+    assert first["supplier_order"]["duplicate"] is False and second["supplier_order"]["duplicate"] is True
+    assert second["supplier_order"]["file"] == first["supplier_order"]["file"] and len(list(tmp_path.iterdir())) == 1
 
 
 @pytest.mark.asyncio
-async def test_odoo_supplier_order_cancels_the_po_when_the_outbox_fails(tmp_path, monkeypatch):
-    double = SupplierOdoo()
-
-    def broken(*args, **kwargs):
-        raise DeliveryError("outbox_unavailable")
-    monkeypatch.setattr(supplier_orders, "write", broken)
-    with pytest.raises(DeliveryError, match="outbox_unavailable"):
-        await supply(double, tmp_path)
-    assert double.po_state == "cancel"
-
-
-@pytest.mark.asyncio
-async def test_odoo_supplier_order_refuses_outside_sandbox_before_any_call(tmp_path):
-    calls = []
-    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: calls.append(r) or httpx.Response(500))) as http:
-        sender = OdooHandoff(http, url="https://odoo.example.com", database="db", user="u", api_key="k")
-        for values in ({"RIG_LOCATE_ORDER_MODE": "live", "RIG_LOCATE_OUTBOX_DIR": str(tmp_path)},
-                       {"RIG_LOCATE_ORDER_MODE": "sandbox"}):
-            with pytest.raises(DeliveryError):
-                await sender.send_supplier_order(tenant_id=TENANT, quote_id="q1", located=READY,
-                                                 order={"purchase_order": PURCHASE}, env=values)
-    assert calls == []
+async def test_rig_supplier_order_refuses_outside_sandbox_missing_or_cancelled_orders(tmp_path):
+    from rigbox.store import MemoryStore
+    store = MemoryStore()
+    orders = RigOrders(store)
+    for values in ({"RIG_LOCATE_ORDER_MODE": "live", "RIG_LOCATE_OUTBOX_DIR": str(tmp_path)}, SANDBOX):
+        with pytest.raises(DeliveryError):
+            await orders.send_supplier_order(tenant_id=TENANT, quote_id="q1", env=values)
+    values = {**SANDBOX, "RIG_LOCATE_OUTBOX_DIR": str(tmp_path)}
+    with pytest.raises(DeliveryError, match="order_missing"):
+        await orders.send_supplier_order(tenant_id=TENANT, quote_id="q1", env=values)
+    await placed(store)
+    await orders.cancel(TENANT, "q1", "test")
+    with pytest.raises(DeliveryError, match="order_state"):
+        await orders.send_supplier_order(tenant_id=TENANT, quote_id="q1", env=values)
+    assert list(tmp_path.iterdir()) == []
 
 
-# 5. Real Postgres: defaults and persistence.
+# 5. Real Postgres: defaults and persistence; PO sent once, cancel only an unsent PO.
 
 @pytest.mark.asyncio
-async def test_real_postgres_auto_order_and_vendor_fields():
+async def test_real_postgres_auto_order_and_vendor_fields(tmp_path):
     import asyncpg
     from uuid import uuid4
     from test_rig_postgres import _admin_url, _create_database, _database_url, _drop_database
@@ -335,6 +307,22 @@ async def test_real_postgres_auto_order_and_vendor_fields():
             await supply_store.source(TENANT, SOURCE)
             row = (await supply_store.snapshot(TENANT))[0][0]
             assert (row["vendor_name"], row["order_email"]) == ("Other Store Wholesale LLC", "orders@other.example")
+            orders, values = RigOrders(store), {**SANDBOX, "RIG_LOCATE_OUTBOX_DIR": str(tmp_path)}
+            await placed(store, "req_1")
+            sent = [await orders.send_supplier_order(tenant_id=TENANT, quote_id="req_1", store_name="Shop", env=values)
+                    for _ in range(2)]
+            assert [item["supplier_order"]["duplicate"] for item in sent] == [False, True]
+            row = await store.locate_order(TENANT, "req_1")
+            assert row["purchase_order"]["state"] == "sent" and row["purchase_order"]["sent"]["transport"] == "sandbox_outbox"
+            assert await pool.fetchval("SELECT sent_at IS NOT NULL FROM agent_rig.supplier_purchase_orders") is True
+            await orders.cancel(TENANT, "req_1", "late")  # a sent PO stays sent
+            assert (await store.locate_order(TENANT, "req_1"))["purchase_order"]["state"] == "sent"
+            await placed(store, "req_2")
+            await orders.cancel(TENANT, "req_2", "supplier_order_failed:outbox_unavailable")
+            row = await store.locate_order(TENANT, "req_2")
+            assert (row["order"]["state"], row["purchase_order"]["state"]) == ("cancelled", "cancelled")
+            assert len(list(tmp_path.iterdir())) == 1
+            print("RIG_PO_PG", json.dumps(row, sort_keys=True))
             default = await pool.fetchval("""SELECT column_default FROM information_schema.columns
                 WHERE table_schema='agent_rig' AND table_name='retailers' AND column_name='auto_order'""")
             assert default == "false"
@@ -342,53 +330,3 @@ async def test_real_postgres_auto_order_and_vendor_fields():
             await pool.close()
     finally:
         await _drop_database(admin, name)
-
-
-# 6. Real Odoo 17 sandbox (opt-in): blind dropship PO confirmed, outbox written once.
-
-@pytest.mark.asyncio
-async def test_real_odoo_sandbox_auto_order(monkeypatch, tmp_path):
-    from test_rig_optional_blind_ship import odoo_sandbox
-    sandbox = odoo_sandbox()  # url|database|user|credential of the local sandbox
-    url, database, user = sandbox[:3]
-    monkeypatch.setenv("RIG_LOCATE_ORDER_MODE", "sandbox")
-    monkeypatch.setenv("RIG_LOCATE_OUTBOX_DIR", str(tmp_path))
-    from uuid import uuid4
-    quote_id = "auto-" + uuid4().hex[:8]
-    quote = {"id": quote_id, "contact": {"name": "Thandi Mokoena", "email": "thandi@example.com"},
-             "payload": {"kind": "product", "product": {"id": "part-1", "name": "Locate test part",
-                                                         "price": {"amount": "1125.00", "currency": "ZAR"}}}}
-    ship = {"address": {**ADDRESS, "country": "ZA"}}
-    async with httpx.AsyncClient() as http:
-        sender = OdooHandoff(http, url=url, database=database, user=user, api_key=sandbox[3])
-        execute = await sender._session()
-        await sender.send(tenant_id=TENANT, email=None, webhook=None, quote=quote)
-        order = await sender.place_located_order(tenant_id=TENANT, quote_id=quote_id, located=READY, ship=ship)
-        first = await sender.send_supplier_order(tenant_id=TENANT, quote_id=quote_id, located=READY, order=order,
-                                                 ship=ship, store_name="Custom Nation (sandbox)")
-        again = await sender.send_supplier_order(tenant_id=TENANT, quote_id=quote_id, located=READY, order=order,
-                                                 ship=ship, store_name="Custom Nation (sandbox)")
-        assert first["purchase_order"]["state"] == "purchase" and again["supplier_order"]["duplicate"] is True
-        po = (await execute("purchase.order", "read", [[order["purchase_order"]["id"]]],
-                            fields=["partner_id", "state", "picking_ids", "dest_address_id"]))[0]
-        vendor = (await execute("res.partner", "read", [[po["partner_id"][0]]], fields=["name", "email", "website"]))[0]
-        assert (vendor["name"], vendor["email"]) == ("Other Store Wholesale LLC", "orders@other.example")
-        pickings = await execute("stock.picking", "read", [po["picking_ids"]],
-                                 fields=["picking_type_id", "partner_id", "location_id", "location_dest_id", "state"])
-        assert len(pickings) == 1 and "Dropship" in pickings[0]["picking_type_id"][1]
-        # Odoo 17 puts the vendor on a dropship picking; the shopper address lives on the PO and SO.
-        assert pickings[0]["partner_id"][0] == po["partner_id"][0]
-        ship_to = (await execute("res.partner", "read", [[po["dest_address_id"][0]]], fields=["type", "ref"]))[0]
-        assert ship_to["type"] == "delivery" and ship_to["ref"] == f"rig:{TENANT}:{quote_id}:ship"
-        assert "Customers" in pickings[0]["location_dest_id"][1] and "Vendors" in pickings[0]["location_id"][1]
-        notes = await execute("mail.message", "search_count", [[["model", "=", "purchase.order"],
-            ["res_id", "=", po["id"] if "id" in po else order["purchase_order"]["id"]],
-            ["body", "ilike", f"rig-supplier-order:{TENANT}:{quote_id}"]]])
-        assert notes == 1
-    files = list(tmp_path.iterdir())
-    assert len(files) == 1
-    parsed = email.message_from_bytes(files[0].read_bytes())
-    print("ODOO_SANDBOX_AUTO", json.dumps({"purchase_order": first["purchase_order"], "vendor": vendor["name"],
-          "picking": {k: pickings[0][k] for k in ("picking_type_id", "location_id", "location_dest_id", "state")},
-          "outbox_file": files[0].name, "to": parsed["To"], "subject": parsed["Subject"]}))
-    print(parsed.get_payload())

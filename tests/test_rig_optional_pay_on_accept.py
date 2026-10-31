@@ -121,12 +121,12 @@ async def test_live_mode_is_refused_before_any_adapter_call(monkeypatch, tmp_pat
         monkeypatch.setenv(name, value)
         with pytest.raises(RigError) as raised:
             await service.locate_accept(TENANT, body)
-        assert raised.value.status == 503 and service.payments.calls == [] and orders.placed == []
+        assert raised.value.status == 503 and service.payments.calls == [] and store.locate_orders == {}
         monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
     store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path, adapter=LiveAdapter())
     with pytest.raises(RigError) as raised:
         await service.locate_accept(TENANT, body)
-    assert raised.value.status == 402 and kinds(service.payments) == ["create_intent"] and orders.placed == []
+    assert raised.value.status == 402 and kinds(service.payments) == ["create_intent"] and store.locate_orders == {}
     assert store.quotes[-1]["payload"]["locate_state"]["state"] == "payment_refused"
 
 
@@ -149,6 +149,9 @@ async def test_accept_pays_then_auto_orders_once(monkeypatch, tmp_path):
     assert result["payment"]["reference"].startswith("ch_test_")
     assert state["state"] == "supplier_ordered" and state["payment"]["provider"] == "test-adapter"
     assert kinds(service.payments) == ["create_intent", "capture"] and len(list(tmp_path.iterdir())) == 1
+    saved = await store.locate_order(TENANT, result["request_id"])  # Rig's own order + PO, no ERP
+    assert saved["order"]["state"] == "placed" and saved["order"]["price"] == result["price"]["amount"]
+    assert saved["purchase_order"]["state"] == "sent"
     charged = service.payments.charges[f"rig:{TENANT}:{result['request_id']}:capture"]
     assert charged.amount == Decimal(result["price"]["amount"]) and charged.currency == result["price"]["currency"]
     text = json.dumps(shopper_body(result))
@@ -169,6 +172,8 @@ async def test_supplier_order_failure_refunds_the_captured_payment(monkeypatch, 
     assert raised.value.status == 502 and state["state"] == "supplier_order_failed_refunded"
     assert kinds(service.payments) == ["create_intent", "capture", "refund"] and list(tmp_path.iterdir()) == []
     assert list(service.payments.refunds.values())[0].status == "refunded"
+    saved = await store.locate_order(TENANT, store.quotes[-1]["id"])
+    assert (saved["order"]["state"], saved["purchase_order"]["state"]) == ("cancelled", "cancelled")
 
 
 @pytest.mark.asyncio
@@ -176,13 +181,14 @@ async def test_order_failure_refunds_the_captured_payment(monkeypatch, tmp_path)
     store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
 
     async def fail(**kwargs):
-        raise DeliveryError("odoo_rejected")
-    orders.place_located_order = fail
+        raise DeliveryError("order_unavailable")
+    service.fulfilment.place_located_order = fail
     with pytest.raises(RigError) as raised:
         await service.locate_accept(TENANT, body)
     assert raised.value.status == 502
     assert store.quotes[-1]["payload"]["locate_state"]["state"] == "order_failed_refunded"
-    assert kinds(service.payments) == ["create_intent", "capture", "refund"] and orders.supplied == []
+    assert kinds(service.payments) == ["create_intent", "capture", "refund"] and store.locate_orders == {}
+    assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.asyncio
@@ -194,7 +200,7 @@ async def test_declined_or_failed_capture_places_no_order(monkeypatch, tmp_path,
         await service.locate_accept(TENANT, {**body, "payment_token": token})
     assert raised.value.status == 402 and kinds(service.payments) == calls
     assert store.quotes[-1]["payload"]["locate_state"]["state"] == "payment_failed"
-    assert orders.placed == [] and list(tmp_path.iterdir()) == []
+    assert store.locate_orders == {} and list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.asyncio

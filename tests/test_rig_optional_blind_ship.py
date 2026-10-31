@@ -1,19 +1,18 @@
 """Optional blind ship: Locate orders ship from the other store straight to the shopper.
 
 Per-store ``blind_ship`` switch, off by default. Per-source
-``neutral_slip_required``. The shopper's delivery address goes on the
-sale.order; Odoo's Dropship route drafts the supplier PO to that address; no
-supplier identity reaches the shopper. Offline here, except the Postgres test
-(RIG_TEST_DATABASE_URL) and the Odoo 17 sandbox test (RIG_TEST_ODOO_SANDBOX).
+``neutral_slip_required``. The order and the supplier PO are Rig's own rows
+(rigbox.fulfilment; Tervory no longer uses Odoo): the PO carries the shopper's
+delivery address and, when the source requires it, the neutral-slip
+instruction. No supplier identity reaches the shopper. Offline here, except the
+real Postgres test (RIG_TEST_DATABASE_URL).
 """
 import asyncio
 import csv
 import json
-import os
 import sys
 from pathlib import Path
 
-import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -26,7 +25,8 @@ from rigbox.locate import SupplyStore
 from rigbox.locate_live import confirm
 from rigbox.quotes.api import mount as mount_quotes
 from rigbox.quotes.sample import KEY, TENANT as SAMPLE, seed
-from rigbox.quotes.senders import BLIND_INSTRUCTION, DeliveryError, OdooHandoff, sandbox_orders
+from rigbox.fulfilment import NEUTRAL_SLIP, RigOrders, numbers
+from rigbox.quotes.senders import DeliveryError
 from rigbox.quotes.service import QuoteService, ship_address
 from rigbox.quotes.store import MemoryQuotes
 from rigbox.retailer import Retailer
@@ -39,22 +39,24 @@ ADDRESS = {"name": "Thandi Mokoena", "street": "12 Long Street", "city": "Cape T
 SUPPLIER = ("other-store", "other.example", "RSR|POF00307", "RSR", "/product/cam-pin")
 
 
-class BlindOrders:
-    """Test double for the retailer's sandbox Odoo; records the ship argument."""
+class HandoffDouble:
+    """Test double for the retailer handoff (the quote email or webhook)."""
 
-    def __init__(self, fail=False):
-        self.sent, self.placed, self.fail = [], [], fail
+    def __init__(self):
+        self.sent = []
 
     async def send(self, *, tenant_id, email, webhook, quote):
         self.sent.append(quote)
 
-    async def place_located_order(self, *, tenant_id, quote_id, located, ship=None):
-        sandbox_orders()
-        if self.fail:
-            raise DeliveryError("odoo_rejected")
-        self.placed.append({"quote_id": quote_id, "source": located["source"], "ship": ship})
-        return {"sale_order": {"name": "S00001", "state": "sale"},
-                "purchase_order": {"name": "P00001", "state": "draft", "dropship": ship is not None}}
+
+class FailingOrders(RigOrders):
+    async def place_located_order(self, **kwargs):
+        raise DeliveryError("order_unavailable")
+
+
+def only_order(store, tenant=TENANT):
+    [(key, row)] = [(key, row) for key, row in store.locate_orders.items() if key[0] == tenant]
+    return row["order"], row["purchase_order"]
 
 
 def env(monkeypatch):
@@ -71,8 +73,10 @@ async def blind_shop(monkeypatch, *, blind=True, neutral=True, fail=False):
     await store.put_retailer(TENANT, "shop", "shop@example.com", None, "Shop", blind_ship=blind)
     await SupplyStore(store).source(TENANT, dict(id="other-store", approved=True, priority=1,
         max_offer_age_seconds=3600, provider="tiger", site="https://other.example", neutral_slip_required=neutral))
-    orders = BlindOrders(fail)
+    orders = HandoffDouble()
     service = QuoteService(store, None, orders, MemoryQuotes(store))
+    if fail:
+        service.fulfilment = FailingOrders(store)
     service.locate_checker = Live(available("45.00"))
     service.payments = FakeProvider()
     held = await service.locate_confirm(TENANT, "part-1")
@@ -131,16 +135,27 @@ def test_ship_address_is_strict():
 # 2. Accept with blind ship.
 
 @pytest.mark.asyncio
-async def test_blind_accept_sends_the_shopper_address_and_neutral_flag_to_the_order(monkeypatch):
+async def test_blind_accept_records_a_rig_order_and_a_neutral_slip_po_to_the_shopper(monkeypatch):
     store, service, orders, held, body = await blind_shop(monkeypatch)
     result = await service.locate_accept(TENANT, body)
     assert result["state"] == "ordered" and result["ships_direct"] is True
-    [placed] = orders.placed
-    assert placed["ship"] == {"address": {**ADDRESS, "country": "ZA"}}
-    assert placed["source"]["neutral_slip_required"] is True
+    order, po = only_order(store)
+    number, po_number = numbers(TENANT, result["request_id"])
+    assert order == {"quote_id": result["request_id"], "number": number, "state": "placed", "product_id": "part-1",
+                     "price": held["price"]["amount"], "currency": "ZAR", "ship_to": {**ADDRESS, "country": "ZA"}}
+    assert po["number"] == po_number and po["state"] == "draft" and po["source_id"] == "other-store"
+    assert po["ship_to"] == {**ADDRESS, "country": "ZA"}
+    assert po["neutral_slip"] is True and po["instructions"] == NEUTRAL_SLIP
+    assert (po["item_sku"], po["item_url"], po["unit_cost"], po["currency"]) == (
+        "RSR|POF00307", "https://other.example/product/cam-pin/", "45.00", "USD")
     quote = next(q for q in store.quotes if q["id"] == result["request_id"])
     assert quote["payload"]["ship_to"]["city"] == "Cape Town"
-    assert quote["payload"]["locate_state"]["blind_ship"] is True
+    state = quote["payload"]["locate_state"]
+    assert state["blind_ship"] is True and (state["order"], state["purchase_order"]) == (number, po_number)
+    # Shopper text never carries the supplier, its cost or the slip instruction.
+    text = json.dumps(result)
+    for marker in ("other-store", "other.example", "RSR", "45.00", "SHIP BLIND", po_number):
+        assert marker not in text
 
 
 @pytest.mark.asyncio
@@ -150,7 +165,7 @@ async def test_blind_accept_without_address_refuses_before_hold_or_payment(monke
         with pytest.raises(RigError) as raised:
             await service.locate_accept(TENANT, {**body, "delivery": delivery})
         assert raised.value.status == 422
-    assert service.payments.captured == [] and orders.sent == [] and orders.placed == []
+    assert service.payments.captured == [] and orders.sent == [] and store.locate_orders == {}
     hold_id = held["hold"].split(".")[0]
     assert store.supply_state[TENANT]["holds"][hold_id]["used_at"] is None
     assert (await service.locate_accept(TENANT, body))["state"] == "ordered"
@@ -161,7 +176,9 @@ async def test_switch_off_keeps_the_existing_ship_to_store_order(monkeypatch):
     store, service, orders, held, body = await blind_shop(monkeypatch, blind=False)
     result = await service.locate_accept(TENANT, body)
     assert result["state"] == "ordered" and "ships_direct" not in result
-    assert orders.placed[0]["ship"] is None
+    order, po = only_order(store)
+    assert order["ship_to"] is None and po["ship_to"] is None
+    assert po["neutral_slip"] is False and po["instructions"] == ""  # ships to the store: no blind slip
     assert "ship_to" not in store.quotes[-1]["payload"]
 
 
@@ -172,7 +189,7 @@ async def test_blind_order_failure_refunds(monkeypatch):
         await service.locate_accept(TENANT, body)
     assert raised.value.status == 502
     assert store.quotes[-1]["payload"]["locate_state"]["state"] == "order_failed_refunded"
-    assert service.payments.refunded == ["order_failed"]
+    assert service.payments.refunded == ["order_failed"] and store.locate_orders == {}
 
 
 # 3. Shopper HTTP responses: no supplier identity, no export_usd (real POF rows).
@@ -206,7 +223,7 @@ def test_locate_confirm_accept_responses_have_no_supplier_or_export_usd(monkeypa
             cost="606", currency="USD", seen_at=datetime.now(timezone.utc),
             url="https://other.example/product/cam-pin/")]
         await rate_stub(store)
-        service = QuoteService(store, None, BlindOrders(), MemoryQuotes(store))
+        service = QuoteService(store, None, HandoffDouble(), MemoryQuotes(store))
         service.locate_checker = Live(available("606.00"))
         service.payments = FakeProvider()
         return service
@@ -233,127 +250,66 @@ def test_locate_confirm_accept_responses_have_no_supplier_or_export_usd(monkeypa
         assert "neutral_slip" not in text and "landed" not in text
         for marker in ("other-store", "other.example", "RSR|POF02445", "RSR", "tiger"):
             assert marker not in text, (marker, text)
-    assert app.state.rig.handoff.placed[0]["ship"]["address"]["city"] == "Cape Town"
+    order, po = only_order(app.state.rig.store, SAMPLE)
+    assert order["ship_to"]["city"] == po["ship_to"]["city"] == "Cape Town" and po["neutral_slip"] is True
 
 
-# 4. Odoo adapter: the blind path against a JSON-RPC double (shape and refusals).
+# 4. RigOrders: Rig's own order rows, no ERP.
 
-class OdooDouble:
-    """Minimal JSON-RPC double. Records every execute_kw call."""
-
-    def __init__(self, *, dropship=True, linked_po=True, sale_state="draft"):
-        self.calls, self.dropship, self.linked_po, self.sale_state = [], dropship, linked_po, sale_state
-        self.created, self.writes = [], []
-
-    def __call__(self, request):
-        params = json.loads(request.content)["params"]
-        if params["service"] == "common":
-            return httpx.Response(200, json={"result": {"server_version_info": [17, 0]}
-                                             if params["method"] == "version" else 2})
-        _, _, _, model, method, args, kwargs = params["args"]
-        self.calls.append((model, method))
-        result = self.answer(model, method, args, kwargs)
-        return httpx.Response(200, json={"result": result})
-
-    def answer(self, model, method, args, kwargs):
-        if (model, method) == ("sale.order", "search_read"):
-            return [{"id": 7, "state": self.sale_state, "order_line": [70]}]
-        if (model, method) == ("sale.order", "read"):
-            return [{"id": 7, "name": "S00007", "state": "sale" if ("sale.order", "action_confirm") in self.calls
-                     else self.sale_state, "partner_id": [11, "Thandi Mokoena"], "partner_shipping_id": [11, "x"]}]
-        if model == "res.country":
-            return [200]
-        if model == "res.country.state":
-            return [300]
-        if (model, method) == ("res.partner", "search"):
-            return []
-        if method == "create":
-            self.created.append((model, args[0]))
-            return {"res.partner": 12 if args[0].get("type") == "delivery" else 13}.get(model, 50)
-        if model == "ir.model.data":
-            return [{"res_id": 9}] if self.dropship else []
-        if (model, method) == ("product.product", "search_read"):
-            return [{"id": 5, "product_tmpl_id": [6, "part"]}]
-        if (model, method) == ("sale.order.line", "search"):
-            return [70]
-        if model == "res.currency":
-            return [1]
-        if (model, method) == ("product.supplierinfo", "search"):
-            return []
-        if method == "write":
-            self.writes.append((model, args[0], args[1]))
-            return True
-        if method == "action_confirm":
-            return True
-        if (model, method) == ("purchase.order.line", "search_read"):
-            return [{"order_id": [40, "P00040"]}] if self.linked_po else []
-        if (model, method) == ("purchase.order", "read"):
-            return [{"name": "P00040", "state": "draft", "partner_id": [13, "v"], "dest_address_id": [12, "ship"]}]
-        raise AssertionError((model, method))
-
-
-LOCATED = {"product_sku": "part-1", "offer": {"sku": "RSR|POF00307", "url": "https://other.example/p"},
-           "live": {"price": "45.00", "currency": "USD"},
-           "source": {"id": "other-store", "provider": "tiger", "site": "https://other.example",
-                      "neutral_slip_required": True}}
-
-
-async def place(double, located=LOCATED):
-    async with httpx.AsyncClient(transport=httpx.MockTransport(double)) as http:
-        sender = OdooHandoff(http, url="https://odoo.example.com", database="db", user="u", api_key="k")
-        return await sender.place_located_order(tenant_id=TENANT, quote_id="q1", located=located,
-                                                ship={"address": {**ADDRESS, "country": "ZA"}})
+LOCATED = {"product_sku": "part-1",
+           "source": {"id": "other-store", "site": "https://other.example", "neutral_slip_required": True},
+           "offer": {"sku": "RSR|POF00307", "url": "https://other.example/product/cam-pin/"},
+           "live": {"price": "45.00", "currency": "USD"}}
+PRICE = {"amount": "1125.00", "currency": "ZAR"}
+SHIP = {"address": {**ADDRESS, "country": "ZA"}}
 
 
 @pytest.mark.asyncio
-async def test_odoo_blind_order_sets_address_route_then_confirms_and_marks_the_po(monkeypatch):
-    monkeypatch.setenv("RIG_LOCATE_ORDER_MODE", "sandbox")
-    double = OdooDouble()
-    result = await place(double)
-    assert result["purchase_order"] == {"id": 40, "name": "P00040", "state": "draft", "dropship": True}
-    delivery = next(values for model, values in double.created if model == "res.partner" and values.get("type"))
-    assert delivery["parent_id"] == 11 and delivery["city"] == "Cape Town" and delivery["state_id"] == 300
-    assert delivery["ref"] == f"rig:{TENANT}:q1:ship"
-    vendor = next(values for model, values in double.created if model == "res.partner" and not values.get("type"))
-    assert vendor["ref"] == f"rig-supply:{TENANT}:other-store"
-    order = [c for c in double.calls if c[0] in ("sale.order", "sale.order.line")]
-    # Address and route are written before the confirm.
-    assert order.index(("sale.order", "write")) < order.index(("sale.order", "action_confirm"))
-    assert order.index(("sale.order.line", "write")) < order.index(("sale.order", "action_confirm"))
-    assert ("sale.order", [7], {"partner_shipping_id": 12}) in double.writes
-    assert ("sale.order.line", [70], {"route_id": 9}) in double.writes
-    po = next(values for model, _, values in double.writes if model == "purchase.order")
-    assert po["notes"] == BLIND_INSTRUCTION and po["partner_ref"] == "RSR|POF00307"
-    # Nothing written to customer-facing records names the other store.
-    customer = json.dumps([w for w in double.writes if w[0].startswith("sale.")] + [delivery])
-    for marker in ("other-store", "other.example", "RSR"):
-        assert marker not in customer
+async def test_rig_orders_refuse_outside_sandbox_before_any_write(monkeypatch):
+    store = MemoryStore()
+    for mode in ("", "live"):
+        with pytest.raises(DeliveryError) as raised:
+            await RigOrders(store).place_located_order(tenant_id=TENANT, quote_id="q1", located=LOCATED,
+                                                       price=PRICE, ship=SHIP, env={"RIG_LOCATE_ORDER_MODE": mode})
+        assert str(raised.value) == "order_mode"
+    assert store.locate_orders == {}
 
 
 @pytest.mark.asyncio
-async def test_odoo_blind_order_without_neutral_flag_has_no_instruction(monkeypatch):
-    monkeypatch.setenv("RIG_LOCATE_ORDER_MODE", "sandbox")
-    double = OdooDouble()
-    await place(double, {**LOCATED, "source": {**LOCATED["source"], "neutral_slip_required": False}})
-    po = next(values for model, _, values in double.writes if model == "purchase.order")
-    assert "notes" not in po
+async def test_rig_orders_are_idempotent_per_quote_and_tenant_scoped():
+    store, sandbox = MemoryStore(), {"RIG_LOCATE_ORDER_MODE": "sandbox"}
+    orders = RigOrders(store)
+    first = await orders.place_located_order(tenant_id=TENANT, quote_id="q1", located=LOCATED, price=PRICE,
+                                             ship=SHIP, env=sandbox)
+    again = await orders.place_located_order(tenant_id=TENANT, quote_id="q1", located=LOCATED, price=PRICE,
+                                             ship=SHIP, env=sandbox)
+    assert first == again and len(store.locate_orders) == 1
+    assert first["purchase_order"] == {"number": numbers(TENANT, "q1")[1], "state": "draft",
+                                       "ship_direct": True, "neutral_slip": True}
+    other = "00000000-0000-4000-8000-000000000999"
+    elsewhere = await orders.place_located_order(tenant_id=other, quote_id="q1", located=LOCATED, price=PRICE,
+                                                 env=sandbox)
+    assert elsewhere["order"]["number"] != first["order"]["number"] and len(store.locate_orders) == 2
+    assert await store.locate_order(other, "q1") != await store.locate_order(TENANT, "q1")
+    assert elsewhere["purchase_order"]["neutral_slip"] is False  # not blind: no slip instruction
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("double,code", [
-    (OdooDouble(dropship=False), "odoo_dropship_missing"),
-    (OdooDouble(linked_po=False), "odoo_purchase_mapping"),
-    (OdooDouble(sale_state="cancel"), "odoo_order_state"),
+@pytest.mark.parametrize("located,price", [
+    ({**LOCATED, "live": {"price": "0", "currency": "USD"}}, PRICE),
+    ({**LOCATED, "live": {"price": "45.00", "currency": "usd$"}}, PRICE),
+    ({k: v for k, v in LOCATED.items() if k != "source"}, PRICE),
+    (LOCATED, {"amount": "NaN", "currency": "ZAR"}),
 ])
-async def test_odoo_blind_order_refuses_without_dropship_or_linked_po(monkeypatch, double, code):
-    monkeypatch.setenv("RIG_LOCATE_ORDER_MODE", "sandbox")
-    with pytest.raises(DeliveryError, match=code):
-        await place(double)
-    if code == "odoo_dropship_missing":
-        assert ("sale.order", "action_confirm") not in double.calls
+async def test_rig_orders_reject_a_bad_snapshot_without_writing(located, price):
+    store = MemoryStore()
+    with pytest.raises(DeliveryError) as raised:
+        await RigOrders(store).place_located_order(tenant_id=TENANT, quote_id="q1", located=located, price=price,
+                                                   env={"RIG_LOCATE_ORDER_MODE": "sandbox"})
+    assert str(raised.value) == "order_rejected" and store.locate_orders == {}
 
 
-# 5. Real Postgres: defaults false, values persist.
+# 5. Real Postgres: defaults false, values persist; orders and POs are Rig's own rows.
 
 @pytest.mark.asyncio
 async def test_real_postgres_blind_ship_and_neutral_slip_defaults_and_persistence():
@@ -382,6 +338,24 @@ async def test_real_postgres_blind_ship_and_neutral_slip_defaults_and_persistenc
             assert (await supply.snapshot(TENANT))[0][0]["neutral_slip_required"] is False
             await supply.source(TENANT, {**base, "neutral_slip_required": True})
             assert (await supply.snapshot(TENANT))[0][0]["neutral_slip_required"] is True
+            # Rig-owned order + PO: one row each per quote, even under concurrent Accepts.
+            orders, sandbox = RigOrders(store), {"RIG_LOCATE_ORDER_MODE": "sandbox"}
+            placed = await asyncio.gather(*[orders.place_located_order(
+                tenant_id=TENANT, quote_id="req_1", located=LOCATED, price=PRICE, ship=SHIP, env=sandbox)
+                for _ in range(4)])
+            assert all(item == placed[0] for item in placed)
+            saved = await store.locate_order(TENANT, "req_1")
+            assert saved["order"]["price"] == "1125.00" and saved["order"]["ship_to"] == SHIP["address"]
+            assert saved["purchase_order"]["unit_cost"] == "45.00" and saved["purchase_order"]["neutral_slip"] is True
+            assert saved["purchase_order"]["instructions"] == NEUTRAL_SLIP
+            assert await pool.fetchval("SELECT count(*) FROM agent_rig.locate_orders") == 1
+            assert await pool.fetchval("SELECT count(*) FROM agent_rig.supplier_purchase_orders") == 1
+            assert await store.locate_order("00000000-0000-4000-8000-000000000999", "req_1") is None
+            unblind = await orders.place_located_order(tenant_id=TENANT, quote_id="req_2", located=LOCATED,
+                                                       price=PRICE, env=sandbox)
+            row = await store.locate_order(TENANT, "req_2")
+            assert unblind["purchase_order"]["ship_direct"] is False and row["purchase_order"]["ship_to"] is None
+            print("RIG_ORDERS_PG", json.dumps(saved, sort_keys=True))
             defaults = await pool.fetch("""SELECT table_name, column_default, is_nullable FROM information_schema.columns
                 WHERE table_schema='agent_rig' AND column_name IN ('blind_ship', 'neutral_slip_required')""")
             assert {(r["table_name"], r["column_default"], r["is_nullable"]) for r in defaults} == {
@@ -390,54 +364,3 @@ async def test_real_postgres_blind_ship_and_neutral_slip_defaults_and_persistenc
             await pool.close()
     finally:
         await _drop_database(admin, name)
-
-
-# 6. Real Odoo 17 sandbox (box-local, opt-in): the Dropship route end to end.
-
-def odoo_sandbox():
-    url = os.environ.get("RIG_TEST_ODOO_SANDBOX", "")
-    if not url:
-        pytest.skip("RIG_TEST_ODOO_SANDBOX is not set (url|database|user|password of a local Odoo 17 sandbox)")
-    return url.split("|")
-
-
-@pytest.mark.asyncio
-async def test_real_odoo_sandbox_blind_dropship(monkeypatch):
-    sandbox = odoo_sandbox()  # url|database|user|credential of the local sandbox
-    url, database, user = sandbox[:3]
-    monkeypatch.setenv("RIG_LOCATE_ORDER_MODE", "sandbox")
-    from uuid import uuid4
-    quote_id = "blind-" + uuid4().hex[:8]
-    quote = {"id": quote_id, "contact": {"name": "Thandi Mokoena", "email": "thandi@example.com"},
-             "payload": {"kind": "product", "product": {"id": "part-1", "name": "Locate test part",
-                                                         "price": {"amount": "1125.00", "currency": "ZAR"}}}}
-    async with httpx.AsyncClient() as http:
-        sender = OdooHandoff(http, url=url, database=database, user=user, api_key=sandbox[3])
-        execute = await sender._session()
-        await sender.send(tenant_id=TENANT, email=None, webhook=None, quote=quote)
-        ship = {"address": {**ADDRESS, "country": "ZA"}}
-        first = await sender.place_located_order(tenant_id=TENANT, quote_id=quote_id, located=LOCATED, ship=ship)
-        again = await sender.place_located_order(tenant_id=TENANT, quote_id=quote_id, located=LOCATED, ship=ship)
-        assert again["purchase_order"]["id"] == first["purchase_order"]["id"]  # idempotent
-        assert first["sale_order"]["state"] == "sale" and first["purchase_order"]["dropship"] is True
-        sale = (await execute("sale.order", "read", [[first["sale_order"]["id"]]],
-                              fields=["partner_id", "partner_shipping_id", "note", "order_line", "picking_ids"]))[0]
-        shipping = (await execute("res.partner", "read", [[sale["partner_shipping_id"][0]]],
-                                  fields=["type", "parent_id", "street", "city", "zip", "country_id"]))[0]
-        assert shipping["type"] == "delivery" and shipping["parent_id"][0] == sale["partner_id"][0]
-        assert (shipping["street"], shipping["city"], shipping["zip"]) == ("12 Long Street", "Cape Town", "8001")
-        lines = await execute("sale.order.line", "read", [sale["order_line"]], fields=["name", "route_id"])
-        assert lines[0]["route_id"] and "Dropship" in lines[0]["route_id"][1]
-        po = (await execute("purchase.order", "read", [[first["purchase_order"]["id"]]],
-                            fields=["dest_address_id", "picking_type_id", "notes", "partner_id", "origin", "state"]))[0]
-        assert po["dest_address_id"][0] == sale["partner_shipping_id"][0]
-        assert "Dropship" in po["picking_type_id"][1] and po["state"] == "draft"
-        assert "Ship blind" in po["notes"] and po["origin"] == first["sale_order"]["name"]
-        # The store's own warehouse does not ship this order.
-        assert sale["picking_ids"] == []
-        customer = json.dumps([sale, shipping, lines])
-        for marker in ("other-store", "other.example", "RSR"):
-            assert marker not in customer
-        print("ODOO_SANDBOX", json.dumps({"sale_order": first["sale_order"], "purchase_order": first["purchase_order"],
-              "dest_address": po["dest_address_id"][1], "picking_type": po["picking_type_id"][1],
-              "line_route": lines[0]["route_id"][1], "po_notes": po["notes"]}))
