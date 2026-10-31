@@ -159,6 +159,9 @@ ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS name text NOT NULL DEFA
 ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS theme text NOT NULL DEFAULT 'neutral'
     CHECK (theme IN ('neutral', 'custom-nation'));
 ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS quote_notice jsonb;
+-- Optional cross-store fulfilment (Locate). Off for every store until it opts in.
+-- Off means no supply lookup in search or quotes and no locate, confirm or accept.
+ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS locate_enabled boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS agent_rig.feeds (
     tenant_id  uuid NOT NULL,
@@ -463,3 +466,20 @@ ALTER TABLE agent_rig.products ADD COLUMN IF NOT EXISTS supply_eligible boolean 
 ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT '';
 ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS site text NOT NULL DEFAULT '';
 ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS feed_id text NOT NULL DEFAULT '';
+
+-- Locate confirm. The offer page is re-read live before any hold is issued.
+ALTER TABLE agent_rig.supply_offers ADD COLUMN IF NOT EXISTS url text;
+-- A hold is a short-lived, single-use price snapshot after a live check.
+-- private holds the supplier evidence and is never returned to a shopper.
+CREATE TABLE IF NOT EXISTS agent_rig.supply_holds (
+    tenant_id uuid NOT NULL,
+    id text NOT NULL,
+    product_id text NOT NULL,
+    public jsonb NOT NULL,
+    private jsonb NOT NULL,
+    expires_at timestamptz NOT NULL,
+    used_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS supply_holds_expiry ON agent_rig.supply_holds (expires_at);

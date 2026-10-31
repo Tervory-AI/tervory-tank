@@ -54,6 +54,7 @@ from rigbox.recall import parts_of
 from rigbox.recall import signature
 from rigbox.recall import whole_hit
 from rigbox.locate import catalogue as supply_catalogue, locate as supply_locate, needs_supply
+from rigbox.locate import enabled as locate_enabled
 from rigbox.store import _fit_key
 from rigbox.quotes.limits import FailedKeyLimits, MemoryRateLimits, PgRateLimits
 
@@ -242,6 +243,11 @@ class Service:
         self.store = store
         self.models = models
         self.handoff = handoff or RecordingHandoff()
+        # Locate confirm reads offers live. The app wires the product checkers,
+        # tests inject doubles. None means confirm is not available.
+        self.locate_checker: Any | None = None
+        # No concrete payment provider is chosen. None refuses Locate checkout.
+        self.payments: Any | None = None
         self.limiter = RateLimiter(limit=rate_limit)
         self.failed_keys = FailedKeyLimits()
         pool = getattr(store, "pool", None)
@@ -647,7 +653,9 @@ class Service:
         wanted = ([part["product"]["id"] for part in payload["setup"]["parts"]]
                   if payload["kind"] == "setup" else [payload["product"]["id"]])
         private = []
-        for row in await self.store.products(tenant_id):
+        # Optional per store: no supply lookup at all until the store opts in.
+        rows = await self.store.products(tenant_id) if await locate_enabled(self.store, tenant_id) else []
+        for row in rows:
             if str(row["sku"]) in wanted and needs_supply(row):
                 result = await supply_locate(self.store, tenant_id, row)
                 private.append({"product_id": row["sku"], **result})
@@ -655,11 +663,32 @@ class Service:
             payload["locate"] = private
         return payload, contact
 
-    async def locate(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+    async def _locate_row(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        if not await locate_enabled(self.store, tenant_id):
+            raise RigError("locate_disabled", "This store does not offer ordering from other stores.", 403)
         row = next((p for p in await self.store.products(tenant_id) if p["sku"] == product_id), None)
         if row is None:
             raise RigError("not_found", "No such product.", 404)
+        return row
+
+    async def locate(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        row = await self._locate_row(tenant_id, product_id)
         return (await supply_locate(self.store, tenant_id, row))["public"]
+
+    async def locate_confirm(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        """Live re-check of the located offer, then a short-lived signed hold."""
+        from rigbox.locate_live import LocateRefused, confirm, hold_secret
+
+        row = await self._locate_row(tenant_id, product_id)
+        if not needs_supply(row):
+            raise RigError("invalid", "This product is available from the store.", 422)
+        if self.locate_checker is None:
+            raise RigError("unavailable", "Live stock checks are not available.", 503)
+        try:
+            secret = hold_secret()
+        except LocateRefused:
+            raise RigError("unavailable", "Live stock checks are not available.", 503) from None
+        return (await confirm(self.store, tenant_id, row, self.locate_checker, secret=secret))["public"]
 
     async def compare(self, tenant_id: str, product_ids: list[str]) -> dict[str, Any]:
         """Other sellers' prices for a selection the shopper already made.

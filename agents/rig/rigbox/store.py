@@ -338,12 +338,16 @@ class MemoryStore(RetailerMemoryStore):
         name: str = "",
         theme: str | None = None,
         quote_notice: dict[str, str] | None = None,
+        locate_enabled: bool | None = None,
     ) -> None:
         theme = theme if theme is not None else self.retailers.get(str(tenant_id), {}).get("theme", "neutral")
         if theme not in {"neutral", "custom-nation"}:
             raise ValueError()
         self.retailers[str(tenant_id)] = {"slug": slug, "email": email, "webhook": webhook, "name": name, "theme": theme,
-            "quote_notice": quote_notice if quote_notice is not None else self.retailers.get(str(tenant_id), {}).get("quote_notice")}
+            "quote_notice": quote_notice if quote_notice is not None else self.retailers.get(str(tenant_id), {}).get("quote_notice"),
+            # Optional cross-store fulfilment. Off until the store switches it on.
+            "locate_enabled": bool(locate_enabled) if locate_enabled is not None
+            else bool(self.retailers.get(str(tenant_id), {}).get("locate_enabled", False))}
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         row = self.retailers.get(str(tenant_id))
@@ -390,6 +394,12 @@ class MemoryStore(RetailerMemoryStore):
             {"tenant_id": str(tenant_id), "id": quote_id, "payload": payload, "contact": contact, "sent_at": None}
         )
         await self.training_event(tenant_id, "rig_quote", quote_id, payload, {"request_id": quote_id})
+
+    async def locate_state(self, tenant_id: str, quote_id: str, state: dict[str, Any]) -> None:
+        """Locate checkout state in the quote payload. Tenant scoped."""
+        for row in self.quotes:
+            if row["tenant_id"] == str(tenant_id) and row["id"] == quote_id:
+                row["payload"] = {**row["payload"], "locate_state": state}
 
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         for row in self.quotes:
@@ -810,19 +820,21 @@ class PgStore(RetailerPgStore):
         name: str = "",
         theme: str | None = None,
         quote_notice: dict[str, str] | None = None,
+        locate_enabled: bool | None = None,
     ) -> None:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook, name, theme, quote_notice)
-                VALUES ($1, $2, $3, $4, $5, coalesce($6, 'neutral'), $7::jsonb)
+                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook, name, theme, quote_notice, locate_enabled)
+                VALUES ($1, $2, $3, $4, $5, coalesce($6, 'neutral'), $7::jsonb, coalesce($8, false))
                 ON CONFLICT (tenant_id) DO UPDATE SET
                     slug = EXCLUDED.slug,
                     email = EXCLUDED.email,
                     webhook = EXCLUDED.webhook,
                     name = EXCLUDED.name,
                     theme = coalesce($6, agent_rig.retailers.theme),
-                    quote_notice = coalesce($7::jsonb, agent_rig.retailers.quote_notice)
+                    quote_notice = coalesce($7::jsonb, agent_rig.retailers.quote_notice),
+                    locate_enabled = coalesce($8, agent_rig.retailers.locate_enabled)
                 """,
                 _uuid(tenant_id),
                 str(slug),
@@ -831,18 +843,20 @@ class PgStore(RetailerPgStore):
                 str(name or ""),
                 theme,
                 json.dumps(quote_notice) if quote_notice is not None else None,
+                None if locate_enabled is None else bool(locate_enabled),
             )
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT slug, email, webhook, name, theme, quote_notice FROM agent_rig.retailers WHERE tenant_id = $1",
+                "SELECT slug, email, webhook, name, theme, quote_notice, locate_enabled FROM agent_rig.retailers WHERE tenant_id = $1",
                 _uuid(tenant_id),
             )
         if row is None:
             return None
         return {"slug": row["slug"], "email": row["email"], "webhook": row["webhook"], "name": row["name"] or "", "theme": row["theme"],
-                "quote_notice": json.loads(row["quote_notice"]) if isinstance(row["quote_notice"], str) else row["quote_notice"]}
+                "quote_notice": json.loads(row["quote_notice"]) if isinstance(row["quote_notice"], str) else row["quote_notice"],
+                "locate_enabled": bool(row["locate_enabled"])}
 
     async def replace_market(self, tenant_id: str, rows: list[dict[str, Any]]) -> None:
         async with self.pool.acquire() as conn:
@@ -949,6 +963,15 @@ class PgStore(RetailerPgStore):
                 _json(contact),
             )
             await enqueue(conn, tenant_id, "rig_quote", quote_id, payload, {"request_id": quote_id})
+
+    async def locate_state(self, tenant_id: str, quote_id: str, state: dict[str, Any]) -> None:
+        """Locate checkout state in the existing quote jsonb. Tenant scoped."""
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE agent_rig.quotes SET payload = jsonb_set(payload, '{locate_state}', $3::jsonb)"
+                " WHERE tenant_id = $1 AND id = $2",
+                _uuid(tenant_id), quote_id, _json(state),
+            )
 
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         async with self.pool.acquire() as conn:

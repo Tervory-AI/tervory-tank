@@ -31,6 +31,15 @@ def gtin(value: Any) -> str:
     return value.zfill(14) if value.isdigit() and len(value) in (8, 12, 13, 14) else ""
 
 
+async def enabled(store: Any, tenant: str) -> bool:
+    """Locate is an Optional per-store feature. Off unless the store switched it on."""
+    reader = getattr(store, "retailer", None)
+    if reader is None:
+        return False
+    retailer = await reader(tenant) or {}
+    return retailer.get("locate_enabled") is True
+
+
 def needs_supply(product: dict) -> bool:
     stock = (product.get("attributes") or {}).get("stock") or {}
     if product.get("active") is False:
@@ -92,7 +101,39 @@ class SupplyStore:
                 "quantity": qty, "status": "available" if product["active"] and qty is not None and qty > 0
                     else "unavailable" if qty == 0 or not product["active"] else "unknown",
                 "eta": product["eta"], "ship_days": product["ship_days"], "region": product["region"],
-                "cost": number(product["price"]), "currency": product["currency"], "seen_at": when})
+                "cost": number(product["price"]), "currency": product["currency"], "seen_at": when,
+                # The other store's product page, re-read live at confirm time.
+                "url": str(product.get("url") or "") or None})
+        await self._write(tenant, source_id, offers, when)
+        return {"imported": len(offers), "rejected": []}
+
+    async def observe_page(self, tenant: str, source_id: str, *, url: str, sku: str, brand: str,
+                           mpn: str | None, region: str, live: Any) -> dict:
+        """Record one live read of an approved store's product page (Tiger).
+
+        Only a definite answer is stored: a page saying in stock means at least
+        one unit, out of stock means none. Unknown, blocked or unpriced reads are
+        not observations and store nothing. ETA and ship days stay unknown.
+        """
+        sources, _, _ = await self.snapshot(tenant)
+        source = next((s for s in sources if s["id"] == source_id), None)
+        if source is None or source.get("provider") != "tiger":
+            raise ValueError("Register this store's Tiger source first.")
+        if not str(url).startswith("https://") or not str(sku).strip() or not str(region).strip():
+            raise ValueError("A page URL, the page's SKU and a region are required.")
+        if live.status not in ("available", "unavailable") or live.price is None or not live.currency:
+            return {"imported": 0, "status": live.status}
+        when = stamp(live.checked_at)
+        if when > datetime.now(timezone.utc):
+            raise ValueError("Observation cannot be in the future.")
+        row = {"tenant_id": str(tenant), "source_id": source_id, "sku": str(sku).strip(), "gtin": live.gtin,
+               "brand": brand, "mpn": mpn, "quantity": Decimal(1 if live.status == "available" else 0),
+               "status": live.status, "eta": None, "ship_days": None, "region": str(region).strip().upper(),
+               "cost": live.price, "currency": live.currency, "seen_at": when, "url": url}
+        await self._write(tenant, source_id, [row], when)
+        return {"imported": 1, "status": live.status}
+
+    async def _write(self, tenant: str, source_id: str, offers: list[dict], when: datetime) -> None:
         if self.pool is None:
             state = self.store.supply_state.setdefault(str(tenant), {})
             # Keep older rows as stale evidence, never invent absence observations.
@@ -106,14 +147,13 @@ class SupplyStore:
             async with self.pool.acquire() as conn, conn.transaction():
                 for o in offers:
                     await conn.execute("""INSERT INTO agent_rig.supply_offers
-                        (tenant_id,source_id,sku,gtin,brand,mpn,quantity,status,eta,ship_days,region,cost,currency,seen_at)
-                        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+                        (tenant_id,source_id,sku,gtin,brand,mpn,quantity,status,eta,ship_days,region,cost,currency,seen_at,url)
+                        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
                         ON CONFLICT(tenant_id,source_id,sku) DO UPDATE SET
-                        gtin=$4,brand=$5,mpn=$6,quantity=$7,status=$8,eta=$9,ship_days=$10,region=$11,cost=$12,currency=$13,seen_at=$14
+                        gtin=$4,brand=$5,mpn=$6,quantity=$7,status=$8,eta=$9,ship_days=$10,region=$11,cost=$12,currency=$13,seen_at=$14,url=$15
                         WHERE agent_rig.supply_offers.seen_at <= EXCLUDED.seen_at""",
                         UUID(str(tenant)), *[o[k] for k in ("source_id", "sku", "gtin", "brand", "mpn", "quantity",
-                            "status", "eta", "ship_days", "region", "cost", "currency", "seen_at")])
-        return {"imported": len(offers), "rejected": []}
+                            "status", "eta", "ship_days", "region", "cost", "currency", "seen_at", "url")])
 
     async def map_sku(self, tenant: str, product_sku: str, source_id: str, offer_sku: str) -> None:
         _, offers, _ = await self.snapshot(tenant)
@@ -130,6 +170,14 @@ class SupplyStore:
         async with self.pool.acquire() as conn:
             await conn.execute("""INSERT INTO agent_rig.supply_sku_map(tenant_id,product_sku,source_id,offer_sku)
                 VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING""", UUID(str(tenant)), product_sku, source_id, offer_sku)
+
+
+async def offer_price(store: Any, tenant: str, settings: Any, source: dict, offer: dict,
+                      cost: Any, currency: str, shop_currency: str) -> tuple[Decimal, Decimal]:
+    """Shopper amount and landed cost. No guessed FX or pricing: the store's own rule."""
+    rule = resolved_rule(settings, {**source, "country": offer["region"]})
+    rate = await store.rate(tenant, currency, shop_currency)
+    return indicative_price(cost, rule, rate), indicative_price(cost, {**rule, "margin_percent": 0}, rate)
 
 
 async def locate(store: Any, tenant: str, product: dict, *, now: datetime | None = None,
@@ -161,12 +209,9 @@ async def locate(store: Any, tenant: str, product: dict, *, now: datetime | None
             continue
         if offer["status"] != "available" or offer.get("quantity") is None or number(offer["quantity"]) < 1:
             continue
-        # No guessed FX or pricing. Reuse the store's confirmed price rule.
         try:
-            rule = resolved_rule(settings, {**approved[offer["source_id"]], "country": offer["region"]})
-            rate = await store.rate(tenant, offer["currency"], product["currency"])
-            amount = indicative_price(offer["cost"], rule, rate)
-            landed = indicative_price(offer["cost"], {**rule, "margin_percent": 0}, rate)
+            amount, landed = await offer_price(store, tenant, settings, approved[offer["source_id"]], offer,
+                                               offer["cost"], offer["currency"], product["currency"])
         except (ValueError, TypeError):
             continue
         ranked.append(((landed, offer["ship_days"] if offer["ship_days"] is not None else Decimal("Infinity"),
@@ -184,6 +229,8 @@ async def locate(store: Any, tenant: str, product: dict, *, now: datetime | None
 async def catalogue(store: Any, tenant: str) -> list[dict]:
     """Resolve only unavailable store products; preserve store identity and fit rules."""
     products = await store.products(tenant)
+    if not await enabled(store, tenant):
+        return products
     snapshot = await SupplyStore(store).snapshot(tenant)
     if not snapshot[0]:
         return products

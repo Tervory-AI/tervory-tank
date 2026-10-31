@@ -112,6 +112,89 @@ class QuoteService(Service):
                 pass  # Delivery state remains visible; never expose invalid URLs.
         return body
 
+    async def locate_accept(self, tenant_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Shopper Accept on a held Locate price. Backend only, sandbox only.
+
+        hold -> stored quote (draft sale.order) -> test-mode capture ->
+        sandbox order (confirmed sale.order and draft supplier purchase.order).
+        Each step is recorded in the quote's payload as locate_state.
+        """
+        from datetime import datetime, timezone
+
+        from rigbox import payments
+        from rigbox.locate_live import Holds, LocateRefused, hold_secret, read_token
+        from rigbox.quotes.senders import sandbox_orders
+
+        row = await self._locate_row(tenant_id, str(body.get("product_id") or ""))
+        try:
+            sandbox_orders()
+            secret = hold_secret()
+            provider = payments.guard(self.payments)
+        except (DeliveryError, LocateRefused, payments.PaymentRefused):
+            raise RigError("unavailable", "Ordering from other stores is not available.", 503) from None
+        if not hasattr(self.handoff, "place_located_order"):
+            raise RigError("unavailable", "Ordering from other stores is not available.", 503)
+        self._quote_fields(body.get("contact"))
+        token = str(body.get("payment_token") or "")
+        if not token or len(token) > 200:
+            raise RigError("invalid", "A payment is required.", 422)
+        now = datetime.now(timezone.utc)
+        try:
+            hold_id = read_token(secret, tenant_id, str(body.get("hold") or ""), now)
+        except LocateRefused as exc:
+            raise RigError("hold", "That price has expired. Check availability again.", 410
+                           if str(exc) == "hold_expired" else 422) from None
+        held = await Holds(self.store).take(tenant_id, hold_id, now)
+        if held is None or held["product_id"] != row["sku"]:
+            raise RigError("hold", "That price has expired. Check availability again.", 410)
+        price = held["public"]["price"]
+        product = dict(await self.product(tenant_id, row["sku"]))
+        product["price"] = dict(price)
+        state: dict[str, Any] = {"state": "confirmed", "hold_id": hold_id,
+                                 "located_at": held["private"]["offer"].get("seen_at"),
+                                 "confirmed_at": held["private"]["live"]["checked_at"],
+                                 "price": price}
+        payload = {"kind": "product", "product": product, "locate_state": state,
+                   "locate": [{"product_id": row["sku"], "public": held["public"], "store": held["private"]}]}
+        evidence = await self._notice_receipt(tenant_id, body.get("notice_version"))
+        if evidence:
+            payload["notice_receipt"] = evidence
+        stored = await self._store_quote(tenant_id, payload, _contact(body.get("contact") or {}))
+        quote_id = stored["request_id"]
+
+        async def record(**changes: Any) -> None:
+            state.update(changes)
+            await self.store.locate_state(tenant_id, quote_id, dict(state))
+
+        if stored.get("delivery") != "sent":
+            await record(state="confirmed", note="retailer_not_reached")
+            return {"request_id": quote_id, "state": "confirmed", "price": price,
+                    "message": "Your request is saved. No payment was taken."}
+        reference = f"rig:{tenant_id}:{quote_id}"
+        try:
+            charge = await payments.capture(provider, amount=price["amount"], currency=price["currency"],
+                                            token=token, reference=reference,
+                                            metadata={"quote_id": quote_id, "product_id": row["sku"]})
+        except payments.PaymentRefused:
+            await record(state="payment_refused")
+            raise RigError("payment", "The payment was not taken.", 402) from None
+        if charge.status != "captured":
+            await record(state="payment_failed")
+            raise RigError("payment", "The payment was not taken.", 402)
+        await record(state="paid", paid_at=datetime.now(timezone.utc).isoformat(),
+                     payment={"reference": charge.reference, "provider": provider.name, "test": charge.test})
+        try:
+            order = await self.handoff.place_located_order(tenant_id=tenant_id, quote_id=quote_id,
+                                                           located=held["private"])
+        except DeliveryError as exc:
+            refunded = await payments.refund(provider, charge, "order_failed")
+            await record(state="order_failed_refunded", error=str(exc), refund={"status": refunded.status})
+            raise RigError("order", "The order could not be placed. The payment was refunded.", 502) from None
+        await record(state="ordered", ordered_at=datetime.now(timezone.utc).isoformat(),
+                     sale_order=order["sale_order"]["name"], purchase_order=order["purchase_order"]["name"])
+        return {"request_id": quote_id, "state": "ordered", "price": price,
+                "payment": {"reference": charge.reference, "test": True}}
+
     async def deliver(self, tenant: str, quote_id: str) -> None:
         quote = await self.quote_store.claim(tenant, quote_id)
         if quote is None:

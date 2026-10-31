@@ -78,7 +78,8 @@ class Retailer:
         products = await self.store.products(tenant)
         return {
             "settings": {"name": retailer.get("name", ""), "email": retailer.get("email") or "",
-                         "theme": retailer.get("theme", "neutral")},
+                         "theme": retailer.get("theme", "neutral"),
+                         "locate_enabled": retailer.get("locate_enabled") is True},
             "price_configured": bool(settings),
             "currency": (settings or {}).get("shop_currency", "ZAR"),
             "templates": await self.store.templates_for(tenant),
@@ -119,10 +120,15 @@ class Retailer:
             raise ValueError("The request is not valid.")
         configured_notice = data.get("quote_notice", previous.get("quote_notice"))
         validated_notice = notice(configured_notice)
+        # Locate is an explicit per-store opt-in. Absent keeps the saved value.
+        locate_enabled = data.get("locate_enabled", previous.get("locate_enabled", False))
+        if type(locate_enabled) is not bool:
+            raise ValueError("The request is not valid.")
         await self.store.put_retailer(tenant, previous.get("slug") or tenant, email,
                                       previous.get("webhook"), name.strip(), theme=theme,
                                       quote_notice={key: validated_notice[key] for key in ("text", "url")}
-                                      if validated_notice else None)
+                                      if validated_notice else None,
+                                      locate_enabled=locate_enabled)
         return {"saved": True}
 
     async def embed_key(self, tenant: str, data: dict[str, Any]) -> dict:

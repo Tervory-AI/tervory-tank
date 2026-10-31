@@ -208,6 +208,34 @@ async def locate(request: Request, payload: LocateIn) -> Response:
     return _ok(request, body)
 
 
+class LocateAcceptIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    product_id: str = Field(min_length=1, max_length=200)
+    hold: str = Field(min_length=1, max_length=200)
+    payment_token: str = Field(min_length=1, max_length=200)
+    contact: dict[str, Any] = Field(default_factory=dict)
+    notice_version: str | None = Field(default=None, max_length=64)
+
+
+@router.post("/locate/confirm")
+async def locate_confirm(request: Request, payload: LocateIn) -> Response:
+    """Live re-check of the located offer. Returns a short-lived signed hold."""
+    await _auth(request)
+    body = await _service(request).locate_confirm(_tenant(request), payload.product_id)
+    return _ok(request, body)
+
+
+@router.post("/locate/accept")
+async def locate_accept(request: Request, payload: LocateAcceptIn) -> Response:
+    """Backend Accept: test-mode payment, then a sandbox-only order. No UI."""
+    await _auth(request)
+    service = _service(request)
+    if not hasattr(service, "locate_accept"):
+        raise RigError("unavailable", "Ordering from other stores is not available.", 503)
+    body = await service.locate_accept(_tenant(request), payload.model_dump())
+    return _ok(request, body)
+
+
 @router.post("/search-events")
 async def settled_search(request: Request, payload: SearchEventIn) -> Response:
     await _auth(request)

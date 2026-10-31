@@ -24,6 +24,8 @@ async def network():
                    active=False, supply_eligible=True, attributes={})
     await store.upsert_product(TENANT, product)
     await store.save_rule(TENANT, {"freight": "5", "duty_percent": "0", "margin_percent": "20"})
+    # Locate is Optional per store and off by default. These tests opt in.
+    await store.put_retailer(TENANT, "desk-shop", None, None, "Desk shop", locate_enabled=True)
     supply = SupplyStore(store)
     await supply.source(TENANT, dict(id="approved", approved=True, priority=1, max_offer_age_seconds=3600))
     offer = dict(tenant_id=TENANT, source_id="approved", sku="supplier-desk", gtin="000000000123",
@@ -200,6 +202,7 @@ async def test_real_postgres_schema_twice_import_isolation_and_receipt_atomicity
             await store.upsert_product(TENANT, product)
             assert (await store.products(TENANT))[0]["mpn"] == "D-1"
             await store.save_rule(TENANT, {"freight": "5", "duty_percent": "0", "margin_percent": "20"})
+            await store.put_retailer(TENANT, "desk-shop", None, None, "Desk shop", locate_enabled=True)
             supply = SupplyStore(store)
             await supply.source(TENANT, dict(id="approved", approved=True, priority=1, max_offer_age_seconds=3600))
             raw = (Path(__file__).resolve().parents[1] / "agents/rig/catalogues/samples/distributor.csv").read_text()
@@ -337,7 +340,12 @@ async def test_http_locate_and_admin_ingestion_boundaries(monkeypatch):
         found = await http.post("/v1/rig/locate", headers=public_headers, json={"product_id": "desk"})
         assert found.status_code == 200 and found.json()["status"] == "available_to_order"
         assert set(found.json()) == {"status", "eta", "price"}
-        assert (await http.post("/v1/rig/locate", headers={"X-Rig-Key": "other-test-role"}, json={"product_id": "desk"})).status_code == 404
+        other = {"X-Rig-Key": "other-test-role"}
+        # Locate is off for the other store: refused before any lookup.
+        assert (await http.post("/v1/rig/locate", headers=other, json={"product_id": "desk"})).status_code == 403
+        await store.put_retailer(OTHER, "other", None, None, "Other", locate_enabled=True)
+        # Switched on, it still cannot see this store's product or offers.
+        assert (await http.post("/v1/rig/locate", headers=other, json={"product_id": "desk"})).status_code == 404
         data = dict(id="new-source", approved=True, max_offer_age_seconds=500)
         assert (await http.post("/v1/rig/admin/supply/sources", headers=public_headers, json=data)).status_code == 401
         admin_headers = {"X-Rig-Key": "admin-test-role"}

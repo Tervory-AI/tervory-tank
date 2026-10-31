@@ -236,8 +236,16 @@ Nothing else in other lanes' files changes behaviour.
 - Kiosk mode runs at 1920×1080.
 - Build and test on stand-in models now: neutral stand-in models (a centre product and two parts that fit it), each with mount points.
 
+## Optional: cross-store fulfilment (Locate checkout)
+Optional, per store, **off by default** (`retailers.locate_enabled`). Custom Nation is the case study. When a store has not switched it on, `/v1/rig/locate`, `/locate/confirm` and `/locate/accept` refuse, and search and quotes do no supply lookup.
+1. **Locate:** out of stock here, verified stock at an approved other store (GTIN, brand+MPN or explicit SKU map), fresh within the source's maximum age.
+2. **Confirm:** re-reads the offer and re-checks live (approved-source stock API, or a Tiger one-shot check of a watched page within 45 s). Unknown or stale stock is never shown as available. Returns a short-lived, single-use, signed hold with the price.
+3. **Accept:** test-mode payment through a provider-agnostic interface (`RIG_LOCATE_PAYMENTS_MODE=test`, live keys refused, no concrete provider yet), then a sandbox Odoo order: the sale.order is confirmed and a supplier purchase.order is created (`RIG_LOCATE_ORDER_MODE=sandbox`). Order failure refunds the test payment.
+4. No shopper Accept UI yet. It needs an approved Figma frame first.
+
 ## Plugged in last (configuration only, no code)
 1. Custom Nation's real suppliers and their keys: RIG-3's feed connections take them.
 2. Custom Nation's Odoo URL and user: RIG-4's adapter takes them.
 3. The 3D add-on price.
 4. Going live on the new ZA host (Hetzner) for Custom Nation shopper data.
+5. Locate checkout: the payment provider (Paystack or Stripe, pending), and a live Odoo order mode. Both need the founder's OK.

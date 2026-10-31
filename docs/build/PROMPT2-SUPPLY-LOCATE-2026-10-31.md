@@ -98,3 +98,23 @@ Figma file uRpPy3Hns0WxWZYTPwZ2ni, actual page 0:1, session ff9f9b7f-acad-40c5-9
 Store inputs required: approved supplier account/source identity (names only; founder fills secret values), confirmed catalogue format/product-list path/field map/currency, supplied quantity/status and real ETA/ship days/region, observation timestamps, maximum offer age, supplier priority, existing confirmed price rule and FX where currencies differ, and explicit SKU maps when GTIN or brand+MPN are absent. Revenue additionally requires actual store-reported accounting receipt IDs/references, net amounts, original currency and timestamps. No source account/feed or real sale receipt was fabricated.
 
 Founder browser acceptance and screenshots are LAST and pending. No screenshot is presented as founder proof. No model call or model-based checking, no production SQL, no live fixture data, no secrets read/created, no ZA/worker investigation, no payment/auto-ordering. Optional sale_rules were not implemented.
+
+## Step 2: Optional Locate checkout (2026-10-31 PDT, backend only)
+
+Locate is Optional per store and **off by default**. Custom Nation is the case study. No UI, no widget code, no deployment, no live charge or order.
+
+| File | Behaviour |
+| --- | --- |
+| agents/rig/schema.sql | `retailers.locate_enabled boolean NOT NULL DEFAULT false` (quote_notice pattern), `supply_offers.url`, new `supply_holds` (tenant-scoped, single use). Additive and idempotent. |
+| agents/rig/rigbox/store.py, retailer.py | Switch stored and shown in store settings, boolean only, saved value kept when omitted. `locate_state` writes each step into the quote's payload jsonb. |
+| agents/rig/rigbox/locate.py | `enabled()`. Off: catalogue, search and quotes skip supply lookup. `observe_page` records a Tiger page read as an offer only when definite and priced. `offer_price` shared by locate and confirm. |
+| agents/rig/rigbox/locate_live.py | `confirm`: re-runs locate, then a live re-check by the source's provider (`api`: approved-source stock API, `tiger`: Tiger check-now, 45 s). Unknown, unpriced, stale, future-dated or GTIN-mismatched live reads give `check_with_store`. Available gives a 10 minute (60-900 s) HMAC-signed, server-side, single-use hold with the price snapshot. |
+| agents/rig/rigbox/payments.py | Provider-agnostic interface and guard: `RIG_LOCATE_PAYMENTS_MODE=test` required, any live-looking key (provider keys or STRIPE/PAYSTACK/PAYMENT env) refused, a charge not marked test is refused. No concrete provider. |
+| agents/rig/rigbox/quotes/senders.py | `place_located_order`: only with `RIG_LOCATE_ORDER_MODE=sandbox` (http allowed only to loopback in sandbox). Confirms the quote's sale.order and creates one draft supplier purchase.order, idempotent by reference. |
+| agents/rig/rigbox/service.py, quotes/service.py, api.py, app.py | `POST /v1/rig/locate/confirm`, `POST /v1/rig/locate/accept`. Off: 403. Accept: hold -> quote (draft sale.order) -> test capture -> sandbox order, refund on order failure. Production wires the live checkers and no payment provider, so accept returns 503. |
+| agents/tiger/rig_watch.py, app.py | `check_now` and `POST /rig/check-now` (key `RIG_TIGER_CHECK_KEY`, 404 otherwise): watched pages only, robots, 45 s render budget, structured extract, confirmed_value. Read only. |
+| tests/test_rig_locate_checkout.py | Switch default/off, confirm stale/unknown/mismatch, holds, live keys, sandbox-only orders, accept states and refund, isolation, page observations, Tiger check-now, real Postgres. |
+
+End to end on the box (local sandbox Odoo 17, Custom Nation POF USA rows, live Mountain West Firearms page for sku 00307): off 403, locate and live confirm 5400.00 ZAR (stand-in rule), test-double payment, sale.order S00003 confirmed and purchase.order P00003 draft at 240 USD. Evidence file on the box: `/workspace/rig-locate/e2e/EVIDENCE-LOCATE-E2E-2026-10-31.md`.
+
+Pending: payment provider choice, sanctioned read of Tank's CN catalogue (`RIG_RETAILER_KEY` not on the box, a local export was used), automatic feed of Tiger-discovered pages and market prices into offers (market_prices rows have no page URL), shopper Accept UI (needs an approved Figma frame), live order mode (founder's OK).
