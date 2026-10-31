@@ -27,7 +27,6 @@ services:
       - tervory-gw-template
       - tervory-gw-tiger
       - tervory-gw-trigger
-      - tervory-gw-trigger-crm
       - tervory-gw-market_lab
       - tervory-gw-radix
       - tervory-gw-tisan
@@ -296,6 +295,7 @@ services:
       - tervory-gw-template
       - tervory-gw-tiger
       - tervory-gw-trigger
+      - tervory-gw-trigger-crm
       - tervory-gw-market_lab
       - tervory-gw-radix
       - tervory-gw-tisan
