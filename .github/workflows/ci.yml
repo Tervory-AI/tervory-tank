@@ -242,7 +242,7 @@ jobs:
         run: |
           free -m || true
           df -h /dev/shm /tmp || true
-          sudo -n dmesg -T 2>/dev/null | grep -iE 'oom|killed process|segfault|out of memory' | tail -n 40 || echo "dmesg not readable on this runner"
+          { sudo -n dmesg -T 2>/dev/null || echo "dmesg not readable on this runner"; } | grep -iE 'oom|killed process|segfault|out of memory|not readable' | tail -n 40
 
   workspace:
     needs: [changes, runner]

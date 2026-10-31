@@ -104,3 +104,66 @@ def test_worker_crash_or_hang_fails_the_run_fast_with_the_test_named(tmp_path, b
     if needle == "test_hangs":
         # faulthandler's stack, with the hung test's own frame, before the worker is killed
         assert "Timeout (0:00:03)!" in text and 'test_a.py", line 3 in test_hangs' in text, text
+
+
+def _never_ran_hooks() -> str:
+    """The 'tests that never ran' section of tests/conftest.py, as its own conftest."""
+    text = (ROOT / "tests" / "conftest.py").read_text()
+    start = text.index("# --- Tests that never ran")
+    end = text.find("\n# --- ", start + 1)
+    return "import pytest\n\n" + text[start:None if end < 0 else end]
+
+
+_RAN_BEFORE_THE_CRASH = (
+    "import os, pytest\n"
+    "@pytest.mark.skip(reason='skipped counts as ran')\n"
+    "def test_1_skipped():\n    pass\n"
+    "@pytest.mark.xfail(reason='xfailed counts as ran', strict=True)\n"
+    "def test_2_xfailed():\n    assert False\n"
+    "def test_3_passes():\n    pass\n")
+
+
+@pytest.mark.parametrize("crash, expected", [
+    # one worker, files in order: a's skip, xfail, pass and crash ran; a's last test, b and c never did
+    (True, "::error::3 of 7 collected tests never ran"),
+    (False, None),  # a full run, skips and xfails included, prints nothing
+])
+def test_a_crash_says_how_many_collected_tests_never_ran(tmp_path, crash, expected):
+    suite = _suite()
+    body = _RAN_BEFORE_THE_CRASH + ("def test_4_kills_its_worker():\n    os._exit(9)\n" if crash
+                                    else "def test_4_passes():\n    pass\n") + "def test_5_after():\n    pass\n"
+    folder = _fixture_suite(tmp_path, body)
+    (folder / "conftest.py").write_text(_never_ran_hooks())
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")}
+    out = tmp_path / "out.txt"
+    with out.open("w") as fh:
+        code = suite.run([*suite.pytest_args("1", "30"), "-p", "no:randomly", str(folder)], 90, "fixture",
+                         cwd=folder, env=env, stdout=fh, stderr=subprocess.STDOUT)
+    text = out.read_text()
+    print(text)
+    never = [line for line in text.splitlines() if "never ran" in line]
+    if expected:
+        assert code != 0 and "test_4_kills_its_worker" in text, text
+        assert never == [expected], text
+    else:
+        assert code == 0 and "5 passed, 1 skipped, 1 xfailed" in text, text
+        assert never == [], text
+
+
+def test_a_cancel_re_raises_the_interrupt_even_when_the_child_ignores_sigint(tmp_path):
+    child = tmp_path / "child.py"
+    child.write_text("import signal, time\nsignal.signal(signal.SIGINT, signal.SIG_IGN)\ntime.sleep(600)\n")
+
+    def cancel(signum, frame):
+        raise KeyboardInterrupt
+
+    previous = signal.signal(signal.SIGALRM, cancel)
+    signal.setitimer(signal.ITIMER_REAL, 1)
+    t0 = time.monotonic()
+    try:
+        with pytest.raises(KeyboardInterrupt):  # not subprocess.TimeoutExpired from the grace wait
+            _suite().run([sys.executable, str(child)], 60, "fixture", grace=1)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+    assert time.monotonic() - t0 < 20

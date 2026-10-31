@@ -66,8 +66,9 @@ def _signal_group(pgid: int, sig: int) -> None:
 def run(cmd: list[str], budget: float, name: str, grace: float = 20, **kwargs) -> int:
     """Run cmd in its own process group; past budget seconds, dump stacks and stop it all.
 
-    The group holds pytest, its xdist workers and the browsers they started, so
-    nothing outlives the run and keeps the job waiting."""
+    The group holds pytest, its xdist workers and the plain subprocesses they
+    start. Chromium (Playwright) makes its own process group, so it is not in it;
+    it exits by itself when its --remote-debugging-pipe closes as the worker dies."""
     proc = subprocess.Popen(cmd, start_new_session=True, **kwargs)
     try:
         return proc.wait(timeout=budget)
@@ -75,6 +76,8 @@ def run(cmd: list[str], budget: float, name: str, grace: float = 20, **kwargs) -
         _signal_group(proc.pid, signal.SIGINT)
         try:
             proc.wait(timeout=grace)
+        except subprocess.TimeoutExpired:
+            pass  # it ignored SIGINT; SIGKILL below, then re-raise the interrupt
         finally:
             _signal_group(proc.pid, signal.SIGKILL)
         raise
@@ -98,7 +101,7 @@ def _faulthandler(test_timeout: int) -> list[str]:
 
 
 def pytest_args(workers: str = "auto", test_timeout: str = "300") -> list[str]:
-    return [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfE",
+    return [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfEs",
             "-n", workers, "--dist", "loadfile",
             # A crashed worker (hung test killed by the thread timeout, or a native
             # crash) ends the run: no replacement worker re-running the same file.
