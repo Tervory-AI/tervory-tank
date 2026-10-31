@@ -1,6 +1,6 @@
 # Pinned body of tank/main.py run_route for tests/test_tenant_rls.py.
 # Changed on purpose by the prompt-caching PR (cache read/write tokens on the receipt).
-# Changed on purpose by #quarantine-zero: urgent reads the tenant-sealed exact cache (#360 over #424).
+# Changed on purpose by #500: urgent reads the tenant-sealed exact cache (#360 over #424).
 # Update this copy only together with a reviewed change to run_route.
 async def run_route(
     req: RouteRequest,
