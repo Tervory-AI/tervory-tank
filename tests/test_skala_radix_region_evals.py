@@ -1,6 +1,5 @@
 """radix.* 1.0.1: eval-only patches, plus per-box regional eval inputs (ZA staging gate)."""
 import json
-import uuid
 
 import httpx
 import pytest
