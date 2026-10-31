@@ -12,11 +12,12 @@ const ts=require(path.join(base,'node_modules/typescript'));
 require.extensions['.ts']=(module,filename)=>module._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,filename);
 const {normalizeSnapshot}=require('../workspace/app/chats/contract.ts');
 const {presentSnapshot}=require('../workspace/app/chats/presentation.ts');
-const output=path.join(root,'tests/fixtures/command-1b');
+const output=process.env.COMMAND_TEST_OUTPUT || path.join(root,'tests/fixtures/command-1b');
+fs.mkdirSync(output,{recursive:true});
 const thread={thread_id:'thread-one',title:'Base run: Delaware ATF list',updated_at:'2026-10-21T12:00:00Z',spent_usd:0,saved_usd:4.12};
 const receipt={rows:['Normalise records','Match to ATF list','Find websites','Read sites'].map((step,i)=>({step_id:step,model:'code',tokens_in:0,tokens_out:0,cost_usd:0,baseline_model:'baseline',baseline_cost_usd:[.61,.88,1.38,1.25][i],saved_usd:[.61,.88,1.38,1.25][i],ledger_id:'entry-'+i})),totals:{cost_usd:0,baseline_cost_usd:4.12,saved_usd:4.12}};
 const original={thread,messages:[{message_id:'user-one',role:'user',content:'Run Base on the Delaware ATF list and show me what it would have cost on a top model.'},{message_id:'answer-one',role:'assistant',content:'Running Base on 1,284 Delaware licences. Every step so far is plain code, so the cost is $0. One step is paid: a web search for 212 records with no site found. Confirm it below or cancel this step.',receipt}],steps:['Normalise 1,284 records','Match to ATF list','Find websites','Read sites','Web search, 212 records','Verify and score'].map((label,i)=>({step_id:'step-'+i,label,actor:'Base',status:i<4?'done':'planned',...(i===3?{link:'/base?batch=B-0142'}:{})})),cards:[{card_id:'paid-one',kind:'paid_run',summary:'Paid step: web search for 212 records with no website found.',cost_estimate_usd:1.06,status:'pending',tool:'base.batch',arguments:{batch:'B-0142',records:Array.from({length:212},()=>({})),engine:'website-search'}}]};
-let state=structuredClone(original),calls=[],failConfirm=false,turns=0,allowedTools=['base.batch'];
+let state=structuredClone(original),calls=[],failConfirm=false,turns=0,allowedTools=['base.batch'],recoveryMode='done';
 const binaryId='00000000-0000-4000-8000-000000000001';
 const unknown={cost_usd:null,baseline_cost_usd:null,saved_usd:null};
 (async()=>{
@@ -37,6 +38,18 @@ const server=createServer(async(req,res)=>{
   if(target==='threads'&&req.method==='GET')return json([state.thread]);
   if(target==='threads'&&req.method==='POST'){state={thread:{...thread,thread_id:'new-thread',title:'New chat',spent_usd:0,saved_usd:0},messages:[],steps:[],cards:[]};return json({thread_id:'new-thread'});}
   if(target.startsWith('cards/')){if(failConfirm)return json({error:'Confirmation could not be saved. Reload before trying again.'},502);const card=state.cards.find(card=>card.card_id===target.split('/')[1]);delete card.error;Object.assign(card,{status:body.action==='confirm'?'confirmed':'cancelled',retry_safe:false,...(body.action==='confirm'?{result:{summary:'Watch saved',url:'https://example.com/result'}}:{})});return json(presentSnapshot({...state,cards:[card]},true).cards[0]);}
+  if(target.endsWith('/events')) {
+    assert.equal(url.searchParams.get('after'),'41');
+    if(recoveryMode!=='active') state.messages.push({message_id:'recovered',role:'assistant',content:'Recovered answer.'});
+    if(recoveryMode!=='done'){res.setHeader('Content-Type','text/event-stream');res.end(recoveryMode==='snapshot'?Array.from({length:500},(_,i)=>`id: ${42+i}\nevent: step\ndata: ${JSON.stringify({seq:42+i,step_id:'replay-step-'+i,label:'Saved step',actor:'code',status:'done'})}\n\n`).join(''):'');return;}
+    res.setHeader('Content-Type','text/event-stream');
+    res.end('id: 41\nevent: token\ndata: {"text":"Recovered ","seq":41}\n\nid: 42\nevent: token\ndata: {"text":"answer.","seq":42}\n\nid: 43\nevent: done\ndata: {"message_id":"recovered","seq":43}\n\n');return;
+  }
+  if(target.endsWith('/turn')&&body.text==='Explicit stream error'){turns++;res.setHeader('Content-Type','text/event-stream');res.end('event: error\ndata: {"message":"Offline stream refused"}\n\n');return;}
+  if(target.endsWith('/turn')&&body.text==='Recover connection') {
+    turns++;state.messages.push({message_id:'recovered-user',role:'user',content:body.text});
+    res.setHeader('Content-Type','text/event-stream');res.end('id: 41\nevent: token\ndata: {"text":"Recovered ","seq":41}\n\n');return;
+  }
   if(target.endsWith('/turn')&&body.text.startsWith('Explain gold')){turns++;assert.equal(body.model,'auto');assert.equal(body.attachments.length,0);state.messages.push({message_id:'asked-user',role:'user',content:body.text});const answer='Gold prices, Tank and eval are unchanged.';state.messages.push({message_id:'asked-answer',role:'assistant',content:answer});res.setHeader('Content-Type','text/event-stream');res.end('event: token\ndata: '+JSON.stringify({text:answer,seq:1})+'\n\nevent: done\ndata: {"seq":2}\n\n');return;}
   if(target.endsWith('/turn')){if(body.model==='pinned')return json({error:'Choosing a specific answer option is not supported yet. Choose Auto to continue.',code:'pin_pending'},409);turns++;assert.equal(body.model,'auto');assert.equal(body.attachments[0].name,'notes.txt');assert.equal(body.attachments[1].attachment_id,binaryId);state.messages.push({message_id:'sent-user',role:'user',content:body.text,attachments:body.attachments});res.setHeader('Content-Type','text/event-stream');res.write('event: token\ndata: {"text":"First words ","seq":1}\n\n');setTimeout(()=>{res.write('event: token\ndata: {"text":"First words ","seq":1}\n\n');res.write('event: token\ndata: {"text":"arrived live.","seq":2}\n\n');res.write('event: receipt\ndata: '+JSON.stringify({rows:[],totals:unknown,status:'pending',step_id:'paid-one'})+'\n\n');state.cards[0].receipt_status='pending';state.thread.spent_usd=null;state.thread.saved_usd=null;state.thread.receipt_status='pending';state.messages.push({message_id:'sent-answer',role:'assistant',content:'First words arrived live.',receipt});res.end('event: done\ndata: {"message_id":"sent-answer","seq":3}\n\n');},400);return;}
   if(req.method==='PATCH'){state.thread.title=body.title;return json({ok:true});}
@@ -44,7 +57,7 @@ const server=createServer(async(req,res)=>{
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const port=server.address().port;
-const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
+const browser=await chromium.launch({executablePath:process.env.COMMAND_BROWSER || '/usr/bin/chromium',headless:true,args:['--no-sandbox']});
 const page=await browser.newPage({viewport:{width:1440,height:1120}});const errors=[];page.on('pageerror',error=>errors.push(error.message));
 try {
  await page.goto(`http://127.0.0.1:${port}/chats?thread=thread-one`);await page.getByRole('heading',{name:thread.title}).waitFor();await page.evaluate(()=>document.fonts.ready);
@@ -88,6 +101,31 @@ try {
  const prompt='Explain gold prices & Tank evaluation?';const beforeTurns=turns;const beforeCreates=calls.filter(call=>call.target==='threads'&&call.method==='POST').length;
  await page.goto(`http://127.0.0.1:${port}/chats?role=client&ask=${encodeURIComponent(prompt)}`);await page.getByText('Gold prices, Tank and eval are unchanged.',{exact:true}).waitFor();assert.equal(state.messages[0].content,prompt);assert.equal(turns,beforeTurns+1);assert.equal(calls.filter(call=>call.target==='threads'&&call.method==='POST').length,beforeCreates+1);assert.equal(new URL(page.url()).searchParams.has('ask'),false);
  await page.reload();await page.getByText('Gold prices, Tank and eval are unchanged.',{exact:true}).waitFor();assert.equal(turns,beforeTurns+1);assert.equal(calls.filter(call=>call.target==='threads'&&call.method==='POST').length,beforeCreates+1);
+ const beforeRecovery=turns;
+ await page.getByRole('textbox',{name:'Message Tervory'}).fill('Recover connection');await page.getByRole('button',{name:'Send',exact:true}).click();
+ await page.getByText('Recovered answer.',{exact:true}).waitFor();
+ assert.equal(turns,beforeRecovery+1);assert.equal(calls.filter(call=>call.target.endsWith('/events')).length,1);
+ assert.equal(await page.getByRole('alert').count(),0);
+ await page.reload();await page.getByText('Recovered answer.',{exact:true}).waitFor();assert.equal(turns,beforeRecovery+1);
+ const replayCount=()=>calls.filter(call=>call.target.endsWith('/events')).length;
+ const postCount=()=>calls.filter(call=>call.target.endsWith('/turn')).length;
+ const sendText=async text=>{await page.getByRole('textbox',{name:'Message Tervory'}).fill(text);await page.getByRole('button',{name:'Send',exact:true}).click();};
+ let beforeReplay=replayCount(),beforePost=postCount();
+ await sendText('Explicit stream error');await page.getByRole('alert').filter({hasText:'Offline stream refused'}).waitFor();
+ assert.equal(replayCount(),beforeReplay);assert.equal(postCount(),beforePost+1);
+ await page.route('**/chats/api/threads/*/turn',route=>route.abort('failed'));
+ beforePost=postCount();await sendText('Transport failure');await page.getByRole('alert').waitFor();
+ await page.waitForFunction(()=>!document.querySelector('#cw-message').disabled);
+ assert.equal(postCount(),beforePost);assert.equal(replayCount(),beforeReplay);await page.unroute('**/chats/api/threads/*/turn');
+ for(const mode of ['snapshot','active']) {
+   recoveryMode=mode;state.messages=state.messages.filter(message=>message.message_id!=='recovered');await page.reload();await page.getByRole('heading',{name:state.thread.title}).waitFor();
+   beforeReplay=replayCount();beforePost=postCount();await sendText('Recover connection');
+   await page.getByRole('alert').filter({hasText:'connection ended'}).waitFor();
+   assert.equal(replayCount(),beforeReplay+1);assert.equal(postCount(),beforePost+1);
+   await page.waitForFunction(()=>!document.querySelector('#cw-message').disabled);
+   assert.equal(await page.getByText('Recovered answer.',{exact:true}).count(),mode==='snapshot'?1:0);
+   assert.equal(await page.getByText('Recovered ',{exact:true}).count(),0);
+ }
  assert.deepEqual(errors,[]);console.log('Browser passed: desktop/mobile, work focus, menu/search, rename, safe retry, unknown outcomes, visible results/cancelled states, unsupported pins, binary files/downloads, pending costs and stream deduplication, persisted reload, new chat, client labels; no overflow or runtime errors.');
 } finally {await browser.close();server.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});
