@@ -298,7 +298,7 @@ def present(
     item["family"] = str(row.get("family") or "")
     item["price_label"] = str(attributes.get("price_label") or "")
     item["demo_item"] = bool(attributes.get("demo_item"))
-    item["availability"] = _stock(attributes)
+    item["availability"] = item.get("availability") or _stock(attributes)
     item["options"] = attributes.get("options") if isinstance(attributes.get("options"), dict) else {}
     item["defaults"] = attributes.get("defaults") if isinstance(attributes.get("defaults"), dict) else {}
     item["fit"] = fit_state(_sku(row), centre, fits, _centre_cut(centre)) if centre is not None else None
@@ -2477,7 +2477,7 @@ def _status(row: dict[str, Any]) -> str:
 
 
 def _available(row: dict[str, Any]) -> bool:
-    return _status(row) in _IN_STOCK
+    return _status(row) in _IN_STOCK or (row.get("availability") or {}).get("status") == "available_to_order"
 
 
 def _amount(row: dict[str, Any]) -> float:
