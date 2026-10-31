@@ -378,6 +378,7 @@ class _ArchiveStream:
         index: VectorIndex,
         cap: int,
         data_dir: str,
+        heartbeat: bool = True,
     ) -> None:
         self.store = store
         self.source = source
@@ -393,6 +394,9 @@ class _ArchiveStream:
         self.skips: Counter[str] = Counter()
         self.capped = False
         self.run: ArchiveRun | None = None
+        # The nightly runs outside a Load's task: it keeps its row untouched
+        # until the night's outcome, so no stale 'running' row is left behind.
+        self.heartbeat = heartbeat
         self._unsaved = 0
 
     async def __call__(self, run: ArchiveRun, payload: bytes) -> bool:
@@ -415,6 +419,8 @@ class _ArchiveStream:
         self._unsaved += 1
         if self._unsaved >= STREAM_SAVE_EVERY:
             await self.save()
+            if not self.heartbeat:
+                return True
             await self.store.record_run(
                 self.source.source_id,
                 status="running",
