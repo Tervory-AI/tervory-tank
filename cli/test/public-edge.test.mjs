@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { run } from '../src/client.mjs';
 
-const source = await readFile(new URL('../../../workspace/lib/tank.ts', import.meta.url), 'utf8');
+const source = await readFile(new URL('../../workspace/lib/tank.ts', import.meta.url), 'utf8');
 const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
 const TENANT = '00000000-0000-0000-0000-000000000011';
 const ID = '00000000-0000-0000-0000-000000000022';
