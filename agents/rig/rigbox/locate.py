@@ -6,6 +6,7 @@ is a supplied catalogue snapshot, never a fetch, purchase or supplier order.
 from __future__ import annotations
 
 import copy
+import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -74,19 +75,23 @@ class SupplyStore:
             raise ValueError("neutral_slip_required must be true or false.")
         row = {"id": identity, "approved": source["approved"], "priority": int(source.get("priority", 0)),
                "max_offer_age_seconds": age, "tenant_id": str(tenant), "neutral_slip_required": neutral,
-               **{key: str(source.get(key) or "") for key in ("provider", "site", "feed_id")}}
+               **{key: str(source.get(key) or "").strip() for key in
+                  ("provider", "site", "feed_id", "vendor_name", "order_email")}}
+        if row["order_email"] and not re.fullmatch(r"[^\s@<>,;\"]+@[^\s@<>,;\"]+\.[^\s@<>,;\"]+", row["order_email"]):
+            raise ValueError("Enter the source's order email address.")
         if self.pool is None:
             state = self.store.supply_state.setdefault(str(tenant), {})
             state["sources"] = [s for s in state.get("sources", []) if s["id"] != identity] + [row]
             return
         async with self.pool.acquire() as conn:
             await conn.execute("""INSERT INTO agent_rig.supply_sources
-                (tenant_id,id,approved,priority,max_offer_age_seconds,provider,site,feed_id,neutral_slip_required)
-                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                (tenant_id,id,approved,priority,max_offer_age_seconds,provider,site,feed_id,neutral_slip_required,
+                 vendor_name,order_email)
+                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
                 ON CONFLICT(tenant_id,id) DO UPDATE SET approved=$3,priority=$4,max_offer_age_seconds=$5,provider=$6,site=$7,
-                feed_id=$8,neutral_slip_required=$9""",
+                feed_id=$8,neutral_slip_required=$9,vendor_name=$10,order_email=$11""",
                 UUID(str(tenant)), identity, row["approved"], row["priority"], age, row["provider"], row["site"], row["feed_id"],
-                neutral)
+                neutral, row["vendor_name"], row["order_email"])
 
     async def import_catalogue(self, tenant: str, source_id: str, record: dict, contents: str | bytes,
                                seen_at: Any) -> dict:

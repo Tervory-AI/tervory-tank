@@ -165,8 +165,19 @@ class QuoteService(Service):
             raise RigError("invalid", "A payment is required.", 422)
         # Blind ship (per store, off by default): validate the address before
         # the hold is taken, so a bad address never burns the held price.
-        blind = (await self.store.retailer(tenant_id) or {}).get("blind_ship") is True
+        retailer = await self.store.retailer(tenant_id) or {}
+        blind = retailer.get("blind_ship") is True
         ship_to = ship_address(body.get("delivery")) if blind else None
+        # Optional auto-order (per store, off by default): sandbox outbox only.
+        auto = retailer.get("auto_order") is True
+        if auto:
+            from rigbox import supplier_orders
+            try:
+                supplier_orders.outbox()
+            except DeliveryError:
+                raise RigError("unavailable", "Ordering from other stores is not available.", 503) from None
+            if not hasattr(self.handoff, "send_supplier_order"):
+                raise RigError("unavailable", "Ordering from other stores is not available.", 503)
         now = datetime.now(timezone.utc)
         try:
             hold_id = read_token(secret, tenant_id, str(body.get("hold") or ""), now)
@@ -176,6 +187,9 @@ class QuoteService(Service):
         held = await Holds(self.store).take(tenant_id, hold_id, now)
         if held is None or held["product_id"] != row["sku"]:
             raise RigError("hold", "That price has expired. Check availability again.", 410)
+        if auto and not supplier_orders.supplier_ready(held["private"]["source"]):
+            # No real vendor or order inbox for this source: refuse before any payment.
+            raise RigError("unavailable", "Ordering from other stores is not available.", 503)
         price = held["public"]["price"]
         product = dict(await self.product(tenant_id, row["sku"]))
         product["price"] = dict(price)
@@ -225,6 +239,21 @@ class QuoteService(Service):
             raise RigError("order", "The order could not be placed. The payment was refunded.", 502) from None
         await record(state="ordered", ordered_at=datetime.now(timezone.utc).isoformat(),
                      sale_order=order["sale_order"]["name"], purchase_order=order["purchase_order"]["name"])
+        if auto:
+            try:
+                supplied = await self.handoff.send_supplier_order(
+                    tenant_id=tenant_id, quote_id=quote_id, located=held["private"], order=order,
+                    ship={"address": ship_to} if ship_to else None, store_name=retailer.get("name") or "",
+                    store_email=retailer.get("email"))
+            except DeliveryError as exc:
+                refunded = await payments.refund(provider, charge, "supplier_order_failed")
+                await record(state="supplier_order_failed_refunded", error=str(exc),
+                             refund={"status": refunded.status})
+                raise RigError("order", "The order could not be placed. The payment was refunded.", 502) from None
+            sent = supplied["supplier_order"]
+            await record(state="supplier_ordered", supplier_ordered_at=datetime.now(timezone.utc).isoformat(),
+                         purchase_order_state=supplied["purchase_order"]["state"],
+                         supplier_order={key: sent.get(key) for key in ("channel", "transport", "file", "duplicate")})
         body = {"request_id": quote_id, "state": "ordered", "price": price,
                 "payment": {"reference": charge.reference, "test": True}}
         if ship_to is not None:

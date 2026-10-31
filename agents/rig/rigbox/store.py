@@ -340,6 +340,7 @@ class MemoryStore(RetailerMemoryStore):
         quote_notice: dict[str, str] | None = None,
         locate_enabled: bool | None = None,
         blind_ship: bool | None = None,
+        auto_order: bool | None = None,
     ) -> None:
         previous = self.retailers.get(str(tenant_id), {})
         theme = theme if theme is not None else self.retailers.get(str(tenant_id), {}).get("theme", "neutral")
@@ -351,7 +352,9 @@ class MemoryStore(RetailerMemoryStore):
             "locate_enabled": bool(locate_enabled) if locate_enabled is not None
             else bool(previous.get("locate_enabled", False)),
             # Optional blind ship (Locate orders ship straight to the shopper). Off by default.
-            "blind_ship": bool(blind_ship) if blind_ship is not None else bool(previous.get("blind_ship", False))}
+            "blind_ship": bool(blind_ship) if blind_ship is not None else bool(previous.get("blind_ship", False)),
+            # Optional auto-order (sandbox outbox only). Off by default.
+            "auto_order": bool(auto_order) if auto_order is not None else bool(previous.get("auto_order", False))}
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         row = self.retailers.get(str(tenant_id))
@@ -826,12 +829,15 @@ class PgStore(RetailerPgStore):
         quote_notice: dict[str, str] | None = None,
         locate_enabled: bool | None = None,
         blind_ship: bool | None = None,
+        auto_order: bool | None = None,
     ) -> None:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship)
-                VALUES ($1, $2, $3, $4, $5, coalesce($6, 'neutral'), $7::jsonb, coalesce($8, false), coalesce($9, false))
+                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship,
+                                             auto_order)
+                VALUES ($1, $2, $3, $4, $5, coalesce($6, 'neutral'), $7::jsonb, coalesce($8, false), coalesce($9, false),
+                        coalesce($10, false))
                 ON CONFLICT (tenant_id) DO UPDATE SET
                     slug = EXCLUDED.slug,
                     email = EXCLUDED.email,
@@ -840,7 +846,8 @@ class PgStore(RetailerPgStore):
                     theme = coalesce($6, agent_rig.retailers.theme),
                     quote_notice = coalesce($7::jsonb, agent_rig.retailers.quote_notice),
                     locate_enabled = coalesce($8, agent_rig.retailers.locate_enabled),
-                    blind_ship = coalesce($9, agent_rig.retailers.blind_ship)
+                    blind_ship = coalesce($9, agent_rig.retailers.blind_ship),
+                    auto_order = coalesce($10, agent_rig.retailers.auto_order)
                 """,
                 _uuid(tenant_id),
                 str(slug),
@@ -851,19 +858,21 @@ class PgStore(RetailerPgStore):
                 json.dumps(quote_notice) if quote_notice is not None else None,
                 None if locate_enabled is None else bool(locate_enabled),
                 None if blind_ship is None else bool(blind_ship),
+                None if auto_order is None else bool(auto_order),
             )
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship FROM agent_rig.retailers WHERE tenant_id = $1",
+                "SELECT slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship, auto_order FROM agent_rig.retailers WHERE tenant_id = $1",
                 _uuid(tenant_id),
             )
         if row is None:
             return None
         return {"slug": row["slug"], "email": row["email"], "webhook": row["webhook"], "name": row["name"] or "", "theme": row["theme"],
                 "quote_notice": json.loads(row["quote_notice"]) if isinstance(row["quote_notice"], str) else row["quote_notice"],
-                "locate_enabled": bool(row["locate_enabled"]), "blind_ship": bool(row["blind_ship"])}
+                "locate_enabled": bool(row["locate_enabled"]), "blind_ship": bool(row["blind_ship"]),
+                "auto_order": bool(row["auto_order"])}
 
     async def replace_market(self, tenant_id: str, rows: list[dict[str, Any]]) -> None:
         async with self.pool.acquire() as conn:
