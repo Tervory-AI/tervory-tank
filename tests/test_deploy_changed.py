@@ -583,84 +583,68 @@ def test_a_failed_call_for_one_room_does_not_stop_the_later_rooms(monkeypatch: p
     assert deployed == ["r"]
 
 
-def _git(repo: Path, *args: str) -> str:
-    import subprocess
-    return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True,
-                          text=True).stdout.strip()
-
-
-def _history(tmp_path: Path) -> tuple[Path, dict[str, str]]:
-    """A repo: rig change (r1), base change (b1), docs change (d1), shared room change (c1)."""
-    repo = tmp_path / "repo"
-    (repo / "agents" / "rig").mkdir(parents=True)
-    (repo / "agents" / "base").mkdir()
-    (repo / "agents" / "_chassis").mkdir()
-    (repo / "docs").mkdir()
-    _git(repo.parent, "init", "-q", str(repo))
-    shas: dict[str, str] = {}
-    for key, path in [("r1", "agents/rig/app.py"), ("b1", "agents/base/app.py"), ("d1", "docs/a.txt"),
-                      ("c1", "agents/_chassis/app.py")]:
-        (repo / path).write_text(key, encoding="utf-8")
-        _git(repo, "add", "-A")
-        _git(repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", key)
-        shas[key] = _git(repo, "rev-parse", "HEAD")
-    return repo, shas
-
-
-def test_stale_finds_a_room_a_run_never_deployed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_a_body_cut_off_mid_wait_does_not_end_the_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    import http.client
     mod = _script(monkeypatch)
-    repo, sha = _history(tmp_path)
-    monkeypatch.setattr(mod, "REPO", str(repo))
-    monkeypatch.setattr(mod, "AFTER", sha["d1"])
-    row = lambda commit, status="finished": {"status": status, "commit": commit}  # noqa: E731
-    # agent-base's code changed in b1; it last deployed r1, so a run skipped it.
-    assert mod.stale("b", "agent-base", row(sha["r1"])) is True
-    assert mod.stale("b", "agent-base", row(sha["b1"])) is False
-    assert mod.stale("b", "agent-base", row(sha["d1"])) is False
-    # agent-rig last deployed b1, after its only change r1.
-    assert mod.stale("r", "agent-rig", row(sha["b1"])) is False
-    # A regional copy follows its room's folder.
-    assert mod.stale("r", "agent-base-za", row(sha["r1"])) is True
-    # Unknowns never redeploy: a commit outside the clone, no commit, a running deploy.
-    assert mod.stale("b", "agent-base", row("f" * 40)) is False
-    assert mod.stale("b", "agent-base", row("HEAD")) is False
-    assert mod.stale("b", "agent-base", row(sha["r1"], "in_progress")) is False
-    assert mod.stale("x", "agent-unknown", row(sha["r1"])) is False
-    # A shared room change makes every room behind it stale.
-    monkeypatch.setattr(mod, "AFTER", sha["c1"])
-    assert mod.stale("r", "agent-rig", row(sha["d1"])) is True
+    now = _clock(monkeypatch, mod)
+    mod._queued["za-uuid"] = "dep-1"
+    polls = [0]
+
+    class _Cut(_Resp):
+        def read(self) -> bytes:
+            raise http.client.IncompleteRead(b'{"sta')
+
+    def urlopen(req, timeout=30):
+        polls[0] += 1
+        if polls[0] == 3:
+            return _Cut(b"")
+        return _Resp(b'{"status": "in_progress"}' if now[0] < 300 else b'{"status": "finished"}')
+
+    monkeypatch.setattr(mod, "URL", "https://coolify.tervory.com")  # urlopen is faked: no network
+    monkeypatch.setattr(mod.urllib.request, "urlopen", urlopen)
+    assert mod.wait_for("za-uuid", "tervory-tank-za", mod.ZA_TIMEOUT_S) is True
+    assert polls[0] > 3
 
 
-def test_a_room_skipped_by_an_earlier_run_is_deployed_by_the_next(monkeypatch: pytest.MonkeyPatch,
-                                                                 tmp_path: Path) -> None:
+@pytest.mark.parametrize("exc", ["BadStatusLine", "IncompleteRead"])
+def test_http_client_errors_are_code_0(monkeypatch: pytest.MonkeyPatch, exc: str) -> None:
+    import http.client
     mod = _script(monkeypatch)
-    repo, sha = _history(tmp_path)
-    monkeypatch.setattr(mod, "REPO", str(repo))
-    monkeypatch.setattr(mod, "AFTER", sha["d1"])
-    apps = [{"name": "agent-base", "uuid": "b"}, {"name": "agent-rig", "uuid": "r"}]
-    live = {"b": sha["r1"], "r": sha["b1"], mod.MAIN_APP: "f" * 40}
 
-    def api(method: str, path: str):
-        if path == "/applications":
-            return 200, apps
-        uuid = path.split("/")[3].split("?")[0]
-        return 200, {"deployments": [{"status": "finished", "commit": live[uuid]}]}
+    def urlopen(req, timeout=30):
+        if exc == "BadStatusLine":
+            raise http.client.BadStatusLine("garbage")
+        raise http.client.IncompleteRead(b"{")
 
+    monkeypatch.setattr(mod, "URL", "https://coolify.tervory.com")  # urlopen is faked: no network
+    monkeypatch.setattr(mod.urllib.request, "urlopen", urlopen)
+    assert mod.api("GET", "/deployments/x") == (0, exc)
+
+
+def test_an_error_body_that_cannot_be_read_keeps_the_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    import urllib.error
+    mod = _script(monkeypatch)
+
+    class _Err(urllib.error.HTTPError):
+        def read(self, *args) -> bytes:
+            raise TimeoutError("read timed out")
+
+    def urlopen(req, timeout=30):
+        raise _Err("https://coolify.tervory.com/api/v1/x", 502, "Bad Gateway", {}, None)
+
+    monkeypatch.setattr(mod, "URL", "https://coolify.tervory.com")  # urlopen is faked: no network
+    monkeypatch.setattr(mod.urllib.request, "urlopen", urlopen)
+    assert mod.api("GET", "/deployments/x") == (502, "")
+
+
+def test_a_budget_skipped_room_is_not_retried_by_a_later_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only a failed newest deployment is retried; a room the budget skipped has none."""
+    mod = _script(monkeypatch)
     order: list[str] = []
-    monkeypatch.setattr(mod, "changed_paths", lambda: ["docs/a.txt"])
-    monkeypatch.setattr(mod, "api", api)
+    apps = [{"name": "agent-base", "uuid": "b"}, {"name": "agent-rig", "uuid": "r"}]
+    monkeypatch.setattr(mod, "changed_paths", lambda: [".github/workflows/ci.yml"])
+    monkeypatch.setattr(mod, "api", _api_with_failed(apps, {"r"}))
     monkeypatch.setattr(mod, "deploy", lambda uuid, name: order.append(name) or True)
     monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
     assert mod.main() == 0
-    assert order == ["agent-base"]
-
-
-def test_room_folder_prefers_the_longest_match(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    mod = _script(monkeypatch)
-    for d in ("market", "market_lab", "_template"):
-        (tmp_path / "agents" / d).mkdir(parents=True)
-    monkeypatch.setattr(mod, "REPO", str(tmp_path))
-    assert mod.room_folder("agent-market-lab-za") == "market_lab"
-    assert mod.room_folder("agent-market") == "market"
-    assert mod.room_folder("agent-template") == ""
-    assert mod.room_folder("agent-marketing") == ""
+    assert order == ["agent-rig"]

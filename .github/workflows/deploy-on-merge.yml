@@ -34,7 +34,8 @@ jobs:
     # = 1560 s, poll overrun 12 x 45 s = 540 s, checkout 60 s: 16560 s = 276 min.
     # DEPLOY_BUDGET_S is 280 min: deploy_changed.py starts no room whose wait would end
     # past it, so the job ends by about 283 min, well before GitHub's 290-min kill. A room
-    # not started is deployed by the next run (stale()).
+    # not started is reported as an error and is not retried by later runs (they retry
+    # only failed deployments): deploy it with coolify-ops or the next change to its code.
     timeout-minutes: 290
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
