@@ -11,5 +11,5 @@
 #
 # Added 31 Oct 2026 (#486): failures found when the whole suite ran again on main fd5fc1a5.
 # None of these tests ran in PR CI since 27 Oct (#351), so each drifted from the code it checks.
-# 19 of the 22 found were fixed in #486. These 4 entries (3 problems) remain: each is a
-# product or release decision, not a test flaw. Strict xfail: each fails the run once it passes.
+# 19 of the 22 found were fixed in #486. The last 4 entries (room_seal x2, chat_graduation,
+# candidate bundled feeds) were fixed at the root in grok/quarantine-zero. The list is empty.
