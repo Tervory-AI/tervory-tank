@@ -19,6 +19,7 @@ write('$ node tests/cli_1_20261031/record.mjs\n');
 await run(['chat', 'fake-thread', '--model', 'fake-pinned-model'], {
   store: { get: async () => token },
   transport: async (url, init) => {
+    if (init.method === 'GET' && url.endsWith('/threads/fake-thread')) return Response.json({ messages: [], steps: [], cards: [] });
     if (url.endsWith('/cards/fake-card')) {
       if (JSON.parse(init.body).action !== 'cancel') throw new Error('Recording must cancel');
       return Response.json({ status: 'cancelled' });
@@ -43,7 +44,7 @@ await run(['chat', 'fake-thread', '--model', 'fake-pinned-model'], {
       controller.close();
     } }), { headers: { 'Content-Type': 'text/event-stream' } });
   },
-  io: { write, prompt: async label => {
+  io: { write, preview: value => write('\r\x1b[2K' + value), prompt: async label => {
     const answer = answers.shift() ?? null;
     write(label + (answer ?? '') + '\n'); return answer;
   } },
