@@ -142,7 +142,7 @@ jobs:
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.run == 'true' }}
     # Self-hosted only when "pick runner" chose it and the change is not from a fork.
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
-    # Full suite: about N minutes on a 4-core runner; the per-test timeout is 5 minutes.
+    # Full suite: about 10 minutes on the hosted 4-core runner (9.5 min of tests); the per-test timeout is 5 minutes.
     timeout-minutes: 30
     services:
       postgres:

@@ -19,6 +19,12 @@ def test_boston_backup_survives_default_deployment_composition(tmp_path, directo
     # Coolify consumes this metadata before handing the file to Compose.
     for service in compose["services"].values():
         service.pop("exclude_from_hc", None)
+    # Corridor networks are created once on the live host (docker network create), so a
+    # fresh runner has none and Compose stops at "declared as external, but could not be
+    # found". This test is about which services an ordinary up selects, not networks.
+    for network in (compose.get("networks") or {}).values():
+        if network:
+            network.pop("external", None)
     target = tmp_path / directory
     target.mkdir()
     source = target / "docker-compose.yaml"
@@ -29,11 +35,13 @@ def test_boston_backup_survives_default_deployment_composition(tmp_path, directo
     # --no-deps avoids unrelated services' runtime dependency waits in dry-run.
     command = ["docker", "compose", "--project-name", "backup-regression", "--dry-run",
                "-f", str(source), "up", "-d", "--no-build", "--pull", "never", "--no-deps"]
-    first = subprocess.run(command, env=env, capture_output=True, text=True, check=True)
+    first = subprocess.run(command, env=env, capture_output=True, text=True)
+    assert first.returncode == 0, first.stdout + first.stderr
     expected = "Container backup-regression-r2-backup-1"
     assert expected in first.stdout + first.stderr, "ordinary redeploy drops the profiled backup"
     # A fresh resolution at the same path must retain the worker without a repair/profile flag.
-    again = subprocess.run(command, env=env, capture_output=True, text=True, check=True)
+    again = subprocess.run(command, env=env, capture_output=True, text=True)
+    assert again.returncode == 0, again.stdout + again.stderr
     assert expected in again.stdout + again.stderr
     worker = compose["services"]["r2-backup"]
     assert worker["restart"] == "unless-stopped"
@@ -66,6 +74,12 @@ def test_za_backup_survives_default_deployment_composition(tmp_path):
     compose = yaml.safe_load((ROOT / "docker-compose.za.yml").read_text())
     for service in compose["services"].values():
         service.pop("exclude_from_hc", None)
+    # Corridor networks are created once on the live host (docker network create), so a
+    # fresh runner has none and Compose stops at "declared as external, but could not be
+    # found". This test is about which services an ordinary up selects, not networks.
+    for network in (compose.get("networks") or {}).values():
+        if network:
+            network.pop("external", None)
         service["env_file"] = [".env"]  # what Coolify writes on every deploy
     (tmp_path / ".env").write_text("")
     source = tmp_path / "docker-compose.yaml"
