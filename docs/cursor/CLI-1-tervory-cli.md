@@ -28,6 +28,25 @@
    - `--model <name>`: pins any roster model for that turn. It still goes through Tank, and the receipt also shows what Auto would have cost.
 5. **Region:** the token's box decides where it talks: app.tervory.com or za.tervory.com. It never mixes the two.
 
+## Decision: ZA device codes are not bound to a tenant (review item 5, 31 Oct)
+Any signed-in organization can approve a ZA code into its own tenant on the ZA Tank.
+This is deliberate, not an omission:
+- The CLI has no identity when it asks for a code (RFC 8628 §3.1); the tenant comes from
+  the person who approves. There is nothing trustworthy to bind the code to at creation.
+- Binding a code to a tenant chosen at creation does not stop the phishing case the review
+  raised: an attacker who sends someone an approval link would simply create the code for
+  that person's tenant. The token is minted for the approving user in the approving
+  tenant, so an approval never grants access to anyone else's tenant.
+- Binding codes to a home region would close Chat to customers outside their home region,
+  and Tervory Chat must be open to all regions.
+Mitigations in place: codes are single use and expire in 10 minutes; the approval page
+(`workspace/app/cli/device/page.tsx`) shows the code, organization, device name and
+region and says to approve only a code the user's own terminal shows; ZA approvals use
+only the dedicated `TANK_DEVICE_APPROVAL_KEY` (two routes, user and tenant still
+required); `tervory logout` revokes the credential, and Tank has a member revoke route (the Workspace token page is still pending its Figma frame).
+Revisit if Tank gains per-tenant region residency rules (then refuse approval on a box
+outside the tenant's allowed regions) or if a code ever needs to carry a tenant hint.
+
 ## Done when
 CI green. Tests against a fake Tank:
 - login stores the token in the keychain and never prints it;
