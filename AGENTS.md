@@ -28,6 +28,8 @@ Spec: Build Pack v2 (Claude Doc) and `README.md`.
 
 10. **The ladder runs by itself; builders do not add cost.** At run time every step goes down the ladder automatically: free rungs first (code, cache, our own search and browser), then the cheapest available paid rung (any model with funds, Brave, a data vendor). No run waits for a person. At build time, a builder never adds a new paid service, key or provider, and never changes which paid routes a task uses, unless the brief says so; that is the founder's decision.
 
+11. **Region and runtime config land in their own PR, first.** Runtime config deploys on merge: `litellm/`, `docker-compose.yml` and `docker-compose.za.yml` redeploy the main app and `tervory-tank-za` (`.github/scripts/deploy_changed.py` `MAIN_PREFIXES`), and anything under `agents/<room>/` redeploys that room and its regional copies. Never let it ride in a CI, test or docs PR: open a small PR for the config alone, merge it and let it deploy, then land the PR that depends on it. Say in that PR which apps deploy-on-merge will redeploy. (#486 shipped a ZA LiteLLM change this way; see `docs/ops/ZA-LITELLM-OFFPEAK-2026-10-31.md`.)
+
 ## Conventions
 - Plain English in the UI. No jargon, no hype words.
 - Brand: navy `#001840` (text, dark bands), red `#E80008` (the dot, one primary action, the accepted chip only), lines `#B8BFD0`, tint `#F4F6FB`. Headings Jost Light, body Inter, cost/meta lines JetBrains Mono. Logo files in `workspace/public/brand/` — use them as-is, never redraw the logo.
