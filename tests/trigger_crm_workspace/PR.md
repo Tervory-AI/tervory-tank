@@ -47,3 +47,12 @@ No real CRM records, secrets, model/provider calls, production SQL, live mutatio
 - Founder-approved current client CRM frames and exact copy before implementing the newly requested screens. No historical pending approval is treated as approval.
 - Configured token and organization mapping are founder-owned by setting name only; no token values are requested or handled here.
 - Full-build founder browser walkthrough and acceptance, last.
+
+
+## Client integration follow-up — 2026-10-31T12:20:53.035623-07:00 / 2026-10-31T19:20:53.035623+00:00
+
+Supersedes founder-only Workspace restriction: authenticated users with an active Clerk organization are forwarded using server-derived user/tenant identity. Tank remains authoritative for persisted Trigger entitlement, revocation and attested CRM organization binding. No default grant, new UI, direct write route or browser credential is added.
+
+Changed `workspace/app/api/trigger-crm/[...path]/route.ts`: removed founder-only prefilter while preserving authentication, active organization, path/query allowlist and sanitized failures. `tests/trigger_crm_workspace/contract.cjs` verifies signed-in client forwarding and Tank permission-denial propagation alongside existing boundaries.
+
+Exact commands: `node tests/trigger_crm_workspace/contract.cjs` — PASS; `git diff --check` — PASS. Commits `378fb6e` and `36d4224` pushed successfully. Initial commit failed because this fresh checkout lacked a Git author; configured repository-local identity matching existing Codex commits, then committed normally. No production requests or data changes. Fresh combined client integration, independent review and hosted CI remain required.
