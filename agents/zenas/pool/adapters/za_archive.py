@@ -262,7 +262,11 @@ def _page_rank(page: str) -> tuple[int, int, str]:
 class ArchiveRun:
     """One source's archive position for this Load."""
 
-    def __init__(self, resume: str) -> None:
+    def __init__(self, resume: str, tag: str = "") -> None:
+        # A source's own cursor version (e.g. Special Tribunal's "st-v2"):
+        # every cursor() ends in it, so a save made mid-walk by the stream
+        # carries it as the end-of-walk one does.
+        self.tag = tag
         self.downloaded = 0
         self.skips: Counter[str] = Counter()
         self.years: set[int] = set()
@@ -309,7 +313,8 @@ class ArchiveRun:
         scope = self.scope or self.resume_scope
         year = self.year or self.resume_year or "0"
         page = self.page or self.resume_page or "0"
-        return "\n".join([MARKER, "1" if self.finished else "0", scope, year, page, seen])
+        cursor = "\n".join([MARKER, "1" if self.finished else "0", scope, year, page, seen])
+        return f"{cursor}\n{self.tag}" if self.tag else cursor
 
     def note_year(self, year: int) -> None:
         if 1800 <= int(year) <= 2200:

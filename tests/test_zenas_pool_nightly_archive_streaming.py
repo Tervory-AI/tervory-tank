@@ -69,7 +69,7 @@ def _quick(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("SARS_MIN_INTERVAL", "0")
     monkeypatch.setenv("ZENAS_ZA_ARCHIVE_MAX", "5000")
     # Real PDF parsing is not the point; the bytes still flow through the walk.
-    monkeypatch.setattr(za_archive, "pdf_text", lambda body: body[9:].decode())
+    monkeypatch.setattr(za_archive, "pdf_text_or_none", lambda body: body[9:].decode())
     monkeypatch.setattr(nightly, "get_adapter", lambda source: _Walk())
 
 
