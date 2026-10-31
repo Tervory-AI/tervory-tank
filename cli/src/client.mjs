@@ -264,14 +264,23 @@ const amount = value => value === null || value === undefined ? 'pending' : Stri
 export function receiptLines(receipt) {
   const rows = receipt.rows ?? [];
   if (!rows.length) return ['Receipt pending'];
-  return rows.map(row => {
+  return rows.map((row, index) => {
     // Tank prices pinned turns' same recorded tokens at the frozen Auto policy price; the CLI never computes money.
-    const auto = row.auto_cost_status === 'priced' && typeof row.auto_cost_usd === 'number'
+    const priced = row.auto_cost_status === 'priced' && typeof row.auto_cost_usd === 'number';
+    const pinned = row.requested_model && row.requested_model !== 'auto';
+    // Tank sends model names only to the founder (as the Workspace receipt shows them only
+    // to the founder). Without them this is a customer receipt: dollar figures only.
+    if (typeof row.model !== 'string') {
+      return `Step ${index + 1} | cost ${amount(row.cost_usd)} | would have cost ${amount(row.baseline_cost_usd)}`
+        + ` | saved ${amount(row.saved_usd)}`
+        + (pinned ? ` | What Auto would have cost: ${priced ? amount(row.auto_cost_usd) : 'comparison pending'}` : '');
+    }
+    const auto = priced
       ? `would have cost ${amount(row.auto_cost_usd)} (${row.auto_model ?? 'policy model'}, same tokens at policy model prices)` : 'comparison pending';
     return `${row.model === 'code' ? 'code (no model)' : row.model} | tokens ${row.tokens_in}/${row.tokens_out}`
-      + ` | cost ${amount(row.cost_usd)} | baseline ${amount(row.baseline_cost_usd)}`
+      + ` | cost ${amount(row.cost_usd)} | baseline ${row.baseline_model ? `${row.baseline_model} ` : ''}${amount(row.baseline_cost_usd)}`
       + ` | saved ${amount(row.saved_usd)} | ledger ${row.ledger_id}`
-      + (row.requested_model && row.requested_model !== 'auto' ? ` | Auto ${auto}` : '');
+      + (pinned ? ` | Auto ${auto}` : '');
   });
 }
 

@@ -1007,6 +1007,44 @@ async def test_auto_comparison_prices_same_tokens_with_frozen_tenant_policy(api,
 
 
 @pytest.mark.asyncio
+async def test_customer_receipts_carry_no_model_names_but_keep_the_auto_dollar_figure(api, runtime, monkeypatch):
+    # Review item 3: only the founder sees serving, baseline and Auto model names.
+    client, pool = api
+    runtime.list_models = AsyncMock(return_value=[{'name': 'fixture-pin'}])
+    async with pool.acquire() as conn:
+        await conn.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) VALUES('fixture-auto','fixture',0.001,0.002)")
+        await conn.execute("DELETE FROM tank.policy WHERE task_type='command.turn' AND tenant_id IS NULL")
+        await conn.execute("INSERT INTO tank.policy(tenant_id,task_type,model) VALUES($1,'command.turn','fixture-auto')", TENANT)
+    names = ('fixture-auto', 'fixture-model', 'fixture-baseline', '"auto_model"', '"baseline_model"', '"model": "fixture', 'auto_comparison')
+    results = {}
+    for user in ('customer', 'founder'):
+        ledger_id = await seed_ledger(pool)
+        await pool.execute("UPDATE tank.ledger SET baseline_model='fixture-baseline',baseline_cost_usd=0.5 WHERE id=$1", ledger_id)
+        monkeypatch.setattr(command, 'route_turn', AsyncMock(return_value=SimpleNamespace(ledger_id=ledger_id, content='Measured answer')))
+        headers = {'x-tervory-user': user}
+        thread = (await client.post('/v1/command/threads', json={}, headers=headers)).json()['thread_id']
+        reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Hello', 'model': 'fixture-pin'}, headers=headers)
+        snapshot = await client.get(f'/v1/command/threads/{thread}', headers=headers)
+        events = await client.get(f'/v1/command/threads/{thread}/events', headers=headers)
+        results[user] = (reply.text, snapshot.text, events.text, snapshot.json()['receipts'][0])
+    for text in results['customer'][:3]:
+        assert 'auto_cost_usd' in text
+        for name in names:
+            assert name not in text, name
+    customer = results['customer'][3]
+    assert customer['auto_cost_usd'] == pytest.approx(0.05) and customer['auto_cost_status'] == 'priced'
+    assert customer['cost_usd'] == 0.02 and customer['baseline_cost_usd'] == 0.5 and 'same tokens' in customer['auto_cost_label']
+    assert not {'model', 'baseline_model', 'auto_model'} & customer.keys()
+    founder = results['founder'][3]
+    assert (founder['model'], founder['baseline_model'], founder['auto_model']) == ('fixture-model', 'fixture-baseline', 'fixture-auto')
+    assert founder['auto_cost_usd'] == pytest.approx(0.05)
+    assert 'auto_comparison' in results['founder'][1]
+    # Durable state still holds the full evidence for the founder's audit.
+    state = await pool.fetchval("SELECT state FROM tank.command_threads WHERE user_id='customer'")
+    assert 'fixture-auto' in (state if isinstance(state, str) else json.dumps(state))
+
+
+@pytest.mark.asyncio
 async def test_query_tenant_never_authenticates(runtime):
     req = request(**{'x-tank-key': runtime.TANK_API_KEY, 'x-tervory-user': 'founder'})
     req.scope['query_string'] = f'tenant_id={TENANT}'.encode()

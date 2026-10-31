@@ -229,6 +229,31 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
     }
 
 
+# Engine and model names are founder-only (as in the Workspace receipt). Customers
+# get the dollar figures and the "What Auto would have cost" label, never the
+# serving, baseline or Auto model names. Durable state is not rewritten.
+MODEL_NAME_KEYS = frozenset({"model", "baseline_model", "auto_model"})
+
+
+def public_receipt(receipt: dict, founder: bool) -> dict:
+    return receipt if founder else {k: v for k, v in receipt.items() if k not in MODEL_NAME_KEYS}
+
+
+def public_step(payload: dict, founder: bool) -> dict:
+    # auto_comparison is the frozen policy model and its price book row.
+    return payload if founder else {k: v for k, v in payload.items() if k != "auto_comparison"}
+
+
+def public_event(kind: str, data: dict, founder: bool) -> dict:
+    if founder:
+        return data
+    if kind == "receipt":
+        return {**data, "rows": [public_receipt(r, False) for r in data.get("rows", [])]}
+    if kind == "step":
+        return public_step(data, False)
+    return data
+
+
 def totals(rows: list[dict]) -> dict:
     complete = all(r["saved_usd"] is not None for r in rows)
     return {
@@ -341,12 +366,13 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
         row = await owned(conn, thread_id, actor)
     state = unpack(row["state"])
     amounts = thread_totals(state)
+    founder = current_actor(actor).founder
     return {"thread": {"thread_id": str(thread_id), "title": row["title"], "updated_at": row["updated_at"],
                        "spent_usd": amounts["cost_usd"], "saved_usd": amounts["saved_usd"], "receipt_status": amounts["receipt_status"],
                        "recorded_spent_usd": amounts["recorded_spent_usd"]},
-            "messages": state["messages"], "steps": list(state["steps"].values()),
+            "messages": state["messages"], "steps": [public_step(s, founder) for s in state["steps"].values()],
             "cards": [public_card(c) for c in state["cards"].values()],
-            "receipts": state["receipts"], "seq": row["seq"]}
+            "receipts": [public_receipt(r, founder) for r in state["receipts"]], "seq": row["seq"]}
 
 
 @router.get("/tasks/{task_id}/receipts")
@@ -363,7 +389,8 @@ async def task_receipts(task_id: uuid.UUID, actor: Actor = Depends(identity)) ->
     if task["ledger_id"] is not None and task["data"] is None:
         raise HTTPException(409, "Receipt evidence is missing or outside this tenant")
     rows = [receipt_row(unpack(task["data"]), str(task_id))] if task["data"] is not None else []
-    return {"rows": rows, "totals": totals(rows) if rows else
+    founder = current_actor(actor).founder
+    return {"rows": [public_receipt(r, founder) for r in rows], "totals": totals(rows) if rows else
             {"cost_usd": None, "baseline_cost_usd": None, "saved_usd": None},
             "status": "recorded" if rows and rows[0]["cost_usd"] is not None else "pending"}
 
@@ -381,6 +408,7 @@ def sse(kind: str, data: dict) -> str:
 
 
 async def replay(thread_id: uuid.UUID, actor: Actor, after: int, *, turn_id: str | None = None):
+    founder = current_actor(actor).founder
     while True:
         async with db().acquire() as conn:
             row = await conn.fetchrow(
@@ -395,7 +423,7 @@ async def replay(thread_id: uuid.UUID, actor: Actor, after: int, *, turn_id: str
         for item in events:
             data = unpack(item["data"])
             after = data["seq"]
-            yield sse(item["kind"], data)
+            yield sse(item["kind"], public_event(item["kind"], data, founder))
         if len(events) == 500:
             continue
         if turn_id is None or row["active_turn"] != turn_id:

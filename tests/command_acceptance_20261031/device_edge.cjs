@@ -86,8 +86,11 @@ const transport = async (url, init) => {
   // A streamed chat turn from the CLI with a pinned model: Tank prices the Auto comparison.
   await cli.run(['ask', '--model', input.pin, 'Hello from the CLI'], { store, transport, io });
   assert.match(output, /Hello world\./, output);
-  assert.match(output, /ledger [0-9a-f-]{36}/);
-  assert.match(output, /\| Auto would have cost \$?[0-9.]+ \(luna, same tokens at policy model prices\)/, output);
+  // offline-client is a customer: dollar figures and the Auto label only, no model,
+  // baseline-model or Auto-model names and no ledger ids (review item 3).
+  assert.match(output, /Step 1 \| cost [0-9.]+ \| would have cost /, output);
+  assert.match(output, /\| What Auto would have cost: [0-9.]+/, output);
+  for (const name of ['luna', input.pin, 'ledger ', 'tokens ']) assert(!output.includes(name), `customer receipt leaked ${name}: ${output}`);
   const thread = /Thread ([0-9a-f-]{36})/.exec(output)[1];
 
   // Refresh: the access token is near expiry, so the next command rotates both tokens.

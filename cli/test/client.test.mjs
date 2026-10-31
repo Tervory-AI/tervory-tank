@@ -206,6 +206,17 @@ test('pinned model shows Tank-priced Auto comparison and never computes one', as
   assert(!unpriced.join('').includes('42'));
 });
 
+test('customer receipt (no model names from Tank) shows dollar figures and the Auto label only', () => {
+  const { model, baseline_model, ...customer } = row;
+  const lines = receiptLines({ rows: [{ ...customer, requested_model: 'fake-model', auto_cost_status: 'priced', auto_cost_usd: 0.05 }] }).join('\n');
+  assert.match(lines, /^Step 1 \| cost .* \| would have cost .* \| saved .* \| What Auto would have cost: 0\.05$/);
+  for (const leak of [model, 'fake-auto', 'policy model', 'ledger', 'tokens', 'fake-ledger']) assert(!lines.includes(leak), leak);
+  const pending = receiptLines({ rows: [{ ...customer, requested_model: 'fake-model', auto_cost_status: 'pending', auto_cost_usd: 42 }] }).join('');
+  assert.match(pending, /What Auto would have cost: comparison pending/);
+  assert(!pending.includes('42'));
+  assert(!receiptLines({ rows: [customer] }).join('').includes('Auto'));
+});
+
 test('client cannot propose founder tools', async () => {
   const h = harness();
   await assert.rejects(run(['run', 'skala', 'approve', '--args', '{}'], h), /not available/);
