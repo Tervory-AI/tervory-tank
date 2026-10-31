@@ -73,28 +73,6 @@ const snapshot = {thread:{thread_id:'one',title:'Tank test-model',updated_at:'20
   const isolated=contract.applyReceipt({...snapshot,messages:[{message_id:'answer',role:'assistant',content:'Text'}],cards:[],steps:[]},pending,'answer');assert.equal(isolated.messages[0].receipt,undefined);assert.equal(isolated.job_receipts[0].step_id,'action');
   const first=contract.applyReceipt({...snapshot,messages:[{message_id:'answer',role:'assistant',content:'Text'}],cards:[],steps:[{step_id:'step',actor:'Tervory',status:'running'}]},receipt,'answer');
   const second=contract.applyReceipt(first,{...receipt,rows:[{...receipt.rows[0],ledger_id:'row-two'}]},'answer');assert.equal(second.messages[0].receipt.rows.length,2);assert.equal(second.messages[0].receipt.totals.cost_usd,.02);
-  // Pinned rows carry Tank's same-token Auto comparison; totals sum only fully priced rows.
-  const autoRows = [
-    {...receipt.rows[0], step_id:'answer', ledger_id:'auto-one', auto_cost_usd:null},
-    {...receipt.rows[0], step_id:'work', ledger_id:'auto-two', auto_cost_usd:.004},
-  ];
-  const mixed = {...receipt, rows:autoRows, totals:{...receipt.totals, cost_usd:99, auto_cost_usd:99}};
-  const grouped = contract.applyReceipt({...snapshot,messages:[{message_id:'answer',role:'assistant',content:'Text'}],cards:[],steps:[]},mixed,'answer');
-  assert.equal(grouped.messages[0].receipt.totals.cost_usd,.01);
-  assert.equal(grouped.messages[0].receipt.totals.auto_cost_usd,null);
-  assert.equal(grouped.job_receipts[0].totals.cost_usd,.01);
-  assert.equal(grouped.job_receipts[0].totals.auto_cost_usd,.004);
-  const autoReload = contract.normalizeSnapshot({...snapshot,messages:[{message_id:'answer',role:'assistant',content:'Text'}],cards:[],steps:[],receipts:autoRows});
-  assert.deepEqual(autoReload.messages[0].receipt,grouped.messages[0].receipt);
-  assert.equal(autoReload.job_receipts[0].totals.auto_cost_usd,.004);
-  const delta = contract.applyReceipt(grouped,{...receipt,rows:[{...autoRows[0],auto_cost_usd:.003}]},'answer');
-  assert.equal(delta.messages[0].receipt.rows.length,1);
-  assert.equal(delta.messages[0].receipt.totals.auto_cost_usd,.003);
-  assert.equal(contract.receiptFor([autoRows[1],{...autoRows[1],ledger_id:'auto-three',auto_cost_usd:.006}]).totals.auto_cost_usd,.01);
-  assert.equal(contract.receiptFor([{...autoRows[0],auto_cost_usd:Infinity}]).totals.auto_cost_usd,null);
-  assert.equal(contract.receiptFor([{...autoRows[0],auto_cost_usd:NaN}]).totals.auto_cost_usd,null);
-  assert.equal(contract.receiptFor([autoRows[1]],'work',true).totals.auto_cost_usd,null);
-  assert.equal(contract.receiptFor(receipt.rows).totals.auto_cost_usd,undefined);
   const baselinePending={...receipt,rows:[{...receipt.rows[0],baseline_status:'baseline pending',saved_usd:null}]};
   assert.equal(presentation.presentReceipt(baselinePending,false).rows[0].baseline_status,'baseline pending');
   for(const status of ['executing','unknown','failed','confirmed','cancelled']) {

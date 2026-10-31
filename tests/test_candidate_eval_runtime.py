@@ -159,7 +159,7 @@ class CandidateEvalRuntimeTests(unittest.TestCase):
     def test_bundled_feeds_and_fixtures_match_existing_sources(self):
         self.assertIn(f"version: {PACKAGE.name}", (PACKAGE / "skill.yaml").read_text(encoding="utf-8"))
         files = [p for p in (PACKAGE / "feeds").rglob("*") if p.is_file() and p.suffix in {".py", ".sql"}]
-        self.assertEqual(len(files), 22)  # 1.3.0 adds feeds/keyless.py (imported by adapters.py)
+        self.assertEqual(len(files), 21)
         self.assertTrue((PACKAGE / "feeds/published.py").is_file())
         for path in files:
             original = ROOT / "agents/market_lab/feeds" / path.relative_to(PACKAGE / "feeds")

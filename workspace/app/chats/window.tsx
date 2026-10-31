@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { SquadLinks, SQUAD_MEMBERS } from "../squad-links";
 import { clientLabel, visibleCard } from "./presentation";
-import { applyReceipt, canConfirm, dollars, readEvents, safeLink, upsert, type Attachment, type Card, type Event, type Message, type ModelOption, type Receipt, type Snapshot, type Step, type Thread } from "./contract";
+import { applyReceipt, canConfirm, dollars, readEvents, safeLink, upsert, type Attachment, type Card, type Message, type ModelOption, type Receipt, type Snapshot, type Step, type Thread } from "./contract";
 import doneDot from "./assets/done.svg";
 import attentionDot from "./assets/attention.svg";
 import plannedDot from "./assets/planned.svg";
@@ -27,13 +27,6 @@ function CostReceipt({ receipt, founder, threadId, messageId }: { receipt: Recei
     {founder && <small>{row.ledger_id}</small>}
   </a>)}<a className="cw-receipt-total" href={`/chats/evidence/${encodeURIComponent(threadId)}`}><span>Total</span><span>Cost {dollars(receipt.totals.cost_usd)}</span><span>Would have cost {dollars(receipt.totals.baseline_cost_usd)}</span><span>Saved {dollars(receipt.totals.saved_usd)}</span>{receipt.totals.auto_cost_usd !== undefined && <span>Auto would have cost {dollars(receipt.totals.auto_cost_usd)}</span>}</a></div>;
   return <section className="cw-receipt" id={`cost-${messageId}`} aria-label="Answer cost"><div className="cw-receipt-desktop"><header><strong>Receipt{pending ? " · Cost pending" : ""}</strong><small>Each step links to its cost details</small></header>{rows}</div><details className="cw-receipt-mobile"><summary>Receipt{pending ? " · Cost pending" : ""} · {dollars(receipt.totals.cost_usd)} · would have cost {dollars(receipt.totals.baseline_cost_usd)} · saved {dollars(receipt.totals.saved_usd)}</summary>{rows}</details></section>;
-}
-
-/** Header totals belong to a selected chat; with none selected there is nothing to total. */
-export function ThreadTotals({ selected, snapshot }: { selected: string | null; snapshot: Snapshot | null }) {
-  if (!selected) return null;
-  const evidence = `/chats/evidence/${encodeURIComponent(selected)}`;
-  return <div className="cw-totals">{snapshot?.thread.receipt_status === "pending" && <span>Cost pending</span>}<a href={evidence}>Spent {dollars(snapshot?.thread.spent_usd)}</a><a className="cw-saving" href={evidence}>Saved {dollars(snapshot?.thread.saved_usd)}</a></div>;
 }
 
 export function CommandWindow({ initialThreads, models, founder, account, initialTools = [], initialError = "" }: { initialThreads: Thread[]; models: ModelOption[]; founder: boolean; account: string; initialTools?: string[]; initialError?: string }) {
@@ -203,17 +196,17 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     // Invalidate any snapshot already in flight before the new stream starts.
     const version = ++generation.current;
     const controller = new AbortController(); streamAbort.current = controller;
-    const localId = `pending-${Date.now()}`; let completed = false; let lastSeq = snapshot.seq ?? -1; let rejected = false;
+    const localId = `pending-${Date.now()}`; let completed = false; let lastSeq = -1;
     setSnapshot(current => current && ({ ...current, messages: [...current.messages, { message_id: `${localId}-user`, role: "user", content: requestText, attachments: files }, { message_id: localId, role: "assistant", content: "" }] }));
     try {
       const response = await api(`threads/${id}/turn`, { method: "POST", body: JSON.stringify({ text: requestText, model: founder ? model : "auto", attachments: files }), signal: controller.signal });
       if (!response.body || !response.headers.get("content-type")?.includes("text/event-stream")) throw new Error("The live response is unavailable. Reopen this chat before sending again.");
       setText(""); setAttachments([]);
-      const receive = (event: Event) => {
+      await readEvents(response.body, event => {
         if (generation.current !== version) return;
         if (event.seq !== undefined) { if (event.seq <= lastSeq) return; lastSeq = event.seq; }
         const data = event.data;
-        if (event.type === "error") { rejected = true; throw new Error(String(data.message)); }
+        if (event.type === "error") throw new Error(String(data.message));
         if (event.type === "done") completed = true;
         setSnapshot(current => {
           if (!current) return current;
@@ -223,14 +216,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
           if (event.type === "token") return { ...current, messages: current.messages.map(message => message.message_id !== localId ? message : { ...message, content: (data.replace === true ? "" : message.content) + String(data.text ?? "") }) };
           return current;
         });
-      };
-      // A dropped GET/stream can be replayed; a turn POST must never be retried.
-      try { await readEvents(response.body, receive, controller.signal); }
-      catch (err) { if (rejected || controller.signal.aborted) throw err; }
-      if (!completed && !controller.signal.aborted) {
-        const replay = await api(`threads/${id}/events?after=${Math.max(0, lastSeq)}`, { signal: controller.signal });
-        if (replay.body && replay.headers.get("content-type")?.includes("text/event-stream")) await readEvents(replay.body, receive, controller.signal);
-      }
+      });
       if (!completed) throw new Error("The connection ended before the answer finished. Reopen this chat before sending again.");
       await load(id, version); await refreshThreads();
     } catch (err) {
@@ -271,7 +257,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
       <nav className="cw-bottom-nav">{founder && <a href="/ledger">Ledger</a>}<a href="/billing">Billing</a><a href="/data">Files</a><a href="/onboarding">Settings</a></nav>
     </aside>
     <main className="cw-chat" inert={menu || work ? true : undefined}>
-      <header className="cw-thread-header"><div><h1>{snapshot ? snapshot.thread.title : selected ? "Loading chat…" : "A new conversation"}</h1>{snapshot && <button className="cw-rename" disabled={sending || busy || !!cardBusy} onClick={() => { setTitle(snapshot.thread.title); setRenaming(true); }}>Rename</button>}</div><button className="cw-work-tab" ref={workButton} onClick={() => setWork(true)} aria-expanded={work}>Work {done}/{steps.length}</button><ThreadTotals selected={selected} snapshot={snapshot} /></header>
+      <header className="cw-thread-header"><div><h1>{snapshot ? snapshot.thread.title : selected ? "Loading chat…" : "A new conversation"}</h1>{snapshot && <button className="cw-rename" disabled={sending || busy || !!cardBusy} onClick={() => { setTitle(snapshot.thread.title); setRenaming(true); }}>Rename</button>}</div><button className="cw-work-tab" ref={workButton} onClick={() => setWork(true)} aria-expanded={work}>Work {done}/{steps.length}</button><div className="cw-totals">{snapshot?.thread.receipt_status === "pending" && <span>Cost pending</span>}<a href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Spent {dollars(snapshot?.thread.spent_usd)}</a><a className="cw-saving" href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Saved {dollars(snapshot?.thread.saved_usd)}</a></div></header>
       {renaming && <form className="cw-rename-form" onSubmit={rename}><label>Chat name<input autoFocus value={title} maxLength={160} required onChange={event => setTitle(event.target.value)} /></label><button disabled={busy}>Save</button><button type="button" onClick={() => setRenaming(false)}>Cancel</button></form>}
       {error && <div className="cw-error" role="alert">{error}<button disabled={sending || busy} onClick={() => { setError(""); void (selected ? load(selected) : refreshThreads()).catch(err => setError(problem(err))); }}>Reload</button></div>}
       <div className="cw-messages" aria-label="Conversation" aria-busy={sending || busy}>
