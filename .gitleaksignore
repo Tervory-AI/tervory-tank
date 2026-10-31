@@ -48,3 +48,4 @@ b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/l
 b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-072.html:generic-api-key:14316
 b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-073.html:generic-api-key:14316
 b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-074.html:generic-api-key:14316
+7d5b0ae70d1fe3d2618da481a344730031ab456f:tests/command_acceptance_20261031/local_e2e.cjs:generic-api-key:25
