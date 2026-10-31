@@ -33,7 +33,7 @@ def runtime(monkeypatch):
         assert _tenant.get() == str(TENANT)
         yield conn
     monkeypatch.setattr(command, 'db', lambda: SimpleNamespace(acquire=acquire))
-    monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(box_region=lambda: 'us-east', TANK_API_KEY='fake-workspace'))
+    monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(box_region=lambda: 'us-east', TANK_API_KEY='dummy-workspace'))
     monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
     return conn
 
@@ -70,7 +70,7 @@ async def test_foreign_region_never_queries_local_database(runtime):
 @pytest.mark.asyncio
 async def test_malformed_bearer_cannot_fall_back_to_workspace(runtime):
     with pytest.raises(HTTPException) as error:
-        await pat.identity(request('invalid', **{'x-tank-key': 'fake-workspace'}))
+        await pat.identity(request('invalid', **{'x-tank-key': 'dummy-workspace'}))
     assert error.value.status_code == 401
     runtime.fetchrow.assert_not_awaited()
 
