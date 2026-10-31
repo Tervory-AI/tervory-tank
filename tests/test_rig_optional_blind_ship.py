@@ -11,7 +11,6 @@ import csv
 import json
 import os
 import sys
-from decimal import Decimal
 from pathlib import Path
 
 import httpx
