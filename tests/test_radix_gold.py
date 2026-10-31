@@ -13,7 +13,12 @@ from fastapi import FastAPI
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'agents' / 'radix'))
+# Other rooms have their own gold_sources; another test in this worker may have
+# cached one, so import Radix's fresh and put the cached copy back.
+_cached_gold = sys.modules.pop('gold_sources', None)
 import gold_sources as gold  # noqa: E402
+if _cached_gold is not None:
+    sys.modules['gold_sources'] = _cached_gold
 from test_radix_business import ENGINE  # noqa: E402
 from scanlib import dependencies, static  # noqa: E402
 from scanlib import secrets as scanner_secrets  # noqa: E402

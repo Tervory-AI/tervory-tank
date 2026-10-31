@@ -10,7 +10,8 @@ Three pytest runs, because two test folders import sibling modules by bare
 name (test_alerts, test_review) and so cannot share one process with other
 folders that have files of the same name:
   1. everything else, 2. tests/tiger_g5, 3. tests/zenas_regulation_alerts.
-tests/ci_security runs in the security job (it needs the pinned gitleaks).
+tests/ci_security runs in the security job (it needs the pinned gitleaks) and
+tests/test_live_check.py in live-check.yml (it needs Playwright for Node).
 
 Known failures on main are listed with reasons in tests/quarantine.txt.
 """
@@ -25,7 +26,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ALONE = ["tests/tiger_g5", "tests/zenas_regulation_alerts"]
-ELSEWHERE = ["tests/ci_security"]
+# Run by their own workflows: security job (pinned gitleaks), live-check.yml (Node Playwright).
+ELSEWHERE = ["tests/ci_security", "tests/test_live_check.py"]
 # Provider keys and tokens must never reach the suite, even if a runner has them set.
 KEY_HINTS = ("API_KEY", "TOKEN", "SECRET", "PASSWORD", "OPENAI", "ANTHROPIC", "OPENROUTER",
              "PERPLEXITY", "DEEPSEEK", "GROQ", "TOGETHER", "MISTRAL", "GEMINI", "XAI_", "HF_")
