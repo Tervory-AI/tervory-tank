@@ -192,19 +192,18 @@ async def test_blind_order_failure_refunds(monkeypatch):
     assert service.payments.refunded == ["order_failed"] and store.locate_orders == {}
 
 
-# 3. Shopper HTTP responses: no supplier identity or supplier cost (real POF row 02445).
+# 3. Shopper HTTP responses: no supplier identity or supplier cost (an invented POF-style row, 92445).
 # The catalogue attribute export_usd is #505's cost guard; this row carries only shopper-safe attributes.
 
-POF_02445 = dict(sku="02445", id="02445", gtin="847313024459",
-                 name="PST-7 Suppressor, 7.62, TITANIUM, High Temp Cerakote, HUB Compatible, "
-                      "Includes 5/8x24 PST-QD Flash Hider, BLACK",
-                 brand="POF-USA", category="Suppressors", price="19800", currency="ZAR",
-                 image_url="https://assets.local/pof-02445.jpg", active=True)
+POF_92445 = dict(sku="92445", id="92445", gtin="2000000924458",
+                 name="Test Suppressor, invented for this test, BLACK",
+                 brand="POF-USA", category="Suppressors", price="12345", currency="ZAR",
+                 image_url="https://assets.local/pof-92445.jpg", active=True)
 
 
 def pof_row(sku):
-    assert sku == "02445"
-    return {**POF_02445, "attributes": {"color": "BLACK", "stock": {"status": "out_of_stock"}}}
+    assert sku == "92445"
+    return {**POF_92445, "attributes": {"color": "BLACK", "stock": {"status": "out_of_stock"}}}
 
 
 def test_locate_confirm_accept_responses_have_no_supplier_identity_or_cost(monkeypatch):
@@ -213,7 +212,7 @@ def test_locate_confirm_accept_responses_have_no_supplier_identity_or_cost(monke
     async def ready():
         store = MemoryStore()
         await seed(store)
-        await store.upsert_product(SAMPLE, pof_row("02445"))
+        await store.upsert_product(SAMPLE, pof_row("92445"))
         await store.save_rule(SAMPLE, {"freight": "5", "duty_percent": "0", "margin_percent": "20"})
         retailer = await store.retailer(SAMPLE)
         await store.put_retailer(SAMPLE, retailer["slug"], retailer["email"], retailer["webhook"], retailer["name"],
@@ -222,7 +221,7 @@ def test_locate_confirm_accept_responses_have_no_supplier_identity_or_cost(monke
             max_offer_age_seconds=3600, provider="tiger", site="https://other.example", neutral_slip_required=True))
         from datetime import datetime, timezone
         store.supply_state[SAMPLE]["offers"] = [dict(
-            tenant_id=SAMPLE, source_id="other-store", sku="RSR|POF02445", gtin="847313024459", brand="POF-USA",
+            tenant_id=SAMPLE, source_id="other-store", sku="RSR|POF92445", gtin="2000000924458", brand="POF-USA",
             mpn=None, quantity="1", status="available", eta="2026-11-20", ship_days=8, region="US",
             cost="987", currency="USD", seen_at=datetime.now(timezone.utc),
             url="https://other.example/product/cam-pin/")]
@@ -238,13 +237,13 @@ def test_locate_confirm_accept_responses_have_no_supplier_identity_or_cost(monke
     mount_quotes(app)
     headers = {"X-Rig-Key": KEY, "Origin": "http://127.0.0.1:8001"}
     with TestClient(app) as client:
-        located = client.post("/v1/rig/locate", json={"product_id": "02445"}, headers=headers)
-        held = client.post("/v1/rig/locate/confirm", json={"product_id": "02445"}, headers=headers)
-        product = client.get("/v1/rig/products/02445", headers=headers)
+        located = client.post("/v1/rig/locate", json={"product_id": "92445"}, headers=headers)
+        held = client.post("/v1/rig/locate/confirm", json={"product_id": "92445"}, headers=headers)
+        product = client.get("/v1/rig/products/92445", headers=headers)
         assert located.status_code == held.status_code == product.status_code == 200, (located.text, held.text)
         assert held.json()["status"] == "available_to_order"
         accepted = client.post("/v1/rig/locate/accept", headers=headers, json={
-            "product_id": "02445", "hold": held.json()["hold"], "payment_token": "tok_test_visa",
+            "product_id": "92445", "hold": held.json()["hold"], "payment_token": "tok_test_visa",
             "contact": {"name": "Thandi Mokoena", "email": "thandi@example.com"}, "delivery": ADDRESS})
         assert accepted.status_code == 200, accepted.text
         assert accepted.json()["ships_direct"] is True
@@ -254,7 +253,7 @@ def test_locate_confirm_accept_responses_have_no_supplier_identity_or_cost(monke
         # payment reference) are dropped first: their hex can contain "987".
         assert re.search(r"(?<![0-9A-Za-z])987(?:\.0+)?(?![0-9A-Za-z])", re.sub(r'"(hold|request_id|reference)":"[^"]*"', "", text)) is None, text
         assert "neutral_slip" not in text and "landed" not in text
-        for marker in ("other-store", "other.example", "RSR|POF02445", "RSR", "tiger"):
+        for marker in ("other-store", "other.example", "RSR|POF92445", "RSR", "tiger"):
             assert marker not in text, (marker, text)
     order, po = only_order(app.state.rig.store, SAMPLE)
     assert order["ship_to"]["city"] == po["ship_to"]["city"] == "Cape Town" and po["neutral_slip"] is True
