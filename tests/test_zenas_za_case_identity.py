@@ -183,3 +183,54 @@ def test_only_za_case_files_replace_by_url():
         effective_from=None,
     )
     assert not url_replaces(statute)
+
+
+def test_files_without_a_neutral_citation_use_the_printed_case_number():
+    # Real header shapes from the 25 files that had no identifier of their own.
+    # Each takes the number printed in its header; none is made up.
+    assert za_comptrib._citation(
+        "https://www.comptrib.co.za/uploads/topics/CompTrib_Case_Files/Reasons%20for%20Decision%20-%20KKI.pdf",
+        "COMPETITION TRIBUNAL OF SOUTH AFRICA\nIn the matter between:\nCASE No: IM238JAN19\nKlein Karoo International (Pty) Ltd First Applicant\n",
+    ) == "CompTrib IM238JAN19"
+    assert za_comptrib._citation(
+        "https://www.comptrib.co.za/uploads/topics/CompTrib_Case_Files/20141106134700204_A0-4781e.pdf",
+        "COMPETITION TRIBUNAL OF SOUTH AFRICA\nCase No: (019513)\nIn the matter between:\nLINPAC PLASTICS (SA) PTY LTD\n",
+    ) == "CompTrib 019513"
+    # An unlabelled code with a footnote mark glued on ("CR212Feb17" + "1").
+    assert za_comptrib._citation(
+        "https://www.comptrib.co.za/uploads/topics/CompTrib_Case_Files/REASONS%20Various.pdf",
+        "COMPETITION TRIBUNAL OF SOUTH AFRICA \n \nCR212Feb171 \nIn the consolidated exception\n",
+    ) == "CompTrib CR212FEB17"
+    assert header_case_number("I\nN THE LAND COURT OF SOUTH AFRICA \nCAS\nE NO: LanC 89/2019B \nB\nefore: Bishop AJ\n") == "LANC 89/2019B"
+    assert header_case_number("IN THE LAND COURT\nCase number:  2025 \u2013 154050  \nBefore: Montzinger AJ\n") == "2025-154050"
+    assert header_case_number("THE LAND COURT OF SOUTH AFRICA \nCase 49/2011B \nHeard on 25 July 2025\n") == "49/2011B"
+    assert za_sars_taxcourt._citation(
+        "https://www.sars.gov.za/lapd-drj-tc-2018-07-tc-tadm-14294-11-july-2018/",
+        "THE TAX COURT OF SOUTH AFRICA \n(JOHANNESBURG) \nCase no: IT 14294\nIn the matter between: \n",
+    ) == "Tax Court IT 14294"
+    # Prose that mentions "case" is not a case number.
+    assert header_case_number("The first case of COVID-19 on 5 March 2020.\nIn this case 5 people\n") == ""
+
+
+def test_electoral_court_judgment_on_the_sca_site_names_its_own_court():
+    from agents.zenas.pool.adapters import za_sca_jdownloads
+
+    text = (
+        "THE ELECTORAL COURT OF SOUTH AFRICA \n(BLOEMFONTEIN) \n Not Reportable \n Case No: 0013/26EC \n"
+        "In the matter between: \nAFRICAN NATIONAL CONGRESS APPELLANT \nand \nELECTORAL COMMISSION RESPONDENT\n"
+        "[1] This appeal concerns [2012] ZASCA 13.\n"
+    )
+    assert za_sca_jdownloads._citation("https://www.supremecourtofappeal.org.za/x/4745-anc-v-iec", text, "") == (
+        "Electoral Court 0013/26EC"
+    )
+
+
+def test_cac_keeps_a_constitutional_court_judgments_own_citation():
+    text = (
+        "CONSTITUTIONAL COURT OF SOUTH AFRICA \nCase CCT 31/20 \nIn the matter between: \nCOMPETITION COMMISSION Applicant\n"
+        "and\nMEDICLINIC SOUTHERN AFRICA (PTY) LIMITED First Respondent\nNeutral citation: Competition Commission v Mediclinic "
+        "[2021] ZACC 35\n[1] As held in [2016] ZACAC 2 ...\n"
+    )
+    assert za_cac._citation("https://www.cac.org.za/wp-content/uploads/CCT%2031-20%20CC%20v%20Mediclinic.pdf", text) == (
+        "[2021] ZACC 35"
+    )

@@ -13,6 +13,7 @@ from agents.zenas.pool.adapters.za_archive import ArchiveRun, accept_pdf, limit_
 from agents.zenas.pool.adapters.za_case_common import (
     absolute_url,
     env_int,
+    header_case_number,
     own_citation,
     parse_case_blob,
 )
@@ -88,6 +89,9 @@ def _citation(url: str, text: str) -> str:
     if band and number:
         kind = (number.group(1) or "IT").upper()
         return f"{kind} {number.group(2)} [{band.group(1)}] ZATC"
+    printed = header_case_number(text)
+    if printed:
+        return f"Tax Court {printed}"
     return ""
 
 

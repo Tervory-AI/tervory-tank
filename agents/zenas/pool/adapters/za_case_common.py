@@ -168,12 +168,25 @@ _HEAD_CASE_NO = re.compile(
 )
 
 
+# A header line that starts with a case label, even one a PDF broke ("CAS\nE NO:"),
+# followed by a number with no slash ("IM238JAN19", "(019513)", "2025 – 154050").
+_LINE_CASE_NO = re.compile(
+    r"^[ \t]*(?:(?:ct|cc|cct|cac|lcc)[ \t]+)?c\s?a\s?s\s?e[ \t]*(?:n\s?o\s?s?|numbers?)?[ \t]*[.:]*[ \t]*\(?"
+    r"((?:[A-Z]{1,6}[ \t]?)?\d[\w]*(?:[ \t]?[/\u2013-][ \t]?\w+){0,3})",
+    re.I | re.M,
+)
+
+
 def header_case_number(text: str) -> str:
     """The case number printed in the judgment header ("Case No: LCC 16/2020"), or ""."""
-    found = _HEAD_CASE_NO.search(judgment_head(text))
+    head = judgment_head(text)
+    found = _HEAD_CASE_NO.search(head) or _LINE_CASE_NO.search(head)
     if not found:
         return ""
-    return re.sub(r"\s*/\s*", "/", " ".join(found.group(1).split())).upper()[:40]
+    number = " ".join(found.group(1).split())
+    number = re.sub(r"\s*[/]\s*", "/", number)
+    number = re.sub(r"\s*[\u2013]\s*|\s+-\s+", "-", number)
+    return number.upper()[:40]
 
 
 def court_citation(url: str, text: str, codes, label: str, *, title: str = "") -> str:

@@ -43,7 +43,8 @@ def judgment_pdfs(page: bytes, base: str = INDEX) -> list[str]:
 
 
 def _citation(url: str, text: str) -> str:
-    found = own_citation(text, ("ZACAC",), url=url)
+    # The CAC also hosts the Constitutional Court judgments on its appeals.
+    found = own_citation(text, ("ZACAC", "ZACC"), url=url)
     if found:
         return found
     match = _CASE_NO.search(unquote(url))
