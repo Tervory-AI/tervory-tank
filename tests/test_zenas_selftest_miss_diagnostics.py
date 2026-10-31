@@ -285,7 +285,10 @@ def test_quoted_values_with_spaces_are_cut_whole(text):
     "The court applied a risk-assessment framework.",
     "the task-management-system was in issue",
     "a disk-encryption-standard clause",
-    "the secret_ballot: held on the day",
+    # A hyphen joins prose words; only underscore keys are identifiers.
+    "Secret-ballot: the members voted",
+    "token-based: the scheme applied",
+    "password-protected: the file was sealed",
     "the token-holder's rights",
 ])
 def test_bare_words_do_not_cut_legal_text(text):
@@ -354,3 +357,19 @@ def test_url_with_a_credential_parameter_is_cut_whole_and_others_are_kept():
     assert selftest._cut_secrets(keep) == keep
     cut = selftest._cut_secrets("See https://x.example/cb?access_token=" + OPAQUE + "&x=1 now")
     assert OPAQUE not in cut and cut.startswith("See ") and cut.endswith(" now")
+
+
+# Review round 4: underscore credential keys are cut with any suffix (runtime-built fakes).
+UNDERSCORE_KEYS = ["SECRET" + "_KEY_BASE", "TOKEN" + "_V2", "token" + "_auth", "password" + "_plain",
+                   "PASSWORD" + "_SALT", "secret" + "_id"]
+
+
+@pytest.mark.parametrize("form", ["{k}={v}", '{k}: "{v}"'])
+@pytest.mark.parametrize("key", UNDERSCORE_KEYS)
+def test_underscore_credential_keys_are_cut_on_both_paths(key, form):
+    value = _fill(28)
+    text = "Held: costs follow. " + form.format(k=key, v=value) + " The appeal fails."
+    for cleaned in (selftest._diagnostic_text(text), selftest._citation_text(text),
+                    json.dumps(selftest._public_misses([{"case": "x", "answer": text, "other_citations": [text]}]))):
+        assert value not in cleaned, (key, form)
+        assert _no_run_of(value, cleaned), (key, form)

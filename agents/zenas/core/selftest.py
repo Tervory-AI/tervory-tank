@@ -598,8 +598,11 @@ _SECRET_SHAPES = (
         r"(?i)(?:[\"'][a-z0-9_-]{0,60}(?:api[_-]?key|secret|token|password|passwd)[a-z0-9_-]{0,60}[\"']"
         r"|(?<![a-z0-9_-])[a-z0-9_-]{0,60}(?:api[_-]?key|secret[_-]?access[_-]?key|access[_-]?key[_-]?id)[a-z0-9_-]{0,60}"
         r"|(?<![a-z0-9_-])[a-z0-9_-]{0,60}[_-](?:secret|token|password|passwd)[a-z0-9_-]{0,60}"
-        # secret_key, TOKEN_VALUE; not prose such as "secret_ballot" or "token-holder".
-        r"|(?<![a-z0-9_-])(?:secret|token|password|passwd)[_-](?:key|value|token|secret|string|hash)(?![a-z0-9]))"
+        # secret_key, TOKEN_V2, PASSWORD_SALT: an underscore key is an identifier, cut with
+        # any suffix. A hyphen is how prose joins words ("token-holder", "Secret-ballot:"),
+        # so a hyphenated key needs a credential suffix (secret-key, token-value).
+        r"|(?<![a-z0-9_-])(?:secret|token|password|passwd)"
+        r"(?:_[a-z0-9_-]{1,60}|-(?:key|value|token|secret|string|hash)(?![a-z0-9])))"
         r"\s*[=:]\s*" + _SECRET_VALUE
     ),
     # A bare word ("The secret: the parties agreed", "token: R500 was paid") is legal
