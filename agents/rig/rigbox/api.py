@@ -352,6 +352,9 @@ class SupplySourceIn(BaseModel):
     approved: bool
     priority: int = 0
     max_offer_age_seconds: int = Field(gt=0)
+    provider: str = Field(default="", max_length=200)
+    site: str = Field(default="", max_length=200)
+    feed_id: str = Field(default="", max_length=200)
 
 
 class SupplyImportIn(BaseModel):
