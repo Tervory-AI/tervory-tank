@@ -557,7 +557,6 @@ def test_a_failed_call_mid_wait_does_not_end_the_wait(monkeypatch: pytest.Monkey
 
 
 def test_a_failed_call_for_one_room_does_not_stop_the_later_rooms(monkeypatch: pytest.MonkeyPatch) -> None:
-    import urllib.error
     mod = _script(monkeypatch)
     _clock(monkeypatch, mod)
     apps = [{"name": "agent-base", "uuid": "b"}, {"name": "agent-rig", "uuid": "r"}]
