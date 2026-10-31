@@ -6,15 +6,15 @@ Updated **31 October 2026, 12:23 PDT / 19:23 UTC**. Earlier 11:29 checkpoint res
 
 | File and line | Change |
 |---|---|
-| `tank/trigger_crm.py:28` | Reuse JSON Schema validation against a strict pinned BottleCRM write subset. No arbitrary metadata or automatic project/billing/public-link side effects. |
-| `tank/trigger_crm.py:48` | Recheck existing Command identity and actual persisted tenant Trigger entitlement; no default grant or cross-tenant founder fallback. Client integration was explicitly authorized after the initial founder-only checkpoint. Voice administration remains founder/tenant-admin only. |
-| `tank/trigger_crm.py:56` | Explicit Tank tenant -> actual BottleCRM organization + connector token setting name mapping. Missing, duplicate organizations, setting names or credential values fail closed. Mapping is founder-supplied configuration. A matching authenticated CRM organization attestation is now required on every upstream read; writes additionally require attested read preflight and server-side expected-org check before the CRM view executes. |
-| `tank/trigger_crm.py:91` | Fixed allowlisted BottleCRM paths, bounded response/timeout, no redirects/proxy environment, sanitized errors, no upstream user/token/org metadata projected to Workspace. |
-| `tank/trigger_crm.py:143` | GET leads/contacts/estimates/invoices list. Public `page` translated to pinned DRF limit/offset (10 rows); leads have independently paged open/closed groups, combined only after strict shape checks. |
-| `tank/trigger_crm.py:180` | GET one UUID record. |
-| `tank/trigger_crm.py:188` | POST execution only with exact existing durable Command confirmed-card context; no boolean approval bypass, no automatic retry. Successful code mutation gets an actual zero-cost ledger row. |
+| `tank/trigger_crm.py:31` | Reuse JSON Schema validation against a strict pinned BottleCRM write subset. No arbitrary metadata or automatic project/billing/public-link side effects. |
+| `tank/trigger_crm.py:51` | Recheck existing Command identity and actual persisted tenant Trigger entitlement; no default grant or cross-tenant founder fallback. Client integration was explicitly authorized after the initial founder-only checkpoint. Voice administration remains founder/tenant-admin only. |
+| `tank/trigger_crm.py:59` | Explicit Tank tenant -> actual BottleCRM organization + connector token setting name mapping. Missing, duplicate organizations, setting names or credential values fail closed. Mapping is founder-supplied configuration. A matching authenticated CRM organization attestation is now required on every upstream read; writes additionally require attested read preflight and server-side expected-org check before the CRM view executes. |
+| `tank/trigger_crm.py:94` | Fixed allowlisted BottleCRM paths, bounded response/timeout, no redirects/proxy environment, sanitized errors, no upstream user/token/org metadata projected to Workspace. |
+| `tank/trigger_crm.py:146` | GET leads/contacts/estimates/invoices list. Public `page` translated to pinned DRF limit/offset (10 rows); leads have independently paged open/closed groups, combined only after strict shape checks. |
+| `tank/trigger_crm.py:183` | GET one UUID record. |
+| `tank/trigger_crm.py:191` | POST execution only with exact existing durable Command confirmed-card context; no boolean approval bypass, no automatic retry. Successful code mutation gets an actual zero-cost ledger row. |
 | `tank/trigger_crm_schema.py:1` | Write contracts copied from `ops/trigger-crm/openapi-cd7c12a.yml`, pinned upstream `cd7c12a`. Countries/currencies and required fields preserved; arbitrary custom fields excluded. |
-| `tank/command.py:44`, `:978`, `:1015` | Tenant Trigger-granted `trigger.crm.write` tool, strict arguments and existing Command adapter; existing durable card ownership, role recheck, cancellation and once-only dispatch reused. |
+| `tank/command.py:35`, `:981`, `:1018` | Tenant Trigger-granted `trigger.crm.write` tool, strict arguments and existing Command adapter; existing durable card ownership, role recheck, cancellation and once-only dispatch reused. |
 | `tank/main.py:4484` | Register CRM router. |
 | `tank/requirements.txt:17` | Existing Researcher `jsonschema==4.26.0` pin reused; no model needed for validation. |
 | `docker-compose.yml:261` | Names-only connector settings; Tank attached to existing CRM corridor. |
