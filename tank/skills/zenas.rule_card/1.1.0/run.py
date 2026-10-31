@@ -10,12 +10,13 @@ from pathlib import Path
 from typing import Any
 
 # The room's rule-card prompt carries the same line (agents/zenas/core/service.py).
-# A date or identifier in a quote is masked before cite-check, so the quote can
+# A date, amount or identifier in a quote is masked before cite-check, so the quote can
 # never match the judgment and the whole answer becomes "could not verify".
 QUOTE_RULE = (
-    "Quote whole sentences that contain no dates, ID numbers, phone numbers, email addresses "
-    "or street addresses. Those are masked before a quote is checked, so a quote that "
-    "contains one cannot be verified."
+    "Quote whole sentences that contain no dates, amounts, patent or case numbers, ID or phone "
+    "numbers, email or street addresses, and keep those out of every other field too. They are "
+    "masked before the card is checked, so a quote that contains one cannot be verified and a "
+    "card that contains one is refused."
 )
 
 

@@ -5,8 +5,14 @@ sentence containing "08 March 2023". Rule-card cleaning masks dates and other
 identifiers before cite-check ("[Date]"), so the quote no longer matched the
 judgment, strict cite-check failed, and the answer became "could not verify".
 
-The prompt now asks for whole sentences with no dates, ID or phone numbers,
-email or street addresses (QUOTE_RULE). The room's rule-card prompt in
+Boston showed the same class on 1 F.2d 8, 10 and 11 (1924 opinions):
+"March 4, 1922" is masked as [Date] and the patent number "1,237,432" as
+[Amount]. Two answers became "could not verify" and one was refused as "a rule
+card holds law only".
+
+The prompt now asks for whole sentences with no dates, amounts, patent or case
+numbers, ID or phone numbers, email or street addresses, and asks for them to be
+kept out of every other card field (QUOTE_RULE). The room's rule-card prompt in
 agents/zenas/core/service.py carries the identical line. The mask and
 cite-check are unchanged: in the room a dated quote is still masked and
 the answer is still "could not verify" (tests/test_zenas_rule_card_dated_quotes.py).
