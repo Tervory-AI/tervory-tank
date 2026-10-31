@@ -71,7 +71,8 @@ concurrency:
 jobs:
   op:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 12: the renormalise run step stops itself at 9, leaving time for its restore step.
+    timeout-minutes: 12
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
@@ -120,7 +121,16 @@ jobs:
 
       - name: ZA re-normalise in the deployed room (dry run unless apply=true)
         if: inputs.op == 'zenas-renormalise'
+        timeout-minutes: 9
         run: python3 .github/scripts/zenas_renormalise_op.py run
+
+      # A cancel, a step timeout or a SIGKILL can stop the run step before its own
+      # restore. This fixed step (no inputs) puts the default dry-run command back on
+      # the task and keeps its queued mark, so the dashboard's Execute stays a dry run.
+      - name: Put the ZA re-normalise task back to a dry run after a stop
+        if: (cancelled() || failure()) && inputs.op == 'zenas-renormalise'
+        timeout-minutes: 2
+        run: python3 .github/scripts/zenas_renormalise_op.py restore
 
       - name: Read the last ZA re-normalise run
         if: inputs.op == 'zenas-renormalise-report'

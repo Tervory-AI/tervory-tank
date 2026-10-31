@@ -18,6 +18,9 @@ token stays in this job.
   The workflow also puts both renormalise ops in one fixed concurrency group.
 - The task is kept disabled with a yearly frequency, so it never runs on a
   schedule; it runs only when this op (or a founder in the dashboard) queues it.
+- A hard stop is covered too: SIGTERM becomes an exception (so the restore runs),
+  and the workflow's "if: cancelled() || failure()" step runs `restore`, which
+  puts the default dry-run command back and keeps the stored queued mark.
 - Prints only a fixed projection of the job's JSON report (counts, resume id,
   changed rows' ids and suspect-space counts). The raw execution output and any
   API body are never printed.
@@ -29,6 +32,7 @@ import json
 import os
 import re
 import shlex
+import signal
 import sys
 import time
 import urllib.error
@@ -67,6 +71,10 @@ _COUNT_KEY = re.compile(r"^[a-z :]{1,40}$")
 
 class OpError(Exception):
     """A fixed message that is safe to print."""
+
+
+class Terminated(Exception):
+    """SIGTERM (a cancelled or timed-out workflow step): unwinds so the restore runs."""
 
 
 def allowed_paths(app: str, task: str = "") -> set[str]:
@@ -302,6 +310,18 @@ def run(call=api, env=os.environ, sleep=time.sleep, clock=time.monotonic) -> dic
 
     state = {"queued": False, "started": False}
 
+    def settle() -> dict | None:
+        """After a QUEUED restore: if a run started meanwhile (between the last poll
+        and the restore), the mark is stale, so clear it. Returns that run or None."""
+        try:
+            new = [row for row in _executions(call, app, task) if _key(row) not in seen]
+            if not new:
+                return None
+            code, _ = call("PATCH", f"/applications/{app}/scheduled-tasks/{task}", body(False, IDLE_TIMEOUT))
+        except Exception:  # noqa: BLE001 - best effort; the doc says how to clear a stale mark
+            return None
+        return max(new, key=_when) if _ok(code) else None
+
     def restore(still_queued: bool) -> str:
         """Put the same flags back with --dry-run. Returns '' or a note of what failed."""
         uuid = task
@@ -317,6 +337,13 @@ def run(call=api, env=os.environ, sleep=time.sleep, clock=time.monotonic) -> dic
         return "" if _ok(code) else f"; restoring the dry-run command failed (HTTP {code}): set it in Coolify"
 
     try:
+        if task and task_row.get("timeout") != IDLE_TIMEOUT:
+            # The guard above found no queued run, so the mark is stale. Clear it first:
+            # Coolify moves updated_at only when a field changes, so the storing PATCH
+            # below must change the timeout for updated_at to mark this dispatch.
+            code, _ = call("PATCH", f"/applications/{app}/scheduled-tasks/{task}", body(False, IDLE_TIMEOUT))
+            if not _ok(code):
+                raise OpError(f"clearing the stale queued mark failed (HTTP {code})")
         if task:
             code, _ = call("PATCH", f"/applications/{app}/scheduled-tasks/{task}", body(spec["apply"], QUEUED_TIMEOUT))
             if not _ok(code):
@@ -327,10 +354,17 @@ def run(call=api, env=os.environ, sleep=time.sleep, clock=time.monotonic) -> dic
             if not _ok(code) or not _UUID.match(made) or made == nightly:
                 raise OpError(f"creating the renormalise task failed (HTTP {code})")
             task = made
+        # From here a run may be queued: a 5xx or a network error does not prove that
+        # Coolify did not queue it, so the mark stays. Only a definite 4xx clears it.
+        state["queued"] = True
         code, _ = call("POST", f"/applications/{app}/scheduled-tasks/{task}/execute")
         if not _ok(code):
-            raise OpError(f"queuing the renormalise run failed (HTTP {code}); this Coolify may not support execute")
-        state["queued"] = True
+            if 400 <= code < 500:
+                state["queued"] = False
+                raise OpError(f"queuing the renormalise run failed (HTTP {code}); nothing was queued "
+                              "(this Coolify may not support execute)")
+            raise OpError(f"queuing the renormalise run failed (HTTP {code}); Coolify may still have queued it, "
+                          "so the task stays marked: read it with op=zenas-renormalise-report")
         deadline = clock() + WAIT_SECONDS
         latest = None
         restored = False
@@ -355,10 +389,14 @@ def run(call=api, env=os.environ, sleep=time.sleep, clock=time.monotonic) -> dic
             note = restore(still_queued=True)
             if note:
                 raise OpError("the run has not started" + note)
+            latest = settle()
     except BaseException as exc:
         if isinstance(exc, OpError) and "restoring the dry-run command" in str(exc):
             raise
-        note = restore(still_queued=state["queued"] and not state["started"])
+        still_queued = state["queued"] and not state["started"]
+        note = restore(still_queued=still_queued)
+        if still_queued and not note and task:
+            settle()
         if isinstance(exc, OpError):
             raise OpError(str(exc) + note) from None
         if note:
@@ -386,21 +424,57 @@ def report(call=api, env=os.environ) -> dict:
     return {"op": "zenas-renormalise-report", "region": region, "task_uuid": task, **summary(latest)}
 
 
+DEFAULT_DRY_RUN = {"apply": False, "sources": [], "limit": None, "after": ""}
+
+
+def restore_after_stop(call=api) -> dict:
+    """The workflow's cancelled()/failure() step. Fixed: no inputs are read. Puts the
+    default dry-run command on the task and keeps the stored timeout (the queued mark),
+    because a stopped run step may already have queued a run. Touches nothing else."""
+    region = "za"
+    app, task, container, row = _room(call, region)
+    if not task:
+        return {"op": "zenas-renormalise-restore", "region": region, "task_uuid": "", "restored": False}
+    timeout = row.get("timeout")
+    if not (isinstance(timeout, int) and not isinstance(timeout, bool) and 1 <= timeout <= QUEUED_TIMEOUT):
+        timeout = QUEUED_TIMEOUT  # unknown: mark it, so the next dispatch checks before queuing
+    code, _ = call("PATCH", f"/applications/{app}/scheduled-tasks/{task}",
+                   {"name": TASK_NAME, "command": command(DEFAULT_DRY_RUN), "frequency": FREQUENCY,
+                    "container": container or None, "timeout": timeout, "enabled": False})
+    if not _ok(code):
+        raise OpError(f"restoring the dry-run command failed (HTTP {code}): set it in Coolify")
+    return {"op": "zenas-renormalise-restore", "region": region, "task_uuid": task, "restored": True,
+            "command": command(DEFAULT_DRY_RUN), "queued_mark": timeout != IDLE_TIMEOUT}
+
+
+def _on_sigterm(signum, frame):
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)  # let the restore finish
+    raise Terminated("SIGTERM")
+
+
 def main(argv=None, call=api) -> int:
     mode = (argv or sys.argv[1:] or [""])[0]
+    previous = signal.signal(signal.SIGTERM, _on_sigterm)
     try:
         if mode == "run":
             result = run(call)
         elif mode == "report":
             result = report(call)
+        elif mode == "restore":
+            result = restore_after_stop(call)
         else:
-            raise OpError("mode must be run or report")
+            raise OpError("mode must be run, report or restore")
     except OpError as exc:
         print(f"::error title=zenas-renormalise::{exc}")
         return 1
     except Exception as exc:  # noqa: BLE001 - never print bodies or messages
         print(f"::error title=zenas-renormalise::failed ({type(exc).__name__})")
         return 1
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+    if mode == "restore":
+        print(json.dumps(result, sort_keys=True))
+        return 0
     print(json.dumps(result, sort_keys=True))
     if result.get("report_status") == HIDDEN:
         print(f"::error title=zenas-renormalise::{HIDDEN}")

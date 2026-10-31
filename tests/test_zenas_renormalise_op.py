@@ -6,6 +6,9 @@ prints only a fixed projection of the job's report.
 """
 import importlib.util
 import json
+import os
+import signal
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -32,10 +35,15 @@ OUTPUT = ("2026-10-31 renormalise batch 1: {\"rows\": 10}\nDATABASE_URL=DO_NOT_P
 
 class FakeCoolify:
     """Coolify as the op sees it. An execution row exists only once a worker starts
-    the job (start_after polls after the execute call; None = never starts)."""
+    the job (start_after polls after the execute call; None = never starts).
+
+    Like Coolify (Eloquent update on a clean model), a PATCH that changes no field
+    does not move updated_at. The clock only moves forward and is always later
+    than every execution already started."""
 
     def __init__(self, existing=True, running=False, finish="success", execute_code=200, patch_code=200,
-                 create_code=201, nightly_running=False, start_after=1, hidden=False, poll_error_at=None):
+                 create_code=201, nightly_running=False, start_after=1, hidden=False, poll_error_at=None,
+                 queue_on_5xx=False):
         self.calls = []
         self.tick = 0
         self.tasks = [{"uuid": NIGHTLY, "name": op.NIGHTLY_NAME, "container": "agent-zenas", "command": "DO_NOT_PRINT"}]
@@ -46,16 +54,22 @@ class FakeCoolify:
                             "created_at": "2026-10-30T01:00:00Z", "started_at": "2026-10-30T01:00:00Z",
                             "finished_at": None if running else "2026-10-30T01:10:00Z",
                             "message": "old run DO_NOT_PRINT"}]
+        if not existing:
+            self.executions = []  # a task that does not exist yet has no executions
         self.nightly = [{"id": 9, "status": "running" if nightly_running else "success",
                          "created_at": "2026-10-31T00:00:00Z", "message": "DO_NOT_PRINT"}]
         self.finish, self.execute_code, self.patch_code, self.create_code = finish, execute_code, patch_code, create_code
         self.start_after, self.hidden, self.poll_error_at = start_after, hidden, poll_error_at
+        self.queue_on_5xx = queue_on_5xx
         self.queued_at_poll = None
+        self.started_row = None
         self.polls = 0
+        self.clock = datetime(2026, 10, 31, 20, 0, tzinfo=timezone.utc)
 
     def now(self):
-        self.tick += 1
-        return f"2026-10-31T20:{self.tick:02d}:00Z"
+        stamps = [op._stamp(row.get(field)) for row in self.executions for field in ("created_at", "started_at")]
+        self.clock = max([self.clock, *[s for s in stamps if s]]) + timedelta(minutes=1)
+        return self.clock.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def mine(self):
         return next((t for t in self.tasks if t["name"] == op.TASK_NAME), None)
@@ -76,12 +90,15 @@ class FakeCoolify:
             return self.create_code, {"uuid": TASK}
         if (method, path) == ("PATCH", f"{BASE}/scheduled-tasks/{TASK}"):
             first = not any(m == "PATCH" for m, _, _ in self.calls[:-1])
-            code = self.patch_code if first else 200  # only the first (storing) PATCH is made to fail
-            self.mine().update(body, updated_at=self.now())  # Coolify may store it and still answer 5xx
+            code = self.patch_code if first else 200  # only the first PATCH is made to fail
+            mine = self.mine()
+            if any(mine.get(k) != v for k, v in body.items()):  # a no-op PATCH keeps updated_at
+                mine.update(body, updated_at=self.now())  # Coolify may store it and still answer 5xx
             return code, None
         if (method, path) == ("POST", f"{BASE}/scheduled-tasks/{TASK}/execute"):
-            if self.execute_code == 200:
+            if self.execute_code == 200 or self.execute_code >= 500 and self.queue_on_5xx:
                 self.queued_at_poll = self.polls
+                self.started_row = None
                 self.exec_id = 100 + len([c for c in self.calls if c[1].endswith("/execute")])
                 self.queued_command = self.mine()["command"]
             return self.execute_code, None
@@ -89,18 +106,19 @@ class FakeCoolify:
             self.polls += 1
             if self.poll_error_at is not None and self.polls >= self.poll_error_at:
                 return 500, None
-            rows = [dict(r) for r in self.executions]
             if self.queued_at_poll is not None and self.start_after is not None:
                 age = self.polls - self.queued_at_poll
                 if age >= self.start_after:
                     done = age >= self.start_after + 1
-                    row = {"id": self.exec_id, "status": self.finish if done else "running",
-                           "created_at": "2026-10-31T21:00:00Z", "started_at": "2026-10-31T21:00:00Z",
-                           "finished_at": "2026-10-31T21:05:00Z" if done else None}
+                    if self.started_row is None:  # the worker starts it now
+                        stamp = self.now()
+                        self.started_row = {"id": self.exec_id, "created_at": stamp, "started_at": stamp}
+                        self.executions.append(self.started_row)
+                    self.started_row.update(status=self.finish if done else "running",
+                                            finished_at=self.now() if done else None)
                     if not self.hidden:
-                        row["message"] = OUTPUT if done else ""
-                    rows.append(row)
-            return 200, rows
+                        self.started_row["message"] = OUTPUT if done else ""
+            return 200, [dict(r) for r in self.executions]
         raise AssertionError((method, path))
 
 
@@ -378,8 +396,8 @@ DRY = "python -m agents.zenas.pool.renormalise --batch-size 25 --source cac --li
 
 
 @pytest.mark.parametrize("fault,marker", [
-    ({"execute_code": 403}, op.IDLE_TIMEOUT),
-    ({"execute_code": 500}, op.IDLE_TIMEOUT),
+    ({"execute_code": 403}, op.IDLE_TIMEOUT),  # a definite 4xx: nothing was queued
+    ({"execute_code": 500}, op.QUEUED_TIMEOUT),  # a 5xx may still have queued it
     ({"patch_code": 500}, op.IDLE_TIMEOUT),
     ({"start_after": None, "poll_error_at": 2}, op.QUEUED_TIMEOUT),  # read 1 is the pre-check
 ])
@@ -395,7 +413,7 @@ def test_failure_after_a_create_restores_the_dry_run():
     fake = FakeCoolify(existing=False, execute_code=500)
     with pytest.raises(op.OpError, match="HTTP 500"):
         run(fake, **FLAGS)
-    assert stored(fake)["command"] == DRY and stored(fake)["timeout"] == op.IDLE_TIMEOUT
+    assert stored(fake)["command"] == DRY and stored(fake)["timeout"] == op.QUEUED_TIMEOUT
 
 
 def test_unexpected_error_still_restores(monkeypatch):
@@ -410,6 +428,7 @@ def test_unexpected_error_still_restores(monkeypatch):
     with pytest.raises(TimeoutError):
         op.run(flaky, env(**FLAGS), sleep=lambda s: None, clock=iter(range(0, 10_000, 5)).__next__)
     assert stored(fake)["command"] == DRY
+    assert stored(fake)["timeout"] == op.QUEUED_TIMEOUT  # a network error does not prove nothing was queued
 
 
 def test_a_successful_apply_runs_apply_then_leaves_a_dry_run():
@@ -470,3 +489,169 @@ def test_visible_output_without_a_report_is_named():
     fake.executions[0]["message"] = "Traceback DO_NOT_PRINT"
     out = op.report(fake, env())
     assert out["report"] is None and out["report_status"] == "no report in the output"
+
+
+# --- Review of #512, round 2 ---------------------------------------------------------
+
+def nowait(fake, **kw):
+    """One dispatch that stops waiting at once (the run has not started yet)."""
+    saved = op.WAIT_SECONDS
+    op.WAIT_SECONDS = 0
+    try:
+        return op.run(fake, env(**kw), sleep=lambda s: None, clock=lambda: 0)
+    finally:
+        op.WAIT_SECONDS = saved
+
+
+def started_later(fake, run_id):
+    """The queued run starts and finishes after the op has left (nobody clears the mark)."""
+    stamp = fake.now()
+    fake.executions.append({"id": run_id, "status": "success", "created_at": stamp, "started_at": stamp,
+                            "finished_at": fake.now(), "message": OUTPUT})
+    fake.queued_at_poll = None
+
+
+# Point 1: a PATCH that changes nothing does not move updated_at.
+def test_fake_keeps_updated_at_on_a_no_op_patch():
+    fake = FakeCoolify()
+    before = dict(stored(fake))
+    fake("PATCH", f"{BASE}/scheduled-tasks/{TASK}", {"command": before["command"], "timeout": before["timeout"]})
+    assert stored(fake)["updated_at"] == before["updated_at"]
+
+
+def test_a_second_queued_run_is_refused_even_when_the_storing_patch_would_be_a_no_op():
+    fake = FakeCoolify(start_after=None)
+    assert "not started" in nowait(fake)["next"]  # run 1 queued, never seen to start
+    assert stored(fake)["timeout"] == op.QUEUED_TIMEOUT
+    started_later(fake, 7)  # run 1 starts later; the mark stays
+    second = nowait(fake)  # allowed: run 1 has started. Run 2 is queued and does not start.
+    assert "not started" in second["next"]
+    patches = [body for method, _, body in fake.calls if method == "PATCH"]
+    # The stale mark is cleared before storing, so the storing PATCH changes the
+    # timeout and moves updated_at past run 1's start.
+    assert [p["timeout"] for p in patches[-3:]] == [op.IDLE_TIMEOUT, op.QUEUED_TIMEOUT, op.QUEUED_TIMEOUT]
+    assert op._stamp(stored(fake)["updated_at"]) > op._stamp(fake.executions[-1]["started_at"])
+    writes = len([c for c in fake.calls if c[0] != "GET"])
+    with pytest.raises(op.OpError, match="queued after the latest execution"):
+        nowait(fake)  # run 3 is refused while run 2 is still queued
+    assert len([c for c in fake.calls if c[0] != "GET"]) == writes
+
+
+def test_no_clearing_patch_when_the_task_is_idle():
+    fake = FakeCoolify()
+    run(fake)
+    patches = [body for method, _, body in fake.calls if method == "PATCH"]
+    assert patches[0]["timeout"] == op.QUEUED_TIMEOUT  # straight to storing: IDLE -> QUEUED always moves updated_at
+
+
+# Point 2: a run that starts between the last poll and the "not started" restore.
+class StartsDuringRestore(FakeCoolify):
+    def __call__(self, method, path, body=None):
+        if (method == "PATCH" and body and body["timeout"] == op.QUEUED_TIMEOUT
+                and body["command"].endswith("--dry-run") and not any(r["id"] == 8 for r in self.executions)):
+            stamp = self.now()
+            self.executions.append({"id": 8, "status": "running", "created_at": stamp, "started_at": stamp})
+        return super().__call__(method, path, body)
+
+
+def test_a_run_that_starts_during_the_restore_clears_the_mark():
+    fake = StartsDuringRestore(start_after=None)
+    result = nowait(fake, APPLY="true")
+    assert stored(fake)["timeout"] == op.IDLE_TIMEOUT and stored(fake)["command"].endswith("--dry-run")
+    assert result["execution"]["status"] == "running"
+    fake.executions[-1].update(status="success", finished_at=fake.now(), message=OUTPUT)
+    fake.start_after = 1
+    assert run(fake)["execution"]["status"] == "success"  # not wedged
+
+
+def test_doc_says_how_to_clear_a_stuck_mark():
+    doc = " ".join((ROOT / "docs/ops/ZENAS-ZA-RENORMALISE.md").read_text().split())
+    assert "set the task's timeout to 35999" in doc
+    assert "press **Execute**" in doc and "always a dry run" in doc
+    assert "ends with `--apply`" in doc  # a lost runner: check the command first
+    assert "store.ingest_snapshot" in doc  # the nightly-overlap follow-up
+
+
+# Point 3: hard stops. SIGTERM unwinds through the restore; the workflow step covers the rest.
+def test_sigterm_while_waiting_restores_the_dry_run(capsys, monkeypatch):
+    for name, value in env(**FLAGS).items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(op.time, "sleep", lambda s: None)
+    fake = FakeCoolify(start_after=None)
+    original = fake.__call__
+
+    def terminated(method, path, body=None):
+        if path.endswith(f"{TASK}/executions") and fake.queued_at_poll is not None:
+            os.kill(os.getpid(), signal.SIGTERM)
+        return original(method, path, body)
+
+    handler = signal.getsignal(signal.SIGTERM)
+    assert op.main(["run"], call=terminated) == 1
+    assert "failed (Terminated)" in capsys.readouterr().out
+    assert stored(fake)["command"] == DRY
+    assert stored(fake)["timeout"] == op.QUEUED_TIMEOUT  # queued, not seen to start
+    assert signal.getsignal(signal.SIGTERM) is handler  # put back after the op
+
+
+@pytest.mark.parametrize("timeout", [op.QUEUED_TIMEOUT, op.IDLE_TIMEOUT])
+def test_restore_step_puts_the_default_dry_run_back_and_keeps_the_mark(timeout, capsys):
+    fake = FakeCoolify()
+    stored(fake).update(command=DRY.replace("--dry-run", "--apply"), timeout=timeout)
+    assert op.main(["restore"], call=fake) == 0
+    default = "python -m agents.zenas.pool.renormalise --batch-size 25 " + " ".join(
+        f"--source {s}" for s in op.DEFAULT_SOURCES) + " --dry-run"
+    assert stored(fake)["command"] == default and "special-tribunal" not in default
+    assert stored(fake)["timeout"] == timeout and stored(fake)["enabled"] is False
+    writes = [(m, p) for m, p, _ in fake.calls if m != "GET"]
+    assert writes == [("PATCH", f"{BASE}/scheduled-tasks/{TASK}")]  # nothing else is touched
+    assert "DO_NOT_PRINT" not in capsys.readouterr().out
+
+
+def test_restore_step_marks_a_task_with_an_unknown_timeout_and_ignores_inputs(monkeypatch):
+    monkeypatch.setenv("SOURCE", "special-tribunal")
+    monkeypatch.setenv("APPLY", "true")
+    fake = FakeCoolify()
+    stored(fake).pop("timeout")
+    assert op.main(["restore"], call=fake) == 0
+    assert stored(fake)["timeout"] == op.QUEUED_TIMEOUT and stored(fake)["command"].endswith("--dry-run")
+    assert "special-tribunal" not in stored(fake)["command"]
+
+
+def test_restore_step_without_a_task_writes_nothing():
+    fake = FakeCoolify(existing=False)
+    assert op.restore_after_stop(fake)["restored"] is False
+    assert all(m == "GET" for m, _, _ in fake.calls)
+
+
+def test_workflow_restores_after_a_cancel_or_failure():
+    workflow = yaml.safe_load((ROOT / ".github/workflows/coolify-ops.yml").read_text())
+    job = workflow["jobs"]["op"]
+    steps = job["steps"]
+    run_step = next(s for s in steps if s.get("if") == "inputs.op == 'zenas-renormalise'")
+    restore_step = next(s for s in steps if s.get("if") == "(cancelled() || failure()) && inputs.op == 'zenas-renormalise'")
+    assert restore_step["run"] == "python3 .github/scripts/zenas_renormalise_op.py restore"
+    assert steps.index(restore_step) == steps.index(run_step) + 1
+    # The run step times out before the job does, so the restore step still gets to run.
+    assert run_step["timeout-minutes"] + restore_step["timeout-minutes"] < job["timeout-minutes"]
+    assert op.WAIT_SECONDS + 60 < run_step["timeout-minutes"] * 60
+
+
+# Point 4: only a definite 4xx on execute means nothing was queued.
+@pytest.mark.parametrize("code,marker", [(400, op.IDLE_TIMEOUT), (404, op.IDLE_TIMEOUT), (409, op.IDLE_TIMEOUT),
+                                         (500, op.QUEUED_TIMEOUT), (502, op.QUEUED_TIMEOUT), (503, op.QUEUED_TIMEOUT)])
+def test_execute_error_keeps_the_mark_unless_a_definite_4xx(code, marker):
+    fake = FakeCoolify(execute_code=code)
+    with pytest.raises(op.OpError, match=f"HTTP {code}"):
+        run(fake, **FLAGS)
+    assert stored(fake)["command"] == DRY and stored(fake)["timeout"] == marker
+
+
+def test_a_5xx_that_did_queue_blocks_the_next_dispatch_until_it_starts():
+    fake = FakeCoolify(execute_code=502, queue_on_5xx=True, start_after=None)
+    with pytest.raises(op.OpError, match="may still have queued it"):
+        run(fake, **FLAGS)
+    with pytest.raises(op.OpError, match="queued after the latest execution"):
+        run(fake)
+    started_later(fake, 11)
+    fake.execute_code, fake.start_after = 200, 1
+    assert run(fake)["execution"]["status"] == "success"

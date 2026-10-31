@@ -90,12 +90,26 @@ What the op does (`.github/scripts/zenas_renormalise_op.py`):
      when a worker starts the job, so the op marks the task while a run is
      queued (timeout 36000) and clears the mark (timeout 35999) once it has
      seen the run start. A task updated after its latest execution and still
-     marked is refused;
+     marked is refused. Coolify moves `updated_at` only when a field changes,
+     so before storing a new command the op first clears a stale mark (sets
+     35999), and the storing update (35999 to 36000) always moves `updated_at`.
+     If a run starts between the op's last look and its "not started" update,
+     the op reads the executions once more and clears the mark;
    - `zenas-pool-nightly` is running (both write `zenas_pool.documents`). Of
      the nightly task the op may only read its executions.
    Both renormalise ops also share the fixed concurrency group
    `coolify-zenas-renormalise` (`cancel-in-progress: false`), so two dispatches
    never run side by side.
+
+   **Clearing a stuck mark.** If Coolify lost a queued job (a worker or Redis
+   restart), every dispatch is refused with "queued after the latest execution
+   and has not started". First confirm in Coolify (the task's executions and the
+   queue) that nothing is queued or running for `zenas-za-renormalise`. Then
+   either set the task's timeout to 35999 in the dashboard, or press **Execute**
+   on the task, which is always a dry run (see step 5) and creates a newer
+   execution. Before pressing Execute, check that the stored command ends with
+   `--dry-run`; if it ends with `--apply` (only possible after a lost runner,
+   see step 5), change that last flag to `--dry-run` first.
 3. Creates (once) or updates the scheduled task `zenas-za-renormalise` with the
    exact command, e.g.
    `python -m agents.zenas.pool.renormalise --batch-size 25 --source cac --limit 20 --dry-run`.
@@ -115,6 +129,23 @@ What the op does (`.github/scripts/zenas_renormalise_op.py`):
    that has not started at the wait limit), the op puts the same flags back with
    `--dry-run`. So the **Execute** button in the Coolify dashboard only ever runs
    a dry run; `apply` goes only through this op.
+   Hard stops are covered too:
+   - SIGINT and SIGTERM (a cancelled run, or the run step's 9-minute timeout)
+     unwind through the same restore.
+   - If the run step is killed before it can restore (SIGKILL after the cancel
+     grace period, or a timeout), the workflow's next step
+     (`if: (cancelled() || failure()) && inputs.op == 'zenas-renormalise'`)
+     runs `zenas_renormalise_op.py restore`. That fixed step reads no inputs: it
+     stores the default dry-run command and keeps the task's timeout as it is
+     (the queued mark stays), and touches nothing else. It cannot read the
+     command first, because Coolify hides it from tokens without
+     `read:sensitive`.
+   - Only a lost runner (the machine itself disappears) skips both. Then check
+     the stored command in Coolify before anything else: if it ends with
+     `--apply`, change it to `--dry-run`.
+   - If the call that queues the run fails with a 5xx or a network error,
+     Coolify may still have queued it, so the mark stays (36000). Only a
+     definite 4xx means nothing was queued.
 6. If Coolify hides the execution output (a token without `read:sensitive`
    gets no `message`), both ops print
    `output hidden: COOLIFY_TOKEN lacks read:sensitive` and exit 1 instead of
@@ -125,7 +156,12 @@ it neither waits for nor blocks a deploy. A room redeploy while it runs stops
 the execution; resume with `after`. `zenas-pool-nightly` runs daily at 02:00 (Coolify server time); a long
 `apply` run should be started so that it ends before then. The op refuses to
 start while the nightly runs, but it cannot stop the nightly from starting
-during a long run.
+during a long run. Known limit, with a follow-up: `store.ingest_snapshot` takes
+no row or advisory lock, so if the nightly re-lists a document while an apply
+run is on it, both can write a version. The follow-up locks the document's rows
+in `store.ingest_snapshot` (`SELECT … FOR UPDATE`, or
+`pg_advisory_xact_lock(hashtext(document_id))` at the start of the
+transaction), which protects the nightly too.
 
 If the installed Coolify does not support executing a scheduled task through
 its API, the op fails with "queuing the renormalise run failed (HTTP n)" and
