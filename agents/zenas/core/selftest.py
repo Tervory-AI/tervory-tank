@@ -554,15 +554,30 @@ _MISS_QUOTES = 6
 # Secrets never reach a miss record. Values of these env names are cut out before
 # the PII mask runs, and these shapes are cut out wherever they appear.
 _SECRET_ENV = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD|PASSWD|DSN|DATABASE_URL|CREDENTIAL|PRIVATE)", re.IGNORECASE)
+class _UrlWithCredential:
+    """A URL that carries a credential parameter is cut whole. The URL is matched
+    once as a whole run and the keyword looked up in a callback, so a long run of
+    "http://http://…" costs linear time (one pattern with \\S*key=\\S* backtracked
+    to the end of the run from every "http")."""
+
+    _RUN = re.compile(r"(?i)\bhttps?://\S+")
+    _KEY = re.compile(r"(?i)(?:api_key|token|password|secret|[?&]key)=")
+
+    def sub(self, repl: str, text: str) -> str:
+        return self._RUN.sub(lambda m: repl if self._KEY.search(m.group(0)) else m.group(0), text)
+
+
 # A secret value: a quoted value up to its closing quote (or the end of the line),
 # else a run without spaces, quotes or separators.
 _SECRET_VALUE = r"(?:\"[^\"\n]*\"?|'[^'\n]*'?|[^\s\"',;}]+)"
 _SECRET_SHAPES = (
     # PEM private-key blocks first: they span lines, and the text is not folded yet.
     re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\Z)"),
-    re.compile(r"sk-[A-Za-z0-9_-]{8,}"),
-    re.compile(r"\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{8,}"),
-    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"),
+    # \b and 20+ so prose such as "risk-assessment" is not cut (real keys are far longer).
+    re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"),
+    # Prefixes in any case: "SK_LIVE_" or "Sk_Live_" on a real body is still the key.
+    re.compile(r"\b(?i:sk|rk|pk)_(?i:live|test)_[A-Za-z0-9]{8,}"),
+    re.compile(r"\b(?i:github_pat_)[A-Za-z0-9_]{20,}"),
     re.compile(r"\bAIza[0-9A-Za-z_-]{30,}"),
     re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),
     re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[abprs]-[A-Za-z0-9-]{10,})\b"),
@@ -572,7 +587,7 @@ _SECRET_SHAPES = (
     re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=|-]{8,}"),
     # The scheme starts where its run starts and is bounded: linear time on "a-a-a-…".
     re.compile(r"(?i)(?<![a-z0-9+.-])[a-z][a-z0-9+.-]{0,30}://[^\s/@:]+:[^\s/@]+@\S+"),
-    re.compile(r"(?i)\bhttps?://\S*(?:api_key|token|password|secret|[?&]key)=\S*"),
+    _UrlWithCredential(),
     # key = value, key: value and JSON "key": "value" for identifier-style keys: a
     # quoted key, an api/access key name (api_key, X-Api-Key, aws_secret_access_key),
     # or secret/token/password joined to another word (client_secret, access_token,
@@ -583,7 +598,8 @@ _SECRET_SHAPES = (
         r"(?i)(?:[\"'][a-z0-9_-]{0,60}(?:api[_-]?key|secret|token|password|passwd)[a-z0-9_-]{0,60}[\"']"
         r"|(?<![a-z0-9_-])[a-z0-9_-]{0,60}(?:api[_-]?key|secret[_-]?access[_-]?key|access[_-]?key[_-]?id)[a-z0-9_-]{0,60}"
         r"|(?<![a-z0-9_-])[a-z0-9_-]{0,60}[_-](?:secret|token|password|passwd)[a-z0-9_-]{0,60}"
-        r"|(?<![a-z0-9_-])(?:secret|token|password|passwd)[_-][a-z0-9_-]{1,60})"
+        # secret_key, TOKEN_VALUE; not prose such as "secret_ballot" or "token-holder".
+        r"|(?<![a-z0-9_-])(?:secret|token|password|passwd)[_-](?:key|value|token|secret|string|hash)(?![a-z0-9]))"
         r"\s*[=:]\s*" + _SECRET_VALUE
     ),
     # A bare word ("The secret: the parties agreed", "token: R500 was paid") is legal
@@ -633,7 +649,7 @@ def _cut_shapes(text: str) -> str:
     def decoded(match: re.Match[str]) -> str:
         run = match.group(0)
         plain = run
-        for _ in range(3):  # double-encoded values too
+        for _ in range(8):  # multiply-encoded values too, until nothing changes
             step = urllib.parse.unquote(plain)
             if step == plain:
                 break

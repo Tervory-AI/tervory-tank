@@ -222,6 +222,12 @@ SANCTUM = "7" + "|" + _fill(48)
 OPAQUE = _fill(20) + "9"
 
 
+def _enc(text, times):
+    for _ in range(times):
+        text = urllib.parse.quote(text, safe="")
+    return text
+
+
 def _no_run_of(body, cleaned):
     flat = cleaned.replace(" ", "")
     return all(body[i : i + 12] not in flat for i in range(0, max(1, len(body) - 12), 4))
@@ -234,6 +240,8 @@ URL_ENCODED = {
     "sanctum token": (urllib.parse.quote(SANCTUM), SANCTUM[2:]),
     "authorization header": (urllib.parse.quote("Authorization: " + "Bearer " + OPAQUE), OPAQUE),
     "double-encoded stripe key": (urllib.parse.quote(urllib.parse.quote("key=" + STRIPE)), STRIPE[8:]),
+    "4x-encoded stripe key": (_enc("key=" + STRIPE, 4), STRIPE[8:]),
+    "4x-encoded jwt": (_enc("t=" + JWT, 4), JWT.split(".")[2]),
 }
 
 
@@ -273,6 +281,12 @@ def test_quoted_values_with_spaces_are_cut_whole(text):
     "The token: a payment of the deposit was made.",
     "password: not disclosed to the court",
     "The trade secret = the recipe, as pleaded.",
+    # Review round 3: "sk-" inside a word is prose, not a key.
+    "The court applied a risk-assessment framework.",
+    "the task-management-system was in issue",
+    "a disk-encryption-standard clause",
+    "the secret_ballot: held on the day",
+    "the token-holder's rights",
 ])
 def test_bare_words_do_not_cut_legal_text(text):
     assert selftest._cut_secrets(text) == text
@@ -290,7 +304,7 @@ def test_credentials_after_key_words_are_still_cut(text, core):
 
 
 def test_redaction_stays_linear_on_long_runs():
-    for text in ("a_" * 20000, "a-" * 20000 + ":", "secret_" * 5000 + ": ", "%41" * 20000,
+    for text in ("http://" * 6000, "https://a" * 4500, "a_" * 20000, "a-" * 20000 + ":", "secret_" * 5000 + ": ", "%41" * 20000,
                  '"pass' + 'word": "' + "x " * 20000, "x" * 40000 + "%3D"):
         start = time.monotonic()
         selftest._cut_secrets(text)
@@ -305,3 +319,38 @@ def test_public_misses_redact_the_error_field(monkeypatch):
     dumped = json.dumps(out)
     assert STRIPE not in dumped and ENV_SECRET not in dumped and EMAIL not in dumped
     assert out[0]["error"].startswith("TimeoutError")
+
+
+# Review round 3, point 3: a real key body with only its prefix's case changed is
+# still the key. Fakes built at runtime.
+PREFIX_ONLY = {
+    "SK_LIVE_": "SK" + "_LIVE_" + _fill(24),
+    "Sk_Live_": "Sk" + "_Live_" + _fill(24),
+    "RK_TEST_": "RK" + "_TEST_" + _fill(24),
+    "GITHUB_PAT_": "GITHUB" + "_PAT_" + _fill(22) + "_" + _fill(40),
+    "Github_Pat_": "Github" + "_Pat_" + _fill(22) + "_" + _fill(40),
+}
+
+
+@pytest.mark.parametrize("name", sorted(PREFIX_ONLY))
+def test_mixed_case_key_prefixes_are_cut_on_both_paths(name):
+    key = PREFIX_ONLY[name]
+    body = key.split("_", 2)[2]
+    text = f"Held: costs follow. {key} The appeal fails."
+    for cleaned in (selftest._diagnostic_text(text), selftest._citation_text(key),
+                    json.dumps(selftest._public_misses([{"case": "x", "answer": text, "other_citations": [key]}]))):
+        assert body not in cleaned, name
+        assert _no_run_of(body, cleaned), name
+
+
+def test_sk_dash_keys_are_still_cut():
+    key = "sk-" + "proj-" + _fill(40)
+    assert _fill(40) not in selftest._diagnostic_text(f"x {key} y")
+    assert _fill(40) not in selftest._diagnostic_text(urllib.parse.quote("key=" + key))
+
+
+def test_url_with_a_credential_parameter_is_cut_whole_and_others_are_kept():
+    keep = "See https://x.example/judgments?page=2&title=Smith%20v%20Jones for the order."
+    assert selftest._cut_secrets(keep) == keep
+    cut = selftest._cut_secrets("See https://x.example/cb?access_token=" + OPAQUE + "&x=1 now")
+    assert OPAQUE not in cut and cut.startswith("See ") and cut.endswith(" now")
