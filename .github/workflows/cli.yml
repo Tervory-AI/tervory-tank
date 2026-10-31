@@ -65,10 +65,11 @@ jobs:
       - name: The Workspace image builds and serves the same release at /cli/
         # Same command the deploy runs (docker-compose.yml additional_contexts.cli=./cli),
         # stopped at the release stage; the build stage copies it into public/cli so Next serves it.
-        # The image's checksums verify its own tarballs, and every tarball holds a byte-identical
-        # tar stream to the direct build above. Only the gzip layer may differ between gzip
-        # versions (the image's Debian gzip vs the runner's), which is why the hashes are compared
-        # after decompression here and the served manifest is checked against the served files.
+        # The image's checksums verify its own tarballs, and every tarball has the same entries
+        # (names, modes, owners, sizes, mtimes) and the same file bytes as the direct build above.
+        # The archive bytes themselves can differ between GNU tar versions (the image's Debian
+        # tar 1.34 vs the runner's 1.35 encode ustar headers differently), so they are compared
+        # by contents here and the served manifest is checked against the served files.
         run: |
           grep -qE '^\s+cli: \./cli$' docker-compose.yml || { echo "docker-compose.yml workspace build needs additional_contexts.cli: ./cli"; exit 1; }
           grep -qxF 'COPY --from=cli-release /out/cli ./public/cli' workspace/Dockerfile || { echo "workspace/Dockerfile must copy the CLI release into public/cli"; exit 1; }
@@ -89,11 +90,10 @@ jobs:
           bad=0
           for f in "$A"/releases/*/*.tar.gz; do
             g="$B/${f#"$A"/}"
-            if ! cmp -s <(gzip -dc "$f") <(gzip -dc "$g"); then
-              bad=1; echo "tar stream differs: ${f##*/}"
-              diff <(tar -tvzf "$f") <(tar -tvzf "$g") || true
-              rm -rf /tmp/xa /tmp/xb && mkdir -p /tmp/xa /tmp/xb && tar -xzf "$f" -C /tmp/xa && tar -xzf "$g" -C /tmp/xb
-              diff -r /tmp/xa /tmp/xb || true
+            rm -rf /tmp/xa /tmp/xb && mkdir -p /tmp/xa /tmp/xb && tar -xzf "$f" -C /tmp/xa && tar -xzf "$g" -C /tmp/xb
+            # Same entries (names, modes, owners, sizes, mtimes) and the same bytes in every file.
+            if ! diff <(tar -tvzf "$f") <(tar -tvzf "$g") || ! diff -r --no-dereference /tmp/xa /tmp/xb; then
+              bad=1; echo "release contents differ: ${f##*/}"
             fi
           done
           echo "runner: $(tar --version | head -1); $(gzip --version | head -1); npm $(npm -v)"
