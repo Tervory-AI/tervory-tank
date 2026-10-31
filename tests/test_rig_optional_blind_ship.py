@@ -8,8 +8,8 @@ instruction. No supplier identity reaches the shopper. Offline here, except the
 real Postgres test (RIG_TEST_DATABASE_URL).
 """
 import asyncio
-import csv
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -192,18 +192,22 @@ async def test_blind_order_failure_refunds(monkeypatch):
     assert service.payments.refunded == ["order_failed"] and store.locate_orders == {}
 
 
-# 3. Shopper HTTP responses: no supplier identity, no export_usd (real POF rows).
+# 3. Shopper HTTP responses: no supplier identity or supplier cost (real POF row 02445).
+# The catalogue attribute export_usd is #505's cost guard; this row carries only shopper-safe attributes.
+
+POF_02445 = dict(sku="02445", id="02445", gtin="847313024459",
+                 name="PST-7 Suppressor, 7.62, TITANIUM, High Temp Cerakote, HUB Compatible, "
+                      "Includes 5/8x24 PST-QD Flash Hider, BLACK",
+                 brand="POF-USA", category="Suppressors", price="19800", currency="ZAR",
+                 image_url="https://assets.local/pof-02445.jpg", active=True)
+
 
 def pof_row(sku):
-    with (ROOT / "tests" / "fixtures" / "rig" / "pof-usa-cost-guard.csv").open(encoding="utf-8") as handle:
-        row = next(r for r in csv.DictReader(handle) if r["sku"] == sku)
-    attributes = {**json.loads(row["attributes"]), "stock": {"status": "out_of_stock"}}
-    return dict(sku=sku, id=sku, gtin=row["gtin"], name=row["name"], brand=row["brand"], category=row["category"],
-                price=row["price"], currency=row["currency"], image_url=row["image_url"], active=True,
-                attributes=attributes)
+    assert sku == "02445"
+    return {**POF_02445, "attributes": {"color": "BLACK", "stock": {"status": "out_of_stock"}}}
 
 
-def test_locate_confirm_accept_responses_have_no_supplier_or_export_usd(monkeypatch):
+def test_locate_confirm_accept_responses_have_no_supplier_identity_or_cost(monkeypatch):
     env(monkeypatch)
 
     async def ready():
@@ -246,7 +250,9 @@ def test_locate_confirm_accept_responses_have_no_supplier_or_export_usd(monkeypa
         assert accepted.json()["ships_direct"] is True
     for response in (located, held, product, accepted):
         text = response.text
-        assert "export_usd" not in text and "606" not in text
+        # The supplier's live cost (606 USD). Random ids (hold token, request id,
+        # payment reference) are dropped first: their hex can contain "606".
+        assert re.search(r"(?<![0-9A-Za-z])606(?:\.0+)?(?![0-9A-Za-z])", re.sub(r'"(hold|request_id|reference)":"[^"]*"', "", text)) is None, text
         assert "neutral_slip" not in text and "landed" not in text
         for marker in ("other-store", "other.example", "RSR|POF02445", "RSR", "tiger"):
             assert marker not in text, (marker, text)

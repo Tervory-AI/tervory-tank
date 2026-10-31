@@ -152,7 +152,7 @@ class QuoteService(Service):
 
         from rigbox import payments
         from rigbox.locate_live import Holds, LocateRefused, hold_secret, read_token
-        from rigbox.quotes.senders import sandbox_orders
+        from rigbox.fulfilment import sandbox_orders
 
         row = await self._locate_row(tenant_id, str(body.get("product_id") or ""))
         try:
@@ -188,11 +188,18 @@ class QuoteService(Service):
         except LocateRefused as exc:
             raise RigError("hold", "That price has expired. Check availability again.", 410
                            if str(exc) == "hold_expired" else 422) from None
-        held = await Holds(self.store).take(tenant_id, hold_id, now)
+        holds = Holds(self.store)
+        if auto:
+            # No real vendor or order inbox for this source: refuse before the
+            # hold is taken (so the shopper's held price is not burned) and
+            # before any payment.
+            peeked = await holds.peek(tenant_id, hold_id, now)
+            if peeked is not None and not supplier_orders.supplier_ready(peeked["private"]["source"]):
+                raise RigError("unavailable", "Ordering from other stores is not available.", 503)
+        held = await holds.take(tenant_id, hold_id, now)
         if held is None or held["product_id"] != row["sku"]:
             raise RigError("hold", "That price has expired. Check availability again.", 410)
         if auto and not supplier_orders.supplier_ready(held["private"]["source"]):
-            # No real vendor or order inbox for this source: refuse before any payment.
             raise RigError("unavailable", "Ordering from other stores is not available.", 503)
         price = held["public"]["price"]
         product = dict(await self.product(tenant_id, row["sku"]))
@@ -261,12 +268,18 @@ class QuoteService(Service):
                     tenant_id=tenant_id, quote_id=quote_id, store_name=retailer.get("name") or "",
                     store_email=retailer.get("email"))
             except DeliveryError as exc:
-                # Cancel Rig's order and unsent PO, then refund.
-                await self.fulfilment.cancel(tenant_id, quote_id, f"supplier_order_failed:{exc}")
-                refunded = await payments.refund(provider, charge, "supplier_order_failed")
-                await record(state="supplier_order_failed_refunded", error=str(exc),
-                             refund={"status": refunded.status})
-                raise RigError("order", "The order could not be placed. The payment was refunded.", 502) from None
+                # Cancel Rig's order and unsent PO, then refund. cancel refuses
+                # (returns "sent") when the supplier already has the PO: then
+                # the order stands and nothing is refunded.
+                cancelled = await self.fulfilment.cancel(tenant_id, quote_id, f"supplier_order_failed:{exc}")
+                if cancelled != "sent":
+                    refunded = await payments.refund(provider, charge, "supplier_order_failed")
+                    await record(state="supplier_order_failed_refunded", error=str(exc),
+                                 refund={"status": refunded.status})
+                    raise RigError("order", "The order could not be placed. The payment was refunded.", 502) from None
+                supplied = {"purchase_order": {"state": "sent"},
+                            "supplier_order": {"channel": "email", "transport": "sandbox_outbox",
+                                               "duplicate": True, "reconciled": True}}
             sent = supplied["supplier_order"]
             await record(state="supplier_ordered", supplier_ordered_at=datetime.now(timezone.utc).isoformat(),
                          purchase_order_state=supplied["purchase_order"]["state"],

@@ -442,15 +442,24 @@ class MemoryStore(RetailerMemoryStore):
         row["purchase_order"].update(state="sent", sent=copy.deepcopy(sent))
         return copy.deepcopy(row["purchase_order"])
 
-    async def cancel_locate_order(self, tenant_id: str, quote_id: str, reason: str) -> None:
-        """Cancel a placed order and its unsent PO (a sent PO is left for the store to handle)."""
+    async def cancel_locate_order(self, tenant_id: str, quote_id: str, reason: str) -> str:
+        """Cancel a placed order and its unsent PO. Refuses ("sent") once the PO was sent."""
         row = self.locate_orders.get((str(tenant_id), quote_id))
         if row is None:
-            return
+            return "missing"
+        if row["purchase_order"]["state"] == "sent":
+            return "sent"
         if row["order"]["state"] == "placed":
             row["order"].update(state="cancelled", cancel_reason=reason)
         if row["purchase_order"]["state"] == "draft":
             row["purchase_order"]["state"] = "cancelled"
+        return "cancelled"
+
+    async def draft_supplier_orders(self, tenant_id: str, limit: int = 200) -> list[str]:
+        """Quote ids whose PO is still draft and whose order is still placed."""
+        return [quote for (tenant, quote), row in self.locate_orders.items()
+                if tenant == str(tenant_id) and row["purchase_order"]["state"] == "draft"
+                and row["order"]["state"] == "placed"][:limit]
 
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         for row in self.quotes:
@@ -1095,16 +1104,37 @@ class PgStore(RetailerPgStore):
             saved = await self._locate_order(conn, _uuid(tenant_id), quote_id)
         return saved["purchase_order"] if saved else None
 
-    async def cancel_locate_order(self, tenant_id: str, quote_id: str, reason: str) -> None:
-        """Cancel a placed order and its unsent PO, in one transaction."""
+    async def cancel_locate_order(self, tenant_id: str, quote_id: str, reason: str) -> str:
+        """Cancel a placed order and its unsent PO, in one transaction.
+
+        The PO row is locked first; a PO already sent refuses the whole cancel
+        ("sent"), so the supplier never holds an order Rig marked cancelled.
+        """
         tenant = _uuid(tenant_id)
         async with self.pool.acquire() as conn, conn.transaction():
+            po_state = await conn.fetchval(
+                "SELECT state FROM agent_rig.supplier_purchase_orders WHERE tenant_id = $1 AND quote_id = $2"
+                " FOR UPDATE", tenant, quote_id)
+            if po_state is None:
+                return "missing"
+            if po_state == "sent":
+                return "sent"
             await conn.execute(
                 "UPDATE agent_rig.locate_orders SET state = 'cancelled', cancel_reason = $3, updated_at = now()"
                 " WHERE tenant_id = $1 AND quote_id = $2 AND state = 'placed'", tenant, quote_id, reason)
             await conn.execute(
                 "UPDATE agent_rig.supplier_purchase_orders SET state = 'cancelled', updated_at = now()"
                 " WHERE tenant_id = $1 AND quote_id = $2 AND state = 'draft'", tenant, quote_id)
+        return "cancelled"
+
+    async def draft_supplier_orders(self, tenant_id: str, limit: int = 200) -> list[str]:
+        """Quote ids whose PO is still draft and whose order is still placed (oldest first)."""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT p.quote_id FROM agent_rig.supplier_purchase_orders p JOIN agent_rig.locate_orders o"
+                " USING (tenant_id, quote_id) WHERE p.tenant_id = $1 AND p.state = 'draft' AND o.state = 'placed'"
+                " ORDER BY p.created_at LIMIT $2", _uuid(tenant_id), max(1, min(int(limit), 1000)))
+        return [row["quote_id"] for row in rows]
 
     async def _locate_order(self, conn: Any, tenant: UUID, quote_id: str) -> dict[str, Any] | None:
         order = await conn.fetchrow(

@@ -26,7 +26,7 @@ def public_product(row: dict[str, Any]) -> dict[str, Any]:
     attributes = row.get("attributes") or {}
     if not isinstance(attributes, dict):
         attributes = {}
-    result = {
+    return {
         "id": str(row.get("id") or row.get("sku") or ""),
         "name": str(row.get("name") or ""),
         "brand": str(row.get("brand") or ""),
@@ -35,10 +35,6 @@ def public_product(row: dict[str, Any]) -> dict[str, Any]:
         "price": _price(row),
         "attributes": attributes,
     }
-    if isinstance(row.get("availability"), dict):
-        result["availability"] = {key: row["availability"][key] for key in ("status", "eta")
-                                  if key in row["availability"]}
-    return result
 
 
 def _price(row: dict[str, Any]) -> dict[str, Any]:
