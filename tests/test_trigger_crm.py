@@ -139,7 +139,8 @@ def test_strict_write_schema_rejects_hidden_authority(extra):
 
 
 def test_tool_is_founder_only_and_pinned_estimate_sideeffects_denied():
-    assert 'trigger.crm.write' not in command.allowed_tools(command.Actor(T,'client',False,frozenset({'trigger'})))
+    assert 'trigger.crm.write' not in command.allowed_tools(command.Actor(T,'client',False))
+    assert 'trigger.crm.write' in command.allowed_tools(command.Actor(T,'client',False,frozenset({'trigger'})))
     with pytest.raises(HTTPException):command.validate_action(command.PlannedAction(tool='trigger.crm.write',arguments={}),command.Actor(T,'client',False))
     with pytest.raises(ValueError):crm.validate_data('estimates',{'title':'Synthetic','account_id':str(RECORD),'contact_id':str(RECORD),'start_project':True})
 
@@ -203,3 +204,40 @@ async def test_existing_durable_card_gate_checks_executing_payload_and_owner(set
     monkeypatch.setattr(command,'dispatch_action',bound_dispatch)
     assert (await trigger_commands.dispatch_confirmed(action,FOUNDER,RECORD,str(RECORD)))[0] == 200
     assert trigger_commands.CONFIRMED.get() is None
+
+
+def test_pinned_schema_property_names_are_not_stripped_as_annotations():
+    from pathlib import Path
+
+    import yaml
+    from trigger_crm_schema import ROOTS, SCHEMAS
+    upstream=yaml.safe_load((Path(__file__).parents[1]/'ops/trigger-crm/openapi-cd7c12a.yml').read_text())['components']['schemas']
+    excluded={'custom_fields','start_project','project_billing_type','public_link_enabled','deposit_percent'}
+    for resource,name in ROOTS.items():
+        expected=set(upstream[name]['properties'])-({'custom_fields'} if resource!='estimates' else excluded)
+        assert set(SCHEMAS[name]['properties']) == expected
+    crm.validate_data('leads',{'title':'Synthetic','description':'Offline','assigned_to':[],'contacts':[],'teams':[]})
+    crm.validate_data('contacts',{'first_name':'Synthetic','last_name':'Offline','title':'Offline role','description':'Offline'})
+    crm.validate_data('estimates',{'title':'Synthetic','account_id':str(RECORD),'contact_id':str(RECORD)})
+
+
+@pytest.mark.asyncio
+async def test_client_actual_grant_recheck_and_admin_voice_boundary(setup,monkeypatch):
+    client=command.Actor(T,'offline-client',False)
+    granted=True
+    class Conn:
+        async def fetch(self,sql,*values):
+            assert values == (T,)
+            assert 'FROM tank.tenant_squad WHERE tenant_id=$1' in sql
+            return [{'agent':'trigger'}] if granted else []
+    class Acquire:
+        async def __aenter__(self):return Conn()
+        async def __aexit__(self,*args):pass
+    monkeypatch.setattr(command,'db',lambda:SimpleNamespace(acquire=lambda:Acquire()))
+    actor=await crm.authority(client)
+    assert 'trigger.crm.write' in command.allowed_tools(actor)
+    assert not {'trigger.voice.set','trigger.voice.rollback','trigger.feedback'} & set(command.allowed_tools(actor))
+    assert 'worker.build' not in command.allowed_tools(actor)
+    granted=False
+    with pytest.raises(HTTPException) as exc:await crm.authority(actor)
+    assert exc.value.status_code == 403
