@@ -79,12 +79,14 @@ test('one-shot defaults model to Auto and EOF cancels', async () => {
   assert.equal(h.calls.at(-1).body.action, 'cancel');
 });
 
-test('pinned model reports unavailable Auto instead of invented price snapshot', async () => {
+test('pinned model shows Tank-priced Auto comparison and never computes one', async () => {
   const h = harness(); await run(['ask', 'hello', '--model', 'fake-model'], h);
   assert.equal(h.calls.find(c => c.url.endsWith('/turn')).body.model, 'fake-model');
-  assert.match(h.output(), /Auto unavailable \(no historical ledger evidence\)/);
-  const calculated = receiptLines({ rows: [{ ...row, requested_model: 'fake-model', auto_cost_status: 'priced', auto_cost_usd: 42 }] });
-  assert(!calculated.join('').includes('42'));
+  assert.match(h.output(), /Auto comparison pending/);
+  const priced = receiptLines({ rows: [{ ...row, requested_model: 'fake-model', auto_model: 'fake-auto', auto_cost_status: 'priced', auto_cost_usd: 0.05 }] });
+  assert.match(priced.join(''), /Auto would have cost 0\.05 \(fake-auto, same tokens at policy model prices\)/);
+  const unpriced = receiptLines({ rows: [{ ...row, requested_model: 'fake-model', auto_cost_status: 'pending', auto_cost_usd: 42 }] });
+  assert(!unpriced.join('').includes('42'));
 });
 
 test('client cannot propose founder tools', async () => {

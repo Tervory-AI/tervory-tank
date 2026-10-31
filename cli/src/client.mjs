@@ -154,8 +154,9 @@ export function receiptLines(receipt) {
   const rows = receipt.rows ?? [];
   if (!rows.length) return ['Receipt pending'];
   return rows.map(row => {
-    const auto = row.auto_cost_status === 'recorded' && row.auto_ledger_id
-      ? `${amount(row.auto_cost_usd)} [ledger ${row.auto_ledger_id}]` : 'unavailable (no historical ledger evidence)';
+    // Tank prices pinned turns' same recorded tokens at the frozen Auto policy price; the CLI never computes money.
+    const auto = row.auto_cost_status === 'priced' && typeof row.auto_cost_usd === 'number'
+      ? `would have cost ${amount(row.auto_cost_usd)} (${row.auto_model ?? 'policy model'}, same tokens at policy model prices)` : 'comparison pending';
     return `${row.model === 'code' ? 'code (no model)' : row.model} | tokens ${row.tokens_in}/${row.tokens_out}`
       + ` | cost ${amount(row.cost_usd)} | baseline ${amount(row.baseline_cost_usd)}`
       + ` | saved ${amount(row.saved_usd)} | ledger ${row.ledger_id}`

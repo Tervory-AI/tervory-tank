@@ -16,6 +16,7 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -222,17 +223,6 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
     }
 
 
-def public_receipt(receipt: dict) -> dict:
-    # Older saved receipts may contain a price-book projection. Do not rewrite
-    # durable evidence, but never publish that projection as an observed cost.
-    result = dict(receipt)
-    if result.get("requested_model") not in (None, "auto") or "auto_cost_usd" in result:
-        result.update(auto_model=None, auto_cost_usd=None, auto_cost_status="pending", auto_priced_at=None)
-        result.pop("auto_cost_label", None)
-        result.pop("auto_cost_basis", None)
-    return result
-
-
 def totals(rows: list[dict]) -> dict:
     complete = all(r["saved_usd"] is not None for r in rows)
     return {
@@ -350,7 +340,7 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
                        "recorded_spent_usd": amounts["recorded_spent_usd"]},
             "messages": state["messages"], "steps": list(state["steps"].values()),
             "cards": [public_card(c) for c in state["cards"].values()],
-            "receipts": [public_receipt(r) for r in state["receipts"]], "seq": row["seq"]}
+            "receipts": state["receipts"], "seq": row["seq"]}
 
 
 @router.get("/tasks/{task_id}/receipts")
@@ -398,8 +388,6 @@ async def replay(thread_id: uuid.UUID, actor: Actor, after: int, *, turn_id: str
             )
         for item in events:
             data = unpack(item["data"])
-            if item["kind"] == "receipt":
-                data = {**data, "rows": [public_receipt(r) for r in data.get("rows", [])]}
             after = data["seq"]
             yield sse(item["kind"], data)
         if len(events) == 500:
@@ -437,6 +425,20 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
         override["_on_token"] = on_token
     return await run_route(RouteRequest(tenant_id=actor.tenant_id, agent="orchestrator", task_type="command.turn",
                                        home_region=box_region(), messages=[Message(**m) for m in messages], priority=priority), **override)
+
+
+async def auto_price_snapshot(conn: Any, tenant_id: uuid.UUID) -> dict:
+    # Freeze the policy model and price book at acceptance, before paid work.
+    # This is a same-token comparison, not another model execution.
+    row = await conn.fetchrow(
+        "SELECT p.model,q.input_usd,q.output_usd,q.updated_at FROM tank.policy p "
+        "LEFT JOIN tank.proof_prices q ON q.model=p.model AND q.active "
+        "WHERE p.task_type='command.turn' AND (p.tenant_id=$1 OR p.tenant_id IS NULL) "
+        "ORDER BY p.tenant_id NULLS LAST LIMIT 1", tenant_id)
+    return {"model": row["model"] if row else None,
+            "input_usd": str(row["input_usd"]) if row and row["input_usd"] is not None else None,
+            "output_usd": str(row["output_usd"]) if row and row["output_usd"] is not None else None,
+            "priced_at": row["updated_at"].isoformat() if row and row["updated_at"] else None}
 
 
 async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages: list[dict], model: str | None = None,
@@ -579,7 +581,7 @@ async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity
                 "SELECT build_id,tenant_id,$3 FROM tank.command_builds WHERE thread_id=$1 AND tenant_id=$2 "
                 "AND status IN ('queued','running','awaiting_review')", thread_id, actor.tenant_id, body.text,
             )
-        comparison = None  # No recorded Auto execution: a price-book projection is not ledger evidence.
+        comparison = await auto_price_snapshot(conn, actor.tenant_id) if body.model not in (None, "auto") else None
         await step(conn, row, state, {"step_id": turn_id, "label": "Preparing answer", "actor": "Tervory", "status": "running",
                                       "requested_model": body.model or "auto", "auto_comparison": comparison})
         messages = message_context(state["messages"])
@@ -1279,10 +1281,15 @@ async def record_receipts(conn: Any, row: dict, state: dict, step_id: str, ids: 
         receipt = receipt_row(by_id[str(ledger_id)], step_id)
         requested_model = state["steps"].get(step_id, {}).get("requested_model")
         if requested_model not in (None, "auto"):
-            # A pinned execution has no observed Auto cost. Preserve the API
-            # fields without projecting prices or running another model to compare.
-            receipt.update(requested_model=requested_model, auto_model=None,
-                           auto_cost_usd=None, auto_cost_status="pending", auto_priced_at=None)
+            price = state["steps"].get(step_id, {}).get("auto_comparison") or {}
+            priced = receipt["cost_usd"] is not None and all(price.get(k) is not None for k in ("model", "input_usd", "output_usd"))
+            auto_cost = (Decimal(str(receipt["tokens_in"])) * Decimal(price["input_usd"])
+                         + Decimal(str(receipt["tokens_out"])) * Decimal(price["output_usd"])) if priced else None
+            receipt.update(requested_model=requested_model, auto_model=price.get("model"),
+                           auto_cost_usd=float(auto_cost) if auto_cost is not None else None,
+                           auto_cost_status="priced" if priced else "pending", auto_priced_at=price.get("priced_at"),
+                           auto_cost_label="What Auto would have cost (same tokens at policy model prices)",
+                           auto_cost_basis="Same recorded tokens, priced from the price book at turn acceptance; not a separate model run.")
         existing = next((r for r in state["receipts"] if r["ledger_id"] == str(ledger_id)), None)
         if existing and existing["step_id"] != step_id:
             raise HTTPException(409, "Ledger evidence already belongs to another step")

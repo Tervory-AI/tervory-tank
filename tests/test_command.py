@@ -965,7 +965,7 @@ async def test_squad_audit_failure_rolls_back_permission(api):
 
 
 @pytest.mark.asyncio
-async def test_auto_comparison_stays_unavailable_despite_pricebook_and_policy(api, runtime, monkeypatch):
+async def test_auto_comparison_prices_same_tokens_with_frozen_tenant_policy(api, runtime, monkeypatch):
     client, pool = api
     runtime.list_models = AsyncMock(return_value=[{'name': 'fixture-pin'}])
     async with pool.acquire() as conn:
@@ -977,7 +977,7 @@ async def test_auto_comparison_stays_unavailable_despite_pricebook_and_policy(ap
 
     async def answer(actor, messages, model=None, *, task_id=None, on_token=None):
         assert model == 'fixture-pin'
-        # Price-book data cannot become an observed Auto execution cost.
+        # A price or policy edit during the call must not rewrite its comparison.
         async with pool.acquire() as conn:
             await conn.execute("UPDATE tank.proof_prices SET input_usd=5 WHERE model='fixture-auto'")
             await conn.execute("UPDATE tank.policy SET model='fixture-platform' WHERE tenant_id=$1 AND task_type='command.turn'", TENANT)
@@ -991,15 +991,19 @@ async def test_auto_comparison_stays_unavailable_despite_pricebook_and_policy(ap
     route.assert_awaited_once()
     data = (await client.get(f'/v1/command/threads/{thread}')).json()
     receipt = data['receipts'][0]
-    assert receipt['auto_model'] is None
-    assert receipt['auto_cost_usd'] is None
-    assert receipt['auto_cost_status'] == 'pending' and receipt['auto_priced_at'] is None
-    assert receipt['ledger_id'] == str(ledger_id)
+    assert receipt['auto_model'] == 'fixture-auto'
+    assert receipt['auto_cost_usd'] == pytest.approx(10 * 0.001 + 20 * 0.002)
+    assert receipt['auto_cost_status'] == 'priced' and receipt['auto_priced_at']
+    assert 'same tokens' in receipt['auto_cost_label'] and 'not a separate model run' in receipt['auto_cost_basis']
     assert receipt['cost_usd'] == 0.02
     replay = await client.get(f'/v1/command/threads/{thread}/events')
-    assert '"auto_cost_usd": null' in replay.text
-    assert '"auto_cost_usd": 0.05' not in replay.text
-    assert (await client.get('/v1/command/threads')).json()[0]['spent_usd'] == 0.02
+    assert '"auto_cost_usd": 0.05' in replay.text
+    async with pool.acquire() as conn:
+        other = await command.auto_price_snapshot(conn, OTHER)
+        assert other['model'] == 'fixture-platform'
+        await conn.execute("UPDATE tank.proof_prices SET active=false WHERE model='fixture-platform'")
+        missing = await command.auto_price_snapshot(conn, OTHER)
+        assert missing['model'] == 'fixture-platform' and missing['input_usd'] is None
 
 
 @pytest.mark.asyncio
@@ -1204,46 +1208,6 @@ async def test_code_first_proposal_rechecks_roles_and_cancel_has_no_side_effect(
     monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', '')
     assert (await client.post(path, json=action)).status_code == 403
     dispatch.assert_not_awaited()
-
-
-def test_public_receipt_hides_legacy_projection_without_mutating_evidence():
-    original = {'requested_model': 'fixture-pin', 'model': 'fixture-pin', 'cost_usd': 0.02,
-                'ledger_id': 'recorded-id', 'auto_model': 'fixture-auto', 'auto_cost_usd': 0.05,
-                'auto_cost_status': 'priced', 'auto_priced_at': 'old',
-                'auto_cost_label': 'legacy projection', 'auto_cost_basis': 'price book'}
-    public = command.public_receipt(original)
-    assert public['auto_cost_usd'] is None and public['auto_cost_status'] == 'pending'
-    assert public['ledger_id'] == original['ledger_id'] and public['cost_usd'] == 0.02
-    assert 'auto_cost_label' not in public and 'auto_cost_basis' not in public
-    assert original['auto_cost_usd'] == 0.05  # immutable historical evidence
-
-
-@pytest.mark.asyncio
-async def test_legacy_projected_receipt_is_unavailable_in_snapshot_and_replay(api):
-    client, pool = api
-    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
-    actor = command.Actor(TENANT, 'founder', True)
-    original = {'step_id': 'fixture-step', 'ledger_id': str(uuid.uuid4()), 'model': 'fixture-pin',
-                'tokens_in': 10, 'tokens_out': 20, 'cost_usd': 0.02,
-                'baseline_model': None, 'baseline_cost_usd': None, 'saved_usd': None,
-                'requested_model': 'fixture-pin', 'auto_cost_usd': 0.05, 'auto_cost_status': 'priced',
-                'auto_cost_basis': 'price book'}
-    async with command.editing(uuid.UUID(thread), actor) as (conn, row, state):
-        state['receipts'].append(original)
-        await command.event(conn, row, 'receipt', {'rows': [original], 'totals': command.totals([original])})
-    saved = (await client.get(f'/v1/command/threads/{thread}')).json()
-    assert saved['receipts'][0]['auto_cost_usd'] is None
-    assert saved['receipts'][0]['cost_usd'] == saved['thread']['spent_usd'] == 0.02
-    events = (await client.get(f'/v1/command/threads/{thread}/events')).text
-    payload = json.loads(next(line[6:] for line in events.splitlines() if line.startswith('data: ')))
-    assert payload['rows'][0]['auto_cost_usd'] is None
-    assert payload['rows'][0]['ledger_id'] == original['ledger_id']
-    assert payload['seq'] == saved['seq'] == 1
-    async with pool.acquire() as conn:
-        durable = json.loads(await conn.fetchval('SELECT state FROM tank.command_threads WHERE thread_id=$1', uuid.UUID(thread)))
-        assert durable['receipts'][0]['auto_cost_usd'] == 0.05
-        durable_event = json.loads(await conn.fetchval('SELECT data FROM tank.command_events WHERE thread_id=$1', uuid.UUID(thread)))
-        assert durable_event['rows'][0]['auto_cost_usd'] == 0.05
 
 
 @pytest.mark.asyncio

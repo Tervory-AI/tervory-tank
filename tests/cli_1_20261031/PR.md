@@ -69,7 +69,7 @@ This evidence-only update initially could not be committed: Git reported `unable
 
 - **Missing approved Figma frame and exact copy:** Settings > Access tokens, including create/reveal/revoke and empty/error states, at desktop/mobile sizes. Live file ZnphBOJU6657tohGLD3IzS Client screens page 5:114 and Founder screens page 5:115 contain no Access tokens frame/text. C6 terminal presentation 7:292 is explicitly rejected history for unauthorized rand samples. No new UI was invented; no Settings page exists in this draft.
 - Companion PR #465 supplies the PAT-authenticated models, known-action proposal and owned task-receipt contracts. This draft alone does not add those routes. The integration lane verifies the combined branches with synthetic data.
-- Pinned-model Auto comparison is unavailable without actual historical ledger evidence. No hypothetical price-book amount is shown as measured cost. The CLI never computes receipt money.
+- Pinned-model Auto comparison (#496): the CLI prints Tank's same-token, policy-model price-book comparison, labelled as such, or `comparison pending`. The CLI never computes receipt money.
 - Native macOS/Windows/Linux keychain integration and the founder's own browser acceptance remain unverified. Unit tests inject a keychain interface and synthetic token; they do not claim a native credential-store test.
 - Confirmed jobs are read-only polled at most 240 times, 500 ms apart; completed/failed steps, unknown action outcome, user cancellation and the polling bound stop watching. Reopening a saved thread resumes its confirmed jobs. These behaviors are fake-Tank tested; no live worker was started.
 - All CI checks and independent review must be green before readiness. This PR remains draft and must not merge automatically.
