@@ -13,12 +13,14 @@ const source = ts.transpileModule(fs.readFileSync(path.join(root, 'workspace/lib
 }).outputText;
 const moduleValue = {exports:{}};
 let upstreamCalls = 0;
+const upstreamStatuses = [];
 vm.runInNewContext(source, {module:moduleValue,exports:moduleValue.exports,
   process:{env:{TANK_URL:input.origin,TANK_API_KEY:'dummy-workspace-key'}},
   URL,Request,Response,Headers,Uint8Array,fetch:async(url,init)=>{
     assert.equal(new URL(url).origin,input.origin);
     assert.deepEqual(Object.keys(init.headers).sort(),['Authorization','Content-Type']);
-    upstreamCalls++; return fetch(url,init);
+    upstreamCalls++; const response = await fetch(url,init);
+    upstreamStatuses.push(response.status); return response;
   }});
 const proxy = moduleValue.exports.personalCommandRequest;
 const transport = async(url,init)=>{
@@ -45,6 +47,7 @@ const transport = async(url,init)=>{
   // Token chooses the ZA public hostname; adapter forwards to its configured box.
   // Local Tank must independently refuse the region mismatch.
   await assert.rejects(()=>foreign.json('/v1/command/tools'),/403/);
-  assert(upstreamCalls >= count);
+  assert.equal(upstreamCalls,count+1);
+  assert.equal(upstreamStatuses.at(-1),403);
   process.stdout.write('PASS: actual CLI/public PAT adapter/Tank cancellation and client denial\n');
 })().catch(error=>{console.error(error);process.exitCode=1;});
