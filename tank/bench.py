@@ -178,6 +178,8 @@ async def reserve(conn, run_id: uuid.UUID, region: str, case: dict, amount: Deci
 
 async def call_model(model: str, messages: list[dict], max_tokens: int) -> dict:
     rt = runtime()
+    if str(model or "").strip().lower().startswith("build-"):
+        raise ValueError("This model is for Tervory's own build and test work only.")
     async with httpx.AsyncClient(timeout=120) as client:
         response = await client.post(f'{rt.LITELLM_URL}/v1/chat/completions',
             headers={'Authorization': f'Bearer {rt.LITELLM_MASTER_KEY}'},

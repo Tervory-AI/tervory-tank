@@ -21,6 +21,7 @@ Endpoints
   GET  /v1/base/records?tenant_id=       proxy: enriched records, newest first
   GET  /v1/policy                        the routing policy rows
   PUT  /v1/policy/{task_type}            change a policy row (no deploy needed)
+  DELETE /v1/policy/{task_type}?tenant_id=  drop one tenant's own row (never the platform default)
   GET  /v1/models                       the roster LiteLLM serves, with USD per million tokens
   GET  /v1/rig/search                    proxy: one tenant's catalogue search
   GET  /v1/rig/graph/{id}                proxy: fit graph for one product
@@ -85,6 +86,12 @@ ZA_HOME_MESSAGE = "needs the South Africa region"
 US_HOME_MESSAGE = "needs the United States region"
 IDENTIFIER_REFUSAL = "A personal identifier cannot be sent to a provider outside South Africa."
 ALLOW_REFUSAL = "This provider is not on the tenant's allow-list."
+# Build-only models (the ChatGPT sign-in). Every alias starts with build- and is
+# reachable only for Tervory's own build tenants: evals, self-tests, samples.
+# Never customer or tenant traffic. See docs/ops/CHATGPT-BUILD-MODEL.md.
+BUILD_MODEL_PREFIX = "build-"
+BUILD_ONLY_REFUSAL = "This model is for Tervory's own build and test work only."
+_PLATFORM_TENANT_ID = "00000000-0000-0000-0000-000000000001"
 _pii_detect = None
 _skill_home: contextvars.ContextVar[str | None] = contextvars.ContextVar("zenas_skill_home", default=None)
 
@@ -217,6 +224,29 @@ def sa_hosted_models() -> frozenset[str]:
             if name:
                 names.add(name)
     return frozenset(names)
+
+
+def is_build_only_model(name: Any, provider_model: Any = None) -> bool:
+    """True for a build-only alias (build-*) or any ChatGPT-subscription deployment."""
+    alias = str(name or "").strip().lower()
+    provider = str(provider_model or "").strip().lower()
+    return alias.startswith(BUILD_MODEL_PREFIX) or provider.startswith("chatgpt/")
+
+
+def build_tenants() -> frozenset[str]:
+    """Tenants whose calls may use a build-only model: the platform tenant, plus
+    TANK_BUILD_TENANTS (comma-separated ids of internal test tenants, no customers)."""
+    extra = {part.strip().lower() for part in os.environ.get("TANK_BUILD_TENANTS", "").split(",") if part.strip()}
+    return frozenset({_PLATFORM_TENANT_ID, *extra})
+
+
+def build_model_refusal(model: Any, tenant_id: Any) -> str | None:
+    """The wall: a build-only model for anyone other than a build tenant is refused."""
+    if not is_build_only_model(model):
+        return None
+    if tenant_id is not None and str(tenant_id).strip().lower() in build_tenants():
+        return None
+    return BUILD_ONLY_REFUSAL
 
 
 def tenant_allowlist(tenant_id: str) -> frozenset[str] | None:
@@ -380,6 +410,9 @@ def model_call_refusal(
     permitted SA model at all? Pure-code skills do not call this.
     """
     here = normalize_box(box)
+    build = build_model_refusal(model, tenant_id) if model is not None else None
+    if build:
+        return build
     allow = tenant_allowlist(tenant_id)
     public_record = _pool_read_candidate(text, caller=caller, task_type=task_type, skill=skill) and pool_read
     if here != ZA_REGION:
@@ -814,6 +847,21 @@ async def list_policy(tenant_id: uuid.UUID) -> list[dict[str, Any]]:
     return out
 
 
+def build_policy_problem(body: "PolicyRow") -> str | None:
+    """A build-only model may sit only on a build tenant's own row, never the platform
+    default (tenant_id null) that every customer inherits, never batched, never cached."""
+    named = [body.model, body.escalation_model]
+    if not any(is_build_only_model(name) for name in named if name):
+        return None
+    if body.tenant_id is None:
+        return BUILD_ONLY_REFUSAL + " It cannot be the default policy for every tenant."
+    if build_model_refusal(BUILD_MODEL_PREFIX, body.tenant_id):
+        return BUILD_ONLY_REFUSAL
+    if body.batch_eligible or body.cache_scope != "none" or body.semantic_cache:
+        return BUILD_ONLY_REFUSAL + " Set batch_eligible false, cache_scope none and semantic_cache false."
+    return None
+
+
 @app.put("/v1/policy/{task_type}", dependencies=[Depends(require_key)])
 async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
     if body.task_type != task_type:
@@ -821,6 +869,9 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
     body.model = body.model.strip()
     if graduate.router_cannot_serve(body.model) or (graduate.is_skill(body.model) and body.rung != 3):
         raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
+    build_problem = build_policy_problem(body)
+    if build_problem:
+        raise HTTPException(status_code=403, detail=build_problem)
     if graduate.is_skill(body.model):
         parsed = graduate.parse_skill(body.model)
         pkg = get_package(*parsed)
@@ -846,6 +897,18 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
             body.semantic_cache, body.matter_matching, body.max_cost_usd,
         )
     return {"ok": True}
+
+
+@app.delete("/v1/policy/{task_type}", dependencies=[Depends(require_key)])
+async def delete_tenant_policy(task_type: str, tenant_id: uuid.UUID) -> dict[str, Any]:
+    """Remove one tenant's own policy row so that tenant follows the platform default again.
+    The platform default row (tenant_id null) is never deleted here. Used to switch a build
+    tenant back off a build-only model after a test run."""
+    async with pool().acquire() as conn:
+        status = await conn.execute(
+            "DELETE FROM tank.policy WHERE task_type=$1 AND tenant_id=$2", task_type, tenant_id,
+        )
+    return {"ok": True, "deleted": int(str(status).rsplit(" ", 1)[-1] or 0)}
 
 
 # ---------- the one call ----------
@@ -1439,6 +1502,9 @@ async def run_route(
 
 
 async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int, *, receipt: dict | None = None) -> tuple[str, float]:
+    if is_build_only_model(model):
+        # Shadow runs on live tenant traffic; a build-only model never sees it.
+        raise RuntimeError(BUILD_ONLY_REFUSAL)
     messages = _plain_messages(messages)
     if _contains_html(messages):
         raise ValueError("HTML is not model input; supply extracted text")
@@ -1494,6 +1560,12 @@ _ROSTER_TTL_S = 300
 _roster_cache: tuple[float, list[dict[str, Any]]] | None = None
 
 
+def _build_row(row: dict[str, Any]) -> bool:
+    """Build-only models are not on the roster: no model picker, override, bench,
+    price search or graduation candidate can see them. Only a build tenant's policy row can."""
+    return is_build_only_model(row.get("model_name"), (row.get("litellm_params") or {}).get("model"))
+
+
 def _roster_row(item: Any) -> dict[str, Any] | None:
     """One served model in roster shape: name, provider model and prices only, never a key."""
     if not isinstance(item, dict):
@@ -1545,6 +1617,8 @@ async def _roster_models() -> list[dict[str, Any]]:
                 seen: set[str] = set()
                 for item in data or []:
                     row = _roster_row(item)
+                    if row is not None and _build_row(row):
+                        continue
                     if row is not None and row["model_name"] not in seen:
                         seen.add(row["model_name"])
                         rows.append(row)
@@ -1559,7 +1633,7 @@ async def _roster_models() -> list[dict[str, Any]]:
     import yaml
 
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return [row for row in (_roster_row(item) for item in raw.get("model_list") or []) if row]
+    return [row for row in (_roster_row(item) for item in raw.get("model_list") or []) if row and not _build_row(row)]
 
 
 async def _live_price_quotes() -> list[graduate.Quote]:
@@ -1824,6 +1898,9 @@ async def _load_evidence(conn: Any, policy: dict[str, Any]) -> graduate.Evidence
 
 async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by: str) -> None:
     task_type = before["task_type"]
+    if move.action == "promote" and is_build_only_model(move.policy.get("model")):
+        log.warning("graduation %s: build-only model not promoted", task_type)
+        return
     if move.action == "promote":
         updated = await conn.execute(
             """
@@ -2223,6 +2300,8 @@ async def set_candidate(task_type: str, body: CandidateBody) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail="no such platform policy")
         if body.candidate_model and body.candidate_model == row["model"]:
             raise HTTPException(status_code=400, detail="candidate must differ from the current model")
+        if is_build_only_model(body.candidate_model):
+            raise HTTPException(status_code=403, detail=BUILD_ONLY_REFUSAL)
         if graduate.is_skill(body.candidate_model):
             problem = await _check_code_candidate(conn, str(body.candidate_model))
             if problem:
