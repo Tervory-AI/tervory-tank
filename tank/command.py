@@ -359,7 +359,9 @@ async def task_receipts(task_id: uuid.UUID, actor: Actor = Depends(identity)) ->
         task = await conn.fetchrow(
             "SELECT t.ledger_id,to_jsonb(l) AS data FROM tank.tasks t "
             "LEFT JOIN tank.ledger l ON l.id=t.ledger_id AND l.tenant_id=t.tenant_id "
-            "WHERE t.id=$1 AND t.tenant_id=$2 AND t.created_by=$3",
+            "WHERE t.id=$1 AND t.tenant_id=$2 AND t.created_by=$3 AND t.task_type='command.turn' "
+            "AND EXISTS (SELECT 1 FROM tank.command_threads c WHERE c.tenant_id=$2 AND c.user_id=$3 "
+            "AND c.state->'steps' ? t.id::text)",
             task_id, actor.tenant_id, actor.user_id,
         )
     if task is None:
