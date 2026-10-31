@@ -328,13 +328,15 @@ SPEED_LIMIT_MS = 300
 # worker holding the CPU). Seen today: 568 ms and 859 ms single samples with
 # p95 near 11 ms. Two or more slow samples, or a slow p95, is a real regression.
 SPEED_ALLOWED_OVER = 1
+# The one allowed outlier still has a hard ceiling, so a real hang fails.
+SPEED_CEILING_MS = 2000
 
 
 def _speed_ok(samples: list[float]) -> bool:
-    """Gate 5 verdict: p95 under the limit and at most one sample at or over it."""
-    _p50, p95, _slowest = _percentiles(samples)
+    """Gate 5 verdict: p95 under the limit, at most one sample at or over it, none at the ceiling."""
+    _p50, p95, slowest = _percentiles(samples)
     over = sum(1 for sample in samples if sample >= SPEED_LIMIT_MS)
-    return p95 < SPEED_LIMIT_MS and over <= SPEED_ALLOWED_OVER
+    return p95 < SPEED_LIMIT_MS and over <= SPEED_ALLOWED_OVER and slowest < SPEED_CEILING_MS
 
 
 @pytest.fixture(scope="module")
@@ -777,7 +779,7 @@ def test_gate_5_search_speed(world: dict[str, Any]) -> None:
 
 
 def test_gate_5_verdict_tolerates_one_pause_but_not_a_regression() -> None:
-    """One stalled sample passes. Two slow samples or a slow p95 still fail."""
+    """One stalled sample under the ceiling passes. A hang, two slow samples or a slow p95 still fail."""
     fast = [10.0] * 200
     assert _speed_ok(fast)
     one_pause = fast[:199] + [859.59]
@@ -790,6 +792,12 @@ def test_gate_5_verdict_tolerates_one_pause_but_not_a_regression() -> None:
     assert not _speed_ok(all_slow)
     just_under = [299.0] * 200
     assert _speed_ok(just_under)
+    under_ceiling = fast[:199] + [1999.0]
+    assert _speed_ok(under_ceiling)
+    at_ceiling = fast[:199] + [2000.0]
+    assert not _speed_ok(at_ceiling)
+    hang = fast[:199] + [10_000.0]
+    assert not _speed_ok(hang)
 
 
 def test_bundle_and_compare_math() -> None:
