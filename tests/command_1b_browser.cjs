@@ -17,7 +17,7 @@ fs.mkdirSync(output,{recursive:true});
 const thread={thread_id:'thread-one',title:'Base run: Delaware ATF list',updated_at:'2026-10-21T12:00:00Z',spent_usd:0,saved_usd:4.12};
 const receipt={rows:['Normalise records','Match to ATF list','Find websites','Read sites'].map((step,i)=>({step_id:step,model:'code',tokens_in:0,tokens_out:0,cost_usd:0,baseline_model:'baseline',baseline_cost_usd:[.61,.88,1.38,1.25][i],saved_usd:[.61,.88,1.38,1.25][i],ledger_id:'entry-'+i})),totals:{cost_usd:0,baseline_cost_usd:4.12,saved_usd:4.12}};
 const original={thread,messages:[{message_id:'user-one',role:'user',content:'Run Base on the Delaware ATF list and show me what it would have cost on a top model.'},{message_id:'answer-one',role:'assistant',content:'Running Base on 1,284 Delaware licences. Every step so far is plain code, so the cost is $0. One step is paid: a web search for 212 records with no site found. Confirm it below or cancel this step.',receipt}],steps:['Normalise 1,284 records','Match to ATF list','Find websites','Read sites','Web search, 212 records','Verify and score'].map((label,i)=>({step_id:'step-'+i,label,actor:'Base',status:i<4?'done':'planned',...(i===3?{link:'/base?batch=B-0142'}:{})})),cards:[{card_id:'paid-one',kind:'paid_run',summary:'Paid step: web search for 212 records with no website found.',cost_estimate_usd:1.06,status:'pending',tool:'base.batch',arguments:{batch:'B-0142',records:Array.from({length:212},()=>({})),engine:'website-search'}}]};
-let state=structuredClone(original),calls=[],failConfirm=false,turns=0,allowedTools=['base.batch'];
+let state=structuredClone(original),calls=[],failConfirm=false,turns=0,allowedTools=['base.batch'],recoveryMode='done';
 const binaryId='00000000-0000-4000-8000-000000000001';
 const unknown={cost_usd:null,baseline_cost_usd:null,saved_usd:null};
 (async()=>{
@@ -40,10 +40,12 @@ const server=createServer(async(req,res)=>{
   if(target.startsWith('cards/')){if(failConfirm)return json({error:'Confirmation could not be saved. Reload before trying again.'},502);const card=state.cards.find(card=>card.card_id===target.split('/')[1]);delete card.error;Object.assign(card,{status:body.action==='confirm'?'confirmed':'cancelled',retry_safe:false,...(body.action==='confirm'?{result:{summary:'Watch saved',url:'https://example.com/result'}}:{})});return json(presentSnapshot({...state,cards:[card]},true).cards[0]);}
   if(target.endsWith('/events')) {
     assert.equal(url.searchParams.get('after'),'41');
-    state.messages.push({message_id:'recovered',role:'assistant',content:'Recovered answer.'});
+    if(recoveryMode!=='active') state.messages.push({message_id:'recovered',role:'assistant',content:'Recovered answer.'});
+    if(recoveryMode!=='done'){res.setHeader('Content-Type','text/event-stream');res.end(recoveryMode==='snapshot'?Array.from({length:500},(_,i)=>`id: ${42+i}\nevent: step\ndata: ${JSON.stringify({seq:42+i,step_id:'replay-step-'+i,label:'Saved step',actor:'code',status:'done'})}\n\n`).join(''):'');return;}
     res.setHeader('Content-Type','text/event-stream');
     res.end('id: 41\nevent: token\ndata: {"text":"Recovered ","seq":41}\n\nid: 42\nevent: token\ndata: {"text":"answer.","seq":42}\n\nid: 43\nevent: done\ndata: {"message_id":"recovered","seq":43}\n\n');return;
   }
+  if(target.endsWith('/turn')&&body.text==='Explicit stream error'){turns++;res.setHeader('Content-Type','text/event-stream');res.end('event: error\ndata: {"message":"Offline stream refused"}\n\n');return;}
   if(target.endsWith('/turn')&&body.text==='Recover connection') {
     turns++;state.messages.push({message_id:'recovered-user',role:'user',content:body.text});
     res.setHeader('Content-Type','text/event-stream');res.end('id: 41\nevent: token\ndata: {"text":"Recovered ","seq":41}\n\n');return;
@@ -105,6 +107,25 @@ try {
  assert.equal(turns,beforeRecovery+1);assert.equal(calls.filter(call=>call.target.endsWith('/events')).length,1);
  assert.equal(await page.getByRole('alert').count(),0);
  await page.reload();await page.getByText('Recovered answer.',{exact:true}).waitFor();assert.equal(turns,beforeRecovery+1);
+ const replayCount=()=>calls.filter(call=>call.target.endsWith('/events')).length;
+ const postCount=()=>calls.filter(call=>call.target.endsWith('/turn')).length;
+ const sendText=async text=>{await page.getByRole('textbox',{name:'Message Tervory'}).fill(text);await page.getByRole('button',{name:'Send',exact:true}).click();};
+ let beforeReplay=replayCount(),beforePost=postCount();
+ await sendText('Explicit stream error');await page.getByRole('alert').filter({hasText:'Offline stream refused'}).waitFor();
+ assert.equal(replayCount(),beforeReplay);assert.equal(postCount(),beforePost+1);
+ await page.route('**/chats/api/threads/*/turn',route=>route.abort('failed'));
+ beforePost=postCount();await sendText('Transport failure');await page.getByRole('alert').waitFor();
+ await page.waitForFunction(()=>!document.querySelector('#cw-message').disabled);
+ assert.equal(postCount(),beforePost);assert.equal(replayCount(),beforeReplay);await page.unroute('**/chats/api/threads/*/turn');
+ for(const mode of ['snapshot','active']) {
+   recoveryMode=mode;state.messages=state.messages.filter(message=>message.message_id!=='recovered');await page.reload();await page.getByRole('heading',{name:state.thread.title}).waitFor();
+   beforeReplay=replayCount();beforePost=postCount();await sendText('Recover connection');
+   await page.getByRole('alert').filter({hasText:'connection ended'}).waitFor();
+   assert.equal(replayCount(),beforeReplay+1);assert.equal(postCount(),beforePost+1);
+   await page.waitForFunction(()=>!document.querySelector('#cw-message').disabled);
+   assert.equal(await page.getByText('Recovered answer.',{exact:true}).count(),mode==='snapshot'?1:0);
+   assert.equal(await page.getByText('Recovered ',{exact:true}).count(),0);
+ }
  assert.deepEqual(errors,[]);console.log('Browser passed: desktop/mobile, work focus, menu/search, rename, safe retry, unknown outcomes, visible results/cancelled states, unsupported pins, binary files/downloads, pending costs and stream deduplication, persisted reload, new chat, client labels; no overflow or runtime errors.');
 } finally {await browser.close();server.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});
