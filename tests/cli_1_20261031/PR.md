@@ -1,6 +1,6 @@
 # CLI-1 implementation and bounded evidence
 
-Recorded 2026-10-31, 02:02 PDT / 09:02 UTC. Draft PR #464; companion Tank contract PR #465. Founder acceptance has not occurred. No screenshots of founder testing are claimed. COMMAND-1 audit/screenshots are owned by separate chats after the coordinator narrowed this lane to CLI/PAT.
+Recorded 2026-10-31, 02:08 PDT / 09:08 UTC. Draft PR #464; companion Tank contract PR #465. Founder acceptance has not occurred. No screenshots of founder testing are claimed. COMMAND-1 audit/screenshots are owned by separate chats after the coordinator narrowed this lane to CLI/PAT.
 
 ## What changed (repository line references)
 
@@ -9,11 +9,12 @@ Recorded 2026-10-31, 02:02 PDT / 09:02 UTC. Draft PR #464; companion Tank contra
 | cli/package.json | 1 | Pinned @tervory/cli 0.1.0, Node 22, tervory executable, OS keyring/CSV dependencies and lockfile |
 | cli/bin/tervory.mjs | 1 | Hidden terminal login, no argv/env credential transport, keychain-only persistence |
 | cli/src/client.mjs | 8 | Token-selected fixed app/ZA origins; redirects refused |
-| cli/src/client.mjs | 23 | Stateful streamed credential/terminal-control sanitizer; no token/escape chunk-boundary bypass |
-| cli/src/client.mjs | 82 | Native persistent OS keychain binding; Linux Secret Service required, no plaintext fallback |
+| cli/src/client.mjs | 22 | Stateful streamed credential/terminal-control sanitizer; no token/escape chunk-boundary bypass; static output uses the same C1/CSI/OSC handling |
+| cli/src/client.mjs | 81 | Native persistent OS keychain binding; Linux Secret Service required, no plaintext fallback |
 | cli/src/client.mjs | 166 | Explicit yes-only confirmation; default No/EOF cancel |
-| cli/src/client.mjs | 174 | SSE tokens, steps, receipts and cards through the same Tank command contract |
-| cli/src/client.mjs | 207 | login/logout/chat/ask/threads/run/build/receipts/models; CSV mapped to existing Base schema in code |
+| cli/src/client.mjs | 174 | SSE preview, authoritative replacement, sequence deduplication, final answer once; steps, receipts and cards through the same Tank command contract |
+| cli/src/client.mjs | 209 | Bounded read-only job watching, changed steps/links/receipts, stop on terminal state, cancellation or poll limit; no model/action retries |
+| cli/src/client.mjs | 257 | login/logout/chat/ask/threads/run/build/receipts/models; CSV mapped to existing Base schema in code; saved-thread resume |
 | tank/personal_tokens.py | 39 | Full credential hash lookup before accepting server-stored user/tenant; actual local-box check; forged identity headers ignored |
 | tank/personal_tokens.py | 67 | Workspace-only mint/list/revoke; never returns stored hashes; one-time creation response disables caching |
 | tank/personal_tokens.py | 113 | Existing command dependency reused; no global Tank service-key bypass |
@@ -39,7 +40,7 @@ Commands below ran in the isolated checkout `/tmp/tervory-prompt1-20261031` unle
 | `ls docs/cursor/CLI-1-tervory-cli.md docs/cursor/COMMAND-1-the-window.md workspace/app/chats tank/command.py` | Passed; both briefs and existing COMMAND files present |
 | `git config user.name 'Codex'` and `git config user.email 'codex@openai.com'` | Repository-local identity after initial commit failed with missing identity |
 | `npm install --prefix cli --ignore-scripts --no-audit --no-fund` | Passed; pinned lockfile committed |
-| `npm test --prefix cli` | Final result: **24 passed, 0 failed**. Earlier edge-test source-path error was corrected and suite rerun |
+| `npm test --prefix cli` | Final result: **30 passed, 0 failed**. Earlier edge-test source-path error and test assumptions about a trailing redaction-prefix character / final request after read-only watching were corrected and suite rerun |
 | `PYTHONPATH=tank /tmp/tervory-job8-python/bin/python -m pytest -q tests/test_personal_tokens.py` | **8 passed**; one pre-existing Pydantic field-name warning |
 | `node --check cli/bin/tervory.mjs && node --check cli/src/client.mjs` | Passed |
 | `npm pack --dry-run` (cwd `cli/`) | Passed; package contains executable, client, manifest, README and changelog; no publish |
@@ -65,5 +66,5 @@ Every completed source/test/document file was committed and pushed. Commit comma
 - Companion PR #465 supplies the PAT-authenticated models, known-action proposal and owned task-receipt contracts. This draft alone does not add those routes. The integration lane verifies the combined branches with synthetic data.
 - Pinned-model Auto comparison is unavailable without actual historical ledger evidence. No hypothetical price-book amount is shown as measured cost. The CLI never computes receipt money.
 - Native macOS/Windows/Linux keychain integration and the founder's own browser acceptance remain unverified. Unit tests inject a keychain interface and synthetic token; they do not claim a native credential-store test.
-- Confirmed long-running jobs remain stored in the thread. The current CLI does not continuously poll job progress after a card has been confirmed; its next turn/receipts command can retrieve subsequent evidence. Do not claim complete live-job acceptance.
+- Confirmed jobs are read-only polled at most 240 times, 500 ms apart; completed/failed steps, unknown action outcome, user cancellation and the polling bound stop watching. Reopening a saved thread resumes its confirmed jobs. These behaviors are fake-Tank tested; no live worker was started.
 - All CI checks and independent review must be green before readiness. This PR remains draft and must not merge automatically.
