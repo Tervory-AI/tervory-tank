@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import http.client
 import logging
 import re
 from collections import Counter
@@ -331,7 +332,12 @@ async def polite_get(
     *,
     pause_default: str | None = None,
 ) -> Fetch:
-    """One request at a time. Three tries on a network error, then back off. No SAFLII."""
+    """One request at a time. Three tries on a network error, then back off. No SAFLII.
+
+    A body cut off mid-transfer (http.client.IncompleteRead, or any other
+    http.client.HTTPException) is a network error too. It is not an OSError,
+    so before this it escaped and ended the whole load as "error".
+    """
     if "saflii.org" in url.lower():
         return Fetch(error=True)
     reject_credential_url(url)
@@ -339,7 +345,7 @@ async def polite_get(
     for _attempt in range(3):
         try:
             body = await http_get(url, headers)
-        except OSError:
+        except (OSError, http.client.HTTPException):
             last_error = True
             await _rest(interval_env, pause_default)
             continue
