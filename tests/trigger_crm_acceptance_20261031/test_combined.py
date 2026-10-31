@@ -2,25 +2,26 @@
 import hashlib
 import json
 import os
-from pathlib import Path
 import socket
 import subprocess
 import sys
-from threading import Thread
 import time
+from pathlib import Path
+from threading import Thread
 from types import SimpleNamespace
 from uuid import UUID
 
 import httpx
 import pytest
-import uvicorn
-from fastapi import FastAPI
 
 if not os.environ.get('CRM_ASSEMBLED_ROOT'):
     pytest.skip('Explicit frozen backend/Workspace assembly required; see EVIDENCE.md', allow_module_level=True)
+import uvicorn
+from fastapi import FastAPI
+
 ROOT = Path(os.environ['CRM_ASSEMBLED_ROOT'])
 sys.path.insert(0, str(ROOT / 'tank'))
-import trigger_crm as crm  # noqa: E402
+import trigger_crm as crm
 
 RECORD = '00000000-0000-0000-0000-000000000013'
 ORG = '00000000-0000-0000-0000-000000000014'
@@ -79,7 +80,7 @@ def test_actual_workspace_tank_corridor_and_unconfirmed_write(monkeypatch):
             time.sleep(.025)
         assert server.started
         env = {**os.environ, 'CRM_ASSEMBLED_ROOT': str(ROOT), 'TANK_URL': f'http://127.0.0.1:{port}'}
-        result = subprocess.run(['node', str(Path(__file__).with_name('combined.cjs'))], env=env, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(['node', str(Path(__file__).with_name('combined.cjs'))], env=env, capture_output=True, text=True, timeout=30, check=False)
         assert result.returncode == 0, result.stdout + result.stderr
         assert calls == ['/api/leads/', '/api/contacts/', '/api/invoices/estimates/']
         headers = {'x-tank-key': 'dummy-workspace-key', 'x-tervory-user': 'offline-founder', 'x-tervory-tenant': tenant}
