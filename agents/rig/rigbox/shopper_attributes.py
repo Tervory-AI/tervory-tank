@@ -18,10 +18,16 @@ it is not changed; its callers hand it rows that are already allowlisted.
 Top-level keys and the fields inside structured attributes are allowlisted:
 a key a store invents tomorrow stays private until it is added here on
 purpose. Structured attributes have fixed shapes (``_SHAPES``); any other
-allowlisted key may hold a scalar or a list of scalars only. Free-form names
-chosen by the store (option names, option labels, default names, a verified
-fact's ``name``) cannot be allowlisted, so they are screened against the
-private-key pattern instead (a denylist): ``options: {"rsr": [...]}`` passes.
+allowlisted key may hold a scalar or a list of scalars only.
+
+Words the store chooses (option names and labels, default names, stock and
+price-history labels, strings in a list, every field of a ``verified`` fact)
+cannot be allowlisted, so they are screened word by word against the
+private-key pattern (``private_name``, a denylist). A hit drops the item and
+the numbers it labels. ``verified`` is also structurally strict: dict facts
+only, a string ``name``, an http(s) ``source``. Known limit: a supplier's
+own name ("RSR price", ``options: {"rsr": ...}``) is not on the cost-word
+list, so it passes; the number beside it is still not a cost key.
 """
 
 from __future__ import annotations
@@ -73,46 +79,136 @@ def private_key(key: Any) -> bool:
     return bool(_PRIVATE.search(str(key)))
 
 
+_WORDS = re.compile(r"[^a-z0-9]+")
+
+
+def private_name(name: Any) -> bool:
+    """A store-chosen name, label or bit of text that names a private input.
+
+    Screened as written and word by word, so "Dealer Price", "POF export_usd",
+    "export_usd: 1" and "exportUsd" all count. Anything that is not a string
+    (a missing name, a list, a dict) counts as private: it can't be checked.
+    """
+    if not isinstance(name, str):
+        return True
+    return private_key(name) or private_key(_WORDS.sub("_", name.lower()).strip("_"))
+
+
 def _scalar(value: Any) -> bool:
     return value is None or isinstance(value, _SCALAR)
 
 
-def _pick(value: Any, keys: frozenset[str]) -> dict[str, Any] | None:
-    if not isinstance(value, dict):
-        return None
-    # A listed field may hold a scalar or a list of scalars (verified "magazines": [12, 15, 18]).
-    return {key: _scalars(item) for key, item in value.items() if key in keys and _scalars(item) is not None}
+def _strings(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str)]
+    return []
+
+
+_PAIR = re.compile(r"^\W*([A-Za-z][^:=\n]{0,60}?)\s*[:=]\s*\W{0,3}[A-Za-z]{0,3}\W{0,3}[0-9]")
+
+
+def _private_pair(text: str) -> bool:
+    match = _PAIR.match(text)
+    return bool(match) and private_name(match.group(1))
+
+
+def _labelled_list(value: list[Any]) -> bool:
+    """A flat list where a private-looking string sits beside a number."""
+    has_number = any(isinstance(item, (int, float)) and not isinstance(item, bool) for item in value)
+    return has_number and any(private_name(item) for item in _strings(value))
 
 
 def _scalars(value: Any) -> Any:
-    """A scalar, or a list of scalars. Anything nested is dropped (None)."""
+    """A scalar, or a list of scalars. Anything nested is dropped (None).
+
+    A list holding a private-looking string and a number is dropped whole:
+    in ["export_usd", 4377] the string labels the number beside it. Text
+    that opens with a "name: number" pair whose name is private
+    ("export_usd: 4377", "Dealer price = R4377") is dropped. Prose is not
+    otherwise screened word by word, since copy such as "heavy duty" or
+    "supplier warranty" is ordinary there and labels no number.
+    """
+    if isinstance(value, str):
+        return None if _private_pair(value) else value
     if _scalar(value):
         return value
     if isinstance(value, list):
-        return [item for item in value if _scalar(item)]
+        if _labelled_list(value):
+            return None
+        return [item for item in value if _scalar(item) and not (isinstance(item, str) and _private_pair(item))]
     return None
 
 
+_DIGIT = re.compile(r"[0-9]")
+_NUMERIC = re.compile(r"^[^A-Za-z]*[0-9][^A-Za-z]*$")  # "4377", "R 4,377.00", "4377-"
+
+
+def _pick(value: Any, keys: frozenset[str]) -> dict[str, Any] | None:
+    """Listed fields only, each a scalar or a list of scalars.
+
+    Text that names a private input labels the numbers beside it, so every
+    number in the dict is dropped, and so is text that is only a number
+    ({"label": "export_usd", "qty": 4377} and {"on": "export_usd",
+    "price": 4377} keep no number). The text itself is dropped when it is
+    the ``label`` or carries a digit ("export_usd: 4377"). Other text is
+    display copy ("Supplier warehouse" is a real stock location) and stays,
+    so {"location": "Supplier warehouse", "qty": 3} loses its qty: a
+    safe-side cost.
+    """
+    if not isinstance(value, dict):
+        return None
+    kept: dict[str, Any] = {}
+    labelled = False
+    for key, item in value.items():
+        if key not in keys:
+            continue
+        shaped = _scalars(item)
+        texts = _strings(item)
+        private = [text for text in texts if private_name(text)]
+        if private:
+            labelled = True
+            if key == "label" or any(_DIGIT.search(text) for text in private):
+                continue
+        if shaped is None:
+            continue
+        kept[key] = shaped
+    if labelled:
+        kept = {key: item for key, item in kept.items()
+                if item is None or (isinstance(item, str) and not _NUMERIC.match(item))}
+    return kept
+
+
 def _choice(value: Any) -> Any:
+    if isinstance(value, str):
+        return None if private_name(value) else value
     if _scalar(value):
         return value
-    return _pick(value, OPTION_CHOICE_KEYS)
+    return _pick(value, OPTION_CHOICE_KEYS) or None  # a choice with nothing left is no choice
 
 
 def _options(value: Any) -> dict[str, Any] | None:
-    """{option name: [choice, ...]}. A choice is a scalar or {code,label,delta,sku,price}."""
+    """{option name: [choice, ...]}. A choice is a scalar or {code,label,delta,sku,price}.
+
+    Option names and labels are the store's own words, so they are screened
+    (``private_name``), not allowlisted. A list of choices where a
+    private-looking string sits beside a number is dropped whole.
+    """
     if not isinstance(value, dict):
         return None
     kept: dict[str, Any] = {}
     for name, choices in value.items():
-        if private_key(name):
+        if private_name(name):
             continue
         if isinstance(choices, list):
+            if _labelled_list(choices):
+                continue
             kept[str(name)] = [item for item in (_choice(entry) for entry in choices) if item is not None]
         elif isinstance(choices, dict):
-            picked = {str(label): _choice(entry) for label, entry in choices.items() if not private_key(label)}
+            picked = {str(label): _choice(entry) for label, entry in choices.items() if not private_name(label)}
             kept[str(name)] = {label: entry for label, entry in picked.items() if entry is not None}
-        elif _scalar(choices):
+        elif _scalar(choices) and not (isinstance(choices, str) and private_name(choices)):
             kept[str(name)] = choices
     return kept
 
@@ -121,7 +217,8 @@ def _defaults(value: Any) -> dict[str, Any] | None:
     """{option name: chosen code}. Scalars only."""
     if not isinstance(value, dict):
         return None
-    return {str(name): item for name, item in value.items() if not private_key(name) and _scalar(item)}
+    return {str(name): item for name, item in value.items()
+            if not private_name(name) and _scalar(item) and not (isinstance(item, str) and private_name(item))}
 
 
 def _price_history(value: Any) -> Any:
@@ -132,24 +229,45 @@ def _price_history(value: Any) -> Any:
     return None
 
 
-def _verified_entry(entry: Any) -> Any:
-    """A {name,value,source,note} fact, or a plain scalar.
+_URL = re.compile(r"^https?://[^\s]+$")
+_NAME_MAX = 64
 
-    The entry's ``name`` is a key in all but form, so a private-looking name
-    (``{"name": "export_usd", "value": ...}``) drops the whole entry. Nested
-    lists (``["export_usd", 437]``) are dropped too.
+
+def _verified_entry(entry: Any) -> dict[str, Any] | None:
+    """One cited fact: {"name": str, "value": scalar or list of scalars, "source": URL, "note": str}.
+
+    Structural allowlist: a fact must be a dict with a non-empty string
+    ``name`` (at most 64 characters), a ``value`` that is a scalar or a list
+    of scalars, and, when present, a ``source`` that is an http(s) URL. Every
+    string in it (name, value, source, note) is screened with
+    ``private_name``; one hit drops the whole fact, because the name is a key
+    in all but form and a label anywhere marks the value as private.
     """
-    if isinstance(entry, dict):
-        if private_key(entry.get("name")):
-            return None
-        return _pick(entry, VERIFIED_KEYS)
-    return entry if _scalar(entry) else None
+    if not isinstance(entry, dict):
+        return None
+    name = entry.get("name")
+    if not isinstance(name, str) or not name.strip() or len(name) > _NAME_MAX:
+        return None
+    raw = entry.get("value")
+    if not (_scalar(raw) or (isinstance(raw, list) and all(_scalar(item) for item in raw))):
+        return None
+    source = entry.get("source")
+    if source is not None and not (isinstance(source, str) and _URL.match(source)):
+        return None
+    note = entry.get("note")
+    if note is not None and not isinstance(note, str):
+        return None
+    texts = [name, *_strings(raw), *([source] if source else []), *([note] if note else [])]
+    if any(private_name(text) for text in texts):
+        return None
+    return {key: entry[key] for key in ("name", "value", "source", "note") if key in entry}
 
 
 def _verified(value: Any) -> Any:
-    if isinstance(value, list):
-        return [item for item in (_verified_entry(entry) for entry in value) if item is not None]
-    return value if _scalar(value) else None
+    """A list of cited facts. Bare entries (strings, numbers, nested lists) carry no name, so they are dropped."""
+    if not isinstance(value, list):
+        return None
+    return [item for item in (_verified_entry(entry) for entry in value) if item is not None]
 
 
 _SHAPES = {

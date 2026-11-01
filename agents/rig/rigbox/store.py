@@ -654,9 +654,36 @@ class PgStore(RetailerPgStore):
         except Exception:  # noqa: BLE001 - a log line must never stop startup
             _log.warning("cost-guard: could not count products after the migration", exc_info=True)
             return -1
-        level = logging.WARNING if left else logging.INFO
+        rls = await self._rls_hides_rows(conn) if not visible else False
+        level = logging.WARNING if left or rls else logging.INFO
         _log.log(level, "cost-guard: %d products visible, %d still carry private keys in attributes", visible, left)
+        if rls:
+            _log.warning(
+                "cost-guard: agent_rig.products has forced row-level security and this role does not bypass it, "
+                "so the migration saw no rows and moved nothing. Run schema.sql as the table owner with RLS "
+                "bypassed (or per tenant) to move stored private keys."
+            )
         return int(left)
+
+    @staticmethod
+    async def _rls_hides_rows(conn: Any) -> bool:
+        """True when row-level security applies to this role on agent_rig.products.
+
+        Then a startup migration with no tenant set sees nothing, and zero
+        visible rows does not mean an empty table.
+        """
+        try:
+            row = await conn.fetchrow(
+                "SELECT c.relrowsecurity, c.relforcerowsecurity, r.rolbypassrls, r.rolsuper, "
+                "pg_get_userbyid(c.relowner) = current_user AS owner "
+                "FROM pg_class c JOIN pg_roles r ON r.rolname = current_user "
+                "WHERE c.oid = 'agent_rig.products'::regclass"
+            )
+        except Exception:  # noqa: BLE001 - a log line must never stop startup
+            return False
+        if not row or not row["relrowsecurity"] or row["rolbypassrls"] or row["rolsuper"]:
+            return False
+        return bool(row["relforcerowsecurity"] or not row["owner"])
 
     async def product_exists(self, tenant_id: str, sku: str) -> bool:
         async with self.pool.acquire() as conn:

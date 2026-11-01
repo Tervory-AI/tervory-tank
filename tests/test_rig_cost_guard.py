@@ -7,7 +7,8 @@ Real data is checked only by the full-export test, which reads the CSV from
 the box (RIG_CN_EXPORT) and skips when it is absent (CI).
 Each costed row carries ``attributes.export_usd`` (the supplier's export
 price), the leak this guards against, plus the same cost hidden inside
-``verified`` in the two shapes a store could use.
+``verified`` in the shapes a store could use (named, unnamed, labelled
+elsewhere, bare pairs).
 
 Two kinds of store are exercised:
 - ``imported``: rows go through the catalogue import, which moves pricing
@@ -24,7 +25,9 @@ exactly what it returns when the cost is not stored at all.
 from __future__ import annotations
 
 import asyncio
+import csv
 import json
+import logging
 import os
 import re
 import sys
@@ -81,12 +84,14 @@ def _rows(path: Path = FIXTURE) -> list[dict[str, Any]]:
 
 
 def _hidden_in_verified(row: dict[str, Any]) -> dict[str, Any]:
-    """The cost again, inside ``verified``: a fact named like a private key, and a bare pair."""
+    """The cost again, inside ``verified``: named facts, unnamed facts, labels elsewhere, bare pairs."""
     cost = row["private_attributes"].get("export_usd")
     if cost is None:
         return row
     verified = [{"name": "export_usd", "value": cost, "source": "https://sample-arms.example/"},
-                ["export_usd", cost]]
+                {"name": "POF export_usd", "value": cost}, {"name": "Dealer Price", "value": cost},
+                {"label": "export_usd", "value": cost}, {"name": "spec", "value": cost, "note": "export_usd"},
+                ["export_usd", cost], f"export_usd: {cost}", [f"export_usd={cost}"]]
     return {**row, "attributes": {**row["attributes"], "verified": verified}}
 
 
@@ -282,7 +287,16 @@ NESTED = {
     "price_history": [{"price": 18810, "buy": 437, "vendor": "ZEPHYR", "on": "2 Oct"}],
     "verified": [{"name": "thread", "value": "5/8x24", "source": "https://sample-arms.example/", "vendor": "ZEPHYR"},
                  {"name": "export_usd", "value": 437}, {"name": "Supplier cost", "value": 437},
-                 ["export_usd", 437], "in stock"],
+                 ["export_usd", 437], "in stock",
+                 # Round 3 shapes: spaced or prefixed names, no string name, the label in another field, bare pairs.
+                 {"name": " export_usd", "value": 4377}, {"name": "POF export_usd", "value": 4377},
+                 {"name": "Dealer Price", "value": 4377}, {"name": "Buy price", "value": 4377},
+                 {"key": "export_usd", "value": 4377}, {"label": "export_usd", "value": 4377},
+                 {"name": None, "value": 4377}, {"name": {"export_usd": 1}, "value": 4377},
+                 {"name": ["export_usd"], "value": 4377}, {"name": "spec", "value": "export_usd 4377"},
+                 {"name": "spec", "value": ["export_usd", 4377]}, {"name": "spec", "value": 4377, "source": "export_usd"},
+                 {"name": "spec", "value": 4377, "note": "Dealer price"}, ["export_usd", 4377],
+                 "export_usd: 4377", ["export_usd=4377"], 4377],
     "features": ["titanium", {"vendor": "ZEPHYR"}],
     "thread": {"vendor": "ZEPHYR"},
 }
@@ -297,12 +311,11 @@ def test_nested_shapes_are_allowlisted() -> None:
                     "barrel": [{"code": "b-43", "label": "4.3in", "delta": 0, "sku": ""}, "plain"]},
         "defaults": {"finish": "BLACK"},
         "price_history": [{"price": 18810, "on": "2 Oct"}],
-        "verified": [{"name": "thread", "value": "5/8x24", "source": "https://sample-arms.example/"},
-                     "in stock"],
+        "verified": [{"name": "thread", "value": "5/8x24", "source": "https://sample-arms.example/"}],
         "features": ["titanium"],
     }
     text = json.dumps(shown)
-    for word in ("ZEPHYR", "437", "vendor", "source\": \"ZEPHYR", "zephyr_price", "buy"):
+    for word in ("ZEPHYR", "437", "vendor", "source\": \"ZEPHYR", "zephyr_price", "buy", "export", "Dealer"):
         assert word not in text, word
     # The archon catalogue's real shapes pass unchanged.
     archon = {"stock": {"status": "low_stock", "location": "Custom Nation showroom", "lead": "Collect today",
@@ -312,10 +325,32 @@ def test_nested_shapes_are_allowlisted() -> None:
                                                                    "sku": ""}]},
               "defaults": {"barrel": "barrel-43", "optic_cut": "RMR"}}
     assert shopper_attributes(archon) == archon
+    assert shopper_attributes(LABELLED) == {
+        "stock": {"status": "in_stock"},
+        "options": {"finish": [{"code": "black"}]},
+        "price_history": [{"on": "2 Oct"}],
+        "in_box": [],
+        "summary": "Sample pistol",
+    }
 
 
+# Nit B shapes: a private label beside a number outside ``verified``.
+LABELLED = {
+    "stock": {"label": "export_usd", "qty": 4377, "status": "in_stock"},
+    "options": {"finish": [{"label": "export_usd", "price": 4377}, {"code": "black"}], "trim": ["export_usd", 4377]},
+    "price_history": [{"label": "export_usd", "price": 4377, "on": "2 Oct"}],
+    "features": ["export_usd", 4377],
+    "in_box": ["Dealer price: 4377"],
+    "summary": "Sample pistol",
+    "detail": "export_usd: 4377",
+}
+
+
+@pytest.mark.parametrize("nested", ["nested", "labelled"])
 @pytest.mark.parametrize("shop", [None, ARCHON_SHOP], ids=["rank", "cn-shop-search"])
-def test_nested_private_keys_never_reach_shopper_routes_or_search(shop: dict[str, Any] | None) -> None:
+def test_nested_private_keys_never_reach_shopper_routes_or_search(shop: dict[str, Any] | None, nested: str) -> None:
+    planted = NESTED if nested == "nested" else LABELLED
+
     def nested_app(nested: dict[str, Any]) -> Any:
         app, rig, _echo = _app("legacy")
 
@@ -333,14 +368,16 @@ def test_nested_private_keys_never_reach_shopper_routes_or_search(shop: dict[str
         return app
 
     # Control: the same row holding only the allowlisted nested shape.
-    app = nested_app(NESTED)
-    control_app = nested_app(shopper_attributes(NESTED))
+    app = nested_app(planted)
+    control_app = nested_app(shopper_attributes(planted))
     with TestClient(app) as client, TestClient(control_app) as control:
         detail = client.get("/v1/rig/products/90101", headers=HEADERS)
         assert detail.status_code == 200, detail.text
         _clean(detail.text)
         assert "vendor" not in detail.text and "zephyr_price" not in detail.text
-        for query in ("suppressor", "KX-9", "ZEPHYR", "vendor", "Sample Direct", "zephyr_price", "buy", "437"):
+        assert "4377" not in detail.text and "Dealer" not in detail.text
+        for query in ("suppressor", "KX-9", "ZEPHYR", "vendor", "Sample Direct", "zephyr_price", "buy", "437",
+                      "4377", "Dealer", "POF", "export_usd"):
             found = client.get("/v1/rig/search", params={"q": query}, headers=HEADERS)
             assert found.status_code == 200, found.text
             body = {key: value for key, value in found.json().items() if key != "parts"}  # parts echoes q
@@ -348,7 +385,8 @@ def test_nested_private_keys_never_reach_shopper_routes_or_search(shop: dict[str
             assert "vendor_sku" not in json.dumps(body) and "zephyr_price" not in json.dumps(body)
             expected = control.get("/v1/rig/search", params={"q": query}, headers=HEADERS)
             assert _ids(found.json()) == _ids(expected.json()), query
-            if query in ("ZEPHYR", "vendor", "buy", "437"):
+            assert "4377" not in json.dumps(body), query
+            if query in ("ZEPHYR", "vendor", "buy", "437", "4377", "Dealer", "POF"):
                 assert "90101" not in _ids(found.json()), query
 
 
@@ -480,5 +518,131 @@ def test_postgres_search_is_not_a_cost_oracle_and_migration_moves_costs() -> Non
         async with store.atomic(TENANT) as locked:
             await locked.delete_products(TENANT, [rows[1]["sku"]])
         assert await store.product_private_attributes(TENANT, rows[1]["sku"]) == {}
+
+    asyncio.run(_with_pg(admin, body))
+
+
+# Fuzz: many spellings of a private name, in every place a store could put one.
+_CANARY = 4377
+_PRIVATE_WORDS = ("export_usd", "dealer price", "buy price", "unit cost", "supplier", "wholesale", "landed",
+                  "markup", "margin", "purchase price", "trade price", "profit", "duty")
+
+
+def _spellings(word: str) -> set[str]:
+    parts = word.split()
+    if len(parts) == 1:
+        parts = word.split("_")
+    camel = parts[0].lower() + "".join(part.title() for part in parts[1:])
+    joined = {sep.join(parts) for sep in ("_", "-", ".", " ", "  ", "/")}
+    out = set()
+    for base in joined | {camel}:
+        for variant in (base, base.upper(), base.title(), f" {base}", f"{base} ", f"POF {base}",
+                        f"{base} (ZAR)", f"Sample_{base}", f"{base}:"):
+            out.add(variant)
+    return out
+
+
+def _fuzz_shapes(name: Any) -> list[dict[str, Any]]:
+    k = _CANARY
+    url = "https://sample-arms.example/"
+    if not isinstance(name, str):  # a missing or non-string name: it can't be screened, so the fact goes
+        return [{"verified": [{"name": name, "value": k, "source": url}]},
+                {"verified": [{"name": name, "value": [k]}, {"value": k}]}]
+    return [
+        {"verified": [{"name": name, "value": k, "source": url}]},
+        {"verified": [{"name": "spec", "value": [name, k]}]},
+        {"verified": [{"name": "spec", "value": k, "source": name}]},
+        {"verified": [{"name": "spec", "value": k, "note": name}]},
+        {"verified": [{"key": name, "value": k}, {"label": name, "value": k}, {"value": k}]},
+        {"verified": [[name, k], f"{name}: {k}", [f"{name}={k}"], k]},
+        {"verified": {"name": name, "value": k}},
+        {"verified": f"{name} {k}"},
+        {"options": {"finish": [{"label": name, "price": k}], "trim": [name, k], name: [k]}},
+        {"options": {"finish": {name: {"price": k}}}},
+        {"defaults": {name: k}},
+        {"stock": {"label": name, "qty": k}},
+        {"price_history": [{"label": name, "price": k}, {"on": name, "amount": k}]},
+        {"price_history": {"label": name, "was": k}},
+        {"features": [name, k]},
+        {"in_box": [f"{name}: {k}"]},
+        {"detail": f"{name}: {k}"},
+    ]
+
+
+def test_fuzz_private_names_never_leak_a_canary() -> None:
+    names: list[Any] = sorted({spelling for word in _PRIVATE_WORDS for spelling in _spellings(word)})
+    names += [None, 1, 2.5, True, ["export_usd"], {"name": "export_usd"}]
+    checked = 0
+    for name in names:
+        for shape in _fuzz_shapes(name):
+            shown = json.dumps(shopper_attributes(shape))
+            assert str(_CANARY) not in shown, (name, shape, shown)
+            checked += 1
+    assert checked > 2000, checked
+
+
+def test_fuzz_safe_names_and_archon_facts_pass_unchanged() -> None:
+    url = "https://sample-arms.example/"
+    for name in ("thread", "Thread pitch", "optic_cuts", "weight_oz", "Locking note", "in box", "Sold separately",
+                 "Barrel length", "listed", "rail", "grip"):
+        fact = {"name": name, "value": "5/8x24", "source": url}
+        assert shopper_attributes({"verified": [fact]}) == {"verified": [fact]}, name
+        assert shopper_attributes({"verified": [{**fact, "value": [12, 15]}]})["verified"] == [{**fact, "value": [12, 15]}]
+    facts = 0
+    with (ROOT / "agents" / "rig" / "catalogues" / "archon" / "products.csv").open(newline="") as handle:
+        for row in csv.DictReader(handle):
+            attributes = json.loads(row.get("attributes") or "{}")
+            verified = attributes.get("verified")
+            if verified:
+                assert shopper_attributes({"verified": verified}) == {"verified": verified}, row["sku"]
+                facts += len(verified)
+            shown = shopper_attributes(attributes)
+            for key, value in attributes.items():
+                if key in shown:
+                    assert shown[key] == value, (row["sku"], key)
+    assert facts == 35, facts
+
+
+def test_cost_guard_warns_when_forced_rls_hides_every_row() -> None:
+    """A startup migration under forced RLS sees no rows: the log line says so at WARNING."""
+    admin = _pg_admin()
+    rows = _rows()
+
+    async def body(stores: list[PgStore], pools: list[Any]) -> None:
+        store, pool = stores[0], pools[0]
+        await _load(store, rows[:2], "legacy")
+        records: list[logging.LogRecord] = []
+
+        class _Keep(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                records.append(record)
+
+        handler = _Keep(level=logging.DEBUG)
+        logger = logging.getLogger("rigbox.store")
+        logger.addHandler(handler)
+        old_level = logger.level
+        logger.setLevel(logging.DEBUG)
+        try:
+            async with pool.acquire() as conn:
+                assert not await PgStore._rls_hides_rows(conn)  # superuser: no RLS in the way
+                role = "rig_rls_" + uuid4().hex[:8]
+                async with conn.transaction():  # rolled back: role, grants and RLS go with it
+                    await conn.execute(f"CREATE ROLE {role}")
+                    await conn.execute(f"GRANT USAGE ON SCHEMA agent_rig TO {role}")
+                    await conn.execute(f"GRANT SELECT ON agent_rig.products TO {role}")
+                    await conn.execute("ALTER TABLE agent_rig.products ENABLE ROW LEVEL SECURITY")
+                    await conn.execute("ALTER TABLE agent_rig.products FORCE ROW LEVEL SECURITY")
+                    await conn.execute(f"SET LOCAL ROLE {role}")
+                    assert await PgStore._rls_hides_rows(conn)
+                    records.clear()
+                    assert await store._log_cost_guard(conn) == 0
+                    assert [r.levelno for r in records] == [logging.WARNING, logging.WARNING], records
+                    assert "row-level security" in records[1].getMessage()
+                records.clear()
+                assert await store._log_cost_guard(conn) > 0  # legacy rows still carry the cost
+                assert all("row-level security" not in r.getMessage() for r in records)
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(old_level)
 
     asyncio.run(_with_pg(admin, body))
