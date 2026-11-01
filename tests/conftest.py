@@ -22,6 +22,12 @@ if str(_TANK) not in sys.path:
     sys.path.insert(0, str(_TANK))
 
 
+@pytest.fixture(autouse=True)
+def _no_skill_temp_sweep(monkeypatch):
+    """run_skill sweeps old trigger-skill-* folders (tank/skala.py); never the box's shared /tmp."""
+    monkeypatch.setenv("TANK_SKILL_TEMP_SWEEP", "off")
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_configure(config: pytest.Config) -> None:
     # pytest-asyncio warns, and will later error, when this is unset. There is no
