@@ -226,7 +226,7 @@ async def test_za_cli_talks_straight_to_tank_with_device_login(streaming, monkey
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.environ.get('COMMAND_ACCEPTANCE_CLIENTS') != '1',
                     reason='Requires assembled CLI/Workspace and local-only client dependencies')
-async def test_existing_founder_token_cli_answer_is_visible_in_chats_with_same_receipt(streaming):
+async def test_existing_founder_token_cli_answer_is_visible_in_chats_with_same_receipt(streaming):  # noqa: F811 (imported pytest fixture)
     """Existing PAT only: CLI ask -> persisted Tank turn -> actual /chats API read.
 
     No login, new credential flow, native keychain read or external model request.
