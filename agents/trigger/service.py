@@ -19,8 +19,11 @@ class CheckIn(BaseModel):
     text: str = Field(min_length=1, max_length=32000)
 
 
-class WriteIn(CheckIn):
+class CheckerIn(CheckIn):
     text: str = Field(min_length=1, max_length=20000)
+
+
+class WriteIn(CheckerIn):
     document_type: Literal["copy", "article", "document", "legal"] = "copy"
     register: str | None = Field(default=None, max_length=100)
     template: str | None = Field(default=None, max_length=100)
