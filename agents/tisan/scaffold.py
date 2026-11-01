@@ -98,8 +98,8 @@ def validate(payload: dict[str, Any]) -> dict[str, Any]:
         "fonts": fonts,
         "logo_url": logo,
     }
-    copies = {item["name"]: str(UUID(item["copy"])) for item in payload.get("pages", [])
-              if isinstance(item, dict) and item.get("copy") is not None}
+    copies = {item["name"]: str(UUID(item["copy"])) for item in (payload.get("pages") or [])
+              if isinstance(item, dict) and item.get("copy") is not None and item["name"] in pages}
     if copies:
         result["copies"] = copies
     return result
@@ -113,6 +113,8 @@ def _pages(value: Any) -> list[str]:
     seen: list[str] = []
     for item in value:
         if isinstance(item, dict):
+            if item.get("name") in seen:
+                raise ScaffoldError("a page name is not valid")
             if set(item) - {"name", "copy"}:
                 raise ScaffoldError("a page name is not valid")
             if item.get("copy") is not None:
