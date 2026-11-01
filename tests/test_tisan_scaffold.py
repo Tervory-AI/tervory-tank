@@ -49,8 +49,9 @@ def _brief(**overrides: object) -> dict:
 
 def test_template_has_the_pages_and_no_analytics() -> None:
     for rel in (
-        "app/page.tsx",
-        "app/about/page.tsx",
+        "app/[[...path]]/page.tsx",
+        "scripts/content-check.cjs",
+        "sections/registry.tsx",
         "app/contact/page.tsx",
         "app/privacy/page.tsx",
         "app/not-found.tsx",
@@ -227,7 +228,8 @@ async def test_two_brands_write_different_tokens_for_their_own_tenants(tmp_path:
     assert "Jost" in css
     assert "#001840" not in tsx
     assert "#E80008" not in tsx
-    assert "alt={`${site.name} logo`}" in tsx
+    assert "site.name" not in tsx
+    assert "site.pages" not in tsx
     with tarfile.open(north["archive"], "r:gz") as tar:
         contact_spec = tar.extractfile("e2e/contact.spec.ts")
         assert contact_spec is not None
