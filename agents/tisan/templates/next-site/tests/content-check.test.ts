@@ -9,12 +9,18 @@ import manifest from "../sections/manifest.json";
 import fixture from "./fixtures/site.json";
 
 const roots: string[] = [];
-const fresh = () => structuredClone(fixture) as {
-  schema: string;
-  nav: { label: string; href: string }[];
-  ui: { menu_open: string; menu_close: string; skip_link: string };
-  pages: { name: string; path: string; title: string; sections: { type: string; id: string; props: Record<string, unknown> }[] }[];
-};
+const fresh = () =>
+  structuredClone(fixture) as {
+    schema: string;
+    nav: { label: string; href: string }[];
+    ui: { menu_open: string; menu_close: string; skip_link: string };
+    pages: {
+      name: string;
+      path: string;
+      title: string;
+      sections: { type: string; id: string; props: Record<string, unknown> }[];
+    }[];
+  };
 function root() {
   const dir = mkdtempSync(join(tmpdir(), "tisan-content-"));
   roots.push(dir);
@@ -29,7 +35,9 @@ function save(dir: string, value: unknown) {
 
 test("the isolated fixture covers every manifest type, with optional slots omitted", () => {
   expect(checkContent(fixture)).toEqual([]);
-  expect(fixture.pages[0].sections.map((section) => section.type).sort()).toEqual(Object.keys(manifest.sections).sort());
+  expect(fixture.pages[0].sections.map((section) => section.type).sort()).toEqual(
+    Object.keys(manifest.sections).sort(),
+  );
 });
 
 test("all missing text, image and alt slots are listed in one result", () => {
@@ -44,24 +52,42 @@ test("all missing text, image and alt slots are listed in one result", () => {
   ];
   const errors = checkContent(data).join("\n");
   for (const path of [
-    "site/ui/menu_open", "site/ui/menu_close", "site/ui/skip_link", "site/nav/0/label",
-    "site/pages/0/title", "sections/0/props/heading", "sections/0/props/body",
-    "sections/0/props/image/src", "sections/0/props/image/alt",
-    "sections/1/props/items/0/name", "sections/1/props/items/0/image/src", "sections/1/props/items/0/image/alt",
-    "sections/1/props/items/1/image/src", "sections/1/props/items/1/image/alt",
-    "sections/2/props/images/0/src", "sections/2/props/images/0/alt", "sections/2/props/images/1/src", "sections/2/props/images/1/alt",
-  ]) expect(errors).toContain(path);
+    "site/ui/menu_open",
+    "site/ui/menu_close",
+    "site/ui/skip_link",
+    "site/nav/0/label",
+    "site/pages/0/title",
+    "sections/0/props/heading",
+    "sections/0/props/body",
+    "sections/0/props/image/src",
+    "sections/0/props/image/alt",
+    "sections/1/props/items/0/name",
+    "sections/1/props/items/0/image/src",
+    "sections/1/props/items/0/image/alt",
+    "sections/1/props/items/1/image/src",
+    "sections/1/props/items/1/image/alt",
+    "sections/2/props/images/0/src",
+    "sections/2/props/images/0/alt",
+    "sections/2/props/images/1/src",
+    "sections/2/props/images/1/alt",
+  ])
+    expect(errors).toContain(path);
 });
 
-test.each(["unknown", "__proto__", "constructor", "header", "footer"])("refuses unknown section %s", (type) => {
-  const data = fresh();
-  data.pages[0].sections[0].type = type;
-  expect(checkContent(data).join("\n")).toContain("unknown section type");
-});
+test.each(["unknown", "__proto__", "constructor", "header", "footer"])(
+  "refuses unknown section %s",
+  (type) => {
+    const data = fresh();
+    data.pages[0].sections[0].type = type;
+    expect(checkContent(data).join("\n")).toContain("unknown section type");
+  },
+);
 
 test("refuses bad types, enums, array bounds, string lengths, URLs and unknown props", () => {
   for (const props of [
-    { heading: 1 }, { heading: " " }, { heading: "x".repeat(201) },
+    { heading: 1 },
+    { heading: " " },
+    { heading: "x".repeat(201) },
     { heading: "Test", extra: "value" },
     { heading: "Test", image: { src: "javascript:alert(1)", alt: "Test" } },
     { heading: "Test", cta: { href: "//outside.example", label: "Test" } },
@@ -81,14 +107,29 @@ test("refuses bad types, enums, array bounds, string lengths, URLs and unknown p
 });
 
 test("checks document shape, unique names/paths/ids and reserved routes", () => {
-  for (const value of [null, [], 1, {}, { ...fresh(), schema: "other" }, { ...fresh(), pages: [] }, { ...fresh(), extra: true }]) {
+  for (const value of [
+    null,
+    [],
+    1,
+    {},
+    { ...fresh(), schema: "other" },
+    { ...fresh(), pages: [] },
+    { ...fresh(), extra: true },
+  ]) {
     expect(checkContent(value).length).toBeGreaterThan(0);
   }
   const data = fresh();
   data.pages.push(structuredClone(data.pages[0]));
   data.pages[0].sections.push(structuredClone(data.pages[0].sections[0]));
   expect(checkContent(data).filter((error) => error.includes("duplicate"))).toHaveLength(3);
-  for (const path of ["/contact", "/privacy", "/api/contact", "/_next/a", "/bad//path", "/../escape"]) {
+  for (const path of [
+    "/contact",
+    "/privacy",
+    "/api/contact",
+    "/_next/a",
+    "/bad//path",
+    "/../escape",
+  ]) {
     const invalid = fresh();
     invalid.pages[0].path = path;
     expect(checkContent(invalid).length).toBeGreaterThan(0);
@@ -111,11 +152,14 @@ test("loadContent has no fixture fallback and refuses malformed or invalid conte
 test("CLI fails with all errors and succeeds for missing content", () => {
   const dir = root();
   const script = resolve("scripts/content-check.cjs");
-  expect(execFileSync(process.execPath, [script], { cwd: dir, encoding: "utf8" })).toContain("passed");
+  expect(execFileSync(process.execPath, [script], { cwd: dir, encoding: "utf8" })).toContain(
+    "passed",
+  );
   save(dir, {});
   const result = spawnSync(process.execPath, [script], { cwd: dir, encoding: "utf8" });
   expect(result.status).toBe(1);
-  for (const slot of ["schema", "nav", "ui/menu_open", "ui/menu_close", "ui/skip_link", "pages"]) expect(result.stderr).toContain(`site/${slot}`);
+  for (const slot of ["schema", "nav", "ui/menu_open", "ui/menu_close", "ui/skip_link", "pages"])
+    expect(result.stderr).toContain(`site/${slot}`);
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
   expect(pkg.scripts.build).toBe("node scripts/content-check.cjs && next build");
 });
