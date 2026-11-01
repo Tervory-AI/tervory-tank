@@ -1,3 +1,5 @@
+import { regionTank, type Region } from "@/app/api/zenas/tank";
+
 // The only way the Workspace talks to a model: through Tank.
 // Server-side only (uses TANK_API_KEY). Never import from a client component.
 
@@ -1098,14 +1100,24 @@ export function moaAction(userId: string, action: "bench" | "promote", body: { t
   return tank(`/v1/moa/${action}`, { method: "POST", headers: { "x-tervory-admin": userId }, body: JSON.stringify(body) });
 }
 
-/** Public platform training matches, read from the active US Zenas room. */
-export function mootPublishedMatches(matchId?: string, signal?: AbortSignal): Promise<unknown> {
-  const query = new URLSearchParams({ home_region: "us-east" });
+/** Published matches are read on demand from their owning region, never persisted here. */
+export async function mootPublishedMatches(matchId?: string, signal?: AbortSignal, region: Region = "us-east"): Promise<unknown> {
+  if (region !== "us-east" && region !== "za") return { matches: [] };
+  const query = new URLSearchParams({ home_region: region });
   if (matchId) query.set("match_id", matchId);
   const timeout = AbortSignal.timeout(10000);
-  return tank(`/v1/zenas/moot/published?${query}`, {
+  const init: RequestInit = {
     method: "GET", signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  };
+  if (region === "us-east") return tank(`/v1/zenas/moot/published?${query}`, init);
+  const owner = regionTank("za");
+  if (!owner) return { matches: [] };
+  const response = await fetch(`${owner.url}/v1/zenas/moot/published?${query}`, {
+    ...init, cache: "no-store", redirect: "error",
+    headers: { "content-type": "application/json", "x-tank-key": owner.key },
   });
+  if (!response.ok) throw new Error("Published matches unavailable");
+  return response.json();
 }
 
 /** MOOT-1a: list fixture problems via Tank → Zenas room (server-side only). */
