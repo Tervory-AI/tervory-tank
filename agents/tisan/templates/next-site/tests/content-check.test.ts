@@ -113,7 +113,6 @@ test("checks document shape, unique names/paths/ids and reserved routes", () => 
     1,
     {},
     { ...fresh(), schema: "other" },
-    { ...fresh(), pages: [] },
     { ...fresh(), extra: true },
   ]) {
     expect(checkContent(value).length).toBeGreaterThan(0);
@@ -176,4 +175,14 @@ test("invalid image objects still report missing source and alt text", () => {
   const errors = checkContent(data).join("\n");
   expect(errors).toContain("sections/3/props/image/src");
   expect(errors).toContain("sections/3/props/image/alt");
+});
+
+test("empty page lists and existing contact/privacy content remain contract-valid", () => {
+  const data = fresh();
+  for (const path of ["/contact", "/privacy", "/Upper_Case/nested"]) {
+    data.pages[0].path = path;
+    expect(checkContent(data)).toEqual([]);
+  }
+  data.pages = [];
+  expect(checkContent(data)).toEqual([]);
 });
