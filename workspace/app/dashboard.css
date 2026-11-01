@@ -17,3 +17,13 @@
 .dash-client-root a:focus-visible{outline:3px solid #7498d3;outline-offset:3px}
 @media(max-width:650px){.dash-client-root .dash-client-kpis{grid-template-columns:1fr}}
 
+/* The approved content fills the area provided by the existing shared shell. */
+.app-shell:has(.dash-client-root)>.shell-main>main{max-width:none;width:100%;margin:0;padding:0}
+.dash-client-root .dash-good .savings-number{color:#1e7a46}
+.dash-client-root .dash-label{line-height:normal}
+.dash-client-root .dash-value{margin:6px 0 0!important}
+.dash-client-root .dash-ask{margin:0}
+.dash-client-root .dash-client-columns>.dash-card{display:flex;flex-direction:column;gap:10px}
+.dash-client-root .dash-client-columns h2{margin:0}
+.dash-client-root .dash-row{width:100%}
+.dash-client-root .dash-member .dash-note{line-height:normal}

@@ -63,7 +63,9 @@ export default function TasksPage() {
   useEffect(() => {
     const focusTask = () => {
       if (!window.location.hash.startsWith("#task-") || focusedTask.current === window.location.hash) return;
-      const target = document.getElementById(decodeURIComponent(window.location.hash.slice(1)));
+      let id: string;
+      try { id = decodeURIComponent(window.location.hash.slice(1)); } catch { return; }
+      const target = document.getElementById(id);
       if (target) {
         focusedTask.current = window.location.hash;
         target.scrollIntoView({ block: "center" });
