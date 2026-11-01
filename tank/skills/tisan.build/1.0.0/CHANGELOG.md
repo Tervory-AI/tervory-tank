@@ -6,11 +6,11 @@ Candidate only; founder approval in Skala is required. Builds validated section 
 
 Implementation locations:
 - `agents/tisan/builder.py:19`: reuse scaffold functions; `:33`: compile the actual manifest's schema constraints with the existing Pydantic engine (unknown keywords fail closed); `:94`: validate plans; `:136`: Tank planning and one validation retry; `:159`: site/page/array slots and purposes; `:171`: tenant/write-bound accepted copy; `:198`: assemble/check/archive; `:263`: existing ready event.
-- `agents/tisan/app.py:100`: build handler and ten-minute timeout; `:136`: build eval selection.
+- `agents/tisan/app.py:100`: build handler and ten-minute timeout; `:137`: build eval selection.
 - `agents/tisan/Dockerfile:45`: builder.py added to the existing COPY line only.
 - `tank/command.py:45`: founder-only tool; `:907`: typed input; `:1031`: existing Confirm/Skala adapter.
 - `tank/main.py:3249` and `:3276`: existing room eval hookup includes the new skill.
-- `tank/schema.sql`: one additive `tisan.plan` policy, matching trigger.write's specified rung 1/luna/tenant cache seed, with ON CONFLICT DO NOTHING.
+- `tank/schema.sql:2257`: one additive `tisan.plan` policy, matching trigger.write's specified rung 1/luna/tenant cache seed, with ON CONFLICT DO NOTHING.
 - `tank/skills/tisan.build/1.0.0/`: candidate package, room job adapter and deterministic evals. Quick copy-needed results return through the existing action result; long builds remain queued in the room and emit the existing ready event after success. No new approval is seeded.
 - `tests/test_tisan_builder.py` and `tests/test_tisan_builder_adapter.py`: contract, retry, copy isolation, media, archive, failed checks and founder/Confirm coverage.
 
