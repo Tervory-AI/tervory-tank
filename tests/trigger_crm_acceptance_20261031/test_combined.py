@@ -103,7 +103,6 @@ def test_actual_workspace_tank_corridor_and_unconfirmed_write(monkeypatch):
             grant['enabled'] = granted
             result = subprocess.run(['node', str(Path(__file__).with_name('combined.cjs'))], env=env, capture_output=True, text=True, timeout=30, check=False)
             assert result.returncode == 0, result.stdout + result.stderr
-            grant['enabled'] = False
         assert calls == ['/api/leads/', '/api/contacts/', '/api/invoices/estimates/',
                          '/api/leads/', '/api/contacts/', '/api/invoices/estimates/']
         headers = {'x-tank-key': 'dummy-workspace-key', 'x-tervory-user': 'offline-founder', 'x-tervory-tenant': tenant}
@@ -120,6 +119,7 @@ def test_actual_workspace_tank_corridor_and_unconfirmed_write(monkeypatch):
             assert response.status_code == 502
             assert 'Offline' not in response.text
             assert len(calls) == 7
+            grant['enabled'] = True
             before = len(calls)
             for user, role in [('offline-client', ''), ('offline-admin', 'org:admin'), ('offline-member', 'org:member')]:
                 denied_headers = {**headers, 'x-tervory-user': user, 'x-tervory-role': role}
