@@ -234,6 +234,16 @@ async def test_persisted_ready_bulk_approval_room_execution_tenant_scope_and_rol
                 headers={"X-Tank-Key": "offline-test-fixture"},
                 json={"tenant_id": str(TENANT), "input": {"text": "A draft."}, "version": version, "preview": preview})
             assert response.status_code in {403, 409}
+        # Reproduce production: an old approved checker meets a new runtime.
+        old = skala.load_packages()[("trigger.languagetool", "1.0.0")]
+        tank._packages[(old.id, old.version)] = old
+        await tank.register_packages()
+        runtime["image"] = json.loads((old.path / "service.json").read_text())["image"]
+        assert (await tank.run_skill_evals(old.id, old.version))["gate"] == "passed"
+        await tank.approve_skill(old.id, old.version, tank.Approval(by="offline-founder"))
+        runtime["image"] = LT_IMAGE
+        with pytest.raises(ValueError, match="configuration does not match"):
+            await client.approved_skill(str(TENANT), old.id, {"text": "This is a test."})
         assert await skala_intake.stage_ready(tank) == []
         async with database.acquire() as conn:
             count = await conn.fetchval("SELECT count(*) FROM tank.skill_evals")
@@ -251,7 +261,7 @@ async def test_persisted_ready_bulk_approval_room_execution_tenant_scope_and_rol
             output = Path(evidence)
             output.mkdir(parents=True, exist_ok=True)
             (output / "ready.json").write_text(json.dumps({
-                "skills": [{**dict(row), **next(i for i in preview["items"] if i["id"] == row["id"])} for row in rows],
+                "skills": [{**dict(row), **next(i for i in preview["items"] if i["id"] == row["id"])} for row in rows if (row["id"], row["version"]) in PACKAGES],
                 "preview": {"token": "offline-preview", "items": preview["items"]},
             }, indent=2, default=str) + "\n")
         result = await tank.confirm_skill_approvals(tank.Approval(by="offline-founder", token=preview["token"], confirmed=True))
@@ -268,7 +278,7 @@ async def test_persisted_ready_bulk_approval_room_execution_tenant_scope_and_rol
         assert after["issues"] == legacy["issues"]
         assert len(after["skills"]) == 6 and after["complete"] and after["model_calls"] == 0
         async with database.acquire() as conn:
-            rows = await conn.fetch("SELECT tenant_id,cost_usd,rung FROM tank.ledger WHERE tenant_id=$1", TENANT)
+            rows = await conn.fetch("SELECT tenant_id,cost_usd,rung FROM tank.ledger WHERE tenant_id=$1 AND outcome='delivered'", TENANT)
         assert len(rows) == 6 and all(r["rung"] == 3 and r["cost_usd"] == 0 for r in rows)
         foreign = await checkers.check("This is a test.", await store.get(OTHER), http, tank=client, tenant_id=OTHER)
         assert not any(i["rule"] == "banned_term" for i in foreign["issues"])
@@ -286,23 +296,12 @@ async def test_persisted_ready_bulk_approval_room_execution_tenant_scope_and_rol
         await tank.rollback_skill(original.id, original.version, tank.Approval(by="offline-founder", confirmed=True))
         assert (await client.approved_skill(str(TENANT), original.id, {"text": "A draft."}))["_skill"].endswith("@1.0.0")
         skala._run_cache.pop((newer.id, newer.version), None)
-        # A historical approval/rollback cannot make the old package accept the
-        # replacement runtime. Use only this disposable database and mock room.
-        old = skala.load_packages()[("trigger.languagetool", "1.0.0")]
-        tank._packages[(old.id, old.version)] = old
-        await tank.register_packages()
-        runtime["image"] = json.loads((old.path / "service.json").read_text())["image"]
-        assert (await tank.run_skill_evals(old.id, old.version))["gate"] == "passed"
-        await tank.approve_skill(old.id, old.version, tank.Approval(by="offline-founder"))
-        assert await tank.approved_version(old.id) == "1.0.0"
-        runtime["image"] = LT_IMAGE
-        with pytest.raises(RuntimeError):
+        # Rolling back the approved pointer alone cannot restore the old runtime.
+        await tank.rollback_skill(old.id, "1.0.0", tank.Approval(by="offline-founder", confirmed=True))
+        with pytest.raises(ValueError, match="configuration does not match"):
             await client.approved_skill(str(TENANT), old.id, {"text": "This is a test."})
         await tank.rollback_skill(old.id, "1.1.0", tank.Approval(by="offline-founder", confirmed=True))
         assert (await client.approved_skill(str(TENANT), old.id, {"text": "This is a test."}))["_skill"].endswith("@1.1.0")
-        await tank.rollback_skill(old.id, "1.0.0", tank.Approval(by="offline-founder", confirmed=True))
-        with pytest.raises(RuntimeError):
-            await client.approved_skill(str(TENANT), old.id, {"text": "This is a test."})
 
 
 

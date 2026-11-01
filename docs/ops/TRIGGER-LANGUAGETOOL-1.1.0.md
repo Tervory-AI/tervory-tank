@@ -24,6 +24,13 @@ gates. Existing 1.0.0 files remain byte-for-byte unchanged.
   The new package pins both values; the approved old package correctly refuses
   this image. Container health alone therefore does not restore approved checks.
 
+The local candidate checker was also executed against the deployed adapter through
+a Docker-exec HTTP bridge (the real key stayed inside Tank). Version 1.1.0
+returned the expected rules for `This are a test.`, no issues for
+`This is a test.`, and zero model calls. Version 1.0.0 rejected that same live
+replacement image. This verifies candidate compatibility without approving it,
+writing a production ledger row or changing production approval state.
+
 ## Review and rollout
 
 This PR changes Tank packages/intake, which deploys Tank and its ZA copy on merge.
