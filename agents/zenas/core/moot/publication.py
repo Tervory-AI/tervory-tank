@@ -20,7 +20,7 @@ def public_rows(state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     human_sides = sum(state["seats"][s]["kind"] == "human" for s in ("applicant", "respondent"))
     mode = ("ai_ai", "student_ai", "student_student")[human_sides]
     # Ordinary hearings do not pretend to be a measured fairness pair.
-    match = {"mode": mode, "fairness": {}, "runs": [{"transcript": transcript, "ruling": {
+    match = {"mode": mode, "fairness": ({"reading": "Fairness check not measured."} if human_sides == 0 else {}), "runs": [{"transcript": transcript, "ruling": {
         "order": ruling["order"], "reasons": ruling["reasons"], "authority_links": authorities,
         "reveal": {"real_holding": problem["real_holding"]}}, "cost_usd": measured_cost(state)}]}
     public_problem = {"id": "hearing-" + state["id"], "title": problem["title"],
