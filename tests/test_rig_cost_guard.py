@@ -33,6 +33,7 @@ import re
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 from uuid import uuid4
 
 import pytest
@@ -539,6 +540,13 @@ def _spellings(word: str) -> set[str]:
         for variant in (base, base.upper(), base.title(), f" {base}", f"{base} ", f"POF {base}",
                         f"{base} (ZAR)", f"Sample_{base}", f"{base}:"):
             out.add(variant)
+    # Glued camelCase prefixes ("pofExportUsd", "POFExportUsd"), and an invisible character inside the word
+    # (zero-width space, soft hyphen, zero-width joiner) or fullwidth letters.
+    glued = camel[0].upper() + camel[1:]
+    out |= {f"pof{glued}", f"POF{glued}", f"net{glued}"}
+    for base in ("_".join(parts), " ".join(parts).title()):
+        out |= {base[:2] + mark + base[2:] for mark in ("\u200b", "\u00ad", "\u200d")}
+        out.add("".join(chr(ord(ch) + 0xFEE0) if "!" <= ch <= "~" else ch for ch in base))
     return out
 
 
@@ -566,6 +574,13 @@ def _fuzz_shapes(name: Any) -> list[dict[str, Any]]:
         {"features": [name, k]},
         {"in_box": [f"{name}: {k}"]},
         {"detail": f"{name}: {k}"},
+        # Round 4: the name %-quoted in a source query, and amounts written as text beside a private label.
+        {"verified": [{"name": "spec", "value": 1, "source": f"{url}p?{quote(name)}={k}"}]},
+        {"price_history": [{"label": name, "price": f"R {k:,}.00"}, {"label": name, "price": f"USD {k}"}]},
+        {"options": {"finish": [{"code": "x", "label": name, "price": f"ZAR{k}"}], "trim": [name, str(k)]}},
+        {"stock": {"status": name, "qty": f"R{k}"}},
+        {"features": [name, str(k)]},
+        {"size": [name, f"R{k}"]},
     ]
 
 
@@ -575,8 +590,8 @@ def test_fuzz_private_names_never_leak_a_canary() -> None:
     checked = 0
     for name in names:
         for shape in _fuzz_shapes(name):
-            shown = json.dumps(shopper_attributes(shape))
-            assert str(_CANARY) not in shown, (name, shape, shown)
+            shown = json.dumps(shopper_attributes(shape), ensure_ascii=False)
+            assert str(_CANARY) not in shown and f"{_CANARY:,}" not in shown, (name, shape, shown)
             checked += 1
     assert checked > 2000, checked
 

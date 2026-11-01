@@ -33,7 +33,9 @@ list, so it passes; the number beside it is still not a cost key.
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any
+from urllib.parse import unquote
 
 # Private pricing inputs and supplier provenance, matched anywhere in a key.
 # export_* (e.g. Custom Nation's export_usd), wholesale, buy/purchase prices,
@@ -80,18 +82,25 @@ def private_key(key: Any) -> bool:
 
 
 _WORDS = re.compile(r"[^a-z0-9]+")
+_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
 
 def private_name(name: Any) -> bool:
     """A store-chosen name, label or bit of text that names a private input.
 
-    Screened as written and word by word, so "Dealer Price", "POF export_usd",
-    "export_usd: 1" and "exportUsd" all count. Anything that is not a string
+    Screened as written and word by word, after decoding %xx, dropping
+    invisible format characters, folding fullwidth forms and splitting
+    camelCase, so "Dealer Price", "POF export_usd", "export_usd: 1",
+    "pofExportUsd", "ex\u200bport_usd" and "exp%6Frt_usd" all count. Anything that is not a string
     (a missing name, a list, a dict) counts as private: it can't be checked.
     """
     if not isinstance(name, str):
         return True
-    return private_key(name) or private_key(_WORDS.sub("_", name.lower()).strip("_"))
+    # Drop invisible format characters (zero-width, soft hyphen), fold fullwidth forms, decode %xx,
+    # and split camelCase, so "pofExportUsd", "Dea\u200dler Price" and "?exp%6Frt_usd=" are screened too.
+    text = unicodedata.normalize("NFKC", "".join(ch for ch in unquote(name) if unicodedata.category(ch) != "Cf"))
+    words = _WORDS.sub("_", _CAMEL.sub("_", text).lower()).strip("_")
+    return private_key(name) or private_key(text) or private_key(words)
 
 
 def _scalar(value: Any) -> bool:
@@ -106,17 +115,21 @@ def _strings(value: Any) -> list[str]:
     return []
 
 
+# An amount written as text: "4377", "R4377", "R 4,377.00", "USD 4377", "$4377"; not "2 Oct" or "15 rounds".
+_AMOUNT = re.compile(r"^[^A-Za-z0-9]*(?:[A-Za-z]{1,3}[^A-Za-z0-9]*)?[0-9][0-9.,\s]*[^A-Za-z0-9]*$")
+
 _PAIR = re.compile(r"^\W*([A-Za-z][^:=\n]{0,60}?)\s*[:=]\s*\W{0,3}[A-Za-z]{0,3}\W{0,3}[0-9]")
 
 
 def _private_pair(text: str) -> bool:
-    match = _PAIR.match(text)
+    match = _PAIR.match(unicodedata.normalize("NFKC", text))  # fullwidth "Ｂｕｙ Ｐｒｉｃｅ: 4377" too
     return bool(match) and private_name(match.group(1))
 
 
 def _labelled_list(value: list[Any]) -> bool:
     """A flat list where a private-looking string sits beside a number."""
-    has_number = any(isinstance(item, (int, float)) and not isinstance(item, bool) for item in value)
+    has_number = any((isinstance(item, (int, float)) and not isinstance(item, bool))
+                     or (isinstance(item, str) and _AMOUNT.match(item)) for item in value)
     return has_number and any(private_name(item) for item in _strings(value))
 
 
@@ -142,7 +155,6 @@ def _scalars(value: Any) -> Any:
 
 
 _DIGIT = re.compile(r"[0-9]")
-_NUMERIC = re.compile(r"^[^A-Za-z]*[0-9][^A-Za-z]*$")  # "4377", "R 4,377.00", "4377-"
 
 
 def _pick(value: Any, keys: frozenset[str]) -> dict[str, Any] | None:
@@ -176,7 +188,7 @@ def _pick(value: Any, keys: frozenset[str]) -> dict[str, Any] | None:
         kept[key] = shaped
     if labelled:
         kept = {key: item for key, item in kept.items()
-                if item is None or (isinstance(item, str) and not _NUMERIC.match(item))}
+                if item is None or (isinstance(item, str) and not _AMOUNT.match(item))}
     return kept
 
 
