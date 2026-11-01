@@ -32,8 +32,8 @@ def metadata(row: dict) -> dict:
     """Freeze the actual issue-to-deadline horizon and validate probabilities."""
     result = dict(row)
     horizon = (clock(row["resolve_by"]) - clock(row["made_at"])).total_seconds()
-    if horizon <= 0 or not horizon.is_integer():
-        raise ValueError("prediction horizon must be positive whole seconds")
+    if horizon < 0 or not horizon.is_integer():
+        raise ValueError("prediction horizon must be nonnegative whole seconds")
     if row.get("horizon_seconds") is not None and int(row["horizon_seconds"]) != horizon:
         raise ValueError("prediction horizon differs from its deadline")
     result["horizon_seconds"] = int(horizon)
