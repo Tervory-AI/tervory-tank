@@ -1,6 +1,6 @@
 """Explicit neutral sample server for cloud development. Never mounted by app.py.
 
-PYTHONPATH=agents/rig uvicorn rigbox.quotes.sample:app --port 8001
+PYTHONPATH=agents/rig uvicorn fixtures.rig_quote_sample:app --port 8001
 Uses in-memory data and a recording sender. It makes no external requests.
 """
 
