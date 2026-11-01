@@ -1,7 +1,6 @@
 """Gold candidates use uploaded database products and approved fits per tenant."""
 from __future__ import annotations
 import importlib.util
-import json
 import sys
 from pathlib import Path
 from uuid import uuid4
@@ -133,7 +132,6 @@ def _call(module, path: str, headers: dict[str, str]) -> tuple[int, bytes]:
 
 
 def test_gold_route_requires_room_key_and_explicit_tenant(monkeypatch):
-    from types import SimpleNamespace
     from rigbox.service import Service
     from fastapi.testclient import TestClient
     import asyncio
