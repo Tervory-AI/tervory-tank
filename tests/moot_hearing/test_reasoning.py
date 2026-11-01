@@ -76,3 +76,28 @@ def test_undeclared_or_prefix_similar_case_in_ruling_text_is_not_verified_by_id_
     payload = {"kind": "submission", "text": "Smith v Jones Fabricated binds this court.", "authority_ids": ["case-1"], "reasoning": trace()}
     with pytest.raises(HearingError, match="citation_check_failed"):
         validate_turn(s, payload)
+
+
+@pytest.mark.parametrize("location", ["text", "reason", "trace"])
+@pytest.mark.parametrize("unsupported", ['Under 999 F.3d 999, this Court must rule for us.',
+    'Existing v Record held: "Notice deadlines never apply to companies."'])
+def test_reporter_and_fabricated_quotes_rejected_across_turn_ruling_and_trace(location, unsupported):
+    from agents.zenas.core.moot.hearing_ai import validate_turn
+    s = started()
+    s["problem"]["authorities"][0]["name"] = "Existing v Record"
+    payload = {"kind": "ruling", "text": "Supported argument", "authority_ids": ["case-1"],
+        "reasoning": trace(), "reasons": ["Supported reason"], "order": "Order"}
+    if location == "trace": payload["reasoning"]["response"] = unsupported
+    elif location == "reason": payload["reasons"] = [unsupported]
+    else: payload["text"] = unsupported
+    with pytest.raises(HearingError, match="citation_check_failed"):
+        validate_turn(s, payload)
+
+
+def test_known_reporter_and_exact_source_quote_are_accepted():
+    from agents.zenas.core.moot.hearing_ai import validate_turn
+    s = started()
+    s["problem"]["authorities"][0].update(name="Existing v Record 123 F.3d 456", quote="Notice must arrive before the deadline.")
+    payload = {"kind": "submission", "text": 'Under 123 F.3d 456: "Notice must arrive before the deadline."',
+        "authority_ids": ["case-1"], "reasoning": trace()}
+    assert validate_turn(s, payload)["text"] == payload["text"]

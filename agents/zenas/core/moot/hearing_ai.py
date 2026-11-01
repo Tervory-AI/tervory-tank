@@ -9,13 +9,39 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 import json
+import re
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 from . import hearing
 from .judge import flag_authorities
 from agents.zenas.core.precedent import named_cases
+from agents.zenas.core.engine import quote_in_source
 from .reasoning import REASONING_INSTRUCTIONS, validate
+
+
+# Standard US reporters are not recognized by the existing SA/name checker.
+_US_REPORTER = re.compile(r"\b\d+\s+(?:U\.?\s*S\.?|S\.?\s*Ct\.?|L\.?\s*Ed\.?(?:\s*2d)?|F\.?(?:\s*(?:2d|3d|4th|Supp\.?(?:\s*(?:2d|3d))?))?)\s+\d+\b", re.I)
+_QUOTES = re.compile(r'"([^"\n]+)"|“([^”]+)”|‘([^’]+)’|(?<!\w)\'([^\'\n]+)\'(?!\w)|^\s*>\s*(.+)$', re.I | re.M)
+
+
+def _ground_text(value: Any, authorities: list[dict[str, Any]], facts: str) -> None:
+    if isinstance(value, dict):
+        for item in value.values():
+            _ground_text(item, authorities, facts)
+    elif isinstance(value, list):
+        for item in value:
+            _ground_text(item, authorities, facts)
+    elif isinstance(value, str):
+        normalize = lambda text: re.sub(r"[\s.]", "", text).casefold()
+        known = {normalize(m.group()) for a in authorities for m in _US_REPORTER.finditer(a["name"])}
+        if any(normalize(m.group()) not in known for m in _US_REPORTER.finditer(value)):
+            raise hearing.HearingError("citation_check_failed")
+        sources = [a.get("quote", "") for a in authorities] + [facts]
+        for match in _QUOTES.finditer(value):
+            quote = next(group for group in match.groups() if group is not None)
+            if not any(quote_in_source(quote, source) for source in sources):
+                raise hearing.HearingError("citation_check_failed")
 
 
 def validate_turn(state: dict[str, Any], payload: Any) -> dict[str, Any]:
@@ -30,6 +56,7 @@ def validate_turn(state: dict[str, Any], payload: Any) -> dict[str, Any]:
     question = state["pending_question"]
     if question and state["floor"] == question["target"] and payload.get("responds_to") != question["turn"]:
         raise hearing.HearingError("pending_question_not_addressed")
+    _ground_text(result, problem["authorities"], problem["facts"])
     known = [a["name"] for a in problem["authorities"]]
     binding = [a["name"] for a in problem["authorities"] if a.get("weight") == "binding"]
     normalized = lambda value: " ".join(value.split()).casefold()
