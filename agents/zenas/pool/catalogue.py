@@ -26,7 +26,7 @@ CATALOGUE: tuple[SourceSpec, ...] = (
         name="EUR-Lex EU legislation and case-law",
         region="us-east",
         jurisdiction="us",
-        licence="© European Union. EUR-Lex reuse with attribution; Commission Decision 2011/833/EU.",
+        licence="© European Union. EUR-Lex; Commission Decision 2011/833/EU. Civil articles extracted from official text; recitals and criminal provisions omitted.",
         terms=(
             "Checked 2026-11-01 against the EUR-Lex legal notice. EU legal documents may be "
             "reused commercially or non-commercially unless otherwise specified, under "
