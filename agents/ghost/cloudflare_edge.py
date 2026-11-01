@@ -73,7 +73,8 @@ class CloudflareEdgeControl(FixtureEdgeControl):
             if not response.is_success:
                 raise CloudflareEdgeError("Cloudflare request failed.")
             data = response.json()
-            if not isinstance(data, dict) or data.get("success") is not True:
+            if (not isinstance(data, dict) or data.get("success") is not True
+                    or not isinstance(data.get("result"), (dict, list))):
                 raise CloudflareEdgeError("Cloudflare request failed.")
             return data["result"]
         except (httpx.HTTPError, ValueError, KeyError, TypeError):
@@ -106,10 +107,16 @@ class CloudflareEdgeControl(FixtureEdgeControl):
                     "phase": PHASES[kind], "rules": [rule],
                 })
             else:
+                if not isinstance(ruleset, dict):
+                    raise CloudflareEdgeError("Invalid Cloudflare ruleset response.")
                 ruleset_id = _id(ruleset.get("id"))
+                if any(r.get("ref") == ref for r in ruleset.get("rules", []) if isinstance(r, dict)):
+                    raise CloudflareEdgeError("Autumbra rule reference already exists.")
                 result = self._request("POST", f"zones/{zone_id}/rulesets/{ruleset_id}/rules", body=rule)
+            if not isinstance(result, dict):
+                raise CloudflareEdgeError("Invalid Cloudflare ruleset response.")
             ruleset_id = _id(result.get("id"))
-            matches = [r for r in result.get("rules", []) if r.get("ref") == ref]
+            matches = [r for r in result.get("rules", []) if isinstance(r, dict) and r.get("ref") == ref]
             if len(matches) != 1 or matches[0].get("expression") != rule["expression"]:
                 raise CloudflareEdgeError("Cloudflare did not confirm the added rule.")
             rule_id = _id(matches[0].get("id"))
@@ -136,7 +143,9 @@ class CloudflareEdgeControl(FixtureEdgeControl):
             self._zone(row["site"])
             root = f"zones/{_id(row['zone_id'])}/rulesets/{_id(row['ruleset_id'])}"
             ruleset = self._request("GET", root)
-            owned = [r for r in ruleset.get("rules", []) if r.get("id") == _id(rule_id)]
+            if not isinstance(ruleset, dict):
+                raise CloudflareEdgeError("Invalid Cloudflare ruleset response.")
+            owned = [r for r in ruleset.get("rules", []) if isinstance(r, dict) and r.get("id") == _id(rule_id)]
             if len(owned) != 1 or any(owned[0].get(k) != row[k] for k in ("ref", "expression")):
                 raise CloudflareEdgeError("Cloudflare shield ownership could not be verified.")
             self._request("DELETE", root + "/rules/" + _id(rule_id))
