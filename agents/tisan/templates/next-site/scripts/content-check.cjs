@@ -31,7 +31,8 @@ function validateSchema(value, schema, path, errors) {
   };
   if (schema.type && !matches[schema.type]) {
     errors.push(`${path}: expected ${schema.type}`);
-    return;
+    if (schema.type !== "object") return;
+    value = {};
   }
   if (schema.type === "object") {
     const props = schema.properties || {};
