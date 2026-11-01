@@ -582,8 +582,28 @@ async def _update_official(
     resume = await store.get_checkpoint(source.source_id)
     if resume.startswith("snap:"):
         resume = ""
+    from agents.zenas.pool.adapters.za_govza import streaming
+
+    inserted = 0
+    received = 0
+
+    async def save_file(payload: bytes, cursor: str) -> None:
+        nonlocal inserted, received
+        errors = adapter.report.errors
+        added = await ingest_snapshot(
+            store, source, [payload], on=on, embedder=embedder, index=index, region=region,
+        )
+        if adapter.report.errors > errors:
+            raise ValueError("gov.za file could not be parsed; checkpoint preserved")
+        # A cancelled/failed ingest may have stored a prefix of its sections.
+        # It must not acknowledge the PDF; replay is idempotent on the next run.
+        await store.set_checkpoint(source.source_id, cursor, await store.stored_bytes())
+        inserted += added
+        received += 1
+
     try:
-        blobs, cursor = await adapter.fetch_bulk(http_get, resume=resume)
+        with streaming(save_file):
+            blobs, cursor = await adapter.fetch_bulk(http_get, resume=resume)
     except RateLimited as exc:
         await store.record_source(source)
         await store.record_run(
@@ -604,9 +624,8 @@ async def _update_official(
             when=when,
         )
         return
-    inserted = 0
     if blobs:
-        inserted = await ingest_snapshot(
+        inserted += await ingest_snapshot(
             store,
             source,
             list(blobs),
@@ -619,7 +638,7 @@ async def _update_official(
         await store.record_source(source)
     detail = adapter.feeds_detail()
     errors = int(getattr(adapter.report, "errors", 0) or 0)
-    if not blobs and errors == 0:
+    if not blobs and not received and errors == 0:
         detail = f"{detail}; unchanged"
     status = "error" if errors and inserted == 0 else "ok"
     await store.set_checkpoint(source.source_id, cursor, await store.stored_bytes())
