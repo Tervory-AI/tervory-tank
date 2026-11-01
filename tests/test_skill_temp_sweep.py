@@ -9,7 +9,6 @@ import time
 from pathlib import Path
 
 import pytest
-
 import skala
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,6 +59,7 @@ def test_killed_engine_leaks_its_folder_and_the_sweep_removes_it(tmp_path):
 
 
 def test_run_skill_sweeps_at_most_every_ten_minutes(monkeypatch):
+    monkeypatch.delenv("TANK_SKILL_TEMP_SWEEP", raising=False)
     calls = []
     monkeypatch.setattr(skala, "_last_temp_sweep", None)
     monkeypatch.setattr(skala, "_sweep_skill_temp_quietly", lambda: calls.append(1))
@@ -95,3 +95,23 @@ def test_run_skill_calls_the_sweep(monkeypatch):
     monkeypatch.setattr(skala, "_import_run", lambda pkg: run)
     out = asyncio.run(skala.run_skill(type("P", (), {"ref": "x@1"})(), {}, None))
     assert out["ok"] is True and seen == ["sweep"]
+
+
+def test_sweep_switch_and_thread_failure_never_fail_the_call(monkeypatch):
+    started = []
+    monkeypatch.setattr(skala, "_last_temp_sweep", None)
+    monkeypatch.setenv("TANK_SKILL_TEMP_SWEEP", "off")  # what tests/conftest.py sets for every test
+
+    class Boom:
+        def __init__(self, **kwargs):
+            started.append(kwargs)
+
+        def start(self):
+            raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(skala.threading, "Thread", Boom)
+    skala._maybe_sweep_skill_temp()
+    assert started == [] and skala._last_temp_sweep is None
+    monkeypatch.delenv("TANK_SKILL_TEMP_SWEEP")
+    skala._maybe_sweep_skill_temp()  # must not raise
+    assert len(started) == 1

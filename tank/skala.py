@@ -261,11 +261,17 @@ def _sweep_skill_temp_quietly() -> None:
 def _maybe_sweep_skill_temp() -> None:
     """At most every SKILL_TEMP_SWEEP_EVERY_S per process, sweep in a background thread."""
     global _last_temp_sweep
+    # Tests set this (tests/conftest.py) so no test sweeps the shared /tmp of the box.
+    if os.environ.get("TANK_SKILL_TEMP_SWEEP", "").strip().lower() == "off":
+        return
     now = time.monotonic()
     if _last_temp_sweep is not None and now - _last_temp_sweep < SKILL_TEMP_SWEEP_EVERY_S:
         return
     _last_temp_sweep = now
-    threading.Thread(target=_sweep_skill_temp_quietly, name="skill-temp-sweep", daemon=True).start()
+    try:
+        threading.Thread(target=_sweep_skill_temp_quietly, name="skill-temp-sweep", daemon=True).start()
+    except Exception:  # e.g. RuntimeError: can't start new thread; housekeeping never fails a call
+        log.exception("skill scratch sweep could not start")
 
 
 # ---------- running ----------
