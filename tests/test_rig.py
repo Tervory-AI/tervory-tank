@@ -520,7 +520,8 @@ class _SchemaConn:
         self.lookups: list[str] = []
 
     async def execute(self, statement: str) -> None:
-        self.executed.append(statement)
+        # apply_schema prefixes each statement with its SET LOCAL lock_timeout.
+        self.executed.append(statement.split(";\n", 1)[1] if statement.startswith("SET LOCAL lock_timeout") else statement)
         if self.error is not None:
             raise self.error
 
