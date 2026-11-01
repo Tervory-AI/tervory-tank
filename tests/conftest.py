@@ -199,3 +199,32 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
     for node, mode, reason in _QUARANTINED:
         seen = ",".join(sorted(outcomes.get(node, set()))) or "not collected"
         terminalreporter.write_line(f"{seen:>16}  {node}  [{mode}] {reason}")
+
+
+# --- Tests that never ran -----------------------------------------------------
+#
+# The offline suite runs with --max-worker-restart 0, so a crashed xdist worker
+# ends the run. -q hides xdist's own note about it, and the summary line counts
+# only tests that reported. The controller remembers what was collected and
+# names the gap. Skipped, xfailed and crashed tests count as ran.
+
+_COLLECTED_IDS: set[str] = set()
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_xdist_node_collection_finished(node, ids) -> None:
+    if hasattr(node.config, "workerinput"):
+        return
+    _COLLECTED_IDS.update(ids)  # --dist loadfile: every worker collects the same ids
+
+
+# pytest reads only pytest_* names; specname keeps this apart from the quarantine summary above.
+@pytest.hookimpl(specname="pytest_terminal_summary", trylast=True)
+def pytest_terminal_summary_never_ran(terminalreporter, config) -> None:
+    if hasattr(config, "workerinput") or not _COLLECTED_IDS:
+        return
+    ran = {report.nodeid for key in ("passed", "failed", "skipped", "xfailed", "xpassed", "error")
+           for report in terminalreporter.stats.get(key, []) if getattr(report, "nodeid", None) in _COLLECTED_IDS}
+    never = len(_COLLECTED_IDS) - len(ran)
+    if never > 0:
+        terminalreporter.write_line(f"::error::{never} of {len(_COLLECTED_IDS)} collected tests never ran")
