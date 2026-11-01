@@ -99,7 +99,7 @@ def allowed_tools(actor: Actor) -> list[str]:
     squads = TOOLS.keys() if actor.founder else actor.squads & SQUADS
     founder_tools = [name for name in FOUNDER_TOOLS
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
-    voice_tools = ["trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"] if actor.tenant_admin and not actor.founder else []
+    voice_tools = TOOLS["trigger"] if actor.tenant_admin and not actor.founder else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]] + founder_tools + voice_tools)
 
 
@@ -897,10 +897,15 @@ class SkillVersionArgs(Body):
     version: str = Field(max_length=50, pattern=r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$")
 
 
+class ScaffoldPage(Body):
+    name: str = Field(min_length=1, max_length=40)
+    copy: uuid.UUID | None = None
+
+
 class ScaffoldArgs(Body):
     name: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9-]+$")
-    pages: list[str] | None = Field(default=None, min_length=1, max_length=20)
+    pages: list[str | ScaffoldPage] | None = Field(default=None, min_length=1, max_length=20)
     brand: dict[str, Any]
 
 
@@ -930,10 +935,12 @@ class ReviewArgs(Body):
 
 
 class TriggerCheckArgs(Body):
-    text: str = Field(min_length=1, max_length=20000)
+    # The existing 32,000-byte action envelope remains authoritative.
+    text: str = Field(min_length=1, max_length=32000)
 
 
 class TriggerWriteArgs(TriggerCheckArgs):
+    text: str = Field(min_length=1, max_length=20000)
     document_type: Literal["copy", "article", "document", "legal"] = "copy"
     register: str | None = Field(default=None, max_length=100)
     template: str | None = Field(default=None, max_length=100)
