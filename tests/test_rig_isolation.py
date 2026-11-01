@@ -5,10 +5,7 @@ Uses the in-memory store, the same way tests/test_rig.py does. No database and n
 
 from __future__ import annotations
 
-async def load_catalogue(service, folder):
-    from rig_fixture_loader import load_catalogue as load
-    return await load(service, folder)
-
+from rig_fixture_loader import load_catalogue
 
 import sys
 from pathlib import Path

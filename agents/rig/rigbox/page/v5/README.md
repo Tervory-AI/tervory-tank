@@ -3,7 +3,7 @@
 Built from the approved Figma file "Rig" (pages "Rig — Search v5" and "Custom Nation skin v5").
 
 - `/v5` is the Tervory skin. `/v5/cn` or `/v5?skin=cn` is the Custom Nation skin. Both use the tokens of the Figma collection "Rig Skin v5", switched by `data-skin` on `<html>`.
-- Both skins search the Archon demo catalogue (`catalogues/archon`) through this host's `/v1/rig`.
+- Both skins use the configured store's uploaded catalogue through this host's `/v1/rig`.
 
 ## Real engine
 

@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-async def load_catalogue(service, folder):
-    from rig_fixture_loader import load_catalogue as load
-    return await load(service, folder)
-
+from rig_fixture_loader import load_catalogue
 
 import asyncio
 import importlib.util

@@ -3,9 +3,9 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 import json
-from rigbox.catalogue import (read_publish, tenant_id_for, parse_products_csv, parse_fits_csv, parse_market_csv)
 
 def load_folder(folder: Path) -> dict[str, Any]:
+    from rigbox.catalogue import (read_publish, tenant_id_for, parse_products_csv, parse_fits_csv, parse_market_csv)
     publish_path = folder / "publish.json"
     publish: dict[str, Any] = {}
     publish_error = ""

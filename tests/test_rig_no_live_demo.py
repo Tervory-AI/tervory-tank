@@ -1,9 +1,6 @@
-
-async def load_catalogue(service, folder):
-    from rig_fixture_loader import load_catalogue as load
-    return await load(service, folder)
-
 """The live page never chooses the saved catalogues; fixtures remain offline."""
+
+from rig_fixture_loader import load_catalogue
 
 from contextlib import asynccontextmanager
 import json

@@ -1,13 +1,10 @@
-
-async def load_catalogue(service, folder):
-    from rig_fixture_loader import load_catalogue as load
-    return await load(service, folder)
-
 """Opt-in cloud test: real pinned Hermes, real sample catalogue, fake model only.
 
 RIG2_HERMES_IMAGE=tervory-rig-brain:cloud pytest -q tests/test_rig_box_runtime.py
 No production credentials or paid model calls are used.
 """
+
+from rig_fixture_loader import load_catalogue
 import asyncio
 import json
 import os
