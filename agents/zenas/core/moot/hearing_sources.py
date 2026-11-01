@@ -5,7 +5,6 @@ browser as a source. Reuses conversion's civil gate and the existing quote gate.
 """
 from __future__ import annotations
 
-import json
 from typing import Any
 from uuid import UUID
 
