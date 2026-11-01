@@ -188,10 +188,17 @@ async def test_archive_contains_accepted_content(builder, monkeypatch, tmp_path)
     scaffold.run_checks = AsyncMock(return_value=([{'name': 'test check double', 'ok': True}], ''))
     monkeypatch.setattr(builder, '_scaffold', lambda: scaffold)
     p = payload()
+    p['plan']['pages'] += [{'name': name, 'path': '/' + name, 'sections': []}
+                           for name in ['support', 'about', 'contact', 'privacy']]
     p['copy'] = copy_for(builder, p['plan'])
     async with client_for() as client:
         result = await builder.execute(p, TENANT, http=client, data_root=tmp_path)
     assert result['ok'] and result['archive'] == str(tmp_path / 'builds' / TENANT / 'test-build/1.tar.gz')
+    assert 'app/support/page.tsx' not in result['files']
+    assert 'app/about/page.tsx' not in result['files']
+    assert 'app/contact/page.tsx' in result['files']
+    assert 'app/privacy/page.tsx' in result['files']
+    assert 'app/api/contact/route.ts' in result['files']
     with tarfile.open(result['archive']) as archive:
         name = next(n for n in archive.getnames() if n.endswith('content/site.json'))
         content = json.load(archive.extractfile(name))
