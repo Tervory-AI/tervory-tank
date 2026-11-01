@@ -46,10 +46,21 @@ export function MootCourt() {
     const id = selectedRef.current;
     if (!id) return;
     const requestedSeat = seatRef.current;
-    const res = await fetch(`${BASE}hearings/${id}${requestedSeat ? `?seat=${requestedSeat}` : ""}`, { cache: "no-store" });
-    if (!res.ok) return;
-    const data = await res.json();
-    if (seatRef.current === requestedSeat) accept(data.hearing, data.operator);
+    try {
+      const res = await fetch(`${BASE}hearings/${id}${requestedSeat ? `?seat=${requestedSeat}` : ""}`, { cache: "no-store" });
+      if (selectedRef.current !== id || seatRef.current !== requestedSeat) return;
+      if (!res.ok) {
+        if ([401, 403, 404].includes(res.status)) { setHearing(null); setOperator(false); seatRef.current = ""; setSeat(""); }
+        else setHearing(current => {
+          if (!current) return current;
+          const problem = { ...current.problem }; delete problem.bench_notes;
+          return { ...current, problem };
+        });
+        setMessage("Room unavailable"); return;
+      }
+      const data = await res.json();
+      if (seatRef.current === requestedSeat) accept(data.hearing, data.operator);
+    } catch { if (selectedRef.current === id) setMessage("Room unavailable"); }
   }, [accept, seat]);
 
   useEffect(() => {

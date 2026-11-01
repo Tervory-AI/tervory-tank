@@ -102,3 +102,44 @@ async def test_malformed_result_keeps_real_receipt_but_never_invents_ruling_or_t
     result = await AIExecutor(store, tank).run(OWNER, s["id"], str(uuid4()), s["revision"])
     assert not result["transcript"] and result["ruling"] is None
     assert result["receipts"][0]["discarded"] is True and result["receipts"][0]["cost_usd"] == 0.002
+
+
+@pytest.mark.asyncio
+async def test_ai_respondent_resumes_the_actual_student_argument_and_pending_question():
+    from .test_hearing import submit
+    s = started()
+    s = submit(s, "applicant")
+    s = submit(s, "judge", "question", target="respondent")
+    s = hearing.change(s, OWNER, s["revision"], "handover", {"seat": "respondent", "controller": {"kind": "ai"}})
+    store = Store(s)
+    class ContextTank(Tank):
+        async def route(self, tenant, task, messages):
+            reply = await super().route(tenant, task, messages)
+            context = json.loads(messages[1]["content"])
+            assert context["transcript"][0]["text"] == "applicant words"
+            assert context["pending_question"]["text"] == "judge words"
+            assert context["floor"] == "respondent" and task == "moot.counsel"
+            assert "never counsel" not in json.dumps(context)
+            payload = json.loads(reply["content"])
+            payload["responds_to"] = context["pending_question"]["turn"]
+            reply["content"] = json.dumps(payload)
+            return reply
+    result = await AIExecutor(store, ContextTank()).run(OWNER, s["id"], str(uuid4()), s["revision"])
+    assert len(result["transcript"]) == 3 and result["transcript"][-1]["seat"] == "respondent"
+    assert result["floor"] == "judge" and result["pending_question"] is None
+
+
+@pytest.mark.asyncio
+async def test_already_completed_ai_response_loses_commit_race_to_handover():
+    s = started({seat: "ai" for seat in HUMANS})
+    class RacingStore(Store):
+        async def commit(self, actor, ident, req, revision, action, payload, transition):
+            if action == "ai_turn":
+                async with self.lock:
+                    self.state = hearing.change(self.state, OWNER, self.state["revision"], "handover", {
+                        "seat": "applicant", "controller": {"kind": "human", "user_id": HUMANS["applicant"].user_id}})
+            return await super().commit(actor, ident, req, revision, action, payload, transition)
+    result = await AIExecutor(RacingStore(s), Tank()).run(OWNER, s["id"], str(uuid4()), s["revision"])
+    assert result["transcript"] == [] and result["seats"]["applicant"]["kind"] == "human"
+    assert result["receipts"][0]["discarded"] is True
+    assert result["ai_attempts"][-1]["resolution"] == "revoked_result_discarded"

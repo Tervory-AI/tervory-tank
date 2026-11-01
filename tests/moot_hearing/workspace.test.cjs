@@ -15,7 +15,7 @@ function harness({ founder = true, members = ['founder', 'student'], ownMember =
     if (spec === '@/lib/tenant') return { currentTenant: async () => tenant };
     if (spec === '@/lib/admin') return { isFounder: () => founder };
     if (spec === '@/lib/workspace-origin') return { isWorkspaceOrigin: req => req.headers.get('origin') === 'https://zenas.tervory.com' };
-    if (spec === '@clerk/nextjs/server') return { clerkClient: async () => ({ organizations: { getOrganizationMembershipList: async ({ userId }) => ({
+    if (spec === '@clerk/nextjs/server') return { auth: async () => ({ userId: tenant.userId }), clerkClient: async () => ({ organizations: { getOrganizationMembershipList: async ({ userId }) => ({
       data: (userId || members).filter(id => members.includes(id) && (ownMember || id !== tenant.userId)).map(userId => ({ publicUserData: { userId, firstName: userId } })),
     }) } }) };
     if (spec === '../../tank') return { zenas: async (url, options) => { calls.push({ url, options }); return Response.json({ hearing: { revision: 1 } }); } };
@@ -61,4 +61,15 @@ test('Moot adapter confines proxy paths and seat identifiers', async () => {
   assert.equal((await h.GET(new Request('https://zenas.tervory.com/api/zenas/moot'), context(['..', 'pool']))).status, 404);
   assert.equal((await h.GET(new Request('https://zenas.tervory.com/api/zenas/moot?seat=bench_notes'), context(['hearings', id]))).status, 400);
   assert.equal(h.calls.length, 0);
+});
+
+test('hearing client ignores old revisions and preserves the selected hearing', () => {
+  const file = path.join(root, 'workspace/app/zenas/moot-hearing-types.ts');
+  const module = { exports: {} };
+  const js = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  new Function('module', 'exports', js)(module, module.exports);
+  const current = { id, revision: 12 };
+  assert.equal(module.exports.newerHearing(current, { id, revision: 11 }, id), current);
+  assert.equal(module.exports.newerHearing(current, { id: tenant.tenantId, revision: 99 }, id), current);
+  assert.equal(module.exports.newerHearing(current, { id, revision: 13 }, id).revision, 13);
 });

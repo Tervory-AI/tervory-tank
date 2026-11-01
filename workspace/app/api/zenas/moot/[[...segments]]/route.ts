@@ -1,4 +1,4 @@
-import { clerkClient } from "@clerk/nextjs/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { currentTenant } from "@/lib/tenant";
 import { isFounder } from "@/lib/admin";
 import { isWorkspaceOrigin } from "@/lib/workspace-origin";
@@ -44,7 +44,10 @@ async function serve(req: Request, context: Context) {
     || segments.length === 2 && segments[0] === "hearings" && UUID.test(segments[1]));
   if (!isCreate && !isCommand && !isRead) return reply({ error: "not_found" }, 404);
   try {
+    const identity = await auth();
+    if (!identity.userId) return reply({ error: "not_signed_in" }, 401);
     const tenant = await currentTenant();
+    if (tenant.userId !== identity.userId) return reply({ error: "not_found" }, 404);
     const client = await clerkClient();
     const ownMembership = await client.organizations.getOrganizationMembershipList({ organizationId: tenant.orgId, userId: [tenant.userId], limit: 1 });
     if (!ownMembership.data.some(m => m.publicUserData?.userId === tenant.userId)) return reply({ error: "not_found" }, 404);
