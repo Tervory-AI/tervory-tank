@@ -6,7 +6,7 @@ const ts = require('../workspace/node_modules/typescript');
 const React = require('../workspace/node_modules/react');
 const { renderToStaticMarkup } = require('../workspace/node_modules/react-dom/server');
 let fail = false;
-let data = {jobs_done:1234,granted_squads:['base','zenas'],recent:['queued','running','done','failed','done'].map((status,i)=>({id:`job-${i}`,title:`Own job ${i}`,status}))};
+let data = {jobs_done:1234,granted_squads:['base','market_lab','zenas'],recent:['queued','running','done','failed','done'].map((status,i)=>({id:`job-${i}`,title:`Own job ${i}`,status}))};
 const savings = {as_of:'2026-11-01T12:00:00Z',month:{saved:'8557.1'}};
 const load = Module._load;
 Module._load = function(name,parent,main){
@@ -30,7 +30,7 @@ const {localGreeting}=require('../workspace/app/dashboard-greeting.tsx');
  for(const text of ['1,234','$8,557','Queued','In progress','Ready','Failed','Business lists','Legal'])assert(html.includes(text),text);
  for(let i=0;i<4;i++)assert(html.includes(`href="/tasks#task-job-${i}"`));
  assert(html.includes('href="/base"')&&html.includes('href="/zenas"'));
- assert(!html.includes('href="/tiger"')&&!html.includes('href="/market-lab"'));
+ assert(!html.includes('href="/tiger"'));assert(html.includes('href="/market-lab"'));
  assert(html.includes('href="#your-savings"')&&html.includes('Savings report fixture'));
  data={jobs_done:0,granted_squads:[],recent:[]};
  const empty=await render();assert(empty.includes('No work yet.'));assert(!empty.includes('href="/base"'));

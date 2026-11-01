@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FeedbackButtons } from "../feedback-buttons";
 import "./tasks.css";
 
@@ -35,6 +35,7 @@ const KINDS = [
 ];
 
 export default function TasksPage() {
+  const focusedTask = useRef<string | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [title, setTitle] = useState("");
   const [request, setRequest] = useState("");
@@ -61,9 +62,13 @@ export default function TasksPage() {
   // Dashboard deep links arrive before the asynchronous task list has rendered.
   useEffect(() => {
     const focusTask = () => {
-      if (!window.location.hash.startsWith("#task-")) return;
+      if (!window.location.hash.startsWith("#task-") || focusedTask.current === window.location.hash) return;
       const target = document.getElementById(decodeURIComponent(window.location.hash.slice(1)));
-      if (target) { target.scrollIntoView({ block: "center" }); target.focus({ preventScroll: true }); }
+      if (target) {
+        focusedTask.current = window.location.hash;
+        target.scrollIntoView({ block: "center" });
+        target.focus({ preventScroll: true });
+      }
     };
     focusTask();
     window.addEventListener("hashchange", focusTask);
