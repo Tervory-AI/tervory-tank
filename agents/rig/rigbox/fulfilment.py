@@ -234,7 +234,8 @@ class RigOrders:
         "stranded": the send never happened (for example Rig stopped between
         recording the order and sending the PO). This method never writes the
         outbox, cancels or refunds; the payment reconciler cancels and refunds
-        stranded auto-order POs. Safe to run repeatedly.
+        stranded auto-order POs. A PO whose outbox file can't be read is
+        skipped (neither). Safe to run repeatedly.
         """
         from rigbox import supplier_orders
 
@@ -245,7 +246,12 @@ class RigOrders:
         old = set(await self.store.draft_supplier_orders(tenant_id, limit, before=cutoff))
         fixed, stranded = [], []
         for quote_id in drafts:
-            purchase = await self._reconcile_one(tenant_id, quote_id, env)
+            try:
+                purchase = await self._reconcile_one(tenant_id, quote_id, env)
+            except DeliveryError:
+                # The outbox file can't be read: neither sent nor stranded.
+                logging.getLogger(__name__).warning("locate order send state unknown in reconcile")
+                continue
             if purchase is not None:
                 fixed.append({"quote_id": quote_id, "purchase_order": purchase["number"]})
             elif quote_id in old:

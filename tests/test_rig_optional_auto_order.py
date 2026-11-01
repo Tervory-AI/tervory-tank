@@ -392,6 +392,16 @@ async def test_reconcile_lists_an_old_unsent_draft_po_as_stranded(tmp_path):
     assert result == {"checked": 1, "reconciled": [], "stranded": ["q1"]}
     assert store.locate_orders[(TENANT, "q1")]["purchase_order"]["state"] == "draft"
     assert store.locate_orders[(TENANT, "q1")]["order"]["state"] == "placed" and list(tmp_path.iterdir()) == []
+    # An outbox it can't read is neither sent nor stranded.
+    def unreadable(**kwargs):
+        raise DeliveryError("outbox_unavailable")
+    supplier_orders_sent_record = supplier_orders.sent_record
+    supplier_orders.sent_record = unreadable
+    try:
+        assert await RigOrders(store).reconcile(tenant_id=TENANT, env=values, now=later) == \
+            {"checked": 1, "reconciled": [], "stranded": []}
+    finally:
+        supplier_orders.sent_record = supplier_orders_sent_record
 
 
 # 5. Real Postgres: defaults and persistence; PO sent once, cancel only an unsent PO.
