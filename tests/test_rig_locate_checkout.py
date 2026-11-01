@@ -238,8 +238,9 @@ class FakeProvider:
         self.captured.append((amount, currency, reference))
         return payments.Charge("ch_test_1", self.status, amount, currency, self.test)
 
-    async def refund(self, *, charge, reason, idempotency_key):
-        self.refunded.append(reason)
+    async def refund(self, *, charge, reason, idempotency_key, metadata):
+        assert reason == payments.REFUND_REASON
+        self.refunded.append(metadata["cause"])
         self.refund_keys.append(idempotency_key)
         return payments.Charge(charge.reference, "refunded", charge.amount, charge.currency, True)
 

@@ -11,11 +11,13 @@ Two adapter shapes pass the same guard:
 * PaymentAdapter: pay on Accept. create_intent on Accept, capture, refund,
   and cancel_intent (void an authorization that was not captured), each
   keyed by an idempotency key; find_intent (look an intent up by its
-  creation key, when the create response was lost); plus webhook events
+  creation key, when the create response was lost); retrieve (read the
+  charge an intent's capture made, without capturing again); plus webhook events
   verified with an HMAC-SHA256 signature (verify_webhook).
 
 Every refund is keyed "<reference>:refund", so a retried refund moves money
-at most once. TestAdapter is the built-in fake
+at most once. Refunds carry one fixed reason (REFUND_REASON); why Rig
+refunded goes in metadata["cause"]. TestAdapter is the built-in fake
   used by tests. It is never wired into the app, and there is no live mode.
 """
 from __future__ import annotations
@@ -35,6 +37,8 @@ MODE_ENV = "RIG_LOCATE_PAYMENTS_MODE"
 # Live key shapes for the providers under consideration and common processors.
 # Stripe: sk_live_, pk_live_, rk_live_, whsec_ is not a mode marker.
 # Paystack: sk_live_, pk_live_. Any *_live_* shape is refused.
+# The single refund reason sent to a provider; the cause rides in metadata.
+REFUND_REASON = "order_not_fulfilled"
 _LIVE = re.compile(r"(?:^|[_-])live(?:[_-]|$)|^(?:sk|pk|rk)_live", re.I)
 
 
@@ -63,7 +67,8 @@ class PaymentProvider(Protocol):
     async def capture(self, *, amount: Decimal, currency: str, token: str, reference: str,
                       metadata: dict[str, str]) -> Charge: ...
 
-    async def refund(self, *, charge: Charge, reason: str, idempotency_key: str) -> Charge: ...
+    async def refund(self, *, charge: Charge, reason: str, idempotency_key: str,
+                     metadata: dict[str, str]) -> Charge: ...
 
 
 @dataclass(frozen=True)
@@ -104,10 +109,20 @@ class PaymentAdapter(Protocol):
 
     async def find_intent(self, *, reference: str, idempotency_key: str) -> Intent | None:
         """The intent created with this idempotency key, or None if none was
-        created. Used when create_intent's response was lost."""
+        created. Used when create_intent's response was lost.
+
+        A live adapter must return only an intent it can prove was created
+        with this key (an exact idempotency-key or metadata match), never a
+        best guess by amount or time: Rig voids whatever this returns."""
         ...
 
-    async def refund(self, *, charge: Charge, reason: str, idempotency_key: str) -> Charge: ...
+    async def retrieve(self, *, intent: Intent) -> Charge | None:
+        """The charge captured on this intent, or None. Read-only: moves no
+        money and needs no idempotency key."""
+        ...
+
+    async def refund(self, *, charge: Charge, reason: str, idempotency_key: str,
+                     metadata: dict[str, str]) -> Charge: ...
 
 
 def live_key(value: str) -> bool:
@@ -142,16 +157,22 @@ async def capture(provider: PaymentProvider | None, *, amount: Any, currency: st
     return charge
 
 
-async def refund(provider: PaymentProvider | None, charge: Charge, reason: str, *, reference: str,
+async def refund(provider: PaymentProvider | None, charge: Charge, cause: str, *, reference: str,
                  env: dict[str, str] | None = None) -> Charge:
-    """Refund a charge, keyed "<reference>:refund" so a retry refunds once."""
-    return await guard(provider, env).refund(charge=charge, reason=reason, idempotency_key=f"{reference}:refund")
+    """Refund a charge, keyed "<reference>:refund" so a retry refunds once.
+
+    The provider always gets REFUND_REASON; cause (why Rig refunded) and the
+    quote reference go in metadata.
+    """
+    return await guard(provider, env).refund(charge=charge, reason=REFUND_REASON,
+                                             idempotency_key=f"{reference}:refund",
+                                             metadata={"cause": cause, "reference": reference})
 
 
 def intents(provider: Any) -> bool:
     """True when the configured adapter supports pay on Accept (intent then capture)."""
     return all(callable(getattr(provider, name, None))
-               for name in ("create_intent", "capture_intent", "cancel_intent", "find_intent"))
+               for name in ("create_intent", "capture_intent", "cancel_intent", "find_intent", "retrieve"))
 
 
 def _proven(value: Any, kind: type) -> Any:
@@ -184,17 +205,15 @@ async def find_intent(provider: Any, *, reference: str, env: dict[str, str] | No
     return None if found is None else _proven(found, Intent)
 
 
-async def captured_charge(provider: Any, intent: Intent, *, reference: str,
-                          env: dict[str, str] | None = None) -> Charge:
-    """The charge an earlier capture made, for refunding it only.
+async def retrieve(provider: Any, intent: Intent, *, env: dict[str, str] | None = None) -> Charge:
+    """The charge an earlier capture made on this intent, for refunding it.
 
-    Same capture key, so the adapter returns the existing charge and moves no
-    money. Unlike capture_intent, the charge need not prove test mode: this is
-    used only to give money back (after a capture that could not be proven),
-    and still sits behind the guard.
+    A read: nothing is captured again. Unlike capture_intent, the charge need
+    not prove test mode (it is used only to give money back, after a capture
+    that could not be proven), and the call still sits behind the guard.
     """
     checked = guard(provider, env)
-    charge = await checked.capture_intent(intent=intent, idempotency_key=f"{reference}:capture")
+    charge = await checked.retrieve(intent=intent)
     if not isinstance(charge, Charge) or charge.status != "captured":
         raise PaymentRefused("capture_unconfirmed")
     return charge
@@ -277,6 +296,7 @@ class TestAdapter:
         self.charges: dict[str, Charge] = {}
         self.refunds: dict[str, Charge] = {}
         self.refund_keys: dict[str, Charge] = {}
+        self.refund_causes: list[str] = []
         self.canceled: dict[str, Intent] = {}
         self.tokens: dict[str, str] = {}
         self.calls: list[tuple[str, str]] = []
@@ -316,6 +336,11 @@ class TestAdapter:
                 raise ConnectionError("capture response lost")
         return self.charges[idempotency_key]
 
+    async def retrieve(self, *, intent: Intent) -> Charge | None:
+        charge = intent.reference.replace("pi_", "ch_", 1)
+        return next((item for item in self.charges.values()
+                     if item.reference == charge and item.status == "captured"), None)
+
     async def cancel_intent(self, *, intent: Intent, idempotency_key: str) -> Intent:
         if idempotency_key not in self.canceled:
             self.calls.append(("cancel_intent", idempotency_key))
@@ -325,9 +350,11 @@ class TestAdapter:
                                                     intent.amount, intent.currency, True)
         return self.canceled[idempotency_key]
 
-    async def refund(self, *, charge: Charge, reason: str, idempotency_key: str) -> Charge:
+    async def refund(self, *, charge: Charge, reason: str, idempotency_key: str,
+                     metadata: dict[str, str]) -> Charge:
         if idempotency_key not in self.refund_keys:
             self.calls.append(("refund", idempotency_key))
+            self.refund_causes.append(metadata.get("cause", ""))
             self.refund_keys[idempotency_key] = Charge(charge.reference, "refunded", charge.amount,
                                                        charge.currency, True)
             self.refunds.setdefault(charge.reference, self.refund_keys[idempotency_key])
