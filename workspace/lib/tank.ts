@@ -911,6 +911,7 @@ export type DashboardRead = {
   jobs_done: number;
   saved_usd: number | null;
   credits_left: number | null;
+  granted_squads?: string[];
   recent?: { id: string; title: string; status: string }[];
   skills?: { id: string; version: string; last_eval_score: number | null; eval_threshold: number }[];
   squad?: { agent: string; status: string; jobs: number }[];
