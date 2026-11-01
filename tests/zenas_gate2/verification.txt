@@ -146,12 +146,12 @@ $ env PYTHONPATH=.:tank:agents/_chassis /home/ammosync/.codex/za-readiness-20261
 ........................                                                 [100%]
 =============================== warnings summary ===============================
 tank/main.py:750
-  /workspace/codex-zenas-gate2/tank/main.py:750: DeprecationWarning: 
+  /workspace/codex-zenas-gate2/tank/main.py:750: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 ../../home/ammosync/.codex/za-readiness-20261101/venv/lib/python3.12/site-packages/fastapi/applications.py:4723
@@ -159,21 +159,21 @@ tank/main.py:750
 ../../home/ammosync/.codex/za-readiness-20261101/venv/lib/python3.12/site-packages/fastapi/applications.py:4723
 ../../home/ammosync/.codex/za-readiness-20261101/venv/lib/python3.12/site-packages/fastapi/applications.py:4723
 ../../home/ammosync/.codex/za-readiness-20261101/venv/lib/python3.12/site-packages/fastapi/applications.py:4723
-  /home/ammosync/.codex/za-readiness-20261101/venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /home/ammosync/.codex/za-readiness-20261101/venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tank/main.py:804
-  /workspace/codex-zenas-gate2/tank/main.py:804: DeprecationWarning: 
+  /workspace/codex-zenas-gate2/tank/main.py:804: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 ../../home/ammosync/.codex/za-readiness-20261101/venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
@@ -181,39 +181,39 @@ tank/main.py:804
     warnings.warn(
 
 tank/agent_skills.py:531
-  /workspace/codex-zenas-gate2/tank/agent_skills.py:531: DeprecationWarning: 
+  /workspace/codex-zenas-gate2/tank/agent_skills.py:531: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tank/skala_intake.py:71
-  /workspace/codex-zenas-gate2/tank/skala_intake.py:71: DeprecationWarning: 
+  /workspace/codex-zenas-gate2/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tank/skala_intake.py:77
-  /workspace/codex-zenas-gate2/tank/skala_intake.py:77: DeprecationWarning: 
+  /workspace/codex-zenas-gate2/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tank/skala_revalidation.py:192
-  /workspace/codex-zenas-gate2/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /workspace/codex-zenas-gate2/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -229,45 +229,50 @@ exit_code=0
 
 $ git diff --check origin/main
 tests/zenas_gate2/verification.txt:149: trailing whitespace.
-+  /workspace/codex-zenas-gate2/tank/main.py:750: DeprecationWarning: 
++  /workspace/codex-zenas-gate2/tank/main.py:750: DeprecationWarning:
 tests/zenas_gate2/verification.txt:151: trailing whitespace.
-+  
++
 tests/zenas_gate2/verification.txt:154: trailing whitespace.
-+          
++
 tests/zenas_gate2/verification.txt:162: trailing whitespace.
-+  /home/ammosync/.codex/za-readiness-20261101/venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
++  /home/ammosync/.codex/za-readiness-20261101/venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
 tests/zenas_gate2/verification.txt:164: trailing whitespace.
-+  
++
 tests/zenas_gate2/verification.txt:167: trailing whitespace.
-+          
++
 tests/zenas_gate2/verification.txt:171: trailing whitespace.
-+  /workspace/codex-zenas-gate2/tank/main.py:804: DeprecationWarning: 
++  /workspace/codex-zenas-gate2/tank/main.py:804: DeprecationWarning:
 tests/zenas_gate2/verification.txt:173: trailing whitespace.
-+  
++
 tests/zenas_gate2/verification.txt:176: trailing whitespace.
-+          
++
 tests/zenas_gate2/verification.txt:184: trailing whitespace.
-+  /workspace/codex-zenas-gate2/tank/agent_skills.py:531: DeprecationWarning: 
++  /workspace/codex-zenas-gate2/tank/agent_skills.py:531: DeprecationWarning:
 tests/zenas_gate2/verification.txt:186: trailing whitespace.
-+  
++
 tests/zenas_gate2/verification.txt:189: trailing whitespace.
-+          
++
 tests/zenas_gate2/verification.txt:193: trailing whitespace.
-+  /workspace/codex-zenas-gate2/tank/skala_intake.py:71: DeprecationWarning: 
++  /workspace/codex-zenas-gate2/tank/skala_intake.py:71: DeprecationWarning:
 tests/zenas_gate2/verification.txt:195: trailing whitespace.
-+  
++
 tests/zenas_gate2/verification.txt:198: trailing whitespace.
-+          
++
 tests/zenas_gate2/verification.txt:202: trailing whitespace.
-+  /workspace/codex-zenas-gate2/tank/skala_intake.py:77: DeprecationWarning: 
++  /workspace/codex-zenas-gate2/tank/skala_intake.py:77: DeprecationWarning:
 tests/zenas_gate2/verification.txt:204: trailing whitespace.
-+  
++
 tests/zenas_gate2/verification.txt:207: trailing whitespace.
-+          
++
 tests/zenas_gate2/verification.txt:211: trailing whitespace.
-+  /workspace/codex-zenas-gate2/tank/skala_revalidation.py:192: DeprecationWarning: 
++  /workspace/codex-zenas-gate2/tank/skala_revalidation.py:192: DeprecationWarning:
 tests/zenas_gate2/verification.txt:213: trailing whitespace.
-+  
++
 tests/zenas_gate2/verification.txt:216: trailing whitespace.
 +
 exit_code=2
+
+The preceding whitespace check detected trailing spaces in captured third-party deprecation warnings. Log line endings were normalized; no product code changed.
+
+$ git diff --check origin/main
+exit_code=0
