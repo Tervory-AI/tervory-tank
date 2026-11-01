@@ -143,6 +143,16 @@ def test_strict_write_schema_rejects_hidden_authority(extra):
     assert exc.value.status_code == 422
 
 
+@pytest.mark.parametrize('squads', [frozenset({squad}) for squad in command.TOOLS] + [frozenset(command.TOOLS)])
+@pytest.mark.parametrize('tenant_admin', [False, True])
+def test_no_client_squad_grant_exposes_crm_write(squads, tenant_admin):
+    actor = command.Actor(T, 'offline-client', False, squads, tenant_admin)
+    assert 'trigger.crm.write' not in command.allowed_tools(actor)
+    with pytest.raises(HTTPException) as exc:
+        command.require_tool(actor, 'trigger.crm.write')
+    assert exc.value.status_code == 403
+
+
 def test_tool_requires_founder_and_estimate_sideeffects_denied():
     assert 'trigger.crm.write' not in command.allowed_tools(command.Actor(T,'client',False))
     assert 'trigger.crm.write' not in command.allowed_tools(command.Actor(T,'client',False,frozenset({'trigger'})))
