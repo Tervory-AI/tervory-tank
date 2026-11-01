@@ -53,8 +53,7 @@ from rigbox.quotes.sample import KEY, TENANT, seed  # noqa: E402
 from rigbox.quotes.service import QuoteService  # noqa: E402
 from rigbox.quotes.store import MemoryQuotes  # noqa: E402
 from rigbox.service import RecordingHandoff, Service  # noqa: E402
-import rigbox.shopper_attributes as sa  # noqa: E402
-from rigbox.shopper_attributes import PRIVATE_KEY_PATTERN, SHOPPER_ATTRIBUTES, shopper_attributes  # noqa: E402
+from rigbox.shopper_attributes import _PRICING, PRIVATE_KEY_PATTERN, SHOPPER_ATTRIBUTES, shopper_attributes  # noqa: E402
 from rigbox.store import MemoryStore, PgStore  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "rig" / "sample-cost-guard.csv"
@@ -699,7 +698,7 @@ _AMOUNT_FORMS = (
     "$4,377", "R4377", "R 4 377,00", "\u20ac4.377", "4 377 \u20ac", "\u00a34377", "US$4,377", "USD 4,377.00",
     "4377 ZAR", "4377 zar", "4377 rand", "\u00a54377", "\u20b94,377", "-4377", "\u22124377", "(4377)",
     "(R 4,377.00)", "-R4,377", "+4377", "~4377", "4.377e3", "4.377E+03", "4.377\u00d710\u00b3", "4377/ea", "4377k",
-    "43\u200b77", "43\u00ad77", "R\uff14,\uff13\uff17\uff17",
+    "43\u200b77", "43\u00ad77", "R\uff14,\uff13\uff17\uff17", "approximately R4377", "\u2163\u2162\u2166\u2166",
 )
 
 
@@ -745,4 +744,107 @@ def test_a_provenance_location_is_display_copy_and_keeps_qty() -> None:
     # Every pricing word is also a private key, so the location rule never shows a key the strip would move.
     for word in ("cost", "duty", "margin", "landed", "markup", "profit", "wholesale", "export", "buy_price",
                  "purchase_price", "dealer_price", "trade_price", "vat", "fx", "exchange_rate", "pricing_rule"):
-        assert private_key(word) and sa._PRICING.search(word), word
+        assert private_key(word) and _PRICING.search(word), word
+
+
+_TEXT_KEYS = ("detail", "summary", "tagline")
+
+
+def test_every_private_pair_in_free_text_is_hidden() -> None:
+    # Any clause, a leading list number or "_", a word before the amount, Roman numerals (NFKC folds them to letters).
+    for text in (
+        "Weight: 2 kg; Dealer price: 4377",
+        "Weight: 2 kg, Dealer price: 4377",
+        "Weight: 2 kg\nexport_usd = 4377",
+        "Weight: 2 kg \u2022 Dealer price: R 4,377.00",
+        "Weight: 2 kg | unit cost: 4377",
+        "1. Dealer price: 4377",
+        "_export_usd: 4377",
+        "Dealer price: approximately R4377",
+        "Dealer price: \u2163\u2162\u2166\u2166",
+        "Dealer price, approx: 4377",
+        "\uff22\uff55\uff59 \uff30\uff52\uff49\uff43\uff45: 4377",
+    ):
+        for key in _TEXT_KEYS:
+            assert shopper_attributes({key: text}) == {}, (key, text)
+        # In a list the private item carries its amount, so the list goes whole.
+        assert shopper_attributes({"in_box": ["Pistol", text]}) == {}, text
+
+
+def test_free_text_without_a_private_pair_is_kept() -> None:
+    for text in (
+        "Ships in: 3 days, Warranty = 5 years",
+        "Thread: 1/2x28; Rail: 1913 Picatinny",
+        "Weight: 680 g; Capacity: 17 rounds \u2022 Gen \u2163",
+        "Heavy duty frame. Supplier warranty included.",
+        "1. Steel slide; 2. Polymer frame",
+    ):
+        for key in _TEXT_KEYS:
+            assert shopper_attributes({key: text}) == {key: text}, (key, text)
+
+
+def test_a_private_word_beside_ordinary_copy_keeps_the_list() -> None:
+    # A private word labels an amount, not copy: these lists are kept whole.
+    for items in (
+        ["Heavy duty", "2-year warranty"],
+        ["Supplier warranty card", "2 magazines"],
+        ["Heavy-duty rail", "Holds 17 rounds", "Black"],
+        ["Heavy duty", "Pack of 50", "Gen 5"],
+    ):
+        for key in ("features", "in_box", "included"):
+            assert shopper_attributes({key: items}) == {key: items}, (key, items)
+    # Beside an amount (a number, a short or currency-marked string) or carrying one, the list goes.
+    for items in (
+        ["Dealer price", 4377],
+        ["Dealer price", "4377 rand"],
+        ["Dealer price", "USD 4,377.00 each"],
+        ["Dealer price", "approximately R4377"],
+        ["Heavy duty", "\u20ac4377 value"],
+        ["Black", "Dealer price 4377"],
+        ["Dealer price", "99 per unit"],
+        ["Dealer price", "\u2163\u2162\u2166\u2166"],
+        ["Dealer price", "\u56db\u5343\u4e09\u767e\u4e03\u5341\u4e03"],
+        ["Dealer price", "NDM3Nw=="],
+        # Copy with a long number beside a private word stays on the safe side.
+        ["Heavy duty", "1913 Picatinny"],
+    ):
+        for key in ("features", "in_box", "included"):
+            assert shopper_attributes({key: items}) == {}, (key, items)
+
+
+def test_a_short_amount_with_a_word_beside_a_private_word_drops_the_list() -> None:
+    # #529 review: a 1-2 digit amount next to an ordinary word is still the labelled amount.
+    for items in (
+        ["Dealer price", "85 total"], ["Cost", "85 AUD"], ["Landed", "85 bucks"], ["Supplier cost", "was 85"],
+        ["Dealer price", "4.4 thousand"], ["Cost", "43 hundred"], ["Trade price", "44k total"], ["Cost", "85/box"],
+        ["Wholesale", "85 rands"], ["export_usd", "85 nett"], ["Cost", "85 apiece"], ["Dealer price", "\u2078\u2075 total"],
+        ["Dealer price", "43 hundred", "77 total"], ["85 total", "Supplier cost"],
+    ):
+        for key in ("features", "in_box", "included"):
+            assert shopper_attributes({key: items}) == {}, (key, items)
+        assert shopper_attributes({"options": {"trim": items}}) == {"options": {}}, items
+
+
+def test_an_amount_after_a_break_following_the_separator_is_held() -> None:
+    # be5300de held these (its amount window crossed the break); #529's clause split must not show them.
+    for text in ("Dealer price:\n4377", "Dealer price:\r\n4377", "Dealer price =\n4377", "Cost:\nR4377",
+                 "export_usd:\n4377", "Dealer price: \u2022 4377", "Dealer price: | 4377", "Dealer price:; 4377",
+                 "Dealer price:\u00b74377", "Weight: 2 kg; Dealer price:\n4377"):
+        for key in ("detail", "summary", "tagline"):
+            assert "4377" not in json.dumps(shopper_attributes({key: text})), (key, text)
+    # A private name's own clause with no number does not reach into the next clause.
+    for text in ("Heavy duty: yes; Weight: 2 kg", "Supplier warranty: yes\nWeight: 680 g"):
+        assert shopper_attributes({"detail": text}) == {"detail": text}, text
+
+
+def test_copy_phrases_count_only_in_ascii_digits_beside_a_private_word() -> None:
+    # A copy phrase is ASCII digits as written: Roman, fullwidth, Arabic-Indic, superscript or zero-width forms
+    # of the same phrase still count as the labelled amount, and so do Roman numerals before a plain word.
+    for amount in ("\u2167\u2165 total", "\u2167\u2165 AUD", "was \u2167\u2165", "\u2167\u2165 in stock",
+                   "\u2167\u2165 rounds", "\uff18\uff15 rounds", "\u0668\u0665 magazines", "\u2078\u2075 days",
+                   "8\u200b5 rounds", "Holds 8\u200b5 rounds", "Pack of \uff18\uff15", "Gen \u2167"):
+        for key in ("features", "in_box", "included"):
+            assert shopper_attributes({key: ["Dealer price", amount]}) == {}, (key, amount)
+    for items in (["Heavy duty", "2-year warranty"], ["Supplier warranty card", "2 magazines"],
+                  ["Heavy duty", "Pack of 50", "Gen 5"]):
+        assert shopper_attributes({"features": items}) == {"features": items}, items
