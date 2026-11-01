@@ -13,7 +13,7 @@ for (const path of sitePaths()) {
       await expect(page.getByRole("main")).toBeEmpty();
     }
     await info.attach("page", {
-      body: await page.screenshot({ fullPage: true }),
+      body: await page.screenshot({ path: info.outputPath("page.png"), fullPage: true }),
       contentType: "image/png",
     });
   });
