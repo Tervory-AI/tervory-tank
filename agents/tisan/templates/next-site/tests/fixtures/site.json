@@ -2,15 +2,64 @@
   "schema": "tisan.content/1",
   "nav": [{ "label": "Test navigation", "href": "/" }],
   "ui": { "menu_open": "Test open", "menu_close": "Test close", "skip_link": "Test skip" },
-  "pages": [{ "name": "test-home", "path": "/", "title": "Test-only page title", "sections": [
-    { "type": "hero", "id": "hero-1", "props": { "heading": "Test-only hero" } },
-    { "type": "feature-grid", "id": "features", "props": { "items": [{ "title": "Test feature", "body": "Test description" }] } },
-    { "type": "product-grid", "id": "products", "props": { "items": [{ "name": "Test product", "image": { "src": "/media/test.svg", "alt": "Test image" } }] } },
-    { "type": "image-text", "id": "image", "props": { "heading": "Test image heading", "body": "Test image body", "image": { "src": "/media/test.svg", "alt": "Test image" }, "side": "left" } },
-    { "type": "steps", "id": "steps", "props": { "items": [{ "title": "Test first", "body": "Test first body" }, { "title": "Test second", "body": "Test second body" }] } },
-    { "type": "faq", "id": "faq", "props": { "items": [{ "question": "Test question", "answer": "Test answer" }] } },
-    { "type": "cta-band", "id": "cta", "props": { "heading": "Test CTA", "cta": { "label": "Test link", "href": "/contact" } } },
-    { "type": "contact", "id": "contact", "props": {} },
-    { "type": "gallery", "id": "gallery", "props": { "images": [{ "src": "/media/test.svg", "alt": "Test gallery image" }] } }
-  ] }]
+  "pages": [
+    {
+      "name": "test-home",
+      "path": "/",
+      "title": "Test-only page title",
+      "sections": [
+        { "type": "hero", "id": "hero-1", "props": { "heading": "Test-only hero" } },
+        {
+          "type": "feature-grid",
+          "id": "features",
+          "props": { "items": [{ "title": "Test feature", "body": "Test description" }] }
+        },
+        {
+          "type": "product-grid",
+          "id": "products",
+          "props": {
+            "items": [
+              { "name": "Test product", "image": { "src": "/media/test.svg", "alt": "Test image" } }
+            ]
+          }
+        },
+        {
+          "type": "image-text",
+          "id": "image",
+          "props": {
+            "heading": "Test image heading",
+            "body": "Test image body",
+            "image": { "src": "/media/test.svg", "alt": "Test image" },
+            "side": "left"
+          }
+        },
+        {
+          "type": "steps",
+          "id": "steps",
+          "props": {
+            "items": [
+              { "title": "Test first", "body": "Test first body" },
+              { "title": "Test second", "body": "Test second body" }
+            ]
+          }
+        },
+        {
+          "type": "faq",
+          "id": "faq",
+          "props": { "items": [{ "question": "Test question", "answer": "Test answer" }] }
+        },
+        {
+          "type": "cta-band",
+          "id": "cta",
+          "props": { "heading": "Test CTA", "cta": { "label": "Test link", "href": "/contact" } }
+        },
+        { "type": "contact", "id": "contact", "props": {} },
+        {
+          "type": "gallery",
+          "id": "gallery",
+          "props": { "images": [{ "src": "/media/test.svg", "alt": "Test gallery image" }] }
+        }
+      ]
+    }
+  ]
 }
