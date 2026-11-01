@@ -74,12 +74,17 @@ async function get(parts = ['leads'], query = '') {
   assert.equal(ok.headers.get('x-content-type-options'), 'nosniff');
   assert.deepEqual(await ok.json(), { resource: 'leads', items: [], page: 1, count: 0 });
   assert.equal(tenantIdFor('org_previous'), tenantIdFor('org_offline'));
-  session = { userId: 'offline-client', orgId: 'org_offline' };
-  // Tank, not Workspace's founder flag, decides the persisted grant and CRM organization authority.
-  upstream = () => Response.json({ resource: 'leads', items: [], page: 1, count: 0 });
-  assert.equal((await get()).status, 200);
-  upstream = () => new Response(null, { status: 403 });
-  assert.equal((await get()).status, 403);
+  for (const denied of [
+    { userId: 'offline-client', orgId: 'org_offline', grants: ['trigger'] },
+    { userId: 'offline-admin', orgId: 'org_offline', orgRole: 'org:admin', grants: ['trigger'] },
+    { userId: 'offline-member', orgId: 'org_offline', orgRole: 'org:member' },
+  ]) {
+    session = denied;
+    const before = count;
+    assert.equal((await get()).status, 404);
+    assert.equal((await get(['contacts', id])).status, 404);
+    assert.equal(count, before, 'nonfounders must be refused before Tank transport');
+  }
   session = { userId: 'offline-founder', orgId: 'org_offline' };
   for (const resource of ['contacts', 'estimates']) {
     upstream = () => Response.json({ resource, item: { id } });
@@ -103,5 +108,5 @@ async function get(parts = ['leads'], query = '') {
   await assert.rejects(triggerCrmRead({ userId: 'offline-founder', tenantId: 'ignored' }, ['../admin'], new URLSearchParams()), /invalid_crm_request/);
   assert.equal(count, before);
   assert.deepEqual(Object.keys(route).sort(), ['GET', 'dynamic', 'runtime']);
-  console.log('PASS: signed-in client forwarding with Tank authorization, active-tenant aliases, path/query allowlists, no mutation export, same-box forwarding, empty errors, response envelope checks');
+  console.log('PASS: founder-only read corridor; granted client, tenant admin and member refused before transport, active-tenant aliases, path/query allowlists, no mutation export, same-box forwarding, empty errors, response envelope checks');
 })().catch(error => { console.error(error); process.exitCode = 1; });
