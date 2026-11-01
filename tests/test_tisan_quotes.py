@@ -104,7 +104,7 @@ async def at_state(store, state):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('before,after', product(q.MOVES, q.MOVES))
+@pytest.mark.parametrize('before,after', list(product(q.MOVES, q.MOVES)))
 async def test_every_transition_and_refusal(before, after):
     pool = Pool()
     store = q.Quotes(pool)
@@ -293,3 +293,46 @@ def test_packaged_paths_and_registration():
     assert 'agents/tisan/quotes.py agents/tisan/schema.sql /app/' in docker
     assert 'agents/rig/rigbox/reserve.py /app/quote_smtp.py' in docker
     assert q.EMAIL_WORDING == ROOT / 'docs/figma/tisan/QUOTE-EMAILS.md'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('actor', ['', ' ', 'x' * 257, 'actor\nheader'])
+async def test_invalid_actor_is_refused_without_writes(actor):
+    pool = Pool()
+    with pytest.raises(q.Refused):
+        await q.Quotes(pool).create(A, actor, DATA)
+    assert pool.rows == {} and pool.events == []
+
+
+@pytest.mark.asyncio
+async def test_unknown_state_and_invalid_list_limits():
+    store = q.Quotes(Pool())
+    row = await store.create(A, 'requester', DATA)
+    with pytest.raises(q.Refused):
+        await store.move(A, row['id'], 'actor', 'unknown')
+    for limit in (0, 201):
+        with pytest.raises(q.Refused):
+            await store.list(A, limit)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('data', [
+    {'contact': {'email': 'bad'}, 'items': DATA['items']},
+    {'contact': {'email': 'quote@example.invalid\nBcc: victim@example.invalid'}, 'items': DATA['items']},
+    {'contact': DATA['contact'], 'items': []},
+    {'contact': DATA['contact'], 'items': [{'item_id': 'card-number', 'quantity': 1}]},
+    {'contact': DATA['contact'], 'items': [{'item_id': str(UUID(int=3)), 'quantity': 0}]},
+    {'contact': DATA['contact'], 'items': [{'item_id': str(UUID(int=3)), 'quantity': True}]},
+])
+async def test_invalid_contact_and_items_refused_before_storage(data):
+    pool = Pool()
+    with pytest.raises(ValidationError):
+        await q.Quotes(pool).create(A, 'requester', data)
+    assert pool.rows == {} and pool.events == []
+
+
+def test_email_api_missing_wording_preserves_quote(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(q, 'EMAIL_WORDING', tmp_path / 'absent.md')
+    row = client.post('/quotes', headers=HEADERS, json={'tenant_id': str(A), 'data': DATA}).json()
+    assert client.post(f"/quotes/{row['id']}/email?tenant_id={A}", headers=HEADERS).json() == {'mail': 'wording_missing'}
+    assert client.get(f"/quotes/{row['id']}?tenant_id={A}", headers=HEADERS).json()['state'] == 'submitted'
