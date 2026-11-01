@@ -90,6 +90,7 @@ def test_rig_real_box_public_api_and_sealed_execution(tmp_path):
             "-e", "DATABASE_URL=postgresql://postgres@postgres:5432/postgres",
             "-e", "RIG_TRUSTED_PROXY_CIDRS=" + proxy_subnet,
             "-e", "CATALOGUE_DIR=/offline-catalogues", "-v", str(offline) + ":/offline-catalogues:ro",
+            "-v", str(ROOT / "tests/rig_fixture_loader.py") + ":/test-harness/rig_fixture_loader.py:ro",
             "-e", "DATA_DIR=/data", "-v", volumes[0] + ":/data")
         for name, port in ((api, 8000), (brain, 8001), (browser, 3000), (gateway, 3000), (sandbox, 8002)):
             ready(name, port)
@@ -107,8 +108,21 @@ print('PASS proxy reaches only public API')
         assert "PASS proxy" in docker("run", "--rm", "-i", "--name", probe, "--network", proxy_net,
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "tervory-rig-api:cloud",
             "python", "-", input=proxy_probe)
-        api_probe = r'''import httpx,json,os
+        api_probe = r'''import asyncio,httpx,json,os,sys
 from pathlib import Path
+sys.path.insert(0, '/test-harness')
+# Explicit test-only import into the throwaway box, never production startup.
+async def seed_test_database():
+ import asyncpg
+ from rigbox.service import Service
+ from rigbox.store import PgStore
+ from rig_fixture_loader import load_catalogue
+ pool = await asyncpg.create_pool(os.environ['DATABASE_URL'])
+ try:
+  await load_catalogue(Service(PgStore(pool)), Path('/offline-catalogues/second'))
+ finally:
+  await pool.close()
+asyncio.run(seed_test_database())
 with httpx.Client(base_url='http://127.0.0.1:8000',trust_env=False) as client:
  assert client.get('/health').json()['ok'] is True
  config=json.loads(Path('/offline-catalogues/second/publish.json').read_text())
