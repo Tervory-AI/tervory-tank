@@ -5,7 +5,6 @@ import copy
 import importlib.util
 import json
 import os
-import sys
 import tarfile
 import uuid
 from pathlib import Path
@@ -155,6 +154,7 @@ async def test_copy_headers_and_redirects(builder):
         assert request.headers['X-Tervory-Home-Region'] == 'za'
         assert request.headers['X-Tank-Key'] == 'test-room-key'
         assert request.url.path == '/v1/trigger/copy/' + wid
+        assert request.url.params['tenant_id'] == TENANT
         return httpx.Response(200, json={'tenant_id': TENANT, 'write_id': wid, 'text': 'Accepted test copy'})
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
         assert await builder.accepted_copy(client, TENANT, wid, base='http://tank:8000', key='test-room-key', region='za') == 'Accepted test copy'
