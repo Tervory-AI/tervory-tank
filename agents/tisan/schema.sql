@@ -47,3 +47,57 @@ CREATE TABLE IF NOT EXISTS agent_tisan.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
+
+-- J4: submission is approval; only item identifiers/quantities and email are kept.
+CREATE TABLE IF NOT EXISTS agent_tisan.quote_requests (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    contact jsonb NOT NULL CHECK (jsonb_typeof(contact) = 'object'),
+    items jsonb NOT NULL CHECK (jsonb_typeof(items) = 'array'),
+    state text NOT NULL CHECK (state IN ('draft','submitted','acknowledged','quoted','accepted','declined')),
+    mail_state text NOT NULL DEFAULT 'pending'
+        CHECK (mail_state IN ('pending','sending','sent','uncertain')),
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY (tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS quote_requests_tenant_created
+    ON agent_tisan.quote_requests (tenant_id,created_at DESC,id DESC);
+CREATE TABLE IF NOT EXISTS agent_tisan.quote_events (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    request_id uuid NOT NULL,
+    from_state text,
+    to_state text NOT NULL,
+    actor text NOT NULL CHECK (length(btrim(actor)) BETWEEN 1 AND 256),
+    happened_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    FOREIGN KEY (tenant_id,request_id) REFERENCES agent_tisan.quote_requests (tenant_id,id),
+    CHECK ((from_state IS NULL AND to_state='draft') OR
+        (from_state='draft' AND to_state='submitted') OR
+        (from_state='submitted' AND to_state='acknowledged') OR
+        (from_state='acknowledged' AND to_state='quoted') OR
+        (from_state='quoted' AND to_state IN ('accepted','declined')))
+);
+CREATE INDEX IF NOT EXISTS quote_events_tenant_request
+    ON agent_tisan.quote_events (tenant_id,request_id,id);
+ALTER TABLE agent_tisan.quote_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_tisan.quote_requests FORCE ROW LEVEL SECURITY;
+ALTER TABLE agent_tisan.quote_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_tisan.quote_events FORCE ROW LEVEL SECURITY;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='agent_tisan'
+        AND tablename='quote_requests' AND policyname='quote_requests_tenant') THEN
+        CREATE POLICY quote_requests_tenant ON agent_tisan.quote_requests
+            USING (tenant_id = nullif(current_setting('app.tenant_id',true),'')::uuid)
+            WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id',true),'')::uuid);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='agent_tisan'
+        AND tablename='quote_events' AND policyname='quote_events_tenant') THEN
+        CREATE POLICY quote_events_tenant ON agent_tisan.quote_events
+            USING (tenant_id = nullif(current_setting('app.tenant_id',true),'')::uuid)
+            WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id',true),'')::uuid);
+    END IF;
+END $$;
+GRANT SELECT,INSERT,UPDATE ON agent_tisan.quote_requests TO agent_tisan;
+GRANT SELECT,INSERT ON agent_tisan.quote_events TO agent_tisan;
+GRANT USAGE,SELECT ON SEQUENCE agent_tisan.quote_events_id_seq TO agent_tisan;
