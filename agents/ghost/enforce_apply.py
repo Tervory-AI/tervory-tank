@@ -8,6 +8,7 @@ exists). A model is never called from Enforce. No Tank key required.
 from __future__ import annotations
 
 import time
+import os
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -16,12 +17,46 @@ from .client_settings import ApplyMode, ClientAutumbraSettings
 from .durable_shields import load_pending, persist_control, persist_pending
 from .fixture_edge import DEFAULT_CONTROL, FixtureEdgeControl
 from .never_block import classify_never_block
-from .shields import plan_for
+from .shields import plan_for, zone_of
 from .speed_budgets import stamp_budget, utc_now
 from .threat_payload import ThreatAction, ThreatPayload
 
 # Pending approvals expire if never approved (seconds). Overridable in tests.
 PENDING_APPROVAL_TTL_SEC = 7 * 24 * 3600
+
+
+def control_name(control: FixtureEdgeControl) -> str:
+    return getattr(control, "control_name", "fixture_edge")
+
+
+def select_control(*, site: str, settings: ClientAutumbraSettings,
+                   control: FixtureEdgeControl | None = None) -> FixtureEdgeControl:
+    """Enforce-only credential read; egress hold always keeps runtime on fixture.
+
+    Explicit mock-backed controls let offline tests exercise the complete path.
+    There is intentionally no runtime flag that can lift the egress hold.
+    """
+    from .cloudflare_edge import CloudflareEdgeControl, TOKEN_ENV
+
+    edge = control or DEFAULT_CONTROL
+    if isinstance(edge, CloudflareEdgeControl):
+        if edge.tenant_id != settings.tenant_id or edge.site != site:
+            raise ValueError("Cloudflare control does not belong to this client and site.")
+        return edge
+    # Read the setting only here in Enforce, never in Watch or shared rule code.
+    configured = bool(os.environ.get(TOKEN_ENV, "").strip())
+    if not configured or zone_of(site) is None:
+        return edge
+    # Founder hold: no live transport may be constructed until the separately
+    # approved proxy AND site-health integration land. Token alone does nothing.
+    return edge
+
+
+def _apply_shield(edge: FixtureEdgeControl, *, site: str, kind: str,
+                  address: str | None, path: str | None, ref: str) -> dict[str, Any]:
+    if kind == "rate_limit":
+        return edge.apply_rate_limit(site=site, path=path, ref=ref)
+    return edge.apply_block_ip(site=site, address=address, ref=ref)
 
 
 def payload_fields_only(payload: ThreatPayload) -> dict[str, Any]:
@@ -111,22 +146,26 @@ def apply_from_payload(
             address=payload.address,
         )
 
-    edge = control or DEFAULT_CONTROL
+    edge = select_control(site=site, settings=settings, control=control)
+    name = control_name(edge)
+    receipt["control"] = name
+    supported = (payload.kind == "block_ip" and bool(payload.address)) or (
+        name == "cloudflare" and payload.kind == "rate_limit" and bool(payload.path)
+    )
     t1 = time.perf_counter()
     applied = False
     if (
         mode is ApplyMode.auto_when_checks_pass
-        and payload.kind == "block_ip"
-        and payload.address
+        and supported
     ):
-        row = edge.apply_block_ip(site=site, address=payload.address, ref=ref)
+        row = _apply_shield(edge, site=site, kind=payload.kind, address=payload.address, path=payload.path, ref=ref)
         receipt["applied_record"] = row
-        receipt["undo"] = {"rule_id": row["rule_id"], "control": "fixture_edge"}
+        receipt["undo"] = {"rule_id": row["rule_id"], "control": name}
         applied = True
         receipt["outcome"] = "applied"
         _persist(data_dir, edge)
-    elif mode is ApplyMode.approve_each and payload.kind == "block_ip" and payload.address:
-        receipt["undo"] = {"rule_id": None, "control": "fixture_edge", "pending": True}
+    elif mode is ApplyMode.approve_each and supported:
+        receipt["undo"] = {"rule_id": None, "control": name, "pending": True}
         if data_dir is not None:
             pending = load_pending(data_dir)
             pending[receipt["id"]] = {
@@ -134,13 +173,15 @@ def apply_from_payload(
                 "site": site,
                 "address": payload.address,
                 "kind": payload.kind,
+                "path": payload.path,
+                "control": name,
                 "created_at": utc_now(),
                 "expires_at_epoch": time.time() + PENDING_APPROVAL_TTL_SEC,
                 "payload": fields,
             }
             persist_pending(data_dir, pending)
     elif mode is ApplyMode.never:
-        receipt["undo"] = {"rule_id": None, "control": "fixture_edge", "report_only": True}
+        receipt["undo"] = {"rule_id": None, "control": name, "report_only": True}
     stamp_budget(receipt, stage="decision_to_shield", seconds=time.perf_counter() - t1)
 
     t2 = time.perf_counter()
@@ -159,11 +200,11 @@ def apply_from_payload(
             **(receipt.get("budgets") or {}),
             **(undone.get("budgets") or {}),
         }
-        receipt["control"] = "fixture_edge"
+        receipt["control"] = name
         return receipt
 
     receipt["applied"] = applied
-    receipt["control"] = "fixture_edge"
+    receipt["control"] = name
     return receipt
 
 
@@ -184,6 +225,12 @@ def undo_applied(
     if not rule_id:
         raise LookupError("no applied shield to undo")
     edge = control or DEFAULT_CONTROL
+    name = control_name(edge)
+    if undo.get("control", name) != name:
+        raise LookupError("shield belongs to another control")
+    stored = next((r for r in edge.list_blocked() if r.get("rule_id") == str(rule_id)), {})
+    if stored.get("control", name) != name:
+        raise LookupError("shield belongs to another control")
     row = edge.undo(str(rule_id))
     _persist(data_dir, edge)
     out = {
@@ -195,7 +242,7 @@ def undo_applied(
         "undone": row,
         "prior_receipt_id": receipt.get("id"),
         "applied": False,
-        "control": "fixture_edge",
+        "control": name,
         "timestamp": utc_now(),
         "tenant_id": receipt.get("tenant_id"),
     }
@@ -211,9 +258,9 @@ def undo_from_payload(
     data_dir: Path | str | None = None,
 ) -> dict[str, Any]:
     """Undo via validated ThreatPayload door (from outside Enforce through the queue)."""
-    if payload.action is not ThreatAction.undo_shield:
+    if not isinstance(payload, ThreatPayload) or payload.action is not ThreatAction.undo_shield:
         raise TypeError("undo_from_payload requires action=undo_shield")
-    edge = control or DEFAULT_CONTROL
+    edge = select_control(site=payload.site, settings=settings, control=control)
     rule_id = (payload.rule_id or "").strip()
     if not rule_id and payload.prior_receipt_id and data_dir is not None:
         # Resolve rule_id from founder console / receipts on the queue box later;
@@ -265,7 +312,7 @@ def approve_pending(
     data_dir: Path | str | None = None,
 ) -> dict[str, Any]:
     """Apply a pending shield on approval (ThreatPayload door)."""
-    if payload.action is not ThreatAction.approve_shield:
+    if not isinstance(payload, ThreatPayload) or payload.action is not ThreatAction.approve_shield:
         raise TypeError("approve_pending requires action=approve_shield")
     if data_dir is None:
         return {
@@ -311,11 +358,20 @@ def approve_pending(
             "tenant_id": settings.tenant_id,
             **settings.receipt_stamp(),
         }
-    edge = control or DEFAULT_CONTROL
     address = str(row.get("address") or "")
     site = str(row.get("site") or payload.site)
+    edge = select_control(site=site, settings=settings, control=control)
+    name = control_name(edge)
+    if row.get("control", "fixture_edge") != name:
+        raise LookupError("pending shield belongs to another control")
+    if site != payload.site:
+        raise ValueError("approval site does not match pending shield")
+    if row.get("kind", "block_ip") == "block_ip":
+        why = classify_never_block(address, client_own_cidrs=settings.own_cidrs)
+        if why:
+            raise ValueError("pending address is on the never-block list")
     ref = f"approve-{rid.replace('-', '')[:16]}"
-    applied_row = edge.apply_block_ip(site=site, address=address, ref=ref)
+    applied_row = _apply_shield(edge, site=site, kind=row.get("kind", "block_ip"), address=address, path=row.get("path"), ref=ref)
     _persist(data_dir, edge)
     persist_pending(data_dir, pending)
     return {
@@ -326,13 +382,13 @@ def approve_pending(
         "outcome": "applied",
         "applied": True,
         "applied_record": applied_row,
-        "undo": {"rule_id": applied_row["rule_id"], "control": "fixture_edge"},
+        "undo": {"rule_id": applied_row["rule_id"], "control": name},
         "prior_receipt_id": rid,
         "address": address,
         "site": site,
         "timestamp": utc_now(),
         "tenant_id": settings.tenant_id,
-        "control": "fixture_edge",
+        "control": name,
         **settings.receipt_stamp(),
     }
 
