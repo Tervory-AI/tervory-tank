@@ -72,9 +72,11 @@ def sandbox():
     try:
         command('docker', 'run', '-d', '--pull=never', '--name', box.pg,
                 '--network', box.name, '--memory=1g', '--cpus=1',
+                '--label', 'tervory.restore-drill=' + box.name,
                 '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', PG_IMAGE)
         command('docker', 'run', '-d', '--pull=never', '--name', box.qd,
                 '--network', box.name, '--memory=1g', '--cpus=1',
+                '--label', 'tervory.restore-drill=' + box.name,
                 '-p', '127.0.0.1::6333', QDRANT_IMAGE)
         port = command('docker', 'port', box.qd, '6333/tcp').decode().strip()
         if not re.fullmatch(r'127\.0\.0\.1:\d+', port):
