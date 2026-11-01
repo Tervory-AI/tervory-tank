@@ -5,6 +5,10 @@ const path = require('node:path');
 const Module = require('node:module');
 const root = path.resolve(__dirname, '../..');
 const ts = require(path.join(root, 'workspace/node_modules/typescript'));
+const resolve = Module._resolveFilename;
+Module._resolveFilename = function(name, parent, ...rest) {
+  return resolve.call(this, name.startsWith('@/') ? path.join(root, 'workspace', name.slice(2)) : name, parent, ...rest);
+};
 require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true}
 }).outputText, file);
