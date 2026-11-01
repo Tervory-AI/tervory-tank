@@ -1098,10 +1098,13 @@ export function moaAction(userId: string, action: "bench" | "promote", body: { t
 }
 
 /** Public platform training matches, read from the active US Zenas room. */
-export function mootPublishedMatches(matchId?: string): Promise<{ matches: unknown[] }> {
+export function mootPublishedMatches(matchId?: string, signal?: AbortSignal): Promise<unknown> {
   const query = new URLSearchParams({ home_region: "us-east" });
   if (matchId) query.set("match_id", matchId);
-  return tank(`/v1/zenas/moot/published?${query}`, { method: "GET" });
+  const timeout = AbortSignal.timeout(10000);
+  return tank(`/v1/zenas/moot/published?${query}`, {
+    method: "GET", signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  });
 }
 
 /** MOOT-1a: list fixture problems via Tank → Zenas room (server-side only). */
