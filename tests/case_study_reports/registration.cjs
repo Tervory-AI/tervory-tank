@@ -39,7 +39,7 @@ console.info = (...args) => events.push(args);
 global.fetch = async (url, init) => {
   assert.equal(new URL(url).origin, process.env.TANK_URL);
   assert.equal(init.method, 'POST');
-  assert.equal(init.redirect, 'error');
+  assert.equal(init.redirect, 'manual');
   assert.ok(init.signal instanceof AbortSignal);
   calls.push(init.headers);
   if (mode === 'network') throw new TypeError('private transport detail');
@@ -79,7 +79,7 @@ const tank = require('../../workspace/lib/tank.ts');
   session = { userId: 'bob', orgId: 'org_a' };
   mode = 403;
   await assert.rejects(tenant.activeTenant);
-  for (const status of [401, 403, 400, 404, 422]) {
+  for (const status of [301, 302, 307, 308, 401, 403, 400, 404, 422]) {
     session = { userId: 'alice', orgId: `org_denied_${status}` };
     mode = status;
     await assert.rejects(tenant.activeTenant);

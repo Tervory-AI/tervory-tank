@@ -38,7 +38,9 @@ export async function caseStudyRequest(identity: { tenantId: string; userId: str
     if (value !== null) url.searchParams.set(key, value);
   }
   return fetch(url, {
-    method: path === "ensure" ? "POST" : "GET", cache: "no-store", redirect: "error", signal,
+    method: path === "ensure" ? "POST" : "GET", cache: "no-store",
+    // Observe ensure redirects as non-retryable HTTP failures; never follow them.
+    redirect: path === "ensure" ? "manual" : "error", signal,
     headers: { "X-Tank-Key": TANK_API_KEY, "X-Tervory-User": identity.userId, "X-Tervory-Tenant": identity.tenantId },
   });
 }
@@ -50,7 +52,8 @@ const reportRegistrations = new Map<string, { failures: number; next: number; pe
 
 export async function ensureCaseStudyReports(identity: { tenantId: string; userId: string }): Promise<void> {
   // Reject malformed runtime configuration before classifying fetch failures.
-  new URL("/v1/case-studies/ensure", TANK_URL);
+  const endpoint = new URL("/v1/case-studies/ensure", TANK_URL);
+  if (!["http:", "https:"].includes(endpoint.protocol)) throw new Error("Invalid Tank protocol");
   const key = JSON.stringify([identity.tenantId, identity.userId]);
   const previous = reportRegistrations.get(key);
   if (previous?.pending) return previous.pending;
