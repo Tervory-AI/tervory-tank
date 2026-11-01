@@ -1,14 +1,14 @@
 /** Approved copy from the Rig agent frames. */
 
 export const ACCOUNT_NAV = [
-  { href: "/", label: "Dashboard" },
-  { href: "/projects", label: "Projects" },
-  { href: "/", label: "Chats" },
+  { href: "https://app.tervory.com/", label: "Dashboard" },
+  { href: "/matters", label: "Projects" },
+  { href: "/chats", label: "Chats" },
 ] as const;
 
 export const ACCOUNT_BOTTOM = [
   { href: "/settings", label: "Settings" },
-  { href: "/support", label: "Support" },
+  { href: "https://tervory.com", label: "Support" },
 ] as const;
 
 export const TABS = [
