@@ -15,7 +15,10 @@ from fastapi import HTTPException
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tests/trigger_second_build'))
-from test_second import env, headers, confirm, TENANT, OTHER  # noqa: F401
+from test_second import env as second_build_env, headers, confirm, TENANT, OTHER
+
+# Reuse the real second-build disposable database and room fixture.
+env = second_build_env
 import command
 from trigger import checkers
 from trigger.service import CheckIn, WriteIn
