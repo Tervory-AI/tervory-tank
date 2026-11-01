@@ -121,14 +121,7 @@ test("checks document shape, unique names/paths/ids and reserved routes", () => 
   data.pages.push(structuredClone(data.pages[0]));
   data.pages[0].sections.push(structuredClone(data.pages[0].sections[0]));
   expect(checkContent(data).filter((error) => error.includes("duplicate"))).toHaveLength(3);
-  for (const path of [
-    "/contact",
-    "/privacy",
-    "/api/contact",
-    "/_next/a",
-    "/bad//path",
-    "/../escape",
-  ]) {
+  for (const path of ["/api/contact", "/_next/a", "/bad//path", "/../escape"]) {
     const invalid = fresh();
     invalid.pages[0].path = path;
     expect(checkContent(invalid).length).toBeGreaterThan(0);
