@@ -206,6 +206,8 @@ async def test_archive_contains_accepted_content(builder, monkeypatch, tmp_path)
 @pytest.mark.skipif(os.environ.get('TISAN_RUN_BUILD') != '1', reason='explicit offline npm build check')
 async def test_full_build_with_real_checks(builder, tmp_path):
     p = payload()
+    p['plan']['pages'].append({'name': 'privacy', 'path': '/privacy', 'sections': []})
+    p['plan']['nav'].append({'href': '/privacy'})
     p['copy'] = copy_for(builder, p['plan'])
     async with client_for() as client:
         result = await builder.execute(p, TENANT, http=client, data_root=tmp_path)
