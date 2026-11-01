@@ -15,12 +15,12 @@
     warnings.warn(
 
 tests/test_rig_3d_engine.py::test_tank_proxy_does_not_accept_unscoped_or_entitlement_writes
-  /workspace/rig-remove-cn-demo-prices/tank/main.py:737: DeprecationWarning: 
+  /workspace/rig-remove-cn-demo-prices/tank/main.py:737: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/test_rig_3d_engine.py::test_tank_proxy_does_not_accept_unscoped_or_entitlement_writes
@@ -28,59 +28,59 @@ tests/test_rig_3d_engine.py::test_tank_proxy_does_not_accept_unscoped_or_entitle
 tests/test_rig_3d_engine.py::test_tank_proxy_does_not_accept_unscoped_or_entitlement_writes
 tests/test_rig_3d_engine.py::test_tank_proxy_does_not_accept_unscoped_or_entitlement_writes
 tests/test_rig_3d_engine.py::test_tank_proxy_does_not_accept_unscoped_or_entitlement_writes
-  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tests/test_rig_3d_engine.py::test_tank_proxy_does_not_accept_unscoped_or_entitlement_writes
-  /workspace/rig-remove-cn-demo-prices/tank/main.py:791: DeprecationWarning: 
+  /workspace/rig-remove-cn-demo-prices/tank/main.py:791: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tests/test_rig_3d_engine.py::test_tank_proxy_does_not_accept_unscoped_or_entitlement_writes
 tests/test_rig_box_tank.py::test_step_receipts_are_idempotent_tenant_scoped_and_readable
 tests/test_rig_box_tank.py::test_rig_chat_uses_rig_policy_pause_and_real_ledger
-  /workspace/rig-remove-cn-demo-prices/tank/agent_skills.py:531: DeprecationWarning: 
+  /workspace/rig-remove-cn-demo-prices/tank/agent_skills.py:531: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tests/test_rig_3d_engine.py::test_tank_proxy_does_not_accept_unscoped_or_entitlement_writes
-  /workspace/rig-remove-cn-demo-prices/tank/skala_intake.py:71: DeprecationWarning: 
+  /workspace/rig-remove-cn-demo-prices/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/test_rig_3d_engine.py::test_tank_proxy_does_not_accept_unscoped_or_entitlement_writes
-  /workspace/rig-remove-cn-demo-prices/tank/skala_intake.py:77: DeprecationWarning: 
+  /workspace/rig-remove-cn-demo-prices/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tests/test_rig_3d_engine.py::test_tank_proxy_does_not_accept_unscoped_or_entitlement_writes
-  /workspace/rig-remove-cn-demo-prices/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /workspace/rig-remove-cn-demo-prices/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html

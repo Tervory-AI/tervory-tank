@@ -52,7 +52,7 @@ docker run --detach --name rig-demo-removal-pg --publish 127.0.0.1::5432 --env P
 docker port rig-demo-removal-pg 5432
 ```
 
-Result: PostgreSQL 16 listening only on `127.0.0.1:32781`; tests create/drop their own uniquely named databases. No production connection.
+Result: PostgreSQL 16 listening only on `127.0.0.1:32781`; tests create/drop their own uniquely named databases. No production connection. After verification, `docker rm --force rig-demo-removal-pg` removed the throwaway container.
 
 The initial runtime lacked several dependencies. Reused the existing complete `venv-ci` and existing read-only Workspace node_modules rather than installing replacements:
 
@@ -68,7 +68,7 @@ Final full suite command:
 TMPDIR=/workspace/rig-remove-cn-demo-prices/.rig-validation RIG_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32781/postgres POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32781/postgres READ1_CHROMIUM_EXECUTABLE=/opt/google/chrome/chrome PLAYWRIGHT_BROWSERS_PATH=/home/ammosync/.cache/ms-playwright /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python -m pytest tests/test_rig*.py tests/rig_tiger_prices tests/custom_nation_rig -q --tb=short --continue-on-collection-errors --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
 ```
 
-Result: **722 passed, 11 skipped, 14 warnings in 162.94 seconds**, exit 0. Raw full-suite output is committed in `docs/rig/remove-cn-demo-prices-validation.txt`.
+Result: **722 passed, 11 skipped, 14 warnings in 162.94 seconds**, exit 0. Full-suite output (trailing whitespace normalized) is committed in `docs/rig/remove-cn-demo-prices-validation.txt`.
 
 The skipped checks require explicitly enabled Docker/Hermes images, absent Forge executables, or the uncommitted private Custom Nation cost export; no real Hermes or other model call was enabled. Browser/API tests used isolated test fixtures only. External sockets and nonlocal DNS were blocked by the existing test harness.
 
