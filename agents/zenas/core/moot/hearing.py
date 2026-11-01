@@ -104,7 +104,7 @@ def _operator(state: dict[str, Any], actor: Actor) -> None:
 def create(hearing_id: str, actor: Actor, problem: dict[str, Any], seats: dict[str, Any]) -> dict[str, Any]:
     _require(actor.founder and bool(actor.user_id), "operator_required")
     _uuid(actor.tenant_id)
-    _require(set(seats) == set(SEATS), "invalid_seats")
+    _require(isinstance(seats, dict) and set(seats) == set(SEATS), "invalid_seats")
     return {
         "id": _uuid(hearing_id), "tenant_id": actor.tenant_id, "region": actor.region,
         "owner_id": actor.user_id, "revision": 0, "phase": "draft", "problem_version": 1,
@@ -133,7 +133,7 @@ def change(state: dict[str, Any], actor: Actor, revision: int, action: str, payl
     _operator(out, actor)
     if action == "edit":
         _require(out["phase"] == "draft", "problem_locked")
-        out["problem"] = _problem(payload["problem"], out["region"])
+        out["problem"] = _problem(payload.get("problem"), out["region"])
         out["problem_version"] += 1
     elif action == "lock":
         _require(out["phase"] == "draft", "invalid_phase")
