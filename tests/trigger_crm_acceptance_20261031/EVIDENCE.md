@@ -1,3 +1,48 @@
+## Refreshed founder-only evidence — 1 November 2026
+
+This section supersedes all older source heads and client-grant acceptance below.
+No production or founder-browser completion is claimed.
+
+Frozen source heads (both include current main
+`f545e182d3886c1af8a9b5878e26b70b08866ac3`):
+
+| Branch | Tested head |
+|---|---|
+| #498 backend | `cbfa329f29783db6ccdf53e423adb25fc1f33f61` |
+| #497 Workspace | `be137cb4146dee721125427c11a29810f9249ee0` |
+| #499 acceptance harness before this evidence-only commit | `1d2f12b2` |
+
+Changed `combined.cjs:47` to require 404 for a granted client, tenant admin and
+member. Changed `test_combined.py:102` to run with grants enabled and disabled,
+refuse direct nonfounder Tank reads/writes while the grant is enabled, and retain
+unconfirmed-write, region and authenticated-organization refusal assertions.
+
+Exact setup/verification commands in `/workspace/codex-trigger-crm`:
+
+1. `git checkout codex/trigger-crm-acceptance-20261031 && git merge origin/main`: PASS, no conflicts; merge `fe4cce67`.
+2. `git worktree add --detach /workspace/codex-trigger-crm/.crm-assembly codex/trigger-crm-backend-20261031`: PASS.
+3. `git -C .crm-assembly merge --no-commit --no-ff codex/trigger-crm-workspace-20261031`: PASS, no conflicts. Local detached assembly only, never pushed as a product branch.
+4. `ln -s /home/ammosync/.codex/trigger-crm-workspace-20261031/workspace/node_modules .crm-assembly/workspace/node_modules`: PASS, existing dependencies reused, untracked.
+5. `CRM_ASSEMBLED_ROOT=/workspace/codex-trigger-crm/.crm-assembly PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q -s -p no:cacheprovider tests/trigger_crm_acceptance_20261031/test_combined.py --tb=short`: initial collection failed because local test environment lacked uvicorn. `/home/ammosync/trigger-crm-venv312/bin/python -m pip install 'uvicorn==0.54.0'` installed the existing Tank pin. Exact test command rerun: **1 passed, zero skips, one existing Pydantic warning, 3.66s**.
+6. `node tests/trigger_crm_workspace/contract.cjs` in `.crm-assembly`: PASS, founder-only boundary and existing route contracts.
+7. `git diff --check` in primary and assembled trees: PASS.
+8. Every finished file committed and `git push origin codex/trigger-crm-acceptance-20261031`: PASS.
+
+Actual observed assertions: founder list envelopes for leads/contacts/estimates,
+limit/offset mapping, tenant binding, no credential reflection; clients/admins/
+members refused; six synthetic reads across the two grant states; founder write
+with forged boolean confirmation refused 409 before mutation; wrong-region read
+refused 403; wrong authenticated CRM organization refused 502 before projection.
+Only loopback Tank and synthetic httpx CRM transport were used. No model calls,
+external CRM requests, live fixtures, production SQL, setting values or deployment.
+
+Backend focused checks: **56 passed**, 19.56s; Ruff passed. Workspace route contract
+and TypeScript (`--noEmit --incremental false`) passed. Commands and source-line
+manifests are in each branch's own evidence document. Hosted exact-head checks
+remain separate and pending at this checkpoint. Founder merge, approved screen
+integration, real configured records and founder browser screenshots remain
+required; no screenshots are fabricated or substituted with fixtures.
+
 # Trigger CRM completion evidence
 
 Recorded 31 October 2026, 11:20 PDT / 18:20 UTC. Audit base: `35cae5ffd8cd6f90dc21e34f201707a74c093f01`.
