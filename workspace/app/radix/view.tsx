@@ -82,9 +82,9 @@ export function RadixPage({ accountName, settings }: { accountName: string; sett
         : <a href="/" className="rx-brand" aria-label="Tervory workspace"><TervoryLogo /></a>}
       <nav className="rx-standard" aria-label="Standard navigation">
         <p className="rx-account">{accountName}</p>
-        <a href="/radix">Dashboard</a>
-        <a href="/tasks">Projects</a>
-        <a href="/">Chats</a>
+        <a href="https://app.tervory.com/">Dashboard</a>
+        <a href="/matters">Projects</a>
+        <a href="/chats">Chats</a>
       </nav>
       <SquadLinks className="rx-standard squad-nav" />
       <div className="rx-page-nav">
