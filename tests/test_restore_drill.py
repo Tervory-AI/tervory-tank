@@ -41,14 +41,23 @@ def test_newest_rejects_cross_region_and_missing_snapshots():
         newest([], 'us-east/')
 
 
+@pytest.fixture
+def identity_file(tmp_path):
+    path = tmp_path / 'identity'
+    try:
+        yield path
+    finally:
+        path.unlink(missing_ok=True)
+
+
 @pytest.mark.parametrize('region', ['us-east', 'za'])
-def test_offline_encrypted_roundtrip(tmp_path, monkeypatch, region):
+def test_offline_encrypted_roundtrip(tmp_path, monkeypatch, region, identity_file):
     if os.environ.get('RESTORE_DRILL_E2E') != '1':
         pytest.skip('Dedicated restore-drill CI enables real disposable stores')
     assert shutil.which('age') and shutil.which('age-keygen') and shutil.which('docker')
     monkeypatch.setenv('TANK_REGION', region)
     # Tool-generated ephemeral identity stays in its file, never read by Python/logged.
-    identity = tmp_path / 'identity'
+    identity = identity_file
     command('age-keygen', '-o', str(identity))
     recipient = command('age-keygen', '-y', str(identity)).decode().strip()
     store = ArchiveStore(region)
