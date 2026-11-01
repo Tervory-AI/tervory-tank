@@ -39,6 +39,8 @@ async def pg_store():
         async with pool.acquire() as conn:
             await conn.execute("CREATE SCHEMA agent_zenas")
             await conn.execute(Path("agents/zenas/core/moot/hearing_schema.sql").read_text())
+            await conn.execute("""CREATE TABLE agent_zenas.moot_problems(id text PRIMARY KEY, tenant_id uuid, region text, title text, body jsonb, locked boolean);
+                CREATE TABLE agent_zenas.moot_matches(id uuid PRIMARY KEY,tenant_id uuid,problem_id text,region text,mode text,published boolean,fairness jsonb,runs jsonb,created_at timestamptz DEFAULT now());""")
         yield HearingStore(pool)
     finally:
         if pool:
@@ -109,3 +111,25 @@ def test_schema_is_additive_and_in_room_startup_schema():
     sql = Path("agents/zenas/core/moot/hearing_schema.sql").read_text()
     assert sql in Path("agents/zenas/schema.sql").read_text()
     assert "DROP " not in sql and "CREATE TABLE IF NOT EXISTS" in sql
+
+
+@pytest.mark.asyncio
+async def test_founder_publish_roundtrip_uses_existing_public_reader_without_private_state(pg_store):
+    from agents.zenas.core.moot.published import published_matches
+    s = await new(pg_store)
+    # Commit an entire genuine two-input/human-judge hearing; only storage is disposable.
+    for seat, kind, extra in [("applicant", "submission", {}), ("judge", "question", {"target": "respondent"}),
+        ("respondent", "submission", {}), ("judge", "ruling", {"order": "Independent order", "reasons": ["Independent reason"], "authority_ids": ["case-1"]})]:
+        s = await pg_store.mutate(HUMANS[seat], s["id"], str(uuid4()), s["revision"], "turn", {"kind": kind, "text": seat + " words", **extra},
+            lambda s, a, r, p: turn(s, a, r, p))
+    with pytest.raises(HearingError):
+        await pg_store.mutate(HUMANS["judge"], s["id"], str(uuid4()), s["revision"], "publish", {}, transition("publish"))
+    request = str(uuid4()); revision = s["revision"]
+    s = await pg_store.mutate(OWNER, s["id"], request, revision, "publish", {}, transition("publish"))
+    replay = await pg_store.mutate(OWNER, s["id"], request, revision, "publish", {}, transition("publish"))
+    assert replay["published"] and replay["revision"] == s["revision"]
+    rows = await published_matches(pg_store.pool, UUID("00000000-0000-0000-0000-000000000001"), "us-east", UUID(s["id"]))
+    assert len(rows) == 1 and rows[0]["published"] is True
+    assert rows[0]["judgmentOrder"] == "Independent order"
+    assert "never counsel" not in json.dumps(rows) and "actor_id" not in json.dumps(rows)
+    assert rows[0]["reveal"] == "real holding hidden until judgment"

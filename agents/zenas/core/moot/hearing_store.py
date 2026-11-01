@@ -112,5 +112,25 @@ class HearingStore:
                     updated["revision"], state["revision"])
                 if result is None:
                     raise hearing.HearingError("stale_revision")
+                if updated["published"] and not state["published"]:
+                    hearing._operator(state, actor)
+                    await self._publish(conn, updated)
                 await self._record(conn, actor, updated, request_id, fingerprint, action)
                 return Mutation(updated, replayed=False)
+
+
+    async def _publish(self, conn: Any, state: dict[str, Any]) -> None:
+        """Founder-reviewed public copy, same transaction as the publication event.
+
+        The existing public reader is platform-scoped. Copy only explicit public
+        fields into that platform scope; the private tenant hearing stays private.
+        """
+        from .publication import public_rows
+        problem, match = public_rows(state)
+        platform = UUID("00000000-0000-0000-0000-000000000001")
+        await conn.execute("""INSERT INTO agent_zenas.moot_problems(id,tenant_id,region,title,body,locked)
+            VALUES($1,$2,$3,$4,$5::jsonb,true)""", problem["id"], platform, state["region"],
+            problem["title"], json.dumps(problem["body"]))
+        await conn.execute("""INSERT INTO agent_zenas.moot_matches(id,tenant_id,problem_id,region,mode,published,fairness,runs)
+            VALUES($1,$2,$3,$4,$5,true,$6::jsonb,$7::jsonb)""", UUID(state["id"]), platform,
+            problem["id"], state["region"], match["mode"], json.dumps(match["fairness"]), json.dumps(match["runs"]))

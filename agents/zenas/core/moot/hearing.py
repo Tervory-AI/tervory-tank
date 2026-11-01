@@ -157,6 +157,9 @@ def change(state: dict[str, Any], actor: Actor, revision: int, action: str, payl
         controller["epoch"] = out["seats"][seat]["epoch"] + 1
         out["seats"][seat] = controller
         _invalidate_ai(out, "handover")
+    elif action == "publish":
+        _require(out["phase"] == "closed" and out["ruling"] is not None and not out["published"], "closed_ruling_required")
+        out["published"] = True
     elif action == "issue":
         _require(out["phase"] == "hearing" and out["floor"] == "judge", "judge_floor_required")
         index = payload.get("index")
@@ -171,7 +174,7 @@ def change(state: dict[str, Any], actor: Actor, revision: int, action: str, payl
 def _invalidate_ai(state: dict[str, Any], reason: str) -> None:
     pending = state["pending_ai"]
     if pending:
-        state["ai_attempts"].append({**pending, "status": "invalidated", "reason": reason})
+        state["ai_attempts"].append({**pending, "started": pending["status"] == "started", "status": "invalidated", "reason": reason})
         state["pending_ai"] = None
 
 
@@ -296,7 +299,7 @@ def view(state: dict[str, Any], actor: Actor, seat: str | None = None) -> dict[s
         for entry in out["transcript"]:
             entry.pop("actor_id", None)
     out["problem"] = {k: deepcopy(problem[k]) for k in ("title", "facts", "issues", "fact_records")}
-    out["problem"]["authorities"] = [{k: deepcopy(a[k]) for k in ("id", "name", "quote", "source_url", "weight") if k in a} for a in problem["authorities"]]
+    out["problem"]["authorities"] = [{k: deepcopy(a[k]) for k in ("id", "name", "quote", "source_url", "weight", "court", "paragraph") if k in a} for a in problem["authorities"]]
     if seat in SIDES:
         # Existing recursive bench-note stripping also applies to nested counsel bundles.
         from agents.zenas.core.moot.problem import _strip_private
@@ -305,6 +308,8 @@ def view(state: dict[str, Any], actor: Actor, seat: str | None = None) -> dict[s
         out["problem"]["bundle"] = bundle
     if seat == "judge":
         out["problem"]["bench_notes"] = deepcopy(problem["bench_notes"])
+    out["cost_usd"] = measured_cost(state)
+    out["receipts"] = [{k: r.get(k) for k in ("ledger_id", "cost_usd", "seat", "turn", "discarded")} for r in state["receipts"]]
     if state["phase"] == "closed" or state["published"]:
         out["reveal"] = problem["real_holding"]
     return out
@@ -342,3 +347,14 @@ def resolve_ai(state: dict[str, Any], actor: Actor, revision: int, token: str,
         out["receipts"].append({**saved, "seat": attempt["seat"], "turn": None, "token": token,
                                 "discarded": True})
     return _finish(out)
+
+
+def measured_cost(state: dict[str, Any]) -> float | None:
+    priced_tokens = {r["token"] for r in state["receipts"] if r["cost_usd"] is not None}
+    if any(r["cost_usd"] is None for r in state["receipts"]):
+        return None
+    if any(a.get("started") and a["token"] not in priced_tokens for a in state["ai_attempts"]):
+        return None
+    if state["pending_ai"] and state["pending_ai"]["status"] == "started":
+        return None
+    return sum(r["cost_usd"] for r in state["receipts"])
