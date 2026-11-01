@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -479,7 +479,7 @@ class PostgresLedger:
             row["horizon_seconds"],
             row.get("confidence"),
             row.get("realised_value"),
-            _date(row["realised_date"]) if row.get("realised_date") else None,
+            date.fromisoformat(str(row["realised_date"])[:10]) if row.get("realised_date") else None,
             row.get("kind"),
             row.get("feed"),
         )
