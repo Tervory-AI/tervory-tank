@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from core.batch_guard import Pool
+from core.predictions import metadata, calibration
 
 SCHEMA = "agent_market_lab"
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.sql"
@@ -105,7 +106,7 @@ class MemoryLedger:
         self._require_tenant(row["tenant_id"])
         if any(item["id"] == row["id"] for item in self.predictions):
             raise RuntimeError("predictions are append-only")
-        self.predictions.append(dict(row))
+        self.predictions.append(metadata(row))
 
     def save_report(self, row: dict[str, Any]) -> None:
         self._require_tenant(row["tenant_id"])
@@ -125,6 +126,9 @@ class MemoryLedger:
     def predictions_for(self, tenant_id: str) -> list[dict[str, Any]]:
         self._require_tenant(tenant_id)
         return [dict(item) for item in self.predictions if item["tenant_id"] == str(tenant_id)]
+
+    def calibration_for(self, tenant_id: str) -> dict:
+        return calibration(self.predictions_for(tenant_id), tenant_id)
 
     def _sync_points(self) -> None:
         self.points = [_plain_point(point) for point in self.pool.points]
@@ -447,13 +451,16 @@ class PostgresLedger:
         )
 
     async def save_prediction(self, row: dict[str, Any]) -> None:
+        row = metadata(row)
         await self.conn.execute(
             f"""
             INSERT INTO {SCHEMA}.predictions (
                 id, tenant_id, made_at, statement, metric_series_id, comparator,
-                target, resolve_by, rationale, sources, outcome, resolved_at, score
+                target, resolve_by, rationale, sources, outcome, resolved_at, score,
+                horizon_seconds, confidence, realised_value, realised_date, kind, feed
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13,
+                $14, $15, $16, $17, $18, $19
             )
             """,
             uuid.UUID(str(row["id"])),
@@ -469,6 +476,12 @@ class PostgresLedger:
             row.get("outcome"),
             _timestamp(row.get("resolved_at")),
             row.get("score"),
+            row["horizon_seconds"],
+            row.get("confidence"),
+            row.get("realised_value"),
+            _date(row["realised_date"]) if row.get("realised_date") else None,
+            row.get("kind"),
+            row.get("feed"),
         )
 
     async def save_report(self, row: dict[str, Any]) -> None:
@@ -527,7 +540,8 @@ class PostgresLedger:
         rows = await self.conn.fetch(
             f"""
             SELECT id, tenant_id, made_at, statement, metric_series_id, comparator,
-                   target, resolve_by, rationale, sources, outcome, resolved_at, score
+                   target, resolve_by, rationale, sources, outcome, resolved_at, score,
+                   horizon_seconds, confidence, realised_value, realised_date, kind, feed
             FROM {SCHEMA}.predictions
             WHERE tenant_id = $1
             ORDER BY made_at, id
@@ -535,6 +549,10 @@ class PostgresLedger:
             uuid.UUID(str(tenant_id)),
         )
         return [_record(row) for row in rows]
+
+
+    async def calibration_for(self, tenant_id: str) -> dict:
+        return calibration(await self.predictions_for(tenant_id), tenant_id)
 
 
 def _plain_point(point: dict[str, Any]) -> dict[str, Any]:
