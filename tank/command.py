@@ -30,7 +30,7 @@ from command_stream import AnswerText, TokenSink
 router = APIRouter(prefix="/v1/command", tags=["command"])
 logger = logging.getLogger(__name__)
 _background: set[asyncio.Task] = set()
-SQUADS = frozenset({"trigger", "base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"})
+SQUADS = frozenset({"base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"})
 TOOLS = {
     "trigger": ["trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
     "base": ["base.batch", "base.search"],
@@ -100,10 +100,7 @@ def allowed_tools(actor: Actor) -> list[str]:
     founder_tools = [name for name in FOUNDER_TOOLS
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
     voice_tools = ["trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"] if actor.tenant_admin and not actor.founder else []
-    admin_trigger = {"trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"}
-    tools = [tool for squad in squads for tool in TOOLS[squad]
-             if tool not in admin_trigger or actor.founder or actor.tenant_admin]
-    return sorted(set(tools + founder_tools + voice_tools))
+    return sorted([tool for squad in squads for tool in TOOLS[squad]] + founder_tools + voice_tools)
 
 
 def require_tool(actor: Actor, name: str) -> None:
