@@ -343,7 +343,7 @@ def create_enforce_app() -> FastAPI:
             "ok": True,
             "role": "enforce",
             "tank_key_configured": bool(os.environ.get("TANK_KEY", "").strip()),
-            "control": "fixture_edge",
+            "control": getattr(app.state.control, "control_name", "fixture_edge"),
             "blocked": len(app.state.control.list_blocked()),
             "shield_mode": app.state.settings.shield_mode.value,
             "tenant_id": app.state.settings.tenant_id,
