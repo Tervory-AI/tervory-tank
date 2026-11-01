@@ -1,3 +1,38 @@
+## Normal main merge after #498 — 1 November 2026
+
+Main `858dbffa9ffcaeb6fb643dcab679cd593a773349` merged normally into this same
+branch at `4aaf549d`. No rebase, force push or reset. Source/test head: `120815383f71c27cc04ec9a31e2bc8d3ad01e7a0`.
+The sole conflict was the appended CRM helper in `workspace/lib/tank.ts:1449`.
+It is retained; the diff against main is only that helper. Main's ZA regionTank
+import/public reader, PAT/device/CLI functions and Trigger authority are intact.
+
+Integration fixes preserve actual production-module loading:
+
+- `tests/trigger_gate2/admin_contract.cjs:8`: resolve @/ aliases to real Workspace modules, including Zenas regionTank; no auth stub.
+- `tests/command_acceptance_20261031/public_edge.cjs:5,12`: reuse existing workspace_loader for actual Tank and regionTank instead of a VM without require. All PAT/cancellation/ownership assertions remain.
+
+Exact checks in `/workspace/codex-trigger-crm`:
+
+1. `git fetch origin && git checkout codex/trigger-crm-workspace-20261031 && git merge origin/main`: conflict above resolved preserving both sides; merge committed and pushed normally.
+2. `node tests/trigger_crm_workspace/contract.cjs`: PASS (twice, including integrated candidate).
+3. `workspace/node_modules/.bin/tsc --noEmit --incremental false -p workspace/tsconfig.json`: PASS, exit 0 (twice).
+4. `docker run --rm -d --name codex-crm-497-refresh-20261101 --memory 512m --cpus 1 -e POSTGRES_HOST_AUTH_METHOD=trust --tmpfs /var/lib/postgresql/data -p 127.0.0.1::5432 postgres:16.15`: PASS; `docker port codex-crm-497-refresh-20261101 5432` gave 127.0.0.1:32786. Synthetic disposable DB only.
+5. `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank:tests:.crm-testdeps POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32786/postgres COMMAND_ACCEPTANCE_CLIENTS=1 COMMAND_TEST_TOOLS=/workspace/codex-trigger-crm/workspace/node_modules /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q -p no:cacheprovider tests/test_trigger_crm.py tests/test_trigger_crm_wsgi.py tests/test_command.py tests/test_command_streaming.py tests/test_personal_tokens.py tests/test_device_login.py tests/test_pat_route_corridor.py tests/trigger_gate2/test_gate2.py tests/command_acceptance_20261031/test_cross_lane.py tests/test_acceptance_identity_matrix.py --tb=short`: initial combined attempt **221 passed, 9 failed**, 83.55s. Four WSGI subprocesses could not see checkout-local Django; five cross-lane failures were missing local csv-parse (existing CLI dependencies reused) and the real-region-module loader gap fixed above. These failures are not represented as a green broad run.
+6. Same environment/pytest flags with `tests/command_acceptance_20261031/test_cross_lane.py` alone after fixes: **7 passed**, zero skips, 18.29s; actual CLI/public adapter, US and ZA device-login, durable cancel/confirm, replay and receipts exercised.
+7. `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q -p no:cacheprovider tests/test_trigger_crm_wsgi.py --tb=short`: **4 passed**, 1.74s; existing CRM environment makes Django available to subprocesses.
+8. Copy existing #499 `combined.cjs` and `test_combined.py` unchanged into ignored `.crm-refresh-harness`, then `CRM_ASSEMBLED_ROOT=/workspace/codex-trigger-crm PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q -s -p no:cacheprovider .crm-refresh-harness/test_combined.py --tb=short`: **1 passed**, zero skips, 4.80s; actual candidate loaded, no auth stub.
+9. `node --test tests/live_page_sources.test.cjs`: **15 passed**, including ZA reads, no Boston fallback, missing regional config, cancellation and bounded errors.
+10. `node --expose-gc tests/device_login_next_fetch.cjs`: PASS, real Next dedupe fetch and stalled-body/GC bounds. `node tests/cli_sign_ins.cjs`: PASS. `node tests/trigger_gate2/admin_contract.cjs`: PASS after alias fix. `node tests/trigger_second_build/admin_contract.cjs`: PASS. `node tests/acceptance_identity_matrix.cjs`: PASS.
+11. `git diff --check`: PASS. `node --check tests/command_acceptance_20261031/public_edge.cjs`: PASS.
+12. `docker stop codex-crm-497-refresh-20261101`: PASS; own --rm test DB removed. Per-file commits and normal `git push origin codex/trigger-crm-workspace-20261031`: PASS.
+
+The first audit collection lacked jsonschema. Existing pins jsonschema 4.26.0
+and Django 6.1.2 installed only under ignored `.crm-testdeps`; no other task's
+venv changed. Existing CLI and Workspace dependencies are untracked symlinks.
+No live CRM request, setting values, production SQL/write, model call or deploy.
+Fresh exact-head CI and independent review pending. #499 awaits its normal main
+refresh after #497 merges. No founder browser completion/screenshots claimed.
+
 ## Review dependency refresh — 1 November 2026
 
 Rebased onto corrected backend `551979986876ea0795c0c2dee5eef2f67f606554`,
