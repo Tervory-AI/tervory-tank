@@ -6,8 +6,10 @@ from uuid import uuid4
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent))
-sys.path.insert(0, str(Path(__file__).parents[1] / "_chassis"))
+ROOT = Path(__file__).resolve().parents[1]
+ROOM = ROOT / "agents" / "market_lab"
+sys.path.insert(0, str(ROOM))
+sys.path.insert(0, str(ROOT / "agents" / "_chassis"))
 from core.ledger import MemoryLedger, PostgresLedger
 from core.predictions import calibration, classify, metadata
 from core.pure import make_prediction, surge_detect, shift_detect
@@ -114,7 +116,7 @@ async def test_tank_research_job_writes_only_claims_with_openable_sources(monkey
     from core.evidence import document_page
     import core.research_adapter
 
-    spec = importlib.util.spec_from_file_location("gate2_room", Path(__file__).parent / "app.py")
+    spec = importlib.util.spec_from_file_location("gate2_room", ROOM / "app.py")
     room = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(room)
     class ResearchLedger(MemoryLedger):
@@ -157,7 +159,7 @@ async def test_isolated_postgres_metadata_round_trip():
     socket = os.environ.get('GATE2_POSTGRES_SOCKET')
     if not socket:
         pytest.skip('opt-in disposable Gate 2 database')
-    assert Path(socket).resolve() == (Path(__file__).parents[2] / '.gate2-pg-socket').resolve()
+    assert Path(socket).resolve() == (ROOT / '.gate2-pg-socket').resolve()
     conn = await asyncpg.connect(host=socket, user='postgres', database='market_lab_gate2_test')
     transaction = conn.transaction()
     await transaction.start()

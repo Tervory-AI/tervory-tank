@@ -19,7 +19,7 @@ The existing room now freezes a prediction's horizon and empirical confidence, p
 | `agents/market_lab/core/warnings.py:188` | Confidence comes from the already-completed, non-overlapping historical episodes available at issuance, with kind/feed frozen. |
 | `agents/market_lab/app.py:98` | Existing Tank research job uses the existing cited answer reader for feeds and documents, and persists every answer line with its citation. |
 | `agents/market_lab/app.py:136` | Callable calibration job returns data only; no Workspace view added. |
-| `agents/market_lab/test_gate2.py:1` | Classifier reuse, confidence bounds, stale/future/missing observations, immutable outcome metadata, tenant isolation, calibration, SQL binding, cited research and opt-in disposable Postgres checks. |
+| `tests/test_market_lab_gate2.py:1` | Classifier reuse, confidence bounds, stale/future/missing observations, immutable outcome metadata, tenant isolation, calibration, SQL binding, cited research and opt-in disposable Postgres checks. |
 
 H4/H5 feed adapters and document ingestion are reused. Keyed-feed code and settings were not changed. No approved skill package was edited. Changes under `agents/market_lab/` cause deploy-on-merge to redeploy Market Lab and its regional copies under the existing deployment rules; no runtime configuration file changed.
 
@@ -53,7 +53,7 @@ docker run -d --name market-lab-gate2-postgres --network none -e POSTGRES_HOST_A
 Succeeded. An earlier attempt configured only `/socket`, preventing the image's init script from finding its default socket. That disposable container was removed and recreated with both socket directories as shown. The successful regression applies schema twice, round-trips prediction metadata and realised outcome, checks calibration and tenant filtering, and rolls back its transaction.
 
 ```sh
-env -u DATABASE_URL GATE2_POSTGRES_SOCKET=/workspace/codex-market-lab-gate2/.gate2-pg-socket .venv/bin/python -m pytest agents/market_lab/test_gate2.py tests/test_market_lab.py tests/test_market_lab_before_deploy.py tests/test_market_lab_documents.py tests/test_market_lab_evidence.py tests/test_market_lab_page.py tests/test_market_lab_public_pages.py tests/test_market_lab_review.py tests/test_market_lab_source_pages.py tests/test_market_lab_warning_stats.py tests/market_lab_feeds/test_official_feeds.py tests/market_lab_keyless_feeds/test_keyless.py tests/market_lab_keyless_feeds/test_subscriptions.py -q
+env -u DATABASE_URL GATE2_POSTGRES_SOCKET=/workspace/codex-market-lab-gate2/.gate2-pg-socket .venv/bin/python -m pytest tests/test_market_lab_gate2.py tests/test_market_lab.py tests/test_market_lab_before_deploy.py tests/test_market_lab_documents.py tests/test_market_lab_evidence.py tests/test_market_lab_page.py tests/test_market_lab_public_pages.py tests/test_market_lab_review.py tests/test_market_lab_source_pages.py tests/test_market_lab_warning_stats.py tests/market_lab_feeds/test_official_feeds.py tests/market_lab_keyless_feeds/test_keyless.py tests/market_lab_keyless_feeds/test_subscriptions.py -q
 ```
 
 Result: **202 passed, 1 skipped in 19.10s**. Full output: `pytest.txt`. The skip is the existing optional subscription Postgres test (its separate database configuration is absent). Two unrelated repository quarantine entries were not collected. The new Postgres test did run, using its explicitly selected isolated Unix socket. New Gate 2 tests live in the authorized room directory and must be explicitly included in the review command above.
@@ -61,7 +61,7 @@ Result: **202 passed, 1 skipped in 19.10s**. Full output: `pytest.txt`. The skip
 The new research regression initially used the wrong page helper and a synchronous report adapter. Both test errors were fixed before the successful final run. An earlier broad run before that adapter fix returned 201 passed, 1 failed, 1 skipped.
 
 ```sh
-.venv/bin/ruff check agents/market_lab/core/predictions.py agents/market_lab/core/ledger.py agents/market_lab/core/jobs.py agents/market_lab/core/warning_stats.py agents/market_lab/core/warnings.py agents/market_lab/app.py agents/market_lab/test_gate2.py --select E9,F
+.venv/bin/ruff check agents/market_lab/core/predictions.py agents/market_lab/core/ledger.py agents/market_lab/core/jobs.py agents/market_lab/core/warning_stats.py agents/market_lab/core/warnings.py agents/market_lab/app.py tests/test_market_lab_gate2.py --select E9,F
 git diff --check
 ```
 
