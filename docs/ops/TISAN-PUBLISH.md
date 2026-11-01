@@ -7,7 +7,7 @@ founder-approved [promotion](../../agents/tisan/PROMOTION.md) and Radix gate.
 
 ## Founder setup
 
-1. Create a separate Coolify team (or project) only for client sites. Put each
+1. Create a separate Coolify team only for client sites. Put each
    site's staging and production apps in it. Create `TISAN_COOLIFY_TOKEN` inside
    that team with **read, write and deploy**, and **without read:sensitive**, so
    it cannot reach any other Tervory app. `TISAN_COOLIFY_URL` is the Coolify HTTPS
@@ -45,14 +45,14 @@ No credentials or setting values belong in this document or acceptance evidence.
 
 ### Runtime configuration prerequisite
 
-The authorized publish source changes read `TISAN_SITES_REPO` and
-`TISAN_GITHUB_TOKEN` from Tank's environment. The checked-in Tank environment
-mappings in `docker-compose.yml` and `docker-compose.za.yml` do not yet pass
-these two settings through. Those files are outside this job's allowed edits.
-An authorized runtime-config change is required before this implementation can
-publish live. Coolify setting values alone must not be represented as proof
-that the running Tank container received them. No runtime settings were changed
-by this branch. The only Dockerfile edit adds `publish.py` to its existing COPY.
+The publish source reads `TISAN_SITES_REPO` and `TISAN_GITHUB_TOKEN` from
+Tank's environment. `docker-compose.yml` passes both settings to the Boston
+Tank container; empty values keep publishing unavailable. `docker-compose.za.yml`
+does not pass these settings through, so this setup targets Boston only.
+Before publishing live, deploy the mapping and configure the private repository
+and its scoped token. Coolify setting values alone are not proof that the running
+Tank container received them. No live runtime settings were changed by this
+branch. The only Dockerfile edit adds `publish.py` to its existing COPY.
 
 ## Publish and inspect staging
 
