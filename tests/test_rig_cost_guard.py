@@ -810,3 +810,41 @@ def test_a_private_word_beside_ordinary_copy_keeps_the_list() -> None:
     ):
         for key in ("features", "in_box", "included"):
             assert shopper_attributes({key: items}) == {}, (key, items)
+
+
+def test_a_short_amount_with_a_word_beside_a_private_word_drops_the_list() -> None:
+    # #529 review: a 1-2 digit amount next to an ordinary word is still the labelled amount.
+    for items in (
+        ["Dealer price", "85 total"], ["Cost", "85 AUD"], ["Landed", "85 bucks"], ["Supplier cost", "was 85"],
+        ["Dealer price", "4.4 thousand"], ["Cost", "43 hundred"], ["Trade price", "44k total"], ["Cost", "85/box"],
+        ["Wholesale", "85 rands"], ["export_usd", "85 nett"], ["Cost", "85 apiece"], ["Dealer price", "\u2078\u2075 total"],
+        ["Dealer price", "43 hundred", "77 total"], ["85 total", "Supplier cost"],
+    ):
+        for key in ("features", "in_box", "included"):
+            assert shopper_attributes({key: items}) == {}, (key, items)
+        assert shopper_attributes({"options": {"trim": items}}) == {"options": {}}, items
+
+
+def test_an_amount_after_a_break_following_the_separator_is_held() -> None:
+    # be5300de held these (its amount window crossed the break); #529's clause split must not show them.
+    for text in ("Dealer price:\n4377", "Dealer price:\r\n4377", "Dealer price =\n4377", "Cost:\nR4377",
+                 "export_usd:\n4377", "Dealer price: \u2022 4377", "Dealer price: | 4377", "Dealer price:; 4377",
+                 "Dealer price:\u00b74377", "Weight: 2 kg; Dealer price:\n4377"):
+        for key in ("detail", "summary", "tagline"):
+            assert "4377" not in json.dumps(shopper_attributes({key: text})), (key, text)
+    # A private name's own clause with no number does not reach into the next clause.
+    for text in ("Heavy duty: yes; Weight: 2 kg", "Supplier warranty: yes\nWeight: 680 g"):
+        assert shopper_attributes({"detail": text}) == {"detail": text}, text
+
+
+def test_copy_phrases_count_only_in_ascii_digits_beside_a_private_word() -> None:
+    # A copy phrase is ASCII digits as written: Roman, fullwidth, Arabic-Indic, superscript or zero-width forms
+    # of the same phrase still count as the labelled amount, and so do Roman numerals before a plain word.
+    for amount in ("\u2167\u2165 total", "\u2167\u2165 AUD", "was \u2167\u2165", "\u2167\u2165 in stock",
+                   "\u2167\u2165 rounds", "\uff18\uff15 rounds", "\u0668\u0665 magazines", "\u2078\u2075 days",
+                   "8\u200b5 rounds", "Holds 8\u200b5 rounds", "Pack of \uff18\uff15", "Gen \u2167"):
+        for key in ("features", "in_box", "included"):
+            assert shopper_attributes({key: ["Dealer price", amount]}) == {}, (key, amount)
+    for items in (["Heavy duty", "2-year warranty"], ["Supplier warranty card", "2 magazines"],
+                  ["Heavy duty", "Pack of 50", "Gen 5"]):
+        assert shopper_attributes({"features": items}) == {"features": items}, items

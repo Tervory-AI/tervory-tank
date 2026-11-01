@@ -141,22 +141,23 @@ def _strings(value: Any) -> list[str]:
 
 
 # "name: amount" or "name = amount" in any clause ("Weight: 2 kg; Dealer price: 4377", "1. Dealer price: 4377",
-# "_export_usd: 4377"): a number (any script) within the first 24 characters after the separator.
+# "_export_usd: 4377", "Dealer price, approx: 4377"): a number (any script) within the first 24 characters after
+# the separator. A clause starts at the text start or after ; | newline • · or ", ". The name stops at a hard
+# break; the amount may start after one ("Dealer price:\n4377") and then runs to the next hard break.
 _CLAUSE = re.compile(r"[;|\n\u2022\u00b7]|,\s")
-_PAIR = re.compile(r"^[\W\d_]*?([A-Za-z][^:=]{0,60}?)\s*[:=]\s*(.{0,24})", re.DOTALL)
-
-
-# Hard clause breaks only (no ", "): "Dealer price, approx: 4377" keeps its whole label.
-_HARD_CLAUSE = re.compile(r"[;|\n\u2022\u00b7]")
+_PAIR = re.compile(
+    r"[\W\d_]*?([A-Za-z][^:=;|\n\u2022\u00b7]{0,60}?)\s*[:=][\s;|\u2022\u00b7,]*([^;|\n\u2022\u00b7]{0,24})", re.DOTALL)
+# The be5300de opening-pair check, kept as is so nothing it hid can show.
+_OPENING_PAIR = re.compile(r"^\W*([A-Za-z][^:=\n]{0,60}?)\s*[:=]\s*(.{0,12})", re.DOTALL)
 
 
 def _private_pair(text: str) -> bool:
     # Raw and NFKC: NFKC folds fullwidth labels ("Ｂｕｙ Ｐｒｉｃｅ: 4377") but turns "Ⅳ" into letters.
     for form in (text, unicodedata.normalize("NFKC", text)):
-        for clause in (*_CLAUSE.split(form), *_HARD_CLAUSE.split(form)):
-            match = _PAIR.match(clause)
-            if match and _has_number(match.group(2)) and private_name(match.group(1)):
-                return True
+        matches = [_OPENING_PAIR.match(form)]
+        matches += [_PAIR.match(form, start) for start in (0, *(m.end() for m in _CLAUSE.finditer(form)))]
+        if any(match and _has_number(match.group(2)) and private_name(match.group(1)) for match in matches):
+            return True
     return False
 
 
@@ -168,15 +169,28 @@ _MONEY = re.compile(
 _TOKEN = re.compile(r"[^\W_]+")
 
 
+# Numbers that are product copy, not an amount: "2-year warranty", "2 magazines", "Holds 17 rounds", "Pack of 50", "Gen 5".
+# ASCII digits only, matched on the text as written: a copy phrase in another script or with invisible characters
+# ("\u2167\u2165 rounds", "\uff18\uff15 rounds", "Holds 8\u200b5 rounds") is not copy, so its number still counts.
+_COPY_NUMBER = re.compile(
+    r"[0-9]+(?:\s*-\s*|\s+)?(?:years?|yrs?|months?|weeks?|days?|hours?|magazines?|mags?|rounds?|packs?|pieces?|pcs?"
+    r"|sets?|slots?|inch(?:es)?|mm|cm|kg|g|lbs?|oz|ml)\b"
+    r"|\b(?:pack|set|box|case)\s+of\s+[0-9]+\b|\b(?:holds|gen|mk)\s*[0-9]+\b")
+
+
 def _amount_text(text: str) -> bool:
     """A string that reads as an amount rather than copy.
 
-    It holds a number and either has 3 or more numeric characters in any script ("4377 rand",
-    "USD 4,377.00", "\u2163\u2162\u2166\u2166"), has no word of 3 or more letters
-    ("R 43", "4.4k", "NDM3Nw=="), or carries a currency sign or word ("\u20ac43", "43 rand", "99 per unit").
-    "2-year warranty", "2 magazines", "Holds 17 rounds" and "Pack of 50" are copy.
+    It holds a number and has 3 or more numeric characters in any script ("4377 rand", "USD 4,377.00",
+    "\u2163\u2162\u2166\u2166"), has no word of 3 or more letters ("R 43", "4.4k", "NDM3Nw=="), carries a currency
+    sign or word ("\u20ac43", "43 rand", "99 per unit"), or keeps a number once known copy phrases are taken out
+    ("85 total", "85 AUD", "4.4 thousand", "was 85", "\u2167\u2165 total"). Only "2-year warranty",
+    "2 magazines", "Holds 17 rounds", "Pack of 50", "Gen 5" and the like, in ASCII digits, are copy.
     """
-    text = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+    # Copy phrases are matched on the text as written, and never when it hides invisible characters.
+    visible = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+    left = text.lower() if visible != text else _COPY_NUMBER.sub(" ", text.lower())
+    text = visible
     numeric = sum(unicodedata.numeric(ch, None) is not None for ch in text)
     if not numeric:
         return False
@@ -185,7 +199,7 @@ def _amount_text(text: str) -> bool:
              if len(token) >= 3 and all(ch.isalpha() and unicodedata.numeric(ch, None) is None for ch in token)]
     folded = unicodedata.normalize("NFKC", text).lower()
     return (numeric >= 3 or not words or any(unicodedata.category(ch) == "Sc" for ch in text)
-            or bool(_MONEY.search(folded)))
+            or bool(_MONEY.search(folded)) or _has_number(left))
 
 
 def _labelled_list(value: list[Any]) -> bool:
