@@ -51,7 +51,7 @@ class Liar:
 async def _service() -> tuple[Service, Liar]:
     models = Liar()
     service = Service(MemoryStore(), models)
-    for name in ("customnation", "example", "second"):
+    for name in ("lumaworks", "example", "second"):
         report = await load_catalogue(service, CATALOGUES / name)
         assert report["products"]["rejected"] == []
         assert report["fits"]["rejected"] == []

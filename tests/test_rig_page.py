@@ -24,7 +24,7 @@ from rigbox.service import RecordingHandoff, Service, hash_key  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
 EXAMPLE = ROOT / "tests" / "fixtures" / "rig_catalogues" / "example"
-DEMO = ROOT / "tests" / "fixtures" / "rig_catalogues" / "customnation"
+DEMO = ROOT / "tests" / "fixtures" / "rig_catalogues" / "lumaworks"
 ARCHON = ROOT / "tests" / "fixtures" / "rig_catalogues" / "archon"
 PAGE = ROOT / "agents" / "rig" / "rigbox" / "page"
 ORIGIN = "https://rig.tervory.com"

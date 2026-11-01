@@ -31,7 +31,7 @@ from rigbox.service import RecordingHandoff, Service, WebhookHandoff  # noqa: E4
 from rigbox.store import MemoryStore  # noqa: E402
 
 ARCHON = ROOT / "tests" / "fixtures" / "rig_catalogues" / "archon"
-LUMAWORKS = ROOT / "tests" / "fixtures" / "rig_catalogues" / "customnation"
+LUMAWORKS = ROOT / "tests" / "fixtures" / "rig_catalogues" / "lumaworks"
 EXAMPLE = ROOT / "tests" / "fixtures" / "rig_catalogues" / "example"
 TENANT = "44444444-4444-4444-8444-444444444444"
 LUMAWORKS_TENANT = "33333333-3333-4333-8333-333333333333"

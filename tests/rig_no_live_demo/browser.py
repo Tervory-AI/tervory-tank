@@ -37,9 +37,9 @@ async def main():
     output.mkdir(parents=True, exist_ok=True)
     service = Service(MemoryStore())
     # Existing saved catalogue, explicitly loaded only by this offline harness.
-    await load_catalogue(service, ROOT / "tests/fixtures/rig_catalogues/customnation")
+    await load_catalogue(service, ROOT / "tests/fixtures/rig_catalogues/lumaworks")
     config = json.loads(
-        (ROOT / "tests/fixtures/rig_catalogues/customnation/publish.json").read_text()
+        (ROOT / "tests/fixtures/rig_catalogues/lumaworks/publish.json").read_text()
     )
     tenant = config["tenant_id"]
     app = FastAPI()

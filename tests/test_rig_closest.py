@@ -43,7 +43,7 @@ class Quiet:
 
 async def _service() -> Service:
     service = Service(MemoryStore(), Quiet())
-    for name in ("customnation", "example", "second"):
+    for name in ("lumaworks", "example", "second"):
         report = await load_catalogue(service, CATALOGUES / name)
         assert report["products"]["rejected"] == []
     return service
@@ -308,7 +308,7 @@ class _Liar:
 async def test_ask_refuses_a_model_digit_the_row_does_not_have() -> None:
     models = _Liar()
     service = Service(MemoryStore(), models)
-    report = await load_catalogue(service, CATALOGUES / "customnation")
+    report = await load_catalogue(service, CATALOGUES / "lumaworks")
     assert report["products"]["rejected"] == []
     for question in ("Is TLR-7 listed?", "Is the RMR Type 3 listed?"):
         before = len(models.calls)

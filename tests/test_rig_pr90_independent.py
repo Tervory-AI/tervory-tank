@@ -37,7 +37,7 @@ from rigbox.service import Service, hash_key  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
 CATALOGUES = ROOT / "tests" / "fixtures" / "rig_catalogues"
-CN = CATALOGUES / "customnation"
+CN = CATALOGUES / "lumaworks"
 ARCHON = CATALOGUES / "archon"
 EXAMPLE = CATALOGUES / "example"
 SECOND = CATALOGUES / "second"
@@ -172,10 +172,10 @@ _INTENT: list[tuple[str, set[str]]] = [
 ]
 
 QUERIES: list[tuple[str, str, set[str]]] = (
-    [("customnation", text, ok) for text, ok in _CN]
+    [("lumaworks", text, ok) for text, ok in _CN]
     + [("example", text, ok) for text, ok in _EX]
     + [("second", text, ok) for text, ok in _SE]
-    + [("customnation", text, ok) for text, ok in _INTENT]
+    + [("lumaworks", text, ok) for text, ok in _INTENT]
 )
 
 OUTSIDE = [
@@ -393,16 +393,16 @@ def world() -> dict[str, Any]:
     client = TestClient(_app(service))
     client.__enter__()
     keys = {
-        "customnation": _key(CN),
+        "lumaworks": _key(CN),
         "example": _key(EXAMPLE),
         "second": _key(SECOND),
     }
     origins = {
-        "customnation": CN_ORIGIN,
+        "lumaworks": CN_ORIGIN,
         "example": CN_ORIGIN,
         "second": SE_ORIGIN,
     }
-    tenants = {"customnation": CN_TENANT, "example": EX_TENANT, "second": SE_TENANT}
+    tenants = {"lumaworks": CN_TENANT, "example": EX_TENANT, "second": SE_TENANT}
     payload = {"service": service, "client": client, "keys": keys, "origins": origins, "tenants": tenants}
     yield payload
     client.__exit__(None, None, None)
@@ -1041,7 +1041,7 @@ def test_diff_secrets_feeds_and_admin_key() -> None:
 
 async def _feeds(service: Service) -> dict[str, list[dict[str, Any]]]:
     return {
-        "customnation": await service.store.feeds_for(CN_TENANT),
+        "lumaworks": await service.store.feeds_for(CN_TENANT),
         "example": await service.store.feeds_for(EX_TENANT),
         "second": await service.store.feeds_for(SE_TENANT),
     }

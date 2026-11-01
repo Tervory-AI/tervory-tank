@@ -22,7 +22,7 @@ from rigbox.api import mount  # noqa: E402
 from rigbox.service import Service  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
-CN = ROOT / "tests" / "fixtures" / "rig_catalogues" / "customnation"
+CN = ROOT / "tests" / "fixtures" / "rig_catalogues" / "lumaworks"
 EXAMPLE = ROOT / "tests" / "fixtures" / "rig_catalogues" / "example"
 SECOND = ROOT / "tests" / "fixtures" / "rig_catalogues" / "second"
 TENANT = "33333333-3333-4333-8333-333333333333"

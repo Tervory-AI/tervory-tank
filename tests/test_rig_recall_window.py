@@ -121,7 +121,7 @@ async def test_a_search_uses_the_configured_window(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(service_mod, "rank_room", tracking)
     monkeypatch.setenv("RIG_SEARCH_RECALL_DAYS", "30")
     service = Service(MemoryStore(), Models())
-    report = await load_catalogue(service, CATALOGUES / "customnation")
+    report = await load_catalogue(service, CATALOGUES / "lumaworks")
     assert report["products"]["rejected"] == []
     await service.search(CN, "optic for lumaworks", 12)
     service.store.searches[0]["created_at"] = _when(40)
