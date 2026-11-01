@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import re
 import sys
 import tarfile
@@ -18,7 +17,6 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tests/trigger_second_build'))
 from test_second import env, headers, confirm, TENANT, OTHER  # noqa: F401
 import command
-import trigger_commands
 from trigger import checkers
 from trigger.service import CheckIn, WriteIn
 from trigger.voice_parser import parse_voice
@@ -268,3 +266,48 @@ async def test_one_accepted_write_enters_only_its_tenant_case_study(env):
         assert figures['trigger.acceptance_rate']['value'] == (100 if expected else 0)
         assert figures['trigger.checker_issues_per_draft']['value'] == (result['report']['issue_count'] if expected else 0)
         assert figures['trigger.voice_rule_hits']['value'] == expected
+
+
+def test_copy_defaults_legacy_rendering_and_standard_page_content(tmp_path):
+    scaffold = scaffold_module()
+    # Explicit None had the same meaning as an omitted pages list before Gate 2.
+    normal = scaffold.validate(brief(None))
+    assert normal['pages'] == ['home', 'about', 'contact', 'privacy'] and 'copies' not in normal
+    injected = brief(['home', 'products'])
+    injected['resolved_copy'] = {'products': 'unverified'}
+    clean = scaffold.validate(injected)
+    assert 'resolved_copy' not in clean
+    old = scaffold.render_extra_page('Products')
+    assert 'This page is ready for content.' in old
+    assert scaffold.render_extra_page('Products', None) == old
+    for page in ['home', 'about', 'contact', 'privacy']:
+        normalized = scaffold.validate(brief([{'name': page, 'copy': str(uuid4())}]))
+        normalized['resolved_copy'] = {page: 'Tenant <copy> & {literal}.'}
+        target = tmp_path / page
+        scaffold.write_project(normalized, target)
+        source = (target / 'app' / ('page.tsx' if page == 'home' else page + '/page.tsx')).read_text()
+        assert scaffold._jsx_text(normalized['resolved_copy'][page]) in source
+        if page == 'contact':
+            assert '<form action="/api/contact"' in source
+    duplicate = str(uuid4())
+    with pytest.raises(scaffold.ScaffoldError):
+        scaffold.validate(brief([{'name': 'products', 'copy': duplicate}, {'name': 'products', 'copy': str(uuid4())}]))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['auth', 'redirect', 'unavailable', 'tenant', 'write', 'text', 'size'])
+async def test_copy_resolution_fails_closed_without_building(failure, monkeypatch, tmp_path):
+    scaffold = scaffold_module()
+    reference = str(uuid4())
+    monkeypatch.setenv('TANK_KEY', 'offline-tisan')
+    data = {'tenant_id': str(TENANT), 'write_id': reference, 'text': 'Accepted.'}
+    status = {'auth': 401, 'redirect': 302, 'unavailable': 503}.get(failure, 200)
+    if failure == 'tenant': data['tenant_id'] = str(OTHER)
+    if failure == 'write': data['write_id'] = str(uuid4())
+    if failure == 'text': data['text'] = {'unverified': 'copy'}
+    if failure == 'size': data['text'] = 'x' * 20001
+    cls = httpx.AsyncClient
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: cls(**kwargs, transport=httpx.MockTransport(lambda request: httpx.Response(status, json=data))))
+    with pytest.raises(scaffold.ScaffoldError, match='Writing record unavailable'):
+        await scaffold.execute(brief([{'name': 'products', 'copy': reference}]), str(TENANT), data_root=tmp_path)
+    assert not (tmp_path / 'builds').exists()
