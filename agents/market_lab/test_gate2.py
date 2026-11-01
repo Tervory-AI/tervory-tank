@@ -110,7 +110,8 @@ async def test_tank_research_job_writes_only_claims_with_openable_sources(monkey
     import importlib.util
     from types import SimpleNamespace
     from core.document_read import extract
-    from core.documents import accept, page
+    from core.documents import accept
+    from core.evidence import document_page
     import core.research_adapter
 
     spec = importlib.util.spec_from_file_location("gate2_room", Path(__file__).parent / "app.py")
@@ -140,8 +141,8 @@ async def test_tank_research_job_writes_only_claims_with_openable_sources(monkey
     assert result['citations']
     for citation in result['citations']:
         assert citation['url'].startswith(f'/market-lab/sources/{file_id}')
-        assert await page(ledger, TENANT, file_id) is not None
-        assert await page(ledger, OTHER, file_id) is None
+        assert await document_page(ledger, TENANT, file_id) is not None
+        assert await document_page(ledger, OTHER, file_id) is None
     assert ledger.reports[0]['answer'] == result['answer']
     assert ledger.reports[0]['tenant_id'] == TENANT
 
