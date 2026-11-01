@@ -151,12 +151,98 @@ _PAIR = re.compile(
 _OPENING_PAIR = re.compile(r"^\W*([A-Za-z][^:=\n]{0,60}?)\s*[:=]\s*(.{0,12})", re.DOTALL)
 
 
+# A label that runs straight into an amount, from any word start: "Dealer price, 4377", "Dealer price 4377",
+# "Weight: 2 kg,Dealer price: 4377", "Dealer price \u00b7 : 4377", "Cost - R4377", "Dealer price: 4\u00b7377".
+# The label is a run of letters, spaces, "_", "'", "-" and breaks; each word end in it is tried, and the last two
+# words before any money word are screened. Separators, dashes, spaces and breaks may sit between label and
+# amount. The amount starts with a non-letter or a money prefix ("R4377", "approx 4377") and ends at the next
+# break, unless that break splits a digit run ("4\u00b7377") or what comes before it holds no number and no word
+# ("$\u00b74,377", "R\u20284377", "ap\u00b7prox 4377"). It must read as money (_money_shaped), so a copy number
+# after a private-looking word ("Heavy duty, 680 g", "Heavy duty Gen 5") is kept. Only adds to the pair checks.
+_BREAKS = ";|,\n\r\v\f\x85\u2028\u2029\u2022\u00b7"
+_WORD_START = re.compile(r"(?<![A-Za-z])[A-Za-z]")
+_LABEL_RUN = re.compile(r"[A-Za-z][A-Za-z _'\-\u00ad\u200b-\u200f\u2060-\u2064\ufeff" + _BREAKS + r"]{0,60}")
+_GAP = re.compile(r"[\s:=\-" + _BREAKS + r"]*")
+_SPLIT_DIGITS = re.compile(r"(?<=\d)[" + _BREAKS + r"](?=\d)")
+_AMOUNT_BREAK = re.compile(r"[" + _BREAKS + r"]")
+_MONEY_WORDS = r"approx\w*|about|around|only|was|r|usd|zar|eur|gbp|aud|cad|nzd"
+_MONEY_PREFIX = re.compile(r"(?:" + _MONEY_WORDS + r")\.?\s*(?=[^\sA-Za-z])", re.I)
+_MONEY_WORD = re.compile(_MONEY_WORDS, re.I)
+_FRAGMENT = re.compile(
+    r"\s*(?:[^\sA-Za-z]*|[A-Za-z]{1,2}|(?i:a|ap|app|appr|appro|approx|ab|abo|abou|ar|aro|arou|aroun))\s*")
+_LABEL_WORD = re.compile(r"[A-Za-z'_]+")
+_LABEL_SPLIT = re.compile(r"[\s\-" + _BREAKS + r"]+")
+
+
+def _label_amount(form: str) -> bool:
+    for start in _WORD_START.finditer(form):
+        label = _LABEL_RUN.match(form, start.start())
+        # Every word end is tried as the end of the label, so a label may run across a break ("Dealer\nprice: 4377")
+        # and a money word split by a break is read as the amount ("Dealer price, a\u00b7pprox 4377").
+        ends = [start.start() + m.end() for m in _LABEL_WORD.finditer(label.group())]
+        if any(_label_amount_at(form, start.start(), end) for end in ends):
+            return True
+    return False
+
+
+def _label_amount_at(form: str, begin: int, end: int) -> bool:
+    label = form[begin:end]
+    raw = _LABEL_SPLIT.split(label)
+    words = list(raw)
+    while words and _MONEY_WORD.fullmatch(words[-1]):
+        words.pop()
+    if not words or not private_name(" ".join(words[-2:])):
+        return False
+    gap = _GAP.match(form, end)
+    pieces = _AMOUNT_BREAK.split(_SPLIT_DIGITS.sub("", form[gap.end():gap.end() + 48]))
+    amount = pieces[0]
+    for piece in pieces[1:3]:
+        if _has_number(amount) or not _FRAGMENT.fullmatch(amount):
+            break
+        amount = amount.rstrip() + piece.lstrip()
+    amount = amount.strip()
+    if not amount or (amount[0].isalpha() and not _MONEY_PREFIX.match(amount)):
+        return False
+    # A number glued to a word is a model or code ("Heavy duty IPX7", "M13x1"), unless that word is money or the
+    # label needs it to be private ("R4377", "Cost4377", "Buy price4377").
+    if (gap.end() == end and not _MONEY_WORD.fullmatch(raw[-1]) and not private_name(words[-1])
+            and private_name(" ".join(words[-2:-1]))):
+        return False
+    # Copy phrases are read with the label words before the amount ("Gen 5", "Pack of 50").
+    return _money_shaped(amount) and _has_number(_COPY_NUMBER.sub(" ", f"{label} {amount}".lower()))
+
+
+# Words that may sit in an amount ("85 total", "4.4 thousand", "4377 AUD"); any other word makes it copy
+# ("1000 lb rating", "1913 rail", "4140 steel").
+_AMOUNT_WORD = re.compile(
+    r"total|retail|nett?|price|value|only|mark|grand|thousand|hundred|million|bucks?|quid|sterling|apiece|inc|incl"
+    r"|excl?|vat|gst|tax|rands?|dollars?|euros?|pounds?|yen|cents?|approx\w*|about|around|was|now|each|per|unit")
+
+
+def _money_shaped(amount: str) -> bool:
+    """Text after a private label that reads as money, not copy: a number left once ASCII copy phrases are
+    taken out ("680 g" and "17 rounds" are copy), with a currency sign or word, or with no other word than
+    an amount word or a three-letter currency code ("4377", "R4377", "$4,377.00", "4377 AUD", "85 total")."""
+    if any(unicodedata.category(ch) == "Cf" for ch in amount):
+        return _amount_text(amount)
+    if not _has_number(_COPY_NUMBER.sub(" ", amount.lower())):
+        return False
+    folded = unicodedata.normalize("NFKC", amount)
+    if any(unicodedata.category(ch) == "Sc" for ch in amount) or _MONEY.search(folded.lower()):
+        return True
+    words = [token for token in _TOKEN.findall(_COPY_NUMBER.sub(" ", amount))
+             if len(token) >= 3 and token.isalpha()]
+    return all(_AMOUNT_WORD.fullmatch(word.lower()) or (len(word) == 3 and word.isupper()) for word in words)
+
+
 def _private_pair(text: str) -> bool:
     # Raw and NFKC: NFKC folds fullwidth labels ("Ｂｕｙ Ｐｒｉｃｅ: 4377") but turns "Ⅳ" into letters.
     for form in (text, unicodedata.normalize("NFKC", text)):
         matches = [_OPENING_PAIR.match(form)]
         matches += [_PAIR.match(form, start) for start in (0, *(m.end() for m in _CLAUSE.finditer(form)))]
         if any(match and _has_number(match.group(2)) and private_name(match.group(1)) for match in matches):
+            return True
+        if _label_amount(form):
             return True
     return False
 

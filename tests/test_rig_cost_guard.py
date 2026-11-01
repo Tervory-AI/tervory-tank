@@ -876,3 +876,35 @@ def test_text_split_by_any_line_break_without_a_private_pair_is_kept() -> None:
         for text in (f"Weight: 2 kg{br}Colour: black", f"Heavy duty: yes{br}Colour: black",
                      f"Supplier warranty: yes{br}Finish: black", f"Holds 17 rounds{br}Finish: black"):
             assert shopper_attributes({"detail": text}) == {"detail": text}, (text, br)
+
+
+_CLAUSE_BREAKS = (", ", ",", ";", " | ", "\n", "\r\n", "\u2028", " \u00b7 ", "\u00b7", " \u2022 ")
+
+
+def test_a_private_label_running_into_an_amount_without_a_separator_is_hidden() -> None:
+    # Free text with no ":" or "=" after the label; #532 and earlier showed these.
+    for text in ("Dealer price, 4377", "Dealer price 4377", "Cost, R4377", "Cost - R4377", "Our cost is 4377",
+                 "export_usd 4377", "Supplier cost, $4,377.00", "Landed 4377 AUD", "Wholesale \u00b7 approx 4377",
+                 "Buy price\n4377", "Dealer\nprice: 4377", "Cost4377", "unit cost, \uff14\uff13\uff17\uff17"):
+        for value in ({"detail": text}, {"summary": text}, {"features": [text]}, {"options": {"trim": [text]}}):
+            assert "4377" not in json.dumps(shopper_attributes(value), ensure_ascii=False), value
+            assert "4377" not in json.dumps(shopper_attributes(value)), value
+
+
+def test_a_break_inside_a_private_pair_is_hidden() -> None:
+    # A break inside the pair: before the label, between label and separator, or inside the amount.
+    for br in _CLAUSE_BREAKS:
+        for text in (f"Weight: 2 kg{br}Dealer price: 4377", f"Weight: 2 kg; Dealer price{br}: 4377",
+                     f"Weight: 2 kg; Dealer price: 4{br}377", f"Cost: ${br}4,377.00", f"Cost: R{br}4377",
+                     f"Dealer price: a{br}pprox 4377", f"Finish: black{br}Cost{br}= 4377"):
+            for value in ({"detail": text}, {"features": [text]}, {"features": ["Heavy duty", text]}):
+                assert "4377" not in json.dumps(shopper_attributes(value)), (value, br)
+
+
+def test_ordinary_copy_after_a_private_looking_word_is_kept() -> None:
+    # Copy numbers ("680 g", "Pack of 50", "Gen 5", "IPX7", "1913 Picatinny") after a private-looking word stay.
+    for br in (" ", ", ", ",", "\n", " \u00b7 ", " - "):
+        for tail in ("680 g", "1000 lb rating", "Pack of 50", "Gen 5", "IPX7", "MIL-STD 1913", "M13x1 LH",
+                     "2-year warranty", "17 rounds", "4140 steel"):
+            for text in (f"Heavy duty{br}{tail}", f"Weight: 2 kg; Heavy duty{br}{tail}", f"Cost-effective{br}{tail}"):
+                assert shopper_attributes({"detail": text}) == {"detail": text}, text
