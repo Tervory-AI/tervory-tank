@@ -173,5 +173,3 @@ def read_publish(text: str) -> dict[str, Any]:
     if not isinstance(loaded, dict):
         raise ValueError("publish file must be an object")
     return loaded
-
-

@@ -57,151 +57,73 @@ diff --git a/tests/rig4.test.ts b/tests/rig4.test.ts
 index 884811b..91369d5 100644
 --- a/tests/rig4.test.ts
 +++ b/tests/rig4.test.ts
-@@ -25,9 +25,9 @@ function view(sample: boolean, screen: "results" | "explore"): View {
- }
- 
- describe("RIG-4 live data and delivery", () => {
+@@ -28 +28 @@ describe("RIG-4 live data and delivery", () => {
 -  it.each(["results", "explore"] as const)("labels %s only when sample is true", (screen) => {
 +  it.each(["results", "explore"] as const)("omits retired badges on %s regardless of data flags", (screen) => {
-     expect(renderView(view(false, screen))).not.toContain("SAMPLE DATA");
+@@ -30 +30 @@ describe("RIG-4 live data and delivery", () => {
 -    expect(renderView(view(true, screen))).toContain("SAMPLE DATA");
 +    expect(renderView(view(true, screen))).not.toContain("SAMPLE DATA");
-   });
- 
-   it("shows shopper receipt copy and never exposes retailer portal links", () => {
-@@ -72,19 +72,19 @@ it("uses themed delivery text, including requests needing store attention", () =
-   expect(renderView(state)).toContain("Contact &lt;shop&gt;");
- });
- 
+@@ -75 +75 @@ it("uses themed delivery text, including requests needing store attention", () =
 -it("has one sample label, selected state, and singular setup wording", () => {
 +it("has no retired labels, preserves selection and singular setup wording", () => {
-   const state = view(true, "results");
+@@ -77 +77 @@ it("has one sample label, selected state, and singular setup wording", () => {
 -  expect(renderView(state).match(/SAMPLE DATA/g)).toHaveLength(1);
 +  expect(renderView(state)).not.toContain("SAMPLE DATA");
-   expect(renderView(state)).toContain("Selected ✓");
-   expect(renderView(state)).not.toContain('data-action="explore"');
-   state.screen = "setup";
-   state.setups = [setup];
-   expect(renderView(state)).toContain("1 option</h2>");
+@@ -83 +83 @@ it("has one sample label, selected state, and singular setup wording", () => {
 -  expect(renderView(state).match(/SAMPLE DATA/g)).toHaveLength(1);
 +  expect(renderView(state)).not.toContain("SAMPLE DATA");
-   expect(renderView(state)).toContain("✓ Approved parts only");
-   state.product = product;
-   state.setups = [{ ...setup, parts: [{ role: "part", product: { ...product, attributes: { sample: true } } }] }];
+@@ -87 +87 @@ it("has one sample label, selected state, and singular setup wording", () => {
 -  expect(renderView(state).match(/SAMPLE DATA/g)).toHaveLength(1);
 +  expect(renderView(state)).not.toContain("SAMPLE DATA");
- });
- 
- it("orders all missing-product fields before the request button", () => {
 diff --git a/tests/smoke.spec.ts b/tests/smoke.spec.ts
 index f457783..873f6f4 100644
 --- a/tests/smoke.spec.ts
 +++ b/tests/smoke.spec.ts
-@@ -47,7 +47,7 @@ test("main path at 1440 and 390", async ({ page }) => {
-     await page.getByRole("searchbox").fill("staccato");
-     await page.getByRole("button", { name: "Search", exact: true }).click();
-     await expect(page.getByRole("heading", { name: "Staccato P", exact: true })).toBeVisible();
+@@ -50 +50 @@ test("main path at 1440 and 390", async ({ page }) => {
 -    await expect(page.getByText("SAMPLE DATA").first()).toBeVisible();
 +    await expect(page.getByText("SAMPLE DATA")).toHaveCount(0);
-     await shoot(page, `02-results-${width}`);
-     await expectNoHorizontalScroll(page);
- 
 diff --git a/widget/src/api/client.ts b/widget/src/api/client.ts
 index b60cdc0..0695614 100644
 --- a/widget/src/api/client.ts
 +++ b/widget/src/api/client.ts
-@@ -4,6 +4,7 @@ import type {
-   GraphResponse,
-   LinkQuoteRequest,
-   ProductDetail,
+@@ -6,0 +7 @@ import type {
 +  PrivacyNotice,
-   QuoteRequest,
-   RequestAck,
-   SearchResponse,
-@@ -44,6 +45,11 @@ export class RigClient {
-     return this.mockModule;
-   }
- 
+@@ -46,0 +48,5 @@ export class RigClient {
 +  async privacyNotice(): Promise<PrivacyNotice | null> {
 +    if (this.usesMock) return null;
 +    return (await this.request<{ notice: PrivacyNotice | null }>("/v1/rig/privacy-notice")).notice;
 +  }
 +
-   async search(q: string, limit = 12): Promise<SearchResponse> {
-     if (this.usesMock) return (await this.loadMock()).search(q, limit);
-     const params = new URLSearchParams({ q, limit: String(limit) });
-@@ -99,7 +105,7 @@ export class RigClient {
-     if (this.usesMock) return (await this.loadMock()).linkQuote(body);
-     return this.request<RequestAck>("/v1/rig/link-quote", {
-       method: "POST",
+@@ -102 +108 @@ export class RigClient {
 -      body: JSON.stringify({ url: body.url, note: body.note, ...(body.contact ? { contact: body.contact } : {}) }),
 +      body: JSON.stringify({ url: body.url, note: body.note, ...(body.notice_version ? { notice_version: body.notice_version } : {}), ...(body.contact ? { contact: body.contact } : {}) }),
-     });
-   }
- 
-@@ -107,6 +113,7 @@ export class RigClient {
-     if (this.usesMock) return (await this.loadMock()).quote(body);
-     const payload: QuoteRequest = {
-       contact: body.contact,
+@@ -109,0 +116 @@ export class RigClient {
 +      ...(body.notice_version ? { notice_version: body.notice_version } : {}),
-       ...(body.setup ? { setup: contractSetup(body.setup) } : {}),
-       ...(body.product_id ? { product_id: body.product_id } : {}),
-     };
 diff --git a/widget/src/api/types.ts b/widget/src/api/types.ts
 index 346ca9f..d688271 100644
 --- a/widget/src/api/types.ts
 +++ b/widget/src/api/types.ts
-@@ -74,7 +74,10 @@ export type AskResponse = {
-   cites: string[];
- };
- 
+@@ -76,0 +77,2 @@ export type AskResponse = {
 +export type PrivacyNotice = { text: string; url: string; version: string };
 +
- export type LinkQuoteRequest = {
+@@ -77,0 +80 @@ export type LinkQuoteRequest = {
 +  notice_version?: string;
-   url: string;
-   note: string;
-   contact?: Contact;
-@@ -87,6 +90,7 @@ export type Contact = {
- };
- 
- export type QuoteRequest = {
+@@ -89,0 +93 @@ export type QuoteRequest = {
 +  notice_version?: string;
-   setup?: Setup;
-   product_id?: string;
-   contact: Contact;
 diff --git a/widget/src/element.ts b/widget/src/element.ts
 index f6deaf4..8f0b658 100644
 --- a/widget/src/element.ts
 +++ b/widget/src/element.ts
-@@ -2,7 +2,7 @@ import { searchEventId } from "./api/search-event";
- import { RigClient } from "./api/client";
- import { formatPrice } from "./api/format";
- import { RigError } from "./api/types";
+@@ -5 +5 @@ import { RigError } from "./api/types";
 -import type { Contact, GraphResponse, Product, RequestAck, Setup } from "./api/types";
 +import type { Contact, PrivacyNotice, GraphResponse, Product, RequestAck, Setup } from "./api/types";
- import { resolveTheme, type Theme } from "./theme/themes";
- import { renderView, type LinkField, type QuoteView, type Screen, type View } from "./ui/render";
- import { styles } from "./ui/styles";
-@@ -25,6 +25,8 @@ export class TervoryRig extends HTMLElement {
-   }
- 
-   private client = new RigClient({ apiBase: "", key: "" });
+@@ -27,0 +28,2 @@ export class TervoryRig extends HTMLElement {
 +  private notice: PrivacyNotice | null = null;
 +  private noticeReady = false;
-   private themeOverride: Theme | null = null;
-   private root: HTMLElement | null = null;
-   private searchTimer = 0;
-@@ -118,10 +120,28 @@ export class TervoryRig extends HTMLElement {
- 
-   private syncClient(): void {
-     const apiBase = this.getAttribute("api-base");
+@@ -120,0 +123,2 @@ export class TervoryRig extends HTMLElement {
 +    this.notice = null;
 +    this.noticeReady = false;
-     this.client = new RigClient({
-       apiBase: apiBase === null ? "" : apiBase.trim(),
-       key: this.getAttribute("rig-key") ?? "",
-     });
+@@ -124,0 +129,16 @@ export class TervoryRig extends HTMLElement {
 +    this.refreshNotice();
 +  }
 +
@@ -218,266 +140,107 @@ index f6deaf4..8f0b658 100644
 +      this.message = this.errorText(error);
 +      this.render();
 +    });
-   }
- 
-   private currentTheme(): Theme {
-@@ -166,6 +186,8 @@ export class TervoryRig extends HTMLElement {
-   private view(): View {
-     return {
-       theme: this.currentTheme(),
+@@ -168,0 +189,2 @@ export class TervoryRig extends HTMLElement {
 +      notice: this.notice,
 +      noticeReady: this.noticeReady,
-       query: this.query,
-       screen: this.screen,
-       results: this.results,
-@@ -799,6 +821,7 @@ export class TervoryRig extends HTMLElement {
-     this.cancelSearch();
-     const product = this.findProduct(id);
-     if (!product) return;
+@@ -801,0 +824 @@ export class TervoryRig extends HTMLElement {
 +    this.refreshNotice();
-     this.quoteOpener = this.captureFocus();
-     this.quoteTarget = { kind: "product", productId: id };
-     this.quote = {
-@@ -818,6 +841,7 @@ export class TervoryRig extends HTMLElement {
-     this.cancelSearch();
-     const setup = this.setups.find((item) => item.tier === tier);
-     if (!setup) return;
+@@ -820,0 +844 @@ export class TervoryRig extends HTMLElement {
 +    this.refreshNotice();
-     this.quoteOpener = this.captureFocus();
-     this.quoteTarget = { kind: "setup", tier };
-     this.quote = {
-@@ -834,7 +858,7 @@ export class TervoryRig extends HTMLElement {
-   }
- 
-   private async submitQuote(form: HTMLFormElement): Promise<void> {
+@@ -837 +861 @@ export class TervoryRig extends HTMLElement {
 -    if (!this.quote || !this.quoteTarget || this.quote.pending || this.quote.requestId) return;
 +    if (!this.noticeReady || !this.quote || !this.quoteTarget || this.quote.pending || this.quote.requestId) return;
-     const data = new FormData(form);
-     const name = String(data.get("name") ?? "").trim();
-     const email = String(data.get("email") ?? "").trim();
-@@ -850,8 +874,8 @@ export class TervoryRig extends HTMLElement {
-       }
-       const response =
-         target.kind === "product"
+@@ -853,2 +877,2 @@ export class TervoryRig extends HTMLElement {
 -          ? await this.client.quote({ contact, product_id: target.productId })
 -          : await this.client.quote({ contact, setup });
 +          ? await this.client.quote({ contact, notice_version: this.notice?.version, product_id: target.productId })
 +          : await this.client.quote({ contact, notice_version: this.notice?.version, setup });
-       if (this.quote !== currentQuote) return;
-       this.quote = { ...currentQuote, requestId: response.request_id, ack: response, pending: false };
-       this.pendingFocus = {
-@@ -866,6 +890,7 @@ export class TervoryRig extends HTMLElement {
-     } catch (error) {
-       if (this.quote !== currentQuote) return;
-       this.quote = { ...currentQuote, error: this.errorText(error), pending: false };
+@@ -868,0 +893 @@ export class TervoryRig extends HTMLElement {
 +      if (error instanceof RigError && error.code === "notice_changed") this.refreshNotice();
-     }
-     this.render();
-   }
-@@ -891,6 +916,7 @@ export class TervoryRig extends HTMLElement {
-   }
- 
-   private async submitLink(form: HTMLFormElement): Promise<void> {
+@@ -893,0 +919 @@ export class TervoryRig extends HTMLElement {
 +    if (!this.noticeReady) return;
-     if (this.linkPending || this.linkRequestId) return;
-     this.linkError = null;
-     this.linkErrors = {};
-@@ -923,10 +949,11 @@ export class TervoryRig extends HTMLElement {
-       }
-     };
-     try {
+@@ -926 +952 @@ export class TervoryRig extends HTMLElement {
 -      const response = await this.client.linkQuote({ url: this.linkUrl.trim(), note: "", contact });
 +      const response = await this.client.linkQuote({ notice_version: this.notice?.version, url: this.linkUrl.trim(), note: "", contact });
-       finish({ linkRequestId: response.request_id, linkAck: response });
-     } catch (error) {
-       finish({ linkError: this.errorText(error) });
+@@ -929,0 +956 @@ export class TervoryRig extends HTMLElement {
 +      if (error instanceof RigError && error.code === "notice_changed") this.refreshNotice();
-     }
-   }
- 
 diff --git a/widget/src/mock/unavailable.ts b/widget/src/mock/unavailable.ts
 index e551a60..c4eba52 100644
 --- a/widget/src/mock/unavailable.ts
 +++ b/widget/src/mock/unavailable.ts
-@@ -1,6 +1,6 @@
- // Same function names as ./index; arguments are ignored.
+@@ -2,2 +2,2 @@
 -// Stand-in for the sample catalogue in the script-tag (UMD) bundle.
 -// Retailer embeds must never ship sample data, so api-base="mock" is refused
 +// Unconfigured API fallback for the script-tag (UMD) bundle.
 +// Retailer embeds require a real API, so api-base="mock" is refused
- // here. The ES module build still lazy-loads the real mock for the demo.
- import type {
-   AskResponse,
-@@ -16,7 +16,7 @@ import { RigError } from "../api/types";
- function refuse(): never {
-   throw new RigError(
-     "mock_not_bundled",
+@@ -19 +19 @@ function refuse(): never {
 -    "Sample data is not part of this bundle. Set api-base to your Rig API.",
 +    "Set api-base to your Rig API.",
-     400,
-   );
- }
 diff --git a/widget/src/theme/themes.ts b/widget/src/theme/themes.ts
 index 14e516d..13c9e97 100644
 --- a/widget/src/theme/themes.ts
 +++ b/widget/src/theme/themes.ts
-@@ -104,7 +104,6 @@ export type Theme = {
-     forWord: string;
-     mark: string;
-     close: string;
+@@ -107 +106,0 @@ export type Theme = {
 -    sampleLabel: string;
-     notAlternative: string;
-     errorGeneric: string;
-     unavailable: string;
-@@ -148,9 +147,9 @@ export const customNation: Theme = {
-   copy: {
-     eyebrow: "Sourced from the USA",
-     title: "Find it. We source it.",
+@@ -151 +150 @@ export const customNation: Theme = {
 -    placeholder: "Search a make, model or part — e.g. Staccato, Leupold Mark 5, MDT ACC",
 +    placeholder: "Search a make, model or part",
-     popularLabel: "Popular:",
+@@ -153 +152 @@ export const customNation: Theme = {
 -    popular: ["Staccato", "Leupold", "Nightforce", "MDT", "TriggerTech", "Proof Research"],
 +    popular: ["Leupold", "Nightforce", "MDT", "TriggerTech", "Proof Research"],
-     steps: [
-       { title: "Search", body: "Every SKU from our US suppliers, as you type." },
-       { title: "Complete your setup", body: "We suggest the parts that fit what you chose." },
-@@ -161,7 +160,7 @@ export const customNation: Theme = {
-     optionsWord: "options",
-     youChose: "You chose",
-     finePrint:
+@@ -164 +163 @@ export const customNation: Theme = {
 -      "One indicative total per setup. We confirm stock, permits and the final quotation in your client space. Prices shown are sample data until the US feeds are connected.",
 +      "One indicative total per setup. We confirm stock, permits and the final quotation in your client space.",
-     missingTitle: "Not in our feeds yet? We can still get it.",
-     missingBody: "Paste the link to the product on any US store and we will quote it for you.",
-     linkPlaceholder: "https://…",
-@@ -217,7 +216,6 @@ export const customNation: Theme = {
-     forWord: "for",
-     mark: "RIG · by Tervory",
-     close: "Close",
+@@ -220 +218,0 @@ export const customNation: Theme = {
 -    sampleLabel: "SAMPLE DATA",
-     notAlternative: "That part is not an alternative that fits.",
-     errorGeneric: "Something went wrong.",
-     unavailable: "That setup is no longer available.",
-@@ -273,7 +271,7 @@ export const neutral: Theme = {
-     optionWord: "option",
-     optionsWord: "options",
-     youChose: "You chose",
+@@ -276 +274 @@ export const neutral: Theme = {
 -    finePrint: "One indicative total per setup. The shop confirms stock and the final quotation. Prices shown are sample data.",
 +    finePrint: "One indicative total per setup. The shop confirms stock and the final quotation.",
-     missingTitle: "Not in the catalogue yet? We can still quote it.",
-     missingBody: "Paste a link to the product and your contact details, and the shop will quote it.",
-     linkPlaceholder: "https://…",
-@@ -329,7 +327,6 @@ export const neutral: Theme = {
-     forWord: "for",
-     mark: "RIG · by Tervory",
-     close: "Close",
+@@ -332 +329,0 @@ export const neutral: Theme = {
 -    sampleLabel: "SAMPLE DATA",
-     notAlternative: "That part is not an alternative that fits.",
-     errorGeneric: "Something went wrong.",
-     unavailable: "That setup is no longer available.",
 diff --git a/widget/src/three/index.html b/widget/src/three/index.html
 index 113c0f1..108b511 100644
 --- a/widget/src/three/index.html
 +++ b/widget/src/three/index.html
-@@ -1,7 +1,7 @@
- <!doctype html>
- <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
- <title>Rig — 3D test page</title><style>body{margin:0;padding:20px;font:16px/1.5 system-ui,sans-serif;color:#001840;background:#fff}main{max-width:1440px;margin:auto}button{min-height:48px;padding:12px;font:inherit;margin:0 10px 12px 0}button:disabled{opacity:0.55;cursor:not-allowed}#billing{border-top:1px solid #B8BFD0;margin-top:24px}body.terminal-page{padding:0}body.terminal-page main{max-width:none}body.terminal-page main>:not(#viewer){display:none}</style></head>
+@@ -4 +4 @@
 -<body><main><h1>3D product view</h1><p>Sample models. Design review page.</p>
 +<body><main><h1>3D product view</h1>
- <button id="open" type="button" disabled aria-describedby="message">Open 3D</button>
- <button id="kiosk" type="button" disabled aria-describedby="message">Open terminal</button>
- <p id="message" role="status">Connecting…</p><div id="viewer"></div><section id="billing"><h2>Billing</h2><p id="addon"></p></section>
 diff --git a/widget/src/three/viewer.ts b/widget/src/three/viewer.ts
 index 9625631..573a4de 100644
 --- a/widget/src/three/viewer.ts
 +++ b/widget/src/three/viewer.ts
-@@ -23,7 +23,7 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
-     .rig-3d .controls{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.rig-3d form{display:flex;gap:12px;flex-wrap:wrap}.rig-3d label{display:flex;flex-direction:column;gap:4px;max-width:100%}
-     .rig-3d input{max-width:100%}.rig-3d .quote-button{background:var(--rig-accent, #E80008);color:var(--rig-on-accent, white);border:0}.rig-3d .status{min-height:1.5em}
-     .rig-3d.kiosk{max-width:none;height:100vh;padding:16px;display:grid;grid-template-columns:minmax(0,1fr) 360px;grid-template-rows:auto auto auto auto auto 1fr auto;gap:12px;background:var(--rig-card, white)}
+@@ -26 +26 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
 -    .rig-3d.kiosk h2{grid-column:1/-1;grid-row:1;margin:0}.rig-3d.kiosk .sample{grid-column:1/-1;grid-row:2;margin:0}
 +    .rig-3d.kiosk h2{grid-column:1/-1;grid-row:1;margin:0}
-     .rig-3d.kiosk canvas{grid-column:1;grid-row:3/8;height:100%;min-height:0}
-     .rig-3d.kiosk .controls{grid-column:2;grid-row:3;margin:0}.rig-3d.kiosk .total{grid-column:2;grid-row:4;margin:0}
-     .rig-3d.kiosk .swaps{grid-row:5}.rig-3d.kiosk .status{grid-column:2;grid-row:6}.rig-3d.kiosk form{grid-column:2;grid-row:7;flex-direction:column}
-@@ -33,7 +33,6 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
-   `; root.append(style);
-   if (kiosk) root.classList.add("kiosk");
-   root.append(node("h2", "Explore this setup"));
+@@ -36 +35,0 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
 -  if (initial.sample) { const sample = node("p", "SAMPLE DATA"); sample.className = "sample"; root.append(sample); }
-   const canvas = node("canvas"); canvas.tabIndex = 0;
-   canvas.setAttribute("aria-label", "Rotate with left and right arrows. Zoom with plus and minus."); root.append(canvas);
-   const controls = node("div"); controls.className = "controls"; root.append(controls);
 diff --git a/widget/src/ui/render.ts b/widget/src/ui/render.ts
 index f466d03..629095a 100644
 --- a/widget/src/ui/render.ts
 +++ b/widget/src/ui/render.ts
-@@ -1,5 +1,5 @@
+@@ -1,2 +1,2 @@
 -import type { Contact, GraphResponse, Price, Product, RequestAck, Setup, SetupPart } from "../api/types";
 -import { detailOf, formatPrice, isSample, matchNote, summaryOf, whyLines } from "../api/format";
 +import type { Contact, PrivacyNotice, GraphResponse, Price, Product, RequestAck, Setup, SetupPart } from "../api/types";
 +import { detailOf, formatPrice, matchNote, summaryOf, whyLines } from "../api/format";
- import type { Theme } from "../theme/themes";
- 
- export type Screen = "home" | "results" | "missing" | "setup" | "explore";
-@@ -20,6 +20,8 @@ export type LinkField = "url" | "name" | "email" | "phone";
- 
- export type View = {
-   theme: Theme;
+@@ -22,0 +23,2 @@ export type View = {
 +  notice?: PrivacyNotice | null;
 +  noticeReady?: boolean;
-   query: string;
-   screen: Screen;
-   results: Product[];
-@@ -116,7 +118,6 @@ function results(view: View): string {
-   const cards = view.results.map((product) => resultCard(view, product)).join("");
-   return `<div class="meta-row">
-       <strong>${view.results.length} ${esc(noun)} ${esc(copy.forWord)} “${esc(view.query)}”</strong>
+@@ -119 +120,0 @@ function results(view: View): string {
 -      ${view.results.some(isSample) ? sampleBadge(copy.sampleLabel) : ""}
-     </div>
-     <div class="cards">${cards}</div>`;
- }
-@@ -154,7 +155,8 @@ function missing(view: View): string {
-       ${linkField(view, "name", copy.quoteName, "text", view.linkContact?.name ?? "", 'autocomplete="name" maxlength="120"')}
-       ${linkField(view, "email", copy.quoteEmail, "email", view.linkContact?.email ?? "", 'autocomplete="email" maxlength="254"')}
-       ${linkField(view, "phone", copy.quotePhone, "tel", view.linkContact?.phone ?? "", 'autocomplete="tel" inputmode="tel" maxlength="40"')}
+@@ -157 +158,2 @@ function missing(view: View): string {
 -      <button class="btn btn-accent" type="submit" ${view.linkPending || view.linkRequestId ? "disabled" : ""}>${esc(copy.requestQuote)}</button>
 +      <button class="btn btn-accent" type="submit" ${view.linkPending || view.linkRequestId || view.noticeReady === false ? "disabled" : ""}>${esc(copy.requestQuote)}</button>
 +      ${quotePrivacySlot(view)}
-     </form>
-     ${error}${ack}
-   </section>`;
-@@ -166,7 +168,7 @@ function linkField(view: View, field: LinkField, label: string, type: string, va
-   return `<div class="note">
-     <label for="${id}">${esc(label)}</label>
-     <input class="field" id="${id}" name="${field}" type="${type}" required ${attributes}
+@@ -169 +171 @@ function linkField(view: View, field: LinkField, label: string, type: string, va
 -      ${view.linkPending || view.linkRequestId ? "disabled" : ""}
 +      ${view.linkPending || view.linkRequestId || view.noticeReady === false ? "disabled" : ""}
-       ${error ? `aria-invalid="true" aria-describedby="${id}-error"` : ""} value="${esc(value)}">
-     ${error ? `<p class="field-error" id="${id}-error">${esc(error)}</p>` : ""}
-   </div>`;
-@@ -187,7 +189,6 @@ function setupScreen(view: View): string {
-         ${note ? `<p class="chosen-note">${esc(note)}</p>` : ""}
-       </div>
-       <div class="chosen-side">
+@@ -190 +191,0 @@ function setupScreen(view: View): string {
 -        ${isSample(product) || view.setups.some((setup) => setup.parts.some((part) => isSample(part.product))) ? sampleBadge(copy.sampleLabel) : ""}
-       </div>
-     </section>
-     ${
-@@ -327,8 +328,6 @@ function explore(view: View): string {
-       <div class="graph">${branchRows}</div></div>
-       <div class="side">${panel(view, setup)}${askBox(view)}</div>
-     </div>
+@@ -330,2 +330,0 @@ function explore(view: View): string {
 -    ${[...(product ? [product] : []), ...branches.flatMap((branch) => branch.products)].some(isSample)
 -      ? sampleBadge(copy.sampleLabel, "sample sample-float") : ""}
-   </div></div>${quoteDialog(view)}`;
- }
- 
-@@ -373,6 +372,14 @@ function askBox(view: View): string {
-   </form>`;
- }
- 
+@@ -375,0 +375,8 @@ function askBox(view: View): string {
 +function quotePrivacySlot(view: View): string {
 +  const notice = view.notice;
 +  if (!notice) return '<div data-quote-privacy hidden></div>';
@@ -486,37 +249,19 @@ index f466d03..629095a 100644
 +  return `<p data-quote-privacy><a href="${esc(notice.url)}" target="_blank" rel="noopener noreferrer">${esc(notice.text)}</a></p>`;
 +}
 +
- function quoteDialog(view: View): string {
-   const quote = view.quote;
-   if (!quote) return "";
-@@ -399,7 +406,8 @@ function quoteDialog(view: View): string {
-         <input class="field" id="quote-email" name="email" type="email" autocomplete="email" required ${quote.pending ? "disabled" : ""} value="${esc(quote.email)}">
-       </label>
-       ${quote.error ? `<p class="status" role="status">${esc(quote.error)}</p>` : ""}
+@@ -402 +409,2 @@ function quoteDialog(view: View): string {
 -      <button class="btn btn-accent" type="submit" ${quote.pending ? "disabled" : ""}>${esc(copy.quoteSend)}</button>
 +      <button class="btn btn-accent" type="submit" ${quote.pending || view.noticeReady === false ? "disabled" : ""}>${esc(copy.quoteSend)}</button>
 +      ${quotePrivacySlot(view)}
-       <button type="button" class="text-btn" data-action="close-quote">${esc(copy.close)}</button>
-     </form>
-   </div>`;
-@@ -424,9 +432,6 @@ function photo(product: Product, view: View, size: string): string {
-   return `<div class="photo ${size}" aria-hidden="true">${inner}</div>`;
- }
- 
+@@ -427,3 +434,0 @@ function photo(product: Product, view: View, size: string): string {
 -function sampleBadge(label: string, className = "sample"): string {
 -  return `<span class="${className}">${esc(label)}</span>`;
 -}
- 
- function acknowledgement(ack: RequestAck, theme: Theme): string {
-   const pending = ack.delivery === "pending" || ack.delivery === "sending";
 diff --git a/widget/src/ui/styles.ts b/widget/src/ui/styles.ts
 index 4a645fe..52b7acb 100644
 --- a/widget/src/ui/styles.ts
 +++ b/widget/src/ui/styles.ts
-@@ -180,17 +180,6 @@ h1.title {
- .step p { font-size: 14px; }
- .meta-row { gap: 10px; flex-wrap: wrap; }
- .meta-row strong { font-size: 13px; }
+@@ -183,11 +182,0 @@ h1.title {
 -.sample {
 -  display: inline-block;
 -  background: var(--rig-badge);
@@ -528,30 +273,9 @@ index 4a645fe..52b7acb 100644
 -  border-radius: var(--rig-radius);
 -  white-space: nowrap;
 -}
- .cards, .setups {
-   display: grid;
-   grid-template-columns: repeat(3, minmax(0, 1fr));
-@@ -298,7 +287,6 @@ h1.title {
- }
- .setup-name { font-size: 26px; line-height: 1; }
- .setup-head .badge-hot,
+@@ -301 +289,0 @@ h1.title {
 -.setup-head .sample:last-child { margin-left: auto; }
- .badge-hot {
-   background: var(--rig-accent);
-   color: var(--rig-on-accent);
-@@ -650,7 +638,6 @@ h1.title {
- }
- .answer { color: var(--rig-graph-text); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
- .answer span { color: var(--rig-graph-muted); font-size: 11px; }
+@@ -653 +640,0 @@ h1.title {
 -.sample-float { position: absolute; left: 32px; bottom: 20px; background: rgba(255, 255, 255, 0.08); color: var(--rig-graph-muted); }
- @media (max-width: 1100px) {
-   .explore-grid { grid-template-columns: 1fr; min-height: 0; padding: 16px; }
-   .graph-canvas { grid-template-columns: 1fr; gap: 40px; }
-@@ -663,7 +650,6 @@ h1.title {
-   .centre { padding-top: 8px; }
-   .side { min-height: 0; }
-   .ask { margin-top: 0; }
+@@ -666 +652,0 @@ h1.title {
 -  .sample-float { position: static; margin: 0 16px 16px; }
- }
- @media (max-width: 720px) {
-   .shell { padding: 20px 16px 28px; gap: 18px; }

@@ -137,4 +137,3 @@ def add_anchors(data: bytes, job: Job) -> bytes:
         return struct.pack("<4sIIII", b"glTF", 2, 20+len(encoded)+len(tail), len(encoded), 0x4E4F534A) + encoded + tail
     except (ValueError, KeyError, IndexError, TypeError, struct.error):
         raise RigError("anchors", "The attachment points could not be added. Check their names and the product file.", 422) from None
-
