@@ -251,6 +251,10 @@ services:
       TANK_API_KEY: ${TANK_API_KEY}
       # Founder-only repository reads; absent means the tools are not offered.
       TANK_GITHUB_READ_TOKEN: ${TANK_GITHUB_READ_TOKEN:-}
+      # Tisan publish (docs/ops/TISAN-PUBLISH.md): the private sites repository and its
+      # one-repository token (Contents + Workflows read/write). Empty keeps publish off.
+      TISAN_SITES_REPO: ${TISAN_SITES_REPO:-}
+      TISAN_GITHUB_TOKEN: ${TISAN_GITHUB_TOKEN:-}
       HF_TOKEN: ${HF_TOKEN:-}
       HF_ORG: ${HF_ORG:-}
       TRAINING_JOB_KEY: ${TRAINING_JOB_KEY:-}
