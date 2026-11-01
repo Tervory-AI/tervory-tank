@@ -27,7 +27,7 @@ from trigger.voice import Voice, VoiceStore
 
 TENANT = UUID("00000000-0000-0000-0000-000000000011")
 OTHER = UUID("00000000-0000-0000-0000-000000000012")
-PACKAGES = {k: p for k, p in skala.load_packages().items() if p.id in skala_intake.IDS and p.version == "1.0.0"}
+PACKAGES = {k: p for k, p in skala.load_packages().items() if p.id in skala_intake.IDS and p.version == skala_intake.VERSIONS[p.id]}
 RESPONSES = json.loads(Path(__file__).with_name("languagetool-responses.json").read_text())
 LT_IMAGE = json.loads((ROOT / "agents/trigger/sources/pins.json").read_text())["languagetool-image"]
 CONFIG_HASH = hashlib.sha256((ROOT / "agents/trigger/languagetool.properties").read_bytes()).hexdigest()
@@ -57,6 +57,45 @@ async def test_each_package_meets_real_skala_gate(identity, monkeypatch):
         assert result["score"] == result["threshold"] == 1.0, [d for d in result["details"] if not d["passed"]]
         assert result["total"] >= 20 and result["cost_usd"] == 0
         assert not any(d["used_model"] for d in result["details"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", ["1.0.0", "1.1.0"])
+async def test_languagetool_versioned_runtime_contract(version, monkeypatch):
+    """Each immutable package passes only against its own runtime provenance."""
+    monkeypatch.setenv("TANK_KEY_TRIGGER", "offline-test-fixture")
+    pkg = skala.load_packages()[("trigger.languagetool", version)]
+    pin = json.loads((pkg.path / "service.json").read_text())
+    other = skala.load_packages()[("trigger.languagetool", "1.1.0" if version == "1.0.0" else "1.0.0")]
+    other_pin = json.loads((other.path / "service.json").read_text())
+    image = pin["image"]
+    def reply(request):
+        body = json.loads(request.content)
+        return httpx.Response(200, json={"result": RESPONSES[body["text"]],
+            "config_sha256": pin["config_sha256"], "image": image})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as http:
+        evidence = await skala.run_evals(pkg, lambda: context(pkg, http))
+        assert evidence["eligible"] and evidence["score"] == 1.0
+        image = other_pin["image"]
+        with pytest.raises(ValueError, match="configuration does not match"):
+            await skala.run_skill(pkg, {"text": "This is a test."}, context(pkg, http))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("filename", ["service.json", "languagetool.properties"])
+async def test_languagetool_new_package_tampering_is_refused(filename, tmp_path, monkeypatch):
+    monkeypatch.setenv("TANK_KEY_TRIGGER", "offline-test-fixture")
+    original = PACKAGES[("trigger.languagetool", "1.1.0")]
+    target = tmp_path / "tampered"
+    shutil.copytree(original.path, target)
+    path = target / filename
+    path.write_bytes(path.read_bytes() + b"\n")
+    pkg = dataclasses.replace(original, path=target)
+    def forbidden(request):
+        raise AssertionError("Tampered package reached the room")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(forbidden)) as http:
+        with pytest.raises(ValueError, match="Pinned checker data changed"):
+            await skala._import_run_uncached(pkg)({"text": "A draft."}, context(pkg, http))
 
 
 @pytest.mark.asyncio
@@ -99,16 +138,20 @@ async def test_tampered_rule_archive_is_refused(tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("change", ["version", "config", "incomplete"])
+@pytest.mark.parametrize("change", ["version", "build", "premium", "config", "image", "incomplete"])
 async def test_languagetool_runtime_mismatch_never_silently_passes(change, monkeypatch):
     monkeypatch.setenv("TANK_KEY_TRIGGER", "offline-test-fixture")
     result = json.loads(json.dumps(RESPONSES["This is a test."]))
     digest = CONFIG_HASH
+    image = LT_IMAGE
     if change == "version": result["software"]["version"] = "other"
+    if change == "build": result["software"]["buildDate"] = "changed"
+    if change == "premium": result["software"]["premium"] = True
+    if change == "image": image = "changed"
     if change == "config": digest = "changed"
     if change == "incomplete": result["warnings"] = {"incompleteResults": True}
-    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200, json={"result": result, "config_sha256": digest, "image": LT_IMAGE}))) as http:
-        pkg = PACKAGES[("trigger.languagetool", "1.0.0")]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200, json={"result": result, "config_sha256": digest, "image": image}))) as http:
+        pkg = PACKAGES[("trigger.languagetool", "1.1.0")]
         with pytest.raises((ValueError, RuntimeError)):
             await skala.run_skill(pkg, {"text": "This is a test."}, context(pkg, http))
 
@@ -160,13 +203,14 @@ async def test_persisted_ready_bulk_approval_room_execution_tenant_scope_and_rol
     monkeypatch.setattr(tank, "_model_for_skill", no_model)
     await tank.register_packages()
     transport = httpx.ASGITransport(app=tank.app)
+    runtime = {"image": LT_IMAGE}
     async def dispatch(request):
         if request.url.host == "tank":
             return await transport.handle_async_request(request)
         if request.url.host == "agent-trigger":
             assert request.headers["x-tank-key"] == "offline-test-fixture"
             body = json.loads(request.content)
-            return httpx.Response(200, json={"result": RESPONSES[body["text"]], "config_sha256": CONFIG_HASH, "image": LT_IMAGE})
+            return httpx.Response(200, json={"result": RESPONSES[body["text"]], "config_sha256": CONFIG_HASH, "image": runtime["image"]})
         if request.url.host == "trigger-languagetool":
             from urllib.parse import parse_qs
             text = parse_qs(request.content.decode())["text"][0]
@@ -212,6 +256,7 @@ async def test_persisted_ready_bulk_approval_room_execution_tenant_scope_and_rol
             }, indent=2, default=str) + "\n")
         result = await tank.confirm_skill_approvals(tank.Approval(by="offline-founder", token=preview["token"], confirmed=True))
         assert len(result["approved"]) == 7
+        assert await tank.approved_version("trigger.languagetool") == "1.1.0"
         if evidence:
             (output / "approved.json").write_text(json.dumps(result, indent=2) + "\n")
         # Every approved checker must skip the room implementation.
@@ -241,6 +286,24 @@ async def test_persisted_ready_bulk_approval_room_execution_tenant_scope_and_rol
         await tank.rollback_skill(original.id, original.version, tank.Approval(by="offline-founder", confirmed=True))
         assert (await client.approved_skill(str(TENANT), original.id, {"text": "A draft."}))["_skill"].endswith("@1.0.0")
         skala._run_cache.pop((newer.id, newer.version), None)
+        # A historical approval/rollback cannot make the old package accept the
+        # replacement runtime. Use only this disposable database and mock room.
+        old = skala.load_packages()[("trigger.languagetool", "1.0.0")]
+        tank._packages[(old.id, old.version)] = old
+        await tank.register_packages()
+        runtime["image"] = json.loads((old.path / "service.json").read_text())["image"]
+        assert (await tank.run_skill_evals(old.id, old.version))["gate"] == "passed"
+        await tank.approve_skill(old.id, old.version, tank.Approval(by="offline-founder"))
+        assert await tank.approved_version(old.id) == "1.0.0"
+        runtime["image"] = LT_IMAGE
+        with pytest.raises(RuntimeError):
+            await client.approved_skill(str(TENANT), old.id, {"text": "This is a test."})
+        await tank.rollback_skill(old.id, "1.1.0", tank.Approval(by="offline-founder", confirmed=True))
+        assert (await client.approved_skill(str(TENANT), old.id, {"text": "This is a test."}))["_skill"].endswith("@1.1.0")
+        await tank.rollback_skill(old.id, "1.0.0", tank.Approval(by="offline-founder", confirmed=True))
+        with pytest.raises(RuntimeError):
+            await client.approved_skill(str(TENANT), old.id, {"text": "This is a test."})
+
 
 
 @pytest.mark.asyncio
