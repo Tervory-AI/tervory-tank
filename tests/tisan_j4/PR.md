@@ -26,9 +26,9 @@ including repeated moves and moves out of terminal states, are refused.
 | `agents/tisan/Dockerfile:45` | Packages quotes/schema and existing SMTP implementation; includes repository Figma documents for the future approved wording file. |
 | `agents/tisan/Dockerfile.dockerignore:8` | Allows the reused SMTP source and existing Figma document tree in the build context. |
 | `tests/test_tisan_quotes.py:108` | Every pair of six states, financial-field refusals at three levels, audit/rollback, tenant isolation, API authorization, invalid inputs, missing/invalid wording, successful/rejected/uncertain email and missing SMTP. |
-| `tests/test_tisan_quotes_postgres.py:24` | Disposable local PostgreSQL: execute schema twice, exercise non-bypass room role and RLS, concurrent moves, and event-failure rollback. |
+| `tests/test_tisan_quotes_postgres.py:23` | Disposable local PostgreSQL: execute schema twice, exercise non-bypass room role and RLS, concurrent moves, and event-failure rollback. |
 
-Only `agents/tisan/` and the listed tests/report changed. The existing exact-commit
+Only `agents/tisan/` and the listed tests/report changed, including the root-authorized isolation-fixture correction recorded below. The existing exact-commit
 promotion and Radix gate implementations from #425/#426 are retained. No
 Workspace page, generated-site page, Tank route, Compose setting, model call,
 production SQL, live SMTP send, promotion or deployment was performed.
@@ -215,3 +215,63 @@ The three optional local PostgreSQL tests were skipped because this follow-up
 did not start a database or set `J4_TEST_POSTGRES_PORT`; their earlier real-SQL
 results remain recorded above. No behavior changed. Hosted checks on the new
 head remain pending; no browser acceptance or merge is claimed.
+
+
+## PR #564 disposable-isolation follow-up
+
+Isolation run `41354022951` failed while installing all room schemas because the
+throwaway fixture does not provision the production `agent_tisan` role. Fixed
+without creating roles in application schema DDL or weakening RLS:
+
+- `agents/tisan/schema.sql:102`: grant the same least-privilege table/sequence
+  permissions only when the room role already exists. Reapplying schema after
+  role provisioning applies those grants. Forced RLS and tenant policies always
+  install, including when the role is absent; no PUBLIC grant was added.
+- `tests/test_tenant_rls.py:199`: omit `GENERATED ALWAYS` identity columns from
+  generic seed INSERTs so PostgreSQL generates their IDs. Every actual tenant
+  table, including both quote tables, remains in the full isolation matrix.
+  No production identity constraint, RLS policy, or matrix assertion was relaxed.
+- `tests/test_tisan_quotes_postgres.py:32`: install schema before role
+  provisioning, assert no role was created and both quote tables enforce RLS,
+  then provision the test role, reapply and verify the original grants and
+  actual non-bypass-room-role operations.
+
+Before pushing any of these three files, ran against a new disposable container:
+
+```sh
+docker run --detach --name tisan-j4-review-postgres --network bridge --publish 127.0.0.1::5432 --env POSTGRES_HOST_AUTH_METHOD=trust --tmpfs /var/lib/postgresql/data postgres:16
+docker port tisan-j4-review-postgres 5432
+RLS_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32784/postgres J4_TEST_POSTGRES_PORT=32784 /tmp/base-reliability-venv/bin/python -m pytest -q tests/test_tenant_rls.py tests/test_tisan_quotes_postgres.py tests/test_tisan_quotes.py
+```
+
+The container bound `127.0.0.1:32784`. First run: **113 passed, 1 failed in
+32.80s**; the remaining failure was a missing local `dns` module when importing
+Radix gateway code, not a schema/setup/RLS failure. Installed the existing
+Radix Dockerfile's pinned dependency into this clone's ignored test-only folder:
+
+```sh
+/tmp/base-reliability-venv/bin/python -m pip install --target /workspace/codex-tisan-j4/.test-deps dnspython==2.9.0
+PYTHONPATH=/workspace/codex-tisan-j4/.test-deps RLS_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32784/postgres J4_TEST_POSTGRES_PORT=32784 /tmp/base-reliability-venv/bin/python -m pytest -q tests/test_tenant_rls.py tests/test_tisan_quotes_postgres.py tests/test_tisan_quotes.py
+```
+
+Install exited 0; complete targeted rerun: **114 passed, 13 warnings in
+66.65s**, exit 0, **no skips**. This includes the actual disposable all-schema
+isolation matrix and real quote PostgreSQL tests, not just doubles.
+
+To explicitly verify the absent-room-role path again after removing only the
+role inside this named disposable container:
+
+```sh
+docker exec tisan-j4-review-postgres psql -U postgres -d postgres -c 'DROP ROLE agent_tisan'
+J4_TEST_POSTGRES_PORT=32784 /tmp/base-reliability-venv/bin/python -m pytest -q tests/test_tisan_quotes_postgres.py
+PATH=/tmp/base-reliability-venv/bin:$PATH ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+git diff --check
+```
+
+Results: `DROP ROLE`; **3 passed, 1 warning in 1.27s**; Ruff **All checks
+passed**; diff check no output. All commands exited 0 before the source/test
+fixes were committed and pushed. Source/test commits: `b58d6250`, `ef6b46bf`,
+`2daf6928`. This report is the subsequent documentation change. The disposable
+container is removed after verification. No production role/schema/data was
+accessed or changed. Hosted CI on this new head remains to be checked by root;
+no merge or founder browser acceptance is claimed.
