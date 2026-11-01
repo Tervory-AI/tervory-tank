@@ -39,6 +39,15 @@ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const browser=await chromium.launch({headless:true,executablePath:process.env.NAV_CHROMIUM || undefined});
 const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
 const base=`http://127.0.0.1:${server.address().port}`;
+await page.route('**/*',route=>{
+ const url=new URL(route.request().url());
+ if(url.hostname==='127.0.0.1') return route.continue();
+ if(assets.has(url.pathname)) return route.fulfill({body:assets.get(url.pathname)});
+ if(['app.tervory.com','zenas.tervory.com','base.tervory.com','tiger.tervory.com'].includes(url.hostname) && url.pathname==='/chats'){
+  return route.fulfill({contentType:'text/html',body:`<style>${css}</style><div id="root"></div><script type="module">${bundle.outputFiles[0].text}</script>`});
+ }
+ return route.abort();
+});
 try {
  for(const width of [375,1440]){
   await page.setViewportSize({width,height:900});await page.goto(`${base}/chats`);await page.locator('#app-sidebar').waitFor({state:width===375?'hidden':'visible'});
@@ -79,7 +88,6 @@ try {
  // Host rules: only / rewrites; Chats and Projects deep links stay intact.
  for(const host of ['app.tervory.com','zenas.tervory.com','base.tervory.com','tiger.tervory.com']){
   const target=`https://${host}/chats`;
-  await page.route(target,route=>route.fulfill({contentType:'text/html',body:`<style>${css}</style><div id="root"></div><script type="module">${bundle.outputFiles[0].text}</script>`}));
   await page.goto(target);await page.getByRole('link',{name:'Chats',exact:true,includeHidden:true}).waitFor();
   const href=await page.getByRole('link',{name:'Chats',exact:true,includeHidden:true}).getAttribute('href');assert.equal(new URL(href,target).pathname,'/chats');
   assert.equal(await page.getByRole('link',{name:'Projects',exact:true}).getAttribute('href'),'/matters');
