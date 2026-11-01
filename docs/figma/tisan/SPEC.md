@@ -332,39 +332,71 @@ and QUOTE-EMAILS-DRAFT.md; each is part of this approval register.
 - W127: "Plain-text body"
 - W128: "Hello {customer_name},\n\n{shop_name} has received your quote request {request_id}.\n\n{items}\n\nReply preference: {reply_method}\nWe will contact you using the details you provided.\n\n{shop_name}"
 - W129: "HTML body"
-- W130: "<h1>We received your quote request</h1>\n<p>Hello {customer_name},</p>\n<p>{shop_name} has received your quote request {request_id}.</p>\n<ul>{items}</ul>\n<p>Reply preference: {reply_method}</p>\n<p>We will contact you using the details you provided.</p>\n<p>{shop_name}</p>"
-- W131: "E2 · Store · New request · submitted"
-- W132: "New quote request {request_id}"
-- W133: "A new quote request is ready for {shop_name}.\n\nRequest: {request_id}\nReceived: {submitted_at}\nName: {customer_name}\nEmail: {customer_email}\nPhone: {customer_phone}\nCompany: {customer_company}\nReply preference: {reply_method}\n\n{items}\n\nOpen the request: {request_url}"
-- W134: "<h1>New quote request</h1>\n<p>A new quote request is ready for {shop_name}.</p>\n<dl>\n<dt>Request</dt><dd>{request_id}</dd>\n<dt>Received</dt><dd>{submitted_at}</dd>\n<dt>Name</dt><dd>{customer_name}</dd>\n<dt>Email</dt><dd>{customer_email}</dd>\n<dt>Phone</dt><dd>{customer_phone}</dd>\n<dt>Company</dt><dd>{customer_company}</dd>\n<dt>Reply preference</dt><dd>{reply_method}</dd>\n</dl>\n<ul>{items}</ul>\n<p><a href=\"{request_url}\">Open the request</a></p>"
-- W135: "E3 · Customer · Your quote · quoted"
-- W136: "Your quote from {shop_name} — {request_id}"
-- W137: "Hello {customer_name},\n\nYour quote from {shop_name} is ready.\nRequest: {request_id}\n\n{items}\n\nAmount: {quote_amount} {quote_currency}\nValid until: {valid_until}\n\n{quote_message}\n\nReply to this email to accept or decline the quote.\n\n{shop_name}"
-- W138: "<h1>Your quote</h1>\n<p>Hello {customer_name},</p>\n<p>Your quote from {shop_name} is ready.</p>\n<p>Request: {request_id}</p>\n<ul>{items}</ul>\n<p><strong>Amount: {quote_amount} {quote_currency}</strong></p>\n<p>Valid until: {valid_until}</p>\n<p>{quote_message}</p>\n<p>Reply to this email to accept or decline the quote.</p>\n<p>{shop_name}</p>"
-- W139: "E4 · Customer · Accepted · accepted"
-- W140: "Quote accepted — {shop_name} — {request_id}"
-- W141: "Hello {customer_name},\n\nYour acceptance has been recorded for quote {request_id} from {shop_name}.\nAmount: {quote_amount} {quote_currency}\nRecorded: {changed_at}\n\n{shop_name} will contact you about the next steps."
-- W142: "<h1>Quote accepted</h1>\n<p>Hello {customer_name},</p>\n<p>Your acceptance has been recorded for quote {request_id} from {shop_name}.</p>\n<p>Amount: {quote_amount} {quote_currency}</p>\n<p>Recorded: {changed_at}</p>\n<p>{shop_name} will contact you about the next steps.</p>"
-- W143: "E5 · Store · Accepted · accepted"
-- W144: "Quote {request_id} accepted"
-- W145: "{customer_name}'s acceptance of quote {request_id} has been recorded.\nAmount: {quote_amount} {quote_currency}\nRecorded: {changed_at}\n\nOpen the request: {request_url}"
-- W146: "<h1>Quote accepted</h1>\n<p>{customer_name}'s acceptance of quote {request_id} has been recorded.</p>\n<p>Amount: {quote_amount} {quote_currency}</p>\n<p>Recorded: {changed_at}</p>\n<p><a href=\"{request_url}\">Open the request</a></p>"
-- W147: "E6 · Customer · Declined · declined"
-- W148: "Quote declined — {shop_name} — {request_id}"
-- W149: "Hello {customer_name},\n\nYour decision to decline quote {request_id} from {shop_name} has been recorded.\nRecorded: {changed_at}\n\nYou can reply to this email if you would like to discuss the quote.\n\n{shop_name}"
-- W150: "<h1>Quote declined</h1>\n<p>Hello {customer_name},</p>\n<p>Your decision to decline quote {request_id} from {shop_name} has been recorded.</p>\n<p>Recorded: {changed_at}</p>\n<p>You can reply to this email if you would like to discuss the quote.</p>\n<p>{shop_name}</p>"
-- W151: "E7 · Store · Declined · declined"
-- W152: "Quote {request_id} declined"
-- W153: "{customer_name}'s decision to decline quote {request_id} has been recorded.\nRecorded: {changed_at}\n\nOpen the request: {request_url}"
-- W154: "<h1>Quote declined</h1>\n<p>{customer_name}'s decision to decline quote {request_id} has been recorded.</p>\n<p>Recorded: {changed_at}</p>\n<p><a href=\"{request_url}\">Open the request</a></p>"
-- W155: "Close menu"
+- W130: "We received your quote request"
+- W131: "Hello {customer_name},"
+- W132: "{shop_name} has received your quote request {request_id}."
+- W133: "{items}"
+- W134: "Reply preference: {reply_method}"
+- W135: "We will contact you using the details you provided."
+- W136: "{shop_name}"
+- W137: "HTML source"
+- W138: "<h1>We received your quote request</h1>\n<p>Hello {customer_name},</p>\n<p>{shop_name} has received your quote request {request_id}.</p>\n<ul>{items}</ul>\n<p>Reply preference: {reply_method}</p>\n<p>We will contact you using the details you provided.</p>\n<p>{shop_name}</p>"
+- W139: "E2 · Store · New request · submitted"
+- W140: "New quote request {request_id}"
+- W141: "A new quote request is ready for {shop_name}.\n\nRequest: {request_id}\nReceived: {submitted_at}\nName: {customer_name}\nEmail: {customer_email}\nPhone: {customer_phone}\nCompany: {customer_company}\nReply preference: {reply_method}\n\n{items}\n\nOpen the request: {request_url}"
+- W142: "New quote request"
+- W143: "A new quote request is ready for {shop_name}."
+- W144: "{request_id}"
+- W145: "Received"
+- W146: "{submitted_at}"
+- W147: "Company"
+- W148: "Reply preference"
+- W149: "{reply_method}"
+- W150: "Open the request"
+- W151: "<h1>New quote request</h1>\n<p>A new quote request is ready for {shop_name}.</p>\n<dl>\n<dt>Request</dt><dd>{request_id}</dd>\n<dt>Received</dt><dd>{submitted_at}</dd>\n<dt>Name</dt><dd>{customer_name}</dd>\n<dt>Email</dt><dd>{customer_email}</dd>\n<dt>Phone</dt><dd>{customer_phone}</dd>\n<dt>Company</dt><dd>{customer_company}</dd>\n<dt>Reply preference</dt><dd>{reply_method}</dd>\n</dl>\n<ul>{items}</ul>\n<p><a href=\"{request_url}\">Open the request</a></p>"
+- W152: "E3 · Customer · Your quote · quoted"
+- W153: "Your quote from {shop_name} — {request_id}"
+- W154: "Hello {customer_name},\n\nYour quote from {shop_name} is ready.\nRequest: {request_id}\n\n{items}\n\nAmount: {quote_amount} {quote_currency}\nValid until: {valid_until}\n\n{quote_message}\n\nReply to this email to accept or decline the quote.\n\n{shop_name}"
+- W155: "Your quote"
+- W156: "Your quote from {shop_name} is ready."
+- W157: "Request: {request_id}"
+- W158: "Amount: {quote_amount} {quote_currency}"
+- W159: "Valid until: {valid_until}"
+- W160: "Reply to this email to accept or decline the quote."
+- W161: "<h1>Your quote</h1>\n<p>Hello {customer_name},</p>\n<p>Your quote from {shop_name} is ready.</p>\n<p>Request: {request_id}</p>\n<ul>{items}</ul>\n<p><strong>Amount: {quote_amount} {quote_currency}</strong></p>\n<p>Valid until: {valid_until}</p>\n<p>{quote_message}</p>\n<p>Reply to this email to accept or decline the quote.</p>\n<p>{shop_name}</p>"
+- W162: "E4 · Customer · Accepted · accepted"
+- W163: "Quote accepted — {shop_name} — {request_id}"
+- W164: "Hello {customer_name},\n\nYour acceptance has been recorded for quote {request_id} from {shop_name}.\nAmount: {quote_amount} {quote_currency}\nRecorded: {changed_at}\n\n{shop_name} will contact you about the next steps."
+- W165: "Quote accepted"
+- W166: "Your acceptance has been recorded for quote {request_id} from {shop_name}."
+- W167: "Recorded: {changed_at}"
+- W168: "{shop_name} will contact you about the next steps."
+- W169: "<h1>Quote accepted</h1>\n<p>Hello {customer_name},</p>\n<p>Your acceptance has been recorded for quote {request_id} from {shop_name}.</p>\n<p>Amount: {quote_amount} {quote_currency}</p>\n<p>Recorded: {changed_at}</p>\n<p>{shop_name} will contact you about the next steps.</p>"
+- W170: "E5 · Store · Accepted · accepted"
+- W171: "Quote {request_id} accepted"
+- W172: "{customer_name}'s acceptance of quote {request_id} has been recorded.\nAmount: {quote_amount} {quote_currency}\nRecorded: {changed_at}\n\nOpen the request: {request_url}"
+- W173: "{customer_name}'s acceptance of quote {request_id} has been recorded."
+- W174: "<h1>Quote accepted</h1>\n<p>{customer_name}'s acceptance of quote {request_id} has been recorded.</p>\n<p>Amount: {quote_amount} {quote_currency}</p>\n<p>Recorded: {changed_at}</p>\n<p><a href=\"{request_url}\">Open the request</a></p>"
+- W175: "E6 · Customer · Declined · declined"
+- W176: "Quote declined — {shop_name} — {request_id}"
+- W177: "Hello {customer_name},\n\nYour decision to decline quote {request_id} from {shop_name} has been recorded.\nRecorded: {changed_at}\n\nYou can reply to this email if you would like to discuss the quote.\n\n{shop_name}"
+- W178: "Quote declined"
+- W179: "Your decision to decline quote {request_id} from {shop_name} has been recorded."
+- W180: "You can reply to this email if you would like to discuss the quote."
+- W181: "<h1>Quote declined</h1>\n<p>Hello {customer_name},</p>\n<p>Your decision to decline quote {request_id} from {shop_name} has been recorded.</p>\n<p>Recorded: {changed_at}</p>\n<p>You can reply to this email if you would like to discuss the quote.</p>\n<p>{shop_name}</p>"
+- W182: "E7 · Store · Declined · declined"
+- W183: "Quote {request_id} declined"
+- W184: "{customer_name}'s decision to decline quote {request_id} has been recorded.\nRecorded: {changed_at}\n\nOpen the request: {request_url}"
+- W185: "{customer_name}'s decision to decline quote {request_id} has been recorded."
+- W186: "<h1>Quote declined</h1>\n<p>{customer_name}'s decision to decline quote {request_id} has been recorded.</p>\n<p>Recorded: {changed_at}</p>\n<p><a href=\"{request_url}\">Open the request</a></p>"
+- W187: "Close menu"
 
 ## Email frames
 
 E1 customer request received and E2 store new request correspond to submitted.
 E3 customer your quote corresponds to quoted. E4/E5 notify customer/store of
-accepted; E6/E7 notify customer/store of declined. Each frame has subject,
-plain-text body and HTML body. No marketing or tracking pixels.
+accepted; E6/E7 notify customer/store of declined. Each frame has a subject,
+plain-text body, editable rendered HTML preview and exact HTML source. No marketing or tracking pixels.
 Founder approval must cover recipients, reply routing, omitted optional rows,
 item rendering, date/time formatting and the exact copy in the draft email file.
 
@@ -372,8 +404,8 @@ item rendering, date/time formatting and the exact copy in the draft email file.
 
 Source reads, library inspection, component/variable reuse and frame inventory
 were performed in this isolated branch. The source-to-frame structural audit found 90 draft screen/email frames,
-713 component instances and 2,072 visible text nodes. Font families were only
-Jost and Inter. Horizontal text-overflow count was 0. All 128 prototype
+713 component instances and 2,135 visible text nodes. Font families were only
+Jost and Inter. Horizontal and vertical text-overflow counts were 0. All 128 prototype
 destinations (including inherited menu links) existed. Founder browser acceptance has not occurred and
 must not be claimed from tool screenshots. Claude opens the PR from this branch;
 the founder alone merges. A separate review thread may require changes on the
@@ -411,9 +443,30 @@ const page = await figma.getNodeByIdAsync('164:12');
 await figma.setCurrentPageAsync(page);
 const screens = page.children.filter(n => n.type === 'FRAME' && /^(A-|B-|E[1-7] ·)/.test(n.name));
 // Recursively visit visible TEXT and INSTANCE nodes within these screens.
-// Compare text x + width to parent width; collect font families and reaction destination IDs.
+// Compare text x + width to parent width AND y + height to parent height; collect fonts and reaction destinations.
 // Resolve every destination with figma.getNodeByIdAsync; report any missing node.
 ```
-Result: 90 frames, 713 instances, 2,072 visible text nodes, only Jost/Inter,
-0 horizontal overflow findings, 128 existing prototype destinations.
+Result: 90 frames, 713 instances, 2,135 visible text nodes, only Jost/Inter,
+0 horizontal or vertical overflow findings, 128 existing prototype destinations.
 These are design checks, not a live implementation test or founder acceptance.
+
+## Final checks and current review status
+
+- Desktop Workspace shells preserve the canonical menu's 900px minimum height,
+  grow for longer request details, and show Connections, The Squad and New Notices.
+- Final Figma audit: 90 screen/email frames; 713 instances; 2,135 visible text nodes;
+  only Jost and Inter; 0 horizontal or vertical text-overflow findings;
+  128 existing prototype destinations. All seven email frames have rendered HTML previews.
+- Visual checks inspected the 390px filled-one customer form, 375px store list,
+  1440px send-quote confirmation (after correcting its height), and E3 quote email.
+  These were tool-rendered design checks, not screenshots of the founder's browser.
+- `git diff --check origin/main...HEAD` returned exit 0 with no output.
+- A Python documentation check asserted 90 unique screen/email rows plus SPEC,
+  seven email sections, seven plain-text and seven HTML bodies, no unresolved SPEC ID,
+  and absence of QUOTE-EMAILS.md. Result: PASS.
+- Draft page link: https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=164-12
+- SPEC link: https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=172-3525
+- Awaiting: founder opens the Figma page and approves the draft wording and frames.
+  Founder browser screenshots and separate PR review are not yet available and are not claimed.
+- Only docs/figma/tisan/SPEC.md and docs/figma/tisan/QUOTE-EMAILS-DRAFT.md are changed
+  in git. No production runtime, source template, API, schema or live-data file changed.
