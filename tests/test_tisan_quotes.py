@@ -336,3 +336,18 @@ def test_email_api_missing_wording_preserves_quote(client, tmp_path, monkeypatch
     row = client.post('/quotes', headers=HEADERS, json={'tenant_id': str(A), 'data': DATA}).json()
     assert client.post(f"/quotes/{row['id']}/email?tenant_id={A}", headers=HEADERS).json() == {'mail': 'wording_missing'}
     assert client.get(f"/quotes/{row['id']}?tenant_id={A}", headers=HEADERS).json()['state'] == 'submitted'
+
+
+@pytest.mark.asyncio
+async def test_approved_wording_without_smtp_keeps_state_and_mail_pending(tmp_path, monkeypatch):
+    from agents.rig.rigbox.reserve import SmtpMailer
+    path = tmp_path / 'QUOTE-EMAILS.md'
+    path.write_text('```json\n' + json.dumps({'acknowledgement': {
+        'subject': 'test-subject', 'text': 'test-body'}}) + '\n```')
+    monkeypatch.setattr(q, 'EMAIL_WORDING', path)
+    monkeypatch.setattr(SmtpMailer, 'from_env', classmethod(lambda cls: None))
+    store = q.Quotes(Pool())
+    row = await store.create(A, 'requester', DATA, submitted=True)
+    before = await store.read(A, row['id'])
+    assert await store.send_acknowledgement(A, row['id']) == {'mail': 'not_configured'}
+    assert await store.read(A, row['id']) == before
