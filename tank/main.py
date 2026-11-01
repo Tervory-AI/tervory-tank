@@ -3704,7 +3704,7 @@ async def zenas_proxy(path: str, request: Request) -> Response:
         workspace_key = os.environ.get("TANK_API_KEY", "")
         actor = request.headers.get("x-moot-actor", "")
         tenant = request.headers.get("x-moot-tenant", "")
-        if not workspace_key or not hmac.compare_digest(supplied_key, workspace_key) or not actor:
+        if not workspace_key or not hmac.compare_digest(supplied_key.encode(), workspace_key.encode()) or not actor:
             raise HTTPException(404, "not_found")
         try:
             uuid.UUID(tenant)
