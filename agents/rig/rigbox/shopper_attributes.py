@@ -85,6 +85,22 @@ _WORDS = re.compile(r"[^a-z0-9]+")
 _CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
 
+# The pricing words in PRIVATE_KEY_PATTERN, without the provenance words (supplier, store, region...).
+# A stock ``location`` labels the numbers beside it only with one of these: "Supplier warehouse" is a
+# real location, "Dealer price" is not.
+_PRICING = re.compile(
+    r"cost|duty|margin|landed|markup|profit|wholesale|(^|_)export|(^|_)(buy|purchase|dealer|trade)_?price"
+    r"|(^|_)vat($|_)|(^|_)fx($|_)|exchange_rate|pricing_rule", re.I)
+
+
+def _forms(name: str) -> tuple[str, str, str]:
+    # Drop invisible format characters (zero-width, soft hyphen), fold fullwidth forms, decode %xx,
+    # and split camelCase, so "pofExportUsd", "Dea\u200dler Price" and "?exp%6Frt_usd=" are screened too.
+    text = unicodedata.normalize("NFKC", "".join(ch for ch in unquote(name) if unicodedata.category(ch) != "Cf"))
+    words = _WORDS.sub("_", _CAMEL.sub("_", text).lower()).strip("_")
+    return name, text, words
+
+
 def private_name(name: Any) -> bool:
     """A store-chosen name, label or bit of text that names a private input.
 
@@ -96,11 +112,20 @@ def private_name(name: Any) -> bool:
     """
     if not isinstance(name, str):
         return True
-    # Drop invisible format characters (zero-width, soft hyphen), fold fullwidth forms, decode %xx,
-    # and split camelCase, so "pofExportUsd", "Dea\u200dler Price" and "?exp%6Frt_usd=" are screened too.
-    text = unicodedata.normalize("NFKC", "".join(ch for ch in unquote(name) if unicodedata.category(ch) != "Cf"))
-    words = _WORDS.sub("_", _CAMEL.sub("_", text).lower()).strip("_")
-    return private_key(name) or private_key(text) or private_key(words)
+    return any(private_key(form) for form in _forms(name))
+
+
+def _pricing_name(name: str) -> bool:
+    return any(_PRICING.search(form) for form in _forms(name))
+
+
+def _has_number(text: str) -> bool:
+    """Any character with a numeric value, in any script or form, after dropping invisible characters.
+
+    Covers "4377", "R 4,377.00", "4377 rand", "4.377e3", "٤٬٣٧٧", "४३७७", "𝟒𝟑𝟕𝟕", "⁴³⁷⁷", "④③⑦⑦",
+    "❹❸❼❼" and "43\u200b77": under a private label, any of them is the labelled amount.
+    """
+    return any(unicodedata.numeric(ch, None) is not None for ch in text if unicodedata.category(ch) != "Cf")
 
 
 def _scalar(value: Any) -> bool:
@@ -115,28 +140,19 @@ def _strings(value: Any) -> list[str]:
     return []
 
 
-# An amount written as text: "4377", "R4377", "R 4,377.00", "USD 4377", "4377 ZAR", "4'377", and the same in
-# fullwidth or other digit scripts ("４３７７", "٤٣٧٧"); not "2 Oct" or "15 rounds" (a trailing code is
-# upper case). Matched after NFKC.
-_AMOUNT = re.compile(r"^[^A-Za-z\d]*(?:[A-Za-z]{1,3}[^A-Za-z\d]*)?\d[\d.,'\u2019\s]*[^A-Za-z\d]*(?:[A-Z]{1,3}[^A-Za-z\d]*)?$")
-
-
-def _amount(text: str) -> bool:
-    return bool(_AMOUNT.match(unicodedata.normalize("NFKC", text)))
-
-
-_PAIR = re.compile(r"^\W*([A-Za-z][^:=\n]{0,60}?)\s*[:=]\s*\W{0,3}[A-Za-z]{0,3}\W{0,3}\d")
+# "name: amount" or "name = amount": a number (any script) within the first 12 characters after the separator.
+_PAIR = re.compile(r"^\W*([A-Za-z][^:=\n]{0,60}?)\s*[:=]\s*(.{0,12})", re.S)
 
 
 def _private_pair(text: str) -> bool:
     match = _PAIR.match(unicodedata.normalize("NFKC", text))  # fullwidth "Ｂｕｙ Ｐｒｉｃｅ: 4377" too
-    return bool(match) and private_name(match.group(1))
+    return bool(match) and _has_number(match.group(2)) and private_name(match.group(1))
 
 
 def _labelled_list(value: list[Any]) -> bool:
-    """A flat list where a private-looking string sits beside a number."""
+    """A flat list where a private-looking string sits beside (or carries) a number in any form."""
     has_number = any((isinstance(item, (int, float)) and not isinstance(item, bool))
-                     or (isinstance(item, str) and _amount(item)) for item in value)
+                     or (isinstance(item, str) and _has_number(item)) for item in value)
     return has_number and any(private_name(item) for item in _strings(value))
 
 
@@ -161,20 +177,19 @@ def _scalars(value: Any) -> Any:
     return None
 
 
-_DIGIT = re.compile(r"\d")  # any digit script: "export_usd ４３７７" too
-
-
 def _pick(value: Any, keys: frozenset[str]) -> dict[str, Any] | None:
     """Listed fields only, each a scalar or a list of scalars.
 
     Text that names a private input labels the numbers beside it, so every
-    number in the dict is dropped, and so is text that is only a number
-    ({"label": "export_usd", "qty": 4377} and {"on": "export_usd",
-    "price": 4377} keep no number). The text itself is dropped when it is
-    the ``label`` or carries a digit ("export_usd: 4377"). Other text is
-    display copy ("Supplier warehouse" is a real stock location) and stays,
-    so {"location": "Supplier warehouse", "qty": 3} loses its qty: a
-    safe-side cost.
+    number in the dict is dropped, and so is every text that holds a number
+    in any script or form ({"label": "export_usd", "qty": 4377},
+    {"on": "export_usd", "price": "4377 rand"} and {"status": "Dealer price",
+    "qty": "٤٬٣٧٧"} keep no number). The private text itself is dropped when
+    it is the ``label`` or holds a number ("export_usd: 4377").
+
+    A stock ``location`` is display copy: it labels the numbers only with a
+    pricing word, so {"location": "Supplier warehouse", "qty": 3} keeps its
+    qty (``rig.js`` renders "3 in stock"); the location text stays.
     """
     if not isinstance(value, dict):
         return None
@@ -187,15 +202,16 @@ def _pick(value: Any, keys: frozenset[str]) -> dict[str, Any] | None:
         texts = _strings(item)
         private = [text for text in texts if private_name(text)]
         if private:
-            labelled = True
-            if key == "label" or any(_DIGIT.search(text) for text in private):
+            if key != "location" or any(_pricing_name(text) for text in private):
+                labelled = True
+            if key == "label" or any(_has_number(text) for text in private):
                 continue
         if shaped is None:
             continue
         kept[key] = shaped
     if labelled:
         kept = {key: item for key, item in kept.items()
-                if item is None or (isinstance(item, str) and not _amount(item))}
+                if item is None or (isinstance(item, str) and not _has_number(item))}
     return kept
 
 

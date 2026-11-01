@@ -53,6 +53,7 @@ from rigbox.quotes.sample import KEY, TENANT, seed  # noqa: E402
 from rigbox.quotes.service import QuoteService  # noqa: E402
 from rigbox.quotes.store import MemoryQuotes  # noqa: E402
 from rigbox.service import RecordingHandoff, Service  # noqa: E402
+import rigbox.shopper_attributes as sa  # noqa: E402
 from rigbox.shopper_attributes import PRIVATE_KEY_PATTERN, SHOPPER_ATTRIBUTES, shopper_attributes  # noqa: E402
 from rigbox.store import MemoryStore, PgStore  # noqa: E402
 
@@ -330,8 +331,8 @@ def test_nested_shapes_are_allowlisted() -> None:
     assert shopper_attributes(LABELLED) == {
         "stock": {"status": "in_stock"},
         "options": {"finish": [{"code": "black"}]},
-        "price_history": [{"on": "2 Oct"}],
-        "in_box": [],
+        # Under a private label every text holding a number goes, a date too; a list carrying one goes whole.
+        "price_history": [{}],
         "summary": "Sample pistol",
     }
 
@@ -557,8 +558,9 @@ _ARABIC_K = "".join(chr(0x0660 + int(ch)) for ch in str(_CANARY))
 
 def _visible(shown: str) -> str:
     """What a shopper reads: fullwidth folded, every digit script as 0-9, separators gone."""
-    text = "".join(str(unicodedata.digit(ch)) if ch.isdigit() else ch for ch in unicodedata.normalize("NFKC", shown))
-    return re.sub(r"[\s,.'\u2019]", "", text)
+    text = "".join(ch for ch in unicodedata.normalize("NFKC", shown) if unicodedata.category(ch) != "Cf")
+    text = "".join(str(unicodedata.digit(ch)) if unicodedata.digit(ch, None) is not None else ch for ch in text)
+    return re.sub(r"[\s,.'\u2019_\u066b\u066c-]", "", text)
 
 
 def _fuzz_shapes(name: Any) -> list[dict[str, Any]]:
@@ -681,3 +683,66 @@ def test_cost_guard_warns_when_forced_rls_hides_every_row() -> None:
             logger.setLevel(old_level)
 
     asyncio.run(_with_pg(admin, body))
+
+
+def _in_script(zero: int) -> str:
+    return "".join(chr(zero + int(ch)) for ch in str(_CANARY))
+
+
+# The canary written every way a shopper could still read it: digit scripts, compatibility forms,
+# separators, currency marks, signs, scientific notation, suffixes and invisible characters.
+_AMOUNT_FORMS = (
+    "4377", "4,377", _in_script(0xFF10), _in_script(0x0660), _in_script(0x06F0), _in_script(0x0966),
+    _in_script(0x09E6), _in_script(0x0E50), _in_script(0x1D7CE), _in_script(0x1D7F6), _in_script(0x2775),
+    "\u2074\u00b3\u2077\u2077", "\u2084\u2083\u2087\u2087", "\u2463\u2462\u2466\u2466",
+    "4\u202f377", "4\u2009377", "4\u00a0377", "4\u066c377", "4377\u066b00", "4_377", "4'377", "4.377,00",
+    "$4,377", "R4377", "R 4 377,00", "\u20ac4.377", "4 377 \u20ac", "\u00a34377", "US$4,377", "USD 4,377.00",
+    "4377 ZAR", "4377 zar", "4377 rand", "\u00a54377", "\u20b94,377", "-4377", "\u22124377", "(4377)",
+    "(R 4,377.00)", "-R4,377", "+4377", "~4377", "4.377e3", "4.377E+03", "4.377\u00d710\u00b3", "4377/ea", "4377k",
+    "43\u200b77", "43\u00ad77", "R\uff14,\uff13\uff17\uff17",
+)
+
+
+def _amount_shapes(name: str, amount: str) -> list[dict[str, Any]]:
+    return [
+        {"stock": {"label": name, "qty": amount, "status": "in_stock"}},
+        {"stock": {"status": name, "qty": amount}},
+        {"stock": {"status": f"{name} {amount}"}},
+        {"stock": {"location": name, "qty": amount}},
+        {"price_history": [{"label": name, "price": amount, "on": "2 Oct"}, {"on": name, "amount": amount}]},
+        {"price_history": [{"on": f"{name} {amount}"}]},
+        {"price_history": {"label": name, "was": amount}},
+        {"options": {"finish": [{"code": "x", "label": name, "price": amount}], "trim": [name, amount]}},
+        {"options": {"finish": {"BLACK": {"label": name, "price": amount}}}},
+        {"features": [name, amount]},
+        {"size": [name, amount]},
+        {"in_box": [f"{name}: {amount}", f"{name} {amount}"]},
+        {"detail": f"{name}: {amount}"},
+        {"detail": f"{name} = {amount}"},
+        {"verified": [{"name": name, "value": amount}, {"name": "spec", "value": amount, "note": name}]},
+    ]
+
+
+def test_amounts_in_any_script_or_form_beside_a_private_label_never_show() -> None:
+    checked = 0
+    for name in ("export_usd", "Dealer price", "pofExportUsd", "Ｍarkup", "unit cost"):
+        for amount in _AMOUNT_FORMS:
+            for shape in _amount_shapes(name, amount):
+                shown = json.dumps(shopper_attributes(shape), ensure_ascii=False)
+                assert str(_CANARY) not in _visible(shown), (name, amount, shape, shown)
+                checked += 1
+    assert checked == 5 * len(_AMOUNT_FORMS) * 15, checked
+
+
+def test_a_provenance_location_is_display_copy_and_keeps_qty() -> None:
+    # "Supplier warehouse" is a real archon stock location: it labels nothing, and stays.
+    stock = {"status": "in_stock", "location": "Supplier warehouse", "qty": 3, "lead": "ETA 3-4 weeks"}
+    assert shopper_attributes({"stock": stock}) == {"stock": stock}
+    # A pricing word in the location does label the numbers.
+    assert shopper_attributes({"stock": {"location": "Dealer price", "qty": 4377, "lead": "4377"}}) == {
+        "stock": {"location": "Dealer price"}}
+    assert shopper_attributes({"stock": {"location": "export_usd 4377", "qty": 2}}) == {"stock": {}}
+    # Every pricing word is also a private key, so the location rule never shows a key the strip would move.
+    for word in ("cost", "duty", "margin", "landed", "markup", "profit", "wholesale", "export", "buy_price",
+                 "purchase_price", "dealer_price", "trade_price", "vat", "fx", "exchange_rate", "pricing_rule"):
+        assert private_key(word) and sa._PRICING.search(word), word
