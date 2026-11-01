@@ -134,7 +134,8 @@ def _app(mode: str) -> tuple[FastAPI, QuoteService, Echo]:
 def _clean(text: str) -> None:
     for word in SECRETS:
         assert word not in text, word
-    assert "437" not in text  # 90101's export_usd value
+    # 90101's export_usd value, as a whole number: a random request id may contain "437" as hex.
+    assert not re.search(r"(?<![0-9A-Za-z])437(?![0-9A-Za-z])", text)
     assert "ZEPHYR" not in text
 
 
