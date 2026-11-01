@@ -221,3 +221,82 @@ async def test_za_cli_talks_straight_to_tank_with_device_login(streaming, monkey
     # A ZA Tank process reads TANK_REGION=za at import; mirror that for the ledger.
     monkeypatch.setattr(streaming.tank, 'DEFAULT_REGION', 'za')
     await device_login_edge(streaming, 'za', za_key='dummy-za-device-approval-key')
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.environ.get('COMMAND_ACCEPTANCE_CLIENTS') != '1',
+                    reason='Requires assembled CLI/Workspace and local-only client dependencies')
+async def test_existing_founder_token_cli_answer_is_visible_in_chats_with_same_receipt(streaming):
+    """Existing PAT only: CLI ask -> persisted Tank turn -> actual /chats API read.
+
+    No login, new credential flow, native keychain read or external model request.
+    Browser identity and keychain are synthetic; founder browser acceptance is separate.
+    """
+    import personal_tokens as pat
+    b = streaming
+    token = f'tv1.us-east.{TENANT.hex}.' + 'f' * 43
+    async with b.pool.acquire() as conn:
+        await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash) "
+                           "VALUES($1,'founder','us-east','offline-existing-token',$2)", TENANT, pat.digest(token))
+    script = r"""
+const assert = require('node:assert/strict');
+const {pathToFileURL} = require('node:url');
+const {workspace} = require('./tests/command_acceptance_20261031/workspace_loader.cjs');
+const input = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
+assert.equal(new URL(input.origin).hostname, '127.0.0.1');
+(async () => {
+  const identity = {tenantId: input.tenant, userId: 'founder', tenantAdmin: true};
+  const load = workspace({
+    env: {TANK_URL: input.origin, TANK_API_KEY: 'dummy-workspace-key', TANK_REGION: 'us-east'},
+    fetch: async (url, init) => {
+      assert.equal(new URL(url).origin, input.origin);
+      return fetch(url, init);
+    },
+    mocks: {
+      '@/lib/tenant': {activeTenant: async () => identity},
+      '@/lib/trigger': {triggerIdentity: async tenant => tenant},
+      '@/lib/admin': {isFounder: user => user === 'founder'},
+    },
+  });
+  const proxy = load('lib/tank.ts').personalCommandRequest;
+  const cli = await import(pathToFileURL(process.cwd() + '/cli/src/client.mjs').href);
+  const token = `tv1.us-east.${input.tenant.replaceAll('-', '')}.` + 'f'.repeat(43);
+  let output = '';
+  await cli.run(['ask', 'Existing founder token question'], {
+    store: {get: async () => token},
+    transport: (url, init) => proxy(new Request(url, init), new URL(url).pathname.slice('/v1/command/'.length).split('/')),
+    io: {write: text => {output += text;}, prompt: async () => 'N'},
+  });
+  assert(output.includes(input.answer));
+  assert(!output.includes(token));
+  const thread = /Thread ([0-9a-f-]{36})/.exec(output)[1];
+  const route = load('app/chats/api/[...path]/route.ts');
+  const read = async path => {
+    const response = await route.GET(new Request('https://app.tervory.com/chats/api/' + path.join('/')),
+      {params: Promise.resolve({path})});
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+  assert((await read(['threads'])).some(row => row.thread_id === thread));
+  const snapshot = await read(['threads', thread]);
+  const answer = snapshot.messages.find(row => row.role === 'assistant');
+  assert.equal(answer.content, input.answer);
+  const receipt = answer.receipt.rows[0];
+  assert.equal(receipt.cost_usd, 0.0024);
+  assert(output.includes(receipt.ledger_id));
+  process.stdout.write(JSON.stringify({thread, ledger: receipt.ledger_id}));
+})().catch(error => {console.error(error); process.exitCode = 1;});
+"""
+    result = await asyncio.to_thread(subprocess.run, ['node', '-e', script],
+        input=json.dumps({'origin': str(b.api.base_url).rstrip('/'), 'tenant': str(TENANT),
+                          'answer': 'Hello world.\nA 😀 answer.'}),
+        text=True, capture_output=True, timeout=30, check=False)
+    assert result.returncode == 0, result.stderr
+    evidence = json.loads(result.stdout)
+    async with b.pool.acquire() as conn:
+        ledger = await conn.fetchrow('SELECT tenant_id,cost_usd FROM tank.ledger WHERE id=$1',
+                                     uuid.UUID(evidence['ledger']))
+        assert ledger['tenant_id'] == TENANT
+        assert float(ledger['cost_usd']) == 0.0024
+    assert len(b.gateway.calls) == 1
+    print('PASS: existing founder token CLI answer and ledger receipt visible through actual /chats API')
