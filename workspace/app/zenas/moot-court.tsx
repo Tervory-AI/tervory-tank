@@ -199,7 +199,7 @@ export function MootCourt() {
           <label className="zn-select">Your role<select value={seat} onChange={e => selectSeat(e.target.value as Seat)}><option value="">—</option>{allowed.map(s => <option value={s} key={s}>{SEAT_LABELS[s]}</option>)}</select></label>
           {hearing.problem.bench_notes && <details><summary>Bench notes</summary><ul>{Object.values(hearing.problem.bench_notes).flatMap(value => Array.isArray(value) ? value : [value]).filter(value => typeof value === "string").map((value, i) => <li key={i}>{String(value)}</li>)}</ul></details>}
           {hearing.pending_question && <p>{hearing.pending_question.text}</p>}
-          <ol className="zn-thread">{hearing.transcript.map(t => <li key={t.number}><strong>{SEAT_LABELS[t.seat]}</strong><p>{t.text}</p>{t.reasoning && <details><summary>Reasoning</summary><ReasonTrace trace={t.reasoning} /></details>}</li>)}</ol>
+          <ol className="zn-thread">{hearing.transcript.map(t => <li key={t.number}><strong>{SEAT_LABELS[t.seat]}</strong><p>{t.text}</p>{t.reasoning && <details><summary>Reasoning</summary><ReasonTrace trace={t.reasoning} problem={hearing.problem} /></details>}</li>)}</ol>
           {canSubmit && <form className="zn-composer" onSubmit={submit}>
             {seat === "judge" && <><label className="zn-select">Current issue<select name="issue" defaultValue={hearing.current_issue}>{hearing.problem.issues.map((issue, i) => <option value={i} key={i}>{issue}</option>)}</select></label><label className="zn-select">Judge<select name="kind" value={judgeKind} onChange={e => setJudgeKind(e.target.value)}><option value="question">Question</option><option value="direction">Give the floor</option><option value="ruling">Judgment</option></select></label>{judgeKind !== "ruling" && <label className="zn-select">Counsel<select name="target"><option value="applicant">Applicant</option><option value="respondent">Respondent</option></select></label>}</>}
             {area("text", "Submission", true)}
@@ -230,11 +230,15 @@ export function MootCourt() {
 }
 
 
-function ReasonTrace({ trace }: { trace: Record<string, unknown> }) {
+function ReasonTrace({ trace, problem }: { trace: Record<string, unknown>; problem: Hearing["problem"] }) {
   const paragraphs = [trace.opposing_argument, trace.response, trace.conclusion];
   const comparisons = Array.isArray(trace.comparisons) ? trace.comparisons as { legal_significance?: string; differences?: { explanation: string }[] }[] : [];
-  const rules = Array.isArray(trace.rules) ? trace.rules as { application?: string; court_weight?: string }[] : [];
-  return <div>{rules.map((r, i) => <p key={`rule-${i}`}>{r.court_weight}: {r.application}</p>)}
+  const rules = Array.isArray(trace.rules) ? trace.rules as { authority_id?: string; application?: string; court_weight?: string }[] : [];
+  const facts = Array.isArray(trace.facts) ? trace.facts as { id?: string; position?: string; relevance?: string }[] : [];
+  return <div>{facts.map((f, i) => <p key={`fact-${i}`}><strong>{problem.fact_records.find(record => record.id === f.id)?.text}</strong> ({f.position}) {f.relevance}</p>)}
+    {rules.map((r, i) => { const authority = problem.authorities.find(a => a.id === r.authority_id); return <div key={`rule-${i}`}>
+      {authority && <><a href={authority.source_url}>{authority.name}</a><blockquote>{authority.quote}</blockquote></>}
+      <p>{r.court_weight}: {r.application}</p></div>; })}
     {comparisons.map((c, i) => <div key={`comparison-${i}`}><p>{c.legal_significance}</p>{c.differences?.map((d, j) => <p key={j}>{d.explanation}</p>)}</div>)}
     {paragraphs.filter(p => typeof p === "string").map((p, i) => <p key={i}>{String(p)}</p>)}
     {Array.isArray(trace.uncertainty) && trace.uncertainty.filter(u => typeof u === "string").map((u, i) => <p key={`uncertainty-${i}`}>{u}</p>)}

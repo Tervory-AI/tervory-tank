@@ -147,6 +147,8 @@ async def capture(base, output):
                 assert "Private bench research" not in await owner.locator("body").text_content()
                 boundary.delay_judge = False
                 await fill_submission(owner, "Applicant's actual typed submission")
+                await owner.screenshot(path=str(output / f"operator-active-{width}.png"), full_page=True)
+                files.append(f"operator-active-{width}.png")
                 await owner.get_by_role("button", name="Submit", exact=True).click()
                 await judge.get_by_role("textbox", name=re.compile(r"^Submission")).wait_for()
                 assert "Private bench research" in await judge.locator("body").text_content()
@@ -156,10 +158,14 @@ async def capture(base, output):
                 await respondent.get_by_role("textbox", name=re.compile(r"^Submission")).wait_for()
                 assert "Private bench research" not in await respondent.locator("body").text_content()
                 await fill_submission(respondent, "Respondent's distinct typed answer")
+                await respondent.screenshot(path=str(output / f"respondent-active-{width}.png"), full_page=True)
+                files.append(f"respondent-active-{width}.png")
                 await respondent.get_by_role("button", name="Submit", exact=True).click()
                 await judge.get_by_role("textbox", name=re.compile(r"^Submission")).wait_for()
                 await judge.get_by_role("combobox", name=re.compile(r"^Judge")).select_option("ruling")
                 await fill_submission(judge, "An independent judgment on the relevant facts", judge=True)
+                await judge.screenshot(path=str(output / f"judge-active-{width}.png"), full_page=True)
+                files.append(f"judge-active-{width}.png")
                 await judge.get_by_role("button", name="Submit", exact=True).click()
                 await owner.get_by_role("button", name="Publish", exact=True).wait_for()
                 await owner.get_by_role("button", name="Publish", exact=True).click()
@@ -178,7 +184,7 @@ async def capture(base, output):
     (output / "evidence.json").write_text(json.dumps({"label": "local actual UI with domain-backed offline transport; no live auth/models; Postgres tested separately",
         "checks": ["human draft survives AI/human handover", "stale judge projection cannot return to counsel", "two distinct human counsel and human judge",
                    "human judge question/floor/ruling", "founder publish", "375/1440 no horizontal overflow"], "screenshots": files, "page_errors": errors}, indent=2) + "\n")
-    print("Passed both viewport journeys; six screenshots; no model or production calls")
+    print("Passed both viewport journeys; twelve screenshots; no model or production calls")
 
 
 def main():
@@ -191,9 +197,9 @@ def main():
         (folder / "tsconfig.json").write_text(json.dumps({"compilerOptions": {"target": "ES2022", "module": "esnext", "moduleResolution": "bundler", "jsx": "preserve", "esModuleInterop": True, "skipLibCheck": True}}))
         (folder / "next.config.mjs").write_text('export default {experimental:{externalDir:true},devIndicators:false};')
         fonts = json.dumps(str(WORKSPACE / "app/fonts"))
-        (folder / "app/layout.tsx").write_text(f'import {{jost,inter,mono}} from {fonts};export default function Layout({{children}}:{{children:React.ReactNode}}){{return <html lang="en" className={{`${{jost.variable}} ${{inter.variable}} ${{mono.variable}}`}}><body style={{{{margin:0}}}}>{{children}}</body></html>;}}')
+        (folder / "app/layout.tsx").write_text(f'import {{jost,inter,mono}} from {fonts};export default function Layout({{children}}:{{children:React.ReactNode}}){{return <html lang="en" style={{{{height:"auto",overflow:"visible"}}}} className={{`${{jost.variable}} ${{inter.variable}} ${{mono.variable}}`}}><body style={{{{margin:0,height:"auto",overflow:"visible"}}}}>{{children}}</body></html>;}}')
         component = json.dumps(str(WORKSPACE / "app/zenas/moot-court")); css = json.dumps(str(WORKSPACE / "app/zenas/zenas.css"))
-        (folder / "app/page.tsx").write_text(f'import {{MootCourt}} from {component};import {css};export default function Page(){{return <main className="zn" style={{{{padding:24,display:"block",height:"auto",minHeight:"100vh",boxSizing:"border-box",overflow:"visible"}}}}><MootCourt/></main>;}}')
+        (folder / "app/page.tsx").write_text(f'import {{MootCourt}} from {component};import {css};export default function Page(){{return <main className="zn" style={{{{padding:24,display:"block",height:"auto",minHeight:"100vh",maxHeight:"none",boxSizing:"border-box",overflow:"visible"}}}}><MootCourt/></main>;}}')
         base = f"http://127.0.0.1:{port()}"
         with (output / "next.log").open("w") as log:
             web = subprocess.Popen(["node", str(WORKSPACE / "node_modules/next/dist/bin/next"), "dev", "--hostname", "127.0.0.1", "--port", base.rsplit(":", 1)[1]], cwd=folder,
