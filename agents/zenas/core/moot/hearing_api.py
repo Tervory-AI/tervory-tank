@@ -53,6 +53,13 @@ def register_routes(app, pool, tenant_store, box_region, tank):
             "stale_revision", "idempotency_conflict", "ai_turn_pending", "ai_claim_invalid") else 422
         raise HTTPException(status, code) from None
 
+    def present(state, actor, seat=None):
+        projection = hearing.view(state, actor, seat)
+        projection["pending_ai"] = ({"seat": state["pending_ai"]["seat"], "status": state["pending_ai"]["status"]}
+            if state["pending_ai"] else None)
+        projection["last_ai_resolution"] = state["ai_attempts"][-1].get("resolution") if state["ai_attempts"] else None
+        return {"hearing": projection, "operator": actor.founder and actor.user_id == state["owner_id"]}
+
     @app.get("/moot/hearing-sources")
     async def sources(home_region: str, x_tank_key: str = Header(default=""),
         x_moot_tenant: str = Header(default=""), x_moot_actor: str = Header(default=""), x_moot_founder: str = Header(default="")):
@@ -94,7 +101,7 @@ def register_routes(app, pool, tenant_store, box_region, tank):
         try:
             problem = await worked_problem(pool(), actor, str(body.worked_id))
             state = await HearingStore(pool()).create(actor, str(body.request_id), problem, body.seats)
-            return {"hearing": hearing.view(state, actor), "operator": True}
+            return present(state, actor)
         except (hearing.HearingError, ValueError) as exc:
             error(exc)
 
@@ -105,17 +112,13 @@ def register_routes(app, pool, tenant_store, box_region, tank):
         actor = await identity(home_region, x_tank_key, x_moot_tenant, x_moot_actor, x_moot_founder)
         try:
             state = await HearingStore(pool()).load(actor, str(hearing_id))
-            projection = hearing.view(state, actor, seat)
-            projection["pending_ai"] = ({"seat": state["pending_ai"]["seat"], "status": state["pending_ai"]["status"]}
-                if state["pending_ai"] else None)
-            projection["last_ai_resolution"] = state["ai_attempts"][-1].get("resolution") if state["ai_attempts"] else None
-            return {"hearing": projection, "operator": actor.founder and actor.user_id == state["owner_id"]}
+            return present(state, actor, seat)
         except hearing.HearingError as exc:
             error(exc)
 
     @app.post("/moot/hearings/{hearing_id}/{action}")
     async def command(hearing_id: UUID, action: Literal["edit", "lock", "start", "handover", "issue", "turn", "ai", "abandon", "publish"],
-        body: CommandIn, home_region: str, x_tank_key: str = Header(default=""), x_moot_tenant: str = Header(default=""),
+        body: CommandIn, home_region: str, seat: Literal["applicant", "respondent", "judge"] | None = Query(default=None), x_tank_key: str = Header(default=""), x_moot_tenant: str = Header(default=""),
         x_moot_actor: str = Header(default=""), x_moot_founder: str = Header(default="")):
         actor = await identity(home_region, x_tank_key, x_moot_tenant, x_moot_actor, x_moot_founder)
         store = HearingStore(pool())
@@ -142,6 +145,6 @@ def register_routes(app, pool, tenant_store, box_region, tank):
             else:
                 state = await store.mutate(actor, str(hearing_id), str(body.request_id), body.revision, action, body.payload,
                     lambda s, a, r, p: hearing.change(s, a, r, action, p))
-            return {"hearing": hearing.view(state, actor), "operator": actor.founder and actor.user_id == state["owner_id"]}
+            return present(state, actor, seat)
         except (hearing.HearingError, ValueError) as exc:
             error(exc)

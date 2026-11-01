@@ -247,6 +247,10 @@ def turn(state: dict[str, Any], actor: Actor, revision: int, payload: dict[str, 
     _require(isinstance(cited, list) and all(isinstance(a, str) for a in cited), "invalid_authorities")
     known = {a["id"] for a in out["problem"]["authorities"]}
     _require(set(cited) <= known, "unverified_authority")
+    if seat == "judge" and "issue_index" in payload:
+        issue = payload["issue_index"]
+        _require(type(issue) is int and 0 <= issue < len(out["problem"]["issues"]), "invalid_issue")
+        out["current_issue"] = issue
     entry = {"number": len(out["transcript"]), "seat": seat, "controller": controller["kind"],
              "actor_id": actor.user_id if ai_token is None else None, "epoch": controller["epoch"],
              "kind": kind, "text": text, "authority_ids": list(dict.fromkeys(cited)),
@@ -298,6 +302,7 @@ def view(state: dict[str, Any], actor: Actor, seat: str | None = None) -> dict[s
         out["seats"] = {s: {"kind": c["kind"], "epoch": c["epoch"]} for s, c in out["seats"].items()}
         for entry in out["transcript"]:
             entry.pop("actor_id", None)
+    out["my_seats"] = [s for s, c in state["seats"].items() if c["kind"] == "human" and c["user_id"] == actor.user_id]
     out["problem"] = {k: deepcopy(problem[k]) for k in ("title", "facts", "issues", "fact_records")}
     out["problem"]["authorities"] = [{k: deepcopy(a[k]) for k in ("id", "name", "quote", "source_url", "weight", "court", "paragraph") if k in a} for a in problem["authorities"]]
     if seat in SIDES:
