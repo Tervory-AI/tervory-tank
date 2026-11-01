@@ -93,7 +93,7 @@ the databases they create.
 
 Build the companion at `tervory-rig/widget/src/three/`, then run its
 `package-widget.mjs` with the absolute destination of this folder's `widget/`
-subdirectory. For the stand-in app, set `PYTHONPATH=agents/rig:agents/_chassis`,
+subdirectory. For the stand-in app, set `PYTHONPATH=tests:agents/rig:agents/_chassis`,
 `RIG_3D_TEST_DATABASE_URL`, `RIG_3D_TEST_DATA_DIR`, and optionally
 `RIG_3D_WIDGET_DIR`. Start `python -m uvicorn fixtures.rig_three_d.demo:app --host
 127.0.0.1 --port 8035`. `/health` must return `ok: true, sample: true`; `/3d/`
