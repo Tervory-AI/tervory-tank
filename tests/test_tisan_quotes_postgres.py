@@ -29,12 +29,21 @@ async def database():
     name = 'tisan_j4_test_' + uuid4().hex
     await admin.execute(f'CREATE DATABASE {name}')
     conn = await asyncpg.connect(database=name, **options)
-    await conn.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agent_tisan') THEN CREATE ROLE agent_tisan NOLOGIN; END IF; END $$")
-    await conn.execute('CREATE SCHEMA agent_tisan; GRANT USAGE ON SCHEMA agent_tisan TO agent_tisan')
+    await conn.execute('CREATE SCHEMA agent_tisan')
     schema = (ROOT / 'agents/tisan/schema.sql').read_text()
-    # Whole file, twice, verifies existing memory DDL and J4 idempotency together.
+    # Bootstrap DDL before room-role provisioning, as the all-schema RLS fixture
+    # does. Installing a schema must not create a login or weaken its policies.
+    existed = await conn.fetchval("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agent_tisan')")
     await conn.execute(schema)
+    assert await conn.fetchval("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agent_tisan')") == existed
+    assert await conn.fetchval("SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='agent_tisan' AND c.relname IN ('quote_requests','quote_events') AND c.relrowsecurity AND c.relforcerowsecurity") == 2
+    await conn.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agent_tisan') THEN CREATE ROLE agent_tisan NOLOGIN; END IF; END $$")
+    await conn.execute('GRANT USAGE ON SCHEMA agent_tisan TO agent_tisan')
+    # Reapply after provisioning: same production grants, no PUBLIC grant.
     await conn.execute(schema)
+    assert await conn.fetchval("SELECT has_table_privilege('agent_tisan','agent_tisan.quote_requests','SELECT,INSERT,UPDATE')")
+    assert await conn.fetchval("SELECT has_table_privilege('agent_tisan','agent_tisan.quote_events','SELECT,INSERT')")
+    assert await conn.fetchval("SELECT has_sequence_privilege('agent_tisan','agent_tisan.quote_events_id_seq','USAGE,SELECT')")
 
     async def room_role(connection):
         await connection.execute('SET ROLE agent_tisan')
