@@ -75,11 +75,11 @@ def test_za_zenas_room_is_its_own_resource_on_the_corridor() -> None:
     room = yaml.safe_load(ROOM_COMPOSE)
     assert set(room["services"]) == {"agent-zenas", "pool-loader"}
     assert room["networks"]["gw"] == {"external": True, "name": "tervory-gw-zenas"}
-    assert room["networks"]["assembly"] == {"external": True, "name": "tervory-zenas-assembly"}
+    # Contracts are assembled inside agent-zenas; no Docassemble network or resource.
+    assert set(room["networks"]) == {"gw"}
     for name, service in room["services"].items():
         assert service["environment"]["TANK_REGION"] == "za", name
-        # agent-zenas also reaches its Docassemble resource on the private assembly network (#415).
-        assert service["networks"] == (["gw", "assembly"] if name == "agent-zenas" else ["gw"]), name
+        assert service["networks"] == ["gw"], name
         assert "ports" not in service, name
         assert "env_file" not in service, name
         for banned in ("POSTGRES_PASSWORD", "POSTGRES_USER", "LITELLM_MASTER_KEY", "TANK_API_KEY", "QDRANT_API_KEY"):
