@@ -1,3 +1,6 @@
+# coolify: raw compose
+# Retained dormant definition: this seal fix does not authorize starting Docassemble.
+# Before any deployment, resolve retirement and select the existing regional backup volume.
 # Docassemble for Zenas (Boston, us-east), deployed as its OWN Coolify resource, separate
 # from agent-zenas (28 Oct): Docassemble starts slowly (up to ~15 min), and inside agent-zenas
 # that slow start failed every Zenas deploy. Same Base Directory as the room (/agents/zenas).
@@ -85,6 +88,9 @@ services:
 
 volumes:
   docassemble_us_backup:
+    # Fail closed: never replace a retained backup with a newly created empty volume.
+    external: true
+    name: ${DOCASSEMBLE_US_BACKUP_VOLUME:?Set the existing regional Docassemble backup volume name}
 
 networks:
   assembly:
