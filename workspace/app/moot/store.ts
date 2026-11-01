@@ -44,7 +44,7 @@ function validMatch(row: Record<string, unknown>): boolean {
     && (row.authorities === undefined || (Array.isArray(row.authorities) && row.authorities.every(
       authority => object(authority) && typeof authority.name === "string"
         && (authority.source_url === undefined || (typeof authority.source_url === "string"
-          && /^https?:\/\//i.test(authority.source_url))))))
+          && (authority.source_url === "" || /^https?:\/\//i.test(authority.source_url)))))))
     && (row.costUsd === undefined || row.costUsd === null
       || (typeof row.costUsd === "number" && Number.isFinite(row.costUsd) && row.costUsd >= 0));
 }

@@ -71,6 +71,28 @@ test('Moot index reads published room matches through Tank, with US home and no 
   assert.doesNotMatch(html, forbidden);
 });
 
+test('Moot transport bounds a hung read and preserves caller cancellation', async () => {
+  const abortingFetch = (_url, options) => new Promise((resolve, reject) => {
+    assert.ok(options.signal instanceof AbortSignal);
+    if (options.signal.aborted) reject(options.signal.reason);
+    else options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+  });
+  const controller = new AbortController();
+  const callerRead = harness(abortingFetch).load('lib/tank.ts').mootPublishedMatches(undefined, controller.signal);
+  controller.abort();
+  await assert.rejects(callerRead, { name: 'AbortError' });
+  // AbortSignal.timeout is unref'ed; retain a handle for this mocked transport.
+  const keepAlive = setTimeout(() => {}, 12000);
+  try {
+    const start = Date.now();
+    const result = await harness(abortingFetch).load('app/moot/store.ts').listPublishedMatches();
+    assert.deepEqual(result, { status: 'unavailable' });
+    assert.ok(Date.now() - start >= 9900);
+  } finally {
+    clearTimeout(keepAlive);
+  }
+});
+
 test('Moot reader distinguishes empty, malformed, and unavailable replies without leaking details', async () => {
   const cases = [
     [() => response({ matches: [] }), 'empty'],
@@ -141,7 +163,7 @@ test('Moot validates every rendered field and excludes private/offline content',
   assert.deepEqual(await reader.listPublishedMatches(), { status: 'empty', matches: [] });
   assert.deepEqual(await reader.getMatch(id), { status: 'missing' });
   assert.equal(await reader.isPublicWatch(id), false);
-  const publicReader = harness(() => response({ matches: [{ ...match, privateNotes: 'never serialize', transcript: [{ role: 'judge', text: 'Order', secret: 'hidden' }] }] })).load('app/moot/store.ts');
+  const publicReader = harness(() => response({ matches: [{ ...match, authorities: [{ name: 'Court', source_url: '' }], privateNotes: 'never serialize', transcript: [{ role: 'judge', text: 'Order', secret: 'hidden' }] }] })).load('app/moot/store.ts');
   const found = await publicReader.getMatch(id);
   assert.equal(found.status, 'available');
   assert.equal(found.match.matchId, id);
