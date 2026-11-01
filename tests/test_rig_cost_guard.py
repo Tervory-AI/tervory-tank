@@ -626,7 +626,7 @@ def test_fuzz_safe_names_and_archon_facts_pass_unchanged() -> None:
         assert shopper_attributes({"verified": [fact]}) == {"verified": [fact]}, name
         assert shopper_attributes({"verified": [{**fact, "value": [12, 15]}]})["verified"] == [{**fact, "value": [12, 15]}]
     facts = 0
-    with (ROOT / "tests" / "fixtures" / "rig_catalogues" / "archon" / "products.csv").open(newline="") as handle:
+    with (ROOT / "tests" / "fixtures" / "rig_catalogues" / "aurora" / "products.csv").open(newline="") as handle:
         for row in csv.DictReader(handle):
             attributes = json.loads(row.get("attributes") or "{}")
             verified = attributes.get("verified")

@@ -25,7 +25,7 @@ from rigbox.store import MemoryStore  # noqa: E402
 
 EXAMPLE = ROOT / "tests" / "fixtures" / "rig_catalogues" / "example"
 DEMO = ROOT / "tests" / "fixtures" / "rig_catalogues" / "lumaworks"
-ARCHON = ROOT / "tests" / "fixtures" / "rig_catalogues" / "archon"
+ARCHON = ROOT / "tests" / "fixtures" / "rig_catalogues" / "aurora"
 PAGE = ROOT / "agents" / "rig" / "rigbox" / "page"
 ORIGIN = "https://rig.tervory.com"
 PRODUCT = "Example Rifle 308 20in"

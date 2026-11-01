@@ -30,7 +30,7 @@ async def test_shop_migration_is_idempotent_and_preserves_existing_settings():
                 await conn.execute('INSERT INTO agent_rig.retailers (tenant_id,slug) VALUES ($1,$2)', tenant, slug)
             await conn.execute(schema)
             await conn.execute(schema)
-            expected = json.loads((ROOT / 'tests/fixtures/rig_catalogues/archon/publish.json').read_text())['shop']
+            expected = json.loads((ROOT / 'tests/fixtures/rig_catalogues/aurora/publish.json').read_text())['shop']
             for slug, tenant in tenants.items():
                 raw = await conn.fetchval('SELECT shop FROM agent_rig.retailers WHERE tenant_id=$1', tenant)
                 assert json.loads(raw) == (expected if slug == 'archon' else {})

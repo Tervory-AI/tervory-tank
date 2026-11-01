@@ -27,7 +27,7 @@ from rigbox.page_route import mount_page  # noqa: E402
 from rigbox.service import Service, WebhookHandoff  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
-ARCHON = ROOT / "tests" / "fixtures" / "rig_catalogues" / "archon"
+ARCHON = ROOT / "tests" / "fixtures" / "rig_catalogues" / "aurora"
 V5 = ROOT / "agents" / "rig" / "rigbox" / "page" / "v5"
 TENANT = "44444444-4444-4444-8444-444444444444"
 ORIGIN = "https://rig.tervory.com"

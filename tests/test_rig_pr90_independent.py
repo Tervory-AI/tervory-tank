@@ -38,7 +38,7 @@ from rigbox.store import MemoryStore  # noqa: E402
 
 CATALOGUES = ROOT / "tests" / "fixtures" / "rig_catalogues"
 CN = CATALOGUES / "lumaworks"
-ARCHON = CATALOGUES / "archon"
+ARCHON = CATALOGUES / "aurora"
 EXAMPLE = CATALOGUES / "example"
 SECOND = CATALOGUES / "second"
 PAGE = ROOT / "agents" / "rig" / "rigbox" / "page"

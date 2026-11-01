@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT / "agents" / "_chassis"))
 from rigbox.service import RecordingHandoff, Service  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
-ARCHON = ROOT / "tests" / "fixtures" / "rig_catalogues" / "archon"
+ARCHON = ROOT / "tests" / "fixtures" / "rig_catalogues" / "aurora"
 TENANT = "44444444-4444-4444-8444-444444444444"
 
 
