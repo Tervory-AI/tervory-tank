@@ -28,7 +28,7 @@ def test_source_snapshot_uses_real_stored_quotes_and_holding_is_separate():
     assert "w.holdout=false" in WORKED and "w.material_type='public_record'" in WORKED
 
 
-@pytest.mark.parametrize("field,value", [("region", "za"), ("tenant_id", str(uuid4())), ("holdout", True),
+@pytest.mark.parametrize("field,value", [("region", "za"), ("tenant_id", "99999999-9999-4999-8999-999999999999"), ("holdout", True),
     ("material_type", "client_work"), ("nature_of_suit", "criminal prosecution"), ("outcome", "Invented holding"),
     ("fact_pattern", {"facts": "Invented facts", "issues": ["Question"]})])
 def test_no_foreign_private_holdout_criminal_or_invented_source(field, value):
