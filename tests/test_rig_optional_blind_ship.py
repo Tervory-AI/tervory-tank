@@ -369,3 +369,68 @@ async def test_real_postgres_blind_ship_and_neutral_slip_defaults_and_persistenc
             await pool.close()
     finally:
         await _drop_database(admin, name)
+
+
+@pytest.mark.asyncio
+async def test_real_postgres_concurrent_orders_for_one_quote_never_raise():
+    """Four concurrent place_located_order calls per quote, 1,000 rounds: every
+    call reads back the one order (0 errors). ON CONFLICT (tenant, quote) alone
+    let the (tenant, number) unique index raise, wrapped as order_unavailable."""
+    import asyncpg
+    from uuid import uuid4
+    from test_rig_postgres import _admin_url, _create_database, _database_url, _drop_database
+    from rigbox.store import PgStore
+    admin = _admin_url()
+    name = "rig_race_" + uuid4().hex[:12]
+    await _create_database(admin, name)
+    try:
+        pool = await asyncpg.create_pool(_database_url(admin, name), min_size=4, max_size=8)
+        try:
+            store = PgStore(pool)
+            await store.apply_schema()
+            orders, sandbox = RigOrders(store), {"RIG_LOCATE_ORDER_MODE": "sandbox"}
+            errors, rounds = [], 1000
+            for index in range(rounds):
+                results = await asyncio.gather(*[orders.place_located_order(
+                    tenant_id=TENANT, quote_id=f"req_race_{index}", located=LOCATED, price=PRICE, ship=SHIP,
+                    env=sandbox) for _ in range(4)], return_exceptions=True)
+                errors += [result for result in results if isinstance(result, Exception)]
+                assert all(result == results[0] for result in results if not isinstance(result, Exception))
+            assert errors == []
+            assert await pool.fetchval("SELECT count(*) FROM agent_rig.locate_orders") == rounds
+            assert await pool.fetchval("SELECT count(*) FROM agent_rig.supplier_purchase_orders") == rounds
+        finally:
+            await pool.close()
+    finally:
+        await _drop_database(admin, name)
+
+
+@pytest.mark.asyncio
+async def test_real_postgres_an_order_number_taken_by_another_quote_is_a_mismatch(monkeypatch):
+    import asyncpg
+    from uuid import uuid4
+    from test_rig_postgres import _admin_url, _create_database, _database_url, _drop_database
+    from rigbox import fulfilment
+    from rigbox.store import PgStore
+    admin = _admin_url()
+    name = "rig_race_" + uuid4().hex[:12]
+    await _create_database(admin, name)
+    try:
+        pool = await asyncpg.create_pool(_database_url(admin, name))
+        try:
+            store = PgStore(pool)
+            await store.apply_schema()
+            orders, sandbox = RigOrders(store), {"RIG_LOCATE_ORDER_MODE": "sandbox"}
+            await orders.place_located_order(tenant_id=TENANT, quote_id="req_a", located=LOCATED, price=PRICE,
+                                             env=sandbox)
+            taken = fulfilment.numbers(TENANT, "req_a")
+            monkeypatch.setattr(fulfilment, "numbers", lambda tenant, quote: taken)  # forced collision
+            with pytest.raises(DeliveryError, match="order_mismatch"):
+                await orders.place_located_order(tenant_id=TENANT, quote_id="req_b", located=LOCATED,
+                                                 price=PRICE, env=sandbox)
+            assert await store.locate_order(TENANT, "req_b") is None
+            assert await pool.fetchval("SELECT count(*) FROM agent_rig.locate_orders") == 1
+        finally:
+            await pool.close()
+    finally:
+        await _drop_database(admin, name)
