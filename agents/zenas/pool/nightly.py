@@ -30,8 +30,8 @@ _OFFICIAL_STATUTES = frozenset({"govza-acts", "govza-regulations"})
 # The US scheduler allows two hours for the entire night. A progressing bulk
 # archive must also yield; its no-progress watchdog alone cannot bound it.
 _US_COURTLISTENER_SECONDS = 30 * 60
-# ZA's existing scheduler also allows two hours. With 18 live catalogue
-# sources, five minutes each leaves thirty minutes for the remaining jobs.
+# ZA's existing scheduler also allows two hours. With 17 live catalogue
+# sources, five minutes each leaves thirty-five minutes for remaining jobs.
 # A slow early source must not starve every court archive later in the list.
 _ZA_SOURCE_SECONDS = 5 * 60
 
