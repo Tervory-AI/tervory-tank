@@ -67,3 +67,12 @@ def test_ai_judge_cannot_peek_at_actual_holding_or_preselected_winner():
     context = str(ai_context(s, OWNER, token))
     assert "target answer" not in context and "preferred_order" not in context
     assert "real holding hidden" not in context
+
+
+def test_undeclared_or_prefix_similar_case_in_ruling_text_is_not_verified_by_id_list():
+    from agents.zenas.core.moot.hearing_ai import validate_turn
+    s = started()
+    s["problem"]["authorities"][0]["name"] = "Smith v Jones [2026] US 1"
+    payload = {"kind": "submission", "text": "Smith v Jones Fabricated binds this court.", "authority_ids": ["case-1"], "reasoning": trace()}
+    with pytest.raises(HearingError, match="citation_check_failed"):
+        validate_turn(s, payload)

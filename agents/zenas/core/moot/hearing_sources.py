@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from typing import Any
 from uuid import UUID
+from urllib.parse import urlsplit
+
+from agents.zenas.core.pointers import _PARAGRAPH
 
 from agents.zenas.core.convert import criminal_case
 from agents.zenas.core.engine import cite_check, quote_in_source
@@ -25,6 +28,16 @@ WORKED = """SELECT w.*, d.title, d.text, d.citation, d.url, d.status, d.kind,
  AND s.region=$2 AND s.bulk_use='allowed' AND d.kind='case' AND d.status <> 'superseded'"""
 
 
+def verified_paragraph(source: str, quote: str) -> int | None:
+    marks = list(_PARAGRAPH.finditer(source))
+    numbers = [int(m.group(1) or m.group(2)) for m in marks]
+    if any(a >= b for a, b in zip(numbers, numbers[1:])):
+        return None
+    found = [numbers[i] for i, mark in enumerate(marks)
+             if quote_in_source(quote, source[mark.end():marks[i + 1].start() if i + 1 < len(marks) else len(source)])]
+    return found[0] if len(found) == 1 else None
+
+
 def build_problem(row: dict[str, Any], actor: Actor) -> dict[str, Any]:
     if row.get("region") != actor.region or row.get("source_region") != actor.region:
         raise HearingError("wrong_region")
@@ -41,6 +54,9 @@ def build_problem(row: dict[str, Any], actor: Actor) -> dict[str, Any]:
         raise HearingError("source_incomplete")
     if not quote_in_source(facts, source) or not quote_in_source(holding, source):
         raise HearingError("source_quote_check_failed")
+    url = urlsplit(str(row["url"]))
+    if url.scheme not in ("http", "https") or not url.netloc or url.username or url.password:
+        raise HearingError("invalid_source_url")
     citation = str(row.get("citation") or "")
     passage = {"citation": citation, "text": source, "status": row.get("status"),
                "doc_id": row.get("pool_doc_id"), "version_id": row.get("pool_version_id")}
@@ -58,7 +74,7 @@ def build_problem(row: dict[str, Any], actor: Actor) -> dict[str, Any]:
             seen.add(quote)
             authorities.append({"id": f"{row['pool_version_id']}:{len(authorities)}", "name": citation,
                 "quote": quote, "source_url": row["url"], "verified": True, "weight": "unknown",
-                "court": row.get("court") or "", "paragraph": basis.get("paragraph")})
+                "court": row.get("court") or "", "paragraph": verified_paragraph(source, quote)})
     issues = pattern.get("issues") or [pattern.get("question") or ""]
     issues = [i if isinstance(i, str) else str(i.get("issue") or i.get("question") or "") for i in issues]
     issues = [i for i in issues if i.strip()]

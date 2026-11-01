@@ -14,6 +14,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from . import hearing
 from .judge import flag_authorities
+from agents.zenas.core.precedent import named_cases
 from .reasoning import REASONING_INSTRUCTIONS, validate
 
 
@@ -31,6 +32,11 @@ def validate_turn(state: dict[str, Any], payload: Any) -> dict[str, Any]:
         raise hearing.HearingError("pending_question_not_addressed")
     known = [a["name"] for a in problem["authorities"]]
     binding = [a["name"] for a in problem["authorities"] if a.get("weight") == "binding"]
+    normalized = lambda value: " ".join(value.split()).casefold()
+    aliases = {normalized(name) for name in known}
+    aliases.update(normalized(name) for authority in known for name in named_cases(authority))
+    if any(normalized(name) not in aliases for name in named_cases(json.dumps(result))):
+        raise hearing.HearingError("citation_check_failed")
     flags = flag_authorities(json.dumps(result), library_names=known, binding_names=binding)
     if flags["made_up"] or flags["nonbinding_as_binding"]:
         raise hearing.HearingError("citation_check_failed")
