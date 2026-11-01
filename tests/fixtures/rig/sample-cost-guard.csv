@@ -1,0 +1,7 @@
+sku,gtin,name,brand,category,price,currency,image_url,product_url,family,active,attributes
+90101,200000901011,"KX-9 Suppressor, 7.62, Titanium, High Temp Coating, Hub Mount, Includes 5/8x24 QD Flash Hider, BLACK",Sample Arms,Suppressors,18810,ZAR,https://assets.local/sample-90101.jpg,,,yes,"{""export_usd"":437,""color"":""BLACK""}"
+90102,200000901028,"KX Hub Suppressor Adapter, 1.375x24",Sample Arms,Parts,2970,ZAR,https://assets.local/sample-90102.jpg,,,yes,"{""export_usd"":58}"
+90103,200000901035,"GRAPHITE R-200 Upper Receiver Assembly, 5.56 NATO, 13.5"" Barrel W/ Pinned Muzzle Brake, 11"" Rail, Ambi Charging Handle, Piston",Sample Arms,Upper receivers,31200,ZAR,https://assets.local/sample-90103.jpg,,R-200,yes,"{""export_usd"":871}"
+90104,200000901042,"COPPER Lower Receiver Assembly, Semi Auto, Sample Furniture, Curved Trigger, Ambi Selector, Carbine Buffer, QD End Plate",Sample Arms,Lower receivers,19400,ZAR,https://assets.local/sample-90104.jpg,,,yes,"{""export_usd"":512}"
+90105,200000901059,"GRAPHITE 14"" RAIL KIT (INCLUDES BARREL NUT & MOUNTING HARDWARE)",Sample Arms,Upper receivers,7900,ZAR,https://assets.local/sample-90105.jpg,,,yes,"{""export_usd"":163}"
+90106,,"Ranger .308 WIN Rifle, 16"" Barrel, Muzzle Brake, 14"" Rail, Sample Furniture, Piston, BLACK",Sample Arms,Rifles,49900,ZAR,https://assets.local/sample-90106.jpg,,RANGER,yes,"{""export_usd"":1394,""color"":""BLACK""}"

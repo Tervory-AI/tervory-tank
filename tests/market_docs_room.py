@@ -1,5 +1,6 @@
 """Local proof: actual room app; only R2's HTTP transport is replaced."""
 import os
+import socket
 from pathlib import Path
 
 import httpx
@@ -28,6 +29,21 @@ async def r2(self, request):
 
 
 httpx.AsyncHTTPTransport.handle_async_request = r2
+
+# The vault links route asks the room to subscribe https://example.com/reports, and
+# the room's shared public-URL check resolves the host (#421). Answer that one name
+# with a fixed public address so the proof needs no DNS; every other name and the
+# public-address rule itself are unchanged.
+_getaddrinfo = socket.getaddrinfo
+
+
+def _resolve(host, *args, **kwargs):
+    if host == 'example.com':
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('93.184.216.34', 443))]
+    return _getaddrinfo(host, *args, **kwargs)
+
+
+socket.getaddrinfo = _resolve
 if os.environ['AGENT_NAME'] == 'market_lab':
     from app import app
 else:

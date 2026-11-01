@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -15,6 +16,11 @@ from chassis.tenant_db import TenantPool
 from rigbox.logic import public_product
 from rigbox.recall import SEARCH_RECALL_CAP
 from rigbox.retailer_store import RetailerMemoryStore, RetailerPgStore
+from rigbox.shopper_attributes import PRIVATE_KEY_PATTERN, SHOPPER_ATTRIBUTES
+
+_log = logging.getLogger("rigbox.store")
+
+_SEARCH_KEYS = sorted(SHOPPER_ATTRIBUTES)
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.sql"
 
@@ -25,21 +31,21 @@ FROM agent_rig.products
 WHERE tenant_id = $1
 """
 
-_SEARCH = """
+_SEARCH_TEMPLATE = """
 SELECT sku, gtin, mpn, supply_eligible, name, brand, category, price, currency, image_url, url, family,
        attributes, active
 FROM agent_rig.products
 WHERE tenant_id = $1
   AND active = true
   AND (
-    to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(brand, '') || ' ' || coalesce(sku, '') || ' ' || coalesce(attributes::text, ''))
+    to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(brand, '') || ' ' || coalesce(sku, '') || ' ' || {shopper_text})
       @@ plainto_tsquery('simple', $2)
     OR similarity(coalesce(name, ''), $2) > 0.2
     OR similarity(coalesce(brand, ''), $2) > 0.2
     OR similarity(coalesce(sku, ''), $2) > 0.2
   )
 ORDER BY ts_rank(
-    to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(brand, '') || ' ' || coalesce(sku, '') || ' ' || coalesce(attributes::text, '')),
+    to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(brand, '') || ' ' || coalesce(sku, '') || ' ' || {shopper_text}),
     plainto_tsquery('simple', $2)
   ) DESC,
   similarity(coalesce(name, ''), $2) DESC,
@@ -47,21 +53,39 @@ ORDER BY ts_rank(
 LIMIT $3
 """
 
-_SEARCH_FTS = """
+_SEARCH_FTS_TEMPLATE = """
 SELECT sku, gtin, mpn, supply_eligible, name, brand, category, price, currency, image_url, url, family,
        attributes, active
 FROM agent_rig.products
 WHERE tenant_id = $1
   AND active = true
-  AND to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(brand, '') || ' ' || coalesce(sku, '') || ' ' || coalesce(attributes::text, ''))
+  AND to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(brand, '') || ' ' || coalesce(sku, '') || ' ' || {shopper_text})
       @@ plainto_tsquery('simple', $2)
 ORDER BY ts_rank(
-    to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(brand, '') || ' ' || coalesce(sku, '') || ' ' || coalesce(attributes::text, '')),
+    to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(brand, '') || ' ' || coalesce(sku, '') || ' ' || {shopper_text}),
     plainto_tsquery('simple', $2)
   ) DESC,
   sku ASC
 LIMIT $3
 """
+
+# Search text: name, brand, sku and only allowlisted attributes, never
+# attributes::text. Scalars and lists of scalars are indexed; ``stock`` gives
+# its shopper fields only; other structured attributes (options, defaults,
+# price_history, verified) are not search text. $4 is SHOPPER_ATTRIBUTES.
+_SHOPPER_TEXT = """coalesce((
+    SELECT string_agg(e.key || ' ' || CASE
+        WHEN jsonb_typeof(e.value) IN ('string', 'number', 'boolean') THEN e.value #>> '{}'
+        WHEN e.key = 'stock' AND jsonb_typeof(e.value) = 'object'
+            THEN concat_ws(' ', e.value ->> 'status', e.value ->> 'location', e.value ->> 'lead', e.value ->> 'label')
+        WHEN e.key <> 'verified' AND jsonb_typeof(e.value) = 'array' THEN coalesce((
+            SELECT string_agg(x #>> '{}', ' ') FROM jsonb_array_elements(e.value) AS x(value)
+            WHERE jsonb_typeof(x.value) IN ('string', 'number')), '')
+        ELSE '' END, ' ')
+    FROM jsonb_each(CASE WHEN jsonb_typeof(attributes) = 'object' THEN attributes ELSE '{}'::jsonb END) AS e(key, value)
+    WHERE e.key = ANY($4::text[])), '')"""
+_SEARCH = _SEARCH_TEMPLATE.replace("{shopper_text}", _SHOPPER_TEXT)
+_SEARCH_FTS = _SEARCH_FTS_TEMPLATE.replace("{shopper_text}", _SHOPPER_TEXT)
 
 
 def schema_sql() -> str:
@@ -242,6 +266,8 @@ class MemoryStore(RetailerMemoryStore):
         self.deleted_products: set[tuple[str, str]] = set()
         # Rig-owned Locate orders: (tenant, quote) -> {"order", "purchase_order"}.
         self.locate_orders: dict[tuple[str, str], dict[str, Any]] = {}
+        # Pricing inputs moved out of attributes at import. Store-only.
+        self.private_attributes: dict[tuple[str, str], dict[str, Any]] = {}
 
     async def deleted_skus(self, tenant_id: str) -> set[str]:
         return {sku for tenant, sku in self.deleted_products if tenant == str(tenant_id)}
@@ -259,6 +285,8 @@ class MemoryStore(RetailerMemoryStore):
             self.deleted_products.add((tenant, sku))
         self.private_costs = {key: row for key, row in self.private_costs.items()
                               if key[0] != tenant or key[1] not in found}
+        self.private_attributes = {key: row for key, row in self.private_attributes.items()
+                                   if key[0] != tenant or key[1] not in found}
         if hasattr(self, "feed_products"):
             self.feed_products = {key for key in self.feed_products if key[0] != tenant or key[1] not in found}
         if hasattr(self, "watch_receipts"):
@@ -289,9 +317,19 @@ class MemoryStore(RetailerMemoryStore):
         if key in self.deleted_products:
             return "skipped"
         action = "updated" if key in self._products else "added"
-        self._products[key] = {**row, "tenant_id": str(tenant_id), "sku": str(row["sku"])}
+        public = {name: value for name, value in row.items() if name != "private_attributes"}
+        self._products[key] = {**public, "tenant_id": str(tenant_id), "sku": str(row["sku"])}
+        if "private_attributes" in row:
+            if row["private_attributes"]:
+                self.private_attributes[key] = dict(row["private_attributes"])
+            else:
+                self.private_attributes.pop(key, None)
         self._drop_answers(tenant_id)
         return action
+
+    async def product_private_attributes(self, tenant_id: str, sku: str) -> dict[str, Any]:
+        """Store-only. Never on a shopper path."""
+        return dict(self.private_attributes.get((str(tenant_id), sku), {}))
 
     async def products(self, tenant_id: str) -> list[dict[str, Any]]:
         rows = [row for (tenant, _sku), row in self._products.items() if tenant == str(tenant_id)]
@@ -627,6 +665,56 @@ class PgStore(RetailerPgStore):
                         if present == 1:
                             continue
                     raise
+            await self._log_cost_guard(conn)
+
+    async def _log_cost_guard(self, conn: Any) -> int:
+        """Products whose attributes still carry a private key after the migration.
+
+        Logged on every startup. Zero visible products, or a non-zero count,
+        means the migration did not run as intended (for example under forced
+        RLS with no tenant set). Shoppers stay safe either way: every shopper
+        path allowlists attributes.
+        """
+        try:
+            visible, left = await conn.fetchrow(
+                "SELECT count(*), count(*) FILTER (WHERE jsonb_typeof(attributes) = 'object' AND EXISTS ("
+                "SELECT 1 FROM jsonb_object_keys(attributes) AS k(key) WHERE k.key ~* $1)) "
+                "FROM agent_rig.products",
+                PRIVATE_KEY_PATTERN,
+            )
+        except Exception:  # noqa: BLE001 - a log line must never stop startup
+            _log.warning("cost-guard: could not count products after the migration", exc_info=True)
+            return -1
+        rls = await self._rls_hides_rows(conn) if not visible else False
+        level = logging.WARNING if left or rls else logging.INFO
+        _log.log(level, "cost-guard: %d products visible, %d still carry private keys in attributes", visible, left)
+        if rls:
+            _log.warning(
+                "cost-guard: agent_rig.products has forced row-level security and this role does not bypass it, "
+                "so the migration saw no rows and moved nothing. Run schema.sql as the table owner with RLS "
+                "bypassed (or per tenant) to move stored private keys."
+            )
+        return int(left)
+
+    @staticmethod
+    async def _rls_hides_rows(conn: Any) -> bool:
+        """True when row-level security applies to this role on agent_rig.products.
+
+        Then a startup migration with no tenant set sees nothing, and zero
+        visible rows does not mean an empty table.
+        """
+        try:
+            row = await conn.fetchrow(
+                "SELECT c.relrowsecurity, c.relforcerowsecurity, r.rolbypassrls, r.rolsuper, "
+                "pg_get_userbyid(c.relowner) = current_user AS owner "
+                "FROM pg_class c JOIN pg_roles r ON r.rolname = current_user "
+                "WHERE c.oid = 'agent_rig.products'::regclass"
+            )
+        except Exception:  # noqa: BLE001 - a log line must never stop startup
+            return False
+        if not row or not row["relrowsecurity"] or row["rolbypassrls"] or row["rolsuper"]:
+            return False
+        return bool(row["relforcerowsecurity"] or not row["owner"])
 
     async def product_exists(self, tenant_id: str, sku: str) -> bool:
         async with self.pool.acquire() as conn:
@@ -687,8 +775,35 @@ class PgStore(RetailerPgStore):
                 _optional_text(row.get("mpn")),
                 bool(row.get("supply_eligible", False)),
             )
+            if "private_attributes" in row:
+                private = row.get("private_attributes") or {}
+                if private:
+                    await conn.execute(
+                        """
+                        INSERT INTO agent_rig.product_private_attributes (tenant_id, sku, attributes, updated_at)
+                        VALUES ($1, $2, $3::jsonb, now())
+                        ON CONFLICT (tenant_id, sku) DO UPDATE SET attributes = EXCLUDED.attributes, updated_at = now()
+                        """,
+                        _uuid(tenant_id), str(row["sku"]), _json(private),
+                    )
+                else:
+                    await conn.execute(
+                        "DELETE FROM agent_rig.product_private_attributes WHERE tenant_id = $1 AND sku = $2",
+                        _uuid(tenant_id), str(row["sku"]),
+                    )
         await self._drop_answers(tenant_id)
         return "updated" if existed else "added"
+
+    async def product_private_attributes(self, tenant_id: str, sku: str) -> dict[str, Any]:
+        """Store-only. Never on a shopper path."""
+        async with self.pool.acquire() as conn:
+            value = await conn.fetchval(
+                "SELECT attributes FROM agent_rig.product_private_attributes WHERE tenant_id = $1 AND sku = $2",
+                _uuid(tenant_id), sku,
+            )
+        if isinstance(value, str):
+            value = json.loads(value)
+        return dict(value or {})
 
     async def products(self, tenant_id: str) -> list[dict[str, Any]]:
         async with self.pool.acquire() as conn:
@@ -698,11 +813,11 @@ class PgStore(RetailerPgStore):
     async def search_rows(self, tenant_id: str, query: str, limit: int) -> list[dict[str, Any]]:
         async with self.pool.acquire() as conn:
             try:
-                rows = await conn.fetch(_SEARCH, _uuid(tenant_id), query, limit)
+                rows = await conn.fetch(_SEARCH, _uuid(tenant_id), query, limit, _SEARCH_KEYS)
             except Exception as exc:
                 if "similarity" not in str(exc).lower() and "pg_trgm" not in str(exc).lower():
                     raise
-                rows = await conn.fetch(_SEARCH_FTS, _uuid(tenant_id), query, limit)
+                rows = await conn.fetch(_SEARCH_FTS, _uuid(tenant_id), query, limit, _SEARCH_KEYS)
         return [_record_product(row) | {"tenant_id": str(tenant_id)} for row in rows]
 
     async def upsert_fit(self, tenant_id: str, row: dict[str, Any]) -> None:
