@@ -174,6 +174,7 @@ async def accepted_copy(http: Any, tenant: str, write_id: str, *, base: str, key
     except (TypeError, ValueError, AttributeError):
         raise ValueError("copy write id must be a UUID") from None
     response = await http.get(base.rstrip("/") + "/v1/trigger/copy/" + identifier,
+                              params={"tenant_id": tenant},
                               headers={"X-Tank-Key": key, "X-Tervory-Tenant": tenant, "X-Tervory-Home-Region": region},
                               follow_redirects=False, timeout=30)
     if response.status_code != 200:
@@ -242,7 +243,11 @@ async def execute(payload: dict, tenant_id: str, *, tank: Any = None, http: Any 
         number = scaffold._next_build_number(folder)
         with tempfile.TemporaryDirectory(prefix="tisan-build-") as tmp:
             project = Path(tmp) / "project"
-            scaffold.write_project(brief, project)
+            # The content catch-all owns planned routes. The legacy scaffold
+            # generates static pages for custom names, which would shadow it.
+            # Keep only its existing contact/API and privacy routes.
+            scaffold.write_project({**brief, "pages": [name for name in brief["pages"]
+                                    if name in {"home", "contact", "privacy"}]}, project)
             (project / "content").mkdir(exist_ok=True)
             (project / "content/site.json").write_text(json.dumps({"schema": "tisan.content/1", **plan}, ensure_ascii=False, indent=2) + "\n")
             checks, detail = await scaffold.run_checks(project)
