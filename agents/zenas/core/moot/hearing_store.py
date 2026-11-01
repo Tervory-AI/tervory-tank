@@ -141,3 +141,40 @@ class HearingStore:
         await conn.execute("""INSERT INTO agent_zenas.moot_matches(id,tenant_id,problem_id,region,mode,published,fairness,runs)
             VALUES($1,$2,$3,$4,$5,true,$6::jsonb,$7::jsonb)""", UUID(state["id"]), platform,
             problem["id"], state["region"], match["mode"], json.dumps(match["fairness"]), json.dumps(match["runs"]))
+
+    async def create_pair(self, actor: hearing.Actor, hearing_id: str, request_id: str, revision: int) -> dict[str, Any]:
+        from .fairness import pair
+        pair_id = str(uuid5(NAMESPACE_URL, f"tervory:moot:pair:{actor.tenant_id}:{hearing_id}:{request_id}"))
+        second_id = str(uuid5(NAMESPACE_URL, pair_id + ":swapped"))
+        fingerprint = self.fingerprint({"action": "pair", "revision": revision})
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                state = await self._row(conn, actor, hearing_id, lock=True)
+                if await self._request(conn, actor, hearing_id, request_id, fingerprint):
+                    return state
+                first, second = pair(state, actor, revision, pair_id, second_id)
+                await conn.execute("""INSERT INTO agent_zenas.moot_hearings(id,tenant_id,region,revision,state)
+                    VALUES($1,$2,$3,0,$4::jsonb)""", UUID(second_id), UUID(actor.tenant_id), actor.region, json.dumps(second))
+                await conn.execute("""INSERT INTO agent_zenas.moot_hearing_pairs(id,tenant_id,region,owner_id,first_hearing,second_hearing)
+                    VALUES($1,$2,$3,$4,$5,$6)""", UUID(pair_id), UUID(actor.tenant_id), actor.region, actor.user_id, UUID(hearing_id), UUID(second_id))
+                await conn.execute("""UPDATE agent_zenas.moot_hearings SET state=$4::jsonb,revision=$5,updated_at=now()
+                    WHERE tenant_id=$1 AND region=$2 AND id=$3 AND revision=$6""", UUID(actor.tenant_id), actor.region,
+                    UUID(hearing_id), json.dumps(first), first["revision"], revision)
+                await self._record(conn, actor, first, request_id, fingerprint, "pair")
+                await self._record(conn, actor, second, request_id, fingerprint, "paired_copy")
+                return first
+
+    async def fairness(self, actor: hearing.Actor, hearing_id: str) -> dict[str, Any]:
+        from .fairness import evidence
+        async with self.pool.acquire() as conn:
+            state = await self._row(conn, actor, hearing_id)
+            pair_id = state.get("fairness_pair_id")
+            if not pair_id:
+                raise hearing.HearingError("not_found")
+            row = await conn.fetchrow("""SELECT first_hearing,second_hearing FROM agent_zenas.moot_hearing_pairs
+                WHERE id=$1 AND tenant_id=$2 AND region=$3""", UUID(pair_id), UUID(actor.tenant_id), actor.region)
+            if row is None:
+                raise hearing.HearingError("not_found")
+            first = await self._row(conn, actor, str(row["first_hearing"]))
+            second = await self._row(conn, actor, str(row["second_hearing"]))
+            return {"pair_id": pair_id, **evidence(first, second)}

@@ -117,3 +117,20 @@ async def test_closed_reasoning_becomes_pending_review_never_automatic_gold(pg_s
     assert len(rows) == 4 and all(r["status"] == "pending_review" and r["reviewed_by"] is None for r in rows)
     assert all(json.loads(r["candidate"])["verdict"] is None for r in rows)
     assert "never counsel" not in str(rows) and "real holding hidden" not in str(rows)
+
+
+@pytest.mark.asyncio
+async def test_pair_creation_is_atomic_retryable_and_region_tenant_private(pg_store):
+    seats = {seat: {"kind": "ai"} for seat in HUMANS}
+    s = await pg_store.create(OWNER, str(uuid4()), problem(), seats)
+    s = await pg_store.mutate(OWNER, s["id"], str(uuid4()), 0, "lock", {}, transition("lock"))
+    request = str(uuid4()); revision = s["revision"]
+    first, retry = await asyncio.gather(pg_store.create_pair(OWNER, s["id"], request, revision), pg_store.create_pair(OWNER, s["id"], request, revision))
+    assert first == retry and first["fairness_pair_id"]
+    report = await pg_store.fairness(OWNER, s["id"])
+    assert report["status"] == "incomplete" and report["first_hearing"] != report["second_hearing"]
+    second = await pg_store.load(OWNER, report["second_hearing"])
+    assert second["floor"] == "respondent" and second["problem"] == first["problem"]
+    async with pg_store.pool.acquire() as conn:
+        assert await conn.fetchval("SELECT count(*) FROM agent_zenas.moot_hearings") == 2
+        assert await conn.fetchval("SELECT count(*) FROM agent_zenas.moot_hearing_pairs") == 1
