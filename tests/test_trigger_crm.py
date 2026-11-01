@@ -143,9 +143,9 @@ def test_strict_write_schema_rejects_hidden_authority(extra):
     assert exc.value.status_code == 422
 
 
-def test_tool_requires_trigger_entitlement_and_estimate_sideeffects_denied():
+def test_tool_requires_founder_and_estimate_sideeffects_denied():
     assert 'trigger.crm.write' not in command.allowed_tools(command.Actor(T,'client',False))
-    assert 'trigger.crm.write' in command.allowed_tools(command.Actor(T,'client',False,frozenset({'trigger'})))
+    assert 'trigger.crm.write' not in command.allowed_tools(command.Actor(T,'client',False,frozenset({'trigger'})))
     with pytest.raises(HTTPException):command.validate_action(command.PlannedAction(tool='trigger.crm.write',arguments={}),command.Actor(T,'client',False))
     with pytest.raises(ValueError):crm.validate_data('estimates',{'title':'Synthetic','account_id':str(RECORD),'contact_id':str(RECORD),'start_project':True})
 
@@ -227,26 +227,26 @@ def test_pinned_schema_property_names_are_not_stripped_as_annotations():
     crm.validate_data('estimates',{'title':'Synthetic','account_id':str(RECORD),'contact_id':str(RECORD)})
 
 
+@pytest.mark.parametrize('actor', [
+    command.Actor(T, 'offline-client', False, frozenset({'trigger'})),
+    command.Actor(T, 'offline-admin', False, frozenset({'trigger'}), True),
+    command.Actor(T, 'offline-member', False),
+], ids=['granted-client', 'tenant-admin', 'member'])
 @pytest.mark.asyncio
-async def test_client_actual_grant_recheck_and_admin_voice_boundary(setup,monkeypatch):
-    client=command.Actor(T,'offline-client',False)
-    granted=True
-    class Conn:
-        async def fetch(self,sql,*values):
-            assert values == (T,)
-            assert 'FROM tank.tenant_squad WHERE tenant_id=$1' in sql
-            return [{'agent':'trigger'}] if granted else []
-    class Acquire:
-        async def __aenter__(self):return Conn()
-        async def __aexit__(self,*args):pass
-    monkeypatch.setattr(command,'db',lambda:SimpleNamespace(acquire=lambda:Acquire()))
-    actor=await crm.authority(client)
-    assert 'trigger.crm.write' in command.allowed_tools(actor)
-    assert not {'trigger.voice.set','trigger.voice.rollback','trigger.feedback'} & set(command.allowed_tools(actor))
-    assert 'worker.build' not in command.allowed_tools(actor)
-    granted=False
-    with pytest.raises(HTTPException) as exc:await crm.authority(actor)
-    assert exc.value.status_code == 403
+async def test_nonfounder_reads_and_writes_refused_even_with_grants(setup, monkeypatch, actor):
+    setup.dependency_overrides[command.identity] = lambda: actor
+    monkeypatch.setattr(crm, 'authorized_actor', AsyncMock(return_value=actor))
+    upstream = AsyncMock()
+    monkeypatch.setattr(crm, 'upstream', upstream)
+    assert 'trigger.crm.write' not in command.allowed_tools(actor)
+    for method, path, body in [
+        ('GET', '/v1/trigger/crm/contacts', None),
+        ('GET', '/v1/trigger/crm/contacts/' + str(RECORD), None),
+        ('POST', '/v1/trigger/crm/write', {'resource': 'contacts', 'data': {'first_name': 'Synthetic', 'last_name': 'Offline'}}),
+    ]:
+        response = await request(setup, method, path, **({'json': body} if body else {}))
+        assert response.status_code == 403
+    upstream.assert_not_awaited()
 
 
 @pytest.mark.parametrize('attested',[None,str(OTHER),'not-a-uuid'])
