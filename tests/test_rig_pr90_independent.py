@@ -40,8 +40,16 @@ ARCHON = CATALOGUES / "archon"
 EXAMPLE = CATALOGUES / "example"
 SECOND = CATALOGUES / "second"
 PAGE = ROOT / "agents" / "rig" / "rigbox" / "page"
-REPORT = Path("/tmp/rig-pr90-independent.json")
-SHOTS = Path(os.environ.get("RIG_SCREENSHOT_DIR", "/tmp/rig-pr90-screenshots"))
+REPORT: Path
+SHOTS: Path
+
+
+@pytest.fixture(scope="module", autouse=True)
+def isolated_artifact_paths(tmp_path_factory):
+    global REPORT, SHOTS
+    directory = tmp_path_factory.mktemp("rig-pr90")
+    REPORT = directory / "independent.json"
+    SHOTS = Path(os.environ["RIG_SCREENSHOT_DIR"]) if os.environ.get("RIG_SCREENSHOT_DIR") else directory / "screenshots"
 
 CN_TENANT = "33333333-3333-4333-8333-333333333333"
 EX_TENANT = "11111111-1111-4111-8111-111111111111"
