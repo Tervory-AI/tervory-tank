@@ -1,7 +1,7 @@
 # Tisan J4 quote engine — branch handoff
 
 Branch: `codex/tisan-j4`. Implementation/tests verified at
-`654d3150851dd4cf45e9d1e8cebdeb60453e3a12`; this report is the only subsequent change.
+`654d3150851dd4cf45e9d1e8cebdeb60453e3a12` for the full suite; the review follow-up below records the subsequent import-only fixes.
 Claude opens the PR from this branch. Founder merges. No PR has been opened by
 this thread, so hosted PR checks and the separate review remain pending.
 
@@ -192,3 +192,26 @@ revised brief, this browser test follows approval of the frames and wording.
 The engine and local tests are ready on the branch. Claude must open the PR;
 hosted green checks and the separate review are still pending. This report does
 not claim the revised PR-green completion condition or browser acceptance.
+
+
+## PR #564 lint follow-up
+
+CI run `41353670392` reported two F401 findings. Removed only the unused
+`uuid4` import from `tests/test_tisan_quotes.py:10` and unused `Path` import from
+`tests/test_tisan_quotes_postgres.py:10`, in commits `490a4a31` and `02caf8ae`.
+Both were pushed normally to the same `codex/tisan-j4` branch.
+
+Commands run from `/workspace/codex-tisan-j4`:
+
+```sh
+PATH=/tmp/base-reliability-venv/bin:$PATH ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+/tmp/base-reliability-venv/bin/python -m pytest -q tests/test_tisan_quotes.py tests/test_tisan_quotes_postgres.py
+git diff --check
+```
+
+Results: Ruff **All checks passed**, exit 0; focused tests **94 passed,
+3 skipped, 1 warning in 1.14s**, exit 0; diff check exit 0, no output.
+The three optional local PostgreSQL tests were skipped because this follow-up
+did not start a database or set `J4_TEST_POSTGRES_PORT`; their earlier real-SQL
+results remain recorded above. No behavior changed. Hosted checks on the new
+head remain pending; no browser acceptance or merge is claimed.
