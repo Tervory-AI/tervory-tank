@@ -189,13 +189,17 @@ def workflow(name):
 
 
 def group_for(expression, op):
-    """Evaluate coolify-ops' concurrency group expression for one op (tiny subset)."""
+    """Evaluate coolify-ops' concurrency group expression for one op (tiny subset):
+    `(op == 'a' || op == 'b') && 'group' || (...) && 'group2' || format(...)`."""
+    import re
     body = expression.strip()[3:-2].strip()
-    condition, rest = body.split(' && ', 1)
-    deploy_group, fallback = rest.split(' || ', 1)
-    ops = [part.split("== '", 1)[1].rstrip("')") for part in condition.strip('()').split(' || ')]
-    return deploy_group.strip("'") if op in ops else fallback.replace(
-        "format('coolify-ops-{0}', github.run_id)", 'coolify-ops-RUN')
+    pairs = re.findall(r"\(([^()]*)\) && '([^']+)' \|\| ", body)
+    fallback = re.sub(r"^(?:\([^()]*\) && '[^']+' \|\| )+", '', body)
+    for condition, group in pairs:
+        ops = [part.split("== '", 1)[1].rstrip("'") for part in condition.split(' || ')]
+        if op in ops:
+            return group
+    return fallback.replace("format('coolify-ops-{0}', github.run_id)", 'coolify-ops-RUN')
 
 
 class WorkflowTests(unittest.TestCase):
@@ -223,6 +227,10 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(group_for(ops['group'], op), 'coolify-deploy')
         for op in ['status', 'env-refs', 'create-room', 'backup-scope', 'nightly-status']:
             self.assertEqual(group_for(ops['group'], op), 'coolify-ops-RUN')
+        # Both renormalise ops share one fixed group (never the deploy group), so two
+        # dispatches can never run side by side.
+        for op in ['zenas-renormalise', 'zenas-renormalise-report']:
+            self.assertEqual(group_for(ops['group'], op), 'coolify-zenas-renormalise')
 
     def test_live_check_probes_through_the_coolify_gate(self):
         flow = workflow('live-check.yml')
@@ -260,6 +268,12 @@ class WorkflowTests(unittest.TestCase):
             def set_body(self, number, body):
                 events.append(('update', number, body))
 
+            def comment(self, number, body):
+                events.append(('comment', number, body))
+
+            def close(self, number):
+                events.append(('close', number))
+
         watchdog = types.ModuleType('watchdog')
         watchdog.GitHub = FakeGitHub
         with tempfile.TemporaryDirectory() as directory:
@@ -281,6 +295,49 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(events[0][1], 'Live check failed: bad.example')
         self.assertIn('bad.example-375.png', events[0][2])
         self.assertIn('https://github.com/offline/artifacts/456', events[0][2])
+
+    def test_a_host_that_passes_again_closes_its_issue(self):
+        events = []
+        opened = {'Live check failed: good.example': {'number': 7}, 'Live check failed: bad.example': {'number': 8}}
+
+        class FakeGitHub:
+            def __init__(self, *_):
+                pass
+
+            def ensure_label(self):
+                pass
+
+            def open_incidents(self):
+                return opened
+
+            def open_issue(self, title, body):
+                events.append(('create', title))
+
+            def set_body(self, number, body):
+                events.append(('update', number))
+
+            def comment(self, number, body):
+                events.append(('comment', number))
+
+            def close(self, number):
+                events.append(('close', number))
+
+        watchdog = types.ModuleType('watchdog')
+        watchdog.GitHub = FakeGitHub
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, 'results.json').write_text(json.dumps([
+                {'host': 'good.example', 'passed': True, 'viewports': []},
+                {'host': 'bad.example', 'passed': False, 'viewports': [
+                    {'width': 375, 'reasons': ['HTTP 503'], 'screenshot': ''}]},
+            ]))
+            env = {'LIVE_CHECK_OUTPUT': directory, 'GITHUB_REPOSITORY': 'offline/check',
+                   'GITHUB_TOKEN': 'offline', 'GITHUB_SERVER_URL': 'https://github.com',
+                   'GITHUB_RUN_ID': '123', 'ARTIFACT_URL': ''}
+            with patch.dict(os.environ, env), patch.dict('sys.modules', watchdog=watchdog), \
+                    patch('builtins.print'):
+                exec(compile(workflow_python('Open or update one issue per failed host'),
+                             '<issue-workflow>', 'exec'), {})
+        self.assertEqual(events, [('comment', 7), ('close', 7), ('update', 8)])
 
 
 def yaml_load(path):

@@ -83,8 +83,6 @@ def test_compose_only_passes_own_pairs_and_boston_backup_is_persistent():
                     assert svc['environment']['R2_BUCKET_ZENAS_ZA'] == '${R2_BUCKET_ZENAS_ZA:-}'
                 else:
                     assert svc['environment']['R2_BUCKET'] == f'tervory-{room.replace("_", "-")}'
-                if room == 'zenas' and name == 'docassemble-backup':
-                    expected = expected | {'R2_BACKUP_RECIPIENT'}
                 assert keys(svc['environment']) == expected
                 assert svc['environment']['R2_ACCOUNT_ID'] == '${R2_ACCOUNT_ID:-}'
             if room == 'radix':

@@ -14,6 +14,7 @@ from rigbox.logic import _active, _limit, _similarity, _tokens, approved, money,
 from rigbox.rank import _FILLER
 from rigbox.rank import _FUZZY, _common_english, _intent, _shopping_word
 from rigbox.rank import search as rank_search
+from rigbox.shopper_attributes import shopper_attributes
 
 # Category labels are split so this file stays clear of the shared room word list.
 _SIDEARM = "Pist" + "ols"
@@ -298,7 +299,7 @@ def present(
     item["family"] = str(row.get("family") or "")
     item["price_label"] = str(attributes.get("price_label") or "")
     item["demo_item"] = bool(attributes.get("demo_item"))
-    item["availability"] = _stock(attributes)
+    item["availability"] = item.get("availability") or _stock(attributes)
     item["options"] = attributes.get("options") if isinstance(attributes.get("options"), dict) else {}
     item["defaults"] = attributes.get("defaults") if isinstance(attributes.get("defaults"), dict) else {}
     item["fit"] = fit_state(_sku(row), centre, fits, _centre_cut(centre)) if centre is not None else None
@@ -682,8 +683,7 @@ def _outside_brand(query: str, products: list[dict[str, Any]]) -> str:
         listed.update(_tokens(str(row.get("brand") or "")))
         listed.update(_tokens(str(row.get("category") or "")))
         listed.update(_tokens(_sku(row)))
-        attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
-        for key, value in attributes.items():
+        for key, value in shopper_attributes(row.get("attributes")).items():
             listed.update(_tokens(str(key)))
             listed.update(_tokens(str(value)))
     words = re.findall(r"[A-Za-z0-9]+", query)
@@ -2477,7 +2477,7 @@ def _status(row: dict[str, Any]) -> str:
 
 
 def _available(row: dict[str, Any]) -> bool:
-    return _status(row) in _IN_STOCK
+    return _status(row) in _IN_STOCK or (row.get("availability") or {}).get("status") == "available_to_order"
 
 
 def _amount(row: dict[str, Any]) -> float:

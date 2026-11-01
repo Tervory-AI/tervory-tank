@@ -55,6 +55,8 @@ class Conn:
         self.reads.append((sql, args))
         if 'tank.ledger' in sql:
             return [{'day': '2026-10-21', 'calls': 9, 'code': 5, 'delivered': 8, 'spent': 0.24}]
+        if 'tank.tenant_squad' in sql:
+            return [{'agent': 'base'}, {'agent': 'zenas'}]
         if 'tank.tasks' in sql:
             return [{'id': 'one', 'title': 'A requested list', 'status': 'done'}]
         return []
@@ -178,6 +180,8 @@ async def test_client_measurements_come_from_scoped_sources_and_unknowns_are_nul
     assert data['jobs_done'] == 4
     assert data['daily'][0]['spent'] == 0.24
     assert data['saved_usd'] is None and data['credits_left'] is None
+    assert data['granted_squads'] == ['base', 'zenas']
+    assert any('tank.tenant_squad' in sql and args == (TENANT,) for sql, args in conn.reads)
     assert data['recent'] == [{'id': 'one', 'title': 'A requested list', 'status': 'done'}]
     assert all(args == (TENANT,) and 'tenant_id' in sql for sql, args in conn.reads)
 

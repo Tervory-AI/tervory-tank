@@ -60,6 +60,10 @@ async def client_dashboard(tenant_id: uuid.UUID) -> dict[str, Any]:
             """SELECT id::text,title,status FROM tank.tasks WHERE tenant_id=$1
             ORDER BY created_at DESC LIMIT 6""", tenant_id,
         )
+        grants = await conn.fetch(
+            'SELECT agent FROM tank.tenant_squad WHERE tenant_id=$1 ORDER BY agent', tenant_id,
+        )
+    result['granted_squads'] = [row['agent'] for row in grants]
     # Explicit projection: model names, call IDs and failures never reach this view.
     result['recent'] = [dict(row) for row in recent]
     return result

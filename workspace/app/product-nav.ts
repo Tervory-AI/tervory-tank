@@ -28,9 +28,9 @@ export const SQUAD_MEMBERS: readonly SquadMember[] = [
 export const SQUAD_LINKS: NavLink[] = SQUAD_MEMBERS.map(({ href, label }) => ({ href, label }));
 
 export const TOP_LINKS: readonly NavLink[] = [
-  { href: "/", label: "Dashboard" },
+  { href: "https://app.tervory.com/", label: "Dashboard" },
   { href: "/matters", label: "Projects" },
-  { href: "/", label: "Chats" },
+  { href: "/chats", label: "Chats" },
 ];
 
 export const REST_LINKS: readonly NavLink[] = [
@@ -58,6 +58,7 @@ export const REVIEW_LINK: NavLink = { href: "/review", label: "Review" };
 /** Signed-in routes that share the workspace sidebar shell. */
 export const SHELL_ROUTES: readonly string[] = [
   "/",
+  "/chats",
   "/matters",
   "/tasks",
   "/ledger",

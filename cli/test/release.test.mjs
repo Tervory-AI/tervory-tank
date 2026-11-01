@@ -48,7 +48,7 @@ const transport = (url, init) => fetch(String(url).replace('https://app.tervory.
 
 function install(env, home) {
   return run('sh', [join(CLI, 'install.sh')], {
-    env: { PATH: process.env.PATH, HOME: home, TERVORY_CLI_BASE: base, TERVORY_BIN_DIR: join(home, 'bin'), ...env },
+    env: { PATH: process.env.PATH, TMPDIR: work, HOME: home, TERVORY_CLI_BASE: base, TERVORY_BIN_DIR: join(home, 'bin'), ...env },
   }).then(r => ({ code: 0, ...r }), e => ({ code: e.code, stdout: e.stdout, stderr: e.stderr }));
 }
 
@@ -233,7 +233,7 @@ test('install.sh refuses an https->http redirect over wget and over curl (behavi
     const home = mkdtempSync(join(work, `home-${without}-`));
     const before = plainHits;
     return run('sh', [join(CLI, 'install.sh')], { env: {
-      PATH: toolDir(without), HOME: home, TERVORY_CLI_BASE: `${httpsBase}${path}`, TERVORY_BIN_DIR: join(home, 'bin'),
+      PATH: toolDir(without), TMPDIR: work, HOME: home, TERVORY_CLI_BASE: `${httpsBase}${path}`, TERVORY_BIN_DIR: join(home, 'bin'),
       CURL_CA_BUNDLE: cert, WGETRC: join(tls, 'wgetrc'),
     } }).then(r => ({ code: 0, ...r }), e => ({ code: e.code, stdout: e.stdout, stderr: e.stderr }))
       .then(result => ({ ...result, home, plain: plainHits - before }));

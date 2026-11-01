@@ -95,7 +95,7 @@ export function TigerApp({
         </div>
         <nav className="panel-account" aria-label="Account">
           <p className="account" role={accountName?.trim() ? undefined : "status"}>{accountName?.trim() || "Account name could not be loaded."}</p>
-          <a className="nav" href="/">Dashboard</a>
+          <a className="nav" href="https://app.tervory.com/">Dashboard</a>
           <a className="nav" href="/tasks" onClick={() => setMenuOpen(false)}>Tasks</a>
           <a className="nav" href="/chats" onClick={() => setMenuOpen(false)}>Chats</a>
         </nav>

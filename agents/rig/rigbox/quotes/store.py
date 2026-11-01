@@ -42,6 +42,7 @@ class MemoryQuotes:
         self.clock = clock
         self.states: dict[tuple[str, str], dict[str, Any]] = {}
         self.counts: Counter = Counter()
+        self.located_counts: Counter = Counter()
         self.lock = asyncio.Lock()
         self.search_events: dict[tuple[str, str], float] = {}
 
@@ -52,6 +53,9 @@ class MemoryQuotes:
             "created_at": datetime.fromtimestamp(self.clock(), timezone.utc)}
         if not hold:
             await self.count(tenant, "quotes")
+        if any(line.get("store") and line.get("public", {}).get("status") == "available_to_order"
+                   for line in quote["payload"].get("locate", [])):
+            self.located_counts[(tenant, datetime.now(timezone.utc).date())] += 1
 
     async def count(self, tenant: str, event: str) -> None:
         if event not in EVENTS:
@@ -161,6 +165,12 @@ class PgQuotes:
                 UUID(tenant), quote["id"], hold, "tenant_quote_limit" if hold else None)
             if not hold:
                 await self._count(conn, tenant, "quotes")
+            if any(line.get("store") and line.get("public", {}).get("status") == "available_to_order"
+                   for line in quote["payload"].get("locate", [])):
+                await conn.execute("""INSERT INTO agent_rig.widget_counts(tenant_id,day,event,count,located_count)
+                    VALUES($1,(now() AT TIME ZONE 'UTC')::date,'quotes',0,1)
+                    ON CONFLICT(tenant_id,day,event) DO UPDATE SET
+                    located_count=agent_rig.widget_counts.located_count+1""", UUID(tenant))
 
     async def _count(self, conn: Any, tenant: str, event: str) -> None:
         if event not in EVENTS:

@@ -30,6 +30,10 @@ _OFFICIAL_STATUTES = frozenset({"govza-acts", "govza-regulations"})
 # The US scheduler allows two hours for the entire night. A progressing bulk
 # archive must also yield; its no-progress watchdog alone cannot bound it.
 _US_COURTLISTENER_SECONDS = 30 * 60
+# ZA's existing scheduler also allows two hours. With 17 live catalogue
+# sources, five minutes each leaves thirty-five minutes for remaining jobs.
+# A slow early source must not starve every court archive later in the list.
+_ZA_SOURCE_SECONDS = 5 * 60
 
 
 def packaged_snapshots(region: str) -> dict[str, list[bytes]]:
@@ -119,6 +123,21 @@ async def run_nightly(
 
 
 async def _update_nightly_source(store: Store, source, **kwargs) -> None:
+    if kwargs["region"] == "za" and kwargs["live"] and kwargs["snapshots"] is None:
+        window = asyncio.timeout(_ZA_SOURCE_SECONDS)
+        try:
+            async with window:
+                await _update_source(store, source, **kwargs)
+        except TimeoutError:
+            if not window.expired():
+                raise
+            await store.record_source(source)
+            await store.record_run(
+                source.source_id, status="stalled",
+                detail="nightly source time budget reached; the next run retries from the saved checkpoint",
+                documents=await store.instrument_count(source.source_id), when=kwargs["when"],
+            )
+        return
     bounded = (
         kwargs["region"] == "us-east" and source.source_id == "courtlistener"
         and kwargs["live"] and kwargs["snapshots"] is None
@@ -443,9 +462,14 @@ async def _live_archive(
 ) -> bool:
     """Resume a ZA court archive. Other sources keep the ordinary live fetch.
 
-    bulk.py imports urllib_get from this module, so this does not call back into bulk.
+    The walk streams like a Load (bulk._ArchiveStream): each judgment is
+    stored as it is read and the cursor is saved every few files and on an
+    early exit, so a night that dies keeps what it read and memory stays flat.
+    bulk.py imports urllib_get from this module, so bulk is imported here,
+    inside the function.
     """
-    from agents.zenas.pool.adapters.za_archive import ZA_ARCHIVE_SOURCES, feed_detail
+    from agents.zenas.pool.adapters.za_archive import ZA_ARCHIVE_SOURCES, feed_detail, streaming
+    from agents.zenas.pool.bulk import _ArchiveStream, disk_cap_bytes
     from agents.zenas.pool.http import RateLimited
 
     if source.source_id not in ZA_ARCHIVE_SOURCES:
@@ -453,12 +477,20 @@ async def _live_archive(
     adapter = get_adapter(source)
     if not hasattr(adapter, "fetch_bulk"):
         return False
+    cap = disk_cap_bytes()
+    stream = _ArchiveStream(
+        store, source, region=region, on=on, when=when, embedder=embedder, index=index,
+        cap=cap, data_dir=os.environ.get("DATA_DIR", ".") or ".",
+        heartbeat=False,
+    )
     try:
         resume = await store.get_checkpoint(source.source_id)
         if resume.startswith("snap:"):
             resume = ""
-        blobs, cursor = await adapter.fetch_bulk(http_get, resume=resume)
+        with streaming(stream):
+            blobs, cursor = await adapter.fetch_bulk(http_get, resume=resume)
     except RateLimited as exc:
+        await stream.keep_progress()
         await store.record_source(source)
         await store.record_run(
             source.source_id,
@@ -469,11 +501,27 @@ async def _live_archive(
         )
         return True
     except (FetchNotConfigured, LicenceError) as exc:
+        await stream.keep_progress()
         await store.record_source(source)
         await store.record_run(
             source.source_id,
             status="not_configured",
             detail=str(exc),
+            documents=await store.instrument_count(source.source_id),
+            when=when,
+        )
+        return True
+    except (Exception, asyncio.CancelledError):
+        # The judgments already stored stay; the next night resumes after them.
+        await stream.keep_progress()
+        raise
+    if stream.capped:
+        await stream.keep_progress()
+        await store.record_source(source)
+        await store.record_run(
+            source.source_id,
+            status="disk_cap",
+            detail=f"pool disk cap {cap} bytes",
             documents=await store.instrument_count(source.source_id),
             when=when,
         )
@@ -488,8 +536,10 @@ async def _live_archive(
         if isinstance(loaded, dict):
             note = loaded
     skips: Counter[str] = Counter(note.get("skips") or {})
+    skips.update(stream.skips)
+    inserted = stream.inserted
     if blobs:
-        inserted = await ingest_snapshot(
+        inserted += await ingest_snapshot(
             store,
             source,
             list(blobs),
@@ -500,7 +550,6 @@ async def _live_archive(
             skips=skips,
         )
     else:
-        inserted = 0
         await store.record_source(source)
     if cursor:
         await store.set_checkpoint(source.source_id, cursor, await store.stored_bytes())
@@ -533,8 +582,28 @@ async def _update_official(
     resume = await store.get_checkpoint(source.source_id)
     if resume.startswith("snap:"):
         resume = ""
+    from agents.zenas.pool.adapters.za_govza import streaming
+
+    inserted = 0
+    received = 0
+
+    async def save_file(payload: bytes, cursor: str) -> None:
+        nonlocal inserted, received
+        errors = adapter.report.errors
+        added = await ingest_snapshot(
+            store, source, [payload], on=on, embedder=embedder, index=index, region=region,
+        )
+        if adapter.report.errors > errors:
+            raise ValueError("gov.za file could not be parsed; checkpoint preserved")
+        # A cancelled/failed ingest may have stored a prefix of its sections.
+        # It must not acknowledge the PDF; replay is idempotent on the next run.
+        await store.set_checkpoint(source.source_id, cursor, await store.stored_bytes())
+        inserted += added
+        received += 1
+
     try:
-        blobs, cursor = await adapter.fetch_bulk(http_get, resume=resume)
+        with streaming(save_file):
+            blobs, cursor = await adapter.fetch_bulk(http_get, resume=resume)
     except RateLimited as exc:
         await store.record_source(source)
         await store.record_run(
@@ -555,9 +624,8 @@ async def _update_official(
             when=when,
         )
         return
-    inserted = 0
     if blobs:
-        inserted = await ingest_snapshot(
+        inserted += await ingest_snapshot(
             store,
             source,
             list(blobs),
@@ -570,7 +638,7 @@ async def _update_official(
         await store.record_source(source)
     detail = adapter.feeds_detail()
     errors = int(getattr(adapter.report, "errors", 0) or 0)
-    if not blobs and errors == 0:
+    if not blobs and not received and errors == 0:
         detail = f"{detail}; unchanged"
     status = "error" if errors and inserted == 0 else "ok"
     await store.set_checkpoint(source.source_id, cursor, await store.stored_bytes())

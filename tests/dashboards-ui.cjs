@@ -13,6 +13,7 @@ let sourceError = false;
 const fixture = {
   jobs_done: 4, saved_usd: null, credits_left: null,
   daily: [{day:'2026-10-20',calls:4,code:2,delivered:3,spent:0.12}, {day:'2026-10-21',calls:9,code:5,delivered:8,spent:0.24}],
+  granted_squads: ['base'],
   recent: [{id:'job-fixture',title:'Business list',status:'done'}], skills: [], squad: [], shadow_policies: 0, batch_policies: 0,
 };
 const savingsTotal={standards:['sonnet'],tops:['opus'],spent:'1',would_have_cost:'4',saved:'3',work_count:1,jobs_count:1,free_count:0,top_cost:'8',top_spent:'1',top_saved:'7',top_count:1,quality_pending:true};
