@@ -249,6 +249,7 @@ async def capture(base, output):
                 await page.get_by_role("button", name="Publish paired hearings", exact=True).click()
                 await page.get_by_role("link", name="Public watch page", exact=True).wait_for()
                 assert all(s["published"] for s in paired.states.values())
+                assert await page.get_by_role("combobox", name=re.compile(r"^The hearing")).input_value() == second["id"]
                 assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
                 filename = f"paired-{width}.png"
                 await page.screenshot(path=str(output / filename), full_page=True); files.append(filename)

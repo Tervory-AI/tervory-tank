@@ -166,7 +166,7 @@ export function MootCourt() {
     } catch { setMessage("Room unavailable"); } finally { setBusy(false); }
   }
   useEffect(() => {
-    if (operator && hearing?.phase === "closed" && fairness?.status === "incomplete") void startSwapped();
+    if (operator && hearing?.phase === "closed" && fairness?.status === "incomplete" && hearing.id === fairness.first_hearing) void startSwapped();
     // A pair may advance only once per partner; failed/uncertain calls are not replayed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [operator, hearing?.id, hearing?.phase, fairness?.pair_id, fairness?.status]);
@@ -264,7 +264,7 @@ export function MootCourt() {
       <article className="zn-card"><h2>{MOOT_PARTS[2].title}</h2>
         {fairness && <section aria-label="Fairness check"><h3>Fairness check</h3><p>{fairnessReading(fairness)}</p>
           {operator && fairness.status !== "incomplete" && <button className="zn-outline" onClick={() => selectHearing(fairness.first_hearing === hearing?.id ? fairness.second_hearing : fairness.first_hearing)}>View other hearing</button>}
-          {operator && fairness.status === "incomplete" && <button className="zn-outline" disabled={busy} onClick={() => { swappedStart.current = null; void startSwapped(); }}>Run swapped seats</button>}
+          {operator && fairness.status === "incomplete" && hearing?.id === fairness.first_hearing && <button className="zn-outline" disabled={busy} onClick={() => { swappedStart.current = null; void startSwapped(); }}>Run swapped seats</button>}
         </section>}
         {!hearing?.ruling ? <p>{MOOT_PARTS[2].empty}</p> : <><h3>{hearing.ruling.order}</h3><ol>{hearing.ruling.reasons.map((r, i) => <li key={i}>{r}</li>)}</ol><h3>What the court actually held</h3><p>{hearing.reveal}</p>
           <p>Cost: {hearing.cost_usd === null ? "unavailable" : `$${hearing.cost_usd.toFixed(6)}`}</p>
