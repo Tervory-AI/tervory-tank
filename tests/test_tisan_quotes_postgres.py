@@ -7,7 +7,6 @@ and removes it after each test.
 import asyncio
 import os
 import sys
-from pathlib import Path
 from uuid import uuid4
 
 import asyncpg
