@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { sitePaths } from "./site-paths";
 
 for (const path of sitePaths()) {
-  test(`${path} has its existing page or an empty pending design`, async ({ page }) => {
+  test(`${path} has its existing page or an empty pending design`, async ({ page }, info) => {
     const response = await page.goto(path);
     expect(response?.ok()).toBe(true);
     await expect(page.getByRole("main")).toBeAttached();
@@ -12,6 +12,10 @@ for (const path of sitePaths()) {
     } else {
       await expect(page.getByRole("main")).toBeEmpty();
     }
+    await info.attach("page", {
+      body: await page.screenshot({ fullPage: true }),
+      contentType: "image/png",
+    });
   });
 }
 
