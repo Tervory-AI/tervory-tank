@@ -15,7 +15,7 @@ from gold_sources import candidates
 from pydantic import BaseModel
 
 from alert_email import deliver_pending
-from rig_watch import RigWatches, TankRig
+from rig_watch import RigWatches, TankRig, check_now
 from chassis.app import create_app
 from chassis.jobs import JobContext
 from watch import (
@@ -305,6 +305,32 @@ async def update_watch(watch_id: UUID, body: WatchPatch) -> dict[str, Any]:
 async def delete_watch(watch_id: UUID, tenant_id: UUID = Query()):
     if not await _store().delete_watch(str(tenant_id), str(watch_id)):
         raise HTTPException(status_code=404, detail="no such watch")
+
+
+class CheckNowIn(BaseModel):
+    tenant_id: UUID
+    url: str
+
+
+@app.post("/rig/check-now")
+async def rig_check_now(body: CheckNowIn, x_rig_check_key: str = Header(default="")) -> dict[str, Any]:
+    """Rig Locate confirm: one live read of a page this tenant's Tiger watches."""
+    expected = os.environ.get("RIG_TIGER_CHECK_KEY", "")
+    if not expected or not hmac.compare_digest(expected.encode(), x_rig_check_key.encode()):
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        page = check_url(body.url)
+    except BadWatch as exc:
+        raise _watch_http(exc) from exc
+    tenant = str(body.tenant_id)
+
+    async def render(url: str) -> dict[str, Any]:
+        return await _render(url, "", AGENT, tenant)
+
+    async def extract(html: str, url: str) -> dict[str, Any]:
+        return await app.state.tank.run_skill(tenant, "tiger.price_structured", {"html": html, "url": url})
+
+    return await check_now(_store(), tenant, page, render, extract, _fetch_text)
 
 
 @app.get("/observations")

@@ -13,6 +13,7 @@ from uuid import UUID, uuid5
 from rigbox.feeds import map_google_merchant as _map_google_merchant
 from rigbox.feeds import map_shopify as _map_shopify
 from rigbox.feeds import map_woocommerce as _map_woocommerce
+from rigbox.shopper_attributes import split_private
 
 _NAMESPACE = UUID("11111111-1111-4111-8111-111111111111")
 _REQUIRED = ("sku", "name", "brand", "category", "price", "currency", "image_url", "active")
@@ -178,10 +179,14 @@ def _product_row(raw: dict[str, str | None], index: int) -> dict[str, Any]:
         if not isinstance(loaded, dict):
             raise ValueError("attributes must be an object")
         attributes = loaded
+    # Pricing inputs (Custom Nation's export_usd, any cost/landed/margin key)
+    # never enter the shopper-readable attributes column.
+    attributes, private = split_private(attributes)
     return {
         "row": index,
         "sku": values["sku"],
         "gtin": values.get("gtin") or None,
+        "mpn": values.get("mpn") or None,
         "name": values["name"],
         "brand": values["brand"],
         "category": values["category"],
@@ -192,6 +197,7 @@ def _product_row(raw: dict[str, str | None], index: int) -> dict[str, Any]:
         "family": values.get("family") or "",
         "active": _active_value(values["active"]),
         "attributes": attributes,
+        "private_attributes": private,
     }
 
 

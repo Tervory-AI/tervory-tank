@@ -57,6 +57,7 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 import asyncpg
+import execution_receipt
 import httpx
 from command_stream import StreamFailure, TokenSink, completion as stream_completion
 import redis.asyncio as aioredis
@@ -656,6 +657,9 @@ class RouteRequest(BaseModel):
 
 
 class RouteResponse(BaseModel):
+    # Actual foreground dispatch evidence; absent for cache/code/batch results.
+    execution: dict[str, Any] | None = None
+    settings_hash: str | None = None  # No effective-settings attestation exists yet.
     ledger_id: uuid.UUID
     model: str
     rung: int
@@ -1276,11 +1280,17 @@ async def run_route(
     transcript_messages = await _preflight_mask(req, policy, messages, task_id)
     identity = _cache_identity(req, policy, messages, max_tokens, route_seat)
     cache_policy, cache_probe = dict(policy), None
-    if priority != "urgent" and not _offpeak_dispatch and not holds_identifier and code_problem is None:
-        hit = await _cache_read(req, policy, identity)
+    # An exact repeat is served free at every priority: the tenant-sealed exact cache is a
+    # single indexed read, so urgent loses no time and pays no model call (#360). Urgent
+    # reads the exact match only (no semantic form) and still skips the encoder and every
+    # shadow (#424).
+    if not _offpeak_dispatch and not holds_identifier and code_problem is None:
+        exact_policy = policy if priority != "urgent" else {**policy, "semantic_cache": False}
+        hit = await _cache_read(req, exact_policy, identity)
         if hit is not None:
             await _check_route_task(req, task_id)
             return await _record_local(req, policy, model=model, rung=4, content=hit, task_id=task_id, route_seat=route_seat)
+    if priority != "urgent" and not _offpeak_dispatch and not holds_identifier and code_problem is None:
         cache_probe = await semantic_cache.lookup(__import__("sys").modules[__name__], req, cache_policy, identity, messages)
         if await semantic_cache.may_serve(__import__("sys").modules[__name__], req, cache_policy, cache_probe):
             await _check_route_task(req, task_id)
@@ -1359,16 +1369,17 @@ async def run_route(
             await conn.execute("""UPDATE tank.ledger SET outcome='sent',sent_at=$3
                 WHERE id=$1 AND tenant_id=$2 AND offpeak_job_id=$1""", _receipt_id, req.tenant_id, sent_at)
     started = time.perf_counter()
+    dispatched_settings = {"max_tokens": max_tokens, **generation}
     try:
         if _on_token is not None and req.task_type == "command.turn":
             r = await stream_completion(LITELLM_URL, LITELLM_MASTER_KEY,
-                                        {"model": model, "messages": messages, "max_tokens": max_tokens, **generation}, _on_token)
+                                        {"model": model, "messages": messages, **dispatched_settings}, _on_token)
         else:
             async with httpx.AsyncClient(timeout=120) as client:
                 r = await client.post(
                     f"{LITELLM_URL}/v1/chat/completions",
                     headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-                    json={"model": model, "messages": messages, "max_tokens": max_tokens, **generation},
+                    json={"model": model, "messages": messages, **dispatched_settings},
                 )
     except StreamFailure as exc:
         ledger_id = uuid.uuid4()
@@ -1511,6 +1522,9 @@ async def run_route(
         ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
         tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd if cost_status == "set" else None, latency_ms=latency_ms,
         finish_reason=finish_reason, escalation=escalation, cache_read_tokens=cache_read, cache_write_tokens=cache_write,
+        execution=execution_receipt.capture(ledger_id=str(ledger_id), tenant_id=str(req.tenant_id), task_type=req.task_type,
+            requested_model=model, answered_model=answered, dispatched=dispatched_settings,
+            headers=r.headers, response=data, delivered=outcome == "delivered"),
     )
 
 
@@ -3513,6 +3527,8 @@ _ZENAS_PATH = re.compile(
     r"|^moot/matches/ai-ai$"
     r"|^moot/matches/student$"
     r"|^moot/matches/[0-9a-fA-F-]{36}/publish$"
+    r"|^moot/hearing-sources$|^moot/hearings$"
+    r"|^moot/hearings/[0-9a-fA-F-]{36}(/(edit|lock|start|handover|issue|turn|ai|abandon|publish|pair|fairness))?$"
 )
 
 
@@ -3688,6 +3704,23 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     headers: dict[str, str] = {}
     if path.startswith("regulations/"):
         headers["X-Tank-Key"] = os.environ.get("TANK_KEY_ZENAS", "")
+    if path == "moot/hearing-sources" or path == "moot/hearings" or path.startswith("moot/hearings/"):
+        # Only the Workspace service can attest Clerk-derived actor/tenant identity.
+        # Discard caller-supplied founder flags; Tank derives that capability.
+        import hmac
+        supplied_key = request.headers.get("x-tank-key", "")
+        workspace_key = os.environ.get("TANK_API_KEY", "")
+        actor = request.headers.get("x-moot-actor", "")
+        tenant = request.headers.get("x-moot-tenant", "")
+        if not workspace_key or not hmac.compare_digest(supplied_key.encode(), workspace_key.encode()) or not actor:
+            raise HTTPException(404, "not_found")
+        try:
+            uuid.UUID(tenant)
+        except ValueError:
+            raise HTTPException(404, "not_found") from None
+        founder = __import__("admin").founder_allowed(supplied_key, actor)
+        headers.update({"X-Tank-Key": os.environ.get("TANK_KEY_ZENAS", ""),
+            "X-Moot-Actor": actor, "X-Moot-Tenant": tenant, "X-Moot-Founder": "1" if founder else "0"})
     content_type = request.headers.get("content-type")
     if content_type:
         headers["content-type"] = content_type

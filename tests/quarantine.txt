@@ -1,18 +1,16 @@
 # Tests that already fail on main, quarantined so the full offline suite can gate PRs.
 #
-# Format: <pytest node id or prefix> | xfail|skip | <reason>
-#   xfail: still runs and is reported as XFAIL. Strict: once it passes (XPASS) the run
-#          fails, so the PR that fixes it must delete the line. Use exact node ids
-#          (with [params]) so passing siblings stay gated.
-#   skip:  not run (it hangs or burns minutes before failing); say why.
+# Format: <exact pytest node id, with [params]> | xfail | <reason>
+#   The test still runs and is reported as XFAIL. Strict: once it passes (XPASS) the run
+#   fails, so the PR that fixes it must delete the line. Only exact node ids match (no
+#   file, class or prefix entries) and there is no skip mode (tests/conftest.py).
+#   tests/test_quarantine_rules.py fails on any entry missing from its allow-list.
 # Every entry is printed with its outcome at the end of each CI run.
 # Remove an entry in the PR that fixes the test. Do not add entries for new failures:
 # a PR that breaks a passing test must fix it.
 #
 # Added 31 Oct 2026 (#486): failures found when the whole suite ran again on main fd5fc1a5.
 # None of these tests ran in PR CI since 27 Oct (#351), so each drifted from the code it checks.
-# 19 of the 22 found were fixed in #486. The two Docassemble compose entries went when
-# Docassemble was removed. These 2 entries remain: each is a
-# product or release decision, not a test flaw. Strict xfail: each fails the run once it passes.
-tests/test_chat_graduation.py::test_chat_exact_repeat_has_zero_cost_both_jobs_in_savings_and_tenants_sealed | xfail | product conflict, not test drift: #424 made priority=urgent skip all cache reuse, and command.turn's policy is urgent, so #360's free exact repeat of a chat question is off (the repeat is paid again). Decide: let urgent read the tenant-sealed exact cache, or drop the #360 promise. (The test's stale httpx fake is fixed in #486; it now fails only on this.)
-tests/test_candidate_eval_runtime.py::CandidateEvalRuntimeTests::test_bundled_feeds_and_fixtures_match_existing_sources | xfail | 9 bundled feed files differ from agents/market_lab/feeds (runner, adapters, fetch, live, keys, licences, reader, ffl sources/lists) and adapters.py now imports new modules (keyless, which needs feedparser; Tank's requirements do not carry it). Approved packages are immutable and #487 refuses a patch with changed code, so the fix is a market.series_fetch 1.3.0 release with the new dependency closure, through Skala evals and approval
+# 19 of the 22 found were fixed in #486. chat_graduation and the candidate bundled feeds were
+# fixed at the root in the #500 re-land. The two room_seal entries for the Docassemble compose
+# files went when #507 removed Docassemble. No entries remain.

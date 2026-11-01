@@ -405,6 +405,72 @@ async def test_publish_off_refuses_and_logs_without_platform_data(memory):
     assert log["published_row"] is None
 
 
+# Short private tokens can turn up by chance in a uuid, the memtest_ hex agent
+# name or the timestamp microseconds, so they are only looked for in the
+# fields that carry client content. Long or unique strings are checked across
+# the whole published record.
+PUBLISH_SHORT_PRIVATE = ("alice", "555", "harbour")
+PUBLISH_CONTENT_FIELDS = ("claim", "evidence", "meta")
+PUBLISH_LONG_PRIVATE = (
+    "+27 21 555 0199",
+    "555 0199",
+    "alice rowan",
+    "42 harbour road",
+    "client.example",
+)
+
+
+def _publish_leaks(published: dict, tenant: str, row_id: str) -> list[str]:
+    """Private strings found in a published row: whole record for long ones, content fields for short ones."""
+    whole = json.dumps(published, default=str)
+    content = json.dumps(
+        {field: published.get(field) for field in PUBLISH_CONTENT_FIELDS}, default=str
+    )
+    leaks = [
+        f"record:{token}"
+        for token in (str(tenant), str(row_id), *PUBLISH_LONG_PRIVATE)
+        if token in whole
+    ]
+    leaks += [f"content:{token}" for token in PUBLISH_SHORT_PRIVATE if token in content]
+    return leaks
+
+
+def test_publish_leak_check_ignores_random_555_but_catches_real_leaks():
+    tenant, row_id = str(uuid.uuid4()), str(uuid.uuid4())
+    clean = {
+        "id": "b971213e-21d7-519c-ba11-555aa41dc3d7",
+        "tenant_id": PLATFORM_TENANT,
+        "agent": "memtest_55509ce12d4b",
+        "claim": "weekly deliveries; [IDENTITY]; [IDENTITY]; [IDENTITY]; [IDENTITY]; [URL]",
+        "evidence": ["https://public.example/source"],
+        "meta": {},
+        "created_at": "2026-10-31T20:15:41.555123+00:00",
+    }
+    # The old whole-record scan for "555" flagged this clean row; the new check does not.
+    assert "555" in json.dumps(clean)
+    assert _publish_leaks(clean, tenant, row_id) == []
+    for field, value in (
+        ("claim", "weekly deliveries; call 555"),
+        ("evidence", ["https://public.example/555"]),
+        ("meta", {"phone": "555"}),
+    ):
+        assert _publish_leaks({**clean, field: value}, tenant, row_id) == ["content:555"]
+    assert "record:+27 21 555 0199" in _publish_leaks(
+        {**clean, "note": "+27 21 555 0199"}, tenant, row_id
+    )
+    assert _publish_leaks({**clean, "source_tenant": tenant}, tenant, row_id) == [
+        f"record:{tenant}"
+    ]
+    assert _publish_leaks({**clean, "source_row": row_id}, tenant, row_id) == [
+        f"record:{row_id}"
+    ]
+    assert _publish_leaks({**clean, "claim": "alice at 42 harbour road"}, tenant, row_id) == [
+        "record:42 harbour road",
+        "content:alice",
+        "content:harbour",
+    ]
+
+
 @pytest.mark.asyncio
 async def test_explicit_publish_scrubs_and_optin_is_per_client_agent(memory):
     m = memory
@@ -432,8 +498,8 @@ async def test_explicit_publish_scrubs_and_optin_is_per_client_agent(memory):
     assert published["tenant_id"] == PLATFORM_TENANT
     assert published["evidence"] == ["https://public.example/source"]
     assert published["meta"] == {} and published["confidence"] == 0.75
-    for private in (m.tenant, "alice", "555", "harbour", "client.example", row["id"]):
-        assert private not in json.dumps(published)
+    leaks = _publish_leaks(published, m.tenant, row["id"])
+    assert not leaks, (leaks, published)
     assert (await publisher.publish(m.agent, m.tenant, row["id"], "founder-fixture"))[
         "result"
     ] == "already_published"
