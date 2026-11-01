@@ -66,3 +66,20 @@ def test_public_fairness_never_exports_unpublished_partner_or_actor_identifiers(
     assert a["id"] not in str(result) and b["id"] not in str(result)
     assert "owner_id" not in result and result["settings_verified"] is False
     assert result["reading"] == "The paired hearing is incomplete."
+
+
+@pytest.mark.parametrize("seat,expected", [("judge", "judge_controller_changed"), ("applicant", "counsel_controller_changed")])
+def test_restored_controller_does_not_hide_handover_history(seat, expected):
+    a, b = paired(); a, b = completed(a, "applicant"), completed(b, "respondent")
+    b["seats"][seat]["epoch"] += 2
+    assert evidence(a, b)["status"] == expected
+
+
+def test_human_judge_requires_actual_same_author_on_every_judge_turn():
+    a, b = paired(); a, b = completed(a, "applicant"), completed(b, "respondent")
+    for state in (a, b):
+        state["seats"]["judge"] = {"kind": "human", "user_id": "same-student", "epoch": 0}
+        state["transcript"][-1].update(controller="human", actor_id="same-student")
+    assert evidence(a, b)["status"] == "measured"
+    b["transcript"][-1]["actor_id"] = "another-student"
+    assert evidence(a, b)["status"] == "judge_controller_changed"

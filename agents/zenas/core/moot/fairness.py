@@ -47,13 +47,17 @@ def evidence(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any]:
     if first.get("counsel_seats") != {"applicant": "counsel_a", "respondent": "counsel_b"} or second.get("counsel_seats") != {"applicant": "counsel_b", "respondent": "counsel_a"}:
         return {**result, "status": "seats_not_swapped"}
     for state in (first, second):
-        if any(t["controller"] != "ai" for t in state["transcript"] if t["seat"] in hearing.SIDES):
+        if any(state["seats"][seat]["kind"] != "ai" or state["seats"][seat]["epoch"] != first["seats"][seat]["epoch"] for seat in hearing.SIDES) or any(t["controller"] != "ai" or t.get("epoch", 0) != state["seats"][t["seat"]]["epoch"] for t in state["transcript"] if t["seat"] in hearing.SIDES):
             return {**result, "status": "counsel_controller_changed"}
     # A human judge is supported, but must be the same assigned person in both
     # runs. An AI judge needs its own actual model/settings consistency evidence.
     a, b = first["seats"]["judge"], second["seats"]["judge"]
     if a["kind"] != b["kind"] or a["kind"] == "human" and a["user_id"] != b["user_id"]:
         return {**result, "status": "judge_controller_changed"}
+    for state in (first, second):
+        judge = state["seats"]["judge"]
+        if judge["epoch"] != a["epoch"] or any(t["controller"] != judge["kind"] or t.get("epoch", 0) != judge["epoch"] or judge["kind"] == "human" and t.get("actor_id") != judge["user_id"] for t in state["transcript"] if t["seat"] == "judge"):
+            return {**result, "status": "judge_controller_changed"}
     groups = [[r for s in (first, second) for r in s["receipts"] if r["seat"] in hearing.SIDES and not r.get("discarded")]]
     if a["kind"] == "ai":
         groups.append([r for s in (first, second) for r in s["receipts"] if r["seat"] == "judge" and not r.get("discarded")])

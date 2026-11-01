@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { MOOT_LABEL, MOOT_LEAD, MOOT_PARTS } from "./moot";
-import { newerHearing, SEATS, SEAT_LABELS, turnFromForm, type Hearing, type Seat } from "./moot-hearing-types";
+import { fairnessReading, type Fairness, newerHearing, SEATS, SEAT_LABELS, turnFromForm, type Hearing, type Seat } from "./moot-hearing-types";
 
-type Summary = { id: string; title: string; phase: string };
+type Summary = { id: string; title: string; phase: string; first_side?: Seat };
 type Participant = { user_id: string; name: string };
 const BASE = "/api/zenas/moot/";
 const ERROR: Record<string, string> = {
@@ -29,6 +29,8 @@ export function MootCourt() {
   const seatRef = useRef<Seat | "">("");
   const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>({});
   const [hearing, setHearing] = useState<Hearing | null>(null);
+  const [fairness, setFairness] = useState<Fairness | null>(null);
+  const swappedStart = useRef<string | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
@@ -59,7 +61,13 @@ export function MootCourt() {
         setMessage("Room unavailable"); return;
       }
       const data = await res.json();
-      if (seatRef.current === requestedSeat) accept(data.hearing, data.operator);
+      if (seatRef.current === requestedSeat) {
+        accept(data.hearing, data.operator);
+        if (data.hearing.fairness_pair_id) {
+          const comparison = await fetch(`${BASE}hearings/${id}/fairness`, { cache: "no-store" });
+          if (comparison.ok && selectedRef.current === id) setFairness((await comparison.json()).fairness);
+        } else setFairness(null);
+      }
     } catch { if (selectedRef.current === id) setMessage("Room unavailable"); }
   }, [accept, seat]);
 
@@ -103,7 +111,13 @@ export function MootCourt() {
       });
       const data = await res.json();
       if (!res.ok) { setMessage(ERROR[data.error] ?? FAILURE); void refresh(); return false; }
-      if (seatRef.current === requestedSeat) accept(data.hearing, data.operator);
+      if (seatRef.current === requestedSeat) {
+        accept(data.hearing, data.operator);
+        if (data.hearing.fairness_pair_id) {
+          const comparison = await fetch(`${BASE}hearings/${id}/fairness`, { cache: "no-store" });
+          if (comparison.ok && selectedRef.current === id) setFairness((await comparison.json()).fairness);
+        } else setFairness(null);
+      }
       else void refresh();
       if (action === "handover") aiAbort.current?.abort();
       return true;
@@ -128,8 +142,37 @@ export function MootCourt() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hearing?.id, hearing?.revision, hearing?.phase, aiBusy, busy]);
 
+  async function startSwapped() {
+    if (!fairness || !hearing || !operator) return;
+    const target = fairness.first_hearing === hearing.id ? fairness.second_hearing : fairness.first_hearing;
+    const identity = `${fairness.pair_id}:${target}`;
+    if (swappedStart.current === identity) return;
+    swappedStart.current = identity;
+    setBusy(true);
+    try {
+      const res = await fetch(`${BASE}hearings/${target}`, { cache: "no-store" });
+      if (!res.ok) { setMessage("Room unavailable"); return; }
+      const partner = (await res.json()).hearing as Hearing;
+      if (partner.phase === "locked") {
+        const fingerprint = `start-paired:${target}:${partner.revision}`;
+        const key = commandRequests.current.get(fingerprint) ?? crypto.randomUUID();
+        commandRequests.current.set(fingerprint, key);
+        const started = await fetch(`${BASE}hearings/${target}/start`, { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ request_id: key, revision: partner.revision, payload: {} }) });
+        if (!started.ok) { setMessage(FAILURE); return; }
+      }
+      setSummaries(rows => rows.some(r => r.id === target) ? rows : [...rows, { id: target, title: partner.problem.title, phase: partner.phase, first_side: partner.first_side }]);
+      selectHearing(target);
+    } catch { setMessage("Room unavailable"); } finally { setBusy(false); }
+  }
+  useEffect(() => {
+    if (operator && hearing?.phase === "closed" && fairness?.status === "incomplete") void startSwapped();
+    // A pair may advance only once per partner; failed/uncertain calls are not replayed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [operator, hearing?.id, hearing?.phase, fairness?.pair_id, fairness?.status]);
+
   function selectHearing(id: string) {
-    aiAbort.current?.abort(); selectedRef.current = id; setSelected(id); setHearing(null); seatRef.current = ""; setSeat(""); setMessage("");
+    aiAbort.current?.abort(); selectedRef.current = id; setSelected(id); setHearing(null); setFairness(null); seatRef.current = ""; setSeat(""); setMessage("");
   }
   function selectSeat(value: Seat | "") {
     seatRef.current = value; setSeat(value);
@@ -175,7 +218,7 @@ export function MootCourt() {
   return <section className="zn-moot" aria-label={MOOT_LABEL}>
     <header className="zn-head"><div><h1>{MOOT_LABEL}</h1><p>{MOOT_LEAD}</p></div></header>
     {message && <p role="alert">{message}</p>}
-    <label className="zn-select">The hearing<select value={selected} onChange={e => selectHearing(e.target.value)}><option value="">—</option>{summaries.map(s => <option value={s.id} key={s.id}>{s.title}</option>)}</select></label>
+    <label className="zn-select">The hearing<select value={selected} onChange={e => selectHearing(e.target.value)}><option value="">—</option>{summaries.map(s => <option value={s.id} key={s.id}>{s.title}{s.first_side === "respondent" ? " · Swapped seats" : ""}</option>)}</select></label>
     <div className="zn-moot-ground">
       <article className="zn-card"><h2>{MOOT_PARTS[0].title}</h2>
         {founder && !hearing && <form onSubmit={create}>
@@ -211,7 +254,7 @@ export function MootCourt() {
               {area("application", "Apply the rule", Boolean(draft.authority))}{area("difference", "Material factual difference")}{area("significance", "Legal significance", Boolean(draft.authority))}
               {area("opposing", "Opposing argument", true)}{area("response", "Response to the challenge", true)}{area("uncertainty", "Uncertainty", !draft.authority)}{area("conclusion", "Conclusion", true)}
             </>}
-            {seat === "judge" && judgeKind === "ruling" && <>{area("order", "Order", true)}{area("reasons", "Reasons", true)}</>}
+            {seat === "judge" && judgeKind === "ruling" && <><label className="zn-select">Decision<select name="decision" defaultValue="uncertain"><option value="uncertain">Uncertain or no single prevailing party</option><option value="applicant">Applicant</option><option value="respondent">Respondent</option></select></label>{area("order", "Order", true)}{area("reasons", "Reasons", true)}</>}
             <button className="zn-primary" disabled={busy}>Submit</button>
           </form>}
           {hearing.phase === "hearing" && hearing.seats[hearing.floor].kind === "ai" && !hearing.pending_ai && <button className="zn-outline" disabled={aiBusy} onClick={() => void command("ai", {}, true)}>Continue AI turn</button>}
@@ -219,9 +262,13 @@ export function MootCourt() {
         </>}
       </article>
       <article className="zn-card"><h2>{MOOT_PARTS[2].title}</h2>
+        {fairness && <section aria-label="Fairness check"><h3>Fairness check</h3><p>{fairnessReading(fairness)}</p>
+          {operator && fairness.status !== "incomplete" && <button className="zn-outline" onClick={() => selectHearing(fairness.first_hearing === hearing?.id ? fairness.second_hearing : fairness.first_hearing)}>View other hearing</button>}
+          {operator && fairness.status === "incomplete" && <button className="zn-outline" disabled={busy} onClick={() => { swappedStart.current = null; void startSwapped(); }}>Run swapped seats</button>}
+        </section>}
         {!hearing?.ruling ? <p>{MOOT_PARTS[2].empty}</p> : <><h3>{hearing.ruling.order}</h3><ol>{hearing.ruling.reasons.map((r, i) => <li key={i}>{r}</li>)}</ol><h3>What the court actually held</h3><p>{hearing.reveal}</p>
           <p>Cost: {hearing.cost_usd === null ? "unavailable" : `$${hearing.cost_usd.toFixed(6)}`}</p>
-          {operator && !hearing.published && <button className="zn-primary" disabled={busy} onClick={() => void command("publish")}>Publish</button>}
+          {operator && !hearing.published && <button className="zn-primary" disabled={busy || Boolean(hearing.fairness_pair_id && (!fairness || fairness.status === "incomplete"))} onClick={() => void command("publish")}>{hearing.fairness_pair_id ? "Publish paired hearings" : "Publish"}</button>}
           {hearing.published && <a href={`/moot/${hearing.id}`}>Public watch page</a>}
         </>}
       </article>
