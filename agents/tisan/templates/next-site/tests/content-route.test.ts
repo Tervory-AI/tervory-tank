@@ -8,7 +8,11 @@ import { sectionRegistry } from "../sections/registry";
 import fixture from "./fixtures/site.json";
 
 vi.mock("../lib/content", () => ({ readContent: vi.fn() }));
-vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("not-found"); } }));
+vi.mock("next/navigation", () => ({
+  notFound: () => {
+    throw new Error("not-found");
+  },
+}));
 const content = () => structuredClone(fixture) as SiteContent;
 const props = (path?: string[]) => ({ params: Promise.resolve({ path }) });
 beforeEach(() => vi.mocked(readContent).mockReturnValue(null));
