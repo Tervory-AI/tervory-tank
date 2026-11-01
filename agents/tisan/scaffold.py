@@ -252,13 +252,13 @@ def render_tailwind(colours: dict[str, str]) -> str:
 
 def render_extra_page(label: str, copy: str | None = None) -> str:
     safe = _jsx_text(label)
-    body = "This page is ready for content." if copy is None else _jsx_text(copy)
+    body = "" if copy is None else f'      <p className="mt-3">{_jsx_text(copy)}</p>\n'
     return (
         "export default function Page() {\n"
         "  return (\n"
         "    <section>\n"
         f'      <h1 className="font-heading text-3xl">{safe}</h1>\n'
-        f'      <p className="mt-3">{body}</p>\n'
+        f"{body}"
         "    </section>\n"
         "  );\n"
         "}\n"
