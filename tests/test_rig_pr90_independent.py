@@ -344,10 +344,11 @@ def _retime_lone_outlier(samples: list[float], retime: Callable[[int], float]) -
     """Re-time a lone over-limit sample once. A runner pause won't repeat; a slow query will.
 
     All 200 queries are distinct, so one slow sample can also be one slow query shape.
-    Two or more slow samples already fail ``_speed_ok`` and are not re-timed.
+    Two or more slow samples already fail ``_speed_ok`` and are not re-timed, and
+    neither is a lone sample at or over the ceiling, which fails anyway.
     """
     over = [index for index, sample in enumerate(samples) if sample >= SPEED_LIMIT_MS]
-    if len(over) != SPEED_ALLOWED_OVER:
+    if len(over) != SPEED_ALLOWED_OVER or samples[over[0]] >= SPEED_CEILING_MS:
         return {}
     return {index: retime(index) for index in over}
 
@@ -364,6 +365,15 @@ def _timed_search(world: dict[str, Any], catalogue: str, text: str) -> float:
     elapsed = (time.perf_counter() - started) * 1000
     assert response.status_code == 200
     return elapsed
+
+
+def _cold_search(world: dict[str, Any], catalogue: str, text: str) -> float:
+    """Time a search after dropping the tenant's saved searches, so the ranker really runs again.
+
+    The first call saves the search and a repeat would be served from that saved copy.
+    """
+    asyncio.run(world["service"].store.drop_searches(world["tenants"][catalogue]))
+    return _timed_search(world, catalogue, text)
 
 
 @pytest.fixture(scope="module")
@@ -786,7 +796,7 @@ def test_gate_5_search_speed(world: dict[str, Any]) -> None:
     retimed = {
         QUERIES[index][1]: round(ms, 3)
         for index, ms in _retime_lone_outlier(
-            samples, lambda index: _timed_search(world, QUERIES[index][0], QUERIES[index][1])
+            samples, lambda index: _cold_search(world, QUERIES[index][0], QUERIES[index][1])
         ).items()
     }
     payload = {
@@ -828,6 +838,7 @@ def test_gate_5_verdict_tolerates_one_pause_but_not_a_regression() -> None:
         assert _speed_ok(slow_query)
         assert not _verdict(slow_query, lambda _index, ms=constant_ms: ms)
     assert _verdict(fast, pause_gone) and retimed == []
+    assert not _verdict(fast[:199] + [2500.0], pause_gone) and retimed == []
     assert _speed_ok(fast)
     one_pause = fast[:199] + [859.59]
     assert _speed_ok(one_pause)
@@ -845,6 +856,26 @@ def test_gate_5_verdict_tolerates_one_pause_but_not_a_regression() -> None:
     assert not _speed_ok(at_ceiling)
     hang = fast[:199] + [10_000.0]
     assert not _speed_ok(hang)
+
+
+def test_gate_5_retime_reruns_the_ranker(world: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    """A query that is slow inside the ranker is still slow on the re-time, not served from a saved search."""
+    service = world["service"]
+    catalogue, slow = next((catalogue, text) for catalogue, text, _ok in QUERIES if text == "staccato P pistol")
+    ranked: list[str] = []
+    original = service._rank
+
+    def slow_rank(tenant_id: str, products: list[dict[str, Any]], text: str, cap: int) -> dict[str, Any]:
+        if text == slow:
+            ranked.append(text)
+            time.sleep(SPEED_LIMIT_MS / 1000 + 0.05)
+        return original(tenant_id, products, text, cap)
+
+    monkeypatch.setattr(service, "_rank", slow_rank)
+    first = _cold_search(world, catalogue, slow)
+    retimed = _cold_search(world, catalogue, slow)
+    assert first >= SPEED_LIMIT_MS and retimed >= SPEED_LIMIT_MS, (first, retimed)
+    assert ranked == [slow, slow]
 
 
 def test_bundle_and_compare_math() -> None:
