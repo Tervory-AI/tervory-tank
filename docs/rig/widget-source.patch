@@ -177,11 +177,17 @@ index e551a60..c4eba52 100644
 -    "Sample data is not part of this bundle. Set api-base to your Rig API.",
 +    "Set api-base to your Rig API.",
 diff --git a/widget/src/theme/themes.ts b/widget/src/theme/themes.ts
-index 14e516d..fc107d0 100644
+index 14e516d..13c9e97 100644
 --- a/widget/src/theme/themes.ts
 +++ b/widget/src/theme/themes.ts
 @@ -107 +106,0 @@ export type Theme = {
 -    sampleLabel: string;
+@@ -151 +150 @@ export const customNation: Theme = {
+-    placeholder: "Search a make, model or part — e.g. Staccato, Leupold Mark 5, MDT ACC",
++    placeholder: "Search a make, model or part",
+@@ -153 +152 @@ export const customNation: Theme = {
+-    popular: ["Staccato", "Leupold", "Nightforce", "MDT", "TriggerTech", "Proof Research"],
++    popular: ["Leupold", "Nightforce", "MDT", "TriggerTech", "Proof Research"],
 @@ -164 +163 @@ export const customNation: Theme = {
 -      "One indicative total per setup. We confirm stock, permits and the final quotation in your client space. Prices shown are sample data until the US feeds are connected.",
 +      "One indicative total per setup. We confirm stock, permits and the final quotation in your client space.",

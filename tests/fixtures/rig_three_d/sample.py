@@ -6,11 +6,11 @@ from uuid import UUID, uuid4
 
 from rigbox.service import Service, hash_key
 from rigbox.store import PgStore
-from .assets import LocalAssets
-from .contracts import Job, Review
-from .engine import Engine
-from .forge import StubForge
-from .store import Store
+from rigbox.three_d.assets import LocalAssets
+from rigbox.three_d.contracts import Job, Review
+from rigbox.three_d.engine import Engine
+from fixtures.rig_three_d.forge import StubForge
+from rigbox.three_d.store import Store
 
 TENANT = UUID("00000000-0000-0000-0000-000000003d01")
 WITHOUT_3D = UUID("00000000-0000-0000-0000-000000003d02")
@@ -51,7 +51,7 @@ async def seed(pool, directory: Path, *, approve_models=True):
         for product in ("centre", "part-a", "part-b", "part-tall"):
             if await engine.store.approved(TENANT, product):
                 continue
-            metadata = json.loads((Path(__file__).with_name("fixtures") / (product + ".json")).read_text())
+            metadata = json.loads((Path(__file__).with_name("models") / (product + ".json")).read_text())
             job = Job(id=uuid4(), tenant_id=TENANT, product_id=product, source="scan",
                       inputs=[f"{TENANT}/uploads/sample-{n}.jpg" for n in range(50)], dimensions_mm=metadata["dimensions_mm"], cost_cap_usd=0)
             await engine.submit(str(TENANT), job)
