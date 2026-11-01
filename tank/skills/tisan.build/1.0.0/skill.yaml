@@ -1,0 +1,32 @@
+id: tisan.build
+version: 1.0.0
+agent: tisan
+rung: 3
+task_type: tisan.build
+description: >
+  Assemble a site from the shared section contract and tenant-private accepted Trigger copy.
+  A supplied plan uses code only. Request planning uses Tank's tisan.plan policy.
+input:
+  type: object
+  additionalProperties: false
+  required: [name, slug, brand]
+  properties:
+    name: {type: string}
+    slug: {type: string}
+    locale: {type: string}
+    brand: {type: object}
+    request: {type: string}
+    plan: {type: object}
+    copy: {type: object, additionalProperties: {type: string}}
+    media: {type: object, additionalProperties: {type: string}}
+output:
+  type: object
+  properties:
+    ok: {type: boolean}
+    copy_needed: {type: array}
+    media_needed: {type: array}
+    checks: {type: array}
+    files: {type: array}
+    archive: {type: string}
+    detail: {type: string}
+eval_threshold: 1.0
