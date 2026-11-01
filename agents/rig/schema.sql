@@ -165,7 +165,7 @@ ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS locate_enabled boolean 
 -- Optional blind ship: Locate orders ship from the other store straight to the shopper. Off by default.
 ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS blind_ship boolean NOT NULL DEFAULT false;
 
--- Founder-approved carry-over; preserve any store settings already configured.
+-- Founder-approved carry-over. Preserve any store settings already configured.
 ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS shop jsonb NOT NULL DEFAULT '{}'::jsonb;
 UPDATE agent_rig.retailers SET shop = '{"search":true,"mail_reservations":true,"centre_sku":"ARCHON-TYPE-B","not_stocked":[{"name":"Glock","also":["glok","glock"]},{"name":"Sig","also":["sig","sigsauer"]},{"name":"CZ","also":["cz"]}]}'::jsonb
 WHERE slug = 'archon' AND shop = '{}'::jsonb;
