@@ -145,3 +145,5 @@ async def eval_case(body: EvalCase, x_tank_key: str = Header(default="")) -> dic
 # API-only promotion reuses founder identity, the Tisan data volume and Coolify.
 _load_beside({}, 'tisan_promotion_api', 'promotion_api.py').mount(
     app, _load_beside({}, 'tisan_promotion', 'promotion.py'))
+
+_load_beside({}, 'tisan_publish', 'publish.py').mount(app, _load_beside({}, 'tisan_publish_promotion', 'promotion.py'))
