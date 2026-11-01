@@ -48,3 +48,6 @@ b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/l
 b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-072.html:generic-api-key:14316
 b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-073.html:generic-api-key:14316
 b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-074.html:generic-api-key:14316
+
+# Rig Locate #463: dummy live-shaped string in a refusal test (fixed in the next commit); not a credential. Pending reviewer triage.
+a2f2eca3669fd496070eeaf3536f054b6054d5e3:tests/test_rig_locate_checkout.py:stripe-access-token:260

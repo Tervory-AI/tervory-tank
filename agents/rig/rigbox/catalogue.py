@@ -186,6 +186,7 @@ def _product_row(raw: dict[str, str | None], index: int) -> dict[str, Any]:
         "row": index,
         "sku": values["sku"],
         "gtin": values.get("gtin") or None,
+        "mpn": values.get("mpn") or None,
         "name": values["name"],
         "brand": values["brand"],
         "category": values["category"],

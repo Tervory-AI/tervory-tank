@@ -54,6 +54,8 @@ from rigbox.recall import part_query
 from rigbox.recall import parts_of
 from rigbox.recall import signature
 from rigbox.recall import whole_hit
+from rigbox.locate import catalogue as supply_catalogue, locate as supply_locate, needs_supply
+from rigbox.locate import enabled as locate_enabled
 from rigbox.store import _fit_key
 from rigbox.quotes.limits import FailedKeyLimits, MemoryRateLimits, PgRateLimits
 
@@ -242,6 +244,11 @@ class Service:
         self.store = store
         self.models = models
         self.handoff = handoff or RecordingHandoff()
+        # Locate confirm reads offers live. The app wires the product checkers,
+        # tests inject doubles. None means confirm is not available.
+        self.locate_checker: Any | None = None
+        # No concrete payment provider is chosen. None refuses Locate checkout.
+        self.payments: Any | None = None
         self.limiter = RateLimiter(limit=rate_limit)
         self.failed_keys = FailedKeyLimits()
         pool = getattr(store, "pool", None)
@@ -476,7 +483,7 @@ class Service:
         if not ids:
             return []
         by_id: dict[str, dict[str, Any]] = {}
-        for row in await self.store.products(tenant_id):
+        for row in await supply_catalogue(self.store, tenant_id):
             if row.get("active", True) is False:
                 continue
             public = public_product(row)
@@ -646,7 +653,45 @@ class Service:
             payload = {"kind": "product", "product": product}
         else:
             raise RigError("invalid", "A setup or a product is required.", 422)
+        wanted = ([part["product"]["id"] for part in payload["setup"]["parts"]]
+                  if payload["kind"] == "setup" else [payload["product"]["id"]])
+        private = []
+        # Optional per store: no supply lookup at all until the store opts in.
+        rows = await self.store.products(tenant_id) if await locate_enabled(self.store, tenant_id) else []
+        for row in rows:
+            if str(row["sku"]) in wanted and needs_supply(row):
+                result = await supply_locate(self.store, tenant_id, row)
+                private.append({"product_id": row["sku"], **result})
+        if private:
+            payload["locate"] = private
         return payload, contact
+
+    async def _locate_row(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        if not await locate_enabled(self.store, tenant_id):
+            raise RigError("locate_disabled", "This store does not offer ordering from other stores.", 403)
+        row = next((p for p in await self.store.products(tenant_id) if p["sku"] == product_id), None)
+        if row is None:
+            raise RigError("not_found", "No such product.", 404)
+        return row
+
+    async def locate(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        row = await self._locate_row(tenant_id, product_id)
+        return (await supply_locate(self.store, tenant_id, row))["public"]
+
+    async def locate_confirm(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        """Live re-check of the located offer, then a short-lived signed hold."""
+        from rigbox.locate_live import LocateRefused, confirm, hold_secret
+
+        row = await self._locate_row(tenant_id, product_id)
+        if not needs_supply(row):
+            raise RigError("invalid", "This product is available from the store.", 422)
+        if self.locate_checker is None:
+            raise RigError("unavailable", "Live stock checks are not available.", 503)
+        try:
+            secret = hold_secret()
+        except LocateRefused:
+            raise RigError("unavailable", "Live stock checks are not available.", 503) from None
+        return (await confirm(self.store, tenant_id, row, self.locate_checker, secret=secret))["public"]
 
     async def compare(self, tenant_id: str, product_ids: list[str]) -> dict[str, Any]:
         """Other sellers' prices for a selection the shopper already made.
@@ -727,7 +772,7 @@ class Service:
     async def suggested_fits(self, tenant_id: str) -> dict[str, Any]:
         names = {
             str(row.get("sku") or row.get("id") or ""): str(row.get("name") or "")
-            for row in await self.store.products(tenant_id)
+            for row in await supply_catalogue(self.store, tenant_id)
         }
         rows: list[dict[str, Any]] = []
         for row in await self.store.fits(tenant_id):
@@ -882,7 +927,7 @@ class Service:
         rigbox.logic (mirrored into Skala) indexes every attribute it is given,
         so private keys are removed here, before any search or setup sees a row.
         """
-        return shopper_rows(await self.store.products(tenant_id))
+        return shopper_rows(await supply_catalogue(self.store, tenant_id))
 
     async def _active(self, tenant_id: str) -> list[dict[str, Any]]:
         return [row for row in await self._shopper_products(tenant_id) if row.get("active", True)]
@@ -897,7 +942,7 @@ class Service:
         return kept
 
     async def _catalogue_version(self, tenant_id: str) -> str:
-        products = [_version_product(row) for row in await self.store.products(tenant_id)]
+        products = [_version_product(row) for row in await supply_catalogue(self.store, tenant_id)]
         fits = [_version_fit(row) for row in await self._approved_fits(tenant_id)]
         fits.sort(key=lambda row: (row["part_sku"], row["fits_sku"], row["fits_family"]))
         payload = {
@@ -1035,7 +1080,7 @@ class Service:
             return {"rows": 0, "rejected": []}
         if market.get("rejected"):
             return {"rows": 0, "rejected": list(market["rejected"])}
-        known = {str(row.get("sku") or "") for row in await self.store.products(tenant_id)}
+        known = {str(row.get("sku") or "") for row in await supply_catalogue(self.store, tenant_id)}
         unknown = [row for row in market.get("rows") or [] if str(row.get("sku") or "") not in known]
         if unknown:
             return {
@@ -1174,6 +1219,7 @@ def _version_product(row: dict[str, Any]) -> dict[str, Any]:
         "image": str(row.get("image_url") or row.get("image") or ""),
         "active": bool(row.get("active", True)),
         "attributes": attributes,
+        "availability": row.get("availability"),
     }
 
 

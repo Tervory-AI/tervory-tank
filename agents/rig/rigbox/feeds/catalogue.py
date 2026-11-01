@@ -27,6 +27,10 @@ ALIASES = {
     "active": ("active", "available", "availability", "stockstatus"),
     "image_url": ("imageurl", "imagelink", "image", "picture"),
     "url": ("url", "link", "permalink"),
+    "mpn": ("mpn", "manufacturerpartnumber", "partnumber"),
+    "eta": ("eta", "estimatedarrival", "leadtime"),
+    "ship_days": ("shipdays", "leadtimedays"),
+    "region": ("region", "shipfrom", "country"),
     "gtin": ("gtin", "upc", "upccode", "barcode"),
     "family": ("family",),
     "fits_sku": ("fitssku",), "fits_family": ("fitsfamily",), "fit_evidence": ("fitevidence",),
@@ -256,12 +260,22 @@ def map_catalogue(record: dict, contents: str | bytes) -> dict[str, Any]:
             if len(amount) == 2 and amount[1].upper() == record["currency"]:
                 values["price"] = amount[0]
             active = values.get("active", "true").lower() in {"true", "yes", "1", "active", "in_stock", "in stock", "instock", "available"}
+            catalogue_active = active
             if values.get("quantity"):
                 from rigbox.pricing import number
-                in_stock = number(values.pop("quantity")) > 0
+                quantity = number(values["quantity"])
+                in_stock = quantity > 0
                 active = active and in_stock
             values["active"] = "true" if active else "false"
             product = _product_row(values, index)
+            product["supply_eligible"] = bool(catalogue_active and values.get("quantity") and quantity == 0)
+            product["mpn"] = values.get("mpn") or None
+            product["quantity"] = str(quantity) if values.get("quantity") else None
+            product["eta"] = values.get("eta") or None
+            product["ship_days"] = int(values["ship_days"]) if values.get("ship_days") else None
+            if product["ship_days"] is not None and product["ship_days"] < 0:
+                raise ValueError("Invalid ship days.")
+            product["region"] = values.get("region") or ""
             if product["sku"] in seen:
                 raise ValueError("Repeated product identifier.")
             seen.add(product["sku"])

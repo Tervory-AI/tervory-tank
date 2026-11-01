@@ -25,14 +25,14 @@ _SEARCH_KEYS = sorted(SHOPPER_ATTRIBUTES)
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.sql"
 
 _PRODUCTS = """
-SELECT sku, gtin, name, brand, category, price, currency, image_url, url, family,
+SELECT sku, gtin, mpn, supply_eligible, name, brand, category, price, currency, image_url, url, family,
        attributes, active
 FROM agent_rig.products
 WHERE tenant_id = $1
 """
 
 _SEARCH_TEMPLATE = """
-SELECT sku, gtin, name, brand, category, price, currency, image_url, url, family,
+SELECT sku, gtin, mpn, supply_eligible, name, brand, category, price, currency, image_url, url, family,
        attributes, active
 FROM agent_rig.products
 WHERE tenant_id = $1
@@ -54,7 +54,7 @@ LIMIT $3
 """
 
 _SEARCH_FTS_TEMPLATE = """
-SELECT sku, gtin, name, brand, category, price, currency, image_url, url, family,
+SELECT sku, gtin, mpn, supply_eligible, name, brand, category, price, currency, image_url, url, family,
        attributes, active
 FROM agent_rig.products
 WHERE tenant_id = $1
@@ -264,6 +264,8 @@ class MemoryStore(RetailerMemoryStore):
         self.searches: list[dict[str, Any]] = []
         self.training_events: list[dict[str, Any]] = []
         self.deleted_products: set[tuple[str, str]] = set()
+        # Rig-owned Locate orders: (tenant, quote) -> {"order", "purchase_order"}.
+        self.locate_orders: dict[tuple[str, str], dict[str, Any]] = {}
         # Pricing inputs moved out of attributes at import. Store-only.
         self.private_attributes: dict[tuple[str, str], dict[str, Any]] = {}
 
@@ -376,12 +378,20 @@ class MemoryStore(RetailerMemoryStore):
         name: str = "",
         theme: str | None = None,
         quote_notice: dict[str, str] | None = None,
+        locate_enabled: bool | None = None,
+        blind_ship: bool | None = None,
     ) -> None:
+        previous = self.retailers.get(str(tenant_id), {})
         theme = theme if theme is not None else self.retailers.get(str(tenant_id), {}).get("theme", "neutral")
         if theme not in {"neutral", "custom-nation"}:
             raise ValueError()
         self.retailers[str(tenant_id)] = {"slug": slug, "email": email, "webhook": webhook, "name": name, "theme": theme,
-            "quote_notice": quote_notice if quote_notice is not None else self.retailers.get(str(tenant_id), {}).get("quote_notice")}
+            "quote_notice": quote_notice if quote_notice is not None else self.retailers.get(str(tenant_id), {}).get("quote_notice"),
+            # Optional cross-store fulfilment. Off until the store switches it on.
+            "locate_enabled": bool(locate_enabled) if locate_enabled is not None
+            else bool(previous.get("locate_enabled", False)),
+            # Optional blind ship (Locate orders ship straight to the shopper). Off by default.
+            "blind_ship": bool(blind_ship) if blind_ship is not None else bool(previous.get("blind_ship", False))}
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         row = self.retailers.get(str(tenant_id))
@@ -428,6 +438,25 @@ class MemoryStore(RetailerMemoryStore):
             {"tenant_id": str(tenant_id), "id": quote_id, "payload": payload, "contact": contact, "sent_at": None}
         )
         await self.training_event(tenant_id, "rig_quote", quote_id, payload, {"request_id": quote_id})
+
+    async def locate_state(self, tenant_id: str, quote_id: str, state: dict[str, Any]) -> None:
+        """Locate checkout state in the quote payload. Tenant scoped."""
+        for row in self.quotes:
+            if row["tenant_id"] == str(tenant_id) and row["id"] == quote_id:
+                row["payload"] = {**row["payload"], "locate_state": state}
+
+    async def place_locate_order(self, tenant_id: str, order: dict[str, Any],
+                                 purchase: dict[str, Any]) -> dict[str, Any]:
+        """Rig-owned Locate order and draft supplier PO. First write wins per (tenant, quote)."""
+        key = (str(tenant_id), order["quote_id"])
+        created = key not in self.locate_orders
+        if created:
+            self.locate_orders[key] = {"order": copy.deepcopy(order), "purchase_order": copy.deepcopy(purchase)}
+        return {**copy.deepcopy(self.locate_orders[key]), "created": created}
+
+    async def locate_order(self, tenant_id: str, quote_id: str) -> dict[str, Any] | None:
+        row = self.locate_orders.get((str(tenant_id), quote_id))
+        return copy.deepcopy(row) if row else None
 
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         for row in self.quotes:
@@ -548,6 +577,8 @@ def _record_product(row: Any) -> dict[str, Any]:
         "sku": row["sku"],
         "id": row["sku"],
         "gtin": row["gtin"],
+        "mpn": row.get("mpn"),
+        "supply_eligible": bool(row.get("supply_eligible", False)),
         "name": row["name"],
         "brand": row["brand"],
         "category": row["category"],
@@ -710,10 +741,12 @@ class PgStore(RetailerPgStore):
                 """
                 INSERT INTO agent_rig.products
                     (tenant_id, id, sku, gtin, name, brand, category, price, currency,
-                     image_url, url, family, attributes, active, updated_at)
-                VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, now())
+                     image_url, url, family, attributes, active, updated_at, mpn, supply_eligible)
+                VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, now(), $14, $15)
                 ON CONFLICT (tenant_id, sku) DO UPDATE SET
                     gtin = EXCLUDED.gtin,
+                    mpn = EXCLUDED.mpn,
+                    supply_eligible = EXCLUDED.supply_eligible,
                     name = EXCLUDED.name,
                     brand = EXCLUDED.brand,
                     category = EXCLUDED.category,
@@ -739,6 +772,8 @@ class PgStore(RetailerPgStore):
                 str(row.get("family") or ""),
                 _json(row.get("attributes") or {}),
                 bool(row.get("active", True)),
+                _optional_text(row.get("mpn")),
+                bool(row.get("supply_eligible", False)),
             )
             if "private_attributes" in row:
                 private = row.get("private_attributes") or {}
@@ -919,19 +954,23 @@ class PgStore(RetailerPgStore):
         name: str = "",
         theme: str | None = None,
         quote_notice: dict[str, str] | None = None,
+        locate_enabled: bool | None = None,
+        blind_ship: bool | None = None,
     ) -> None:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook, name, theme, quote_notice)
-                VALUES ($1, $2, $3, $4, $5, coalesce($6, 'neutral'), $7::jsonb)
+                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship)
+                VALUES ($1, $2, $3, $4, $5, coalesce($6, 'neutral'), $7::jsonb, coalesce($8, false), coalesce($9, false))
                 ON CONFLICT (tenant_id) DO UPDATE SET
                     slug = EXCLUDED.slug,
                     email = EXCLUDED.email,
                     webhook = EXCLUDED.webhook,
                     name = EXCLUDED.name,
                     theme = coalesce($6, agent_rig.retailers.theme),
-                    quote_notice = coalesce($7::jsonb, agent_rig.retailers.quote_notice)
+                    quote_notice = coalesce($7::jsonb, agent_rig.retailers.quote_notice),
+                    locate_enabled = coalesce($8, agent_rig.retailers.locate_enabled),
+                    blind_ship = coalesce($9, agent_rig.retailers.blind_ship)
                 """,
                 _uuid(tenant_id),
                 str(slug),
@@ -940,18 +979,21 @@ class PgStore(RetailerPgStore):
                 str(name or ""),
                 theme,
                 json.dumps(quote_notice) if quote_notice is not None else None,
+                None if locate_enabled is None else bool(locate_enabled),
+                None if blind_ship is None else bool(blind_ship),
             )
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT slug, email, webhook, name, theme, quote_notice FROM agent_rig.retailers WHERE tenant_id = $1",
+                "SELECT slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship FROM agent_rig.retailers WHERE tenant_id = $1",
                 _uuid(tenant_id),
             )
         if row is None:
             return None
         return {"slug": row["slug"], "email": row["email"], "webhook": row["webhook"], "name": row["name"] or "", "theme": row["theme"],
-                "quote_notice": json.loads(row["quote_notice"]) if isinstance(row["quote_notice"], str) else row["quote_notice"]}
+                "quote_notice": json.loads(row["quote_notice"]) if isinstance(row["quote_notice"], str) else row["quote_notice"],
+                "locate_enabled": bool(row["locate_enabled"]), "blind_ship": bool(row["blind_ship"])}
 
     async def replace_market(self, tenant_id: str, rows: list[dict[str, Any]]) -> None:
         async with self.pool.acquire() as conn:
@@ -1058,6 +1100,74 @@ class PgStore(RetailerPgStore):
                 _json(contact),
             )
             await enqueue(conn, tenant_id, "rig_quote", quote_id, payload, {"request_id": quote_id})
+
+    async def locate_state(self, tenant_id: str, quote_id: str, state: dict[str, Any]) -> None:
+        """Locate checkout state in the existing quote jsonb. Tenant scoped."""
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE agent_rig.quotes SET payload = jsonb_set(payload, '{locate_state}', $3::jsonb)"
+                " WHERE tenant_id = $1 AND id = $2",
+                _uuid(tenant_id), quote_id, _json(state),
+            )
+
+    _ORDER_COLUMNS = "quote_id, number, state, product_id, price, currency, ship_to"
+    _PO_COLUMNS = ("quote_id, number, state, source_id, vendor_name, order_email, item_sku, item_url, quantity,"
+                   " unit_cost, currency, ship_to, neutral_slip, instructions")
+
+    async def place_locate_order(self, tenant_id: str, order: dict[str, Any],
+                                 purchase: dict[str, Any]) -> dict[str, Any]:
+        """Rig-owned Locate order and draft supplier PO, in one transaction.
+
+        ON CONFLICT DO NOTHING on (tenant, quote): a retry or a concurrent
+        second Accept reads back the first order instead of making another.
+        """
+        tenant = _uuid(tenant_id)
+        async with self.pool.acquire() as conn, conn.transaction():
+            created = await conn.fetchval(
+                "INSERT INTO agent_rig.locate_orders (tenant_id, quote_id, number, state, product_id, price, currency, ship_to)"
+                " VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) ON CONFLICT (tenant_id, quote_id) DO NOTHING RETURNING true",
+                tenant, order["quote_id"], order["number"], order["state"], order["product_id"],
+                Decimal(order["price"]), order["currency"],
+                None if order["ship_to"] is None else _json(order["ship_to"]))
+            if created:
+                await conn.execute(
+                    "INSERT INTO agent_rig.supplier_purchase_orders (tenant_id, quote_id, number, state, source_id,"
+                    " vendor_name, order_email, item_sku, item_url, quantity, unit_cost, currency, ship_to,"
+                    " neutral_slip, instructions)"
+                    " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15)",
+                    tenant, purchase["quote_id"], purchase["number"], purchase["state"], purchase["source_id"],
+                    purchase["vendor_name"], purchase["order_email"], purchase["item_sku"], purchase["item_url"],
+                    int(purchase["quantity"]), Decimal(purchase["unit_cost"]), purchase["currency"],
+                    None if purchase["ship_to"] is None else _json(purchase["ship_to"]),
+                    bool(purchase["neutral_slip"]), purchase["instructions"])
+            saved = await self._locate_order(conn, tenant, order["quote_id"])
+        assert saved is not None
+        return {**saved, "created": bool(created)}
+
+    async def locate_order(self, tenant_id: str, quote_id: str) -> dict[str, Any] | None:
+        async with self.pool.acquire() as conn:
+            return await self._locate_order(conn, _uuid(tenant_id), quote_id)
+
+    async def _locate_order(self, conn: Any, tenant: UUID, quote_id: str) -> dict[str, Any] | None:
+        order = await conn.fetchrow(
+            f"SELECT {self._ORDER_COLUMNS} FROM agent_rig.locate_orders WHERE tenant_id = $1 AND quote_id = $2",
+            tenant, quote_id)
+        purchase = await conn.fetchrow(
+            f"SELECT {self._PO_COLUMNS} FROM agent_rig.supplier_purchase_orders WHERE tenant_id = $1 AND quote_id = $2",
+            tenant, quote_id)
+        if order is None or purchase is None:
+            return None
+
+        def plain(row: Any) -> dict[str, Any]:
+            out = dict(row)
+            for key, value in out.items():
+                if isinstance(value, Decimal):
+                    out[key] = str(value.quantize(Decimal("0.01")))
+            if isinstance(out.get("ship_to"), str):
+                out["ship_to"] = json.loads(out["ship_to"])
+            return out
+
+        return {"order": plain(order), "purchase_order": plain(purchase)}
 
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         async with self.pool.acquire() as conn:
