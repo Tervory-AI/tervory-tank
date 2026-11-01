@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 _background: set[asyncio.Task] = set()
 SQUADS = frozenset({"trigger", "base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"})
 TOOLS = {
-    "trigger": ["trigger.crm.write", "trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
+    "trigger": ["trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
     "base": ["base.batch", "base.search"],
     "tiger": ["tiger.watch", "tiger.read"],
     "market_lab": ["market_lab.research"],
@@ -41,7 +41,7 @@ TOOLS = {
     "radix": ["radix.scan"],
     "zenas": ["zenas.ask", "zenas.matters", "zenas.review"],
 }
-FOUNDER_TOOLS = ["skala.list", "skala.evals", "skala.approve", "skala.retire",
+FOUNDER_TOOLS = ["trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
                  "ledger.receipts", "ledger.savings", "worker.build", "repo.prs", "repo.pr", "repo.file"]
 
 
