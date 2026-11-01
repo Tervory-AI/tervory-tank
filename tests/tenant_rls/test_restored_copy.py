@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from ops.restore_drill import Sandbox, command, counts, identifier
+from ops.restore_drill import Sandbox, command, counts
 
 
 def restored_box():
@@ -35,7 +35,8 @@ def box():
     box = restored_box()
     box.sql('CREATE ROLE restore_drill_reader NOSUPERUSER NOBYPASSRLS;')
     for relation in counts(box):
-        schema = relation.split('.')[0]
+        literal = relation.replace("'", "''")
+        schema = box.sql(f"SELECT quote_ident(n.nspname) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.oid='{literal}'::regclass")
         box.sql(f'GRANT USAGE ON SCHEMA {schema} TO restore_drill_reader; '
                 f'GRANT SELECT ON {relation} TO restore_drill_reader;')
     return box
