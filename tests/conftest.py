@@ -99,30 +99,40 @@ async def real_chromium():
 
 def _worker_databases() -> None:
     worker = os.environ.get("PYTEST_XDIST_WORKER")
-    shared = os.environ.get("POOL_SCHEMA_DATABASE_URL")
-    if not worker or not shared:
+    if not worker:
         return
     import asyncio
     from urllib.parse import urlsplit, urlunsplit
 
     import asyncpg
 
-    parts = urlsplit(shared)
-    name = f"{parts.path.lstrip('/') or 'postgres'}_{worker}"
+    def own_copy(shared: str, name: str) -> str:
+        async def create() -> None:
+            conn = await asyncpg.connect(shared)
+            try:
+                if not await conn.fetchval("SELECT 1 FROM pg_database WHERE datname=$1", name):
+                    await conn.execute(f'CREATE DATABASE "{name}"')
+            finally:
+                await conn.close()
 
-    async def create() -> None:
-        conn = await asyncpg.connect(shared)
-        try:
-            if not await conn.fetchval("SELECT 1 FROM pg_database WHERE datname=$1", name):
-                await conn.execute(f'CREATE DATABASE "{name}"')
-        finally:
-            await conn.close()
+        asyncio.run(create())
+        return urlunsplit(urlsplit(shared)._replace(path="/" + name))
 
-    asyncio.run(create())
-    own = urlunsplit(parts._replace(path="/" + name))
-    for key, value in list(os.environ.items()):
-        if key.endswith("DATABASE_URL") and value == shared:
-            os.environ[key] = own
+    shared = os.environ.get("POOL_SCHEMA_DATABASE_URL")
+    if shared:
+        parts = urlsplit(shared)
+        own = own_copy(shared, f"{parts.path.lstrip('/') or 'postgres'}_{worker}")
+        for key, value in list(os.environ.items()):
+            if key.endswith("DATABASE_URL") and value == shared:
+                os.environ[key] = own
+    # DATABASE_URL: the Market Lab and other real-Postgres proofs insist on a loopback
+    # database whose name ends in _test. Each worker gets market_gw0_test, ... so the
+    # proofs' committed rows (queued jobs, seeded tenants) never meet another worker's.
+    market = os.environ.get("DATABASE_URL", "")
+    parts = urlsplit(market)
+    stem = parts.path.lstrip("/")
+    if parts.hostname in {"127.0.0.1", "localhost"} and stem.endswith("_test") and market != shared:
+        os.environ["DATABASE_URL"] = own_copy(market, f"{stem[:-len('_test')]}_{worker}_test")
 
 
 # --- Quarantine ---------------------------------------------------------------
@@ -130,9 +140,11 @@ def _worker_databases() -> None:
 # tests/quarantine.txt lists tests that already fail on main, each with its
 # reason. They still run and are reported (xfail, not hidden). xfail is strict:
 # a quarantined test that starts passing (XPASS) fails the run until its entry
-# is removed, so no fixed test stays ungated. Entries
-# marked "skip" are not run at all (they hang or take minutes before failing).
-# The CI summary prints every entry with its outcome.
+# is removed, so no fixed test stays ungated. There is no skip mode: every
+# quarantined test runs. Each entry is one exact pytest node id (parameters
+# included); a file, class or unparameterised name never covers other tests.
+# tests/test_quarantine_rules.py fails if an entry is not on its reviewed
+# allow-list, so a new entry needs an explicit edit there too.
 
 _QUARANTINE_FILE = Path(__file__).with_name("quarantine.txt")
 
@@ -141,37 +153,37 @@ def _quarantine() -> list[tuple[str, str, str]]:
     entries = []
     if not _QUARANTINE_FILE.exists():
         return entries
+    seen = set()
     for line in _QUARANTINE_FILE.read_text(encoding="utf-8").splitlines():
         if not line.strip() or line.lstrip().startswith("#"):
             continue
-        node, mode, reason = (part.strip() for part in line.split("|", 2))
-        if mode not in {"xfail", "skip"} or not reason:
+        parts = [part.strip() for part in line.split("|", 2)]
+        if len(parts) != 3:
             raise pytest.UsageError(f"tests/quarantine.txt: bad line: {line!r}")
+        node, mode, reason = parts
+        if mode != "xfail":
+            raise pytest.UsageError(f"tests/quarantine.txt: only strict xfail is allowed, not {mode!r}: {line!r}")
+        if not reason or "::" not in node or not node.startswith("tests/") or node in seen:
+            raise pytest.UsageError(f"tests/quarantine.txt: bad line: {line!r}")
+        seen.add(node)
         entries.append((node, mode, reason))
     return entries
 
 
 _QUARANTINED = _quarantine()
+_QUARANTINE_BY_ID = {entry[0]: entry for entry in _QUARANTINED}
 
 
 def _quarantine_entry(nodeid: str) -> tuple[str, str, str] | None:
-    for entry in _QUARANTINED:
-        node = entry[0]
-        if nodeid == node or nodeid.startswith(node + "[") or nodeid.startswith(node + "::"):
-            return entry
-    return None
+    # Exact node ids only: no prefix, file, class or parameter-family matches.
+    return _QUARANTINE_BY_ID.get(nodeid)
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     for item in items:
         entry = _quarantine_entry(item.nodeid)
-        if entry is None:
-            continue
-        reason = f"quarantined: {entry[2]}"
-        if entry[1] == "skip":
-            item.add_marker(pytest.mark.skip(reason=reason))
-        else:
-            item.add_marker(pytest.mark.xfail(reason=reason, strict=True))
+        if entry is not None:
+            item.add_marker(pytest.mark.xfail(reason=f"quarantined: {entry[2]}", strict=True))
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ARG001
