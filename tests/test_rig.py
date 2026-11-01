@@ -519,9 +519,14 @@ class _SchemaConn:
         self.executed: list[str] = []
         self.lookups: list[str] = []
 
-    async def execute(self, statement: str) -> None:
-        # apply_schema prefixes each statement with its SET LOCAL lock_timeout.
-        self.executed.append(statement.split(";\n", 1)[1] if statement.startswith("SET LOCAL lock_timeout") else statement)
+    def transaction(self) -> "_SchemaAcquire":
+        # apply_schema runs each statement in its own transaction.
+        return _SchemaAcquire(self)
+
+    async def execute(self, statement: str, *args: object) -> None:
+        if statement.startswith("SELECT set_config('lock_timeout'"):
+            return  # apply_schema's per-statement lock_timeout
+        self.executed.append(statement)
         if self.error is not None:
             raise self.error
 

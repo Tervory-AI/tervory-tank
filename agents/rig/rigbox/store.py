@@ -746,12 +746,12 @@ class PgStore(RetailerPgStore):
         """
         # Optional DDL errors must roll back before the existing-schema fallback
         # or next statement. Keep SET LOCAL per statement on scoped pools.
-        # Each statement runs as "SET LOCAL lock_timeout ...; <statement>": one
-        # simple query is one transaction, so the timeout ends with it. A lock
+        # Each statement runs in its own transaction that first sets
+        # lock_timeout with set_config(..., true) (SET LOCAL), so the timeout
+        # ends with that statement and never reaches the session. A lock
         # timeout (55P03) is retried with backoff (statements are repeat-safe);
         # once the attempts run out it is logged and raised like any failure.
         checkout = self.pool.acquire(autocommit=True) if isinstance(self.pool, TenantPool) else self.pool.acquire()
-        prefix = f"SET LOCAL lock_timeout = '{SCHEMA_LOCK_TIMEOUT}';\n"
         async with checkout as conn:
             for statement in schema_statements():
                 sql = _classified_sql(statement)
@@ -760,7 +760,10 @@ class PgStore(RetailerPgStore):
                 try:
                     for attempt in range(1, SCHEMA_LOCK_ATTEMPTS + 1):
                         try:
-                            await conn.execute(prefix + statement)
+                            async with conn.transaction():
+                                await conn.execute("SELECT set_config('lock_timeout', $1, true)",
+                                                   SCHEMA_LOCK_TIMEOUT)
+                                await conn.execute(statement)
                             break
                         except Exception as exc:
                             if not _lock_not_available(exc):
