@@ -52,3 +52,25 @@ async def test_only_known_matching_region_reads_local_published_tables(monkeypat
         assert response.status_code == 403
         assert response.json() == {'detail': 'region mismatch'}
         assert local.reads == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('box', ['us-east', 'za'])
+async def test_unpublished_hearing_never_reaches_public_response(monkeypatch, box):
+    monkeypatch.setenv('TANK_REGION', box)
+
+    class UnpublishedPool(LocalPublishedPool):
+        async def fetch(self, query, *args):
+            rows = await super().fetch(query, *args)
+            # Even an unexpectedly returned private row is filtered by the
+            # existing public projection, in addition to the SQL predicate.
+            rows[0]['published'] = False
+            return rows
+
+    local = UnpublishedPool(box)
+    monkeypatch.setattr(room.app.state, 'pool', local, raising=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=room.app), base_url='http://room') as client:
+        response = await client.get('/moot/published', params={'home_region': box, 'match_id': str(MATCH)})
+    assert response.status_code == 200
+    assert response.json() == {'matches': []}
+    assert 'Local civil appeal' not in response.text
