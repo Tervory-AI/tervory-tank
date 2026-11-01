@@ -42,7 +42,7 @@ RUN apt-get update \
     && PLAYWRIGHT_BROWSERS_PATH=/opt/tisan-browser /opt/tisan-check/node_modules/.bin/playwright install --with-deps chromium \
     && rm -rf /tmp/npm-warm \
     && chown -R agent:agent /opt/npm-cache /data
-COPY agents/tisan/app.py agents/tisan/promotion.py agents/tisan/promotion_api.py /app/
+COPY agents/tisan/app.py agents/tisan/promotion.py agents/tisan/promotion_api.py agents/tisan/builder.py /app/
 USER agent
 ENV AGENT_NAME=tisan \
     DATA_DIR=/data \
