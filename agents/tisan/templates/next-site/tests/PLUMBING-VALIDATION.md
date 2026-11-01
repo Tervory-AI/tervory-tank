@@ -84,3 +84,45 @@ No PR was opened or merged; Claude opens the PR from `codex/tisan-sections`.
 On merge, changes under `agents/tisan/` redeploy the Tisan room and its configured
 regional copies under the existing deploy-on-merge rules. This branch does not
 change runtime configuration or publish a generated site.
+
+## Compatibility correction after merging #567
+
+The founder's revised instruction keeps full-site JSON generation in
+`tisan.build` (#571). Scaffold does not write `content/site.json`.
+
+- `agents/tisan/scaffold.py:318` (repository root) now checks whether a standard
+  page file exists before applying accepted copy. Missing home/about files
+  produce `ScaffoldError` naming the page and `tisan.build`, not
+  `FileNotFoundError`. No replacement page files, copy, labels, or visual UI are
+  created.
+- Extra-page copy still uses #567's unchanged `render_extra_page`, including JSX
+  escaping. Existing contact/privacy behavior is retained.
+- `tests/trigger_gate2/test_gate2.py:292` now expects that explicit refusal for
+  home/about, while retaining existing contact/privacy and extra-page copy
+  checks. Only the founder-authorized copy-test block was changed.
+- `tests/test_tisan_scaffold.py:342` covers both missing-page refusals, no
+  generated home/about routes or site JSON, and unchanged contact/privacy pages
+  when no copy is supplied.
+
+Current combined Python command, from `/workspace/codex-tisan-sections`:
+
+```sh
+TMPDIR=/workspace/codex-tisan-sections/.git/tmp .git/venv/bin/python -m pytest -q -rs tests/test_tisan_* tests/trigger_gate2/test_gate2.py -k 'tisan or copy or extra_pages'
+```
+
+Result: **63 passed, 3 skipped, 10 deselected**. The three skips require local/CI
+Postgres: the existing gold-source database test and the two Trigger copy
+endpoint/database integration tests. All file-generation, copy escaping,
+missing-page refusal, and mocked copy-resolution tests pass against the merged
+#567 scaffold and this branch's actual template. No production database is used.
+
+Current template commands, from its directory:
+
+```sh
+TMPDIR=/workspace/codex-tisan-sections/.git/tmp npm test && npm run lint && npm run typecheck
+TMPDIR=/workspace/codex-tisan-sections/.git/tmp npm run build
+```
+
+Results: **53 unit tests passed**; ESLint, Prettier, TypeScript, and the production
+build passed. Browser/Lighthouse evidence above is from the original plumbing
+validation; this compatibility correction adds no template visuals or wording.
