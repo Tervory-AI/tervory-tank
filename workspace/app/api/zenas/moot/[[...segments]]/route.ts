@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SEATS = new Set(["applicant", "respondent", "judge"]);
-const ACTIONS = new Set(["edit", "lock", "start", "handover", "issue", "turn", "ai", "abandon", "publish"]);
+const ACTIONS = new Set(["edit", "lock", "start", "handover", "issue", "turn", "ai", "abandon", "publish", "pair"]);
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 type Context = { params: Promise<{ segments?: string[] }> };
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -41,7 +41,8 @@ async function serve(req: Request, context: Context) {
   const isCommand = req.method === "POST" && segments.length === 3 && segments[0] === "hearings"
     && UUID.test(segments[1]) && ACTIONS.has(segments[2]);
   const isRead = req.method === "GET" && (segments.length === 1 && ["hearings", "sources", "participants"].includes(segments[0])
-    || segments.length === 2 && segments[0] === "hearings" && UUID.test(segments[1]));
+    || segments.length === 2 && segments[0] === "hearings" && UUID.test(segments[1])
+    || segments.length === 3 && segments[0] === "hearings" && UUID.test(segments[1]) && segments[2] === "fairness");
   if (!isCreate && !isCommand && !isRead) return reply({ error: "not_found" }, 404);
   try {
     const identity = await auth();

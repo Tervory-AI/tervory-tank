@@ -10,6 +10,7 @@ export type Hearing = {
   transcript: { number: number; seat: Seat; text: string; kind: string; reasoning?: Record<string, unknown> }[];
   ruling: { order: string; reasons: string[] } | null; reveal?: string; published: boolean;
   pending_ai: { seat: Seat; status: string } | null; last_ai_resolution: string | null;
+  fairness_pair_id?: string | null; first_side?: Seat;
   cost_usd: number | null; receipts: { ledger_id: string; cost_usd: number | null }[];
 };
 export const SEATS: Seat[] = ["applicant", "respondent", "judge"];
@@ -39,5 +40,18 @@ export function turnFromForm(form: FormData, hearing: Hearing, seat: Seat) {
     ...(hearing.pending_question ? { responds_to: hearing.pending_question.turn } : {}),
     ...(seat === "judge" ? { issue_index: Number(value("issue")) } : {}),
     ...(seat === "judge" && kind !== "ruling" ? { target: value("target") } : {}),
-    ...(kind === "ruling" ? { order: value("order"), reasons: value("reasons").split("\n").filter(Boolean) } : {}) };
+    ...(kind === "ruling" ? { decision: value("decision") || "uncertain", order: value("order"), reasons: value("reasons").split("\n").filter(Boolean) } : {}) };
+}
+
+export type Fairness = { pair_id: string; status: string; first_hearing: string; second_hearing: string;
+  settings_verified: boolean; same_party_wins_both: boolean | null; same_seat_wins_both: boolean | null };
+export function fairnessReading(result: Fairness): string {
+  const labels: Record<string, string> = {
+    incomplete: "The paired hearing is incomplete.", problem_changed: "The paired problems differ.",
+    seats_not_swapped: "The counsel seats were not exchanged.", counsel_controller_changed: "Counsel control changed during the comparison.",
+    judge_controller_changed: "Judge control changed during the comparison.", settings_mismatch: "The runs used different model settings.",
+    settings_unverified: "The model settings have not been verified.", uncertain_decision: "The evidence does not support a definite comparative result.",
+  };
+  if (result.status !== "measured") return labels[result.status] ?? "Fairness check not measured.";
+  return result.same_party_wins_both ? "The same party prevailed in both runs." : result.same_seat_wins_both ? "The same AI seat prevailed in both runs." : "The paired runs had different results.";
 }
