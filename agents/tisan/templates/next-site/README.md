@@ -11,8 +11,9 @@ unrecognized paths return an empty 404. There are no default site labels.
 without additional packages. It reports all schema errors together, including
 missing required text, image sources, and alt text. Optional slots may be omitted;
 when their parent object is supplied its required children must be filled.
+Existing contact/privacy routes retain precedence over content for those paths.
 Unknown section types, unknown properties, invalid URLs, duplicate page names,
-paths or section IDs, and paths reserved for existing contact/privacy/API routes
+paths or section IDs, and paths reserved for API/framework routes
 are refused. Malformed JSON fails the build. Missing content is permitted.
 
 `app/[[...path]]/page.tsx` selects the content page by its full path and supplies
