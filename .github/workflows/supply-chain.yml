@@ -1,0 +1,53 @@
+name: supply-chain
+
+on:
+  schedule:
+    - cron: '23 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supply-chain-nightly
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    # Publishing runs only from the trusted default branch, never PR code.
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7, selected by #341
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7, selected by #341
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7, selected by #341
+        with:
+          node-version: '22'
+      - name: Scan every lock and open one draft per fix
+        env:
+          # A repo-scoped App/PAT permits CI on the created PR. GITHUB_TOKEN does not.
+          GH_TOKEN: ${{ secrets.SUPPLY_CHAIN_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 -m agents.market_lab.supply_chain \
+            --report "$RUNNER_TEMP/supply-chain.json" --publish
+      - name: Write coverage and findings to the run summary
+        if: always()
+        env:
+          REPORT: ${{ runner.temp }}/supply-chain.json
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          path = Path(os.environ['REPORT'])
+          if path.exists():
+              report = json.loads(path.read_text())
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+                  summary.write('## Market Lab supply-chain feed\n\n')
+                  summary.write('```json\n' + json.dumps(report, indent=2) + '\n```\n')
+          PY
