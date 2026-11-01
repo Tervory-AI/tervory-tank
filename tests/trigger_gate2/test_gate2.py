@@ -314,3 +314,14 @@ async def test_copy_resolution_fails_closed_without_building(failure, monkeypatc
     with pytest.raises(scaffold.ScaffoldError, match='Writing record unavailable'):
         await scaffold.execute(brief([{'name': 'products', 'copy': reference}]), str(TENANT), data_root=tmp_path)
     assert not (tmp_path / 'builds').exists()
+
+
+@pytest.mark.asyncio
+async def test_private_languagetool_transport_keeps_original_input_cap(env):
+    from test_second import room_app
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=room_app), base_url='http://room') as client:
+        for size, status in [(20000, 200), (20001, 422)]:
+            response = await client.post('/skala/languagetool', json={'tenant_id': str(TENANT), 'text': 'x' * size},
+                                         headers={'X-Tank-Key': 'dummy-room-key'})
+            assert response.status_code == status
+    env.model.assert_not_called()
