@@ -7,8 +7,8 @@ exists). A model is never called from Enforce. No Tank key required.
 """
 from __future__ import annotations
 
-import time
 import os
+import time
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -116,6 +116,10 @@ def apply_from_payload(
         receipt["sources"] = source_credits
         receipt["intel_via"] = "Market Lab"
 
+    edge = select_control(site=payload.site, settings=settings, control=control)
+    name = control_name(edge)
+    receipt["control"] = name
+
     decision_seconds = time.perf_counter() - t0
     stamp_budget(receipt, stage="event_to_decision", seconds=decision_seconds)
 
@@ -146,9 +150,6 @@ def apply_from_payload(
             address=payload.address,
         )
 
-    edge = select_control(site=site, settings=settings, control=control)
-    name = control_name(edge)
-    receipt["control"] = name
     supported = (payload.kind == "block_ip" and bool(payload.address)) or (
         name == "cloudflare" and payload.kind == "rate_limit" and bool(payload.path)
     )
@@ -175,6 +176,7 @@ def apply_from_payload(
                 "kind": payload.kind,
                 "path": payload.path,
                 "control": name,
+                "tenant_id": settings.tenant_id,
                 "created_at": utc_now(),
                 "expires_at_epoch": time.time() + PENDING_APPROVAL_TTL_SEC,
                 "payload": fields,
@@ -358,6 +360,8 @@ def approve_pending(
             "tenant_id": settings.tenant_id,
             **settings.receipt_stamp(),
         }
+    if row.get("tenant_id", settings.tenant_id) != settings.tenant_id:
+        raise ValueError("pending shield belongs to another client")
     address = str(row.get("address") or "")
     site = str(row.get("site") or payload.site)
     edge = select_control(site=site, settings=settings, control=control)
@@ -371,10 +375,12 @@ def approve_pending(
         if why:
             raise ValueError("pending address is on the never-block list")
     ref = f"approve-{rid.replace('-', '')[:16]}"
+    t0 = time.perf_counter()
     applied_row = _apply_shield(edge, site=site, kind=row.get("kind", "block_ip"), address=address, path=row.get("path"), ref=ref)
+    shield_seconds = time.perf_counter() - t0
     _persist(data_dir, edge)
     persist_pending(data_dir, pending)
-    return {
+    receipt = {
         "id": str(uuid4()),
         "product": "Autumbra",
         "role": "Enforce",
@@ -391,6 +397,17 @@ def approve_pending(
         "control": name,
         **settings.receipt_stamp(),
     }
+
+    stamp_budget(receipt, stage="decision_to_shield", seconds=shield_seconds)
+    t_health = time.perf_counter()
+    receipt["health_ok"] = edge.health_check()
+    stamp_budget(receipt, stage="health_check", seconds=time.perf_counter() - t_health)
+    if not receipt["health_ok"]:
+        receipt["auto_undo"] = undo_applied(receipt, control=edge, data_dir=data_dir)
+        receipt["outcome"] = "auto_undone_health_failed"
+        receipt["applied"] = False
+        stamp_budget(receipt, stage="auto_undo_e2e", seconds=time.perf_counter() - t0)
+    return receipt
 
 
 def expire_pending_approvals(
