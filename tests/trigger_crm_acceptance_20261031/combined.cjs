@@ -44,10 +44,14 @@ async function get(parts, query = '') {
   }
   session.orgId = 'org_unconfigured';
   assert.equal((await get(['contacts'])).status, 503);
-  session = { userId: 'offline-client', orgId: 'org_offline_crm' };
-  assert.equal((await get(['contacts'], '?page=2')).status, Number(process.env.CRM_EXPECT_CLIENT_STATUS));
-  session = { userId: 'offline-client', orgId: 'org_no_grant' };
-  assert.equal((await get(['contacts'])).status, 403);
+  for (const denied of [
+    { userId: 'offline-client', orgId: 'org_offline_crm', grants: ['trigger'] },
+    { userId: 'offline-admin', orgId: 'org_offline_crm', orgRole: 'org:admin', grants: ['trigger'] },
+    { userId: 'offline-member', orgId: 'org_offline_crm', orgRole: 'org:member' },
+  ]) {
+    session = denied;
+    assert.equal((await get(['contacts'], '?page=2')).status, 404);
+  }
   session = { userId: null, orgId: 'org_offline_crm' };
   assert.equal((await get(['contacts'])).status, 404);
   session = { userId: 'offline-founder', orgId: 'org_offline_crm' };
