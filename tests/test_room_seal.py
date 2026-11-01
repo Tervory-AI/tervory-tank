@@ -160,6 +160,30 @@ def test_raw_compose_files_need_nothing_from_coolify(path: Path) -> None:
         assert spec and spec.get("name"), f"volume {key} must keep its live name"
 
 
+@pytest.mark.parametrize("suffix,region", [("", "US"), (".za", "ZA")])
+def test_dormant_docassemble_stays_private_and_preserves_existing_backup(suffix: str, region: str) -> None:
+    text = (ROOT / f"agents/zenas/docker-compose.docassemble{suffix}.yml").read_text()
+    compose = yaml.safe_load(text)
+    # A dormant restore definition must never become an unsealed deployment.
+    assert is_raw(text)
+    assert leaks(text) == []
+    assert leaks(text, raw=False) == [f"docassemble would join non-internal {COOLIFY_APP_NETWORK}"]
+    assert compose["networks"]["assembly"] == {
+        "external": True, "name": "tervory-zenas-assembly",
+    }
+    volume = f"docassemble_{region.lower()}_backup"
+    spec = compose["volumes"][volume]
+    # External volumes are neither implicitly created nor removed by compose down -v.
+    # A required, region-specific selector cannot silently fall back to a new name.
+    assert spec["external"] is True
+    assert spec["name"].startswith(f"${{DOCASSEMBLE_{region}_BACKUP_VOLUME:?")
+    assert spec["name"].endswith("}")
+    assert compose["services"]["docassemble"]["volumes"] == [
+        f"{volume}:/usr/share/docassemble/backup",
+    ]
+    assert compose["services"]["docassemble-backup"]["volumes"] == [f"{volume}:/backup:ro"]
+
+
 def test_base_volumes_keep_their_live_names() -> None:
     compose = yaml.safe_load((ROOT / "agents/base/docker-compose.yml").read_text(encoding="utf-8"))
     uuid = "r8aprclj8nooe9keywrp9dmb"

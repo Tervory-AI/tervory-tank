@@ -15,13 +15,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 QUARANTINE = ROOT / "tests" / "quarantine.txt"
 
-# The 2 entries on main after #508 (5d954e96, 31 Oct 2026). Do not add ids. The PR
-# that removes Docassemble deletes both entries and should drop them here too (a stale
-# id here fails nothing: the check is only that every entry is on this list).
-ALLOWED = frozenset({
-    "tests/test_room_seal.py::test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.yml]",
-    "tests/test_room_seal.py::test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.za.yml]",
-})
+# All reviewed failures have been fixed. Do not add ids.
+ALLOWED: frozenset[str] = frozenset()
 
 
 def _lines() -> list[str]:
