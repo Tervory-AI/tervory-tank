@@ -1,3 +1,29 @@
+## Founder-only correction — 1 November 2026
+
+This section supersedes all earlier client-access authorizations below. CRM reads
+and writes require the existing founder check. A Trigger squad grant, tenant
+admin role or member identity cannot authorize CRM access. No live grant or
+production data was changed.
+
+Changed: `tank/command.py:35,44` moves CRM write to founder tools;
+`tank/trigger_crm.py:51` applies `require_founder` before reads and writes;
+`tests/test_trigger_crm.py:231` refuses granted clients, tenant admins and members
+on list/detail/write routes before upstream transport.
+
+Source/test head: `fa18ad7d66f06a3fdc80ba243d476d3825292656`, merged with main
+at merge commit `ba8284da`. Commands in `/workspace/codex-trigger-crm`:
+
+- `git fetch origin && git checkout codex/trigger-crm-backend-20261031 && git merge origin/main`: passed, no conflicts; repository-local Git identity was configured after initial missing-identity error.
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q -p no:cacheprovider tests/test_trigger_crm.py tests/test_trigger_crm_wsgi.py tests/test_secrets.py --tb=short`: **56 passed**, one existing Pydantic warning, 19.56s.
+- `/home/ammosync/trigger-crm-venv312/bin/ruff check tank/trigger_crm.py tank/trigger_crm_schema.py tests/test_trigger_crm.py tests/test_trigger_crm_wsgi.py ops/trigger-crm/tervory_crm_middleware.py ops/trigger-crm/tervory_connector_wsgi.py`: **All checks passed**.
+- `git diff --check`: passed.
+- Every finished file committed and `git push origin codex/trigger-crm-backend-20261031`: passed.
+
+Hosted exact-head checks pending. No new page or copy, model calls, live CRM calls,
+production SQL or deployment. Founder browser test and screenshots are missing;
+this is not a completion claim. Send/payment/convert/delete endpoints remain
+unexposed; supported create/update writes retain durable Command Confirm.
+
 # Trigger CRM connector checkpoint
 
 Updated **31 October 2026, 12:23 PDT / 19:23 UTC**. Earlier 11:29 checkpoint results are retained and superseded where noted below. Draft PR #498. This is implementation and offline evidence, not founder acceptance or a live deployment claim.
