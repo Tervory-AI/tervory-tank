@@ -8,6 +8,7 @@ Branch: `codex/zenas-gate2`. Founder merges; Claude opens the PR. This branch ha
 | `workspace/app/moot/store.ts:57` | Pass region through existing public filtering and detail lookup. |
 | `workspace/app/moot/page.tsx:15` | Read URL region and preserve it in existing match links. No new page words. |
 | `workspace/app/moot/[match]/page.tsx:9` | Detail page reads the selected region. |
+| `tank/main.py:488` | Homes-key scope adds only GET `/v1/zenas/moot/published`, explicit `home_region=za`, no body, only `home_region`/`match_id`; rejects duplicate query fields. No private or credential route is added. |
 | `agents/zenas/app.py:1119` | Only known matching box/home regions may query local published tables; all other combinations return 403 `region mismatch` before a DB read. |
 | `agents/zenas/pool/catalogue.py:25` | One EUR-Lex source, existing `us-east` region; EU attribution, extraction changes and reuse terms checked 2026-11-01. |
 | `agents/zenas/pool/adapters/eur_lex.py:64` | Extract official legal container; reject challenges, incomplete responses and special-rights material. |
@@ -20,6 +21,8 @@ Branch: `codex/zenas-gate2`. Founder merges; Claude opens the PR. This branch ha
 | `tests/test_moot_published_regions.py:1` | Real route and published reader across 16 box/request combinations; DB transport only is replaced. |
 | `tests/test_zenas_pool_corpus.py:24` | Existing catalogue inventory includes new source, with no supplied EUR-Lex snapshot. |
 
+Additional homes-key tests in `tests/test_tank_homes_key.py` cover existing permissions, the public-read exception, forbidden methods/bodies/query fields, private routes, credential routes and Boston refusal. `tests/test_moot_published_regions.py` also tests unpublished-row exclusion in both regions. The combined homes-key/regional run passed 96 tests.
+
 Exact final commands and complete outputs: [verification.txt](verification.txt). Results: 98 Python tests passed; 33 regional/existing Moot tests passed; 15 Workspace tests passed; TypeScript, Ruff E9/F and whitespace checks passed. Tests are offline; the regulation alert suite uses a disposable loopback SMTP catcher. An earlier run with all sockets disabled had seven SMTP fixture setup errors; rerunning with loopback-only connections passed all 98 tests. During test development, transport assertions were corrected for undefined projection fields, regional store binding and the actual DB metadata/chunk shapes. No production behavior was relaxed to satisfy tests.
 
 The EUR-Lex legal notice was checked through its indexed official text; direct web reads returned a JavaScript robot check. Terms: https://eur-lex.europa.eu/content/legal-notice/legal-notice.html?locale=en . Reuse permits EU legal documents subject to exceptions; attribution is retained under Commission Decision 2011/833/EU. Initial source supports official civil trade legislation only, excluding editorial summaries, media, criminal provisions and detected special-rights documents. Live source fetching and a live research answer have not been verified or triggered.
@@ -30,4 +33,4 @@ Remaining signal dependency: `agents/radix/schema.sql`, `agents/radix/passive_st
 
 Founder browser screenshots: **not available; acceptance pending**. After founder merge and deployment, acceptance is the founder publishing a ZA hearing and opening `https://zenas.tervory.com/moot?region=za`, then asking an EU trade question and opening every EUR-Lex citation. No screenshots, live hearing, live answer, live source import or deployment are claimed by this handoff. No model calls, production SQL, secret inspection, configuration value changes or main pushes were performed.
 
-Deploy impact: ordinary deploy-on-merge mechanisms may redeploy Workspace, Tank and both Zenas room copies because this branch touches their existing code paths. Runtime compose and key rules remain unchanged. No merge or deployment was triggered here.
+Deploy impact: ordinary deploy-on-merge mechanisms may redeploy Workspace, Tank and both Zenas room copies because this branch touches their existing code paths. Runtime compose remains unchanged. The only added homes-key permission is the founder-authorized public ZA Moot read described above. Existing `regionTank("za")`, `TANK_URL_ZA` and `TANK_API_KEY_ZA` remain in use; no secret values were inspected or changed. No merge or deployment was triggered here.
