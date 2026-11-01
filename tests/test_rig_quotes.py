@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "agents" / "rig"))
 
 from rigbox.api import mount  # noqa: E402
 from rigbox.quotes.api import mount as mount_quotes  # noqa: E402
-from rigbox.quotes.sample import KEY, TENANT, seed  # noqa: E402
+from fixtures.rig_quote_sample import KEY, TENANT, seed  # noqa: E402
 from rigbox.quotes.senders import DeliveryError, OdooHandoff, RetailerHandoff  # noqa: E402
 from rigbox.quotes.service import QuoteService  # noqa: E402
 from rigbox.quotes.store import MemoryQuotes  # noqa: E402

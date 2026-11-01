@@ -40,6 +40,7 @@ export const REST_LINKS: readonly NavLink[] = [
   { href: "/data", label: "Data" },
   { href: "/prices", label: "Prices" },
   { href: "/onboarding", label: "Settings" },
+  { href: "/cli/sign-ins", label: "CLI sign-ins" },
   { href: "https://tervory.com", label: "Support" },
 ];
 
