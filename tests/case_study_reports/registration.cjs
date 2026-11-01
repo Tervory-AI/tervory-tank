@@ -30,7 +30,7 @@ Module._load = function (name, parent, ...rest) {
   return name === '@clerk/nextjs/server' ? clerk : originalLoad.call(this, name, parent, ...rest);
 };
 process.env.TANK_URL = 'http://tank.offline.invalid';
-process.env.TANK_API_KEY = 'offline-test-only';
+process.env.TANK_API_KEY = 'dummy-offline';
 let now = Date.now(), calls = [], mode = 503, release;
 Date.now = () => now;
 const events = [];
