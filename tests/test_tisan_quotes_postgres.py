@@ -31,6 +31,9 @@ async def database():
     conn = await asyncpg.connect(database=name, **options)
     await conn.execute('CREATE SCHEMA agent_tisan')
     schema = (ROOT / 'agents/tisan/schema.sql').read_text()
+    # The platform RLS rollout marker: quote RLS follows tank.command_threads.
+    await conn.execute('CREATE SCHEMA tank; CREATE TABLE tank.command_threads (id uuid); '
+                       'ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY')
     # Bootstrap DDL before room-role provisioning, as the all-schema RLS fixture
     # does. Installing a schema must not create a login or weaken its policies.
     existed = await conn.fetchval("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agent_tisan')")
@@ -107,3 +110,33 @@ async def test_event_failure_rolls_back_state_and_initial_event_constraint(datab
         assert (await store.read(A, row['id']))['state'] == 'submitted'
         with pytest.raises(asyncpg.CheckViolationError):
             await admin.execute("INSERT INTO agent_tisan.quote_events (tenant_id,request_id,from_state,to_state,actor) VALUES ($1,$2,NULL,'accepted','test')", A, row['id'])
+
+
+@pytest.mark.asyncio
+async def test_quote_rls_stays_off_before_the_platform_rollout():
+    """1 Nov 2026: an unconditional ENABLE made Tank refuse to start. Without the
+    rollout marker the schema leaves RLS off, and turns it off where it was on."""
+    port = os.environ.get('J4_TEST_POSTGRES_PORT')
+    if not port:
+        pytest.skip('J4_TEST_POSTGRES_PORT must select a disposable local PostgreSQL')
+    options = dict(host='127.0.0.1', port=int(port), user='postgres', ssl=False)
+    admin = await asyncpg.connect(database='postgres', **options)
+    name = 'tisan_j4_norls_' + uuid4().hex
+    await admin.execute(f'CREATE DATABASE {name}')
+    conn = await asyncpg.connect(database=name, **options)
+    try:
+        await conn.execute('CREATE SCHEMA agent_tisan')
+        schema = (ROOT / 'agents/tisan/schema.sql').read_text()
+        await conn.execute(schema)
+        on = ("SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
+              "WHERE n.nspname='agent_tisan' AND c.relname IN ('quote_requests','quote_events') "
+              "AND (c.relrowsecurity OR c.relforcerowsecurity)")
+        assert await conn.fetchval(on) == 0
+        await conn.execute('ALTER TABLE agent_tisan.quote_requests ENABLE ROW LEVEL SECURITY; '
+                           'ALTER TABLE agent_tisan.quote_requests FORCE ROW LEVEL SECURITY')
+        await conn.execute(schema)
+        assert await conn.fetchval(on) == 0
+    finally:
+        await conn.close()
+        await admin.execute(f'DROP DATABASE {name}')
+        await admin.close()

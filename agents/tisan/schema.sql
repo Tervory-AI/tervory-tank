@@ -31,10 +31,25 @@ CREATE TABLE IF NOT EXISTS agent_tisan.quote_events (
 );
 CREATE INDEX IF NOT EXISTS quote_events_tenant_request
     ON agent_tisan.quote_events (tenant_id,request_id,id);
-ALTER TABLE agent_tisan.quote_requests ENABLE ROW LEVEL SECURITY;
-ALTER TABLE agent_tisan.quote_requests FORCE ROW LEVEL SECURITY;
-ALTER TABLE agent_tisan.quote_events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE agent_tisan.quote_events FORCE ROW LEVEL SECURITY;
+-- Follow the platform RLS rollout; never turn RLS on by itself (the pattern of
+-- tank.personal_tokens in tank/schema.sql). An unconditional ENABLE here made Tank's
+-- startup guard (tank/main.py _startup) refuse its owner login on 1 Nov 2026. Until
+-- the rollout reaches tank.command_threads, these tables stay without RLS, and
+-- isolation is the tenant_id filter on every quote query (agents/tisan/quotes.py).
+-- The ELSE branch also turns RLS back off where it was already applied.
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid=to_regclass('tank.command_threads') AND relrowsecurity) THEN
+        ALTER TABLE agent_tisan.quote_requests ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.quote_requests FORCE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.quote_events ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.quote_events FORCE ROW LEVEL SECURITY;
+    ELSE
+        ALTER TABLE agent_tisan.quote_requests NO FORCE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.quote_requests DISABLE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.quote_events NO FORCE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.quote_events DISABLE ROW LEVEL SECURITY;
+    END IF;
+END $$;
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='agent_tisan'
         AND tablename='quote_requests' AND policyname='quote_requests_tenant') THEN
