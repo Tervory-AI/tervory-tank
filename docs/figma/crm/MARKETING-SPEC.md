@@ -328,3 +328,117 @@ All view names, labels, actions, statuses and day abbreviations below await foun
 
 Current deterministic audit: 44 screens; 380 field-value instances; viewport errors 0. Editable descendant types: FRAME=564, TEXT=1460, INSTANCE=704. No complete-UI raster was used. Source components and native logo instances remain linked. Visual checks identified and repaired horizontal container sizing and button wrapping. Final visual checks and source/field reconciliation are recorded before handoff; Figma authoring screenshots are not founder acceptance screenshots. No live application test or founder approval is claimed.
 
+
+## Final handoff proof · 1 November 2026
+
+Native Figma SPEC: `151:3973`. Draft close-control wording: **Close**; this also awaits approval. Existing CRM retains all 64 screen IDs; 34 source submenus have the exact order ending Estimates → Marketing → Chat bot, with zero order errors. The rename decision block `149:34013` is a child of original SPEC frame `101:8244`.
+
+Mobile source/local drawers were resized/rebuilt within their existing/new IDs so all ten labels and Close fit inside 375×812. Newly created store menus use the original CRM white-menu paint overrides with only the current module active; this avoids importing the dark workspace-menu defaults. No original CRM entity content was changed. New content-container spacing is linked to existing `space/*` variables.
+
+Final rendered-binding audit: 82 distinct label/binding pairs, zero wrong heading/body font families. Exact rendered field paths follow below. The arrays/dictionary paths in the conceptual field register describe the same proposed data contract; none is an assertion of an existing scheduler or Chatwoot API.
+
+Commands run in `/workspace/codex-crm-marketing-chat-design` unless absolute paths are shown:
+
+```sh
+git clone https://github.com/Tervory-AI/tervory-tank.git /workspace/codex-crm-marketing-chat-design
+git fetch origin main codex/crm-design
+git checkout -B codex/crm-marketing-chat-design origin/main
+ls agents/trigger/README.md
+git --no-pager show origin/codex/crm-design:docs/figma/crm/SPEC.md
+git diff --check
+git add docs/figma/crm/MARKETING-SPEC.md
+git commit -m 'Document Marketing Figma screens, draft copy and confirmation contract'
+git push -u origin codex/crm-marketing-chat-design
+```
+
+Results: clone/fetch/checkout/required source-file read succeeded; whitespace check passed; commits `e4f441ba` (Marketing) and `b285cce9` (Chat bot) pushed successfully. The first commit attempt lacked a local author identity and failed; the existing Codex identity from the prior CRM checkout was reused locally, then commit/push passed. A temporary helper write under `/tmp` failed with `Disk quota exceeded`; the authorized private checkout and its `.git` scratch area remained writable. No required source file, fetch or push failed. Figma API validation rejected intermediate type/scroll/reaction operations; the canvas was inspected after each failure, then targeted corrections were applied. No failed operation is counted as a completed screen. No application tests were run because no application code changed. No secrets or production data were read.
+
+Figma authoring screenshots reviewed: Composer desktop `149:7134`, calendar mobile `149:4995`, mobile drawer `150:4047`. These are design-review evidence, not founder acceptance screenshots. Separate reviewer chat was notified; review is not claimed complete. Claude opens the PR from this branch; the founder alone merges. Founder approval and his own Figma/browser review remain pending.
+
+## Exact rendered binding register
+
+| Draft field label | Rendered binding |
+|---|---|
+| Account | `[channels.Facebook.account_name]` |
+| Status | `[channels.Facebook.status]` |
+| Account | `[channels.Instagram.account_name]` |
+| Status | `[channels.Instagram.status]` |
+| Account | `[channels.LinkedIn.account_name]` |
+| Status | `[channels.LinkedIn.status]` |
+| Account | `[channels.X.account_name]` |
+| Status | `[channels.X.status]` |
+| Account | `[channels.TikTok.account_name]` |
+| Status | `[channels.TikTok.status]` |
+| Account | `[channels.YouTube.account_name]` |
+| Status | `[channels.YouTube.status]` |
+| Account | `[channels.Google Business Profile.account_name]` |
+| Status | `[channels.Google Business Profile.status]` |
+| Period | `[calendar.period]` |
+| Time zone | `[calendar.time_zone]` |
+| Brief | `[post.brief]` |
+| Saved voice | `[voice.revision]` |
+| Draft text | `[post.text]` |
+| Media | `[post.media]` |
+| Channels | `[post.channels]` |
+| Findings | `[checks.findings]` |
+| Checker status | `[checks.complete]` |
+| Rule | `[checks.rule]` |
+| Location | `[checks.location]` |
+| Scheduled for | `[post.scheduled_at]` |
+| Time zone | `[post.time_zone]` |
+| Preview | `[post.previews.Facebook.text]` |
+| Length limit | `[channel_limits.Facebook.limit]` |
+| Counted as | `[channel_limits.Facebook.unit]` |
+| Length used | `[post.previews.Facebook.length]` |
+| Preview | `[post.previews.Instagram.text]` |
+| Length limit | `[channel_limits.Instagram.limit]` |
+| Counted as | `[channel_limits.Instagram.unit]` |
+| Length used | `[post.previews.Instagram.length]` |
+| Preview | `[post.previews.LinkedIn.text]` |
+| Length limit | `[channel_limits.LinkedIn.limit]` |
+| Counted as | `[channel_limits.LinkedIn.unit]` |
+| Length used | `[post.previews.LinkedIn.length]` |
+| Preview | `[post.previews.X.text]` |
+| Length limit | `[channel_limits.X.limit]` |
+| Counted as | `[channel_limits.X.unit]` |
+| Length used | `[post.previews.X.length]` |
+| Preview | `[post.previews.TikTok.text]` |
+| Length limit | `[channel_limits.TikTok.limit]` |
+| Counted as | `[channel_limits.TikTok.unit]` |
+| Length used | `[post.previews.TikTok.length]` |
+| Preview | `[post.previews.YouTube.text]` |
+| Length limit | `[channel_limits.YouTube.limit]` |
+| Counted as | `[channel_limits.YouTube.unit]` |
+| Length used | `[post.previews.YouTube.length]` |
+| Preview | `[post.previews.Google Business Profile.text]` |
+| Length limit | `[channel_limits.Google Business Profile.limit]` |
+| Counted as | `[channel_limits.Google Business Profile.unit]` |
+| Length used | `[post.previews.Google Business Profile.length]` |
+| Channel | `[post.channel]` |
+| Status | `[post.status]` |
+| Text | `[post.text]` |
+| Status history | `[post.history]` |
+| Reported at | `[post.metrics.reported_at]` |
+| Reach | `[post.metrics.reach]` |
+| Clicks | `[post.metrics.clicks]` |
+| Comments | `[post.metrics.comments]` |
+| Profile | `[gbp.profile_name]` |
+| Post | `[gbp.post.text]` |
+| Status | `[gbp.post.status]` |
+| Published at | `[gbp.post.published_at]` |
+| Review | `[review.text]` |
+| Rating | `[review.rating]` |
+| Received at | `[review.created_at]` |
+| Reply brief | `[reply.brief]` |
+| Draft reply | `[reply.text]` |
+| Checker findings | `[reply.checks]` |
+| Reply status | `[reply.status]` |
+| Post | `[post.id]` |
+| Voice revision | `[voice.revision]` |
+| Checker findings | `[checks.findings]` |
+| Approved revision | `[post.approved_revision]` |
+| Review | `[review.id]` |
+| Reply | `[reply.text]` |
+| Channel | `[channel.name]` |
+| Account | `[channel.account_name]` |
+
