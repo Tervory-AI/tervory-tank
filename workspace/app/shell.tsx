@@ -3,7 +3,7 @@
 import { OrganizationSwitcher, UserButton, useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname, useSearchParams, useSelectedLayoutSegments } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import {
   FOUNDER_LINKS,
   REST_LINKS,
@@ -31,8 +31,8 @@ export function Shell({
 }) {
   const browserPathname = usePathname() ?? "";
   const [routeRoot] = useSelectedLayoutSegments();
-  // The public host rewrites / to /autumbra without changing the browser pathname.
-  const pathname = routeRoot === "autumbra" ? "/autumbra" : browserPathname;
+  // Product hosts rewrite / to a room without changing the browser pathname.
+  const pathname = browserPathname === "/" && routeRoot ? `/${routeRoot}` : browserPathname;
   const { isLoaded, userId } = useAuth();
   const [founder, setFounder] = useState(initialFounder);
   const [reviewer, setReviewer] = useState(initialReviewer);
@@ -61,6 +61,32 @@ export function Shell({
     setMenu(false);
   }, [pathname]);
 
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const closeMenu = () => {
+    setMenu(false);
+    menuButton.current?.focus();
+  };
+
+  useEffect(() => {
+    if (!menu) return;
+    const media = window.matchMedia("(min-width: 801px)");
+    const resize = () => { if (media.matches) setMenu(false); };
+    document.getElementById("shell-side-close")?.focus();
+    const escape = (event: KeyboardEvent) => {
+      // Squad's portal handles its own Escape and focus return first.
+      if (event.defaultPrevented || event.key !== "Escape" || document.querySelector(".squad-pop:not([hidden])")) return;
+      event.preventDefault();
+      setMenu(false);
+      menuButton.current?.focus();
+    };
+    document.addEventListener("keydown", escape);
+    media.addEventListener("change", resize);
+    return () => {
+      document.removeEventListener("keydown", escape);
+      media.removeEventListener("change", resize);
+    };
+  }, [menu]);
+
   if (usesOwnShell(pathname)) return (
     <SquadFounderProvider founder={founder}>
       <main>{children}</main>
@@ -74,13 +100,13 @@ export function Shell({
           <a className="shell-skip" href="#shell-content">Skip to content</a>
           <header className="shell-mobile">
             <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={218} height={40} />
-            <button type="button" className="shell-menu" id="shell-menu" aria-expanded={menu} aria-controls="app-sidebar" onClick={() => setMenu(true)}>Menu</button>
+            <button type="button" className="shell-menu" id="shell-menu" ref={menuButton} aria-expanded={menu} aria-controls="app-sidebar" onClick={() => setMenu((open) => !open)}>Menu</button>
           </header>
           {menu ? (
-            <button type="button" className="shell-dim" aria-label="Close menu" onClick={() => setMenu(false)} />
+            <button type="button" className="shell-dim" aria-label="Close menu" onClick={closeMenu} />
           ) : null}
-          <Suspense fallback={<ShellBar pathname={pathname} search="" hash="" founder={founder} reviewer={reviewer} menu={menu} onClose={() => setMenu(false)} />}>
-            <ShellBarLive founder={founder} reviewer={reviewer} menu={menu} onClose={() => setMenu(false)} />
+          <Suspense fallback={<ShellBar pathname={pathname} search="" hash="" founder={founder} reviewer={reviewer} menu={menu} onClose={closeMenu} />}>
+            <ShellBarLive pathname={pathname} founder={founder} reviewer={reviewer} menu={menu} onClose={closeMenu} />
           </Suspense>
           <div id="shell-content" className="shell-main">
             <main>{children}</main>
@@ -92,6 +118,7 @@ export function Shell({
 }
 
 function ShellBarLive({
+  pathname,
   founder,
   reviewer,
   menu,
@@ -101,8 +128,8 @@ function ShellBarLive({
   reviewer: boolean;
   menu: boolean;
   onClose: () => void;
+  pathname: string;
 }) {
-  const pathname = usePathname() ?? "";
   const search = useSearchParams();
   const [hash, setHash] = useState("");
 
@@ -189,7 +216,7 @@ function ShellBar({
 }
 
 function ShellLink({ link, current, onClose }: { link: NavLink; current: boolean; onClose: () => void }) {
-  const external = link.href.startsWith("http");
+  const external = link.href.startsWith("http") && !link.href.startsWith("https://app.tervory.com/");
   if (external) {
     return (
       <a href={link.href} target="_blank" rel="noreferrer">

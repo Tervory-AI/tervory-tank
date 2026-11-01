@@ -117,9 +117,9 @@ export function Tisan({ plugins, accountName, canApproveGold = false }: { plugin
         <div className="panel-top">
           <p className="account">{accountName?.trim() || "Your account"}</p>
           <nav aria-label="Workspace">
-            <a className="nav" href="/ledger">Dashboard</a>
-            <a className="nav" href="/tasks">Projects</a>
-            <a className="nav" href="/">Chats</a>
+            <a className="nav" href="https://app.tervory.com/">Dashboard</a>
+            <a className="nav" href="/matters">Projects</a>
+            <a className="nav" href="/chats">Chats</a>
           </nav>
           <SquadLinks className="squad-nav" linkClassName="nav" />
         </div>
@@ -148,7 +148,7 @@ export function Tisan({ plugins, accountName, canApproveGold = false }: { plugin
         <div className="panel-bottom">
           <img className="panel-sign" src="/brand/tervory-logo-reversed.png" alt="Tervory" />
           <button type="button" className={view === "settings" && dialog !== "plugins" ? "nav on" : "nav"} aria-current={view === "settings" && dialog !== "plugins" ? "page" : undefined} onClick={() => show("settings")}>Settings</button>
-          <a className="nav" href="/">Support</a>
+          <a className="nav" href="https://tervory.com">Support</a>
         </div>
       </aside>
 

@@ -7,12 +7,12 @@ import { MODEL_KEY_LINE, modelsMatching, priceLine, type ModelRow } from "./squa
 import type { WorkersFeed } from "./workers";
 import { WorkersPanel } from "./workers-panel";
 
-// Dashboard, Projects, Settings, and Support have no pages yet.
+// Workspace destinations are shared across product hosts.
 // These point at the nearest existing workspace routes.
 const TOP_LINKS = [
-  { href: "/ledger", label: "Dashboard" },
-  { href: "/tasks", label: "Projects" },
-  { href: "/", label: "Chats" },
+  { href: "https://app.tervory.com/", label: "Dashboard" },
+  { href: "/matters", label: "Projects" },
+  { href: "/chats", label: "Chats" },
 ] as const;
 
 const MIDDLE_LINKS = [
@@ -23,7 +23,7 @@ const MIDDLE_LINKS = [
 
 const BOTTOM_LINKS = [
   { href: "/onboarding", label: "Settings" },
-  { href: "/", label: "Support" },
+  { href: "https://tervory.com", label: "Support" },
 ] as const;
 
 type Turn = { role: "user" | "assistant"; content: string; error?: boolean; sources?: string[] };

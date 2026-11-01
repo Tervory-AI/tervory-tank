@@ -29,7 +29,7 @@ export function rigPriceHistory(identity: { tenantId: string; userId: string }, 
 }
 
 /** API-only reports. Identity is supplied by Clerk on the server, never the browser. */
-export async function caseStudyRequest(identity: { tenantId: string; userId: string }, path = "", query = new URLSearchParams()): Promise<Response> {
+export async function caseStudyRequest(identity: { tenantId: string; userId: string }, path = "", query = new URLSearchParams(), signal?: AbortSignal): Promise<Response> {
   const allowed = ["", "ensure", "clients", "base", "tiger", "market_lab", "rig", "zenas", "trigger", "tisan", "radix", "autumbra"];
   if (!allowed.includes(path)) throw new Error("Unknown request.");
   const url = new URL(`/v1/case-studies${path ? `/${path}` : ""}`, TANK_URL);
@@ -38,14 +38,61 @@ export async function caseStudyRequest(identity: { tenantId: string; userId: str
     if (value !== null) url.searchParams.set(key, value);
   }
   return fetch(url, {
-    method: path === "ensure" ? "POST" : "GET", cache: "no-store", redirect: "error",
+    method: path === "ensure" ? "POST" : "GET", cache: "no-store",
+    // Observe ensure redirects as non-retryable HTTP failures; never follow them.
+    redirect: path === "ensure" ? "manual" : "error", signal,
     headers: { "X-Tank-Key": TANK_API_KEY, "X-Tervory-User": identity.userId, "X-Tervory-Tenant": identity.tenantId },
   });
 }
 
+// Optional bookkeeping, never an authorization or squad grant. Durable Clerk
+// identity + Tank grants/ledger are the retry source on later requests, including
+// after process restarts. This bounded per-process guard only limits load.
+const reportRegistrations = new Map<string, { failures: number; next: number; pending?: Promise<void> }>();
+
 export async function ensureCaseStudyReports(identity: { tenantId: string; userId: string }): Promise<void> {
-  const response = await caseStudyRequest(identity, "ensure");
-  if (!response.ok) throw new Error();
+  // Reject malformed runtime configuration before classifying fetch failures.
+  const endpoint = new URL("/v1/case-studies/ensure", TANK_URL);
+  if (!["http:", "https:"].includes(endpoint.protocol)) throw new Error("Invalid Tank protocol");
+  const key = JSON.stringify([identity.tenantId, identity.userId]);
+  const previous = reportRegistrations.get(key);
+  if (previous?.pending) return previous.pending;
+  if (previous && previous.next > Date.now()) return;
+  if (!previous && reportRegistrations.size >= 1000) {
+    for (const [oldKey, entry] of reportRegistrations) {
+      if (!entry.pending && entry.next <= Date.now()) reportRegistrations.delete(oldKey);
+    }
+    // Defer bookkeeping rather than evict in-flight requests or grow without bound.
+    if (reportRegistrations.size >= 1000) return;
+  }
+  const state = { failures: previous?.failures ?? 0, next: 0, pending: undefined as Promise<void> | undefined };
+  reportRegistrations.set(key, state);
+  state.pending = (async () => {
+    let status: number | undefined;
+    try {
+      const response = await caseStudyRequest(identity, "ensure", new URLSearchParams(), AbortSignal.timeout(1500));
+      status = response.status;
+      if (!response.ok) throw new Error(`Case-study registration rejected (${status})`);
+      if (state.failures) console.info("case_study_registration_recovered", { tenantId: identity.tenantId });
+      state.failures = 0;
+      state.next = Date.now() + 30_000;
+    } catch (error) {
+      // Never contain security, configuration, programming or contract failures.
+      const transport = error instanceof TypeError || (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name));
+      if (!(status === 408 || status === 429 || (status !== undefined && status >= 500) || (status === undefined && transport))) {
+        reportRegistrations.delete(key);
+        throw error;
+      }
+      state.failures += 1;
+      const retryMs = Math.min(60_000, 1000 * 2 ** Math.min(state.failures - 1, 6));
+      state.next = Date.now() + retryMs;
+      // Never log response bodies, credentials, user data or transport messages.
+      console.warn("case_study_registration_deferred", { tenantId: identity.tenantId, status: status ?? "transport", retryMs });
+    } finally {
+      state.pending = undefined;
+    }
+  })();
+  return state.pending;
 }
 
 /** Base product only. Identity and allowed operations are resolved server-side. */
@@ -1052,10 +1099,13 @@ export function moaAction(userId: string, action: "bench" | "promote", body: { t
 }
 
 /** Public platform training matches, read from the active US Zenas room. */
-export function mootPublishedMatches(matchId?: string): Promise<{ matches: unknown[] }> {
+export function mootPublishedMatches(matchId?: string, signal?: AbortSignal): Promise<unknown> {
   const query = new URLSearchParams({ home_region: "us-east" });
   if (matchId) query.set("match_id", matchId);
-  return tank(`/v1/zenas/moot/published?${query}`, { method: "GET" });
+  const timeout = AbortSignal.timeout(10000);
+  return tank(`/v1/zenas/moot/published?${query}`, {
+    method: "GET", signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  });
 }
 
 /** MOOT-1a: list fixture problems via Tank → Zenas room (server-side only). */
