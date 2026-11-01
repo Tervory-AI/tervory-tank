@@ -272,6 +272,16 @@ class QuoteService(Service):
                 # (returns "sent") when the supplier already has the PO: then
                 # the order stands and nothing is refunded.
                 cancelled = await self.fulfilment.cancel(tenant_id, quote_id, f"supplier_order_failed:{exc}")
+                if cancelled == "unknown":
+                    # Rig can't tell whether the supplier has the PO, so it
+                    # neither cancels nor refunds. The order and payment stand
+                    # until a person or a later reconcile settles it.
+                    await record(state="supplier_order_unconfirmed", error=str(exc))
+                    body = {"request_id": quote_id, "state": "ordered", "price": price,
+                            "payment": {"reference": charge.reference, "test": True}}
+                    if ship_to is not None:
+                        body["ships_direct"] = True
+                    return body
                 if cancelled != "sent":
                     refunded = await payments.refund(provider, charge, "supplier_order_failed")
                     await record(state="supplier_order_failed_refunded", error=str(exc),

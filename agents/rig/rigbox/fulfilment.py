@@ -27,6 +27,7 @@ import hashlib
 import logging
 import os
 import re
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
@@ -173,18 +174,27 @@ class RigOrders:
                      env: dict[str, str] | None = None) -> str:
         """Cancel the order and its unsent PO before a refund. Never raises.
 
-        Returns "cancelled", "missing", "sent" or "unrecorded". "sent" means the
-        supplier already has the PO (it is marked sent, or its outbox file
-        exists and is reconciled now): the order is not cancelled, and the
-        caller must not refund. "unrecorded" means the store failed; the caller
-        still refunds and the open order stays visible.
+        Returns "cancelled", "missing", "sent", "unknown" or "unrecorded".
+        "sent" means the supplier already has the PO (it is marked sent, or its
+        outbox file exists and is reconciled now): the order is not cancelled,
+        and the caller must not refund. "unknown" means Rig could not tell
+        whether the PO was sent (for example the outbox file exists but can't be
+        read): nothing is cancelled and the caller must not refund; a person or
+        a later reconcile settles it. "unrecorded" means the store failed after
+        the outbox was checked; the caller still refunds and the open order
+        stays visible.
         """
         log = logging.getLogger(__name__)
         try:
             if await self._reconcile_one(tenant_id, quote_id, env) is not None:
                 return "sent"
-        except DeliveryError:
-            pass  # no sandbox outbox configured: nothing can have been written
+        except DeliveryError as exc:
+            # Only "no outbox configured" (or not in sandbox order mode) proves
+            # nothing was written. Anything else, such as outbox_unavailable,
+            # means the supplier may already have the PO.
+            if str(exc) not in ("outbox_not_configured", "order_mode"):
+                log.warning("locate order send state unknown before cancel")
+                return "unknown"
         except Exception:  # noqa: BLE001
             log.warning("locate order reconcile before cancel failed")
             return "unrecorded"
@@ -213,21 +223,31 @@ class RigOrders:
         return await self.store.supplier_po_sent(tenant_id, quote_id, record)
 
     async def reconcile(self, *, tenant_id: str, env: dict[str, str] | None = None,
-                        limit: int = 200) -> dict[str, Any]:
+                        limit: int = 200, older_than_minutes: int = 15,
+                        now: datetime | None = None) -> dict[str, Any]:
         """Sandbox reconcile for send_supplier_order's recorded:false case.
 
         For each draft PO whose order is still placed, if the outbox file was
         written (the supplier has the order) mark the PO sent with that file.
-        Never writes the outbox, cancels or refunds. Safe to run repeatedly.
+
+        A draft PO older than the cutoff with no outbox file is listed in
+        "stranded": the send never happened (for example Rig stopped between
+        recording the order and sending the PO). This method never writes the
+        outbox, cancels or refunds; the payment reconciler cancels and refunds
+        stranded auto-order POs. Safe to run repeatedly.
         """
         from rigbox import supplier_orders
 
         sandbox_orders(env)
         supplier_orders.outbox(env)
         drafts = await self.store.draft_supplier_orders(tenant_id, limit)
-        fixed = []
+        cutoff = (now or datetime.now(timezone.utc)) - timedelta(minutes=max(1, int(older_than_minutes)))
+        old = set(await self.store.draft_supplier_orders(tenant_id, limit, before=cutoff))
+        fixed, stranded = [], []
         for quote_id in drafts:
             purchase = await self._reconcile_one(tenant_id, quote_id, env)
             if purchase is not None:
                 fixed.append({"quote_id": quote_id, "purchase_order": purchase["number"]})
-        return {"checked": len(drafts), "reconciled": fixed}
+            elif quote_id in old:
+                stranded.append(quote_id)
+        return {"checked": len(drafts), "reconciled": fixed, "stranded": stranded}
