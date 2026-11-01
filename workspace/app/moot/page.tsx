@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 /** Public Moot index on zenas.tervory.com (product host). */
-export default async function MootIndexPage({ searchParams }: { searchParams?: Promise<{ region?: string }> } = {}) {
+export default async function MootIndexPage({ searchParams }: { searchParams?: Promise<{ region?: string }> }) {
   const region = (await searchParams)?.region === "za" ? "za" : "us-east";
   const result = await listPublishedMatches(undefined, region);
   return (

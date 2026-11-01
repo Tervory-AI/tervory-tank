@@ -55,7 +55,7 @@ function harness(fetch, env = {}) {
 }
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status });
 const failed = () => response({}, 503);
-const render = async (h, page, props) => renderToStaticMarkup(await h.load(page).default(props));
+const render = async (h, page, props = {}) => renderToStaticMarkup(await h.load(page).default(props));
 
 // These replace the old tests that asserted a production fixture store was public.
 test('Moot index reads published room matches through Tank, with US home and no cache', async () => {
