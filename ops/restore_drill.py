@@ -28,6 +28,8 @@ SAFE_ENV = {k: os.environ[k] for k in ('PATH', 'LANG', 'LC_ALL') if k in os.envi
 
 def command(*args: str, data: bytes | None = None) -> bytes:
     """Do not leak subprocess errors, dump rows or identity material."""
+    if args[0] == 'docker':
+        args = ('docker', '--host', 'unix:///var/run/docker.sock', *args[1:])
     result = subprocess.run(args, input=data, stdout=subprocess.PIPE,
                             stderr=subprocess.DEVNULL, env=SAFE_ENV, timeout=3600)
     if result.returncode:
@@ -89,7 +91,7 @@ def sandbox():
         yield box
     finally:
         for name in (box.pg, box.qd):
-            subprocess.run(['docker', 'rm', '-fv', name], stdout=subprocess.DEVNULL,
+            subprocess.run(['docker', '--host', 'unix:///var/run/docker.sock', 'rm', '-fv', name], stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL, env=SAFE_ENV, timeout=60)
         command('docker', 'network', 'rm', box.name)
 
@@ -150,7 +152,7 @@ def rls(box, folder):
     report = folder / 'rls.xml'
     env = {**SAFE_ENV, 'RESTORE_DRILL_PG': box.pg, 'PYTHONPATH': str(ROOT)}
     result = subprocess.run([sys.executable, '-m', 'pytest', '-q',
-                             'tests/tenant_rls/test_restored_copy.py',
+                             'tests/tenant_rls',
                              '--tb=no', f'--junitxml={report}'], cwd=ROOT, env=env,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3600)
     if report.exists():
