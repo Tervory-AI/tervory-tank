@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS agent_tisan.quote_events (
     actor text NOT NULL CHECK (length(btrim(actor)) BETWEEN 1 AND 256),
     happened_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     FOREIGN KEY (tenant_id,request_id) REFERENCES agent_tisan.quote_requests (tenant_id,id),
+    CHECK (from_state IS NOT NULL OR to_state='draft'),
     CHECK ((from_state IS NULL AND to_state='draft') OR
         (from_state='draft' AND to_state='submitted') OR
         (from_state='submitted' AND to_state='acknowledged') OR
