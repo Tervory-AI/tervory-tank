@@ -38,7 +38,7 @@ async def test_one_override_hook_preserves_full_receipt(monkeypatch,task,seat):
     response=await main.run_route(req(task),model_override='selected')
     assert response.model=='selected' and _OkGateway.calls==['selected']
     receipt=next(q for q in conn.executes if 'INSERT INTO tank.ledger' in q[0])
-    assert receipt[-1]==seat and receipt[2]==TENANT
+    assert receipt[17]==seat and receipt[2]==TENANT
     assert conn.queries[0][1][0]==('fixture' if seat=='logic' else 'command.turn')
 
 
@@ -84,7 +84,7 @@ async def test_registered_route_forwards_complexity_and_preserves_auth(monkeypat
     async def routed(request,caller,**kwargs):
         seen.append((request,caller,kwargs))
         return dict(ledger_id=str(uuid.uuid4()),model='selected',rung=1,content='done',tokens_in=1,tokens_out=1,cost_usd=None,latency_ms=0,moa={'missing':['research']})
-    row = {'model': 'selected', 'moa_enabled': True}
+    row = {'model': 'selected', 'priority': 'standard', 'moa_enabled': True}
     async def load(*args): return row
     monkeypatch.setenv('TANK_REGION', 'us-east')
     monkeypatch.setattr(main, 'load_policy', load)
@@ -407,7 +407,7 @@ async def test_disabled_route_does_not_import_or_call_moa(monkeypatch):
         if name == 'moa':
             raise AssertionError('Disabled routes must not depend on MoA')
         return original_import(name, *args, **kwargs)
-    async def load(*args): return {'moa_enabled': False, 'moa_config': 'stale and invalid'}
+    async def load(*args): return {'priority': 'standard', 'moa_enabled': False, 'moa_config': 'stale and invalid'}
     async def single(request, caller):
         assert request.agent == caller == 'base'
         return 'ordinary route'
@@ -422,7 +422,7 @@ async def test_disabled_route_does_not_import_or_call_moa(monkeypatch):
 @pytest.mark.parametrize('stored', ['invalid json', '[]', [], 123, {'shape': 'obsolete'},
                                    {'enabled': True}, {'seats': [{'name': 'logic', 'model': 'sonar'}]}])
 async def test_stale_config_logs_and_falls_back_to_single_route(monkeypatch, caplog, stored):
-    row = {'task_type': 'fixture', 'tenant_id': TENANT, 'model': 'selected',
+    row = {'task_type': 'fixture', 'tenant_id': TENANT, 'model': 'selected', 'priority': 'standard',
            'moa_enabled': True, 'moa_config': stored}
     async def load(*args): return row
     async def single(*args, **kwargs): return 'ordinary route'
@@ -439,8 +439,7 @@ async def test_stale_config_logs_and_falls_back_to_single_route(monkeypatch, cap
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('enabled', [False, True])
-async def test_code_policy_retains_core_refusal_without_running_skill_or_seats(monkeypatch, enabled):
-    import graduate
+async def test_missing_code_package_stays_refused_without_running_seats(monkeypatch, enabled):
     row = _policy_row(model='skill:base.fixture@1.0.0', moa_enabled=enabled,
                       moa_config=policy().model_dump())
     async def load(*args): return row
@@ -453,7 +452,7 @@ async def test_code_policy_retains_core_refusal_without_running_skill_or_seats(m
     monkeypatch.setattr(moa, 'run_mixture', forbidden)
     with pytest.raises(HTTPException) as error:
         await main.route(req().model_copy(update={'complex_request': True, 'interactive': False}), None)
-    assert error.value.status_code == 400 and error.value.detail == graduate.ROUTER_BLOCK
+    assert error.value.status_code == 404 and 'no package' in error.value.detail
 
 
 @pytest.mark.asyncio

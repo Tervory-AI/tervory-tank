@@ -14,6 +14,7 @@ from rigbox.logic import _active, _limit, _similarity, _tokens, approved, money,
 from rigbox.rank import _FILLER
 from rigbox.rank import _FUZZY, _common_english, _intent, _shopping_word
 from rigbox.rank import search as rank_search
+from rigbox.shopper_attributes import shopper_attributes
 
 # Category labels are split so this file stays clear of the shared room word list.
 _SIDEARM = "Pist" + "ols"
@@ -52,7 +53,7 @@ _CATEGORY_WORD = {
 }
 _IN_STOCK = frozenset({"in_stock", "low_stock"})
 _BOUND = re.compile(
-    r"\b(under|below|less than|up to|over|above|more than)\s+r?\s*(\d[\d\s]*)",
+    r"\b(under|below|less than|up to|over|above|more than) (?:r ?)?(\d[\d ]*)",
     re.IGNORECASE,
 )
 _IN = re.compile(r"\bin stock(?: only)?\b", re.IGNORECASE)
@@ -298,7 +299,7 @@ def present(
     item["family"] = str(row.get("family") or "")
     item["price_label"] = str(attributes.get("price_label") or "")
     item["demo_item"] = bool(attributes.get("demo_item"))
-    item["availability"] = _stock(attributes)
+    item["availability"] = item.get("availability") or _stock(attributes)
     item["options"] = attributes.get("options") if isinstance(attributes.get("options"), dict) else {}
     item["defaults"] = attributes.get("defaults") if isinstance(attributes.get("defaults"), dict) else {}
     item["fit"] = fit_state(_sku(row), centre, fits, _centre_cut(centre)) if centre is not None else None
@@ -682,8 +683,7 @@ def _outside_brand(query: str, products: list[dict[str, Any]]) -> str:
         listed.update(_tokens(str(row.get("brand") or "")))
         listed.update(_tokens(str(row.get("category") or "")))
         listed.update(_tokens(_sku(row)))
-        attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
-        for key, value in attributes.items():
+        for key, value in shopper_attributes(row.get("attributes")).items():
             listed.update(_tokens(str(key)))
             listed.update(_tokens(str(value)))
     words = re.findall(r"[A-Za-z0-9]+", query)
@@ -704,7 +704,7 @@ def _outside_brand(query: str, products: list[dict[str, Any]]) -> str:
 
 def _parse_constraints(query: str) -> tuple[str, dict[str, Any]]:
     filters: dict[str, Any] = {}
-    text = query
+    text = " ".join(query.split())
     if _IN.search(text):
         filters["in_stock"] = True
         text = _IN.sub(" ", text)
@@ -715,6 +715,7 @@ def _parse_constraints(query: str) -> tuple[str, dict[str, Any]]:
         filters["max_price_inclusive"] = high
         filters["price_range"] = True
         text = text[: span.start()] + " " + text[span.end() :]
+    text = " ".join(text.split())
     match = _BOUND.search(text)
     if match:
         amount = int(re.sub(r"\s+", "", match.group(2)))
@@ -966,7 +967,7 @@ _MODIFIER_WORDS = frozenset({
 _SPEC_WORDS = frozenset({
     "ported", "rmr", "rms", "acro", "threaded", "thread",
 })
-_THREAD_TOKEN = re.compile(r"\d+x\d+")
+_THREAD_TOKEN = re.compile(r"^\d+x\d+$")
 _LOOSE_WORD = re.compile(
     r"\b(?:left[-\s]?handed|left|iwb|kydex|review|best|gen(?:eration)?(?:\s+\d+)?)\b",
     re.IGNORECASE,
@@ -1009,8 +1010,8 @@ _Q_PREFIX = re.compile(
     re.IGNORECASE,
 )
 _DOES_FIT = re.compile(
-    r"^(?:does|do|will|can)\s+(?:the\s+|a\s+|an\s+)?(.+?)\s+fit(?:s)?\s+(?:on\s+)?(?:the\s+|a\s+|an\s+)?(.+?)\s*\??$",
-    re.IGNORECASE,
+    r"^(?:does|do|will|can) (?:the |a |an )?(?>(.+?) fits? )(?:on )?(?:the |a |an )?(.+?)\??$",
+    re.IGNORECASE | re.DOTALL,
 )
 _INCH = re.compile(r"\b(\d+(?:\.\d+)?)\s*(?:inch|inches)\b", re.IGNORECASE)
 # The amount stands alone, or follows its own R. A letter in the word before it stays put.
@@ -1126,7 +1127,7 @@ def _is_question(query: str) -> bool:
 
 
 def _rewrite_fit_question(query: str) -> str:
-    match = _DOES_FIT.match(query.strip())
+    match = _DOES_FIT.match(" ".join(query.split()))
     if match is None:
         return query
     return f"{match.group(1).strip()} for {match.group(2).strip()}"
@@ -1248,7 +1249,7 @@ def _fit_answer(
     filters: dict[str, Any],
     limit: int,
 ) -> dict[str, Any] | None:
-    match = _DOES_FIT.match(raw.strip())
+    match = _DOES_FIT.match(" ".join(raw.split()))
     if match is None:
         return None
     host = _named_sidearm(match.group(2), products)
@@ -1342,10 +1343,11 @@ def _clause_names(clause: str, products: list[dict[str, Any]]) -> bool:
 
 
 def _split_clauses(query: str, products: list[dict[str, Any]]) -> list[str]:
+    query = " ".join(query.split())
     forced = "+" in query or "," in query
     if not forced and not re.search(r"\b(?:with|and)\b", query, re.IGNORECASE):
         return []
-    parts = re.split(r"\s*(?:\+|,|\bwith\b|\band\b)\s*", query, flags=re.IGNORECASE)
+    parts = re.split(r"\+|,|\bwith\b|\band\b", query, flags=re.IGNORECASE)
     cleaned = [" ".join(part.split()) for part in parts if part.strip()]
     if len(cleaned) < 2:
         return []
@@ -2109,6 +2111,7 @@ def _uncovered_words(query: str, chosen: list[dict[str, Any]], products: list[di
 
 
 def _meaningful(token: str, brands: set[str]) -> bool:
+    token = " ".join(token.split())
     if len(token) < 2 or token in _FILLER or token in _QUERY_GLUE or token in _PRICE_WORDS:
         return False
     if token.isdigit() or _THREAD_TOKEN.fullmatch(token):
@@ -2474,7 +2477,7 @@ def _status(row: dict[str, Any]) -> str:
 
 
 def _available(row: dict[str, Any]) -> bool:
-    return _status(row) in _IN_STOCK
+    return _status(row) in _IN_STOCK or (row.get("availability") or {}).get("status") == "available_to_order"
 
 
 def _amount(row: dict[str, Any]) -> float:

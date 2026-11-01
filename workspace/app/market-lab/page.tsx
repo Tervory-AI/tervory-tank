@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { activeTenant } from "@/lib/tenant";
 import { refreshFeeds } from "./actions";
 import { readFlags, loadMarketLab } from "./load";
-import { offPanel } from "./plugins";
 import { quarantinePageError } from "./quarantine";
 import { loadQuarantine } from "./quarantine-server";
 import { QuarantinePanel } from "./quarantine-view";
-import { loadLabPlugins, resolveLabFeedKey } from "./vault-server";
+import { loadLabPlugins } from "./vault-server";
+import { WarningSection } from "./warnings-server";
 import { MarketLabView } from "./view";
 import "./market-lab.css";
 
@@ -23,24 +24,16 @@ export default async function MarketLabPage({
   searchParams: Promise<{ quarantine_error?: string | string[] }>;
 }) {
   const params = await searchParams;
-  let workspaceName: string | null = null;
-  let signedIn = false;
-  try {
-    const tenant = await activeTenant();
-    signedIn = Boolean(tenant);
-    workspaceName = tenant?.orgName ?? null;
-  } catch {
-    workspaceName = null;
-  }
-  const plugins = signedIn ? await loadLabPlugins() : offPanel("Sign in to use Plugins.");
+  const tenant = await activeTenant();
+  if (!tenant) redirect("/onboarding");
+  const workspaceName = tenant.orgName;
+  const plugins = await loadLabPlugins();
   const envKeys = readFlags();
-  const model = await loadMarketLab({
-    vault: { enabled: plugins.enabled, names: plugins.enabled ? plugins.secrets.map((row) => row.name) : [] },
-    resolveKey: plugins.enabled ? resolveLabFeedKey : undefined,
-  });
+  const model = await loadMarketLab(tenant.tenantId);
   const quarantine = await loadQuarantine();
   return (
     <MarketLabView
+      warnings={<WarningSection tenantId={tenant.tenantId} />}
       model={model}
       plugins={plugins}
       envKeys={envKeys}

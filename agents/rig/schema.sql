@@ -19,6 +19,19 @@
 
 CREATE SCHEMA IF NOT EXISTS agent_rig;
 
+-- Durable handoff to Tank's save_pair collector. No contact details or keys.
+-- Events are removed only in the same transaction that stores the training pair.
+CREATE TABLE IF NOT EXISTS agent_rig.training_events (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    source text NOT NULL CHECK (source IN ('rig_no_result', 'rig_quote')),
+    source_ref text NOT NULL,
+    input jsonb NOT NULL,
+    output jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, region, source, source_ref)
+);
+
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE TABLE IF NOT EXISTS agent_rig.products (
@@ -41,6 +54,36 @@ CREATE TABLE IF NOT EXISTS agent_rig.products (
 );
 
 CREATE INDEX IF NOT EXISTS products_tenant_active ON agent_rig.products (tenant_id, active);
+
+-- Append-only event history. Consumer retries never overwrite earlier prices.
+CREATE TABLE IF NOT EXISTS agent_rig.price_history (
+    tenant_id uuid NOT NULL,
+    product_id text NOT NULL,
+    price numeric NOT NULL CHECK(price >= 0 AND price < 'Infinity'::numeric),
+    currency text NOT NULL CHECK(currency ~ '^[A-Z]{3}$'),
+    observed_at timestamptz NOT NULL,
+    event_id uuid PRIMARY KEY
+);
+CREATE INDEX IF NOT EXISTS price_history_tenant_product
+    ON agent_rig.price_history(tenant_id,product_id,observed_at,event_id);
+
+-- Tiger retries are idempotent and cannot replace a newer confirmed observation.
+CREATE TABLE IF NOT EXISTS agent_rig.tiger_receipts (
+    tenant_id uuid NOT NULL,
+    sku text NOT NULL,
+    url text NOT NULL,
+    observed_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, sku, url),
+    FOREIGN KEY (tenant_id, sku) REFERENCES agent_rig.products(tenant_id, sku) ON DELETE CASCADE
+);
+
+-- Manual removal survives feed refresh and restart. Only a manual import clears it.
+CREATE TABLE IF NOT EXISTS agent_rig.deleted_products (
+    tenant_id uuid NOT NULL,
+    sku text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, sku)
+);
 
 CREATE INDEX IF NOT EXISTS products_search_fts ON agent_rig.products
 USING gin (to_tsvector('simple',
@@ -113,6 +156,14 @@ CREATE TABLE IF NOT EXISTS agent_rig.retailers (
 );
 
 ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT '';
+ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS theme text NOT NULL DEFAULT 'neutral'
+    CHECK (theme IN ('neutral', 'custom-nation'));
+ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS quote_notice jsonb;
+-- Optional cross-store fulfilment (Locate). Off for every store until it opts in.
+-- Off means no supply lookup in search or quotes and no locate, confirm or accept.
+ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS locate_enabled boolean NOT NULL DEFAULT false;
+-- Optional blind ship: Locate orders ship from the other store straight to the shopper. Off by default.
+ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS blind_ship boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS agent_rig.feeds (
     tenant_id  uuid NOT NULL,
@@ -120,6 +171,15 @@ CREATE TABLE IF NOT EXISTS agent_rig.feeds (
     url        text NOT NULL,
     currency   text NOT NULL DEFAULT '',
     PRIMARY KEY (tenant_id, url)
+);
+
+-- Legacy feed rows predate supplier_costs. Until a feed refresh records its
+-- product membership, its tenant's provenance is unknown and Tiger fails closed.
+ALTER TABLE agent_rig.feeds ADD COLUMN IF NOT EXISTS watch_indexed boolean NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS agent_rig.feed_products (
+    tenant_id uuid NOT NULL, sku text NOT NULL, feed_url text NOT NULL,
+    PRIMARY KEY (tenant_id, sku, feed_url),
+    FOREIGN KEY (tenant_id, sku) REFERENCES agent_rig.products(tenant_id, sku) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS agent_rig.answers (
@@ -261,6 +321,46 @@ CREATE INDEX IF NOT EXISTS rig_feed_receipts_tenant_created ON agent_rig.feed_re
 ALTER TABLE agent_rig.supplier_costs ADD COLUMN IF NOT EXISTS feed_metadata jsonb NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE agent_rig.feed_receipts ADD COLUMN IF NOT EXISTS feed_id text NOT NULL DEFAULT '';
 
+-- COST-GUARD (#505): pricing inputs a catalogue import put in attributes
+-- (Custom Nation's export_usd) live here, never in agent_rig.products.attributes.
+-- Store-only: no shopper query reads this table. The import moves them on
+-- write (rigbox.catalogue._product_row), and the two statements below move keys
+-- already stored. Both are repeat-safe: copy first, then strip, so a second
+-- run finds nothing to move. On conflict the value still in attributes wins,
+-- because it came from the newest import (for example a re-import after a
+-- rollback). The pattern is rigbox.shopper_attributes.PRIVATE_KEY_PATTERN
+-- (a test keeps them identical). PgStore.apply_schema logs how many products
+-- still carry a matching key afterwards, so a silent no-op (for example under
+-- forced RLS with no tenant set) shows up in the startup log.
+-- Reverse (rollback to a build that reads costs from attributes), run by hand:
+--   UPDATE agent_rig.products p SET attributes = p.attributes || x.attributes
+--   FROM agent_rig.product_private_attributes x
+--   WHERE x.tenant_id = p.tenant_id AND x.sku = p.sku
+CREATE TABLE IF NOT EXISTS agent_rig.product_private_attributes (
+    tenant_id uuid NOT NULL,
+    sku text NOT NULL,
+    attributes jsonb NOT NULL DEFAULT '{}'::jsonb,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, sku),
+    FOREIGN KEY (tenant_id, sku) REFERENCES agent_rig.products(tenant_id, sku) ON DELETE CASCADE
+);
+INSERT INTO agent_rig.product_private_attributes (tenant_id, sku, attributes)
+SELECT p.tenant_id, p.sku, (
+    SELECT jsonb_object_agg(e.key, e.value) FROM jsonb_each(p.attributes) AS e(key, value)
+    WHERE e.key ~* 'cost|duty|margin|landed|markup|profit|wholesale|(^|_)export|(^|_)(buy|purchase|dealer|trade)_?price|(^|_)vat($|_)|(^|_)fx($|_)|exchange_rate|supplier|pricing_rule|^store$|^source_id$|ship.?from|^region$|^seen_at$')
+FROM agent_rig.products p
+WHERE jsonb_typeof(p.attributes) = 'object'
+  AND EXISTS (SELECT 1 FROM jsonb_object_keys(p.attributes) AS k(key)
+              WHERE k.key ~* 'cost|duty|margin|landed|markup|profit|wholesale|(^|_)export|(^|_)(buy|purchase|dealer|trade)_?price|(^|_)vat($|_)|(^|_)fx($|_)|exchange_rate|supplier|pricing_rule|^store$|^source_id$|ship.?from|^region$|^seen_at$')
+ON CONFLICT (tenant_id, sku) DO UPDATE
+    SET attributes = agent_rig.product_private_attributes.attributes || EXCLUDED.attributes, updated_at = now();
+UPDATE agent_rig.products p SET attributes = coalesce((
+    SELECT jsonb_object_agg(e.key, e.value) FROM jsonb_each(p.attributes) AS e(key, value)
+    WHERE NOT e.key ~* 'cost|duty|margin|landed|markup|profit|wholesale|(^|_)export|(^|_)(buy|purchase|dealer|trade)_?price|(^|_)vat($|_)|(^|_)fx($|_)|exchange_rate|supplier|pricing_rule|^store$|^source_id$|ship.?from|^region$|^seen_at$'), '{}'::jsonb)
+WHERE jsonb_typeof(p.attributes) = 'object'
+  AND EXISTS (SELECT 1 FROM jsonb_object_keys(p.attributes) AS k(key)
+              WHERE k.key ~* 'cost|duty|margin|landed|markup|profit|wholesale|(^|_)export|(^|_)(buy|purchase|dealer|trade)_?price|(^|_)vat($|_)|(^|_)fx($|_)|exchange_rate|supplier|pricing_rule|^store$|^source_id$|ship.?from|^region$|^seen_at$');
+
 -- RIG-5: immutable model revisions, reviewed anchors and a per-tenant add-on.
 -- A forge result is never a shopper asset until both automatic and human checks pass.
 CREATE TABLE IF NOT EXISTS agent_rig.rig_3d_entitlements (
@@ -299,3 +399,176 @@ CREATE TABLE IF NOT EXISTS agent_rig.rig_3d_kiosks (
     PRIMARY KEY (tenant_id,id)
 );
 -- End RIG-5.
+
+-- Prompt2: approved store supplier network. Private inputs never selected as products.
+ALTER TABLE agent_rig.products ADD COLUMN IF NOT EXISTS mpn text;
+CREATE TABLE IF NOT EXISTS agent_rig.supply_sources (
+    tenant_id uuid NOT NULL,
+    id text NOT NULL,
+    approved boolean NOT NULL DEFAULT false,
+    priority integer NOT NULL DEFAULT 0,
+    max_offer_age_seconds integer NOT NULL CHECK (max_offer_age_seconds > 0),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE TABLE IF NOT EXISTS agent_rig.supply_offers (
+    tenant_id uuid NOT NULL,
+    source_id text NOT NULL,
+    sku text NOT NULL,
+    gtin text,
+    brand text NOT NULL,
+    mpn text,
+    quantity numeric CHECK (quantity >= 0 AND quantity < 'Infinity'::numeric),
+    status text NOT NULL CHECK (status IN ('available', 'unavailable', 'unknown')),
+    eta text,
+    ship_days integer CHECK (ship_days >= 0),
+    region text NOT NULL,
+    cost numeric NOT NULL CHECK (cost >= 0 AND cost < 'Infinity'::numeric),
+    currency text NOT NULL,
+    seen_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, source_id, sku),
+    FOREIGN KEY (tenant_id, source_id) REFERENCES agent_rig.supply_sources(tenant_id, id)
+);
+CREATE TABLE IF NOT EXISTS agent_rig.supply_sku_map (
+    tenant_id uuid NOT NULL,
+    product_sku text NOT NULL,
+    source_id text NOT NULL,
+    offer_sku text NOT NULL,
+    PRIMARY KEY (tenant_id, product_sku, source_id, offer_sku),
+    FOREIGN KEY (tenant_id, product_sku) REFERENCES agent_rig.products(tenant_id, sku),
+    FOREIGN KEY (tenant_id, source_id, offer_sku) REFERENCES agent_rig.supply_offers(tenant_id, source_id, sku)
+);
+
+-- Located counts mean persisted quote requests, never sales or estimates.
+ALTER TABLE agent_rig.widget_counts ADD COLUMN IF NOT EXISTS located_count bigint NOT NULL DEFAULT 0 CHECK (located_count >= 0);
+ALTER TABLE agent_rig.widget_counts ADD COLUMN IF NOT EXISTS kept_revenue jsonb NOT NULL DEFAULT '{}'::jsonb;
+CREATE TABLE IF NOT EXISTS agent_rig.supply_sale_receipts (
+    tenant_id uuid NOT NULL,
+    receipt_id text NOT NULL,
+    quote_id text NOT NULL,
+    product_id text NOT NULL,
+    amount numeric NOT NULL CHECK (amount > '-Infinity'::numeric AND amount < 'Infinity'::numeric),
+    currency text NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
+    source_ref text NOT NULL,
+    received_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, receipt_id)
+);
+-- Distinguish a feed's zero stock from a deliberately disabled catalogue item.
+ALTER TABLE agent_rig.products ADD COLUMN IF NOT EXISTS supply_eligible boolean NOT NULL DEFAULT false;
+-- Preserve the existing feed pricing scope identity instead of inventing one.
+ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT '';
+ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS site text NOT NULL DEFAULT '';
+ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS feed_id text NOT NULL DEFAULT '';
+-- Blind ship: this source must pack a neutral slip (no own branding or invoice in the parcel).
+ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS neutral_slip_required boolean NOT NULL DEFAULT false;
+
+-- Locate confirm. The offer page is re-read live before any hold is issued.
+ALTER TABLE agent_rig.supply_offers ADD COLUMN IF NOT EXISTS url text;
+-- A hold is a short-lived, single-use price snapshot after a live check.
+-- private holds the supplier evidence and is never returned to a shopper.
+CREATE TABLE IF NOT EXISTS agent_rig.supply_holds (
+    tenant_id uuid NOT NULL,
+    id text NOT NULL,
+    product_id text NOT NULL,
+    public jsonb NOT NULL,
+    private jsonb NOT NULL,
+    expires_at timestamptz NOT NULL,
+    used_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS supply_holds_expiry ON agent_rig.supply_holds (expires_at);
+
+-- Locate orders live in Rig's own database (Tervory no longer uses Odoo).
+-- One row per paid Locate Accept, keyed by its quote, so a retry never makes
+-- a second order. Private store records: never returned to a shopper.
+CREATE TABLE IF NOT EXISTS agent_rig.locate_orders (
+    tenant_id uuid NOT NULL,
+    quote_id text NOT NULL,
+    number text NOT NULL,
+    state text NOT NULL DEFAULT 'placed' CHECK (state IN ('placed', 'cancelled')),
+    product_id text NOT NULL,
+    price numeric(14, 2) NOT NULL CHECK (price > 0),
+    currency text NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
+    -- Blind ship only: the shopper's delivery address. NULL ships to the store.
+    ship_to jsonb,
+    cancel_reason text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, quote_id),
+    UNIQUE (tenant_id, number)
+);
+-- The store's purchase order to the approved source, one per Locate order.
+-- unit_cost is the source's live price: supplier-side only.
+CREATE TABLE IF NOT EXISTS agent_rig.supplier_purchase_orders (
+    tenant_id uuid NOT NULL,
+    quote_id text NOT NULL,
+    number text NOT NULL,
+    state text NOT NULL DEFAULT 'draft' CHECK (state IN ('draft', 'sent', 'cancelled')),
+    source_id text NOT NULL,
+    vendor_name text NOT NULL DEFAULT '',
+    order_email text NOT NULL DEFAULT '',
+    item_sku text NOT NULL DEFAULT '',
+    item_url text NOT NULL DEFAULT '',
+    quantity integer NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    unit_cost numeric(14, 2) NOT NULL CHECK (unit_cost > 0),
+    currency text NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
+    -- Blind ship: ship straight to this address with a neutral slip if required.
+    ship_to jsonb,
+    neutral_slip boolean NOT NULL DEFAULT false,
+    instructions text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, quote_id),
+    UNIQUE (tenant_id, number),
+    FOREIGN KEY (tenant_id, quote_id) REFERENCES agent_rig.locate_orders (tenant_id, quote_id)
+);
+
+-- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
+CREATE TABLE IF NOT EXISTS agent_rig.memory_records (
+    id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    agent text NOT NULL DEFAULT 'rig' CHECK (agent = 'rig'),
+    claim text NOT NULL CHECK (length(claim) BETWEEN 1 AND 8000),
+    evidence jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(evidence) = 'array'),
+    confidence double precision NOT NULL DEFAULT 0.5 CHECK (confidence BETWEEN 0 AND 1),
+    last_verified timestamptz,
+    embed_model text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    tier text NOT NULL DEFAULT 'client' CHECK (tier IN ('client','platform')),
+    kind text NOT NULL DEFAULT 'fact',
+    meta jsonb NOT NULL DEFAULT '{}',
+    seen integer NOT NULL DEFAULT 1,
+    CHECK (tier <> 'platform' OR tenant_id = '00000000-0000-0000-0000-000000000001'::uuid)
+);
+CREATE INDEX IF NOT EXISTS memory_records_scope ON agent_rig.memory_records (tenant_id, tier, created_at, id);
+CREATE INDEX IF NOT EXISTS memory_records_encoder ON agent_rig.memory_records (tenant_id, embed_model);
+CREATE TABLE IF NOT EXISTS agent_rig.memory_index_jobs (
+    row_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    target_model text NOT NULL,
+    operation text NOT NULL DEFAULT 'upsert' CHECK (operation IN ('upsert','delete')),
+    attempts integer NOT NULL DEFAULT 0,
+    run_at timestamptz NOT NULL DEFAULT now(),
+    last_error text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, row_id, target_model, operation)
+);
+CREATE INDEX IF NOT EXISTS memory_index_jobs_due ON agent_rig.memory_index_jobs (run_at);
+CREATE TABLE IF NOT EXISTS agent_rig.memory_publish_policy (
+    tenant_id uuid PRIMARY KEY,
+    enabled boolean NOT NULL DEFAULT false,
+    identifiers jsonb NOT NULL DEFAULT '{}',
+    updated_by text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS agent_rig.memory_publish_log (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    actor text NOT NULL,
+    happened_at timestamptz NOT NULL DEFAULT now(),
+    source_row uuid NOT NULL,
+    result text NOT NULL CHECK (result IN ('disabled','missing','refused','published','already_published')),
+    published_row uuid
+);
+-- END GENERATED AGENT MEMORY

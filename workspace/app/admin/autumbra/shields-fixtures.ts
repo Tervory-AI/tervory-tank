@@ -1,4 +1,4 @@
-// Silent fixtures for Autumbra Enforce when Tank shields API is unavailable.
+// Offline test fixtures only. Live pages never import these values.
 // No Cloudflare apply. No Hugging Face. dry_run only.
 
 export type ShieldReceipt = { step: string; at: string; ledger_id: string; status: string };

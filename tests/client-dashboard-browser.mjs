@@ -1,0 +1,37 @@
+// Mounted production greeting, task board and shared shell; isolated offline fixtures only.
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {createServer} from 'node:http';
+import {createRequire} from 'node:module';
+const root=process.cwd(),require=createRequire(path.join(root,'workspace/package.json'));
+const {build}=require(process.env.F06_ESBUILD_PATH || 'esbuild');
+const {chromium}=require(process.env.F06_PLAYWRIGHT_PATH || 'playwright');
+const out=process.env.F06_SCREENSHOT_DIR || path.join(root,'tests/artifacts/f06');
+await fs.mkdir(out,{recursive:true});
+const entry=`import React from 'react';import{createRoot}from'react-dom/client';import{createPortal}from'react-dom';import{Shell}from'./app/shell';import{DashboardGreeting}from'./app/dashboard-greeting';import Tasks from './app/tasks/page';
+function Dashboard(){const [slot,setSlot]=React.useState(null);React.useEffect(()=>{setSlot(document.querySelector('[data-greeting]'))},[]);return <><div dangerouslySetInnerHTML={{__html:window.fixture}}/>{slot&&createPortal(<DashboardGreeting firstName="Alex"/>,slot)}</>}
+const readAccess=async()=>({founder:false,reviewer:false});createRoot(document.getElementById('root')).render(<Shell founder={false} reviewer={false} readAccess={readAccess}>{location.pathname==='/tasks'?<Tasks/>:<Dashboard/>}</Shell>);`;
+const bundle=await build({stdin:{contents:entry,resolveDir:path.join(root,'workspace'),loader:'tsx'},bundle:true,write:false,loader:{".css":"empty"},format:'esm',jsx:'automatic',define:{'process.env.NODE_ENV':'"production"'},plugins:[{name:'offline',setup(b){
+ b.onResolve({filter:/^(@clerk\/nextjs|next\/link|next\/navigation)$/},a=>({path:a.path,namespace:'offline'}));
+ b.onLoad({filter:/.*/,namespace:'offline'},a=>({loader:'js',resolveDir:path.join(root,'workspace'),contents:a.path==='@clerk/nextjs'?`export const useAuth=()=>({isLoaded:true,isSignedIn:false,userId:null});export const OrganizationSwitcher=()=>null;export const UserButton=()=>null;`:a.path==='next/link'?`import React from 'react';export default function Link(p){return React.createElement('a',p)}`:`export const usePathname=()=>location.pathname;export const useSearchParams=()=>new URLSearchParams(location.search);export const useSelectedLayoutSegments=()=>[location.pathname.split('/')[1]];` }));
+}}]});
+let css='';for(const file of ['globals.css','control/dashboard.css','dashboard.css','tank/proof/savings.css','tasks/tasks.css'])css+=await fs.readFile(path.join(root,'workspace/app',file),'utf8');
+css+=`@font-face{font-family:Inter;src:url(/fonts/Inter-latin.woff2);font-weight:100 900}@font-face{font-family:Jost;src:url(/fonts/Jost-300-latin.woff2);font-weight:300}:root{--font-inter:Inter;--font-jost:Jost;--font-mono:monospace}`;
+const fixtures={};for(const state of ['filled','zero','error']){const html=await fs.readFile(path.join(root,`tests/artifacts/f06/${state}.html`),'utf8');fixtures[state]=html.slice(html.indexOf('</style>')+8).replace(/<h1>.*?<\/h1>/,'<div data-greeting></div>')}
+const assets=new Map();for(const name of await fs.readdir(path.join(root,'workspace/public/brand'))){const file=path.join(root,'workspace/public/brand',name);if((await fs.stat(file)).isFile())assets.set(`/brand/${name}`,await fs.readFile(file))}
+for(const name of ['Inter-latin.woff2','Jost-300-latin.woff2'])assets.set(`/fonts/${name}`,await fs.readFile(path.join(root,'workspace/app/fonts',name)));
+const server=createServer((req,res)=>{const url=new URL(req.url,'http://localhost');if(url.pathname==='/bundle.js'){res.setHeader('Content-Type','text/javascript');res.end(bundle.outputFiles.find(f=>f.path.endsWith('.js'))?.text || bundle.outputFiles[0].text);return}if(assets.has(url.pathname)){res.end(assets.get(url.pathname));return}res.setHeader('Content-Type','text/html');res.end(`<!doctype html><meta charset="utf-8"><style>${css}</style><div id="root"></div><script>window.fixture=${JSON.stringify(fixtures[url.searchParams.get('state')||'filled']).replaceAll('<','\\u003c')}</script><script type="module" src="/bundle.js"></script>`)});
+await new Promise(r=>server.listen(0,'127.0.0.1',r));
+const browser=await chromium.launch({executablePath:process.env.F06_CHROMIUM,args:['--no-sandbox','--disable-gpu']});const base=`http://127.0.0.1:${server.address().port}`;
+const errors=[];
+async function newPage(options={}){
+ const p=await browser.newPage(options);
+ p.on('pageerror',error=>errors.push(error.message));
+ await p.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
+ return p;
+}
+try{
+ for(const width of [1440,375])for(const state of ['filled','zero','error']){const p=await newPage({viewport:{width,height:900},timezoneId:'America/Los_Angeles',colorScheme:'light'});await p.clock.setFixedTime(new Date('2026-11-01T20:00:00Z'));await p.goto(`${base}/?state=${state}`);await p.getByRole('heading',{name:'Good afternoon, Alex',exact:true}).waitFor();await p.evaluate(()=>document.fonts.ready);if(process.env.F06_DEBUG&&state==='filled'&&width===1440)console.log(await p.locator('.dash-client').evaluate(el=>[...el.children].map(e=>({tag:e.tagName,cls:e.className,y:e.getBoundingClientRect().y,h:e.getBoundingClientRect().height,margin:getComputedStyle(e).margin,display:getComputedStyle(e).display}))));assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.equal(await p.locator('.dash-sidebar').count(),0);assert.equal(await p.locator('#app-sidebar').count(),1);if(width===375){assert.equal(await p.locator('#shell-menu').isVisible(),true)}else assert.equal(await p.locator('#app-sidebar').isVisible(),true);await p.screenshot({path:path.join(out,`${state}-${width}.png`),fullPage:true});await p.close()}
+ const p=await newPage();await p.route('**/api/tasks',async route=>{await new Promise(r=>setTimeout(r,150));await route.fulfill({json:[{id:'own-job',title:'Own requested work',task_type:'tier0.answer',status:'running',result:null,created_at:'2026-11-01T00:00:00Z'}]})});await p.goto(`${base}/tasks#task-own-job`);await p.locator('#task-own-job').waitFor();await p.waitForFunction(()=>document.activeElement?.id==='task-own-job');assert.equal(await p.locator('#task-own-job').textContent().then(t=>t.includes('Own requested work')),true);await p.locator('#task-title').focus();await p.waitForTimeout(3000);assert.equal(await p.locator(':focus').getAttribute('id'),'task-title');await p.close();assert.deepEqual(errors,[], 'No page errors across dashboard and task pages');console.log('PASS: mounted local greeting, shared shell and truthful states at 1440/375; delayed per-job deep link focuses own task. Offline fixtures only.');
+}finally{await browser.close();await new Promise(r=>server.close(r))}

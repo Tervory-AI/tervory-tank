@@ -35,7 +35,28 @@ class ActiveBatch:
 active: dict[tuple[uuid.UUID, uuid.UUID], ActiveBatch] = {}
 
 
-async def drive_batch(pool, skills, task_id, cfg, call):
+async def run_code_first(pool: Any, skills: Any, task_id: uuid.UUID, cfg: dict, call: Any) -> None:
+    """Run the existing free passes before asking the brain to recover gaps."""
+    from room import _run_batch
+
+    tenant = uuid.UUID(str(cfg["tenant_id"]))
+    if cfg.get("preview"):
+        raise RuntimeError("Base's brain may use only approved skills")
+
+    async def free_skill(skill_id: str, payload: dict) -> dict:
+        return await call(skill_id, {**payload, "_base_brain_task": str(task_id), "_base_brain_free": True})
+
+    await _run_batch(pool, task_id, cfg, free_skill)
+    outcome = await results(ActiveBatch(pool, cfg, call), Task(tenant_id=tenant, task_id=task_id))
+    # A pause/failure is not permission to spend. Completed, sourced code
+    # answers need no model conversation or paid continuation.
+    if outcome["pipeline_status"] != "done" or not outcome["unresolved"]:
+        return
+    await drive_batch(pool, skills, task_id, cfg, call, free_result=outcome)
+
+
+async def drive_batch(pool, skills, task_id, cfg, call, *, free_result: dict | None = None):
+    """Recover unresolved work; the queue enters through run_code_first."""
     tenant = uuid.UUID(str(cfg["tenant_id"]))
     identity = (tenant, task_id)
     if cfg.get("preview"):
@@ -43,6 +64,10 @@ async def drive_batch(pool, skills, task_id, cfg, call):
     async def scoped_call(skill_id, payload):
         return await call(skill_id, {**payload, "_base_brain_task": str(task_id)})
     batch = ActiveBatch(pool, cfg, scoped_call)
+    if free_result is not None:
+        # The brain's pipeline_run tool receives the completed free pass. It
+        # must not repeat reads or charge for work the queue already did.
+        batch.ran, batch.operation, batch.result = True, "pipeline", free_result
     active[identity] = batch
     receipt = None
     try:
@@ -256,6 +281,8 @@ async def check_website(url: str) -> None:
 
 
 async def phase_result(batch: ActiveBatch) -> dict:
+    if batch.job is None and batch.result is not None:
+        return batch.result
     if batch.job is None or not batch.job.done():
         return {"pipeline_status": "running"}
     return batch.result or {"pipeline_status": "failed", "error": "Pipeline could not finish."}
@@ -294,9 +321,9 @@ def register(app):
         batch = selected(body, x_tank_key)
         operation = "finish" if body.finish else "pipeline"
         async with batch.lock:
-            if batch.job and batch.operation == operation:
+            if batch.operation == operation and (batch.job or batch.result is not None):
                 result = await phase_result(batch)
-                return JSONResponse(result, status_code=202 if not batch.job.done() else 200)
+                return JSONResponse(result, status_code=202 if batch.job and not batch.job.done() else 200)
             if batch.job and not batch.job.done():
                 raise HTTPException(409, "Another pipeline operation is still running.")
             if body.finish:

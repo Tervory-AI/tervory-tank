@@ -13,7 +13,12 @@ from fastapi import FastAPI
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'agents' / 'radix'))
+# Other rooms have their own gold_sources; another test in this worker may have
+# cached one, so import Radix's fresh and put the cached copy back.
+_cached_gold = sys.modules.pop('gold_sources', None)
 import gold_sources as gold  # noqa: E402
+if _cached_gold is not None:
+    sys.modules['gold_sources'] = _cached_gold
 from test_radix_business import ENGINE  # noqa: E402
 from scanlib import dependencies, static  # noqa: E402
 from scanlib import secrets as scanner_secrets  # noqa: E402
@@ -112,4 +117,5 @@ def test_image_packages_route_and_fixtures():
     assert 'COPY radix/gold_sources.py /app/gold_sources.py' in dockerfile
     assert 'COPY radix/evals/gold /app/evals/gold' in dockerfile
     from test_rx1_scans import _load_app
-    assert '/gold/candidates' in {route.path for route in _load_app().app.routes}
+    from http_routes import http_paths
+    assert '/gold/candidates' in http_paths(_load_app().app.routes)

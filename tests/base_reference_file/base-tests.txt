@@ -1,0 +1,117 @@
+........................................................................ [ 22%]
+............................F........................................... [ 44%]
+...................................................................F.... [ 66%]
+........................................................................ [ 88%]
+....................................                                     [100%]
+=================================== FAILURES ===================================
+__________________________ test_founder_trial_action ___________________________
+
+    def test_founder_trial_action():
+        result = subprocess.run(
+            ["node", str(ROOT / "tests/base_trial_route.cjs")],
+            cwd=ROOT, capture_output=True, text=True,
+        )
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: node:internal/modules/cjs/loader:1520
+E           throw err;
+E           ^
+E         
+E         Error: Cannot find module 'typescript'
+E         Require stack:
+E         - /workspace/tervory-tank/workspace/package.json
+E             at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E             at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E             at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E             at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E             at Module._load (node:internal/modules/cjs/loader:1294:5)
+E             at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E             at Module.require (node:internal/modules/cjs/loader:1617:12)
+E             at require (node:internal/modules/helpers:153:16)
+E             at Object.<anonymous> (/workspace/tervory-tank/tests/base_trial_route.cjs:7:12)
+E             at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E           code: 'MODULE_NOT_FOUND',
+E           requireStack: [ '/workspace/tervory-tank/workspace/package.json' ]
+E         }
+E         
+E         Node.js v24.19.0
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['node', '/workspace/tervory-tank/tests/base_trial_route.cjs'], returncode=1, stdout='', stderr=...e: 'MODULE_NOT_FOUND',\n  requireStack: [ '/workspace/tervory-tank/workspace/package.json' ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_base_page.py:41: AssertionError
+_______________ test_base_upload_status_download_and_two_tenants _______________
+
+    def test_base_upload_status_download_and_two_tenants() -> None:
+        result = subprocess.run(["node", "tests/base_works.cjs"], cwd=ROOT, capture_output=True, text=True, timeout=60)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: node:internal/modules/cjs/loader:1520
+E           throw err;
+E           ^
+E         
+E         Error: Cannot find module 'typescript'
+E         Require stack:
+E         - /workspace/tervory-tank/workspace/package.json
+E             at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E             at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E             at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E             at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E             at Module._load (node:internal/modules/cjs/loader:1294:5)
+E             at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E             at Module.require (node:internal/modules/cjs/loader:1617:12)
+E             at require (node:internal/modules/helpers:153:16)
+E             at Object.<anonymous> (/workspace/tervory-tank/tests/base_works.cjs:8:12)
+E             at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E           code: 'MODULE_NOT_FOUND',
+E           requireStack: [ '/workspace/tervory-tank/workspace/package.json' ]
+E         }
+E         
+E         Node.js v24.19.0
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['node', 'tests/base_works.cjs'], returncode=1, stdout='', stderr="node:internal/modules/cjs/loa...e: 'MODULE_NOT_FOUND',\n  requireStack: [ '/workspace/tervory-tank/workspace/package.json' ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_base_workflow.py:10: AssertionError
+=============================== warnings summary ===============================
+tank/main.py:675
+  /workspace/tervory-tank/tank/main.py:675: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+../worker-venv/lib/python3.12/site-packages/fastapi/applications.py:4723
+../worker-venv/lib/python3.12/site-packages/fastapi/applications.py:4723
+  /workspace/worker-venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tank/main.py:710
+  /workspace/tervory-tank/tank/main.py:710: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tank/agent_skills.py:529
+tests/test_base_public_http.py::test_approved_scrape_block_survives_into_pipeline_row_without_archive_retry
+  /workspace/tervory-tank/tank/agent_skills.py:529: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_base_page.py::test_founder_trial_action - AssertionError: n...
+FAILED tests/test_base_workflow.py::test_base_upload_status_download_and_two_tenants
+2 failed, 322 passed, 6 warnings in 160.40s (0:02:40)

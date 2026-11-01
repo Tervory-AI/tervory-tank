@@ -7,6 +7,7 @@ Additive storage only: tank.workers_heartbeat (see schema.sql). No existing tabl
 from __future__ import annotations
 
 import hmac
+import asyncio
 import os
 import re
 from datetime import datetime, timezone
@@ -137,13 +138,45 @@ def view(row: Any, now: datetime | None = None) -> dict[str, Any] | None:
 
 @founder_router.get("/workers")
 async def workers_tile() -> dict[str, Any]:
-    from controls import workers_paused
+    from controls import PLATFORM
 
-    async with db().acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT worker,state,issue,commit,last_error,seen_at FROM tank.workers_heartbeat ORDER BY seen_at DESC LIMIT 1"
-        )
-    return {"workers_paused": await workers_paused(), "worker": view(row), "stale_after_s": STALE_AFTER_S}
+    try:
+        async with asyncio.timeout(5):
+            # TenantPool.acquire already opens the checkout transaction (read committed), so the
+            # snapshot options go there. A nested conn.transaction(isolation=...) is a savepoint
+            # and asyncpg refuses it ("nested transaction has a different isolation level").
+            async with db().acquire(readonly=True, isolation="repeatable_read") as conn:
+                row = await conn.fetchrow(
+                    "SELECT worker,state,issue,commit,last_error,seen_at FROM tank.workers_heartbeat ORDER BY seen_at DESC LIMIT 1"
+                )
+                pause = await conn.fetchrow(
+                    "SELECT value,updated_by,updated_at FROM tank.workers_controls "
+                    "WHERE tenant_id=$1 AND name='workers_paused'", PLATFORM,
+                )
+                change = await conn.fetchrow(
+                    "SELECT by_user,old_value,new_value,at FROM tank.control_log "
+                    "WHERE tenant_id=$1 AND name='workers_paused' ORDER BY at DESC LIMIT 1", PLATFORM,
+                )
+                # Box-wide founder snapshot, matching the worker's thread/tenant
+                # join. Counts do not establish capacity, claimability or progress.
+                counts = await conn.fetchrow(
+                    "SELECT count(*) FILTER (WHERE b.status='queued') AS queued, "
+                    "count(*) FILTER (WHERE b.status='running') AS running, "
+                    "count(*) FILTER (WHERE b.status='awaiting_review') AS awaiting_review "
+                    "FROM tank.command_builds b JOIN tank.command_threads t "
+                    "ON t.thread_id=b.thread_id AND t.tenant_id=b.tenant_id "
+                    "WHERE b.status IN ('queued','running','awaiting_review')"
+                )
+            return {
+                "workers_paused": bool(pause["value"]) if pause else False,
+                "worker": view(row), "stale_after_s": STALE_AFTER_S,
+                "pause_control": {"updated_by": pause["updated_by"], "updated_at": pause["updated_at"].isoformat()} if pause else None,
+                "last_pause_change": {"by_user": change["by_user"], "old_value": change["old_value"],
+                                      "new_value": change["new_value"], "at": change["at"].isoformat()} if change else None,
+                "build_counts": {name: int(counts[name]) for name in ("queued", "running", "awaiting_review")},
+            }
+    except Exception:
+        raise HTTPException(status_code=503, detail="worker diagnostics unavailable") from None
 
 
 async def panel() -> dict[str, Any]:

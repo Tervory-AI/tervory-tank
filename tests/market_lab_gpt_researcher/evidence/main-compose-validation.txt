@@ -1,0 +1,1 @@
+validating /workspace/market-lab-gpt-researcher/main-baseline/docker-compose.yml: services.agent-roles additional properties 'exclude_from_hc' not allowed

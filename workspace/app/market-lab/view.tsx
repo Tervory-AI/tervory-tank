@@ -5,7 +5,7 @@ import { useEffect, useId, useRef, useState, type DragEvent, type FormEvent, typ
 import { useFormStatus } from "react-dom";
 import { MARKET_LAB_LOGO_SRC } from "./catalog";
 import type { LinkGroupView, OnCard, PageModel } from "./model";
-import { formatDay } from "./format";
+import { formatDay, formatRefreshed } from "./format";
 import type { KeyFlags } from "./catalog";
 import {
   PLUGIN_TABS,
@@ -34,7 +34,6 @@ import {
   removeLabLink,
   removeLabSecret,
   saveLabKey,
-  uploadLabFiles,
 } from "./plugin-actions";
 import { SquadLinks } from "../squad-links";
 
@@ -44,22 +43,18 @@ const SECTIONS = [
   { id: "linked", label: "Linked pages" },
 ] as const;
 
-const KEYED_ON = new Set(["eia_diesel", "fred", "census_population", "census_trade", "noaa_climate", "legiscan"]);
-
-// No Dashboard, Projects, Settings, or Support pages exist yet.
-// These point at the nearest existing workspace routes.
 const TOP_LINKS = [
-  { href: "/ledger", label: "Dashboard" },
-  { href: "/tasks", label: "Projects" },
-  { href: "/", label: "Chats" },
+  { href: "/ledger", label: "Usage" },
+  { href: "/tasks", label: "Tasks" },
+  { href: "/chats", label: "Chats" },
 ] as const;
 
 const BOTTOM_LINKS = [
-  { href: "/onboarding", label: "Settings" },
-  { href: "/", label: "Support" },
+  { href: "/onboarding", label: "Workspace setup" },
 ] as const;
 
-type Turn = { role: "user" | "assistant"; content: string; sources?: AnswerSource[]; error?: boolean };
+type Fact = { text: string; href: string; name: string };
+type Turn = { facts?: Fact[]; role: "user" | "assistant"; content: string; sources?: AnswerSource[]; error?: boolean };
 
 function RefreshButton() {
   const { pending } = useFormStatus();
@@ -87,15 +82,6 @@ function scrollToSection(id: string) {
   root.scrollTo({ top, behavior: "smooth" });
 }
 
-function linkLabel(href: string): string {
-  try {
-    const url = new URL(href);
-    return `${url.host}${url.pathname === "/" ? "" : url.pathname}`;
-  } catch {
-    return href;
-  }
-}
-
 function OnCardView({ card }: { card: OnCard }) {
   const bare = !card.headline && card.lines.length === 0 && card.notices.length === 0 && !card.problem;
   const meta = [card.cadence, card.asOf ? `Updated ${card.asOf}` : null, card.sourceLabel].filter(Boolean).join(" · ");
@@ -109,7 +95,7 @@ function OnCardView({ card }: { card: OnCard }) {
         </span>
       </div>
       <p className="ml-summary">{card.summary}</p>
-      {card.headline ? <p className="ml-value">{card.headline}</p> : null}
+      {card.headline ? <p className="ml-value"><a href={card.sourceHref}>{card.headline}</a></p> : null}
       {card.detail ? <p className="ml-detail">{card.detail}</p> : null}
       {card.lines.length ? (
         <ul className="ml-lines">
@@ -150,16 +136,16 @@ function ChatBox() {
     setDraft("");
     setSending(true);
     try {
-      const res = await fetch("/api/market-lab/chat", {
+      const res = await fetch("/market-lab/ask", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages: next.map(({ role, content }) => ({ role, content })) }),
+        body: JSON.stringify({ question: text }),
       });
-      const data = (await res.json().catch(() => null)) as { content?: string; error?: string; sources?: AnswerSource[] } | null;
+      const data = (await res.json().catch(() => null)) as { content?: string; error?: string; facts?: Fact[]; sources?: AnswerSource[] } | null;
       if (!res.ok || !data?.content) {
         setTurns([...next, { role: "assistant", content: data?.error || "Market Lab could not answer.", error: true, sources: [] }]);
       } else {
-        setTurns([...next, { role: "assistant", content: data.content, sources: data.sources ?? [] }]);
+        setTurns([...next, { role: "assistant", content: data.content, facts: data.facts ?? [], sources: data.sources ?? [] }]);
       }
     } catch {
       setTurns([...next, { role: "assistant", content: "Market Lab could not answer. Nothing was changed.", error: true, sources: [] }]);
@@ -183,6 +169,7 @@ function ChatBox() {
               <div className="ml-bubble ml-answer" key={`lab-${index}`}>
                 <p className="ml-who">Market Lab</p>
                 <p className="ml-said">{turn.content}</p>
+                {turn.facts?.length ? <ul className="ml-lines">{turn.facts.map((fact, index) => <li key={`${fact.href}-${index}`}><a href={fact.href}>{fact.text}</a></li>)}</ul> : null}
                 <div className="ml-refs">
                   <p className="ml-refs-label">{REFERENCE_LABEL}</p>
                   {turn.sources && turn.sources.length ? turn.sources.map((source) => (
@@ -190,7 +177,7 @@ function ChatBox() {
                       <span className="ml-ref-name">{source.name}</span>
                       {source.href ? (
                         <a className="ml-ref-link" href={source.href}>
-                          {linkLabel(source.href)}
+                          Open stored source
                         </a>
                       ) : (
                         <span />
@@ -296,8 +283,12 @@ function PluginsDialog({
     const body = new FormData();
     for (const file of files) body.append("file", file);
     setBusy(true);
+    setNote("Reading your files. Large reports can take a little longer.");
     try {
-      await finish(await uploadLabFiles(body));
+      const response = await fetch("/market-lab/files", { method: "POST", body });
+      await finish(await response.json());
+    } catch {
+      setNote("The upload could not be confirmed. Check the file list before trying again.");
     } finally {
       setBusy(false);
     }
@@ -356,7 +347,7 @@ function PluginsDialog({
         <div className="ml-plugins-head">
           <div>
             <h2 id={titleId}>{POPUP_TITLE}</h2>
-            <p>Everything Market Lab reads from. Add a key, upload a file, paste a link, or connect a tool.</p>
+            <p>Manage saved keys, files, links and connections. Answers use stored feeds and files marked Learned.</p>
           </div>
           <button className="ml-text" type="button" onClick={onClose}>
             Close
@@ -382,9 +373,9 @@ function PluginsDialog({
         {note ? <p className="ml-status">{note}</p> : null}
         {!plugins.enabled ? (
           <p className="ml-lead">{plugins.message || VAULT_OFF_MESSAGE}</p>
-        ) : tab === "API keys" ? (
+        ) : tab === "Access keys" ? (
           <div className="ml-tab-body">
-            <p className="ml-lead">Keys for public feeds and your suppliers. A key is write-only: once saved it is never shown again.</p>
+            <p className="ml-lead">Keys supplied by public data providers and your suppliers. Once saved, a key is hidden and cannot be read back.</p>
             <div className="ml-plist">
               {feedKeyCatalog().map((row) => {
                 const saved = secretFor(plugins.secrets, row.name);
@@ -396,12 +387,12 @@ function PluginsDialog({
                       <h3>{row.title}</h3>
                       <span className={connected ? "ml-chip" : "ml-chip ml-chip-off"}>
                         <span className="ml-dot" aria-hidden="true" />
-                        {connected ? "Connected" : "Not set"}
+                        {connected ? "Key provided" : "Not set"}
                       </span>
                     </div>
                     <p>{row.summary}</p>
                     {saved ? <p className="ml-secret">{saved.mask} Saved {saved.savedAt ? formatDay(saved.savedAt) : ""}</p> : null}
-                    {fromEnv ? <p className="ml-secret">set in the environment</p> : null}
+                    {fromEnv ? <p className="ml-secret">Provided by your workspace administrator</p> : null}
                     <div className="ml-keyline">
                       <label className="ml-sr" htmlFor={`key-${row.name}`}>
                         {row.title} key
@@ -455,7 +446,7 @@ function PluginsDialog({
               }}
             >
               <h3>Add a supplier key</h3>
-              <p>For a supplier that gives you an API key.</p>
+              <p>For a supplier that gives you an access key.</p>
               <div className="ml-keyline">
                 <label>
                   Supplier name
@@ -470,7 +461,7 @@ function PluginsDialog({
                 </button>
               </div>
             </form>
-            <p className="ml-fine">Keys are stored on the server, never in the app code.</p>
+            <p className="ml-fine">Saved keys are hidden and cannot be read back.</p>
           </div>
         ) : tab === "Files" ? (
           <div className="ml-tab-body">
@@ -511,7 +502,7 @@ function PluginsDialog({
         ) : tab === "Source links" ? (
           <div className="ml-tab-body">
             <h3 className="ml-subhead">Source links</h3>
-            <p className="ml-lead">Pages Market Lab checks for changes, such as rule pages, season dates or port stats.</p>
+            <p className="ml-lead">Save useful pages here.</p>
             <form className="ml-linkform" onSubmit={onAddLink}>
               <label>
                 Link
@@ -522,7 +513,7 @@ function PluginsDialog({
                 <input name="label" type="text" placeholder="e.g. Texas seasons" disabled={busy} />
               </label>
               <div>
-                <p className="ml-field-label">How often to check</p>
+                <p className="ml-field-label">Preferred check frequency</p>
                 <div className="ml-choice">
                   <button className={cadence === "Daily" ? "active" : ""} type="button" onClick={() => setCadence("Daily")}>
                     Daily
@@ -558,8 +549,8 @@ function PluginsDialog({
           </div>
         ) : (
           <div className="ml-tab-body">
-            <h3 className="ml-subhead">MCP connections</h3>
-            <p className="ml-lead">Connections to outside tools and data servers that Market Lab can read from.</p>
+            <h3 className="ml-subhead">Connections</h3>
+            <p className="ml-lead">Save connection details for outside tools and data sources.</p>
             {plugins.connections.length ? (
               <div className="ml-plist">
                 {plugins.connections.map((item) => (
@@ -577,7 +568,7 @@ function PluginsDialog({
                   <input name="connection-name" type="text" placeholder="e.g. Supplier catalogue" disabled={busy} />
                 </label>
                 <label>
-                  Server URL
+                  Server address
                   <input name="server" type="url" placeholder="https://…" disabled={busy} />
                 </label>
               </div>
@@ -589,21 +580,21 @@ function PluginsDialog({
                       Sign in with the provider
                     </button>
                     <button className={signIn === "token" ? "active" : ""} type="button" onClick={() => setSignIn("token")}>
-                      Token
+                      Access key
                     </button>
                   </div>
                 </div>
                 {signIn === "token" ? (
                   <label>
-                    Token
-                    <input type="password" autoComplete="off" placeholder="Paste token (hidden once saved)" disabled={busy} />
+                    Access key
+                    <input type="password" autoComplete="off" placeholder="Paste access key (hidden once saved)" disabled={busy} />
                   </label>
                 ) : null}
                 <button className="ml-primary" type="submit" disabled={busy}>
                   Add connection
                 </button>
               </div>
-              <p className="ml-fine">A saved token is shown only as dots, and is never shown again.</p>
+              <p className="ml-fine">A saved access key is shown only as dots, and is never shown again.</p>
             </form>
           </div>
         )}
@@ -619,6 +610,7 @@ export function MarketLabView({
   refresh,
   workspaceName,
   quarantine,
+  warnings,
 }: {
   model: PageModel;
   plugins: PluginPanel;
@@ -626,11 +618,12 @@ export function MarketLabView({
   refresh: () => Promise<void>;
   workspaceName: string | null;
   quarantine?: ReactNode;
+  warnings?: ReactNode;
 }) {
   const [menu, setMenu] = useState(false);
   const [active, setActive] = useState("overview");
   const [pluginsOpen, setPluginsOpen] = useState(false);
-  const [tab, setTab] = useState<PluginTab>("API keys");
+  const [tab, setTab] = useState<PluginTab>("Access keys");
   const [query, setQuery] = useState("");
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const searchId = useId();
@@ -671,9 +664,9 @@ export function MarketLabView({
   const groups = model.groups
     .map((group) => ({ ...group, pages: group.pages.filter((page) => scope.linkIds.includes(page.id)) }))
     .filter((group) => group.pages.length > 0);
+  const offFeeds = model.off.filter((feed) => scope.offIds.includes(feed.id));
   const searching = query.trim().length > 0;
-  const noHits = searching && onCards.length === 0 && groups.length === 0;
-  const anyKeyedOn = [...model.featured, ...model.cards].some((card) => KEYED_ON.has(card.id));
+  const noHits = searching && onCards.length === 0 && offFeeds.length === 0 && groups.length === 0;
   const accountName = workspaceName?.trim() || "Your account";
 
   function openSection(id: string) {
@@ -737,7 +730,7 @@ export function MarketLabView({
               type="button"
               onClick={() => openSection("quarantine")}
             >
-              Quarantine
+              Feed review
             </button>
           ) : null}
         </nav>
@@ -771,11 +764,13 @@ export function MarketLabView({
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search feeds, signals, files, links, predictions"
+                placeholder="Search feeds and linked pages"
               />
             </div>
           </header>
+          {warnings}
           <ChatBox />
+          <RefreshStatus status={model.refreshStatus} />
           <div className="ml-counts">
             <article>
               <p className="ml-count">{model.onCount}</p>
@@ -793,17 +788,15 @@ export function MarketLabView({
             </section>
           ) : null}
           {noHits ? <p className="ml-none">Nothing in Market Lab matches that.</p> : null}
-          <section id="on" className="ml-section">
+          {(!searching || onCards.length > 0) ? <section id="on" className="ml-section">
             <h2>On</h2>
-            <p className="ml-lead">
-              {anyKeyedOn
-                ? "These feeds are on. Each shows its latest value."
-                : "These feeds need no key. They read public data and show their latest value."}
-            </p>
+            {onCards.length > 0 ? <p className="ml-lead">
+              These feeds stored observations in their last refresh. Open a feed to check its sources.
+            </p> : null}
             {model.onEmpty && !searching ? (
               <div className="ml-note">
                 <h3>No feed data yet</h3>
-                <p>The feeds have not run yet. Their data shows here after the first refresh.</p>
+                <p>No observations are stored from the latest refresh. Choose Refresh feeds to collect data.</p>
               </div>
             ) : onCards.length ? (
               <div className="ml-grid">
@@ -812,10 +805,16 @@ export function MarketLabView({
                 ))}
               </div>
             ) : null}
-          </section>
-          <section id="linked" className="ml-section">
+          </section> : null}
+          {offFeeds.length ? <section className="ml-section" aria-label="Off feeds">
+            <h2>Off</h2>
+            <div className="ml-grid">{offFeeds.map((feed) => <article className="ml-card" key={feed.id}>
+              <h3>{feed.title}</h3><p>{feed.reason}</p>
+            </article>)}</div>
+          </section> : null}
+          {groups.length > 0 ? <section id="linked" className="ml-section">
             <h2>Linked pages</h2>
-            <p className="ml-lead">Other pages that use these feeds.</p>
+            <p className="ml-lead">Open these sources on their publishers’ websites. Their figures are not included in answers from stored feeds.</p>
             <div className="ml-links">
               {groups.map((group) => (
                 <GroupCard
@@ -826,11 +825,11 @@ export function MarketLabView({
                 />
               ))}
             </div>
-          </section>
+          </section> : null}
           {quarantine}
           <footer className="ml-foot">
             <p>
-              Public data only. FRED data is read live and never stored.{" "}
+              Stored public observations only. Sources that do not permit storage stay linked.{" "}
               {model.refreshedLabel === "Not refreshed yet" ? "Not refreshed yet." : `Last refreshed ${model.refreshedLabel}.`}
             </p>
             <form action={refresh}>
@@ -860,14 +859,14 @@ function isFeedKey(name: string): boolean {
 }
 
 function FileRow({ file, busy, onRemove }: { file: FileMeta; busy: boolean; onRemove: () => void }) {
-  const count = file.rows != null ? `${file.rows} rows` : file.pages != null ? `${file.pages} pages` : "";
+  const count = file.rows != null ? `${file.rows} ${file.rows === 1 ? "row" : "rows"}` : file.pages != null ? `${file.pages} ${file.pages === 1 ? "page" : "pages"}` : "";
   return (
     <div className="ml-prow">
-      <h3>{file.name}</h3>
+      <h3>{file.status === "Learned" ? <a href={`/market-lab/sources/${file.id}`}>{file.name}</a> : file.name}</h3>
       <p className="ml-fine">
-        {file.status} · {formatBytes(file.size)}
+        {file.status}{file.reason ? `: ${file.reason}` : ""} · {formatBytes(file.size)}
         {count ? ` · ${count}` : ""}
-        {file.uploadedAt ? ` · ${formatDay(file.uploadedAt)}` : ""}
+        {file.uploadedAt ? ` · ${formatRefreshed(file.uploadedAt)}` : ""}
       </p>
       <button className="ml-text" type="button" disabled={busy} onClick={onRemove}>
         Remove
@@ -882,7 +881,7 @@ function ConnectionRow({ item, busy, onRemove }: { item: ConnectionMeta; busy: b
       <h3>{item.name}</h3>
       <p>{item.serverUrl}</p>
       <p className="ml-fine">
-        {item.authType === "token" ? "Token" : "Sign in with the provider"} · {item.status}
+        {item.authType === "token" ? "Access key" : "Sign in with the provider"} · {item.status}
         {item.hasToken ? " · ••••••••" : ""}
         {item.lastUsed ? ` · ${formatDay(item.lastUsed)}` : ""}
       </p>
@@ -899,7 +898,7 @@ function GroupCard({ group, open, onToggle }: { group: LinkGroupView; open: bool
       <h3>{group.title}</h3>
       <p>{group.lead}</p>
       <button className="ml-expand" type="button" onClick={onToggle} aria-expanded={open}>
-        Open page →
+        {open ? "Hide links" : "Show links"}
       </button>
       {open ? (
         <ul>
@@ -913,4 +912,17 @@ function GroupCard({ group, open, onToggle }: { group: LinkGroupView; open: bool
       ) : null}
     </article>
   );
+}
+
+function RefreshStatus({ status }: { status?: string | null }) {
+  const router = useRouter();
+  const busy = status === "queued" || status === "running";
+  useEffect(() => {
+    if (!busy) return;
+    const timer = setInterval(() => router.refresh(), 10000);
+    return () => clearInterval(timer);
+  }, [busy, router]);
+  if (busy) return <p role="status">The feeds are refreshing. Stored observations appear as each feed finishes.</p>;
+  if (status === "failed") return <p role="status">The refresh stopped before it finished. You can try Refresh feeds again.</p>;
+  return null;
 }

@@ -1,0 +1,3 @@
+PASS v5 root and both skins: no fixture requests, no demo text, no results, counts or chips without a published store
+PASS Workspace starts empty: no startup search, products, parts, added items, opening conversation, demo decisions or invented counts on any tab
+PASS submitted Workspace search uses the stored catalogue and graph; nothing is pre-added; a no-result search stays empty

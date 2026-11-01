@@ -4,18 +4,23 @@ from __future__ import annotations
 
 import asyncio
 from collections import Counter
+from contextvars import ContextVar
 from datetime import date
+import logging
 
 from agents.zenas.pool.adapters import get_adapter
 from agents.zenas.pool.blobs import text_payloads
 from agents.zenas.pool.chunk import chunk_document
 from agents.zenas.pool.citations import extract_citations
 from agents.zenas.pool.embed import Embedder, NoOpEmbedder, VectorIndex, NoOpVectorIndex
+from agents.zenas.pool.indexing import index_pending
 from agents.zenas.pool.licence import LicenceError, may_store_text, refusal_reason
 from agents.zenas.pool.model import LegalDocument, SourceSpec
 from agents.zenas.pool.region import assert_source_region
 from agents.zenas.pool.store import Store
-from agents.zenas.pool.textutil import version_id_for
+from agents.zenas.pool.textutil import split_parents, version_id_for
+
+version_saved = ContextVar("zenas_nightly_version_saved", default=None)
 
 
 async def ingest_snapshot(
@@ -72,11 +77,33 @@ async def ingest_snapshot(
                         skips["unchanged"] += 1
                 else:
                     inserted += 1
-                    vectors = await embedder.embed([chunk.text for chunk in chunks])
-                    if vectors:
-                        await index.upsert(document.jurisdiction, chunks, vectors, embedder.name)
+                    if callback := version_saved.get():
+                        try:
+                            await callback(document)
+                        except Exception:
+                            logging.getLogger(__name__).warning("Regulation event unavailable; the version remains saved")
+                await index_pending(store, embedder, index, region=region or store.home_region,
+                                    document_id=document.id)
                 await _attach_cites(store, document, citations)
+            await _close_collapsed(store, source, documents, on, skips)
     return inserted
+
+
+async def _close_collapsed(store: Store, source: SourceSpec, documents: list[LegalDocument], on: date,
+                           skips: Counter[str] | None) -> None:
+    """A parse that split "§ 80a" into "§ 80a-1" ... closes the old collapsed "§ 80a" row.
+
+    Only a row that holds one of the children's text or heading is closed, so a
+    real parent section stored beside its children is left alone.
+    """
+    close = getattr(store, "close_collapsed", None)
+    if close is None or not documents:
+        return
+    for parent, (hashes, titles) in split_parents(documents).items():
+        jurisdiction = documents[0].jurisdiction
+        closed = await close(source.source_id, jurisdiction, parent, hashes, titles, on=on)
+        if closed and skips is not None:
+            skips["closed collapsed"] += closed
 
 
 def _parse_payload(adapter, payload: bytes, source: SourceSpec) -> tuple[list[LegalDocument], list[str]]:

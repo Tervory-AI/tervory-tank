@@ -119,11 +119,40 @@ async def test_call_site_once_110_is_approved_sends_its_lists() -> None:
     assert seen["base.contacts"]["generic_words"] == SITE_110["generic_locals"]
 
 
+@pytest.mark.asyncio
+async def test_pipeline_retains_complete_observed_contact_collections() -> None:
+    phones = [f"+1512555020{i}" for i in range(1, 6)]
+    emails = [f"team{i}@shop.example" for i in range(6)]
+    links = ["https://facebook.com/shop", "https://facebook.com/shop-store"]
+    proof = [{"source_url": "https://shop.example/contact", "checked_at": "2026-10-27T10:00:00+00:00",
+              "phones": phones, "emails": emails, "websites": ["https://store.shop.example/"], "socials": links, "links": links}]
+
+    async def call(skill_id, payload):
+        return {
+            "base.normalize": {"fields": {"name": {"value": "Fixture Shop", "confidence": 90}}},
+            "base.resolve": {"match": None, "verdict": "new", "score": 0},
+            "base.find_site": {"website": {"value": "https://shop.example/", "source": "input:verified", "confidence": 85}},
+            "base.scrape_site": {"phones": phones, "emails": emails, "socials": {"facebook": links[0]}, "_base_observations": proof},
+            "base.socials": {"count": 0, "profiles": [], "presence": "none", "confidence": 0},
+            "base.verify": {"confidence": 50, "tier": "review", "flags": []},
+        }.get(skill_id, {"confidence": 0})
+
+    result = await enrich_one({"name": "Fixture Shop"}, None, [], None, call)
+    assert result.status == "done", result.error
+    assert result.profile["phones"]["value"] == phones
+    assert result.profile["emails"]["value"] == emails
+    assert result.profile["social_links"]["value"] == links
+    assert result.profile["websites"]["value"] == ["https://shop.example/", "https://store.shop.example/"]
+    assert result.passes["2b"]["field_observations"] == proof
+
+
 def _flat(tmp_path: Path, skills_dir: Path | None) -> dict:
     """Import pipeline.py from a flat /app-style folder, like the room image."""
     app = tmp_path / "app"
     app.mkdir()
     (app / "pipeline.py").write_text((ROOT / "agents/base/pipeline.py").read_text())
+    # agents/base/Dockerfile copies tank/base_source_scores.py next to pipeline.py.
+    (app / "base_source_scores.py").write_text((ROOT / "tank/base_source_scores.py").read_text())
     shutil.copytree(ROOT / "agents/base/base_gold", app / "base_gold", ignore=shutil.ignore_patterns("__pycache__"))
     env = {k: v for k, v in os.environ.items() if k != "SKILLS_DIR"}
     if skills_dir:

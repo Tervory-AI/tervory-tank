@@ -2,7 +2,7 @@ export type BatchStatus = "held" | "pooled" | "rejected" | "removed";
 
 export type QuarantineBatch = {
   id: string;
-  seriesId: string;
+  seriesName: string;
   source: string;
   region: string;
   currency: string;
@@ -77,10 +77,11 @@ export function asBatch(row: Record<string, unknown>): QuarantineBatch | null {
   const status = String(row.status ?? "");
   if (!STATUSES.includes(status as BatchStatus)) return null;
   const id = String(row.id ?? "").trim();
-  if (!id) return null;
+  const seriesName = typeof row.series_name === "string" ? row.series_name.trim() : "";
+  if (!id || !seriesName || seriesName.includes("00000000-0000-0000-0000")) return null;
   return {
     id,
-    seriesId: String(row.series_id ?? row.seriesId ?? ""),
+    seriesName,
     source: String(row.source ?? ""),
     region: String(row.region ?? ""),
     currency: String(row.currency ?? ""),

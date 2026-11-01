@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import os
 import smtplib
+import ssl
 from email.message import EmailMessage
 from typing import Any
 
@@ -103,6 +104,8 @@ class SmtpMailer:
         message["Subject"] = letter.get("subject") or ""
         message["From"] = self.sender
         message["To"] = letter["to"]
+        if letter.get("message_id"):
+            message["Message-ID"] = letter["message_id"]
         reply_to = str(letter.get("reply_to") or "").strip()
         if reply_to:
             message["Reply-To"] = reply_to
@@ -111,7 +114,7 @@ class SmtpMailer:
 
     def _deliver(self, message: EmailMessage) -> None:
         with smtplib.SMTP(self.host, self.port, timeout=20) as smtp:
-            smtp.starttls()
+            smtp.starttls(context=ssl.create_default_context())
             if self.username:
                 smtp.login(self.username, self.password)
             smtp.send_message(message)

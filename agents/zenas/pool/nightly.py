@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 from collections import Counter
@@ -12,10 +13,12 @@ from pathlib import Path
 from agents.zenas.pool.adapters import get_adapter
 from agents.zenas.pool.catalogue import sources_for_region
 from agents.zenas.pool.config import current_region
-from agents.zenas.pool.embed import Embedder, NoOpEmbedder, NoOpVectorIndex, VectorIndex
+from agents.zenas.pool.embed import Embedder, NoOpEmbedder, NoOpVectorIndex, VectorIndex, live_backends
 from agents.zenas.pool.http import RateLimited
-from agents.zenas.pool.ingest import ingest_snapshot
+from agents.zenas.pool.ingest import ingest_snapshot, version_saved
+from agents.zenas.pool.indexing import index_pending
 from agents.zenas.pool.licence import FetchNotConfigured, LicenceError, refusal_reason
+from agents.zenas.pool.laws_africa import is_laws_africa, live_sources
 from agents.zenas.pool.region import RegionError, assert_source_region, bind_store
 from agents.zenas.pool.status import pool_status
 from agents.zenas.pool.store import Store
@@ -24,6 +27,13 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 # Official statute feeds. Load now uses fetch_bulk through the pool loader.
 # Nightly uses the same resume cursor and writes the feeds sentence itself.
 _OFFICIAL_STATUTES = frozenset({"govza-acts", "govza-regulations"})
+# The US scheduler allows two hours for the entire night. A progressing bulk
+# archive must also yield; its no-progress watchdog alone cannot bound it.
+_US_COURTLISTENER_SECONDS = 30 * 60
+# ZA's existing scheduler also allows two hours. With 17 live catalogue
+# sources, five minutes each leaves thirty-five minutes for remaining jobs.
+# A slow early source must not starve every court archive later in the list.
+_ZA_SOURCE_SECONDS = 5 * 60
 
 
 def packaged_snapshots(region: str) -> dict[str, list[bytes]]:
@@ -69,34 +79,91 @@ async def run_nightly(
     bind_store(store, region)
     day = on or date.today()
     when = datetime.now(timezone.utc)
-    embedder = embedder or NoOpEmbedder()
-    index = index or NoOpVectorIndex()
+    if live and snapshots is None:
+        embedder, index = live_backends(store, region, embedder, index)
+    else:
+        embedder, index = embedder or NoOpEmbedder(), index or NoOpVectorIndex()
     getter = http_get or urllib_get
 
     sources = sources_for_region(region)
     if only is not None:
         wanted = set(only)
         sources = [source for source in sources if source.source_id in wanted]
-    for source in sources:
-        try:
-            assert_source_region(source, region)
-            await _update_source(
-                store,
-                source,
-                snapshots=snapshots,
-                on=day,
-                when=when,
-                live=live,
-                http_get=getter,
-                embedder=embedder,
-                index=index,
-                region=region,
-            )
-        except RegionError:
-            continue
-        except Exception as exc:
-            await _record_source_error(store, source, exc, when)
+    if live and snapshots is None:
+        sources = live_sources(sources)
+    async def changed(document):
+        from chassis.events import publish
+        await publish("00000000-0000-0000-0000-000000000001", "zenas.regulation.changed", document.version_id, {
+            "document_id": hashlib.sha256(document.id.encode()).hexdigest(),
+            "version_id": hashlib.sha256(document.version_id.encode()).hexdigest()})
+    token = version_saved.set(changed)
+    try:
+        for source in sources:
+            try:
+                assert_source_region(source, region)
+                await _update_nightly_source(
+                    store,
+                    source,
+                    snapshots=snapshots,
+                    on=day,
+                    when=when,
+                    live=live,
+                    http_get=getter,
+                    embedder=embedder,
+                    index=index,
+                    region=region,
+                )
+            except RegionError:
+                continue
+            except Exception as exc:
+                await _record_source_error(store, source, exc, when)
+    finally:
+        version_saved.reset(token)
     return await pool_status(store, region=region)
+
+
+async def _update_nightly_source(store: Store, source, **kwargs) -> None:
+    if kwargs["region"] == "za" and kwargs["live"] and kwargs["snapshots"] is None:
+        window = asyncio.timeout(_ZA_SOURCE_SECONDS)
+        try:
+            async with window:
+                await _update_source(store, source, **kwargs)
+        except TimeoutError:
+            if not window.expired():
+                raise
+            await store.record_source(source)
+            await store.record_run(
+                source.source_id, status="stalled",
+                detail="nightly source time budget reached; the next run retries from the saved checkpoint",
+                documents=await store.instrument_count(source.source_id), when=kwargs["when"],
+            )
+        return
+    bounded = (
+        kwargs["region"] == "us-east" and source.source_id == "courtlistener"
+        and kwargs["live"] and kwargs["snapshots"] is None
+    )
+    if not bounded:
+        await _update_source(store, source, **kwargs)
+        return
+    window = asyncio.timeout(_US_COURTLISTENER_SECONDS)
+    try:
+        async with window:
+            await _update_source(store, source, **kwargs)
+    except TimeoutError:
+        if not window.expired():
+            raise
+        from agents.zenas.pool.adapters.courtlistener_bulk import BulkStalled
+
+        # A deadline can also expire after load_bulk returns, while its blobs
+        # are still being ingested. Discard the singleton adapter's speculative
+        # state so the next run starts from the durable checkpoint, not a cached
+        # opinion id or files_done marker ahead of acknowledged data.
+        get_adapter(source)._bulk_state = None
+        await store.record_source(source)
+        await store.record_run(
+            source.source_id, status="stalled", detail=str(BulkStalled()),
+            documents=await store.instrument_count(source.source_id), when=kwargs["when"],
+        )
 
 
 async def _update_source(
@@ -114,6 +181,7 @@ async def _update_source(
 ) -> None:
     assert_source_region(source, region)
     if snapshots is None and live and source.source_id == "courtlistener" and region == "us-east":
+        await index_pending(store, embedder, index, region=region, source_ids=[source.source_id])
         await courtlistener_night(
             store,
             source,
@@ -136,6 +204,15 @@ async def _update_source(
             when=when,
         )
         return
+    if snapshots is None and live and is_laws_africa(source):
+        from agents.zenas.pool.bulk import disk_cap_bytes, load_source
+        await load_source(
+            store, source, region=region, snapshots=None, on=on, when=when, live=True,
+            http_get=http_get, embedder=embedder, index=index, cap=disk_cap_bytes(),
+            data_dir=os.environ.get("DATA_DIR", ".") or ".",
+        )
+        return
+    await index_pending(store, embedder, index, region=region, source_ids=[source.source_id])
     if snapshots is None and live and source.source_id in _OFFICIAL_STATUTES:
         await _update_official(
             store,
@@ -385,9 +462,14 @@ async def _live_archive(
 ) -> bool:
     """Resume a ZA court archive. Other sources keep the ordinary live fetch.
 
-    bulk.py imports urllib_get from this module, so this does not call back into bulk.
+    The walk streams like a Load (bulk._ArchiveStream): each judgment is
+    stored as it is read and the cursor is saved every few files and on an
+    early exit, so a night that dies keeps what it read and memory stays flat.
+    bulk.py imports urllib_get from this module, so bulk is imported here,
+    inside the function.
     """
-    from agents.zenas.pool.adapters.za_archive import ZA_ARCHIVE_SOURCES, feed_detail
+    from agents.zenas.pool.adapters.za_archive import ZA_ARCHIVE_SOURCES, feed_detail, streaming
+    from agents.zenas.pool.bulk import _ArchiveStream, disk_cap_bytes
     from agents.zenas.pool.http import RateLimited
 
     if source.source_id not in ZA_ARCHIVE_SOURCES:
@@ -395,12 +477,20 @@ async def _live_archive(
     adapter = get_adapter(source)
     if not hasattr(adapter, "fetch_bulk"):
         return False
+    cap = disk_cap_bytes()
+    stream = _ArchiveStream(
+        store, source, region=region, on=on, when=when, embedder=embedder, index=index,
+        cap=cap, data_dir=os.environ.get("DATA_DIR", ".") or ".",
+        heartbeat=False,
+    )
     try:
         resume = await store.get_checkpoint(source.source_id)
         if resume.startswith("snap:"):
             resume = ""
-        blobs, cursor = await adapter.fetch_bulk(http_get, resume=resume)
+        with streaming(stream):
+            blobs, cursor = await adapter.fetch_bulk(http_get, resume=resume)
     except RateLimited as exc:
+        await stream.keep_progress()
         await store.record_source(source)
         await store.record_run(
             source.source_id,
@@ -411,11 +501,27 @@ async def _live_archive(
         )
         return True
     except (FetchNotConfigured, LicenceError) as exc:
+        await stream.keep_progress()
         await store.record_source(source)
         await store.record_run(
             source.source_id,
             status="not_configured",
             detail=str(exc),
+            documents=await store.instrument_count(source.source_id),
+            when=when,
+        )
+        return True
+    except (Exception, asyncio.CancelledError):
+        # The judgments already stored stay; the next night resumes after them.
+        await stream.keep_progress()
+        raise
+    if stream.capped:
+        await stream.keep_progress()
+        await store.record_source(source)
+        await store.record_run(
+            source.source_id,
+            status="disk_cap",
+            detail=f"pool disk cap {cap} bytes",
             documents=await store.instrument_count(source.source_id),
             when=when,
         )
@@ -430,8 +536,10 @@ async def _live_archive(
         if isinstance(loaded, dict):
             note = loaded
     skips: Counter[str] = Counter(note.get("skips") or {})
+    skips.update(stream.skips)
+    inserted = stream.inserted
     if blobs:
-        inserted = await ingest_snapshot(
+        inserted += await ingest_snapshot(
             store,
             source,
             list(blobs),
@@ -442,7 +550,6 @@ async def _live_archive(
             skips=skips,
         )
     else:
-        inserted = 0
         await store.record_source(source)
     if cursor:
         await store.set_checkpoint(source.source_id, cursor, await store.stored_bytes())
@@ -475,8 +582,28 @@ async def _update_official(
     resume = await store.get_checkpoint(source.source_id)
     if resume.startswith("snap:"):
         resume = ""
+    from agents.zenas.pool.adapters.za_govza import streaming
+
+    inserted = 0
+    received = 0
+
+    async def save_file(payload: bytes, cursor: str) -> None:
+        nonlocal inserted, received
+        errors = adapter.report.errors
+        added = await ingest_snapshot(
+            store, source, [payload], on=on, embedder=embedder, index=index, region=region,
+        )
+        if adapter.report.errors > errors:
+            raise ValueError("gov.za file could not be parsed; checkpoint preserved")
+        # A cancelled/failed ingest may have stored a prefix of its sections.
+        # It must not acknowledge the PDF; replay is idempotent on the next run.
+        await store.set_checkpoint(source.source_id, cursor, await store.stored_bytes())
+        inserted += added
+        received += 1
+
     try:
-        blobs, cursor = await adapter.fetch_bulk(http_get, resume=resume)
+        with streaming(save_file):
+            blobs, cursor = await adapter.fetch_bulk(http_get, resume=resume)
     except RateLimited as exc:
         await store.record_source(source)
         await store.record_run(
@@ -497,9 +624,8 @@ async def _update_official(
             when=when,
         )
         return
-    inserted = 0
     if blobs:
-        inserted = await ingest_snapshot(
+        inserted += await ingest_snapshot(
             store,
             source,
             list(blobs),
@@ -512,7 +638,7 @@ async def _update_official(
         await store.record_source(source)
     detail = adapter.feeds_detail()
     errors = int(getattr(adapter.report, "errors", 0) or 0)
-    if not blobs and errors == 0:
+    if not blobs and not received and errors == 0:
         detail = f"{detail}; unchanged"
     status = "error" if errors and inserted == 0 else "ok"
     await store.set_checkpoint(source.source_id, cursor, await store.stored_bytes())
@@ -569,6 +695,14 @@ async def _main() -> None:
             )
         else:
             report = await run_nightly(store, live=True)
+        if not use_fixtures:
+            try:
+                from agents.zenas.core.regulations import run_scheduled as regulations_scheduled
+
+                report["regulations"] = await regulations_scheduled(conn, region=current_region())
+            except Exception:
+                # No exception text: upstream failures can contain credentials or tenant data.
+                report["regulations"] = {"unavailable": 1}
         try:
             from agents.zenas.core.convert import run_scheduled as convert_scheduled
 
@@ -584,3 +718,7 @@ async def _main() -> None:
     finally:
         await conn.close()
     print(json.dumps(report, indent=2, default=str))
+
+
+if __name__ == "__main__":
+    main()

@@ -17,7 +17,7 @@ from core.jobs import (
     perform_resolve,
 )
 from core.ledger import PostgresLedger
-from engines.ffl.engine import schedules as case_schedules
+from engines.ffl.engine import schedules as case_schedules, plan as case_plan
 
 AGENT = os.environ.get("AGENT_NAME", "market_lab")
 HEARTBEAT_TENANT = "00000000-0000-0000-0000-000000000001"
@@ -45,13 +45,28 @@ async def ping(ctx: JobContext) -> dict:
 async def refresh(ctx: JobContext) -> dict:
     fixtures = ctx.input.get("fixtures") or os.environ.get("FEEDS_FIXTURES") or None
     async with _ledger() as ledger:
-        return await perform_refresh(
-            tenant_id=ctx.tenant_id,
-            engine=str(ctx.input.get("engine") or ""),
-            ledger=ledger,
-            fixtures=None if not fixtures else str(fixtures),
-            live=not fixtures,
-        )
+        lock = ctx.tenant_id + ":market-collect"
+        await ledger.conn.execute("SELECT pg_advisory_lock(hashtextextended($1, 0))", lock)
+        try:
+            result = await perform_refresh(
+                tenant_id=ctx.tenant_id,
+                engine=str(ctx.input.get("engine") or ""),
+                ledger=ledger,
+                fixtures=None if not fixtures else str(fixtures),
+                live=not fixtures,
+                backfill=bool(ctx.input.get("backfill")),
+            )
+            from core.warning_http import refresh as refresh_warnings
+            result["warnings"] = await refresh_warnings(ledger, ctx.tenant_id, str(ctx.input.get("engine") or ""))
+            return result
+        finally:
+            await ledger.conn.execute("SELECT pg_advisory_unlock(hashtextextended($1, 0))", lock)
+
+
+async def feed_links(ctx: JobContext) -> dict:
+    from core.feed_links import refresh_links
+    async with _ledger() as ledger:
+        return await refresh_links(ledger, ctx.tenant_id, case_plan()["engine"])
 
 
 async def opportunities(ctx: JobContext) -> dict:
@@ -64,12 +79,16 @@ async def opportunities(ctx: JobContext) -> dict:
             signals=ctx.input.get("signals"),
             memory=_SafeMemory(ctx.memory),
         )
+        from core.warning_http import refresh as refresh_warnings
+        await refresh_warnings(ledger, ctx.tenant_id, str(ctx.input.get("engine") or ""))
     return {"top_area": result["top_area"], "top_recommendation": result["top_recommendation"]}
 
 
 async def resolve(ctx: JobContext) -> dict:
     async with _ledger() as ledger:
-        return await perform_resolve(tenant_id=ctx.tenant_id, ledger=ledger)
+        from core.warning_http import refresh as refresh_warnings
+        warning_result = await refresh_warnings(ledger, ctx.tenant_id, str(ctx.input.get("engine") or ""))
+        return {**(await perform_resolve(tenant_id=ctx.tenant_id, ledger=ledger)), "warnings": warning_result}
 
 
 def _has_source_passages(value: object) -> bool:
@@ -82,9 +101,18 @@ async def research(ctx: JobContext) -> dict:
     if not _has_source_passages(passages):
         if not question:
             return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
-        from core.research_adapter import research_if_promoted
+        if os.environ.get("DATABASE_URL"):
+            from core.documents import matched
+            async with _ledger() as ledger:
+                found = await matched(ledger, ctx.tenant_id, question)
+            if found:
+                found.sort(key=lambda item: (item[0], item[1]), reverse=True)
+                facts = [item[2] for item in found[:5]]
+                return {"answer": "\n".join(fact["text"] for fact in facts),
+                        "citations": [{"claim": fact["text"], "url": fact["href"], "source": fact["name"]} for fact in facts], "cost_usd": 0}
+        from core.research_adapter import research_web
 
-        result = await research_if_promoted(ctx.tenant_id, question)
+        result = await research_web(ctx.tenant_id, question)
         if result is not None:
             return result
         return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
@@ -160,11 +188,13 @@ app = create_app(
     handlers={
         "ping": ping,
         "refresh": refresh,
+        "feed_links": feed_links,
         "opportunities": opportunities,
         "resolve": resolve,
         "research": research,
     },
     schedules=_schedules(),
+    job_timeouts={"refresh": 86400, "feed_links": 7200},
 )
 
 
@@ -190,7 +220,6 @@ async def gold_candidates(
 def _batch_view(record: dict) -> dict:
     return {
         "id": record.get("id") or "",
-        "series_id": record.get("series_id") or "",
         "source": record.get("source") or "",
         "region": record.get("region") or "",
         "currency": record.get("currency") or "",
@@ -201,6 +230,25 @@ def _batch_view(record: dict) -> dict:
     }
 
 
+def _batch_series_name(record: dict) -> str:
+    from feeds.catalog import sources
+    from feeds.geo import US_POSTAL_SET, area_label
+
+    if not all(isinstance(record.get(field), str) and record[field].strip() for field in ("ref", "engine")):
+        raise ValueError("series reference or engine missing")
+    try:
+        catalogue = sources(record["engine"])
+    except (SystemExit, ModuleNotFoundError):
+        raise ValueError("series engine unavailable") from None
+    source = next((item for item in catalogue if item.id == record["source"]), None)
+    if source is None:
+        raise ValueError("series source unavailable")
+    # The existing feed adapters store the state's postal code at the end of ref.
+    # Use the same catalogue name and place formatter as the source pages.
+    area = record["ref"].rsplit(":", 1)[-1]
+    return f"{source.name} · {area_label(area, 'state', '')}" if area in US_POSTAL_SET else source.name
+
+
 @app.get("/quarantine")
 async def quarantine_list(x_tank_key: str = Header(default="")) -> dict:
     if not _room_key_ok(x_tank_key):
@@ -209,17 +257,29 @@ async def quarantine_list(x_tank_key: str = Header(default="")) -> dict:
         async with _ledger() as ledger:
             rows = await ledger.conn.fetch(
                 """
-                SELECT id, series_id, source, fetched_at, region, currency, unit, status, reason
-                FROM agent_market_lab.batches
-                WHERE tenant_id = $1 AND status IN ('held', 'pooled', 'rejected', 'removed')
-                ORDER BY created_at, id
+                SELECT b.id, b.series_id, b.source, b.fetched_at, b.region, b.currency,
+                       b.unit, b.status, b.reason, s.ref, s.engine
+                FROM agent_market_lab.batches b
+                LEFT JOIN agent_market_lab.series s ON s.id = b.series_id AND s.tenant_id = b.tenant_id
+                WHERE b.tenant_id = $1 AND b.status IN ('held', 'pooled', 'rejected', 'removed')
+                ORDER BY b.created_at, b.id
                 """,
                 __import__("uuid").UUID(HEARTBEAT_TENANT),
             )
+            batches = []
+            for row in rows:
+                record = dict(row)
+                try:
+                    series_name = _batch_series_name(record)
+                except ValueError as exc:
+                    # Only our safe label-validation reasons, never raw source data.
+                    log.warning("quarantine batch %r skipped: %s", record["id"], exc)
+                    continue
+                batches.append({**_batch_view(record), "series_name": series_name})
     except Exception as exc:  # noqa: BLE001 — class name only; the message can carry the database URL
         log.warning("quarantine list failed (%s)", type(exc).__name__)
         raise HTTPException(status_code=503, detail="quarantine unavailable") from None
-    return {"batches": [_batch_view(dict(row)) for row in rows]}
+    return {"batches": batches}
 
 
 async def _batch_action(batch_id: str, action: str, x_tank_key: str) -> dict:
@@ -256,3 +316,20 @@ async def quarantine_reject(batch_id: str, x_tank_key: str = Header(default=""))
 @app.post("/quarantine/{batch_id}/remove")
 async def quarantine_remove(batch_id: str, x_tank_key: str = Header(default="")) -> dict:
     return await _batch_action(batch_id, "remove", x_tank_key)
+
+
+from core.http import build_router as market_router
+
+app.include_router(market_router(key_ok=_room_key_ok, ledger_context=_ledger, engine=case_plan()["engine"]))
+
+from core.warning_http import build_router as warning_router
+
+app.include_router(warning_router(key_ok=_room_key_ok, ledger_context=_ledger, engine=case_plan()["engine"]))
+
+from core.document_http import build_router as document_router
+
+app.include_router(document_router(key_ok=_room_key_ok, ledger_context=_ledger))
+
+from core.feed_links import build_router as feed_router
+
+app.include_router(feed_router(key_ok=_room_key_ok, ledger_context=_ledger, engine=case_plan()["engine"]))

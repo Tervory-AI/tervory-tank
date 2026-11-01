@@ -1,6 +1,6 @@
 import { baselineNames, cheaper } from "./savings-types";
 export type EvidenceRow = Record<string, string | number | boolean | null>;
-type Pair = { primary_model: string; candidate_model: string; samples: number; agreement: number | null; primary_cost_usd: number; could_have_cost_usd: number };
+type Pair = { primary_model: string; candidate_model: string; samples: number; agreement: number | null; primary_cost_usd: number; could_have_cost_usd: number; saved_usd?: number };
 export type TaskProof = { standards?: string[]; tops?: string[]; top_saved_usd?: number; top_baseline_usd?: number; top_actual_usd?: number; quality_note?: string | null; task_type: string; calls: number; priced_calls: number; actual_usd: number; compared_actual_usd: number; unknown_cost_calls: number; baseline_usd: number; saved_usd: number; backfilled_calls: number; unpriced_calls: number; code_calls: number; code_share: number | null; shadow_pairs: Pair[] };
 export type Proof = { tenant_names: Record<string,string>; tenant_names_note: string | null; tenants: string[]; all_tenant_total: { quality_note?: string | null; standards?: string[]; tops?: string[]; compared_actual_usd?: number; baseline_usd?: number; top_actual_usd?: number; top_baseline_usd?: number; top_saved_usd?: number; calls: number; saved_usd: number; priced_calls: number; unpriced_calls: number }; window: {start: string | null; end: string}; page: number; page_size: number; has_more: Record<string, boolean>; receipt_page_total: { calls: number; saved_usd: number }; tenant_id: string; region: string; tasks: TaskProof[]; ledger: EvidenceRow[]; shadows: EvidenceRow[]; runs: EvidenceRow[]; cases: EvidenceRow[]; promotions: EvidenceRow[]; policies: EvidenceRow[]; state: EvidenceRow[] };
 const usd = (n: number) => `$${Number(n).toFixed(6)}`;
@@ -56,12 +56,12 @@ export function ProofView({ data, task }: { data: Proof; task?: string }) {
       {row.quality_note && <p>{row.quality_note}</p>}
       <dl><div><dt>Money saved vs standard ({baselineNames(row.standards)})</dt><dd><a href={url(row.task_type,"receipts")}>{usd(row.saved_usd)}</a></dd></div>
         <div><dt>Standard ({baselineNames(row.standards)}) / compared spend</dt><dd><a href={url(row.task_type,"receipts")}>{usd(row.baseline_usd)} / {usd(row.compared_actual_usd)}</a></dd></div>
-        <div><dt>Total recorded spend, including fees · standard ({baselineNames(row.standards)}) comparison</dt><dd><a href={url(row.task_type,"receipts")}>{usd(row.actual_usd)} · {row.unknown_cost_calls} unknown costs excluded</a></dd></div>
+        <div><dt>Total recorded spend, including fees · standard ({baselineNames(row.standards)}) comparison</dt><dd><a href={url(row.task_type,"receipts")}>{row.unknown_cost_calls && Number(row.actual_usd) === 0 ? "price not set" : usd(row.actual_usd)} · {row.unknown_cost_calls} unknown costs excluded</a></dd></div>
         <div><dt>Calls served by code</dt><dd><a href={url(row.task_type,"receipts")}>{percent(row.code_share)} ({row.code_calls} / {row.calls})</a></dd></div>
         <div><dt>Receipt coverage</dt><dd><a href={url(row.task_type,"receipts")}>{row.priced_calls} priced · {row.backfilled_calls} backfilled · {row.unpriced_calls} unpriced</a></dd></div></dl>
       <p className="proof-links"><a href={url(row.task_type,"benchmarks")}>Tests and cost per call</a><a href={url(row.task_type,"promotions")}>Promotion dates</a></p>
       {row.shadow_pairs.map(pair => <div className="proof-pair" key={`${pair.primary_model}:${pair.candidate_model}`}><h3>{pair.primary_model} → {pair.candidate_model}</h3><p>Shadow comparison</p>
-        <a href={url(row.task_type,"shadows")}>{pair.samples} pairs · {percent(pair.agreement)} agreement</a><p><a href={url(row.task_type,"shadows")}>Primary ({pair.primary_model}) {usd(pair.primary_cost_usd)} · comparison ({pair.candidate_model}) {usd(pair.could_have_cost_usd)}</a></p></div>)}
+        <a href={url(row.task_type,"shadows")}>{pair.samples} pairs · {percent(pair.agreement)} agreement</a><p><a href={url(row.task_type,"shadows")}>Primary ({pair.primary_model}) {usd(pair.primary_cost_usd)} · comparison ({pair.candidate_model}) {usd(pair.could_have_cost_usd)}{pair.candidate_model.startsWith("routellm:") && pair.saved_usd !== undefined && <> · {usd(pair.primary_cost_usd)} − {usd(pair.could_have_cost_usd)} = {usd(pair.saved_usd)}</>}</a></p></div>)}
       {!row.shadow_pairs.length && <p>No shadow pairs recorded yet.</p>}
     </section>)}</div>
     {pagination}

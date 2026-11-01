@@ -10,8 +10,15 @@
 
 import { auth, clerkClient, currentUser } from "@clerk/nextjs/server";
 import { createHash } from "node:crypto";
+import { ensureCaseStudyReports } from "./tank";
 
 export type Tenant = { tenantId: string; orgId: string; orgName: string; userId: string };
+
+async function registered(tenant: Tenant): Promise<Tenant> {
+  // Transient report bookkeeping outages do not invalidate Clerk identity.
+  await ensureCaseStudyReports(tenant);
+  return tenant;
+}
 
 const NAMESPACE = "7f3b1c2e-9a4d-4c1e-8f2a-5b6d7e8f9a0b"; // fixed; never change or tenant ids shift
 
@@ -52,7 +59,7 @@ export async function currentTenant(): Promise<Tenant> {
   if (orgId) {
     // The session carries the org id and slug; the display name needs one lookup.
     const org = await client.organizations.getOrganization({ organizationId: orgId });
-    return { tenantId: tenantIdFor(orgId), orgId, orgName: org.name, userId };
+    return registered({ tenantId: tenantIdFor(orgId), orgId, orgName: org.name, userId });
   }
 
   // No active organization: use the first one they belong to, or create a personal one.
@@ -63,7 +70,7 @@ export async function currentTenant(): Promise<Tenant> {
     const label = user?.firstName || user?.primaryEmailAddress?.emailAddress?.split("@")[0] || "My";
     org = await client.organizations.createOrganization({ name: `${label} workspace`, createdBy: userId });
   }
-  return { tenantId: tenantIdFor(org.id), orgId: org.id, orgName: org.name, userId };
+  return registered({ tenantId: tenantIdFor(org.id), orgId: org.id, orgName: org.name, userId });
 }
 
 /** The active Clerk organization, or null when the user has not chosen one.
@@ -73,5 +80,5 @@ export async function activeTenant(): Promise<Tenant | null> {
   if (!userId || !orgId) return null;
   const client = await clerkClient();
   const org = await client.organizations.getOrganization({ organizationId: orgId });
-  return { tenantId: tenantIdFor(orgId), orgId, orgName: org.name, userId };
+  return registered({ tenantId: tenantIdFor(orgId), orgId, orgName: org.name, userId });
 }

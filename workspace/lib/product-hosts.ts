@@ -103,3 +103,22 @@ export function mootCanonicalRedirectUrl(
   const qs = search && search !== "?" ? search : "";
   return `https://${ZENAS_PRODUCT_HOST}${path}${qs}`;
 }
+
+/**
+ * Where to send a signed-out visitor back after sign-in: the public address they asked for.
+ * Behind Coolify, req.nextUrl carries the internal bind (https://0.0.0.0:3000), and after a
+ * host rewrite its path is the internal one (/base), so the sign-in page was being given
+ * https://0.0.0.0:3000/base (seen 28 Oct). Only Tervory hosts are used; anything else
+ * falls back to the client workspace home.
+ */
+export function publicReturnUrl(
+  hostHeader: string | null | undefined,
+  pathname: string,
+  search = "",
+): string {
+  const host = normalizeHost(hostHeader);
+  const ours = host === "tervory.com" || host.endsWith(".tervory.com");
+  const path = pathname && pathname.startsWith("/") ? pathname : "/";
+  const qs = search && search !== "?" ? search : "";
+  return ours ? `https://${host}${path}${qs}` : `https://${APP_WORKSPACE_HOST}/`;
+}

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from asyncio import CancelledError
 import base64
 import hmac
 import uuid
@@ -10,6 +11,7 @@ import hashlib
 import html as html_module
 import io
 import json
+import logging
 import os
 import re
 import socket
@@ -24,7 +26,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from brain.evidence import stage
-from brain.robots import RobotsDenied, require_allowed
+from brain.robots import HostBlocked, Run, USER_AGENT, host_stopped, require_allowed, stop_host
 from brain.reader import read_page
 from brain.security import public_url, scope, tenant_dir
 
@@ -58,6 +60,32 @@ concurrency = asyncio.Semaphore(4)
 site_locks: dict[str, asyncio.Lock] = {}
 last_visit: dict[str, float] = {}
 QUEUE_TIMEOUT = 20
+# Three cleanup steps fit within Tiger's five-second transport margin. Each
+# step is attempted even if the preceding resource fails to close.
+CLEANUP_STEP_TIMEOUT_S = 1
+
+
+async def cleanup_visit(context, browser, manager, storage, *, save: bool, bounded: bool):
+    async def step(action):
+        if not bounded:
+            await action()
+            return
+        try:
+            async with asyncio.timeout(CLEANUP_STEP_TIMEOUT_S):
+                await action()
+        except Exception as exc:
+            # Never include exception messages, storage paths or credentials.
+            logging.getLogger(__name__).warning("Browser cleanup failed (%s)", type(exc).__name__)
+
+    try:
+        if save and context is not None:
+            await step(lambda: context.storage_state(path=str(storage)))
+    finally:
+        try:
+            if browser is not None:
+                await step(browser.close)
+        finally:
+            await step(lambda: manager.__aexit__(None, None, None))
 
 
 @asynccontextmanager
@@ -82,15 +110,20 @@ async def render_slot(site):
         if locked:
             lock.release()
 HUMAN_CHECKS = ("g-recaptcha", "hcaptcha", "cf-turnstile", "verify you are human", "confirm you are human",
-                "checking your browser", "complete the security check", "prove you are human")
+                "checking your browser", "complete the security check", "prove you are human",
+                "px-captcha", "cf-error-details", "sorry, you have been blocked", "your request has been blocked")
 AGE_BUTTON = re.compile(r"^(?:yes[,! ]*)?(?:i am|i'm|i confirm i am) (?:over |at least )?(?:18|21)(?:\+| years old)?[.!]?$", re.I)
 
 
 class Page(BaseModel):
     url: str = Field(max_length=2048)
     screenshot: bool = False
+    price_reader: bool = False
     settle_ms: int = Field(default=2000, ge=0, le=10000)
     max_ms: int = Field(default=90000, ge=1000, le=150000)
+    # Navigation's max_ms excludes admission, evidence and extraction. Callers
+    # with a shorter transport deadline must expire that whole operation here.
+    request_timeout_ms: int | None = Field(default=None, ge=1000, le=150000)
 
 
 def human_check(html: str) -> bool:
@@ -112,13 +145,23 @@ async def confirm_age(page, html: str) -> bool:
     return False
 
 
-async def read_pdf(context, url: str, timeout: int) -> dict:
+def blocked_result(url: str) -> dict:
+    return {"ok": False, "url": url, "challenge": True, "blocked_by_check": True,
+            "reason": "blocked", "needs_person": "needs a person",
+            "page": read_page(url, challenge=True)}
+
+
+async def read_pdf(context, url: str, timeout: int, run: Run | None = None) -> dict:
     from pypdf import PdfReader
     started = time.perf_counter()
     for _ in range(8):
         public_url(url)
-        await require_allowed(context, url, min(timeout, 10000))
-        response = await context.request.get(url, timeout=timeout, max_redirects=0)
+        await require_allowed(context, url, min(timeout, 10000), run)
+        response = await context.request.get(url, timeout=timeout, max_redirects=0,
+                                             headers={"User-Agent": USER_AGENT})
+        if response.status in {401, 403, 429}:
+            stop_host(run, url)
+            return {**blocked_result(url), "content_type": "application/pdf", "status": response.status}
         if response.status in {301, 302, 303, 307, 308}:
             url = urljoin(url, response.headers.get("location", ""))
             continue
@@ -283,20 +326,55 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
         site = site_origin(body.url)
     except (ValueError, OSError):
         raise HTTPException(403, "Private or internal web address refused.") from None
-    if access_configured():
-        async with access_locks.setdefault((tenant, site), asyncio.Lock()):
-            task = asyncio.current_task()
-            active_visits[(tenant, site)] = task
-            try:
-                return await visit(body, tenant, x_task_id, site)
-            finally:
-                if active_visits.get((tenant, site)) is task: active_visits.pop((tenant, site), None)
-    return await visit(body, tenant, x_task_id, site)
+    async def scoped_visit():
+        if access_configured():
+            async with access_locks.setdefault((tenant, site), asyncio.Lock()):
+                task = asyncio.current_task()
+                active_visits[(tenant, site)] = task
+                try:
+                    return await visit(body, tenant, x_task_id, site)
+                finally:
+                    if active_visits.get((tenant, site)) is task: active_visits.pop((tenant, site), None)
+        return await visit(body, tenant, x_task_id, site)
+
+    if body.request_timeout_ms is None:
+        return await scoped_visit()
+    try:
+        # Include the tenant/site lock wait: an expired queued visit must never
+        # start later ahead of the caller's retry. Cancellation propagates into
+        # visit's existing browser/context cleanup before releasing admission.
+        async with asyncio.timeout(body.request_timeout_ms / 1000):
+            return await scoped_visit()
+    except TimeoutError:
+        raise HTTPException(503, "The browser could not read this page; no result is claimed.") from None
 
 
-async def visit(body, tenant, task, origin):
+async def visit(body, tenant, task, origin, *, run=None):
     host, _ = public_url(body.url)
     directory = tenant_dir(Path(os.environ.get("BROWSER_DATA_DIR", "/browser-data")), tenant)
+    # A check starts empty even when its task ID is reused or omitted. No
+    # process-global stop state can leak into another tenant/room/check.
+    run = Run() if run is None else run
+    result = {"ok": False, "challenge": False}
+    try:
+        result = await _visit(body, tenant, task, origin, run, directory)
+        return result
+    finally:
+        with (directory / "history.jsonl").open("a") as history:
+            history.write(json.dumps({"time": int(time.time()), "tenant_id": tenant,
+                "task_id": str(uuid.UUID(task)) if task else None,
+                "action": "browser", "host": host, "human_check": bool(result.get("challenge")),
+                "needs_person": "needs a person" if result.get("challenge") else None,
+                "age_confirmation": bool(result.get("age_confirmation")), "ok": result.get("ok", False),
+                "reason": result.get("reason"),
+                # Sealed connection audits must not expose private URL paths.
+                "url": origin if access_configured() else result.get("url", body.url)}) + "\n")
+
+
+async def _visit(body, tenant, task, origin, run, directory):
+    host, _ = public_url(body.url)
+    if host_stopped(run, body.url):
+        return blocked_result(body.url)
     storage = storage_for(tenant, origin)
     secure = access_configured()
     policy = await access_rpc(tenant, origin, "policy") if secure else {"state": "public"}
@@ -330,29 +408,33 @@ async def visit(body, tenant, task, origin):
             if private:
                 result.update(await portal_result(item.page, policy))
             if not private:
-                result = await public_result(item.page, result, html, directory, task)
+                result = await public_result(item.page, result, html, directory, task, price_reader=body.price_reader)
             await dispose(handle)
             return result
     from playwright.async_api import async_playwright
     site = host.removeprefix("www.")
     async with render_slot(site) as slot:
+        # A queued read must recheck after the preceding read releases the host.
+        if host_stopped(run, body.url):
+            return blocked_result(body.url)
         manager = async_playwright()
-        playwright = await manager.__aenter__()
         browser = None
         context = None
         retained = False
+        cancelled = False
         result = {"ok": False, "challenge": False}
         navigation = {"login": False, "human": False}
         try:
+            playwright = await manager.__aenter__()
             proxy = os.environ.get("BROWSER_PROXY_URL", "http://base-browser-gateway:3128")
             browser = await playwright.chromium.launch(headless=True, executable_path="/usr/bin/chromium",
                 proxy={"server": proxy},
                 args=["--disable-quic", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--proxy-bypass-list=<-loopback>"])
             context = await browser.new_context(storage_state=str(storage) if storage.exists() else None,
                 proxy={"server": proxy}, viewport={"width": 1280, "height": 900},
-                service_workers="block", accept_downloads=False, user_agent="TervoryBase/1.0 (+https://tervory.com)")
+                service_workers="block", accept_downloads=False, user_agent=USER_AGENT)
             denied: set[str] = set()
-            await require_allowed(context, body.url, min(body.max_ms, 10000))
+            await require_allowed(context, body.url, min(body.max_ms, 10000), run)
             async def check(route):
                 try:
                     public_url(route.request.url)
@@ -374,33 +456,40 @@ async def visit(body, tenant, task, origin):
                     denied.add("private or unsupported request")
                     await route.abort()
                     return
-                if route.request.is_navigation_request():
+                if not human:
                     try:
-                        await require_allowed(context, route.request.url)
-                    except RobotsDenied:
-                        denied.add('robots.txt')
+                        await require_allowed(context, route.request.url, 10000, run)
+                    except HostBlocked:
+                        denied.add('blocked')
                         await route.abort()
                         return
                 await route.continue_()
             await context.route("**/*", check)
             if urlsplit(body.url).path.lower().endswith(".pdf"):
-                result = await read_pdf(context, body.url, body.max_ms)
+                result = await read_pdf(context, body.url, body.max_ms, run)
             else:
                 page = await context.new_page()
                 pdfs = []
-                page.on("response", lambda response: pdfs.append(response.url) if
-                    "application/pdf" in response.headers.get("content-type", "") and
-                    response.request.resource_type == "document" else None)
+                def notice_response(response):
+                    if (response.status in {403, 429}
+                            and response.request.resource_type == "document"
+                            and response.frame == page.main_frame
+                            and not human_navigation(navigation)):
+                        stop_host(run, response.url)
+                    if ("application/pdf" in response.headers.get("content-type", "")
+                            and response.request.resource_type == "document"):
+                        pdfs.append(response.url)
+                page.on("response", notice_response)
                 try:
                     response = await page.goto(body.url, wait_until="domcontentloaded", timeout=body.max_ms)
                 except Exception:
                     if pdfs:
-                        result = await read_pdf(context, pdfs[-1], body.max_ms)
+                        result = await read_pdf(context, pdfs[-1], body.max_ms, run)
                     else:
                         raise
                 else:
                     html = await page.content()
-                    challenge = human_check(html) or bool(response and response.status in {401, 403, 429})
+                    challenge = human_check(html) or bool(response and response.status in {401, 403, 429}) or host_stopped(run, page.url)
                     login_needed = private and (not storage.exists() or await page.locator('input[type="password"]').count() > 0 or bool(response and response.status == 401))
                     if login_needed and not human_check(html) and not bool(response and response.status in {403, 429}):
                         success = await login(page, context, tenant, origin, navigation, task)
@@ -418,8 +507,11 @@ async def visit(body, tenant, task, origin):
                         await page.evaluate("window.scrollBy(0, Math.min(document.body.scrollHeight, 900))")
                         await page.wait_for_timeout(body.settle_ms)
                         html = await page.content()
-                        challenge = human_check(html) or bool(response and response.status in {401, 403, 429})
+                        challenge = human_check(html) or bool(response and response.status in {401, 403, 429}) or host_stopped(run, page.url)
                     public_url(page.url)
+                    if challenge:
+                        stop_host(run, body.url)
+                        stop_host(run, page.url)
                     queue = None
                     if challenge and secure and social:
                         queue = (await access_rpc(tenant, origin, "queue", reason="human_login", task_id=task or None))["queue_id"]
@@ -441,36 +533,37 @@ async def visit(body, tenant, task, origin):
                 raise HTTPException(403, "Connection is no longer available.")
             if not private:
                 result = await public_result(page if result.get('content_type') != 'application/pdf' else None,
-                                             result, html if result.get('content_type') != 'application/pdf' else '', directory, task)
+                                             result, html if result.get('content_type') != 'application/pdf' else '', directory, task,
+                                             price_reader=body.price_reader)
+            if result.get("challenge"):
+                stop_host(run, body.url)
+                result["reason"] = "blocked"
             if body.screenshot and not private and not result.get("challenge") and result.get("ok"):
                 result["png_base64"] = base64.b64encode(await page.screenshot(type="png")).decode()
             return result
         except HTTPException:
             raise
+        except CancelledError:
+            cancelled = True
+            raise
         except Exception as exc:
-            if isinstance(exc, RobotsDenied) or 'robots.txt' in locals().get('denied', set()):
-                report = read_page(body.url)
-                report['facts']['skip_reason'] = 'robots.txt'
-                result = {'ok': False, 'skipped': True, 'reason': 'robots.txt', 'page': report}
+            if isinstance(exc, HostBlocked) or 'blocked' in locals().get('denied', set()) or host_stopped(run, body.url):
+                stop_host(run, body.url)
+                result = blocked_result(body.url)
                 return result
             raise HTTPException(503, "The browser could not read this page; no result is claimed.") from None
         finally:
-            if not retained:
-                try:
-                    if context and not social: await context.storage_state(path=str(storage))
-                finally:
-                    if browser: await browser.close()
-                    await manager.__aexit__(None, None, None)
-            with (directory / "history.jsonl").open("a") as history:
-                history.write(json.dumps({"time": int(time.time()), "tenant_id": tenant,
-                    "task_id": str(uuid.UUID(task)) if task else None,
-                    "action": "browser", "host": host, "human_check": bool(result.get("challenge")),
-                    "needs_person": "needs a person" if result.get("challenge") else None,
-                    "age_confirmation": bool(result.get("age_confirmation")), "ok": result.get("ok", False)}) + "\n")
-            last_visit[site] = time.monotonic()
+            try:
+                if not retained:
+                    # Expiry never waits to save cookies. Bind the existing
+                    # storage destination only for a normally completed visit.
+                    await cleanup_visit(context, browser, manager, storage,
+                        save=not cancelled and not social, bounded=body.request_timeout_ms is not None)
+            finally:
+                last_visit[site] = time.monotonic()
 
 
-async def public_result(page, result, html, directory, task):
+async def public_result(page, result, html, directory, task, *, price_reader: bool = False):
     result['evidence'] = await stage(directory.parent.parent, directory, task,
         html=html if result.get('content_type') != 'application/pdf' else '',
         pdf=result.pop('pdf_data', None), page=page if result.get('content_type') != 'application/pdf' else None)
@@ -486,6 +579,11 @@ async def public_result(page, result, html, directory, task):
     result["page"]["facts"]["age_gate"] |= bool(result.get("age_confirmation"))
     result["page"]["extraction_ms"] = round((time.perf_counter() - extraction_started) * 1000 + result.pop("pdf_extraction_ms", 0), 3)
     result.pop("html", None)
+    # Only Tiger's deterministic price reader requests markup. Normal browser
+    # tools keep the bounded page report; the model adapter also uses that report.
+    if (price_reader and access_room() == "tiger" and result.get("ok")
+            and not result.get("challenge") and result.get("content_type") != "application/pdf"):
+        result["html"] = source[:600000]
     result.pop("text", None)
     result.pop("links", None)
     return result

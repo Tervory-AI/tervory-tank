@@ -1,46 +1,79 @@
-# After CI passes on main, deploy only the apps whose code changed.
+# Deploy straight after a merge to main (founder, 27 Oct): the pull request already
+# passed CI, so the deploy no longer waits for the same checks to run again on main.
+# Deploy only the apps whose code changed.
 # The main app goes first; rooms deploy only if main finished. No manual clicks after a merge.
 # The Coolify token lives only in the repo secret COOLIFY_TOKEN and is never printed.
 name: deploy-on-merge
 
 on:
-  workflow_run:
-    workflows: [ci]
-    types: [completed]
+  push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
 
 permissions:
   contents: read
 
+# One Coolify deploy at a time, Boston and ZA (31 Oct, #471/#478). The run holds the group
+# through its live-check job, so the next merge's deploy starts only after this deploy AND
+# its live check finished. queue: max keeps every waiting merge in order: the default
+# single queue cancels a pending run whenever a newer one arrives. coolify-ops deploy and
+# room-setup use the same group, so a manual deploy also waits its turn.
 concurrency:
-  group: deploy-on-merge
+  group: coolify-deploy
   cancel-in-progress: false
+  queue: max
 
 jobs:
   deploy:
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # Worst case, a shared room change (tests/test_deploy_changed.py recomputes this from
+    # the room folders in the repo): waits of main 30 min + ZA 45 min + 9 rooms x 15 min
+    # + 1 ZA room (agent-zenas-za) x 30 min = 240 min (14400 s); Coolify calls 52 x 30 s
+    # = 1560 s, poll overrun 12 x 45 s = 540 s, checkout 60 s: 16560 s = 276 min.
+    # DEPLOY_BUDGET_S is 280 min: deploy_changed.py starts no room whose wait would end
+    # past it, so the job ends by about 283 min, well before GitHub's 290-min kill. A room
+    # not started is reported as an error and is not retried by later runs (they retry
+    # only failed deployments): deploy it with coolify-ops or the next change to its code.
+    timeout-minutes: 290
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
       ZA_OFFLINE: ${{ vars.ZA_OFFLINE || '' }}
-      AFTER: ${{ github.event.workflow_run.head_sha }}
+      AFTER: ${{ github.sha }}
+      DEPLOY_BUDGET_S: "16800"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 50
       - name: Find the previous deployed commit
         run: |
-          # The commit before this push on main: the parent of the first commit in the push is not
-          # known here, so compare with the previous successful run of this workflow.
+          # Compare with the previous run that actually ran (success or failure), not only the last
+          # success: one app failing must not make every later merge redeploy every app (28 Oct).
+          # Cancelled runs are skipped, so their changes are still included. Apps whose last
+          # Coolify deployment failed are retried by deploy_changed.py on their own.
           prev=$(curl -sS -H "Authorization: Bearer ${{ github.token }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy-on-merge.yml/runs?branch=main&status=success&per_page=1" \
-            | jq -r '.workflow_runs[0].head_sha // empty')
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy-on-merge.yml/runs?branch=main&status=completed&per_page=20" \
+            | jq -r '[.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure")][0].head_sha // empty')
           if [ -n "$prev" ] && git cat-file -e "$prev^{commit}" 2>/dev/null; then echo "BEFORE=$prev" >> "$GITHUB_ENV"; fi
+          # Tip of main now: an app whose last Coolify deploy finished on it is not restarted
+          # again by a queued run (deploy_changed.py MAIN_HEAD). Unknown: deploy as before.
+          head=$(curl -sS -H "Authorization: Bearer ${{ github.token }}" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/main" | jq -r '.sha // empty')
+          case "$head" in [0-9a-f][0-9a-f]*) [ ${#head} -eq 40 ] && echo "MAIN_HEAD=$head" >> "$GITHUB_ENV" ;; esac
       - name: Deploy changed apps
         run: |
           case "$COOLIFY_URL" in https://*) ;; *) echo "::error::COOLIFY_URL must be https"; exit 1 ;; esac
           test -n "$COOLIFY_TOKEN" || { echo "::error::COOLIFY_TOKEN secret is missing"; exit 1; }
           python3 .github/scripts/deploy_changed.py
+
+  live-check:
+    needs: deploy
+    permissions:
+      contents: read
+      issues: write
+    uses: ./.github/workflows/live-check.yml
+    secrets:
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}

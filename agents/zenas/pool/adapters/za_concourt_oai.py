@@ -11,6 +11,7 @@ the default interval matches that.
 
 from __future__ import annotations
 
+import asyncio
 import html
 import json
 import re
@@ -22,6 +23,7 @@ from agents.zenas.pool.adapters.za_archive import (
     ArchiveRun,
     ChallengePage,
     archive_max,
+    hand_over,
     is_challenge_page,
     log_challenge,
     polite_get,
@@ -347,8 +349,7 @@ async def _consider(run: ArchiveRun, http_get, row: dict) -> bytes:
     match = re.search(r"\[((?:19|20)\d{2})\]", str(row.get("citation") or ""))
     if match:
         run.note_year(int(match.group(1)))
-    run.mark(handle_url)
-    return payload
+    return await hand_over(run, handle_url, payload)
 
 
 async def _list_year_sets(http_get) -> tuple[list[tuple[int, str]], bool]:
@@ -427,7 +428,7 @@ async def _one_item(http_get, row: dict) -> bytes:
     if is_challenge_page(pdf):
         log_challenge(content)
         raise ChallengePage()
-    text = pdf_text(pdf)
+    text = await asyncio.to_thread(pdf_text, pdf)  # CPU-bound; keep the room answering
     if not text:
         fallback = choose_text_fallback(names, judgment)
         text_url = bitstream_content_url(content_by_name.get(fallback) or "")

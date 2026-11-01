@@ -6,6 +6,7 @@ A skill is a versioned package on disk:
         skill.yaml      id, version, agent, rung, task_type, description, schemas, eval_threshold
         run.py          async def run(input: dict, ctx: SkillContext) -> dict
         evals/cases.jsonl   one {"input":…, "expected":…, "tolerance":…} per line
+        evals/cases.<region>.jsonl   optional; same-name rows with this box's input
         CHANGELOG.md
 
 Phase 1 registry = this folder (Git) + tank.skills (Postgres).
@@ -18,7 +19,8 @@ States: candidate -> staging -> approved -> retired
 
 Rules enforced here: agents may call `run` on approved versions only (preview runs
 are for the owner's own testing and are labelled as such in the ledger); approval
-is a separate, human-only call; a new approved version retires the previous one.
+is a separate, human-only call; superseded versions wait in staging for the
+30-day retirement gate and remain available for explicit founder rollback.
 """
 
 from __future__ import annotations
@@ -29,9 +31,14 @@ import hashlib
 import json
 import logging
 import os
+import re
+import shutil
+import tempfile
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -39,6 +46,7 @@ import httpx
 import yaml
 
 from gold import PLATFORM_TENANT
+from skala_patch import patch_refusal
 
 SKILLS_DIR = Path(os.environ.get("SKILLS_DIR", os.path.join(os.path.dirname(__file__), "skills")))
 
@@ -66,15 +74,43 @@ class SkillPackage:
         return f"{self.id}@{self.version}"
 
 
-def _load_cases(path: Path) -> list[dict[str, Any]]:
-    f = path / "evals" / "cases.jsonl"
-    if not f.exists():
-        return []
+def _read_jsonl(f: Path) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for line in f.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if line and not line.startswith("#"):
             out.append(json.loads(line))
+    return out
+
+
+def _load_cases(path: Path) -> list[dict[str, Any]]:
+    """cases.jsonl, with an optional evals/cases.<TANK_REGION>.jsonl for this box.
+
+    A regional row replaces the shared row with the same name, only for its
+    input: expected, tolerance, must_refuse and every other key must be equal,
+    and no case may be added or dropped. A bad regional file fails closed.
+    """
+    f = path / "evals" / "cases.jsonl"
+    if not f.exists():
+        return []
+    out = _read_jsonl(f)
+    region = os.environ.get("TANK_REGION", "us-east").strip().lower()
+    regional = path / "evals" / f"cases.{region}.jsonl"
+    if not re.fullmatch(r"[a-z][a-z0-9-]{0,30}", region) or not regional.exists():
+        return out
+    index = {case.get("name"): i for i, case in enumerate(out)}
+    if None in index or len(index) != len(out):
+        raise ValueError("regional eval cases need unique case names")
+    seen: set[str] = set()
+    for case in _read_jsonl(regional):
+        name = case.get("name")
+        if name not in index or name in seen:
+            raise ValueError(f"regional eval case {name!r} does not replace exactly one shared case")
+        shared = out[index[name]]
+        if {k: v for k, v in case.items() if k != "input"} != {k: v for k, v in shared.items() if k != "input"}:
+            raise ValueError(f"regional eval case {name!r} may change only its input")
+        seen.add(name)
+        out[index[name]] = case
     return out
 
 
@@ -158,6 +194,7 @@ class SkillContext:
     env: dict[str, str] = field(default_factory=dict)   # optional provider keys a skill may use
     calls: int = 0
     cost_usd: float = 0.0
+    live_evaluation: bool = False  # B3 must test the new model, not saved fixture output.
 
     async def model(self, messages: list[dict[str, str]], task_type: str, max_tokens: int | None = None) -> str:
         res = await self._model(
@@ -169,9 +206,78 @@ class SkillContext:
         return str(res.get("content") or "")
 
 
+# ---------- skill scratch space ----------
+# The trigger.* engines (tank/skills/trigger.*/1.0.0/engine.py:12) unpack rules.zip into a
+# tempfile.TemporaryDirectory(prefix="trigger-skill-") when they start. Python removes it
+# only on a clean exit. Their run.py SIGKILLs the engine on its 30 s timeout and whenever
+# the call is cancelled (Tank shutting down cancels in-flight calls), and SIGTERM or SIGHUP
+# skip the cleanup too, so every such stop left ~350 inodes in /tmp for good. Approved
+# versions are never edited in place (AGENTS.md rule 7), so Tank, which starts every run,
+# removes what a killed engine left behind.
+SKILL_TEMP_PREFIXES = ("trigger-skill-",)
+# Far past the engines' 30 s limit: no live engine owns a folder this old.
+SKILL_TEMP_MAX_AGE_S = 3600
+SKILL_TEMP_SWEEP_EVERY_S = 600
+_last_temp_sweep: float | None = None
+
+
+def sweep_skill_temp(root: str | os.PathLike[str] | None = None, *, now: float | None = None,
+                     max_age_s: float = SKILL_TEMP_MAX_AGE_S) -> list[str]:
+    """Remove this user's skill scratch folders older than max_age_s; return their names."""
+    base = Path(root if root is not None else tempfile.gettempdir())
+    now = time.time() if now is None else now
+    removed: list[str] = []
+    try:
+        entries = list(os.scandir(base))
+    except OSError:
+        return removed
+    for entry in entries:
+        if not entry.name.startswith(SKILL_TEMP_PREFIXES):
+            continue
+        try:
+            info = entry.stat(follow_symlinks=False)
+            if not entry.is_dir(follow_symlinks=False) or info.st_uid != os.getuid():
+                continue
+            if now - info.st_mtime < max_age_s:
+                continue
+        except OSError:
+            continue
+        shutil.rmtree(entry.path, ignore_errors=True)
+        if not os.path.lexists(entry.path):
+            removed.append(entry.name)
+    return removed
+
+
+def _sweep_skill_temp_quietly() -> None:
+    try:
+        removed = sweep_skill_temp()
+    except Exception:  # never let housekeeping fail a skill run
+        log.exception("skill scratch sweep failed")
+        return
+    if removed:
+        log.info("removed %d stale skill scratch folders", len(removed))
+
+
+def _maybe_sweep_skill_temp() -> None:
+    """At most every SKILL_TEMP_SWEEP_EVERY_S per process, sweep in a background thread."""
+    global _last_temp_sweep
+    # Tests set this (tests/conftest.py) so no test sweeps the shared /tmp of the box.
+    if os.environ.get("TANK_SKILL_TEMP_SWEEP", "").strip().lower() == "off":
+        return
+    now = time.monotonic()
+    if _last_temp_sweep is not None and now - _last_temp_sweep < SKILL_TEMP_SWEEP_EVERY_S:
+        return
+    _last_temp_sweep = now
+    try:
+        threading.Thread(target=_sweep_skill_temp_quietly, name="skill-temp-sweep", daemon=True).start()
+    except Exception:  # e.g. RuntimeError: can't start new thread; housekeeping never fails a call
+        log.exception("skill scratch sweep could not start")
+
+
 # ---------- running ----------
 
 async def run_skill(pkg: SkillPackage, payload: dict[str, Any], ctx: SkillContext) -> dict[str, Any]:
+    _maybe_sweep_skill_temp()
     run = _import_run(pkg)
     started = time.perf_counter()
     out = await run(payload, ctx)
@@ -316,7 +422,7 @@ async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext],
     cost = 0.0
     for i, case in enumerate(pkg.cases):
         ctx = make_ctx()
-        if "model" in case:
+        if "model" in case and not getattr(ctx, "live_evaluation", False):
             from dataclasses import replace
 
             async def saved_model(**_kwargs: Any) -> dict[str, Any]:
@@ -330,7 +436,7 @@ async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext],
             if case.get("expected_error"):
                 ok, why = False, "expected refusal exception was not raised"
             if ok:
-                configured = case.get("model_configured", "model" in case or bool(pkg.task_type))
+                configured = getattr(ctx, "live_evaluation", False) or case.get("model_configured", "model" in case or bool(pkg.task_type))
                 ok, why = eval_properties(case, out, configured and getattr(ctx, "calls", 0) > 0)
         except Exception as exc:  # noqa: BLE001 — an exception is a failed case, recorded
             ok, why, out = False, f"error: {exc}", {}
@@ -422,6 +528,11 @@ def approval_reason(pkg: SkillPackage, target: dict[str, Any], approved: dict[st
         version_key(pkg.version)
     except ValueError as exc:
         return str(exc)
+    # A patch release must keep the code of the release before it
+    # (skala_patch.py; the same rule as tests/test_skala_patch_code_unchanged.py).
+    patch = patch_refusal(pkg.id, pkg.version, pkg.path)
+    if patch:
+        return patch
     if target["state"] != "staging" or not target["present"]:
         return "Run evals until this version reaches staging first."
     distinct = {evidence_hash([c["input"], c.get("model")]) for c in pkg.cases}
@@ -503,14 +614,10 @@ async def promote(conn: Any, pkg: SkillPackage, by: str, evidence: dict[str, Any
     rows = await conn.fetch("SELECT * FROM tank.skills WHERE id=$1", pkg.id)
     previous = next((r["version"] for r in rows if r["state"] == "approved"), None)
     for row in rows:
-        older_pending = False
-        if not rollback and row["state"] in {"candidate", "staging"} and row["approved_at"] is None:
-            try:
-                older_pending = version_key(row["version"]) < version_key(pkg.version)
-            except ValueError:
-                pass
-        if row["state"] == "approved" or older_pending:
-            await conn.execute("UPDATE tank.skills SET state='retired', updated_at=now() WHERE id=$1 AND version=$2",
+        if row["state"] == "approved" and row["version"] != pkg.version:
+            # A new approval is not permission to retire the previous version.
+            # Keep its approved_at history for rollback during probation.
+            await conn.execute("UPDATE tank.skills SET state='staging', updated_at=now() WHERE id=$1 AND version=$2",
                                pkg.id, row["version"])
     await conn.execute(
         "UPDATE tank.skills SET state='approved', approved_by=$3, approved_at=now(), updated_at=now() WHERE id=$1 AND version=$2",
@@ -548,7 +655,7 @@ async def change_version(db: Any, pkg: SkillPackage, by: str, action: str, *, re
                 if not confirmed:
                     raise HTTPException(409, "Confirm the rollback first.")
                 row = await conn.fetchrow("SELECT * FROM tank.skills WHERE id=$1 AND version=$2", pkg.id, pkg.version)
-                if not row or row["state"] != "retired" or row["approved_at"] is None or not row["present"]:
+                if not row or row["state"] not in {"retired", "staging"} or row["approved_at"] is None or not row["present"]:
                     raise HTTPException(409, "Only a retired version that was previously approved can be restored.")
                 blocked = await zenas_approval_refusal(conn, pkg.id, region=region)
                 if blocked:
@@ -557,8 +664,8 @@ async def change_version(db: Any, pkg: SkillPackage, by: str, action: str, *, re
     return {"ok": True, "skill": pkg.ref, "state": "approved"}
 
 
-async def retire_version(db: Any, skill_id: str, version: str, by: str) -> dict[str, Any]:
-    """Retirement needs the registry row, even when its package is no longer on disk."""
+async def retire_version(db: Any, skill_id: str, version: str, by: str, *, now: datetime | None = None) -> dict[str, Any]:
+    """State-only retirement after a newer approval has completed probation."""
     from fastapi import HTTPException
     async with db.acquire() as conn:
         async with conn.transaction():
@@ -568,8 +675,11 @@ async def retire_version(db: Any, skill_id: str, version: str, by: str) -> dict[
                 raise HTTPException(404, "No such skill version.")
             if row["state"] not in {"candidate", "staging"}:
                 raise HTTPException(409, "Only candidate or staging versions can be retired here. The approved version stays in service.")
+            evidence = await __import__("skala_probation").evidence(conn, skill_id, version, now=now)
+            if not evidence["allowed"]:
+                raise HTTPException(409, evidence)
             await conn.execute("UPDATE tank.skills SET state='retired', updated_at=now() WHERE id=$1 AND version=$2", skill_id, version)
-            await log_action(conn, skill_id, version, by, "retire", None, {})
+            await log_action(conn, skill_id, version, by, "retire", None, evidence)
     return {"ok": True, "skill": f"{skill_id}@{version}", "state": "retired"}
 
 

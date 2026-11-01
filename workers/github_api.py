@@ -115,6 +115,17 @@ class GitHub:
             raise GitHubError("pull list was not a list")
         return payload
 
+    async def pull(self, token: str, number: int) -> dict[str, Any]:
+        return await self._send("GET", f"{API}/repos/{self.repo}/pulls/{number}", token)
+
+    async def mark_draft(self, token: str, node_id: str) -> None:
+        result = await self._send("POST", f"{API}/graphql", token, {
+            "query": "mutation($id:ID!){convertPullRequestToDraft(input:{pullRequestId:$id}){pullRequest{isDraft}}}",
+            "variables": {"id": node_id},
+        })
+        if result.get("errors"):
+            raise GitHubError("GitHub did not mark the pull request draft")
+
     async def create_draft(self, token: str, *, branch: str, title: str, body: str) -> dict[str, Any]:
         url = f"{API}/repos/{self.repo}/pulls"
         created = await self._send(
@@ -140,6 +151,10 @@ class GitHub:
     async def combined_status(self, token: str, sha: str) -> str:
         url = f"{API}/repos/{self.repo}/commits/{sha}/status"
         payload = await self._send("GET", url, token)
+        # Check-runs-only repositories have no legacy commit statuses. GitHub
+        # returns pending/count=0 even after every Actions check has passed.
+        if isinstance(payload, dict) and payload.get("total_count") == 0:
+            return ""
         state = payload.get("state") if isinstance(payload, dict) else None
         return str(state or "pending")
 

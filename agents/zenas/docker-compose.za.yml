@@ -1,8 +1,8 @@
 # Zenas room for the South Africa region. Deploy this file as its own Coolify
 # resource on the SA server (Base Directory /agents/zenas, Compose Location
-# /docker-compose.za.yml). Same room rules as docs/cursor/ROOMS.md: the only
-# network is the corridor tervory-gw-zenas, created by docker-compose.za.yml at
-# the repo root. The room gets its Tank key and its own database login only.
+# /docker-compose.za.yml). The room keeps its gateway corridor and gains a
+# private Docassemble-only network. The corridor is created by the root stack.
+# The room gets its Tank key and its own database login only.
 # No model keys: those live only in the ZA Tank stack (litellm).
 
 services:
@@ -16,14 +16,29 @@ services:
     environment:
       TANK_REGION: za
       AGENT_NAME: zenas
-      R2_BUCKET: tervory-zenas
+      LAWS_AFRICA_API_TOKEN: ${LAWS_AFRICA_API_TOKEN:-}
+      # Founder creates Cloudflare R2 bucket tervory-zenas-za and sets this name.
+      # US agent-zenas keeps R2_BUCKET: tervory-zenas unchanged.
+      R2_BUCKET_ZENAS_ZA: ${R2_BUCKET_ZENAS_ZA:-}
+      R2_BUCKET: ${R2_BUCKET_ZENAS_ZA:-}
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_ACCESS_KEY_ID_ZENAS: ${R2_ACCESS_KEY_ID_ZENAS:-}
       R2_SECRET_ACCESS_KEY_ZENAS: ${R2_SECRET_ACCESS_KEY_ZENAS:-}
       DATABASE_URL: postgresql://agent_zenas:${AGENT_DB_PASSWORD_ZENAS}@postgres:5432/${POSTGRES_DB:-tervory}
+      CHASSIS_ADMIN_DATABASE_URL: ${CHASSIS_ADMIN_DATABASE_URL:-}
+      CHASSIS_RLS_ADMIN_ROLE: ${CHASSIS_RLS_ADMIN_ROLE:-}
       TANK_URL: http://tank:8000
+      ZENAS_SMTP_HOST: ${ZENAS_SMTP_HOST:-}
+      ZENAS_SMTP_PORT: ${ZENAS_SMTP_PORT:-}
+      ZENAS_SMTP_USER: ${ZENAS_SMTP_USER:-}
+      ZENAS_SMTP_PASSWORD: ${ZENAS_SMTP_PASSWORD:-}
+      ZENAS_SMTP_FROM: ${ZENAS_SMTP_FROM:-}
+      ZENAS_SMTP_ALERT_ADDRESSES: ${ZENAS_SMTP_ALERT_ADDRESSES:-}
       TANK_KEY: ${TANK_KEY:-}
       HERMES_URL: http://hermes:8000
+      DOCASSEMBLE_REGION: za
+      DOCASSEMBLE_URL: http://docassemble
+      DOCASSEMBLE_API_KEY: ${DOCASSEMBLE_API_KEY:-}
       ZENAS_PII_KEY: ${ZENAS_PII_KEY:-}
       ZENAS_MATTER_SHARING: ${ZENAS_MATTER_SHARING:-region}
       DATA_DIR: /data
@@ -31,6 +46,7 @@ services:
       - za_agent_data:/data
     networks:
       - gw
+      - assembly
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 10s
@@ -51,6 +67,8 @@ services:
     profiles:
       - load
     environment:
+      HERMES_URL: http://hermes:8000
+      TANK_KEY: ${TANK_KEY:-}
       TANK_REGION: za
       DATABASE_URL: postgresql://agent_zenas:${AGENT_DB_PASSWORD_ZENAS}@postgres:5432/${POSTGRES_DB:-tervory}
       LAWS_AFRICA_API_TOKEN: ${LAWS_AFRICA_API_TOKEN:-}
@@ -77,6 +95,9 @@ volumes:
   za_agent_data:
 
 networks:
+  assembly:
+    external: true
+    name: tervory-zenas-assembly
   gw:
     external: true
     name: tervory-gw-zenas

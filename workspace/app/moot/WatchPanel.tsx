@@ -75,7 +75,7 @@ export function WatchPanel({ row }: { row: WatchRecord }) {
       {row.costUsd != null ? (
         <section aria-label="Cost">
           <h2>Cost</h2>
-          <p>{row.costUsd} (fixture stub receipt)</p>
+          <p>{row.costUsd}</p>
         </section>
       ) : null}
     </main>

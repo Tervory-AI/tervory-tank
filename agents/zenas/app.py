@@ -26,6 +26,7 @@ if _CHASSIS.is_dir() and str(_CHASSIS) not in sys.path:
 
 from agents.zenas.pool.api import interrupt_abandoned_loads  # noqa: E402
 from agents.zenas.pool.api import register_routes as register_pool_routes  # noqa: E402
+from agents.zenas.pool.checkout import PerStatement  # noqa: E402
 from agents.zenas.pool.catalogue import CATALOGUE  # noqa: E402
 from agents.zenas.pool.region import RegionError, assert_box_region
 from agents.zenas.core.law_pool import bind_law_pool  # noqa: E402
@@ -279,8 +280,30 @@ async def _pool_store():
         yield store
 
 
+@asynccontextmanager
+async def _pool_job_store():
+    """The store a long job runs on: a load or a case conversion.
+
+    It borrows a pooled connection per statement (``PerStatement``), so the job
+    holds none of the room's three request connections between statements and
+    each row commits as it is written. Requests keep using ``_pool_store``.
+    """
+    async with _pool_store():
+        pass  # the schema is applied once, on a short request checkout
+    yield PostgresStore(PerStatement(app.state.pool), home_region=_box_region())
+
+
 # Feeds switchboard: pool status and "Load now" per source (Tank proxies /v1/zenas/pool/*).
-register_pool_routes(app, _pool_store, _box_region)
+register_pool_routes(app, _pool_store, _box_region, open_job_store=_pool_job_store)
+
+from agents.zenas.core.regulation_api import register_routes as register_regulation_routes  # noqa: E402
+
+register_regulation_routes(app, _pool_store, _store, _box_region)
+
+from agents.zenas.core.moot.hearing_api import register_routes as register_hearing_routes  # noqa: E402
+
+register_hearing_routes(app, lambda: app.state.pool, _store, _box_region, lambda: app.state.tank)
+
 
 _inner_lifespan = app.router.lifespan_context
 
@@ -959,14 +982,15 @@ async def post_answer(body: AnswerIn) -> dict[str, Any]:
         box_region=_box_region(),
         jurisdiction=body.jurisdiction,
         question=body.question,
-        passages=body.passages,
+        # Ask uses this box's stored law only. Caller-supplied passages cannot establish a citation.
+        passages=[],
         features=body.features,
         matter_id=str(body.matter_id) if body.matter_id else None,
         provider=body.provider,
         tank=app.state.tank,
         pool=getattr(app.state, "law_pool", None),
     )
-    if result.get("reason") == "could not verify":
+    if str(result.get("reason") or "").startswith("could not verify"):
         return result
     _fail(result)
     return result
@@ -1027,7 +1051,7 @@ async def post_cases_convert(body: ConvertIn) -> dict[str, Any]:
 
     async def runner() -> None:
         ladder = await _ready()
-        async with _pool_store() as pool:
+        async with _pool_job_store() as pool:
             await convert_cases(pool, ladder, _model(HEARTBEAT_TENANT), region=box)
 
     started = await begin_convert(box, runner)
@@ -1086,6 +1110,19 @@ class MootStudentIn(BaseModel):
 
 class MootEditIn(BaseModel):
     changes: dict[str, Any]
+
+
+@app.get("/moot/published")
+async def get_moot_published(home_region: str, match_id: UUID | None = None) -> dict[str, Any]:
+    from agents.zenas.core.moot.published import published_matches
+
+    if home_region != "us-east" or _box_region() != "us-east":
+        raise HTTPException(status_code=403, detail="region mismatch")
+    try:
+        matches = await published_matches(app.state.pool, UUID(HEARTBEAT_TENANT), home_region, match_id)
+    except Exception:
+        raise HTTPException(status_code=503, detail="published matches unavailable") from None
+    return {"matches": matches}
 
 
 @app.get("/moot/fixtures")

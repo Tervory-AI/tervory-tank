@@ -42,6 +42,7 @@ class MemoryQuotes:
         self.clock = clock
         self.states: dict[tuple[str, str], dict[str, Any]] = {}
         self.counts: Counter = Counter()
+        self.located_counts: Counter = Counter()
         self.lock = asyncio.Lock()
         self.search_events: dict[tuple[str, str], float] = {}
 
@@ -52,6 +53,9 @@ class MemoryQuotes:
             "created_at": datetime.fromtimestamp(self.clock(), timezone.utc)}
         if not hold:
             await self.count(tenant, "quotes")
+        if any(line.get("store") and line.get("public", {}).get("status") == "available_to_order"
+                   for line in quote["payload"].get("locate", [])):
+            self.located_counts[(tenant, datetime.now(timezone.utc).date())] += 1
 
     async def count(self, tenant: str, event: str) -> None:
         if event not in EVENTS:
@@ -148,15 +152,25 @@ class PgQuotes:
 
     async def create(self, tenant: str, quote: dict[str, Any], *, hold: bool = False) -> None:
         async with self.pool.acquire() as conn, conn.transaction():
+            from rigbox.training import enqueue
+
             await conn.execute("""INSERT INTO agent_rig.quotes (tenant_id, id, payload, contact)
                 VALUES ($1, $2, $3::jsonb, $4::jsonb)""", UUID(tenant), quote["id"],
                 json.dumps(quote["payload"]), json.dumps(quote["contact"]))
+            await enqueue(conn, tenant, "rig_quote", quote["id"], quote["payload"],
+                          {"request_id": quote["id"]})
             await conn.execute("""INSERT INTO agent_rig.quote_handoffs
                 (tenant_id, quote_id, needs_attention, error, next_attempt_at)
                 VALUES ($1, $2, $3, $4, CASE WHEN $3 THEN NULL ELSE now() END)""",
                 UUID(tenant), quote["id"], hold, "tenant_quote_limit" if hold else None)
             if not hold:
                 await self._count(conn, tenant, "quotes")
+            if any(line.get("store") and line.get("public", {}).get("status") == "available_to_order"
+                   for line in quote["payload"].get("locate", [])):
+                await conn.execute("""INSERT INTO agent_rig.widget_counts(tenant_id,day,event,count,located_count)
+                    VALUES($1,(now() AT TIME ZONE 'UTC')::date,'quotes',0,1)
+                    ON CONFLICT(tenant_id,day,event) DO UPDATE SET
+                    located_count=agent_rig.widget_counts.located_count+1""", UUID(tenant))
 
     async def _count(self, conn: Any, tenant: str, event: str) -> None:
         if event not in EVENTS:

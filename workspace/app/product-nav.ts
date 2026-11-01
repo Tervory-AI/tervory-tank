@@ -28,9 +28,9 @@ export const SQUAD_MEMBERS: readonly SquadMember[] = [
 export const SQUAD_LINKS: NavLink[] = SQUAD_MEMBERS.map(({ href, label }) => ({ href, label }));
 
 export const TOP_LINKS: readonly NavLink[] = [
-  { href: "/", label: "Dashboard" },
+  { href: "https://app.tervory.com/", label: "Dashboard" },
   { href: "/matters", label: "Projects" },
-  { href: "/", label: "Chats" },
+  { href: "/chats", label: "Chats" },
 ];
 
 export const REST_LINKS: readonly NavLink[] = [
@@ -57,6 +57,7 @@ export const REVIEW_LINK: NavLink = { href: "/review", label: "Review" };
 /** Signed-in routes that share the workspace sidebar shell. */
 export const SHELL_ROUTES: readonly string[] = [
   "/",
+  "/chats",
   "/matters",
   "/tasks",
   "/ledger",
@@ -77,6 +78,7 @@ export const SHELL_ROUTES: readonly string[] = [
 const OWN_SHELL = [
   "/sign-in",
   "/sign-up",
+  "/autumbra",
   "/base",
   "/tiger",
   "/market-lab",
@@ -88,8 +90,8 @@ const OWN_SHELL = [
   "/tank",
 ] as const;
 
-/** Only auth keeps nested Clerk screens under the same own-shell root. */
-const OWN_SHELL_NESTED = new Set<string>(["/sign-in", "/sign-up"]);
+/** Auth + Autumbra owner pages keep nested screens under the own-shell root (no workspace menu). */
+const OWN_SHELL_NESTED = new Set<string>(["/sign-in", "/sign-up", "/autumbra"]);
 
 export function cleanPath(pathname: string): string {
   if (!pathname) return "/";

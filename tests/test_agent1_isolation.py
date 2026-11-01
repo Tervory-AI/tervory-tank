@@ -18,6 +18,18 @@ spec.loader.exec_module(brain)
 from brain import browser, runner, security, service, sandbox  # noqa: E402
 
 
+def _base_brain():
+    """agents/base/base_brain.py, loaded once. Tests used to rely on an earlier test in
+    this file having loaded it, so they failed with KeyError when run alone or reordered."""
+    module = sys.modules.get("base_brain")
+    if module is None:
+        spec = importlib.util.spec_from_file_location("base_brain", ROOT / "agents/base/base_brain.py")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+    return module
+
+
 def test_browser_and_sandbox_have_no_direct_egress_or_cross_room_network():
     compose = yaml.safe_load((ROOT / "agents/base/docker-compose.yml").read_text())
     assert compose["networks"]["browser"]["internal"] is True
@@ -138,10 +150,7 @@ async def test_foreign_memory_never_reaches_work(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_panel_receipt_query_is_tenant_scoped():
-    spec = importlib.util.spec_from_file_location("base_brain", ROOT / "agents/base/base_brain.py")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    module = _base_brain()
     tenant, task = uuid.uuid4(), uuid.uuid4()
     receipt = {"tenant_id": str(tenant), "task_id": str(task), "steps": [{"action": "remember"}]}
 
@@ -160,12 +169,7 @@ async def test_pipeline_defers_paid_calls_until_recovery_finishes(monkeypatch):
     from types import SimpleNamespace
     import httpx
     from fastapi import FastAPI
-    module = sys.modules.get("base_brain")
-    if module is None:
-        spec = importlib.util.spec_from_file_location("base_brain", ROOT / "agents/base/base_brain.py")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
+    module = _base_brain()
     tenant, task = uuid.uuid4(), uuid.uuid4()
     key = uuid.uuid4().hex
     monkeypatch.setenv("TANK_KEY", key)
@@ -219,7 +223,7 @@ async def test_pipeline_defers_paid_calls_until_recovery_finishes(monkeypatch):
 async def test_rerun_replaces_thinking_subtotal_without_double_counting(monkeypatch):
     from contextlib import asynccontextmanager
     from types import SimpleNamespace
-    module = sys.modules["base_brain"]
+    module = _base_brain()
     tenant, task = uuid.uuid4(), uuid.uuid4()
     receipt = {"tenant_id": str(tenant), "task_id": str(task), "status": "done",
                "model_receipts": [{"ledger_id": str(uuid.uuid4()), "cost_usd": 0.15}]}
@@ -252,7 +256,7 @@ async def test_brain_failure_before_pipeline_uses_existing_pipeline(monkeypatch,
     from contextlib import asynccontextmanager
     from types import SimpleNamespace
     import httpx
-    module = sys.modules["base_brain"]
+    module = _base_brain()
     tenant, task = uuid.uuid4(), uuid.uuid4()
     monkeypatch.setenv("BASE_BRAIN_URL", "http://base-brain")
     calls = []
@@ -283,7 +287,7 @@ async def test_brain_failure_before_pipeline_uses_existing_pipeline(monkeypatch,
 
 @pytest.mark.asyncio
 async def test_retry_refuses_private_and_metadata_dns_before_record_write(monkeypatch):
-    module = sys.modules["base_brain"]
+    module = _base_brain()
     async def addresses(*args, **kwargs):
         return [(2,1,6,"",("10.0.0.1",443))]
     monkeypatch.setattr(asyncio.get_running_loop(),"getaddrinfo",addresses)
@@ -342,7 +346,7 @@ def test_deployment_gate_rejects_privileges_and_shared_namespaces(monkeypatch,fi
 async def test_brain_failure_after_free_pass_runs_paid_continuation(monkeypatch, status):
     from contextlib import asynccontextmanager
     from types import SimpleNamespace
-    module = sys.modules['base_brain']
+    module = _base_brain()
     tenant, task = uuid.uuid4(), uuid.uuid4()
     monkeypatch.setenv('BASE_BRAIN_URL', 'http://base-brain')
     calls=[]
@@ -384,7 +388,7 @@ async def test_brain_failure_after_free_pass_runs_paid_continuation(monkeypatch,
 @pytest.mark.asyncio
 async def test_twenty_unresolved_records_exclude_large_profiles_and_passes():
     from contextlib import asynccontextmanager
-    module=sys.modules['base_brain']
+    module=_base_brain()
     tenant, task=uuid.uuid4(),uuid.uuid4()
     class Pool:
         @asynccontextmanager

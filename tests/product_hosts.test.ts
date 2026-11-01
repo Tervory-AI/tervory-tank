@@ -72,3 +72,14 @@ test("app /moot redirects canonically to zenas host", () => {
   assert.equal(mootCanonicalRedirectUrl("app.tervory.com", "/matters"), null);
   assert.equal(mootCanonicalRedirectUrl("app.tervory.com", "/zenas"), null);
 });
+
+test("sign-in returns to the public address, never the internal bind or rewritten path", async () => {
+  const { publicReturnUrl } = await import("../workspace/lib/product-hosts.ts");
+  assert.equal(publicReturnUrl("base.tervory.com", "/"), "https://base.tervory.com/");
+  assert.equal(publicReturnUrl("Base.Tervory.com:443", "/campaigns", "?x=1"), "https://base.tervory.com/campaigns?x=1");
+  assert.equal(publicReturnUrl("app.tervory.com", "/chats", "?"), "https://app.tervory.com/chats");
+  assert.equal(publicReturnUrl("0.0.0.0:3000", "/base"), "https://app.tervory.com/");
+  assert.equal(publicReturnUrl("evil.example", "/x"), "https://app.tervory.com/");
+  assert.equal(publicReturnUrl("tervory.com.evil.example", "/x"), "https://app.tervory.com/");
+  assert.equal(publicReturnUrl(null, "/x"), "https://app.tervory.com/");
+});

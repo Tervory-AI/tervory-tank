@@ -55,6 +55,8 @@ class Conn:
         self.reads.append((sql, args))
         if 'tank.ledger' in sql:
             return [{'day': '2026-10-21', 'calls': 9, 'code': 5, 'delivered': 8, 'spent': 0.24}]
+        if 'tank.tenant_squad' in sql:
+            return [{'agent': 'base'}, {'agent': 'zenas'}]
         if 'tank.tasks' in sql:
             return [{'id': 'one', 'title': 'A requested list', 'status': 'done'}]
         return []
@@ -147,8 +149,8 @@ async def test_main_call_stops_after_cache_miss_and_cache_still_runs(conn, monke
     monkeypatch.setattr(main, 'zenas_pool_prompt', AsyncMock(return_value=False))
     monkeypatch.setattr(main, 'model_call_refusal', lambda *a, **kw: None)
     monkeypatch.setenv('TANK_REGION', 'us-east')
-    cache = SimpleNamespace(get=AsyncMock(return_value=None))
-    monkeypatch.setattr(main, '_redis', cache)
+    cache = AsyncMock(return_value=None)
+    monkeypatch.setattr(main, '_cache_read', cache)
     conn.value = True
     gateway = Mock(side_effect=AssertionError('paused call reached the gateway'))
     monkeypatch.setattr(main.httpx, 'AsyncClient', gateway)
@@ -156,7 +158,7 @@ async def test_main_call_stops_after_cache_miss_and_cache_still_runs(conn, monke
     with pytest.raises(HTTPException, match='paid work is paused'):
         await main.run_route(request)
     gateway.assert_not_called()
-    cache.get.return_value = '{"content":"already answered"}'
+    cache.return_value = 'already answered'
     result = await main.run_route(request)
     assert result.content == 'already answered' and result.rung == 4 and result.cost_usd == 0
 
@@ -178,6 +180,8 @@ async def test_client_measurements_come_from_scoped_sources_and_unknowns_are_nul
     assert data['jobs_done'] == 4
     assert data['daily'][0]['spent'] == 0.24
     assert data['saved_usd'] is None and data['credits_left'] is None
+    assert data['granted_squads'] == ['base', 'zenas']
+    assert any('tank.tenant_squad' in sql and args == (TENANT,) for sql, args in conn.reads)
     assert data['recent'] == [{'id': 'one', 'title': 'A requested list', 'status': 'done'}]
     assert all(args == (TENANT,) and 'tenant_id' in sql for sql, args in conn.reads)
 
@@ -194,7 +198,7 @@ def test_readonly_controls_have_no_write_path(client):
 
 def test_only_approved_narrow_main_hooks_and_no_approved_skill_edits():
     source = (ROOT / 'tank/main.py').read_text()
-    assert 'event_hooks={"request": [__import__("controls").paid_host_hook]}' in source
+    assert 'event_hooks={"request": [__import__("controls").paid_host_hook], "response": [__import__("controls").paid_response_hook]}' in source
     assert 'refuse_paid(paid=True, task=req.task_type, path="route")' in source
 
 @pytest.mark.asyncio
@@ -282,6 +286,8 @@ async def test_existing_switch_audit_records_who_old_new(conn):
 
 def test_existing_switch_route_refuses_non_founder(monkeypatch):
     monkeypatch.setenv('TANK_API_KEY', 'test')
+    # main reads TANK_API_KEY once at import; another module may have imported it first.
+    monkeypatch.setattr(main, 'TANK_API_KEY', 'test')
     monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder-fixture')
     client = TestClient(main.app)
     assert client.post('/v1/graduation/base.extract/promote', headers={'x-tank-key':'test', 'x-tervory-admin':'other-user'}, json={}).status_code == 404

@@ -22,14 +22,14 @@ import {
 import { ApproveAllReady } from "./approve-all";
 
 const TOP_LINKS = [
-  { href: "/ledger", label: "Dashboard" },
-  { href: "/tasks", label: "Projects" },
-  { href: "/", label: "Chats" },
+  { href: "https://app.tervory.com/", label: "Dashboard" },
+  { href: "/matters", label: "Projects" },
+  { href: "/chats", label: "Chats" },
 ] as const;
 
 const BOTTOM_LINKS = [
   { href: "/onboarding", label: "Settings" },
-  { href: "/", label: "Support" },
+  { href: "https://tervory.com", label: "Support" },
 ] as const;
 
 const SKALA_LOGO = { src: "/brand/skala-on-dark.png", width: 185, height: 44 };
@@ -346,7 +346,7 @@ export function SkalaApp({
                                     {busyKey === `${key}:retire` ? "Retiring…" : "Retire"}
                                   </button>
                                 ) : null}
-                                {version.state === "retired" && version.approved_at && version.present ? (
+                                {(version.state === "retired" || version.state === "staging") && version.approved_at && version.present ? (
                                   <button type="button" disabled={busyKey !== null} onClick={() => openApprove(version, "rollback")}>Roll back to {version.version}</button>
                                 ) : null}
                                 {version.state === "staging" && version.reason ? <p className="sk-row-err">{version.reason}</p> : null}

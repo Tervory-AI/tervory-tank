@@ -1,4 +1,5 @@
-/** Fixture match publish flags for MOOT-1a watch pages. No secrets. */
+import "server-only";
+import { mootPublishedMatches } from "@/lib/tank";
 
 export type MatchRecord = {
   matchId: string;
@@ -14,57 +15,82 @@ export type MatchRecord = {
 };
 
 
-const FIXTURES: Record<string, MatchRecord> = {
-  "fixture-unpublished": {
-    matchId: "fixture-unpublished",
-    published: false,
-    title: "Fixture unpublished match",
-    fairnessReading: "split",
-    judgmentOrder: "appeal_dismissed",
-    judgmentReasons: ["Fixture reasons."],
-    reveal: "Appeal dismissed.",
-    transcript: [{ role: "counsel_appellant", text: "Hidden until published." }],
-    authorities: [{ name: "Fixture Pacta Sunt Servanda [TEST] ZASCA 1", source_url: "https://example.test/a" }],
-    costUsd: 0.01,
-  },
-  "fixture-published": {
-    matchId: "fixture-published",
-    published: true,
-    title: "Fixture Landlord v Tenant (SCA) [TEST]",
-    fairnessReading: "problem_may_be_lopsided",
-    judgmentOrder: "appeal_dismissed",
-    judgmentReasons: [
-      "1. The cancellation clause must be read with clause 14's notice requirement.",
-      "2. On these facts, cancellation without notice could not stand.",
-    ],
-    reveal: "Appeal dismissed. Notice was required before cancellation.",
-    transcript: [
-      { role: "counsel_appellant", text: "The cancellation clause is clear and was triggered by late payment." },
-      { role: "judge", text: "My Lord, on the appellant's submission: Counsel, where in the lease is notice dispensed with in clear words?" },
-      { role: "counsel_respondent", text: "Cancellation without notice is contrary to good faith in this lease." },
-      { role: "judgment", text: "Order: appeal_dismissed." },
-      { role: "reveal", text: "Appeal dismissed. Notice was required before cancellation." },
-    ],
-    authorities: [
-      { name: "Fixture Pacta Sunt Servanda [TEST] ZASCA 1", source_url: "https://example.test/fixture-sa-lease-appeal" },
-      { name: "Fixture Good Faith Lease [TEST] ZASCA 3", source_url: "https://example.test/fixture-sa-lease-appeal" },
-    ],
-    costUsd: 0.012,
-  },
-};
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const OFFLINE = /fixture|\[TEST\]|CVE-2024-0000|ThreatPayload|00000000-0000-0000-0000/i;
 
-export function getMatch(matchId: string): MatchRecord | null {
-  if (!/^[\w-]+$/.test(matchId)) return null;
-  return FIXTURES[matchId] ?? null;
+export type MatchFailure = { status: "unavailable" } | { status: "malformed" };
+export type PublishedMatchesResult =
+  | { status: "available"; matches: MatchRecord[] }
+  | { status: "empty"; matches: [] }
+  | MatchFailure;
+export type MatchResult = { status: "available"; match: MatchRecord } | { status: "missing" } | MatchFailure;
+
+function object(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-/** True when the public page may render (published fixture only). */
-export function isPublicWatch(matchId: string): boolean {
-  const row = getMatch(matchId);
-  return Boolean(row && row.published);
+function strings(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(item => typeof item === "string");
 }
 
-/** Published fixtures for the /moot index (zenas.tervory.com). */
-export function listPublishedMatches(): MatchRecord[] {
-  return Object.values(FIXTURES).filter((row) => row.published);
+function validMatch(row: Record<string, unknown>): boolean {
+  return typeof row.matchId === "string" && UUID.test(row.matchId)
+    && typeof row.title === "string" && row.title.trim().length > 0
+    && typeof row.fairnessReading === "string" && typeof row.judgmentOrder === "string"
+    && typeof row.reveal === "string"
+    && (row.judgmentReasons === undefined || strings(row.judgmentReasons))
+    && (row.transcript === undefined || (Array.isArray(row.transcript) && row.transcript.every(
+      turn => object(turn) && typeof turn.role === "string" && typeof turn.text === "string")))
+    && (row.authorities === undefined || (Array.isArray(row.authorities) && row.authorities.every(
+      authority => object(authority) && typeof authority.name === "string"
+        && (authority.source_url === undefined || (typeof authority.source_url === "string"
+          && (authority.source_url === "" || /^https?:\/\//i.test(authority.source_url)))))))
+    && (row.costUsd === undefined || row.costUsd === null
+      || (typeof row.costUsd === "number" && Number.isFinite(row.costUsd) && row.costUsd >= 0));
+}
+
+/** Only the room's published platform matches may reach the public watch pages.
+ * Private and offline rows are excluded, but broken public data is never called empty.
+ * Never return upstream error details or unknown fields to a public component.
+ */
+export async function listPublishedMatches(matchId?: string): Promise<PublishedMatchesResult> {
+  let response: unknown;
+  try {
+    response = await mootPublishedMatches(matchId);
+  } catch (error) {
+    return { status: error instanceof SyntaxError ? "malformed" : "unavailable" };
+  }
+  if (!object(response) || !Array.isArray(response.matches)) return { status: "malformed" };
+  const matches: MatchRecord[] = [];
+  for (const value of response.matches) {
+    if (!object(value)) return { status: "malformed" };
+    // A private row must never influence the public result or leak its contents.
+    if (value.published === false || OFFLINE.test(JSON.stringify(value))) continue;
+    if (value.published !== true || !validMatch(value)) return { status: "malformed" };
+    const row = value as MatchRecord;
+    matches.push({ matchId: row.matchId, published: true, title: row.title,
+      fairnessReading: row.fairnessReading, judgmentOrder: row.judgmentOrder, reveal: row.reveal,
+      judgmentReasons: row.judgmentReasons,
+      transcript: row.transcript?.map(({ role, text }) => ({ role, text })),
+      authorities: row.authorities?.map(({ name, source_url }) => ({ name, source_url })),
+      costUsd: row.costUsd });
+  }
+  return matches.length ? { status: "available", matches } : { status: "empty", matches: [] };
+}
+
+export async function getMatch(matchId: string): Promise<MatchResult> {
+  if (!UUID.test(matchId)) return { status: "missing" };
+  const result = await listPublishedMatches(matchId);
+  if (result.status === "unavailable" || result.status === "malformed") return result;
+  const match = result.matches.find(row => row.matchId === matchId);
+  return match ? { status: "available", match } : { status: "missing" };
+}
+
+/** Boolean callers must not silently interpret an outage as a missing public page. */
+export async function isPublicWatch(matchId: string): Promise<boolean> {
+  const result = await getMatch(matchId);
+  if (result.status === "unavailable" || result.status === "malformed") {
+    throw new Error(`Moot published matches ${result.status}`);
+  }
+  return result.status === "available";
 }

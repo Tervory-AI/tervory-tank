@@ -34,6 +34,7 @@ function Metric({ label, value, note, days, href }: { label: string; value: stri
 
 export function FounderDashboard({ view }: { view: FounderView }) {
   const { data, signups, paying, activity, now } = view;
+  const unpriced = data.daily.reduce((sum, row) => sum + (row.unpriced || 0), 0);
   return <div className="control-panel">
     <header className="control-top">
       <img src="/brand/tervory-logo.png" alt="Tervory AI" width="180" height="33" />
@@ -44,7 +45,7 @@ export function FounderDashboard({ view }: { view: FounderView }) {
       <Metric label="Sign-ups" value={count(signups.total)} note={<>+<span className="control-number">{signups.thisWeek}</span> this week</>} days={signups.days} href={sourceLink("signups")} />
       <Metric label="Paying clients" value={String(paying.total)} note={<>+<span className="control-number">{paying.thisWeek}</span> this week</>} days={paying.days} href={sourceLink("paying")} />
       <Metric label="Work done today" value={count(activity.delivered)} note={<><span className="control-number">{activity.codePercent}</span>% by code, no model</>} days={activity.work} href={sourceLink("activity", { day: new Date(now).toISOString().slice(0, 10) })} />
-      <Metric label="Spent this month" value={money(activity.spent)} days={activity.spend} href={sourceLink("activity")} />
+      <Metric label="Recorded spend this month" value={unpriced && activity.spent === 0 ? "price not set" : money(activity.spent)} note={unpriced ? `${unpriced} calls excluded: price not set` : undefined} days={unpriced ? [] : activity.spend} href={sourceLink("activity")} />
     </div>
     <NeedsYou skills={passedSkills(data.skills!).length} models={view.models} checks={view.checks} />
     <div className="control-bottom">

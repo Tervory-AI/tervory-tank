@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from chassis.tenant_db import tenant_scope
+
 import hashlib
 import hmac
 import json
@@ -40,6 +42,7 @@ from rigbox.logic import options_for
 from rigbox.logic import product_detail
 from rigbox.logic import _limit
 from rigbox.logic import public_product
+from rigbox.shopper_attributes import shopper_attributes, shopper_rows
 from rigbox.logic import reprice
 from rigbox.logic import setups as build_setups
 from rigbox.rank import search as rank_room
@@ -51,6 +54,8 @@ from rigbox.recall import part_query
 from rigbox.recall import parts_of
 from rigbox.recall import signature
 from rigbox.recall import whole_hit
+from rigbox.locate import catalogue as supply_catalogue, locate as supply_locate, needs_supply
+from rigbox.locate import enabled as locate_enabled
 from rigbox.store import _fit_key
 from rigbox.quotes.limits import FailedKeyLimits, MemoryRateLimits, PgRateLimits
 
@@ -239,6 +244,11 @@ class Service:
         self.store = store
         self.models = models
         self.handoff = handoff or RecordingHandoff()
+        # Locate confirm reads offers live. The app wires the product checkers,
+        # tests inject doubles. None means confirm is not available.
+        self.locate_checker: Any | None = None
+        # No concrete payment provider is chosen. None refuses Locate checkout.
+        self.payments: Any | None = None
         self.limiter = RateLimiter(limit=rate_limit)
         self.failed_keys = FailedKeyLimits()
         pool = getattr(store, "pool", None)
@@ -277,12 +287,29 @@ class Service:
             return row
         env_key = os.environ.get("RIG_ADMIN_KEY") or ""
         if env_key and hmac.compare_digest(presented, env_key):
-            tenants = await self.store.tenant_ids()
+            with tenant_scope(None, administrative=True):
+                tenants = await self.store.tenant_ids()
             if len(tenants) == 1:
                 return {"tenant_id": tenants[0], "kind": "admin", "origins": []}
         raise RigError("unauthorized", "That key is not valid.", 401)
 
     async def search(
+        self,
+        tenant_id: str,
+        query: str,
+        limit: int | None,
+        filters: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        # Both /v1/rig/search entry paths share Workspace's 200-character limit.
+        query = " ".join((query or "").split())[:200]
+        result = await self._search(tenant_id, query, limit, filters)
+        if (query or "").strip() and not result.get("results"):
+            # Include cached misses: each completed search is a distinct event.
+            await self.store.training_event(tenant_id, "rig_no_result", uuid4().hex,
+                                            {"query": query.strip(), "filters": filters or {}}, {"results": []})
+        return result
+
+    async def _search(
         self,
         tenant_id: str,
         query: str,
@@ -296,7 +323,7 @@ class Service:
 
             cap = _limit(limit)
             version = await self._catalogue_version(tenant_id)
-            products = await self.store.products(tenant_id)
+            products = await self._shopper_products(tenant_id)
             fits = await self._approved_fits(tenant_id)
             body = shop_search(
                 {
@@ -337,7 +364,7 @@ class Service:
             body = await self._body_from_saved(tenant_id, whole, pieces, host, cap)
             if body is not None:
                 return body
-        products = await self.store.products(tenant_id)
+        products = await self._shopper_products(tenant_id)
         reusable = False
         for piece in pieces:
             if part_hit(known, host, piece, cap) is not None:
@@ -456,7 +483,7 @@ class Service:
         if not ids:
             return []
         by_id: dict[str, dict[str, Any]] = {}
-        for row in await self.store.products(tenant_id):
+        for row in await supply_catalogue(self.store, tenant_id):
             if row.get("active", True) is False:
                 continue
             public = public_product(row)
@@ -554,6 +581,8 @@ class Service:
         products = []
         for row in await self._active(tenant_id):
             item = public_product(row)
+            # The model and the grounded sentence only see shopper-safe facts.
+            item["attributes"] = shopper_attributes(item["attributes"])
             item["family"] = str(row.get("family") or "")
             products.append(item)
         fits = await self._approved_fits(tenant_id)
@@ -624,7 +653,45 @@ class Service:
             payload = {"kind": "product", "product": product}
         else:
             raise RigError("invalid", "A setup or a product is required.", 422)
+        wanted = ([part["product"]["id"] for part in payload["setup"]["parts"]]
+                  if payload["kind"] == "setup" else [payload["product"]["id"]])
+        private = []
+        # Optional per store: no supply lookup at all until the store opts in.
+        rows = await self.store.products(tenant_id) if await locate_enabled(self.store, tenant_id) else []
+        for row in rows:
+            if str(row["sku"]) in wanted and needs_supply(row):
+                result = await supply_locate(self.store, tenant_id, row)
+                private.append({"product_id": row["sku"], **result})
+        if private:
+            payload["locate"] = private
         return payload, contact
+
+    async def _locate_row(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        if not await locate_enabled(self.store, tenant_id):
+            raise RigError("locate_disabled", "This store does not offer ordering from other stores.", 403)
+        row = next((p for p in await self.store.products(tenant_id) if p["sku"] == product_id), None)
+        if row is None:
+            raise RigError("not_found", "No such product.", 404)
+        return row
+
+    async def locate(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        row = await self._locate_row(tenant_id, product_id)
+        return (await supply_locate(self.store, tenant_id, row))["public"]
+
+    async def locate_confirm(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        """Live re-check of the located offer, then a short-lived signed hold."""
+        from rigbox.locate_live import LocateRefused, confirm, hold_secret
+
+        row = await self._locate_row(tenant_id, product_id)
+        if not needs_supply(row):
+            raise RigError("invalid", "This product is available from the store.", 422)
+        if self.locate_checker is None:
+            raise RigError("unavailable", "Live stock checks are not available.", 503)
+        try:
+            secret = hold_secret()
+        except LocateRefused:
+            raise RigError("unavailable", "Live stock checks are not available.", 503) from None
+        return (await confirm(self.store, tenant_id, row, self.locate_checker, secret=secret))["public"]
 
     async def compare(self, tenant_id: str, product_ids: list[str]) -> dict[str, Any]:
         """Other sellers' prices for a selection the shopper already made.
@@ -705,7 +772,7 @@ class Service:
     async def suggested_fits(self, tenant_id: str) -> dict[str, Any]:
         names = {
             str(row.get("sku") or row.get("id") or ""): str(row.get("name") or "")
-            for row in await self.store.products(tenant_id)
+            for row in await supply_catalogue(self.store, tenant_id)
         }
         rows: list[dict[str, Any]] = []
         for row in await self.store.fits(tenant_id):
@@ -740,7 +807,24 @@ class Service:
         async with self.store.atomic(tenant_id) as store:
             if await store.is_feed_product(tenant_id, sku):
                 return False
-            return await store.update_price(tenant_id, sku, patch)
+            url, stamp = update.get("url"), update.get("observed_at")
+            if url is not None or stamp is not None:
+                from datetime import datetime
+                if not isinstance(url, str) or not isinstance(stamp, str):
+                    raise ValueError("A page and observation time are required.")
+                stamp = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+                if stamp.tzinfo is None:
+                    raise ValueError("An observation timezone is required.")
+                eligible = await store.watch_products(tenant_id)
+                if not any(row["sku"] == sku and row["url"] == url for row in eligible):
+                    return False
+                applied = await store.watch_applied_at(tenant_id, sku, url)
+                if applied is not None and stamp <= applied:
+                    return True  # An acknowledged retry cannot regress a newer observation.
+            changed = await store.update_price(tenant_id, sku, patch)
+            if changed and url is not None:
+                await store.mark_watch_applied(tenant_id, sku, url, stamp)
+            return changed
 
     async def load_catalogues(self, root: Path) -> list[dict[str, Any]]:
         if not root.is_dir():
@@ -768,7 +852,7 @@ class Service:
                 action = await self.store.upsert_product(tenant, row)
                 if action == "added":
                     added += 1
-                else:
+                elif action == "updated":
                     updated += 1
             report["products"] = {"added": added, "updated": updated, "rejected": []}
             for family, members in families_from(await self.store.products(tenant)).items():
@@ -816,12 +900,15 @@ class Service:
                 reports.append({"format": fmt, "added": 0, "updated": 0, "rejected": mapped["rejected"]})
                 continue
             added = updated = 0
-            for row in mapped["rows"]:
-                action = await self.store.upsert_product(tenant_id, row)
-                if action == "added":
-                    added += 1
-                else:
-                    updated += 1
+            async with self.store.atomic(tenant_id) as store:
+                for row in mapped["rows"]:
+                    action = await store.upsert_product(tenant_id, row)
+                    if action == "added":
+                        added += 1
+                    elif action == "updated":
+                        updated += 1
+                await store.index_feed_products(tenant_id, str(feed["url"]), [row["sku"] for row in mapped["rows"]],
+                                                complete=not mapped["rejected"])
             reports.append({"format": fmt, "added": added, "updated": updated, "rejected": mapped["rejected"]})
         return reports
 
@@ -834,8 +921,16 @@ class Service:
             "templates": await self.store.templates_for(tenant_id),
         }
 
+    async def _shopper_products(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Catalogue rows for shopper search, ranking and answers: attributes allowlisted.
+
+        rigbox.logic (mirrored into Skala) indexes every attribute it is given,
+        so private keys are removed here, before any search or setup sees a row.
+        """
+        return shopper_rows(await supply_catalogue(self.store, tenant_id))
+
     async def _active(self, tenant_id: str) -> list[dict[str, Any]]:
-        return [row for row in await self.store.products(tenant_id) if row.get("active", True)]
+        return [row for row in await self._shopper_products(tenant_id) if row.get("active", True)]
 
     async def _approved_fits(self, tenant_id: str) -> list[dict[str, Any]]:
         kept: list[dict[str, Any]] = []
@@ -847,7 +942,7 @@ class Service:
         return kept
 
     async def _catalogue_version(self, tenant_id: str) -> str:
-        products = [_version_product(row) for row in await self.store.products(tenant_id)]
+        products = [_version_product(row) for row in await supply_catalogue(self.store, tenant_id)]
         fits = [_version_fit(row) for row in await self._approved_fits(tenant_id)]
         fits.sort(key=lambda row: (row["part_sku"], row["fits_sku"], row["fits_family"]))
         payload = {
@@ -985,7 +1080,7 @@ class Service:
             return {"rows": 0, "rejected": []}
         if market.get("rejected"):
             return {"rows": 0, "rejected": list(market["rejected"])}
-        known = {str(row.get("sku") or "") for row in await self.store.products(tenant_id)}
+        known = {str(row.get("sku") or "") for row in await supply_catalogue(self.store, tenant_id)}
         unknown = [row for row in market.get("rows") or [] if str(row.get("sku") or "") not in known]
         if unknown:
             return {
@@ -1124,6 +1219,7 @@ def _version_product(row: dict[str, Any]) -> dict[str, Any]:
         "image": str(row.get("image_url") or row.get("image") or ""),
         "active": bool(row.get("active", True)),
         "attributes": attributes,
+        "availability": row.get("availability"),
     }
 
 

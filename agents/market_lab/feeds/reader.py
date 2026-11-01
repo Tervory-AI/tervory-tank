@@ -49,6 +49,9 @@ class FixtureReader:
     def read_text(self, relative: str) -> str:
         return self._path(relative).read_text(encoding="utf-8")
 
+    def read_bytes(self, relative: str) -> bytes:
+        return self._path(relative).read_bytes()
+
     def iter_rows(
         self,
         relative: str,

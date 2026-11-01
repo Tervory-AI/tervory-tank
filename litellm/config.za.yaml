@@ -13,30 +13,54 @@
 # carries its price page and fetch date. The tenant allow-list (TANK_PROVIDER_ALLOW) and the South
 # Africa identifier rule apply to them exactly as to every other non-SA provider.
 
+# 31 Oct 2026 (prompt caching): OpenAI GPT-6 and Anthropic deployments mark every system message as a
+# cache breakpoint (LiteLLM cache_control_injection_points; Tank sends the fixed prompt first). It is set
+# here per deployment, never per request, so a fallback to Gemini or an OpenAI-compatible host is never
+# sent a cache marker (Gemini would create a billed context cache). Cache prices, USD per MTok, read/write:
+#   developers.openai.com/api/docs/pricing + /guides/prompt-caching (30 Oct 2026): reads 0.1x input
+#   (gpt-6.1-sol 0.05x), writes 1.25x input. platform.claude.com/docs/en/about-claude/pricing
+#   (31 Oct 2026): 5-minute writes 1.25x; hits 0.1x haiku-5-5, 0.05x sonnet/opus-5-5, 0.025x fable-5-1.
+# Without these keys LiteLLM bills cached tokens at the full input rate in x-litellm-response-cost.
+
 model_list:
   # ---------- OpenAI (API key, Responses/Chat) ----------
   - model_name: luna            # cheap, fast workhorse: classify, extract, short drafts
     litellm_params:
       model: openai/gpt-6-luna
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/OPENAI_API_KEY
     model_info:
       input_cost_per_token: 0.0000001
+      cache_read_input_token_cost: 0.0000000100
+      cache_creation_input_token_cost: 0.0000001250
       output_cost_per_token: 0.0000005
 
   - model_name: sol             # analysis and longer writing
     litellm_params:
       model: openai/gpt-6-sol
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/OPENAI_API_KEY
     model_info:
       input_cost_per_token: 0.000002
+      cache_read_input_token_cost: 0.0000002000
+      cache_creation_input_token_cost: 0.0000025000
       output_cost_per_token: 0.00001
 
   - model_name: astra           # hardest reasoning only
     litellm_params:
       model: openai/gpt-6-astra
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/OPENAI_API_KEY
     model_info:
       input_cost_per_token: 0.00001
+      cache_read_input_token_cost: 0.0000010000
+      cache_creation_input_token_cost: 0.0000125000
       output_cost_per_token: 0.00005
 
   # ---------- Google Gemini (API key, paid tier: no training on our data) ----------
@@ -105,6 +129,17 @@ model_list:
     model_info:
       input_cost_per_token: 0.0000003
       output_cost_per_token: 0.0000012
+      # Guaranteed recurring off-peak periods (UTC, end exclusive).
+      # Public holidays also qualify; only explicitly verified dates may be added.
+      offpeak:
+        timezone: UTC
+        charge_multiplier: 0.5
+        cache_read_input_cost_per_token: 0.000000006
+        windows:
+          - {days: [0, 1, 2, 3, 4], start: '00:00', end: '01:00'}
+          - {days: [0, 1, 2, 3, 4], start: '04:00', end: '06:00'}
+          - {days: [0, 1, 2, 3, 4], start: '10:00', end: '24:00'}
+          - {days: [5, 6], start: '00:00', end: '24:00'}
 
   # Price checked 2026-10-21: https://api-docs.deepseek.com/quick_start/pricing/
   # USD per MTok: $1.32 input / $3.96 output at peak, half off-peak.
@@ -117,6 +152,15 @@ model_list:
     model_info:
       input_cost_per_token: 0.00000132
       output_cost_per_token: 0.00000396
+      offpeak:
+        timezone: UTC
+        charge_multiplier: 0.5
+        cache_read_input_cost_per_token: 0.000000044
+        windows:
+          - {days: [0, 1, 2, 3, 4], start: '00:00', end: '01:00'}
+          - {days: [0, 1, 2, 3, 4], start: '04:00', end: '06:00'}
+          - {days: [0, 1, 2, 3, 4], start: '10:00', end: '24:00'}
+          - {days: [5, 6], start: '00:00', end: '24:00'}
 
   # ---------- Moonshot Kimi (API key) ----------
   # Price checked 2026-10-21: https://platform.kimi.ai/ (K3 price card)
@@ -136,25 +180,40 @@ model_list:
   - model_name: haiku
     litellm_params:
       model: anthropic/claude-haiku-5-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
     model_info:
       input_cost_per_token: 0.0000001
+      cache_read_input_token_cost: 0.0000000100
+      cache_creation_input_token_cost: 0.0000001250
       output_cost_per_token: 0.0000005
 
   - model_name: sonnet
     litellm_params:
       model: anthropic/claude-sonnet-5-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
     model_info:
       input_cost_per_token: 0.000002
+      cache_read_input_token_cost: 0.0000001000
+      cache_creation_input_token_cost: 0.0000025000
       output_cost_per_token: 0.00001
 
   - model_name: opus
     litellm_params:
       model: anthropic/claude-opus-5-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
     model_info:
       input_cost_per_token: 0.000004
+      cache_read_input_token_cost: 0.0000002000
+      cache_creation_input_token_cost: 0.0000050000
       output_cost_per_token: 0.00002
 
   # ---------- South African hosted model (not configured) ----------
@@ -178,11 +237,18 @@ model_list:
   - model_name: sol-next
     litellm_params:
       model: openai/gpt-6.1-sol
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/OPENAI_API_KEY
       input_cost_per_token: 0.0000020000
+      cache_read_input_token_cost: 0.0000001000
+      cache_creation_input_token_cost: 0.0000025000
       output_cost_per_token: 0.0000100000
     model_info:
       input_cost_per_token: 0.0000020000
+      cache_read_input_token_cost: 0.0000001000
+      cache_creation_input_token_cost: 0.0000025000
       output_cost_per_token: 0.0000100000
 
   # Price checked 2026-10-21: https://platform.claude.com/docs/en/about-claude/pricing
@@ -190,11 +256,18 @@ model_list:
   - model_name: fable
     litellm_params:
       model: anthropic/claude-fable-5-1
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
       input_cost_per_token: 0.0000100000
+      cache_read_input_token_cost: 0.0000002500
+      cache_creation_input_token_cost: 0.0000125000
       output_cost_per_token: 0.0000500000
     model_info:
       input_cost_per_token: 0.0000100000
+      cache_read_input_token_cost: 0.0000002500
+      cache_creation_input_token_cost: 0.0000125000
       output_cost_per_token: 0.0000500000
 
   # Price checked 2026-10-21: https://ai.google.dev/gemini-api/docs/pricing
@@ -655,7 +728,26 @@ model_list:
       licence: MIT
       licence_url: https://huggingface.co/zai-org/GLM-5.3-Flash/blob/main/LICENSE
 
+  # ---------- BUILD ONLY: ChatGPT subscription (OAuth device-code sign-in, no API key) ----------
+  # Added 31 Oct 2026 on the founder's instruction: "this is a part of the build, not selling to
+  # customers". For Tervory's own evals, the Zenas made-up-case self-test and test samples.
+  # Tank refuses every build-* model for any tenant except the platform tenant and
+  # TANK_BUILD_TENANTS, keeps it off the roster (no picker, override, bench, price search or
+  # graduation), never caches its answers and never lets it be the default policy row.
+  # No fallbacks to or from it. Sign-in and revoke: docs/ops/CHATGPT-BUILD-MODEL.md.
+  # The token lives in CHATGPT_TOKEN_DIR on a writable volume (see the compose file).
+  # $0 per token: the subscription is flat-rate, so spend shows as zero in the ledger.
+  - model_name: build-chatgpt
+    litellm_params:
+      model: chatgpt/gpt-6.1-sol
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      build_only: true
+
 litellm_settings:
+  # Return the gateway's actual priced usage at the end of Command streams.
+  include_cost_in_streaming_usage: true
   drop_params: true
   set_verbose: false
   num_retries: 0

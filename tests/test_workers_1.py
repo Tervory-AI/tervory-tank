@@ -266,7 +266,7 @@ def test_fresh_podman_container_is_sealed() -> None:
     assert kill_argv("tervory-worker-7-abcd1234") == ["podman", "kill", "tervory-worker-7-abcd1234"]
     text = (ROOT / "workers/task/Dockerfile").read_text(encoding="utf-8")
     assert "node:22-bookworm-slim" in text
-    assert "playwright==1.64.0" in (ROOT / "workers/task/requirements.txt").read_text(encoding="utf-8")
+    assert "playwright==1.64.1" in (ROOT / "workers/task/requirements.txt").read_text(encoding="utf-8")
     assert "aider-chat==0.86.2" in (ROOT / "workers/task/requirements.txt").read_text(encoding="utf-8")
     assert "playwright install --with-deps chromium" in text
     entry = (ROOT / "workers/task/entrypoint.sh").read_text(encoding="utf-8")
@@ -342,7 +342,7 @@ def test_draft_then_ready_only_when_ci_is_green() -> None:
     assert ready_body("Ship the line.").startswith("ready for review\n")
 
 
-def test_secrets_are_redacted_and_not_in_the_result() -> None:
+def test_secrets_are_redacted_and_not_in_the_result(tmp_path: Path) -> None:
     assert redact(f"Authorization: Bearer {TOKEN}") == "Authorization: Bearer [redacted]"
     header = "-----BEGIN " + "PRIVATE KEY-----"
     footer = "-----END " + "PRIVATE KEY-----"
@@ -354,7 +354,7 @@ def test_secrets_are_redacted_and_not_in_the_result() -> None:
     assert outcome is not None
     assert outcome.status == "draft"
     assert TOKEN not in outcome.line()
-    directory = Path("/tmp/workers-secret-test")
+    directory = tmp_path / "workers-secret-test"
     if directory.exists():
         for child in directory.iterdir():
             child.unlink()
@@ -536,7 +536,7 @@ async def test_ci_failure_stays_a_draft(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_one_task_at_a_time_and_bad_issue_gets_one_comment() -> None:
+async def test_one_task_at_a_time_and_bad_issue_gets_one_comment(tmp_path: Path) -> None:
     comments: list[int] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -559,7 +559,7 @@ async def test_one_task_at_a_time_and_bad_issue_gets_one_comment() -> None:
             return httpx.Response(201, json={})
         return httpx.Response(404)
 
-    key_file = Path("/tmp/workers-app-test.pem")
+    key_file = tmp_path / "workers-app-test.pem"
     key_file.write_bytes(_key_pem())
     github = _client(handler)
     launcher = _Launcher()

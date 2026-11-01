@@ -3,14 +3,16 @@ import Link from "next/link";
 import { listPublishedMatches } from "./store";
 import "./moot-watch.css";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Moot Court · Zenas",
   description: "Public Moot watch — text edition. Training only; nothing here is a filed matter.",
 };
 
 /** Public Moot index on zenas.tervory.com (product host). */
-export default function MootIndexPage() {
-  const rows = listPublishedMatches();
+export default async function MootIndexPage() {
+  const result = await listPublishedMatches();
   return (
     <main className="moot-watch" aria-label="Moot Court">
       <h1>Moot Court</h1>
@@ -23,11 +25,13 @@ export default function MootIndexPage() {
       </p>
       <section aria-label="Published matches">
         <h2>Published matches</h2>
-        {rows.length === 0 ? (
+        {result.status === "unavailable" || result.status === "malformed" ? (
+          <p role="alert" data-moot-state={result.status}>Room unavailable</p>
+        ) : result.status === "empty" ? (
           <p>No published matches yet.</p>
         ) : (
           <ul>
-            {rows.map((row) => (
+            {result.matches.map((row) => (
               <li key={row.matchId}>
                 <Link href={`/moot/${row.matchId}`}>{row.title}</Link>
               </li>

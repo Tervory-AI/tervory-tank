@@ -1,0 +1,150 @@
+name: live-check
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      COOLIFY_TOKEN:
+        required: false
+  pull_request:
+    paths:
+      - ops/live_check.mjs
+      - .github/scripts/live_check_gate.py
+      - ops/live_check_banned.txt
+      - .github/workflows/live-check.yml
+      - .github/workflows/deploy-on-merge.yml
+      - .github/workflows/coolify-ops.yml
+      - workspace/lib/product-hosts.ts
+      - tests/test_live_check.py
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      issues: write
+    # Serialize scheduled and post-deploy checks so one host gets one issue.
+    # queue: max keeps every waiting check: with the default single queue a scheduled
+    # tick would cancel a pending post-deploy check (and fail the deploy run with it).
+    concurrency:
+      group: live-check-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
+      cancel-in-progress: false
+      queue: max
+    # The runner context is not allowed in job-level env (GitHub rejects the whole
+    # workflow file, and deploy-on-merge, which calls it, with it). Set the paths in a step.
+    steps:
+      - name: Set working paths
+        run: |
+          echo "LIVE_CHECK_PLAYWRIGHT_PATH=$RUNNER_TEMP/live-check-browser/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "LIVE_CHECK_OUTPUT=$RUNNER_TEMP/live-check-results" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "22"
+      - name: Cache npm downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.npm
+          key: live-check-npm-${{ runner.os }}-playwright1.64.1
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: savings-page-playwright-${{ runner.os }}-1.64.1-chromium
+      - name: Install browser test packages
+        run: |
+          npm install --prefix "$RUNNER_TEMP/live-check-browser" --no-audit --no-fund playwright@1.64.1
+          browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome || command -v google-chrome-stable || true)
+          if [ -n "$browser" ]; then
+            echo "LIVE_CHECK_CHROMIUM=$browser" >> "$GITHUB_ENV"
+          else
+            "$RUNNER_TEMP/live-check-browser/node_modules/.bin/playwright" install --with-deps chromium
+          fi
+      - name: Offline checker regression tests
+        run: python3 tests/test_live_check.py
+      # Not one probe on a timer: live_check_gate.py waits until Coolify reports main,
+      # agent-rig and the Boston rooms healthy with no deploy queued or running (two reads
+      # in a row), probes, and if a Coolify deploy started during the probe it waits for
+      # that deploy to settle and probes again. A failure while Coolify stayed quiet is real.
+      - name: Open every live host signed out
+        id: live
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+        run: |
+          test -n "$COOLIFY_TOKEN" || { echo "::error::COOLIFY_TOKEN secret is missing"; exit 1; }
+          python3 .github/scripts/live_check_gate.py --output "$LIVE_CHECK_OUTPUT"
+      - name: Save every screenshot and result
+        id: artifact
+        if: ${{ always() && steps.live.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: live-check-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.LIVE_CHECK_OUTPUT }}
+          if-no-files-found: error
+      - name: Publish host results in the run summary
+        if: ${{ always() && steps.live.outcome != 'skipped' }}
+        env:
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+        run: |
+          if [ -f "$LIVE_CHECK_OUTPUT/summary.md" ]; then
+            python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import os
+          import re
+          from pathlib import Path
+          text = (Path(os.environ['LIVE_CHECK_OUTPUT']) / 'summary.md').read_text()
+          print(re.sub(r'\]\([^()]+\.png\)', lambda _: '](' + os.environ['ARTIFACT_URL'] + ')', text))
+          PY
+          else
+            echo 'Live check did not produce a complete summary. See failed step logs.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          printf '\n[Download screenshots and results](%s)\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+      - name: Open or update one issue per failed host
+        if: ${{ always() && github.event_name != 'pull_request' && steps.live.outcome != 'skipped' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, '.github/scripts')
+          from watchdog import GitHub
+
+          report = Path(os.environ['LIVE_CHECK_OUTPUT']) / 'results.json'
+          if not report.exists():
+              raise SystemExit('Live checker produced no results; see failed step logs')
+          failed = [row for row in json.loads(report.read_text()) if not row['passed']]
+          if not failed:
+              print('All hosts passed; no failure issues needed')
+              raise SystemExit(0)
+          github = GitHub(os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_TOKEN'])
+          github.ensure_label()
+          opened = github.open_incidents()
+          run = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          artifact = os.environ['ARTIFACT_URL'] or run
+          for row in failed:
+              title = 'Live check failed: ' + row['host']
+              lines = [f'Signed-out check failed for **{row["host"]}**.', '', f'[Run]({run})',
+                       f'[Screenshots and results]({artifact})', '']
+              for viewport in row['viewports']:
+                  lines.append(f'- {viewport["width"]}px: ' + ('; '.join(viewport['reasons']) or 'PASS'))
+                  if viewport['screenshot']:
+                      lines.append(f'  Screenshot in linked artifact: `{viewport["screenshot"]}`')
+              body = '\n'.join(lines)
+              if title in opened:
+                  github.set_body(int(opened[title]['number']), body)
+                  print('Updated ' + title)
+              else:
+                  github.open_issue(title, body)
+                  print('Opened ' + title)
+          PY

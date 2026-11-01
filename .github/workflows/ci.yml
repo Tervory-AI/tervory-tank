@@ -1,31 +1,66 @@
 name: ci
 
-# Docs-only changes do not run CI. A change that touches only docs/** or
-# Markdown files skips this workflow on pull requests and on pushes to main.
+# Security runs on every PR, including docs-only changes. Build jobs still use ci_scope.py.
 on:
   pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
   push:
     branches: [main]
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
 
 permissions:
   contents: read
 
 # Cancel superseded runs (CI-2). A newer push to the same pull request cancels the
-# older run. Runs on main are never cancelled, because deploy-on-merge depends on
-# them: each main run gets its own group (run_id), so it never waits behind or gets
-# replaced by another main run. (With a shared group, GitHub cancels a *pending*
+# older run. Runs on main are never cancelled: each main run gets its own group
+# (run_id), so it never waits behind or gets replaced by another main run. Since
+# 27 Oct the deploy no longer waits for them (deploy-on-merge runs on the push). (With a shared group, GitHub cancels a *pending*
 # run when a newer one queues, even with cancel-in-progress false.)
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Default ref: the PR merged with its base. Checking out the PR head alone broke every PR
+          # branched before #374 (the security scripts were not on that branch: exit 127).
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12.14"
+      - name: Install pinned security CLIs
+        id: tools
+        run: bash .github/scripts/install-security-tools.sh
+      - name: Test security gate policy
+        run: python3 -m unittest discover -s tests/ci_security -p test_security.py -v
+      - name: Gitleaks — PR commits or main push
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        env:
+          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 .github/scripts/security_scan.py gitleaks --base "$SECURITY_BASE" --output "$RUNNER_TEMP/security-results"
+      - name: Semgrep — new high findings
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        env:
+          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 .github/scripts/security_scan.py semgrep --base "$SECURITY_BASE" --output "$RUNNER_TEMP/security-results"
+      - name: OSV-Scanner — new vulnerable versions
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        env:
+          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 .github/scripts/security_scan.py osv --base "$SECURITY_BASE" --output "$RUNNER_TEMP/security-results"
+      - name: Save security results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: security-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/security-results/*.json
+          if-no-files-found: warn
+          retention-days: 14
+
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -34,8 +69,9 @@ jobs:
       full: ${{ steps.scope.outputs.full }}
       tisan: ${{ steps.scope.outputs.tisan }}
       tests: ${{ steps.scope.outputs.tests }}
+      savings: ${{ steps.scope.outputs.savings }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - name: Select checks from changed paths
@@ -106,8 +142,9 @@ jobs:
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.run == 'true' }}
     # Self-hosted only when "pick runner" chose it and the change is not from a fork.
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
-    # The merged full suite takes over 11 minutes before setup/cleanup.
-    timeout-minutes: 20
+    # Full suite: about 14 minutes on the hosted 4-core runner (run 41229068797: 808 s of tests in
+    # the main pass, 834 s for the whole suite, 15 min for the job); the per-test timeout is 5 minutes.
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -115,6 +152,9 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: pooltest
+          # Disposable service: tests create LOGIN roles without passwords (tenant RLS)
+          # and Radix passive insists on a password-free URL, as in tenant-rls.yml.
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -123,8 +163,11 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # tests/test_tenant_rls.py compares routing bodies with an older commit.
+          fetch-depth: 0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.12"
           cache: pip
@@ -144,54 +187,88 @@ jobs:
           else
             python -m playwright install --with-deps chromium
           fi
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "22"
-      - name: Install workspace packages for offline billing tests
-        # Also when Tisan changed: tests/test_tisan_gold_actions.py needs workspace's typescript.
-        if: needs.changes.outputs.full == 'true' || needs.changes.outputs.tisan == 'true'
+          cache: npm
+          cache-dependency-path: workspace/package-lock.json
+      - name: Install workspace packages for offline billing and Node tests
         working-directory: workspace
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --no-audit --no-fund
-          else
-            npm install --no-package-lock --no-audit --no-fund
-          fi
+        run: npm ci --no-audit --no-fund
       - name: Lint
-        if: needs.changes.outputs.full == 'true'
         # F401 in base.socials/1.0.0/run.py is a pre-existing unused import.
         # This lane cannot edit an approved skill in place.
         run: ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
-      - name: Secret scan and tests
-        run: python3 .github/scripts/ci_scope.py test
+      - name: Prepare test databases
+        # tests/test_radix_passive.py insists on a database named radix_passive_test.
+        # The Market Lab real-Postgres proofs insist on a loopback database ending in
+        # _test (DATABASE_URL below); tests/conftest.py gives each worker market_gwN_test.
+        run: |
+          python - <<'PY'
+          import asyncio, asyncpg
+          async def main():
+              conn = await asyncpg.connect("postgresql://postgres@127.0.0.1:5432/pooltest")
+              await conn.execute("CREATE DATABASE radix_passive_test")
+              await conn.execute("CREATE DATABASE market_test")
+              await conn.close()
+          asyncio.run(main())
+          PY
+      - name: Full offline test suite
+        # The whole suite gates every PR again (it was cut to 3 files on 27 Oct, #351,
+        # because it took 10-15 minutes serially and had not passed for three days).
+        # Now: pytest-xdist workers with one database each, a per-test timeout, no
+        # provider keys, and in-process sockets limited to loopback. Known failures on
+        # main are listed with reasons in tests/quarantine.txt and still reported.
+        # tests/test_skala_patch_code_unchanged.py (#484) runs as part of the suite.
+        run: python3 .github/scripts/offline_suite.py
         env:
-          TEST_TARGETS: ${{ needs.changes.outputs.tests }}
           PYTHONPATH: tank
-          # One Postgres service. The pool schema test and the ladder schema test
-          # both connect here. The ladder test creates its own databases from this URL.
-          POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
-          ZENAS_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
+          # One Postgres service. tests/conftest.py gives each xdist worker its own
+          # database cloned by name from this one (pooltest_gw0, ...).
+          POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          ZENAS_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          # Opt-in database tests: CI has a disposable Postgres, so they run here too.
+          MEMORY_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          BASE_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          RLS_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          RADIX_PASSIVE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/radix_passive_test
+          SKALA_B3_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          SKALA_INTAKE_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          TIGER_MAIL_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          RIG_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          TRAINING_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+          # Market Lab real-Postgres proofs (subscriptions, round trip, real Tank, documents,
+          # warning job); they skip without it. Tervory Review on #486, item 2.
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/market_test
+      - name: Runner memory and kernel log after a failed suite
+        # A crashed xdist worker looks the same whether pytest-timeout killed it or the
+        # kernel did (OOM). This prints the evidence; it never changes the result.
+        if: failure()
+        continue-on-error: true
+        timeout-minutes: 2
+        run: |
+          free -m || true
+          df -h /dev/shm /tmp || true
+          { sudo -n dmesg -T 2>/dev/null || echo "dmesg not readable on this runner"; } | grep -iE 'oom|killed process|segfault|out of memory|not readable' | tail -n 40
 
   workspace:
     needs: [changes, runner]
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: workspace/package-lock.json
       - name: Install
         working-directory: workspace
-        # npm ci when a lockfile is committed. This lane cannot add one, so install
-        # from package.json until workspace/package-lock.json exists.
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --no-audit --no-fund
-          else
-            npm install --no-package-lock --no-audit --no-fund
-          fi
+        run: npm ci --no-audit --no-fund
+      - name: typecheck
+        working-directory: workspace
+        run: npx tsc --noEmit
       - name: Build
         working-directory: workspace
         run: npx next build
@@ -204,28 +281,30 @@ jobs:
 
   savings-page:
     needs: [changes]
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
+    # Only when the savings pages (or what they render) change. Founder, 27 Oct: no
+    # check runs on a pull request it cannot affect.
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.savings == 'true' }}
     # Chromium system dependencies need sudo; keep this job on GitHub hosted runners.
     runs-on: ubuntu-latest
     # 8 minutes timed out twice on 22 Oct and cancelled CI on main. Usually ~1 minute.
     timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "22"
       # This job installs npm packages and a Playwright Chromium every run, and no pip
       # packages. Cache the npm download cache and the browser. There is no
       # workspace/package-lock.json yet, so the npm key uses package.json.
       - name: Cache npm downloads
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.npm
           key: savings-page-npm-${{ runner.os }}-${{ hashFiles('workspace/package.json', 'workspace/package-lock.json') }}-esbuild0.28.2-playwright1.64.1
           restore-keys: |
             savings-page-npm-${{ runner.os }}-
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
           key: savings-page-playwright-${{ runner.os }}-1.64.1-chromium
@@ -249,7 +328,7 @@ jobs:
           CORE2_PLAYWRIGHT_PATH="$RUNNER_TEMP/core2-browser/node_modules/playwright" \
           CORE2_SCREENSHOT_DIR="$RUNNER_TEMP/core2-screenshots" \
           node tests/test_core2_savings_page.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: savings-page-screenshots

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from base_gold.observations import observation
+from base_source_scores import prefer, select_observations
 
 BASE_CORE = [
     "base.normalize",
@@ -65,12 +66,26 @@ def is_account_error(exc: Exception) -> bool:
     return any(token in msg for token in _ACCOUNT_ERRORS)
 
 
-def merge(profile: dict[str, Any], fields: dict[str, Any]) -> None:
-    """Keep the higher-confidence value per field."""
+def merge(profile: dict[str, Any], fields: dict[str, Any],
+          table: dict[tuple[str, str], float] | None = None,
+          evidence: dict[str, Any] | None = None) -> None:
+    """Measured source quality wins; without measurements retain confidence fallback."""
     for key, value in fields.items():
         if not isinstance(value, dict):
             continue
-        if key not in profile or int(value.get("confidence") or 0) >= int(profile[key].get("confidence") or 0):
+        old = profile.get(key)
+        if old and table and old.get("value") != value.get("value"):
+            website = val(profile, "website")
+            candidates = [{**item, "website": website} for item in (old, value)]
+            from base_source_scores import classify
+            if any((classify(item.get("source_url"), website,
+                             item.get("source_kind") or item.get("source")), key) in table for item in candidates):
+                winner = prefer(candidates, key, table)
+                profile[key] = {k: v for k, v in winner.items() if k != "website"}
+                if evidence is not None:
+                    evidence[key] = {"selected": winner, "candidates": candidates}
+                continue
+        if old is None or int(value.get("confidence") or 0) >= int(old.get("confidence") or 0):
             profile[key] = value
 
 
@@ -204,8 +219,8 @@ async def prepare_batch(
     inputs: list[dict[str, Any]] = []
     engine_rows: list[dict[str, Any] | None] = []
     if engine:
-        for raw in raws:
-            ingested = await call(f"{engine}.ingest", raw)
+        for index, raw in enumerate(raws):
+            ingested = await call(f"{engine}.ingest", {**raw, "_base_record_id": str(rec_ids[index])})
             cost += cost_of(ingested)
             inputs.append(ingested.get("record") or dict(raw))
             engine_rows.append(ingested.get("engine") or None)
@@ -216,7 +231,7 @@ async def prepare_batch(
     if registry is None:
         built: list[dict[str, Any]] = []
         for index, record in enumerate(inputs):
-            normalised = await call("base.normalize", record)
+            normalised = await call("base.normalize", {**record, "_base_record_id": str(rec_ids[index])})
             cost += cost_of(normalised)
             fields = normalised.get("fields") or {}
             built.append({
@@ -255,10 +270,27 @@ async def enrich_one(
             return refs[skill_id]
         return skill_id
 
+    original_call = call
+    record_id = raw_input.get("_base_record_id")
+
+    async def attributed_call(skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return await original_call(skill_id, {**payload, **({"_base_record_id": record_id} if record_id else {})})
+
+    call = attributed_call
+
     try:
         norm = await call("base.normalize", raw_input)
         cost += cost_of(norm)
-        merge(profile, norm.get("fields") or {})
+        reliability = {(row["source"], row["field"]): float(row["wilson_lower"])
+                       for row in norm.get("_source_reliability", []) if row.get("wilson_lower") is not None}
+        decisions: dict[str, Any] = {}
+        normalized = norm.get("fields") or {}
+        reference = raw_input.get("_base_reference") or {}
+        if reference and reliability:
+            normalized = {key: {**value, "source_kind": "reference_file",
+                                "source_url": reference.get("source_url"), "checked_at": reference.get("checked_at")}
+                          for key, value in normalized.items()}
+        merge(profile, normalized)
         passes["1a"] = {"skill": named("base.normalize", norm), "ms": norm.get("_ms")}
 
         res = await call("base.resolve", {"record": norm, "registry": registry})
@@ -305,7 +337,9 @@ async def enrich_one(
         site = await call("base.find_site", site_in)
         cost += cost_of(site)
         if site.get("website"):
-            profile["website"] = site["website"]
+            merge(profile, {"website": {**site["website"],
+                                       **({"source_url": site["website"].get("source_url") or site["website"].get("value")} if reliability else {})}},
+                  reliability, decisions)
         passes["2a"] = {
             "skill": named("base.find_site", site),
             "ms": site.get("_ms"),
@@ -326,18 +360,30 @@ async def enrich_one(
                 # Historical facts stay dated; never label them current or use them as gold.
                 scr["text"] = ""
             if scr.get("emails"):
-                profile["emails"] = {"value": scr["emails"][:5], "source": src, "confidence": 80}
+                profile["emails"] = {"value": scr["emails"], "source": src, "confidence": 80}
             if scr.get("phones"):
-                merge(profile, {"phone": {"value": scr["phones"][0], "source": src, "confidence": 80}})
-                profile["phones"] = {"value": scr["phones"][:3], "source": src, "confidence": 80}
+                page = next((item for item in scr.get("_base_observations") or [] if scr["phones"][0] in item.get("phones", [])), {})
+                merge(profile, {"phone": {"value": scr["phones"][0], "source": src, "confidence": 80,
+                                         **({"source_url": page.get("source_url") or url,
+                                             "checked_at": page.get("checked_at")} if reliability else {})}},
+                      reliability, decisions)
+                profile["phones"] = {"value": scr["phones"], "source": src, "confidence": 80}
             if scr.get("socials"):
                 profile["socials"] = {"value": scr["socials"], "source": src, "confidence": 85}
+            # Legacy primary values still feed existing checks. The complete
+            # collections retain independently observed contacts for the client.
+            for target, key in (("websites", "websites"), ("social_links", "socials")):
+                found = [item for page in scr.get("_base_observations") or [] for item in page.get(key, [])]
+                if found:
+                    profile[target] = {"value": list(dict.fromkeys(([url] if target == "websites" else []) + found)),
+                                       "source": src, "confidence": 85}
             passes["2b"] = {
                 "skill": named("base.scrape_site", scr),
                 "ms": scr.get("_ms"),
                 "pages": len(scr.get("pages") or []),
                 "error": scr.get("error"),
                 "via": scr.get("via"),
+                "field_observations": scr.get("_base_observations") or [],
                 **{key: scr[key] for key in ("archive_date", "archive_source", "access_error") if scr.get(key)},
             }
             observed = None if scr.get("archived") else observation(url, scr)
@@ -370,6 +416,15 @@ async def enrich_one(
                         "ms": ex.get("_ms"),
                         "cost_usd": round(float(ex.get("_cost_usd") or 0), 6),
                     }
+
+        if not scr.get("archived"):
+            candidates = list(scr.get("_base_observations") or [])
+            if reference and (normalized.get("phone") or {}).get("value"):
+                candidates.append({"source_url": reference.get("source_url"), "checked_at": reference.get("checked_at"),
+                                   "source_kind": "reference_file", "phones": [normalized["phone"]["value"]]})
+            decisions.update(select_observations(profile, candidates, reliability))
+        if decisions:
+            passes["source_reliability"] = decisions
 
         con_in: dict[str, Any] = {
             "website": url or "",
@@ -544,7 +599,7 @@ async def enrich_queued(
                 reg = registry
             else:
                 reg = [row for row in registry if row.get("id") != str(rec_ids[index])]
-            outcome = await enrich_one(inputs[index], engine_rows[index], reg, engine, call, refs, engine_version)
+            outcome = await enrich_one({**inputs[index], "_base_record_id": str(rec_ids[index])}, engine_rows[index], reg, engine, call, refs, engine_version)
             results.append((index, outcome))
 
     await asyncio.gather(*(one(index) for index in indexes))

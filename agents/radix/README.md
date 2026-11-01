@@ -22,7 +22,7 @@ Login `agent_radix`. Schema `agent_radix`. Key `TANK_KEY_RADIX` on Tank and on H
 - `source` is the repo, sent by the caller. It may be base64 (optionally prefixed with `b64:`) of a `.tar.gz`, a zip, or a git bundle, or `file:<name>` for a file already stored under `/data/<tenant_id>/`. A web address is refused.
 - `ref` is a label, such as a branch or commit. Radix does not fetch it.
 
-The image bakes in Gitleaks 8.28.0, Semgrep 1.181.0, and pip-audit 2.10.1. Semgrep rules are the file `scanlib/semgrep.yml`. Advisory data is baked at image build: a build-only stage fetches the official OSV PyPI and npm exports (`https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`) and `osv_bake.py` turns them into `/opt/osv/osv.sqlite` (about 35 MB). Every rebuild refreshes it; the build fails if an export looks truncated. The #47 fixture JSON under `scanlib/osv` is still copied to `/opt/osv` as well. At runtime Radix opens the sqlite file read-only and never downloads anything. pip-audit and npm audit call a live service, so the dependency scan reads `/opt/osv` and does not run those clients.
+The image bakes in Gitleaks 8.30.1, Semgrep 1.182.1, and pip-audit 2.10.1. Semgrep rules are the file `scanlib/semgrep.yml`. Advisory data is baked at image build: a build-only stage fetches the official OSV PyPI and npm exports (`https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`) and `osv_bake.py` turns them into `/opt/osv/osv.sqlite` (about 35 MB). Every rebuild refreshes it; the build fails if an export looks truncated. The #47 fixture JSON under `scanlib/osv` is still copied to `/opt/osv` as well. At runtime Radix opens the sqlite file read-only and never downloads anything. pip-audit and npm audit call a live service, so the dependency scan reads `/opt/osv` and does not run those clients.
 
 ## What a scan returns
 
@@ -110,3 +110,23 @@ leave room for TLS and HTTP overhead. `lokd.co.za` keeps its original 2
 concurrent / 6 per minute / 1,000,000 response bytes / 20 second limits.
 Missing account configuration refuses proxy startup; missing room credentials
 refuse storage before any request. The proxy never receives the R2 keys.
+# Verified-domain passive assessment deployment requirements
+
+Job 8 adds a DNS-verified, tenant-bound passive assessment API and staging gate.
+Deployment requires **Docker Compose 2.36.0 or later** for `interface_name`.
+Both egress services name their shared `proxy-link` interface `radix-link`;
+the Python proxy binds only that interface's RFC1918 IPv4 address. A missing or
+invalid interface fails closed. Other NICs and hostname-address ordering are
+not fallbacks. The original 8080 healthcheck uses the same designated address.
+Check the Compose version on each deployment host; the proof host's 5.6.0
+does not establish compatibility elsewhere. Do not remove the interface mapping.
+
+The scanner container remains on internal networks only. Its limit is 1 GiB
+for ZAP's capped JVM, with one passive run at a time. ZAP checks the root GET
+response through the DNS-authorized lease; non-200/redirect warnings fail the
+assessment before a clean receipt. Nuclei uses one pinned header-only template.
+The existing settings are referenced by name only; no new credentials are needed.
+Offline command/image/topology proof and dated acceptance status are in
+`tests/radix_passive/PR.md` and `tests/radix_passive/PROOF.txt`. No live scan or
+production deployment is implied by those offline results.
+

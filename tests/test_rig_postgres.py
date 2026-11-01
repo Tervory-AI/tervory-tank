@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import os
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -97,7 +98,9 @@ def test_rig_startup_loads_catalogues_on_postgres(tmp_path: Path, monkeypatch) -
     saved = {key: os.environ.get(key) for key in ("DATABASE_URL", "DATA_DIR", "CATALOGUE_DIR", "AGENT_NAME")}
     os.environ["DATABASE_URL"] = url
     os.environ["DATA_DIR"] = str(tmp_path)
-    os.environ["CATALOGUE_DIR"] = str(CATALOGUES)
+    offline = tmp_path / "offline-catalogues"
+    shutil.copytree(CATALOGUES, offline)
+    os.environ["CATALOGUE_DIR"] = str(offline)
     os.environ["AGENT_NAME"] = "rig"
     try:
         app_module = _load_app()
@@ -112,7 +115,7 @@ def test_rig_startup_loads_catalogues_on_postgres(tmp_path: Path, monkeypatch) -
             assert health.json()["ok"] is True
             home = client.get("/")
             assert home.status_code == 200
-            assert "rk_pub_archon" in home.text
+            assert "rk_pub_archon" not in home.text
             assert "rk_pub_examplebrand" not in home.text
             assert "What are you building?" in home.text
             assert "live distributor keys are off" not in home.text
@@ -120,7 +123,7 @@ def test_rig_startup_loads_catalogues_on_postgres(tmp_path: Path, monkeypatch) -
             assert 'alt="Tervory"' in home.text
             classic = client.get("/cn-classic")
             assert classic.status_code == 200
-            assert "rk_pub_customnation" in classic.text
+            assert "rk_pub_customnation" not in classic.text
             assert "Custom Nation" not in classic.text
             custom = _search(client, "rk_pub_customnation", "https://rig.tervory.com", "Staccato C2")
             assert custom["exact_match"] is True
@@ -150,10 +153,14 @@ async def _assert_imported(url: str) -> None:
         seen = await conn.fetch("SELECT seen_at, price FROM agent_rig.market_prices")
         # customnation market.csv 32 rows + archon market.csv 53 rows
         assert len(seen) == 32 + 53
+        dates: dict[str, int] = {}
         for row in seen:
             assert isinstance(row["seen_at"], datetime)
-            assert row["seen_at"].date().isoformat() == "2026-03-01"
             assert row["price"] is not None
+            day = row["seen_at"].date().isoformat()
+            dates[day] = dates.get(day, 0) + 1
+        # Each catalogue keeps the date its market.csv carries.
+        assert dates == {"2026-03-01": 32, "2026-10-18": 53}
         kind = await conn.fetchval(
             "SELECT jsonb_typeof(attributes) FROM agent_rig.products WHERE sku = $1",
             "STI-C2-9",

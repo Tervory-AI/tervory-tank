@@ -1,0 +1,235 @@
+Managed-cloud verification
+Code/test commit: 77979e75d9c4903a5d78d860a297456c15939087
+
+Final pytest run (exact command in PR.md):
+........................................................................ [ 28%]
+........................................................................ [ 57%]
+........................................................................ [ 86%]
+..................................                                       [100%]
+=============================== warnings summary ===============================
+../worker-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/worker-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /workspace/tervory-tank/tank/main.py:680: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /workspace/worker-venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /workspace/tervory-tank/tank/main.py:718: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /workspace/tervory-tank/tank/agent_skills.py:529: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+250 passed, 6 warnings in 135.63s (0:02:15)
+
+Security policy tests (pinned Gitleaks on PATH):
+----------------------------------------------------------------------
+Ran 34 tests in 14.437s
+
+OK
+
+ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+All checks passed! (exit 0)
+
+git diff --check origin/main
+No output (exit 0)
+
+workspace: ./node_modules/.bin/tsc --noEmit --incremental false
+No output (exit 0)
+
+Gitleaks against base 73a0e2f: clean (exit 0)
+Sanitized findings: []
+
+Founder browser: not run; no screenshots available. No live calls, merge or deployment.
+
+Boston isolated-checkout verification after merging main 7a13687
+Verified source commit: 98e801ea606d394377b6e7356e916ae53db7c81e
+Python 3.12.16; isolated local PostgreSQL 16.15 on loopback port 55461.
+Focused priority/one-door/boot selection:
+..............................................................           [100%]
+=============================== warnings summary ===============================
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /tmp/tervory-priority-resume/tank/main.py:681: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /tmp/tervory-priority-312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /tmp/tervory-priority-resume/tank/main.py:719: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /tmp/tervory-priority-312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /tmp/tervory-priority-resume/tank/agent_skills.py:529: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /tmp/tervory-priority-resume/tank/skala_intake.py:67: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /tmp/tervory-priority-resume/tank/skala_intake.py:72: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /tmp/tervory-priority-resume/tank/skala_revalidation.py:190: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+62 passed, 12 warnings in 66.75s (0:01:06)
+
+Full original affected regression selection on synchronized code:
+........................................................................ [ 28%]
+........................................................................ [ 57%]
+........................................................................ [ 86%]
+..................................                                       [100%]
+=============================== warnings summary ===============================
+../tervory-priority-312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /tmp/tervory-priority-312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /tmp/tervory-priority-resume/tank/main.py:681: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /tmp/tervory-priority-312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /tmp/tervory-priority-resume/tank/main.py:719: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /tmp/tervory-priority-resume/tank/agent_skills.py:529: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /tmp/tervory-priority-resume/tank/skala_intake.py:67: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /tmp/tervory-priority-resume/tank/skala_intake.py:72: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
+  /tmp/tervory-priority-resume/tank/skala_revalidation.py:190: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+250 passed, 12 warnings in 316.25s (0:05:16)
+
+Ruff E9,F: All checks passed! (exit 0).
+git diff --check origin/main: exit 0, no output.

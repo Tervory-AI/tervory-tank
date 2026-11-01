@@ -1,14 +1,14 @@
 /** Approved copy from the Rig agent frames. */
 
 export const ACCOUNT_NAV = [
-  { href: "/", label: "Dashboard" },
-  { href: "/projects", label: "Projects" },
-  { href: "/", label: "Chats" },
+  { href: "https://app.tervory.com/", label: "Dashboard" },
+  { href: "/matters", label: "Projects" },
+  { href: "/chats", label: "Chats" },
 ] as const;
 
 export const ACCOUNT_BOTTOM = [
   { href: "/settings", label: "Settings" },
-  { href: "/support", label: "Support" },
+  { href: "https://tervory.com", label: "Support" },
 ] as const;
 
 export const TABS = [
@@ -37,91 +37,6 @@ export type Pistol = {
   market: number | null;
 };
 
-export const PISTOLS: Pistol[] = [
-  { id: "STI-C2-9", name: "Staccato C2", price: 58999, market: 59000 },
-  { id: "STI-P-9", name: "Staccato P", price: 64999, market: 65000 },
-  { id: "STI-XC-9", name: "Staccato XC", price: 89999, market: 90000 },
-];
-
-/** Parts the Staccato C2 frame shows, in that order. Prices match the demo catalogue. */
-export const C2_PARTS: Part[] = [
-  { id: "HOL-507C-X2", type: "Optics", name: "Holosun 507C X2", price: 5499, market: 5500 },
-  { id: "TRIJ-RMR-T2", type: "Optics", name: "Trijicon RMR Type 2", price: 9999, market: 10000 },
-  { id: "DAW-FO-FRONT", type: "Sights", name: "Dawson fiber front sight", price: 899, market: 900 },
-  { id: "TEN8-REAR", type: "Sights", name: "10-8 rear sight", price: 1299, market: null },
-  { id: "CHEELY-C2", type: "Grips", name: "Cheely compact grip", price: 3299, market: 3300 },
-  { id: "ATLAS-FLAT", type: "Triggers", name: "Atlas flat trigger", price: 2199, market: 2200 },
-  { id: "TENICOR-VELO", type: "Holsters", name: "Tenicor Velo holster", price: 2199, market: 2200 },
-  { id: "SF-X300U", type: "Lights", name: "SureFire X300U", price: 4999, market: 5000 },
-  { id: "MAG-16", type: "Magazines", name: "2011 magazine 16 round", price: 1199, market: 1200 },
-];
-
-export const SEED_ADDED = ["HOL-507C-X2", "SF-X300U"];
-
-export const BUILT = [
-  { title: "Search the catalogue", text: "Type a brand or model, like Staccato, and get the matching products." },
-  {
-    title: "Compatible upgrades",
-    text: "Each pistol shows parts that fit, sorted by type: optics, sights, grips, triggers, holsters, lights, magazines.",
-  },
-  {
-    title: "Prices",
-    text: "Every part shows the retailer's price. The market average shows once the selection is final.",
-  },
-  {
-    title: "Fit approval",
-    text: "New fits wait on the Fits to review tab until an admin approves them with the admin key.",
-  },
-  {
-    title: "Honest answers",
-    text: "A model we don't stock says “No exact match” and shows the closest ones. Rig never makes one up.",
-  },
-] as const;
-
-export const PLAN = [
-  {
-    code: "R4",
-    title: "Search and compatible upgrades",
-    text: "Search the catalogue, see the parts that fit each pistol with retailer prices, market average once the selection is final, fit approval with the admin key.",
-    state: "Done",
-    on: true,
-  },
-  {
-    code: "R5",
-    title: "3D models",
-    text: "A simple 3D model of each pistol and part. Fit comes from maker standards like the RMSc optic footprint, so they don't have to be perfect.",
-    state: "Next",
-    on: false,
-  },
-  {
-    code: "R6",
-    title: "3D builder",
-    text: "The shopper's whole build shown in 3D, live in front of them, with the best prices beside it.",
-    state: "Later",
-    on: false,
-  },
-  {
-    code: "—",
-    title: "Dealer skins",
-    text: "Custom Nation first, after the main product is done.",
-    state: "Later",
-    on: false,
-  },
-] as const;
-
-export const CHANGES = [
-  { id: "94", title: "Homepage searches the Staccato demo", when: "Live 3:57 PM PT" },
-  { id: "93", title: "Fixed the startup crash", when: "Earlier" },
-  { id: "90", title: "Search and compatible upgrades (R4)", when: "Earlier" },
-] as const;
-
-export const SKIN_STEPS = [
-  "Same search and fits as the main Rig.",
-  "The dealer's own logo, colours and prices.",
-  "Tervory's name and logo never show on the dealer's page.",
-  "Built only after the main product is done.",
-] as const;
-
 export type WaitingFit = {
   id: string;
   name: string;
@@ -129,60 +44,12 @@ export type WaitingFit = {
   why: string;
 };
 
-export const WAITING: WaitingFit[] = [
-  {
-    id: "tenicor-p",
-    name: "Tenicor Velo holster",
-    fits: "fits Staccato P",
-    why: "The maker lists a version cut for full-size 2011 pistols.",
-  },
-  {
-    id: "mag-17-c2",
-    name: "2011 magazine 17 round",
-    fits: "fits Staccato C2",
-    why: "Same 2011 magazine. It fits, but sticks out past the shorter grip.",
-  },
-];
-
-export const DECIDED = [
-  {
-    id: "holosun-p",
-    name: "Holosun 507C X2",
-    fits: "fits Staccato P",
-    why: "Same optic footprint as the maker lists for this pistol.",
-    state: "Approved",
-    on: true,
-  },
-  {
-    id: "cheely-c2",
-    name: "Cheely E2 grip",
-    fits: "fits Staccato C2",
-    why: "Full-size grip. The C2 has a shorter frame.",
-    state: "Rejected",
-    on: false,
-  },
+export const BUILT: { title: string; text: string }[] = [];
+export const PLAN: { code: string; title: string; text: string; state: string; on: boolean }[] = [];
+export const CHANGES: { id: string; title: string; when: string }[] = [];
+export const SKIN_STEPS = [
+  "Same search and fits as the main Rig.",
+  "The dealer's own logo, colours and prices.",
+  "Tervory's name and logo never show on the dealer's page.",
+  "Built only after the main product is done.",
 ] as const;
-
-export const OPENING_QUESTION = "What optics fit the Staccato C2?";
-
-export const OPENING_ANSWER = "Two optics in the catalogue are approved to fit the Staccato C2:";
-
-export const OPENING_ITEMS = [
-  { name: "Holosun 507C X2", price: "R5,499" },
-  { name: "Trijicon RMR Type 2", price: "R9,999" },
-];
-
-export const OPENING_SOURCES = [
-  {
-    title: "Holosun 507C X2 · R5,499",
-    detail: "Staccato demo catalogue · product HOL-507C-X2 · approved fit for Staccato 2011 pistols",
-  },
-  {
-    title: "Trijicon RMR Type 2 · R9,999",
-    detail: "Staccato demo catalogue · product TRIJ-RMR-T2 · approved fit for Staccato 2011 pistols",
-  },
-  {
-    title: "Staccato C2",
-    detail: "Staccato demo catalogue · product STI-C2-9 · part of the Staccato 2011 range",
-  },
-];

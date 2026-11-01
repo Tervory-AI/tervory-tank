@@ -3,14 +3,13 @@
 import base64
 from datetime import date, datetime, timedelta, timezone
 import json
-import secrets
-from urllib.parse import urlsplit
 
 from fastapi import APIRouter, FastAPI, Query, Request
 from pydantic import BaseModel, Field
 
 from rigbox.api import _admin, _ok, _service, _tenant
-from rigbox.service import RigError, hash_key
+from rigbox.service import RigError
+from .keys import issue_embed_key
 
 router = APIRouter(prefix="/v1/rig/admin")
 
@@ -24,7 +23,9 @@ async def analytics(request: Request, since: date | None = None):
     await _admin(request)
     start = since or datetime.now(timezone.utc).date() - timedelta(days=30)
     counts = await _service(request).quote_store.analytics(_tenant(request), start)
-    return _ok(request, {"since": start.isoformat(), "counts": counts})
+    from rigbox.supply_accounting import analytics as supply_analytics
+    supply = await supply_analytics(_service(request), _tenant(request), start)
+    return _ok(request, {"since": start.isoformat(), "counts": counts, "supply": supply})
 
 
 @router.get("/quotes/{quote_id}/delivery")
@@ -89,18 +90,30 @@ async def resume(request: Request, quote_id: str):
 @router.post("/embed-keys")
 async def embed_key(request: Request, payload: EmbedOrigins):
     await _admin(request)
-    for origin in payload.origins:
-        try:
-            parsed = urlsplit(origin)
-        except ValueError:
-            raise RigError("invalid", "List exact HTTPS origins without paths.", 422) from None
-        if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
-                or parsed.path or parsed.query or parsed.fragment or "*" in origin):
-            raise RigError("invalid", "List exact HTTPS origins without paths.", 422)
-    key = "rk_pub_" + secrets.token_hex(24)
-    await _service(request).store.put_key(_tenant(request), hash_key(key), "publishable", payload.origins)
-    return _ok(request, {"publishable_key": key, "origins": payload.origins})
+    return _ok(request, await issue_embed_key(_service(request).store, _tenant(request), payload.origins))
 
 
 def mount(application: FastAPI) -> None:
     application.include_router(router)
+
+
+class SaleReceiptIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    receipt_id: str = Field(min_length=1, max_length=200)
+    quote_id: str = Field(min_length=1, max_length=200)
+    product_id: str = Field(min_length=1, max_length=200)
+    amount: str = Field(min_length=1, max_length=40)
+    currency: str = Field(min_length=3, max_length=3)
+    source_ref: str = Field(min_length=1, max_length=200)
+    received_at: str = Field(min_length=1, max_length=50)
+
+
+@router.post("/supply/sale-receipts")
+async def sale_receipt(request: Request, payload: SaleReceiptIn):
+    from rigbox.supply_accounting import record_receipt
+    await _admin(request)
+    try:
+        created = await record_receipt(_service(request), _tenant(request), payload.model_dump())
+    except ValueError:
+        raise RigError("invalid", "The request is not valid.", 422) from None
+    return _ok(request, {"created": created})

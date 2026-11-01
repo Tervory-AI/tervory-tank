@@ -20,8 +20,8 @@ SKILL_PREFIX = "skill:"
 CACHE_CANDIDATE = "cache:semantic"
 TOOL_PREFIX = "tool:"
 SEMANTIC_THRESHOLD = 0.97
-DEFAULT_THRESHOLD = 0.97
-DEFAULT_MIN_SAMPLES = 30
+DEFAULT_THRESHOLD = 0.99
+DEFAULT_MIN_SAMPLES = 200
 DEFAULT_MAX_REJECT = 0.05
 DEFAULT_TOLERANCE = 0.01
 WATCH_DAYS = 7
@@ -374,24 +374,63 @@ def _rolled_back(policy: dict[str, Any], reason: str) -> dict[str, Any]:
     return updated
 
 
-def _wants_auto(policy: dict[str, Any]) -> bool:
-    value = policy.get("auto_promote", False)
-    if value is None:
-        return False
-    return bool(value)
-
-
 def router_cannot_serve(candidate: str | None) -> bool:
-    """run_route posts policy.model to LiteLLM. A skill or a cache name is not a model name."""
+    """Only pinned skills have a foreground runner; cache policies still name a model."""
     if candidate is None:
         return False
     name = str(candidate).strip()
     if not name:
         return False
-    return is_skill(name) or is_semantic_cache(name) or name.startswith("cache:")
+    return (is_skill(name) and parse_skill(name) is None) or name.startswith(("cache:", "tool:", "routellm:"))
 
 
-ROUTER_BLOCK = "the router cannot serve this name with no LiteLLM call yet"
+ROUTER_BLOCK = "use a pinned skill:id@version or a model with cache enabled in policy"
+
+
+def code_failure(output: dict[str, Any], floor: float) -> str | None:
+    """Skills may report a fraction or the existing Base 0..100 confidence scale."""
+    if not output or output.get("answerable") is False or output.get("not_answerable") or output.get("refused"):
+        return "not_answerable"
+    if output.get("status") in {"not-answerable", "not_answerable", "error", "failed"} or output.get("error"):
+        return "not_answerable"
+    scores = []
+    if "confidence" in output:
+        scores.append(output["confidence"])
+    elif isinstance(output.get("fields"), dict):
+        scores.extend(v["confidence"] for v in output["fields"].values() if isinstance(v, dict) and "confidence" in v)
+    try:
+        values = [float(v) / (100 if float(v) > 1 else 1) for v in scores]
+    except (TypeError, ValueError):
+        return "invalid_confidence"
+    if values and (any(not 0 <= v <= 1 for v in values) or min(values) < floor):
+        return "low_confidence"
+    return None
+
+
+def semantic_form(messages: list[dict[str, str]]) -> str:
+    """Conservative local equivalence, preserving word order, names, numbers and negation.
+
+    No embedding service/key. Only spelling and request-politeness variants are
+    equated; wider paraphrases deliberately miss until a local encoder is proven.
+    """
+    synonyms = {"summarise": "summarize", "summarising": "summarizing", "colour": "color"}
+    rows = []
+    for message in messages:
+        text = message.get("content", "")
+        text = re.sub(r"^\s*(?:please\s+|could you\s+|can you\s+)", "", text, flags=re.I)
+        words = re.findall(r"\w+|[^\w\s]", text.casefold())
+        rows.append([message.get("role"), [synonyms.get(word, word) for word in words]])
+    return json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
+
+
+def semantic_vector(form: str) -> list[float]:
+    # Stable across processes/Python versions; used only after equivalence and
+    # tenant/context checks, so a hash collision cannot authorize a cache hit.
+    vector = [0.0] * 256
+    for word in re.findall(r"\w+", form):
+        index = int.from_bytes(hashlib.sha256(word.encode()).digest()[:2], "big") % len(vector)
+        vector[index] += 1
+    return vector
 
 
 def promote_if_proven(policy: dict[str, Any], evidence: Evidence, now: datetime, *, automatic: bool) -> Move:
@@ -403,7 +442,7 @@ def promote_if_proven(policy: dict[str, Any], evidence: Evidence, now: datetime,
     ok, reason = proven_reason(policy, evidence)
     if not ok:
         return Move("hold", _copied(policy), reason)
-    if automatic and not _wants_auto(policy):
+    if automatic:
         return Move("hold", _copied(policy), "proven, waiting for a person")
     return Move("promote", _promoted(policy, now), None)
 
@@ -430,7 +469,7 @@ def rollback_if_dropped(policy: dict[str, Any], evidence: Evidence, now: datetim
 
 
 def apply(policy: dict[str, Any], evidence: Evidence, now: datetime) -> Move:
-    """Promote by itself when the candidate is proven. Roll back a fresh promotion that slips."""
+    """Hold proven candidates for founder approval; roll back a fresh promotion that slips."""
     if policy.get("candidate_model"):
         return promote_if_proven(policy, evidence, now, automatic=True)
     return rollback_if_dropped(policy, evidence, now)
@@ -912,7 +951,7 @@ async def training_table(conn, tenant, region: str) -> list[dict]:
         shown = best['candidate'] if best else policy['candidate_model']
         trained = bool(shown and shown in removed_models)
         can_promote = bool(best and best['candidate'] == policy['candidate_model']
-                           and not router_cannot_serve(best['candidate']) and not policy['auto_promote'])
+                           and not router_cannot_serve(best['candidate']))
         blocked = 'trained on removed data' if trained else None
         if can_promote:
             served = skills_served(best['candidate'], rank_rows, score_rows)

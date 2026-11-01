@@ -13,8 +13,8 @@ import { SquadLinks } from "../squad-links";
 import type { AskReply } from "../api/zenas/rules";
 
 const TOP_LINKS = [
-  { href: "/ledger", label: "Dashboard" },
-  { href: "/tasks", label: "Projects" },
+  { href: "https://app.tervory.com/", label: "Dashboard" },
+  { href: "/matters", label: "Projects" },
 ] as const;
 
 const PAGE_LINKS = [
@@ -24,7 +24,7 @@ const PAGE_LINKS = [
 
 const BOTTOM_LINKS = [
   { href: "/onboarding", label: "Settings" },
-  { href: "/", label: "Support" },
+  { href: "https://tervory.com", label: "Support" },
 ] as const;
 
 export function ZenasView({
@@ -421,7 +421,7 @@ export function ZenasView({
                     <ul className="zn-cited">
                       {reply.sources.map((source) => (
                         <li key={`ask-${source.citation}`}>
-                          <strong>{source.citation}</strong>
+                          <strong>{source.url ? <a href={source.url}>{source.citation}</a> : source.citation}</strong>
                           {source.quote ? <span>{source.quote}</span> : null}
                         </li>
                       ))}

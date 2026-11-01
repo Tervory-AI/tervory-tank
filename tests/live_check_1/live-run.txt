@@ -1,0 +1,15 @@
+(node:10204) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+FAIL app.tervory.com: Page navigation failed
+FAIL protect.tervory.com: Page navigation failed
+FAIL autumbra.tervory.com: Page navigation failed
+FAIL zenas.tervory.com: Page navigation failed
+FAIL base.tervory.com: Page navigation failed
+FAIL tiger.tervory.com: Page navigation failed
+FAIL market-lab.tervory.com: Page navigation failed
+FAIL tisan.tervory.com: Page navigation failed
+FAIL radix.tervory.com: Page navigation failed
+FAIL skala.tervory.com: Page navigation failed
+FAIL tank.tervory.com: Page navigation failed
+FAIL rig.tervory.com: Page navigation failed
+NOTICE: Signed-in checks skipped; step 2 awaits founder-provided settings.

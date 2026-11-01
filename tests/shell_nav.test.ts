@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   SHELL_ROUTES,
+  TOP_LINKS,
+  REST_LINKS,
   linkIsCurrent,
   pageSection,
   sidebarLabels,
@@ -80,6 +82,15 @@ test("workspace routes use the shared shell; auth and squad product roots use th
   assert.equal(usesOwnShell("/skala/gold"), false);
 });
 
+test("only public Autumbra paths use their own shell, including nested owner pages", () => {
+  for (const path of ["/autumbra", "/autumbra/", "/autumbra/owner/token", "/autumbra/report/token"]) {
+    assert.equal(usesOwnShell(path), true, path);
+  }
+  for (const path of ["/admin/autumbra", "/admin/autumbra/settings", "/autumbra-private", "/autumbran"]) {
+    assert.equal(usesOwnShell(path), false, path);
+  }
+});
+
 test("the shell wires the pop-out, Escape, and focus return", () => {
   const squad = readFileSync(new URL("workspace/app/squad-links.tsx", root), "utf8");
   const shell = readFileSync(new URL("workspace/app/shell.tsx", root), "utf8");
@@ -96,4 +107,28 @@ test("the shell wires the pop-out, Escape, and focus return", () => {
   assert.match(shell, />Close</);
   const aside = shell.split('id="app-sidebar"')[1]?.split("</aside>")[0] ?? "";
   assert.equal(aside.includes("squad-popout"), false);
+});
+
+
+test("workspace destinations remain explicit across product-host root rewrites", () => {
+  const byLabel = Object.fromEntries([...TOP_LINKS, ...REST_LINKS].map(link => [link.label, link.href]));
+  for (const host of ["app.tervory.com", "zenas.tervory.com", "base.tervory.com", "tiger.tervory.com"]) {
+    const origin = `https://${host}/`;
+    assert.equal(new URL(byLabel.Dashboard, origin).href, "https://app.tervory.com/");
+    assert.equal(new URL(byLabel.Projects, origin).pathname, "/matters");
+    assert.equal(new URL(byLabel.Chats, origin).pathname, "/chats");
+    assert.equal(new URL(byLabel.Support, origin).href, "https://tervory.com/");
+  }
+  assert.equal(linkIsCurrent(byLabel.Chats, "/chats"), true);
+  for (const path of ["/", "/tasks", "/moot", "/base"]) assert.equal(linkIsCurrent(byLabel.Chats, path), false);
+});
+
+test("room menus do not retain known incorrect workspace destinations", () => {
+  for (const file of ["base/view.tsx", "tank/view.tsx", "skala/view.tsx", "market-lab/view.tsx", "tisan/tisan.tsx", "radix/view.tsx", "tiger/view.tsx", "zenas/view.tsx", "rig/copy.ts", "review/console.tsx"]) {
+    const source = readFileSync(new URL(`workspace/app/${file}`, root), "utf8");
+    assert.doesNotMatch(source, /href: "\/", label: "Chats"|href="\/">Chats/);
+    assert.doesNotMatch(source, /href: "\/(?:ledger|tasks|dashboard)", label: "Dashboard"/);
+    assert.doesNotMatch(source, /href: "\/(?:tasks|projects)", label: "Projects"/);
+    assert.doesNotMatch(source, /href: "\/", label: "Support"|href="\/">Support/);
+  }
 });

@@ -1,7 +1,5 @@
 import type { BaseRecord } from "@/lib/tank";
 
-export const PLATFORM_TENANT = "00000000-0000-0000-0000-000000000001";
-
 export type ContextReport = {
   records: number;
   creditsUsed: number;
@@ -13,9 +11,10 @@ export type ContextReport = {
 };
 
 export async function loadContextReport(
+  tenantId: string,
   read: (tenantId: string, options: { limit: number }) => Promise<BaseRecord[]>,
 ): Promise<ContextReport> {
-  return contextReport(await read(PLATFORM_TENANT, { limit: 200 }));
+  return contextReport(await read(tenantId, { limit: 200 }));
 }
 
 function comparable(value: unknown): string {

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from chassis.tenant_db import tenant_scope
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
 
 _PAGE = Path(__file__).resolve().parent / "page"
@@ -13,10 +16,8 @@ _V5 = _PAGE / "v5"
 _V5_MEDIA = {
     ".css": "text/css",
     ".js": "text/javascript",
-    ".json": "application/json",
     ".svg": "image/svg+xml",
 }
-_V5_SKINS = {"rig", "cn"}
 _ASSETS = {
     "search.js": "text/javascript",
     "search.css": "text/css",
@@ -25,94 +26,116 @@ _ASSETS = {
 }
 
 
-def house_key() -> str:
-    """Publishable key for the catalogue on the Tervory page.
+def _v5_files() -> dict[str, Path]:
+    root = _V5.resolve()
+    files = {}
+    for candidate in root.rglob("*"):
+        path = candidate.resolve()
+        if root in path.parents and path.is_file() and path.suffix.lower() in _V5_MEDIA:
+            files[candidate.relative_to(root).as_posix()] = path
+    return files
 
-    The sheet lives in catalogues/customnation. The page keeps the Tervory
-    skin. The example catalogue stays a separate tenant and is not this page.
-    """
-    publish = Path(__file__).resolve().parents[1] / "catalogues" / "customnation" / "publish.json"
+
+def _v5_objects() -> dict[tuple[str, str], Path]:
+    root = (_V5 / "assets").resolve()
+    objects = {}
+    for name in ("rig.css", "rig.js"):
+        for candidate in root.glob(f"*-{name}"):
+            path = candidate.resolve()
+            if path.parent != root or not path.is_file():
+                continue
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            if candidate.name == f"{digest}-{name}":
+                objects[digest, name] = path
+    return objects
+
+
+async def _published_page(request: Request) -> tuple[str, str]:
+    """Use only the existing configured store, with products in its own store."""
+    key = os.environ.get("RIG_WIDGET_PUBLISHABLE_KEY", "")
+    service = getattr(request.app.state, "rig", None)
+    if not key or service is None:
+        return "", ""
     try:
-        data = json.loads(publish.read_text(encoding="utf-8"))
-    except OSError:
-        return ""
-    keys = data.get("keys") or []
-    if not keys or not isinstance(keys[0], dict):
-        return ""
-    return str(keys[0].get("key") or "")
+        owner = await service.authenticate(key)
+        tenant = str(owner["tenant_id"])
+        with tenant_scope(tenant):
+            if not await service.store.products(tenant):
+                return "", ""
+            retailer = await service.store.retailer(tenant) or {}
+        return key, str(retailer.get("name") or "")
+    except Exception:
+        return "", ""
 
 
-def archon_publish() -> dict:
-    path = Path(__file__).resolve().parents[1] / "catalogues" / "archon" / "publish.json"
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
+def _v5_asset_url(name: str) -> str:
+    digest = hashlib.sha256((_V5 / name).read_bytes()).hexdigest()
+    return f"/page/v5/assets/{digest}/{name}"
 
 
-def archon_key() -> str:
-    keys = archon_publish().get("keys") or []
-    if not keys or not isinstance(keys[0], dict):
-        return ""
-    return str(keys[0].get("key") or "")
-
-
-def _v5_html(skin: str) -> HTMLResponse:
-    """The v5 shopper page from the approved Figma. One page, two skins.
-
-    Both skins search the Archon demo catalogue through /v1/rig on this host.
-    """
+async def _v5_html(request: Request, skin: str) -> HTMLResponse:
     html = (_V5 / "index.html").read_text(encoding="utf-8")
-    publish = archon_publish()
-    html = html.replace("__RIG_SKIN__", skin if skin in _V5_SKINS else "rig")
-    html = html.replace("__RIG_KEY__", json.dumps(archon_key()))
-    html = html.replace("__RIG_SHOP__", json.dumps(str(publish.get("name") or "Custom Nation")))
-    return HTMLResponse(html)
+    key, shop = await _published_page(request)
+    safe_skin = "cn" if skin == "cn" else "rig"
+    html = html.replace("__RIG_SKIN__", safe_skin)
+    html = html.replace("__RIG_KEY__", json.dumps(key).replace("<", "\\u003c"))
+    html = html.replace("__RIG_SHOP__", json.dumps(shop).replace("<", "\\u003c"))
+    for name in ("rig.css", "rig.js"):
+        html = html.replace(f"/page/v5/{name}", _v5_asset_url(name))
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 
-def _shopper_html() -> HTMLResponse:
+async def _shopper_html(request: Request) -> HTMLResponse:
     html = (_PAGE / "index.html").read_text(encoding="utf-8")
-    html = html.replace("__RIG_PUBLISHABLE_KEY__", json.dumps(house_key()))
+    key, _ = await _published_page(request)
+    html = html.replace("__RIG_PUBLISHABLE_KEY__", json.dumps(key).replace("<", "\\u003c"))
     return HTMLResponse(html)
 
 
 def mount_page(application: FastAPI) -> None:
     @application.get("/", include_in_schema=False)
-    async def search_page() -> HTMLResponse:
-        # Root is the built Rig product surface (v5 shopper, Archon fixtures).
-        return _v5_html("rig")
+    async def search_page(request: Request) -> HTMLResponse:
+        return await _v5_html(request, "rig")
 
     @application.get("/product/{product_id}", include_in_schema=False)
-    async def product_page(product_id: str) -> HTMLResponse:
+    async def product_page(request: Request, product_id: str) -> HTMLResponse:
         del product_id
-        return _shopper_html()
+        return await _shopper_html(request)
 
     @application.get("/cn-classic", include_in_schema=False)
-    async def cn_classic_page() -> HTMLResponse:
+    async def cn_classic_page(request: Request) -> HTMLResponse:
         """Classic Custom Nation sheet UI (rk_pub_customnation). Secondary path."""
-        return _shopper_html()
+        return await _shopper_html(request)
 
     @application.get("/house", include_in_schema=False)
-    async def house_page() -> HTMLResponse:
+    async def house_page(request: Request) -> HTMLResponse:
         """Alias of /cn-classic for the house catalogue page."""
-        return _shopper_html()
+        return await _shopper_html(request)
 
     @application.get("/v5", include_in_schema=False)
-    async def v5_page(skin: str = "rig") -> HTMLResponse:
-        return _v5_html(skin)
+    async def v5_page(request: Request, skin: str = "rig") -> HTMLResponse:
+        return await _v5_html(request, skin)
 
     @application.get("/v5/cn", include_in_schema=False)
-    async def v5_cn_page() -> HTMLResponse:
-        return _v5_html("cn")
+    async def v5_cn_page(request: Request) -> HTMLResponse:
+        return await _v5_html(request, "cn")
+
+    @application.get("/page/v5/assets/{digest}/{name}", include_in_schema=False)
+    async def v5_versioned_asset(digest: str, name: str) -> FileResponse:
+        # Request values select a server-enumerated, verified object; they never form a path.
+        path = _v5_objects().get((digest, name))
+        if path is None:
+            raise HTTPException(status_code=404, detail="Not found")
+        return FileResponse(path, media_type=_V5_MEDIA[Path(name).suffix],
+                            headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
     @application.get("/page/v5/{name:path}", include_in_schema=False)
     async def v5_asset(name: str) -> FileResponse:
-        media = _V5_MEDIA.get(Path(name).suffix.lower())
-        path = (_V5 / name).resolve()
-        root = _V5.resolve()
-        if media is None or root not in path.parents or not path.is_file():
+        path = _v5_files().get(name)
+        if path is None:
             raise HTTPException(status_code=404, detail="Not found")
-        return FileResponse(path, media_type=media)
+        media = _V5_MEDIA[path.suffix.lower()]
+        return FileResponse(path, media_type=media, headers={"Cache-Control": "no-cache"})
 
     @application.get("/admin", include_in_schema=False)
     async def admin_page() -> HTMLResponse:

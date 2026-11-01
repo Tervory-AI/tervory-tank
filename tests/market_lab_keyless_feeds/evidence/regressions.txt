@@ -1,0 +1,21 @@
+.........F..........................................................s... [ 29%]
+...........s...............s............................................ [ 59%]
+.....................s.................................................. [ 89%]
+..s......................                                                [100%]
+=================================== FAILURES ===================================
+____________________ test_industry_words_stay_in_the_engine ____________________
+tests/test_feeds_boundaries.py:121: in test_industry_words_stay_in_the_engine
+    assert offenders == []
+E   AssertionError: assert ['tests/rig_n...results.json'] == []
+E
+E     Left contains 5 more items, first extra item: 'tests/rig_no_live_demo/browser.py'
+E     Use -v to get more diff
+=============================== warnings summary ===============================
+../.tervory-cloud/venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/.tervory-cloud/venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_feeds_boundaries.py::test_industry_words_stay_in_the_engine
+1 failed, 235 passed, 5 skipped, 1 warning in 23.59s

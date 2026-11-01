@@ -5,6 +5,7 @@ See docs/ops/self-hosted-runner.md. These tests read the workflow YAML and run t
 """
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -16,7 +17,6 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 CI = WORKFLOWS / "ci.yml"
-TISAN = WORKFLOWS / "tisan-site.yml"
 DOC = ROOT / "docs" / "ops" / "self-hosted-runner.md"
 
 FORK_GUARD = "github.event.pull_request.head.repo.full_name == github.repository"
@@ -33,20 +33,21 @@ def _triggers(workflow: dict) -> dict:
     return workflow.get("on", workflow.get(True))
 
 
-@pytest.mark.parametrize("path", [CI, TISAN], ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [CI], ids=lambda p: p.name)
 def test_docs_only_changes_skip_on_push_and_pull_request(path: Path) -> None:
     triggers = _triggers(_load(path))
     assert set(triggers) == {"pull_request", "push"}
+    # The security job runs on every PR, docs-only included, so there is no
+    # paths-ignore. Build jobs skip docs-only changes through ci_scope.py instead.
     for event in ("pull_request", "push"):
-        ignored = triggers[event]["paths-ignore"]
-        assert "docs/**" in ignored
-        assert "**/*.md" in ignored
-        # paths-ignore cannot be mixed with paths on the same event.
-        assert "paths" not in triggers[event]
+        assert "paths-ignore" not in (triggers[event] or {})
     assert triggers["push"]["branches"] == ["main"]
+    scope = _scope_module().select(["docs/ops/self-hosted-runner.md", "README.md"])
+    assert scope["run"] is False
+    assert "needs.changes.outputs.run == 'true'" in _load(path)["jobs"]["tank"]["if"]
 
 
-@pytest.mark.parametrize("path", [CI, TISAN], ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [CI], ids=lambda p: p.name)
 def test_no_workflow_uses_pull_request_target(path: Path) -> None:
     # pull_request_target runs fork code with this repository's secrets.
     assert "pull_request_target" not in _triggers(_load(path))
@@ -55,7 +56,7 @@ def test_no_workflow_uses_pull_request_target(path: Path) -> None:
 def test_ci_keeps_job_names_and_main_push_trigger() -> None:
     text = CI.read_text(encoding="utf-8")
     jobs = _load(CI)["jobs"]
-    assert set(jobs) == {"changes", "runner", "tank", "workspace", "savings-page"}
+    assert set(jobs) == {"security", "changes", "runner", "tank", "workspace", "savings-page"}
     assert "push:" in text and "branches: [main]" in text
     assert _load(CI)["permissions"] == {"contents": "read"}
 
@@ -87,16 +88,12 @@ def test_main_jobs_fall_back_to_ubuntu_latest(name: str) -> None:
     assert runs_on.index("needs.runner.outputs.runner &&") < runs_on.index("fromJSON(")
 
 
-def test_tisan_site_stays_on_github_hosted() -> None:
-    # playwright install --with-deps needs sudo, which the self-hosted runner user must not have.
-    assert _load(TISAN)["jobs"]["gate"]["runs-on"] == "ubuntu-latest"
-
-
 def test_ci_carries_no_production_secrets() -> None:
     text = CI.read_text(encoding="utf-8")
     for banned in ("COOLIFY", "TANK_KEY", "TANK_API_KEY", "DATABASE_URL: postgresql://tank", "GITHUB_APP_PRIVATE_KEY"):
         assert banned not in text
-    secrets = {part.split("}")[0].strip() for part in text.split("secrets.")[1:]}
+    # Only ${{ secrets.NAME }} expressions; the file name tests/test_secrets.py is not a secret.
+    secrets = set(re.findall(r"\$\{\{\s*secrets\.([A-Z0-9_]+)\s*\}\}", text))
     assert secrets == {"RUNNER_STATUS_TOKEN"}
 
 
@@ -204,7 +201,7 @@ def _scope_module():
 
 @pytest.mark.parametrize("paths", [[], ["README.md"], ["docs/spec.json", "agents/rig/README.md"]])
 def test_docs_select_no_checks(paths):
-    assert _scope_module().select(paths) == {"run": False, "full": False, "tisan": False, "tests": []}
+    assert _scope_module().select(paths) == {"run": False, "full": False, "tisan": False, "tests": [], "savings": False}
 
 
 @pytest.mark.parametrize("room", ["base", "tiger", "market_lab", "radix", "rig", "tisan", "zenas"])
@@ -229,8 +226,22 @@ def test_room_changes_keep_safety_without_unrelated_room_tests(room):
                                   "agents/_template/app.py", "agents/vshop/app.py", "agents/check_isolation.sh",
                                   ".github/workflows/ci.yml", "tests/test_rig.py", "docker-compose.yml"])
 def test_shared_or_unknown_paths_run_everything(path):
-    assert _scope_module().select(["agents/rig/app.py", path]) == {
-        "run": True, "full": True, "tisan": True, "tests": ["."]}
+    scope = _scope_module().select(["agents/rig/app.py", path])
+    scope.pop("savings")
+    assert scope == {"run": True, "full": True, "tisan": True, "tests": ["."]}
+
+
+@pytest.mark.parametrize(("paths", "expected"), [
+    (["workspace/app/page.tsx"], True),
+    (["workspace/app/tank/proof/view.tsx"], True),
+    (["tests/test_core2_savings_page.mjs"], True),
+    (["workspace/app/tiger/view.tsx"], False),
+    (["tank/main.py"], False),
+    (["agents/rig/app.py"], False),
+    (["docs/notes.md"], False),
+])
+def test_savings_page_runs_only_when_its_pages_change(paths, expected):
+    assert _scope_module().select(paths)["savings"] is expected
 
 
 def test_multiple_rooms_select_union():
@@ -270,16 +281,16 @@ def test_changed_paths_includes_deletions_and_both_sides_of_rename(tmp_path, mon
 
 def test_workflows_use_scope_and_do_not_hide_failed_detection():
     ci = _load(CI)["jobs"]
-    for path in (CI, TISAN):
+    for path in (CI,):
         changes = _load(path)["jobs"]["changes"]
         assert changes["steps"][0]["with"]["fetch-depth"] == 0
         assert changes["steps"][1]["run"] == "python3 .github/scripts/ci_scope.py"
     assert "needs.changes.result == 'success'" in ci["tank"]["if"]
     assert "needs.changes.outputs.full == 'true'" in ci["workspace"]["if"]
-    assert "needs.changes.outputs.tisan == 'true'" in _load(TISAN)["jobs"]["gate"]["if"]
-    step = next(step for step in ci["tank"]["steps"] if step.get("name") == "Secret scan and tests")
-    assert step["run"] == "python3 .github/scripts/ci_scope.py test"
-    assert step["env"]["TEST_TARGETS"] == "${{ needs.changes.outputs.tests }}"
+    # The whole offline suite gates PRs again (27 Oct #351 had cut it to three files).
+    step = next(step for step in ci["tank"]["steps"] if step.get("name") == "Full offline test suite")
+    assert step["run"] == "python3 .github/scripts/offline_suite.py"
+    assert "needs.changes.outputs.savings == 'true'" in ci["savings-page"]["if"]
 
 
 @pytest.mark.parametrize("room", ["base", "tiger", "market_lab", "radix", "rig", "tisan", "zenas"])
@@ -355,7 +366,7 @@ def _github(event: str, *, pr: int | None = None, head_repo: str = "Tervory-AI/t
     return ctx
 
 
-@pytest.mark.parametrize("path", [CI, TISAN], ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [CI], ids=lambda p: p.name)
 def test_workflow_level_concurrency_block(path: Path) -> None:
     workflow = _load(path)
     assert workflow["concurrency"] == {
@@ -378,7 +389,7 @@ def _cancels(path: Path, github: dict) -> bool:
     return _eval(_load(path)["concurrency"]["cancel-in-progress"], github=github) is True
 
 
-@pytest.mark.parametrize("path", [CI, TISAN], ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [CI], ids=lambda p: p.name)
 def test_second_push_to_pull_request_cancels_the_first(path: Path) -> None:
     first = _github("pull_request", pr=254, run_id="1")
     second = _github("pull_request", pr=254, run_id="2")
@@ -388,7 +399,7 @@ def test_second_push_to_pull_request_cancels_the_first(path: Path) -> None:
     assert _group(path, _github("pull_request", pr=255)) != _group(path, first)
 
 
-@pytest.mark.parametrize("path", [CI, TISAN], ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [CI], ids=lambda p: p.name)
 def test_main_runs_are_never_cancelled_or_replaced(path: Path) -> None:
     first = _github("push", run_id="9001")
     second = _github("push", run_id="9002")
@@ -398,13 +409,6 @@ def test_main_runs_are_never_cancelled_or_replaced(path: Path) -> None:
     assert _group(path, first) != _group(path, second)
     # A pull request can never share a group with a main run.
     assert _group(path, _github("pull_request", pr=1)) not in {_group(path, first), _group(path, second)}
-
-
-def test_concurrency_groups_differ_per_workflow() -> None:
-    # ci and tisan-site must not cancel each other on the same pull request.
-    pr = _github("pull_request", pr=7)
-    assert _group(CI, pr) == "ci-7"
-    assert _group(TISAN, {**pr, "workflow": "tisan-site"}) == "tisan-site-7"
 
 
 def _runs_on(job: str, github: dict, runner_output: str) -> object:

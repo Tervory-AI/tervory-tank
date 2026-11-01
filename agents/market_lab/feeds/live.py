@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import time
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -18,6 +19,11 @@ DEFAULT_DELAY = 2.0
 DEFAULT_TIMEOUT = 60.0
 DEFAULT_RETRIES = 3
 DEFAULT_BACKOFF = 1.0
+# SEC allows at most ten requests/second across its hosts. Keep a conservative
+# five/second ceiling shared by all clients in this worker, even with delay=0.
+_SEC_INTERVAL = 0.2
+_SEC_LOCK = threading.Lock()
+_SEC_LAST: float | None = None
 
 _ANCHOR = re.compile(
     r"<a\s[^>]*href=(['\"])(.*?)\1[^>]*>(.*?)</a>",
@@ -31,6 +37,27 @@ class NeedsKey(RuntimeError):
     def __init__(self, name: str) -> None:
         self.name = name
         super().__init__(f"needs key {name}")
+
+
+class BlockedSite(RuntimeError):
+    """An access boundary, never a retryable transport failure."""
+
+    def __init__(self, host: str) -> None:
+        self.host = host
+        super().__init__("blocked")
+
+
+def login_boundary(url: str) -> bool:
+    parts = urllib.parse.urlsplit(url).path.lower().split("/")
+    return any(part in {"login", "log-in", "signin", "sign-in", "subscribe", "paywall", "captcha"} for part in parts)
+
+
+def blocked_page(body: bytes) -> bool:
+    text = body[:65536].decode("utf-8", errors="ignore").lower()
+    markers = ("g-recaptcha", "h-captcha", "cf-chl-", "cf_chl_", "challenge-platform",
+               "verify you are human", "verify that you are human", "captcha challenge",
+               "subscribe to continue", "subscribe to read", "sign in to continue", "access denied")
+    return any(marker in text for marker in markers) or bool(re.search(r'<input[^>]+type\s*=\s*[\'"]?password', text))
 
 
 def require_env(name: str) -> str:
@@ -53,7 +80,7 @@ def safe_failure(url: str, exc: BaseException) -> str:
 def _retryable(exc: BaseException) -> bool:
     code = getattr(exc, "code", None)
     if isinstance(code, int):
-        return code in {429, 500, 502, 503, 504}
+        return code in {500, 502, 503, 504}
     return isinstance(exc, (urllib.error.URLError, TimeoutError, ConnectionError))
 
 
@@ -70,6 +97,7 @@ class PoliteClient:
         opener: Callable[..., object] | None = None,
         sleep: Callable[[float], None] | None = None,
         clock: Callable[[], float] | None = None,
+        max_bytes: int | None = None,
     ) -> None:
         self.delay = delay
         self.timeout = timeout
@@ -78,7 +106,34 @@ class PoliteClient:
         self.opener = opener or urllib.request.urlopen
         self.sleep = sleep or time.sleep
         self.clock = clock or time.monotonic
+        self.max_bytes = max_bytes
         self._last: dict[str, float] = {}
+        self.blocked_hosts: set[str] = set()
+
+    def ensure_open(self, url: str) -> None:
+        host = urllib.parse.urlsplit(url).hostname or ""
+        if login_boundary(url):
+            self.blocked_hosts.add(host)
+        if host in self.blocked_hosts:
+            raise BlockedSite(host)
+
+    def _check_block(self, url: str, *, status: int = 200, body: bytes = b"", error: BaseException | None = None) -> None:
+        host = urllib.parse.urlsplit(url).hostname or ""
+        # A denied CONNECT can arrive wrapped in URLError. Never retry it as
+        # an ordinary transport error, and never include its message in logs.
+        if isinstance(error, urllib.error.HTTPError) and error.code not in {401, 402, 403, 429}:
+            try:
+                body = error.read(65536)
+            except Exception:
+                body = b""
+        denied_proxy = isinstance(error, urllib.error.URLError) and bool(re.search(r"\b(?:401|402|403|429)\b", str(error.reason)))
+        if isinstance(error, BlockedSite) or status in {401, 402, 403, 429} or denied_proxy or blocked_page(body):
+            self.blocked_hosts.add(host)
+            if isinstance(error, BlockedSite):
+                self.blocked_hosts.add(error.host)
+            elif isinstance(error, urllib.error.HTTPError):
+                self.blocked_hosts.add(urllib.parse.urlsplit(error.url).hostname or host)
+            raise BlockedSite(host) from None
 
     def _headers(self, extra: dict[str, str] | None) -> dict[str, str]:
         merged = dict(extra or {})
@@ -86,9 +141,7 @@ class PoliteClient:
         return merged
 
     def _wait(self, host: str) -> None:
-        if self.delay <= 0:
-            self._last[host] = self.clock()
-            return
+        global _SEC_LAST
         previous = self._last.get(host)
         now = self.clock()
         if previous is not None:
@@ -97,8 +150,17 @@ class PoliteClient:
                 self.sleep(gap)
                 now = self.clock()
         self._last[host] = now
+        if host == "sec.gov" or host.endswith(".sec.gov"):
+            with _SEC_LOCK:
+                now = time.monotonic()
+                if _SEC_LAST is not None:
+                    gap = _SEC_INTERVAL - (now - _SEC_LAST)
+                    if gap > 0:
+                        time.sleep(gap)
+                _SEC_LAST = time.monotonic()
 
     def get(self, url: str, headers: dict[str, str] | None = None) -> bytes:
+        self.ensure_open(url)
         host = urllib.parse.urlsplit(url).hostname or ""
         last: BaseException | None = None
         for attempt in range(self.retries):
@@ -107,11 +169,16 @@ class PoliteClient:
             try:
                 with self.opener(request, timeout=self.timeout) as response:
                     status = getattr(response, "status", 200) or 200
+                    self._check_block(url, status=status)
                     if status >= 400:
                         raise urllib.error.HTTPError(url, status, "bad status", None, None)
-                    body = response.read()
+                    body = response.read() if self.max_bytes is None else response.read(self.max_bytes + 1)
+                    if self.max_bytes is not None and len(body) > self.max_bytes:
+                        raise ValueError("response exceeds the feed limit")
+                    self._check_block(url, body=body)
                 return body
             except Exception as exc:
+                self._check_block(url, status=getattr(exc, "code", 0), error=exc)
                 last = exc
                 if attempt + 1 >= self.retries or not _retryable(exc):
                     raise RuntimeError(safe_failure(url, exc)) from None
@@ -123,6 +190,7 @@ class PoliteClient:
 
     def iter_lines(self, url: str, headers: dict[str, str] | None = None) -> Iterator[str]:
         """Stream one response. A failure before the first line is retried."""
+        self.ensure_open(url)
         host = urllib.parse.urlsplit(url).hostname or ""
         last: BaseException | None = None
         for attempt in range(self.retries):
@@ -131,6 +199,7 @@ class PoliteClient:
             try:
                 response = self.opener(request, timeout=self.timeout)
             except Exception as exc:
+                self._check_block(url, status=getattr(exc, "code", 0), error=exc)
                 last = exc
                 if attempt + 1 >= self.retries or not _retryable(exc):
                     raise RuntimeError(safe_failure(url, exc)) from None
@@ -139,9 +208,14 @@ class PoliteClient:
             started = False
             try:
                 status = getattr(response, "status", 200) or 200
+                self._check_block(url, status=status)
                 if status >= 400:
                     raise urllib.error.HTTPError(url, status, "bad status", None, None)
+                prefix = b""
                 for raw in response:
+                    if len(prefix) < 65536:
+                        prefix += raw if isinstance(raw, bytes) else str(raw).encode()
+                        self._check_block(url, body=prefix)
                     started = True
                     if isinstance(raw, bytes):
                         yield raw.decode("utf-8", "replace")
@@ -149,6 +223,7 @@ class PoliteClient:
                         yield str(raw)
                 return
             except Exception as exc:
+                self._check_block(url, status=getattr(exc, "code", 0), error=exc)
                 last = exc
                 if started or attempt + 1 >= self.retries or not _retryable(exc):
                     raise RuntimeError(safe_failure(url, exc)) from None
@@ -224,15 +299,16 @@ def census_population_urls(key: str, years: list[int]) -> list[tuple[str, str]]:
 def census_trade_urls(key: str, months: list[str], codes: list[str], flow: str) -> list[tuple[str, str]]:
     path = "imports" if flow == "import" else "exports"
     value = "GEN_VAL_MO" if flow == "import" else "ALL_VAL_MO"
+    commodity = "I_COMMODITY" if flow == "import" else "E_COMMODITY"
     urls: list[tuple[str, str]] = []
     for month in months:
         for code in codes:
             query = urllib.parse.urlencode(
                 {
-                    "get": f"I_COMMODITY,CTY_NAME,{value},DIST_NAME,time",
+                    "get": f"{commodity},CTY_NAME,{value},DIST_NAME,time",
                     "COMM_LVL": "HS6",
                     "time": month,
-                    "I_COMMODITY": code,
+                    commodity: code,
                     "key": key,
                 }
             )

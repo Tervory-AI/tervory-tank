@@ -1,0 +1,9 @@
+PASS store A fixture sign-in -> real admin CSV upload -> mapping confirmation -> publish: 3 products
+PASS own origin-bound embed key + exact shipped snippet; admin checked at 1440/390px
+PASS installed snippet -> search -> approved setup -> quote req_6df7f33f11104f5e949c7b54937a5422: email delivery sent
+PASS store B admin sees no store A catalogue, key, delivery settings or receipts; injected tenant override ignored
+
+PASS two-tenant HTTP/DB isolation: products, search, setups, origins, embed keys, quote read/retry/resume and settings
+PASS SMTP 451 rejection recorded; durable retry changes pending -> sent, attempts 1 -> 2
+PASS local STARTTLS mail catcher: 2 emails contain the approved setup, ZAR 150 total, shopper reply address and request reference
+PASS real Tank restart collected per-tenant save_pair rows: A 2 quotes + repeated misses; B only its own misses; no contacts or public export; durable queue drained

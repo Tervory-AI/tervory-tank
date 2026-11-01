@@ -1,0 +1,13 @@
+# Context is the repository root; send only Tisan, the chassis and the reused check.
+**
+!agents/
+!agents/_chassis/
+!agents/_chassis/**
+!agents/tisan/
+!agents/tisan/**
+!ops/
+!ops/live_check.mjs
+!ops/live_check_banned.txt
+**/.env*
+**/node_modules
+**/__pycache__

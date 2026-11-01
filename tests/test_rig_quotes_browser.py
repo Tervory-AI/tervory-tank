@@ -20,7 +20,7 @@ async def widget_server(tmp_path):
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     base = f"http://127.0.0.1:{port}"
-    process_env = {**os.environ, "PYTHONPATH": str(ROOT / "agents" / "rig"),
+    process_env = {**os.environ, "PYTHONPATH": os.pathsep.join(str(ROOT / "agents" / part) for part in ("rig", "_chassis")),
                    "RIG_SAMPLE_ORIGIN": base, "RIG_WIDGET_PUBLISHABLE_KEY": "rk_pub_neutral_sample"}
     process_env.pop("RIG_WIDGET_DIR", None)
     with (tmp_path / "server.log").open("w") as log:
@@ -74,7 +74,7 @@ async def test_built_widget_live_api_journey(real_chromium, widget_server, tmp_p
     await page.get_by_role("searchbox").fill("Core")
     await page.get_by_role("button", name="Search", exact=True).click()
     await expect(page.get_by_role("heading", name="Core One", exact=True)).to_be_visible()
-    await expect(page.get_by_text("SAMPLE DATA", exact=True)).to_have_count(1)
+    await expect(page.get_by_text("SAMPLE DATA", exact=True)).to_have_count(0)
     await expect(page.locator(".card")).to_have_count(3)
     await page.locator(".card").filter(has=page.get_by_role("heading", name="Core One", exact=True)).get_by_role("button", name="Complete my setup", exact=True).click()
     await expect(page.get_by_text("R 120", exact=True)).to_be_visible()
@@ -82,7 +82,7 @@ async def test_built_widget_live_api_journey(real_chromium, widget_server, tmp_p
     await expect(page.get_by_text("Most chosen", exact=True)).to_be_visible()
     await expect(page.locator(".chosen-note")).to_contain_text("We matched")
     await expect(page.locator(".chosen button")).to_have_count(0)
-    await expect(page.get_by_text("SAMPLE DATA", exact=True)).to_have_count(1)
+    await expect(page.get_by_text("SAMPLE DATA", exact=True)).to_have_count(0)
     await capture("03-setup")
     essential = page.locator(".setup").first
     await essential.get_by_role("button", name="Swap ⇄", exact=True).click()

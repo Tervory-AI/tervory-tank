@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Protocol
@@ -216,11 +217,19 @@ def _chunk_from_mapping(row: dict) -> Chunk:
         citation=row["citation"],
         citation_key=row["citation_key"],
         ordinal=row["ordinal"],
+        url=_row_field(row, "url", ""),
+        version_date=str(_row_field(row, "version_date", "")),
+        known_from=str(_row_field(row, "known_from", "")),
+        attribution=_row_field(row, "attribution", ""),
+        licence=_row_field(row, "licence", ""),
     )
 
 
 class Store(Protocol):
     async def record_source(self, source: SourceSpec) -> None: ...
+    async def close_collapsed(
+        self, source_id: str, jurisdiction: str, citation: str, hashes: set[str], titles: set[str], *, on: date
+    ) -> int: ...
 
     async def get_source(self, source_id: str) -> SourceSpec | None: ...
 
@@ -257,7 +266,13 @@ class Store(Protocol):
         limit: int = 20,
     ) -> list[Chunk]: ...
 
-    async def get_chunks(self, chunk_ids: list[str], *, jurisdiction: str) -> list[Chunk]: ...
+    async def get_chunks(self, chunk_ids: list[str], *, jurisdiction: str, as_at: date | None = None,
+                         level: str | None = None, kind: str | None = None) -> list[Chunk]: ...
+
+    async def pending_embeddings(self, model: str, *, jurisdiction: str, source_ids: list[str] | None = None,
+                                 document_id: str | None = None, after: str = "", limit: int = 64) -> list[Chunk]: ...
+
+    async def record_embeddings(self, chunks: list[Chunk], model: str, dim: int, collection: str) -> None: ...
 
     async def version_count(self, source_id: str | None = None) -> int: ...
 
@@ -282,6 +297,25 @@ class Store(Protocol):
     async def stored_bytes(self) -> int: ...
 
 
+def url_replaces(doc: LegalDocument, source: SourceSpec | None = None) -> bool:
+    """A South African judgment file holds one judgment, so a new document from
+    the same source and file replaces an open one stored under another citation.
+
+    The citation is the document's identity. When a parser fix changes the
+    citation it reads from a file (the first neutral citation in the body was
+    often a case the judgment cites), the old row must close, not stay beside it.
+
+    Some adapters (SAFLII, the official-site loaders) record the source's own
+    page as the URL of every document they read, so that URL names a listing,
+    not one judgment file, and must never close the other cases from it.
+    """
+    url = (doc.url or "").strip()
+    if not (doc.jurisdiction == "za" and doc.kind == "case" and url):
+        return False
+    canonical = (source.canonical_url if source is not None else "") or ""
+    return url.rstrip("/") != canonical.strip().rstrip("/")
+
+
 def _require_source(source: SourceSpec | None, doc: LegalDocument) -> SourceSpec:
     if source is None:
         raise LicenceError("record the source and its terms before storing text")
@@ -302,6 +336,7 @@ class MemoryStore:
         self.runs: dict[str, RunRecord] = {}
         self.cites: dict[tuple[str, str], tuple[str, bool]] = {}
         self.checkpoints: dict[str, tuple[str, int]] = {}
+        self.embeddings: dict[str, tuple[str, int, str]] = {}
 
     async def record_source(self, source: SourceSpec) -> None:
         _guard_home(self.home_region, region=source.region)
@@ -315,7 +350,6 @@ class MemoryStore:
     async def upsert_version(self, doc: LegalDocument, chunks: list[Chunk], *, on: date) -> bool:
         _guard_home(self.home_region, jurisdiction=doc.jurisdiction)
         source = _require_source(self.sources.get(doc.source_id), doc)
-        del source
         if doc.known_from is None:
             doc.known_from = on
         same = [
@@ -347,12 +381,43 @@ class MemoryStore:
             old = self.docs[version_id]
             old.effective_to = plan.close_on
             old.status = "superseded"
+        if url_replaces(doc, source):
+            for item in self.docs.values():
+                if (
+                    item.source_id == doc.source_id
+                    and item.jurisdiction == doc.jurisdiction
+                    and item.kind == doc.kind
+                    and item.url == doc.url
+                    and item.id != doc.id
+                    and item.effective_to is None
+                ):
+                    item.effective_to = on
+                    item.status = "superseded"
         self.docs[doc.version_id] = doc
         for chunk in chunks:
             if chunk.jurisdiction != doc.jurisdiction:
                 raise LicenceError("chunk jurisdiction does not match the document")
             self.chunks[chunk.chunk_id] = chunk
         return True
+
+    async def close_collapsed(
+        self, source_id: str, jurisdiction: str, citation: str, hashes: set[str], titles: set[str], *, on: date
+    ) -> int:
+        """Close open rows of ``citation`` that hold one of its split children's text or heading."""
+        _guard_home(self.home_region, jurisdiction=jurisdiction)
+        closed = 0
+        for item in self.docs.values():
+            if (
+                item.source_id == source_id
+                and item.jurisdiction == jurisdiction
+                and item.citation == citation
+                and item.effective_to is None
+                and (item.content_hash in hashes or item.title in titles)
+            ):
+                item.effective_to = on
+                item.status = "superseded"
+                closed += 1
+        return closed
 
     async def record_link(self, source_id: str, url: str, reason: str) -> None:
         _guard_home(self.home_region)
@@ -441,14 +506,35 @@ class MemoryStore:
         scored.sort(key=lambda item: (-item[0], item[1].ordinal))
         return [chunk for _, chunk in scored[:limit]]
 
-    async def get_chunks(self, chunk_ids: list[str], *, jurisdiction: str) -> list[Chunk]:
+    def _with_source(self, chunk):
+        doc = self.docs[chunk.version_id]
+        return replace(chunk, url=doc.url, version_date=str(doc.effective_from or ""), known_from=str(doc.known_from or ""),
+                       attribution=doc.body or self.sources[doc.source_id].name, licence=doc.licence)
+
+    async def get_chunks(self, chunk_ids, *, jurisdiction, as_at=None, level=None, kind=None):
         _guard_home(self.home_region, jurisdiction=jurisdiction)
-        out: list[Chunk] = []
-        for chunk_id in chunk_ids:
-            chunk = self.chunks.get(chunk_id)
-            if chunk is not None and chunk.jurisdiction == jurisdiction:
-                out.append(chunk)
-        return out
+        return [self._with_source(self.chunks[key]) for key in chunk_ids if key in self.chunks
+                and self._open_chunk_ok(self.chunks[key], jurisdiction=jurisdiction, as_at=as_at, level=level, kind=kind)]
+
+    async def pending_embeddings(self, model, *, jurisdiction, source_ids=None, document_id=None, after="", limit=64):
+        _guard_home(self.home_region, jurisdiction=jurisdiction)
+        rows = []
+        for key, chunk in sorted(self.chunks.items()):
+            doc = self.docs[chunk.version_id]
+            if (key <= after or chunk.jurisdiction != jurisdiction or not self.sources[doc.source_id].enabled
+                    or (source_ids is not None and doc.source_id not in source_ids)
+                    or (document_id is not None and doc.id != document_id)
+                    or self.embeddings.get(key, ("",))[0] == model):
+                continue
+            rows.append(self._with_source(chunk))
+            if len(rows) == limit:
+                break
+        return rows
+
+    async def record_embeddings(self, chunks, model, dim, collection):
+        for chunk in chunks:
+            _guard_home(self.home_region, jurisdiction=chunk.jurisdiction)
+            self.embeddings[chunk.chunk_id] = (model, dim, collection)
 
     async def version_count(self, source_id: str | None = None) -> int:
         if source_id is None:
@@ -672,7 +758,46 @@ class PostgresStore:
                     for chunk in chunks
                 ],
             )
+            if url_replaces(doc, source):
+                await self._conn.execute(
+                    """
+                    UPDATE zenas_pool.documents
+                    SET effective_to = $1, status = 'superseded'
+                    WHERE source_id = $2 AND jurisdiction = $3 AND kind = $4 AND url = $5
+                      AND document_id <> $6 AND effective_to IS NULL
+                    """,
+                    on,
+                    doc.source_id,
+                    doc.jurisdiction,
+                    doc.kind,
+                    doc.url,
+                    doc.id,
+                )
         return True
+
+    async def close_collapsed(
+        self, source_id: str, jurisdiction: str, citation: str, hashes: set[str], titles: set[str], *, on: date
+    ) -> int:
+        """Close open rows of ``citation`` that hold one of its split children's text or heading."""
+        _guard_home(self.home_region, jurisdiction=jurisdiction)
+        result = await self._conn.execute(
+            """
+            UPDATE zenas_pool.documents
+            SET effective_to = $1, status = 'superseded'
+            WHERE source_id = $2 AND jurisdiction = $3 AND citation = $4 AND effective_to IS NULL
+              AND (content_hash = ANY($5::text[]) OR title = ANY($6::text[]))
+            """,
+            on,
+            source_id,
+            jurisdiction,
+            citation,
+            sorted(hashes),
+            sorted(titles),
+        )
+        try:
+            return int(str(result).split()[-1])
+        except (ValueError, IndexError):
+            return 0
 
     async def record_link(self, source_id: str, url: str, reason: str) -> None:
         _guard_home(self.home_region)
@@ -752,19 +877,46 @@ class PostgresStore:
         )
         return [_chunk_from_mapping(row) for row in rows]
 
-    async def get_chunks(self, chunk_ids: list[str], *, jurisdiction: str) -> list[Chunk]:
+    async def get_chunks(self, chunk_ids, *, jurisdiction, as_at=None, level=None, kind=None):
         _guard_home(self.home_region, jurisdiction=jurisdiction)
-        rows = await self._conn.fetch(
-            """
-            SELECT chunk_id, version_id, document_id, jurisdiction, path, heading,
-                   text, citation, citation_key, ordinal
-            FROM zenas_pool.chunks
-            WHERE jurisdiction = $1 AND chunk_id = ANY($2::text[])
-            """,
-            jurisdiction,
-            chunk_ids,
-        )
+        rows = await self._conn.fetch("""
+            SELECT c.*, d.url, d.effective_from::text AS version_date, d.known_from::text AS known_from,
+                   COALESCE(NULLIF(d.body,''),s.name) AS attribution, d.licence
+            FROM zenas_pool.chunks c JOIN zenas_pool.documents d ON d.version_id=c.version_id
+            JOIN zenas_pool.sources s ON s.source_id=d.source_id
+            WHERE c.jurisdiction=$1 AND d.jurisdiction=$1 AND s.region=$3
+              AND c.chunk_id=ANY($2::text[]) AND s.enabled
+              AND ($4::date IS NULL AND d.effective_to IS NULL OR $4::date IS NOT NULL
+                   AND COALESCE(d.effective_from,d.known_from)<=$4 AND (d.effective_to IS NULL OR d.effective_to>$4))
+              AND ($5::text IS NULL OR d.level=$5) AND ($6::text IS NULL OR d.kind=$6)
+            """, jurisdiction, chunk_ids, self.home_region, as_at, level, kind)
+        by_id = {row["chunk_id"]: _chunk_from_mapping(row) for row in rows}
+        return [by_id[key] for key in chunk_ids if key in by_id]
+
+    async def pending_embeddings(self, model, *, jurisdiction, source_ids=None, document_id=None, after="", limit=64):
+        _guard_home(self.home_region, jurisdiction=jurisdiction)
+        rows = await self._conn.fetch("""
+            SELECT c.*, d.url, d.effective_from::text AS version_date, d.known_from::text AS known_from,
+                   COALESCE(NULLIF(d.body,''),s.name) AS attribution, d.licence
+            FROM zenas_pool.chunks c JOIN zenas_pool.documents d ON d.version_id=c.version_id
+            JOIN zenas_pool.sources s ON s.source_id=d.source_id
+            LEFT JOIN zenas_pool.embeddings e ON e.chunk_id=c.chunk_id AND e.model=$1
+            WHERE c.jurisdiction=$2 AND d.jurisdiction=$2 AND s.region=$3 AND s.enabled
+              AND e.chunk_id IS NULL AND c.chunk_id>$4
+              AND ($5::text[] IS NULL OR d.source_id=ANY($5::text[]))
+              AND ($6::text IS NULL OR d.document_id=$6)
+            ORDER BY c.chunk_id LIMIT $7
+            """, model, jurisdiction, self.home_region, after, source_ids, document_id, limit)
         return [_chunk_from_mapping(row) for row in rows]
+
+    async def record_embeddings(self, chunks, model, dim, collection):
+        for chunk in chunks:
+            _guard_home(self.home_region, jurisdiction=chunk.jurisdiction)
+        await self._conn.executemany("""
+            INSERT INTO zenas_pool.embeddings (chunk_id,model,dim,qdrant_collection)
+            VALUES ($1,$2,$3,$4) ON CONFLICT (chunk_id) DO UPDATE
+            SET model=EXCLUDED.model,dim=EXCLUDED.dim,qdrant_collection=EXCLUDED.qdrant_collection
+            """, [(chunk.chunk_id, model, dim, collection) for chunk in chunks])
 
     async def version_count(self, source_id: str | None = None) -> int:
         if source_id is None:

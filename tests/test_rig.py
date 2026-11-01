@@ -381,7 +381,9 @@ def test_public_app_drops_jobs_and_docs() -> None:
     rig_app = _load_rig_app()
     assert Path(rig_app.__file__).resolve() == (ROOT / "agents" / "rig" / "app.py").resolve()
 
-    paths = {getattr(route, "path", None) for route in rig_app.app.routes}
+    from http_routes import http_paths
+
+    paths = http_paths(rig_app.app.routes)
     assert "/health" in paths
     assert "/v1/rig/search" in paths
     assert rig_app.app.openapi_url is None
@@ -463,8 +465,8 @@ def test_room_compose_policy_and_skills_match() -> None:
             assert "IF NOT EXISTS" in statement.upper()
     logic = (ROOT / "agents" / "rig" / "rigbox" / "logic.py").read_bytes()
     ground = (ROOT / "agents" / "rig" / "rigbox" / "ground.py").read_bytes()
-    assert logic == (ROOT / "tank" / "skills" / "rig.search" / "1.0.0" / "pure.py").read_bytes()
-    assert logic == (ROOT / "tank" / "skills" / "rig.setups" / "1.0.0" / "pure.py").read_bytes()
+    assert logic == (ROOT / "tank" / "skills" / "rig.search" / "1.1.0" / "pure.py").read_bytes()
+    assert logic == (ROOT / "tank" / "skills" / "rig.setups" / "1.1.0" / "pure.py").read_bytes()
     for name in ("rig.explain", "rig.ask", "rig.fit_suggest"):
         assert ground == (ROOT / "tank" / "skills" / name / "1.0.0" / "ground.py").read_bytes()
     hits: list[str] = []

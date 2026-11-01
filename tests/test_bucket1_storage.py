@@ -114,8 +114,10 @@ def test_object_cannot_escape_prefix(name):
 
 def test_za_refuses_client_data_before_network():
     async def scenario():
-        bucket = Bucket('tervory-zenas')
-        store = Storage('zenas', environ=environment('zenas', TANK_REGION='za'), transport=httpx.MockTransport(bucket.handle))
+        bucket = Bucket('tervory-zenas-za')
+        env = environment('zenas', TANK_REGION='za', R2_BUCKET_ZENAS_ZA='tervory-zenas-za',
+                          R2_BUCKET='tervory-zenas-za')
+        store = Storage('zenas', environ=env, transport=httpx.MockTransport(bucket.handle))
         with pytest.raises(StorageError, match='ZA client data'):
             await store.put(PLATFORM_TENANT, 'backups', 'dump.age', b'encrypted')
         with pytest.raises(StorageError, match='ZA client data'):
@@ -124,6 +126,82 @@ def test_za_refuses_client_data_before_network():
         await store.put(PLATFORM_TENANT, 'datasets', 'judgment.pdf', b'public judgment', public=True)
         await store.close()
     asyncio.run(scenario())
+
+
+def test_za_zenas_requires_region_bucket_name():
+    with pytest.raises(StorageError, match='R2_BUCKET_ZENAS_ZA is required'):
+        Storage('zenas', environ=environment('zenas', TANK_REGION='za'))
+    with pytest.raises(StorageError, match='must be tervory-zenas-za'):
+        Storage('zenas', environ=environment(
+            'zenas', TANK_REGION='za', R2_BUCKET_ZENAS_ZA='tervory-zenas',
+            R2_BUCKET='tervory-zenas'))
+    with pytest.raises(StorageError, match='only valid for ZA Zenas'):
+        Storage('zenas', environ=environment(
+            'zenas', R2_BUCKET_ZENAS_ZA='tervory-zenas-za',
+            R2_BUCKET='tervory-zenas-za'))
+    store = Storage('zenas', environ=environment(
+        'zenas', TANK_REGION='za', R2_BUCKET_ZENAS_ZA='tervory-zenas-za',
+        R2_BUCKET='tervory-zenas-za'))
+    assert store.bucket == 'tervory-zenas-za'
+    us = Storage('zenas', environ=environment('zenas', R2_BUCKET='tervory-zenas'))
+    assert us.bucket == 'tervory-zenas'
+
+
+def test_za_zenas_backup_writes_public_platform_prefix(monkeypatch):
+    bucket = Bucket('tervory-zenas-za')
+    env = environment(
+        'zenas', TANK_REGION='za', AGENT_NAME='zenas',
+        R2_BUCKET_ZENAS_ZA='tervory-zenas-za', R2_BUCKET='tervory-zenas-za')
+    monkeypatch.setenv('TANK_REGION', 'za')
+    monkeypatch.setattr(
+        backup, 'Storage',
+        lambda owner: Storage(owner, environ=env, transport=httpx.MockTransport(bucket.handle)))
+
+    async def encrypt(path):
+        path.write_bytes(b'age-encryption.org/v1\nencrypted za fixture')
+
+    monkeypatch.setattr(backup, 'encrypted_dump', encrypt)
+    result = asyncio.run(backup.backup_once('zenas'))
+    assert result['bucket'] == 'tervory-zenas-za'
+    assert result['key'].startswith(f'za/{PLATFORM_TENANT}/backups/')
+    assert '/database.dump.age/' in result['key']
+    assert bucket.calls[-1].method == 'GET'
+
+
+def test_za_zenas_qdrant_backup_writes_public_platform_prefix(monkeypatch):
+    bucket = Bucket('tervory-zenas-za')
+    env = environment(
+        'zenas', TANK_REGION='za', AGENT_NAME='zenas',
+        R2_BUCKET_ZENAS_ZA='tervory-zenas-za', R2_BUCKET='tervory-zenas-za')
+    monkeypatch.setenv('TANK_REGION', 'za')
+    monkeypatch.setattr(
+        backup, 'Storage',
+        lambda owner: Storage(owner, environ=env, transport=httpx.MockTransport(bucket.handle)))
+
+    async def encrypt(collection, path):
+        path.write_bytes(b'age-encryption.org/v1\nencrypted za qdrant fixture')
+
+    async def collections():
+        return ['mem_zenas']
+
+    monkeypatch.setattr(backup, 'encrypted_qdrant_snapshot', encrypt)
+    monkeypatch.setattr(backup, 'list_qdrant_collections', collections)
+    results = asyncio.run(backup.qdrant_backup_once('zenas'))
+    assert results[0]['bucket'] == 'tervory-zenas-za'
+    assert results[0]['key'].startswith(f'za/{PLATFORM_TENANT}/backups/')
+    assert '/qdrant/mem_zenas.snapshot.age/' in results[0]['key']
+
+
+def test_zenas_qdrant_backup_refused_outside_za(monkeypatch):
+    monkeypatch.delenv('TANK_REGION', raising=False)
+    with pytest.raises(StorageError, match='TANK_REGION=za'):
+        asyncio.run(backup.qdrant_backup_once('zenas'))
+
+
+def test_zenas_backup_refused_outside_za(monkeypatch):
+    monkeypatch.delenv('TANK_REGION', raising=False)
+    with pytest.raises(StorageError, match='TANK_REGION=za'):
+        asyncio.run(backup.backup_once('zenas'))
 
 
 def test_usage_paginates_and_never_reports_partial_total():
@@ -344,3 +422,93 @@ def test_storage_destination_cannot_be_reassigned():
                 setattr(store, field, 'foreign')
         await store.close()
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('owner', sorted(ROOMS))
+def test_delete_uses_only_own_bucket_and_tenant_prefix(owner):
+    async def scenario():
+        observed = []
+        def handle(request):
+            observed.append((request.method, request.url.path))
+            return httpx.Response(204)
+        store = Storage(owner, environ=environment(owner), transport=httpx.MockTransport(handle))
+        tenant = str(uuid.uuid4())
+        await store.delete(tenant, 'uploads', 'report.pdf')
+        assert observed == [('DELETE', f'/tervory-{owner.replace("_", "-")}/us-east/{tenant}/uploads/report.pdf')]
+        with pytest.raises(StorageError):
+            await store.delete(tenant, 'uploads', '../another-tenant/report.pdf')
+        assert len(observed) == 1
+        await store.close()
+    asyncio.run(scenario())
+
+
+def test_qdrant_configuration_requires_internal_url_and_recipient(monkeypatch):
+    monkeypatch.setenv('R2_BACKUP_RECIPIENT', 'age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p')
+    monkeypatch.setenv('QDRANT_URL', 'http://qdrant:6333')
+    monkeypatch.setenv('QDRANT_API_KEY', 'fixture-key')
+    monkeypatch.setattr(backup.shutil, 'which', lambda name: '/usr/bin/' + name)
+    assert backup.qdrant_configuration()[0] == 'http://qdrant:6333'
+    monkeypatch.setenv('QDRANT_URL', 'https://evil.example/qdrant')
+    with pytest.raises(StorageError, match='QDRANT_URL'):
+        backup.qdrant_configuration()
+    monkeypatch.setenv('QDRANT_URL', 'http://qdrant:6333')
+    monkeypatch.delenv('QDRANT_API_KEY')
+    with pytest.raises(StorageError, match='QDRANT_API_KEY'):
+        backup.qdrant_configuration()
+
+
+def test_qdrant_backup_writes_encrypted_dated_objects(monkeypatch, tmp_path):
+    bucket = Bucket('tervory-uploads')
+    monkeypatch.setenv('R2_BACKUP_RECIPIENT', 'age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p')
+    monkeypatch.setenv('QDRANT_URL', 'http://qdrant:6333')
+    monkeypatch.setenv('QDRANT_API_KEY', 'fixture-key')
+    monkeypatch.setattr(backup.shutil, 'which', lambda name: '/usr/bin/' + name)
+    monkeypatch.setattr(backup, 'Storage', lambda owner: Storage(owner, environ=environment(owner), transport=httpx.MockTransport(bucket.handle)))
+
+    async def encrypt(collection, path):
+        assert collection == 'mem_zenas'
+        path.write_bytes(b'age-encryption.org/v1\nqdrant fixture')
+
+    monkeypatch.setattr(backup, 'encrypted_qdrant_snapshot', encrypt)
+
+    async def collections():
+        return ['mem_zenas']
+
+    monkeypatch.setattr(backup, 'list_qdrant_collections', collections)
+    results = asyncio.run(backup.qdrant_backup_once())
+    assert len(results) == 1
+    assert results[0]['collection'] == 'mem_zenas'
+    assert '/backups/' in results[0]['key']
+    assert '/qdrant/mem_zenas.snapshot.age/' in results[0]['key']
+    assert results[0]['size_bytes'] > 0
+    assert all(b'age-encryption.org/v1' in data for key, data in bucket.data.items() if not key.endswith('manifest.json'))
+
+
+def test_qdrant_backup_failure_uploads_nothing(monkeypatch):
+    bucket = Bucket('tervory-uploads')
+    monkeypatch.setenv('R2_BACKUP_RECIPIENT', 'age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p')
+    monkeypatch.setenv('QDRANT_URL', 'http://qdrant:6333')
+    monkeypatch.setenv('QDRANT_API_KEY', 'fixture-key')
+    monkeypatch.setattr(backup.shutil, 'which', lambda name: '/usr/bin/' + name)
+    monkeypatch.setattr(backup, 'Storage', lambda owner: Storage(owner, environ=environment(owner), transport=httpx.MockTransport(bucket.handle)))
+
+    async def collections():
+        return ['mem_zenas']
+
+    async def fail(collection, path):
+        raise StorageError('Qdrant snapshot encryption failed')
+
+    monkeypatch.setattr(backup, 'list_qdrant_collections', collections)
+    monkeypatch.setattr(backup, 'encrypted_qdrant_snapshot', fail)
+    with pytest.raises(StorageError):
+        asyncio.run(backup.qdrant_backup_once())
+    assert not bucket.data
+
+
+def test_compose_r2_backup_depends_on_qdrant():
+    import yaml
+    worker = yaml.safe_load((ROOT / 'docker-compose.yml').read_text())['services']['r2-backup']
+    assert worker['environment']['QDRANT_URL'] == 'http://qdrant:6333'
+    assert worker['environment']['QDRANT_API_KEY'] == '${QDRANT_API_KEY}'
+    assert worker['depends_on']['qdrant']['condition'] == 'service_healthy'
+    assert 'qdrant_configuration' in worker['healthcheck']['test'][-1]

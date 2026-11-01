@@ -1,0 +1,36 @@
+{
+  "job": "Saved platform rows -> real Tank background adoption -> real Base FFL route -> real Workspace",
+  "fixture": "local, fixture page",
+  "failure_http_status": 401,
+  "failure_on_page": "The reference could not be loaded: The Base reference service returned HTTP 401.",
+  "recovered_without_restarting_tank": true,
+  "platform_source_rows": 4,
+  "reference_licences": 3,
+  "duplicate_rows": 1,
+  "collectors": 1,
+  "default_batch_licences": 2,
+  "newest_row_kept": true,
+  "source_rows_unchanged": true,
+  "shared_reference_for_both_tenants": true,
+  "atf_header_spellings": [
+    "PREMISE_*",
+    "prem_*",
+    "prem *"
+  ],
+  "latest_check": "current"
+}
+Real Tank startup tail:
+INFO:     Started server process [393973]
+INFO:     Waiting for application startup.
+redis unavailable, rung-4 cache off: Error 111 connecting to 127.0.0.1:9. Connection refused.
+Room gold response rejected: base
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:45713 (Press CTRL+C to quit)
+The reference could not be loaded: There are no saved ATF licence rows in the platform reference. (error type: ReferenceFailure)
+INFO:     127.0.0.1:37578 - "GET /health HTTP/1.1" 200 OK
+The reference could not be loaded: The Base reference service returned HTTP 401. (error type: ReferenceFailure)
+INFO:     127.0.0.1:39202 - "GET /v1/vaults/base.vault/plugins?tenant_id=ba5e0000-0000-4000-8000-000000000111 HTTP/1.1" 404 Not Found
+Reference failure log:
+The reference could not be loaded: There are no saved ATF licence rows in the platform reference. (error type: ReferenceFailure)
+The reference could not be loaded: The Base reference service returned HTTP 401. (error type: ReferenceFailure)
+The reference could not be loaded: The Base reference service returned HTTP 401. (error type: ReferenceFailure)

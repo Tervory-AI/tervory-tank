@@ -63,14 +63,14 @@ def test_known_phrase_with_extra_words_is_in_stock() -> None:
     counted = (
         "<p class=\"stock in-stock\">45 in stock</p>"
         "<script type=\"application/ld+json\">"
-        '{"@type":"Product","offers":{"@type":"Offer","price":"63.00","priceCurrency":"GBP",'
+        '{"@type":"Product","name":"Fixture product","offers":{"@type":"Offer","price":"63.00","priceCurrency":"GBP",'
         '"availability":"https://schema.org/InStock"}}'
         "</script>"
     )
     loose = (
         "<p class=\"stock in-stock\">Ships today</p>"
         "<script type=\"application/ld+json\">"
-        '{"@type":"Product","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD",'
+        '{"@type":"Product","name":"Fixture product","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD",'
         '"availability":"https://schema.org/InStock"}}'
         "</script>"
     )
@@ -94,7 +94,7 @@ def test_known_phrase_with_extra_words_is_in_stock() -> None:
 def _product_html_price(price: str) -> str:
     return (
         "<script type=\"application/ld+json\">"
-        '{"@type":"Product","offers":{"@type":"Offer","price":"' + price + '","priceCurrency":"USD"}}'
+        '{"@type":"Product","name":"Fixture product","offers":{"@type":"Offer","price":"' + price + '","priceCurrency":"USD"}}'
         "</script>"
     )
 
@@ -104,7 +104,7 @@ def test_clear_out_of_stock_wording_is_out_of_stock() -> None:
     negated = (
         "<p class=\"stock\">not in stock</p>"
         "<script type=\"application/ld+json\">"
-        '{"@type":"Product","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD",'
+        '{"@type":"Product","name":"Fixture product","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD",'
         '"availability":"https://schema.org/InStock"}}'
         "</script>"
     )
@@ -134,7 +134,7 @@ def test_negation_before_a_stock_phrase() -> None:
     longer = (
         "<p class=\"stock\">no longer in stock</p>"
         "<script type=\"application/ld+json\">"
-        '{"@type":"Product","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD",'
+        '{"@type":"Product","name":"Fixture product","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD",'
         '"availability":"https://schema.org/InStock"}}'
         "</script>"
     )
@@ -167,7 +167,7 @@ def test_negation_is_a_class_of_words() -> None:
     gone = (
         "<p class=\"stock\">hasn't been in stock</p>"
         "<script type=\"application/ld+json\">"
-        '{"@type":"Product","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD",'
+        '{"@type":"Product","name":"Fixture product","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD",'
         '"availability":"https://schema.org/InStock"}}'
         "</script>"
     )
@@ -212,7 +212,7 @@ def test_demand_wording_is_not_a_current_outage() -> None:
     both = (
         "<p class=\"stock\">Couldn't keep it in stock</p>"
         "<script type=\"application/ld+json\">"
-        '{"@type":"Product","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD",'
+        '{"@type":"Product","name":"Fixture product","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD",'
         '"availability":"https://schema.org/OutOfStock"}}'
         "</script>"
     )

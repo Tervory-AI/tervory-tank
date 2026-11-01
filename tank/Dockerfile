@@ -1,8 +1,20 @@
+# syntax=docker/dockerfile:1
 FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt constraints-langgraph.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-COPY main.py skala.py skill_costs.py admin.py graduate.py gold.py training.py controls.py dashboards.py research.py bench.py proof.py savings_defaults.py savings_export.py savings_indexes.py agent_skills.py rig_brain_routes.py rig_forge_routes.py rig_three_d.py cl100k_base.tiktoken cl100k_base.LICENSE storage.py ghost_routes.py command.py workers_status.py access.py rig_feed_mapping.py vault.py moa.py schema.sql ./
+COPY requirements-routellm.txt requirements-routellm-wheel.txt routellm_build.py semantic_encoder.py ./
+# Heavy dependencies and both CPU models install BEFORE the code is copied,
+# so an ordinary code change reuses this cached layer instead of reinstalling ~2 GB.
+# Optional trust bundle for managed cloud builds; never retained in a layer.
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export PIP_CERT=/run/secrets/proxy_ca SSL_CERT_FILE=/run/secrets/proxy_ca; fi; \
+    pip install --no-cache-dir -r requirements.txt -r requirements-routellm.txt && \
+    pip install --no-cache-dir --no-deps --require-hashes -r requirements-routellm-wheel.txt && \
+    python routellm_build.py /opt/routellm && \
+    python semantic_encoder.py
+# Every Tank module is copied by pattern, so a PR that adds a module never edits this line
+# (it used to be a hand-kept list that clashed on almost every Tank PR).
+COPY *.py schema.sql cl100k_base.tiktoken cl100k_base.LICENSE ./
 COPY fonts ./fonts
 COPY skills ./skills
 RUN useradd -m tank && chown -R tank /app
@@ -10,6 +22,7 @@ RUN useradd -m tank && chown -R tank /app
 ARG SOURCE_COMMIT=
 ARG GIT_SHA=
 ENV LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false
+ENV HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false
 ENV TANK_GIT_SHA=${GIT_SHA:-$SOURCE_COMMIT}
 USER tank
 EXPOSE 8000
