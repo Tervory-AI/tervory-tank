@@ -151,3 +151,26 @@ are supplied by this branch. PR CI must also be green before merge.
   non-forced updates, and Contents/Workflows permission sets.
 - Existing Coolify API references and deployment attestation rules are recorded
   in `agents/tisan/PROMOTION.md`.
+
+## PR handoff: source locations and final regression
+
+- `agents/tisan/publish.py:29`: stored archive/manifest validation;
+  `:65`: journalled Git commit and staging deployment; `:150`: founder room API.
+- `agents/tisan/app.py:149`: the one-line publish mount beside promotion.
+- `agents/tisan/Dockerfile:45`: only `publish.py` added to the existing COPY.
+- `tank/main.py:4191`: fixed private-repository GitHub commit implementation;
+  `:4283`: room/founder/tenant checked Git route; `:4308`: founder publish proxy.
+- `tests/test_tisan_publish.py:181`: exact committed content and unchanged
+  workflow proof, alongside failure, tenant, archive and authentication cases.
+- `docs/ops/TISAN-PUBLISH.md:1`: setup, API, runtime prerequisite and acceptance.
+
+Final regression command:
+
+```sh
+/home/ammosync/trigger-crm-venv312/bin/python -m pytest -q tests/test_tisan_publish.py tests/tisan_promotion/test_promotion.py tests/tisan_promotion/test_tisan_promotion_api.py --basetemp=/workspace/codex-tisan-publish/.publish-test-tmp
+```
+
+Result: **52 passed in 7.00s**. `git diff origin/main --check` passed with no
+output. `git diff origin/main -- agents/tisan/Dockerfile` confirmed only the
+permitted COPY-line addition. These are offline results, not live acceptance
+or PR CI results. No screenshots from the founder's browser are available yet.
