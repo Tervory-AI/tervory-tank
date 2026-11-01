@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 import httpx
-from command import Actor, authorized_actor, identity, require_tool
+from command import Actor, authorized_actor, identity, require_founder, require_tool
 from fastapi import APIRouter, Depends, HTTPException, Request
 from jsonschema import Draft4Validator, FormatChecker
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -50,8 +50,7 @@ class CRMWriteArgs(BaseModel):
 
 async def authority(actor: Actor) -> Actor:
     actor = await authorized_actor(actor)
-    # The founder authorized client integration under actual persisted Trigger grants.
-    # UI approval remains separate; no grant is created or inferred here.
+    require_founder(actor)
     require_tool(actor, "trigger.crm.write")
     return actor
 
