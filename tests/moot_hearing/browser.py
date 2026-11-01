@@ -49,7 +49,7 @@ class Boundary:
         self.ai_calls = 0
 
     def present(self, actor, seat=None):
-        projection = hearing.view(self.state, actor, seat)
+        projection = hearing.view(self.state, actor, seat, pair_complete=bool(getattr(self, "states", {})) and all(s["phase"] == "closed" for s in getattr(self, "states", {}).values()))
         projection["pending_ai"] = None
         projection["last_ai_resolution"] = None
         return {"hearing": projection, "operator": actor == OWNER}

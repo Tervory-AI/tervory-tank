@@ -136,10 +136,17 @@ async def test_pair_creation_is_atomic_retryable_and_region_tenant_private(pg_st
         assert await conn.fetchval("SELECT count(*) FROM agent_zenas.moot_hearing_pairs") == 1
 
 
-async def complete_ai(store, s, decision):
+async def complete_ai(store, s, decision, *, stop_before_ruling=False):
     from .test_reasoning import trace
     from agents.zenas.core.moot.hearing import claim_ai, mark_ai_started
     while s["phase"] != "closed":
+        if stop_before_ruling and s["floor"] == "judge" and {t["seat"] for t in s["transcript"] if t["kind"] == "submission"} == {"applicant", "respondent"}:
+            return s
+        if s["seats"][s["floor"]]["kind"] == "human":
+            target = "respondent" if any(t["seat"] == "applicant" for t in s["transcript"]) else "applicant"
+            s = await store.mutate(HUMANS["judge"], s["id"], str(uuid4()), s["revision"], "turn", {"kind": "direction", "text": "Please address the issue", "target": target},
+                lambda s, a, r, p: turn(s, a, r, p))
+            continue
         token = str(uuid4())
         s = await store.mutate(OWNER, s["id"], str(uuid4()), s["revision"], "claim", {"token": token},
             lambda s, a, r, p: claim_ai(s, a, r, p["token"]))

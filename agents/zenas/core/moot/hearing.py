@@ -292,7 +292,7 @@ def turn(state: dict[str, Any], actor: Actor, revision: int, payload: dict[str, 
     return _finish(out)
 
 
-def view(state: dict[str, Any], actor: Actor, seat: str | None = None) -> dict[str, Any]:
+def view(state: dict[str, Any], actor: Actor, seat: str | None = None, *, pair_complete: bool = False) -> dict[str, Any]:
     """Projection is positive-list only; counsel never receives the internal problem."""
     authorize(state, actor)
     if seat is not None:
@@ -325,7 +325,7 @@ def view(state: dict[str, Any], actor: Actor, seat: str | None = None) -> dict[s
         out["problem"]["bench_notes"] = deepcopy(problem["bench_notes"])
     out["cost_usd"] = measured_cost(state)
     out["receipts"] = [{k: r.get(k) for k in ("ledger_id", "cost_usd", "seat", "turn", "discarded")} for r in state["receipts"]]
-    if state["phase"] == "closed" or state["published"]:
+    if (state["phase"] == "closed" or state["published"]) and (not state.get("fairness_pair_id") or pair_complete):
         out["reveal"] = problem["real_holding"]
     return out
 

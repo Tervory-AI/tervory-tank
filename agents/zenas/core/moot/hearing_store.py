@@ -47,6 +47,24 @@ class HearingStore:
         async with self.pool.acquire() as conn:
             return await self._row(conn, actor, hearing_id)
 
+    async def project(self, actor: hearing.Actor, hearing_id: str, seat: str | None = None) -> dict[str, Any]:
+        """Project current durable state; pair completion never comes from a client."""
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                state = await self._row(conn, actor, hearing_id)
+                pair_complete = False
+                if state.get("fairness_pair_id"):
+                    pair_complete = bool(await conn.fetchval("""SELECT count(*)=2 AND bool_and(h.state->>'phase'='closed')
+                        FROM agent_zenas.moot_hearing_pairs p JOIN agent_zenas.moot_hearings h
+                          ON h.id IN (p.first_hearing,p.second_hearing) AND h.tenant_id=p.tenant_id AND h.region=p.region
+                        WHERE p.id=$1 AND p.tenant_id=$2 AND p.region=$3 AND $4 IN (p.first_hearing,p.second_hearing)""",
+                        UUID(state["fairness_pair_id"]), UUID(actor.tenant_id), actor.region, UUID(hearing_id)))
+                projection = hearing.view(state, actor, seat, pair_complete=pair_complete)
+                projection["pending_ai"] = ({"seat": state["pending_ai"]["seat"], "status": state["pending_ai"]["status"]}
+                    if state["pending_ai"] else None)
+                projection["last_ai_resolution"] = state["ai_attempts"][-1].get("resolution") if state["ai_attempts"] else None
+                return {"hearing": projection, "operator": actor.founder and actor.user_id == state["owner_id"]}
+
     async def _request(self, conn: Any, actor: hearing.Actor, hearing_id: str, request_id: str, fingerprint: str) -> bool:
         row = await conn.fetchrow("""SELECT fingerprint FROM agent_zenas.moot_hearing_requests
             WHERE tenant_id=$1 AND hearing_id=$2 AND actor_id=$3 AND request_id=$4""",
