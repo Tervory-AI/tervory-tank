@@ -1,9 +1,8 @@
 # Trigger Gate 2: tenant admins, long checks and accepted page copy
 
 Branch: `codex/trigger-gate2`. Isolated checkout: `/workspace/codex-trigger-gate2`.
-Validated code head: `4d953ff00833f6ce2ce395f7a7ef1330cf45eacb`, incorporating
-main `7a5132fadf30f1cb10e5c55c1d3cc216524dd64b`. The following handoff commit
-contains this report only. Claude opens the PR; founder reviews and merges.
+Original Gate 2 validated code head: `4d953ff00833f6ce2ce395f7a7ef1330cf45eacb`, incorporating
+main `7a5132fadf30f1cb10e5c55c1d3cc216524dd64b`. The review correction and its validation are recorded below. Claude opens the PR; founder reviews and merges.
 
 **Offline implementation and the requested tests pass. Live founder acceptance
 and its screenshots are pending.** The existing Command-to-Tisan runtime
@@ -24,11 +23,11 @@ Chats-to-generated-site journey works.
 | `tank/trigger_routes.py:42` | The existing attachment flow can check a document over the composer's 20,000-character message limit in one action. With an empty `Trigger, check:` prefix and one text attachment, retrieve that owned turn's actual attachment, without including its transport label in the checked document. The existing action envelope still applies; arbitrary 200,000-character attachments do not bypass it. |
 | `tank/trigger_routes.py:110` | A fixed, authenticated Tisan-to-Tank read corridor returns only that job tenant's currently accepted write whose original Command write card is confirmed. Validate room authentication, tenant and home box. Return private/no-store data. |
 | `tank/trigger_routes.py:168` | Write and check dispatch require the existing executing Confirm-card binding to tenant, user, tool and exact arguments. Voice and feedback retain that same binding. Revoked authority is rechecked by the existing Command confirmation flow. |
-| `agents/tisan/scaffold.py:78`, `:253`, `:314`, `:510` | Normalize per-page write references, resolve them through the fixed Tank corridor before creating build files, and escape the accepted body with the existing `_jsx_text`. Existing pages without references remain unchanged. Preserve the existing contact form. Missing, foreign, unaccepted, malformed or unavailable copy fails closed; the brief cannot supply its own resolved text. |
+| `agents/tisan/scaffold.py:78`, `:253`, `:314`, `:510` | Normalize per-page write references, resolve them through the fixed Tank corridor before creating build files, and escape the accepted body with the existing `_jsx_text`. Extra pages without references render their heading with no body paragraph; pages with references render only the escaped accepted body. Standard template pages without references remain unchanged. Preserve the existing contact form. Missing, foreign, unaccepted, malformed or unavailable copy fails closed; the brief cannot supply its own resolved text. |
 | `tank/trigger_learning.py:43` | Record confirmed acceptance/change/rejection in the existing receipt feedback fields consumed by `case_study_sources.trigger()`. The write ID, confirmed card, tenant, receipt ID, task and region must match. Existing private training-pair behavior is retained. |
 | `tests/trigger_gate2/test_gate2.py:73`, `:104` | Real disposable-Postgres and HTTP confirmation tests: admin write/check/feedback in own tenant, no squad grant, denied ordinary member, forged credential, stale/cancelled card, revoked admin role, foreign tenant/user/card and cross-tenant feedback. Direct unconfirmed dispatch is refused. |
-| `tests/trigger_gate2/test_gate2.py:118`, `:148`, `:172`, `:191`, `:320` | One confirmed long-document request, source offsets, UTF-16/line/column locations, byte/character bounds, lossless pieces, aggregate 200-finding truncation, partial results, whole-document required terms/fences and the private checker input bound. |
-| `tests/trigger_gate2/test_gate2.py:202`, `:236`, `:274`, `:302` | Actual accepted-write lookup through the authenticated route into a generated archive; escaping, tenant isolation, preserved default pages, retained form, duplicate/raw-copy refusal and fail-closed lookup failures before build creation. |
+| `tests/trigger_gate2/test_gate2.py:118`, `:148`, `:172`, `:191`, `:339` | One confirmed long-document request, source offsets, UTF-16/line/column locations, byte/character bounds, lossless pieces, aggregate 200-finding truncation, partial results, whole-document required terms/fences and the private checker input bound. |
+| `tests/trigger_gate2/test_gate2.py:202`, `:236`, `:274`, `:303`, `:321` | Actual accepted-write lookup through the authenticated route into a generated archive; escaping, tenant isolation, preserved default pages, retained form, duplicate/raw-copy refusal and fail-closed lookup failures before build creation. |
 | `tests/trigger_gate2/test_gate2.py:256` | A write is generated through a deterministic test substitute, confirmed and accepted through the real flow. Its draft, acceptance and checker figures appear for that tenant/region only. |
 | `tests/trigger_gate2/admin_contract.cjs:1` | Exercise the unchanged real Clerk binding and Workspace header writer: user, org and mapped tenant must match; injected role/user/tenant/squad headers cannot supply admin authority. |
 
@@ -119,3 +118,34 @@ write in that voice, accept the write, attach and check a bounded document over
 page. Repeat with the actual tenant admin and check another tenant is denied.
 Live founder screenshots and that browser acceptance are pending. All test
 voices, draft text and generated archives stayed in the disposable test scope.
+
+
+## Founder review correction: no default page sentence
+
+Reviewed code head: `675bc1afc3363a8aa704bcb489ae905be0fed898`.
+`agents/tisan/scaffold.py:253` now emits no body paragraph when copy is absent.
+With accepted copy it emits only that escaped text in the existing paragraph.
+`tests/trigger_gate2/test_gate2.py:303` writes actual generated page files in both
+cases and asserts the default sentence is absent; the no-copy case has no
+paragraph, and the accepted-copy case has exactly the expected escaped body.
+The earlier default-rendering test now requires heading-only output.
+
+```bash
+TMPDIR=/home/ammosync/.codex/trigger-gate2/tmp \
+/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest \
+  tests/test_tisan_scaffold.py \
+  tests/trigger_gate2/test_gate2.py::test_copy_defaults_legacy_rendering_and_standard_page_content \
+  tests/trigger_gate2/test_gate2.py::test_extra_pages_never_write_default_sentence \
+  -q --tb=short --disable-warnings --disable-socket --allow-unix-socket
+# 14 passed, 3 warnings in 1.86s.
+/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m ruff check \
+  agents/tisan/scaffold.py tests/trigger_gate2/test_gate2.py --select E9,F
+# All checks passed.
+git diff --check
+# PASS.
+```
+
+Unix sockets are permitted only for asyncio's local event-loop self-pipe;
+network sockets remain blocked. No database, model or live site was used for
+this review correction. The source code head above is followed only by this
+report update.
