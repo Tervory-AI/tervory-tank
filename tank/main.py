@@ -544,6 +544,8 @@ async def _homes_key_scope(request: Request) -> None:
     errors and scores. It may read explicitly published ZA Moot hearings only;
     drafts, matters, unpublished hearings and client data stay refused.
     The Boston Workspace holds this key. It never holds the ZA TANK_API_KEY.
+    It cannot approve CLI device sign-ins: those use the separate
+    TANK_DEVICE_APPROVAL_KEY (personal_tokens.device_approval_actor).
     """
     if box_region() != ZA_REGION:
         raise HTTPException(status_code=403, detail=_HOMES_DENIED)
@@ -4536,6 +4538,7 @@ __import__("research").register(app, globals())
 
 # COMMAND-1A: conversation routes live in their own module.
 app.include_router(__import__("command").router)
+__import__("personal_tokens").register(app)
 app.include_router(__import__("trigger_routes").router)
 
 # ACCESS-1: scoped connections and browser-only credential handoff.

@@ -1,7 +1,7 @@
 // COMMAND-1 Lane A wire contract; server-free so streaming can be tested offline.
 export type Money = number | null;
 export type Totals = { cost_usd: Money; baseline_cost_usd: Money; saved_usd: Money; auto_cost_usd?: Money };
-export type ReceiptRow = Totals & { step_id: string; model?: string; baseline_model?: string; tokens_in?: number; tokens_out?: number; ledger_id: string; cost_status?: string; baseline_status?: string };
+export type ReceiptRow = Totals & { step_id: string; model?: string; baseline_model?: string; tokens_in?: number; tokens_out?: number; ledger_id: string; cost_status?: string; baseline_status?: string; requested_model?: string; auto_model?: string | null; auto_cost_status?: string; auto_priced_at?: string | null; auto_cost_label?: string; auto_cost_basis?: string };
 export type Receipt = { rows: ReceiptRow[]; totals: Totals; status?: string; step_id?: string };
 export type Attachment = { name: string; content_type: string; text?: string; attachment_id?: string; size?: number; model_readable?: boolean };
 export type Message = { message_id: string; role: "user" | "assistant"; content: string; receipt?: Receipt; attachments?: Attachment[] };
@@ -53,8 +53,11 @@ export function upsert<T>(rows: T[], row: T, key: keyof T): T[] {
 }
 
 export function receiptFor(rows: ReceiptRow[], step_id?: string, pending = false): Receipt {
-  const sum = (key: "cost_usd" | "baseline_cost_usd" | "saved_usd") => !pending && rows.length && rows.every(row => typeof row[key] === "number") ? rows.reduce((total, row) => total + row[key]!, 0) : null;
-  return { step_id, rows, status: pending || !rows.length || rows.some(row => row.cost_usd === null) ? "pending" : "recorded", totals: { cost_usd: sum("cost_usd"), baseline_cost_usd: sum("baseline_cost_usd"), saved_usd: sum("saved_usd") } };
+  const sum = (key: "cost_usd" | "baseline_cost_usd" | "saved_usd" | "auto_cost_usd") => !pending && rows.length && rows.every(row => typeof row[key] === "number" && Number.isFinite(row[key])) ? rows.reduce((total, row) => total + row[key]!, 0) : null;
+  // Pinned turns carry Tank's "What Auto would have cost" (same recorded tokens at the
+  // policy model's price book, frozen at acceptance). Total it only when every row is priced.
+  const auto = rows.some(row => row.auto_cost_usd !== undefined) ? { auto_cost_usd: sum("auto_cost_usd") } : {};
+  return { step_id, rows, status: pending || !rows.length || rows.some(row => row.cost_usd === null) ? "pending" : "recorded", totals: { cost_usd: sum("cost_usd"), baseline_cost_usd: sum("baseline_cost_usd"), saved_usd: sum("saved_usd"), ...auto } };
 }
 /** Reconstruct durable empty receipts from the step/card markers, without inventing zero. */
 export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
@@ -89,7 +92,8 @@ export function applyReceipt(snapshot: Snapshot, receipt: Receipt, answerId: str
     const rows = incoming.reduce((all, row) => upsert(all, row, "ledger_id"), previous?.rows ?? []);
     // Receipt events are row deltas, so keep earlier evidence for the same step.
     const part = receiptFor(rows, id, receipt.status === "pending");
-    if (ids.length === 1 && !previous?.rows.length) part.totals = receipt.totals;
+    // Aggregate only this step's durable rows; event totals may cover several steps.
+    // Auto comparisons arrive on ledger rows and must survive snapshot/replay.
     if (messageId) next = { ...next, messages: next.messages.map(message => message.message_id === messageId ? { ...message, receipt: part } : message) };
     else next = { ...next, job_receipts: upsert(next.job_receipts ?? [], part, "step_id") };
   }
