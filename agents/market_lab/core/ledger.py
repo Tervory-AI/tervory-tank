@@ -452,9 +452,10 @@ class PostgresLedger:
 
     async def save_prediction(self, row: dict[str, Any]) -> None:
         row = metadata(row)
+        # Literal schema name: no string formatting in this statement (Semgrep raw-query rule).
         await self.conn.execute(
-            f"""
-            INSERT INTO {SCHEMA}.predictions (
+            """
+            INSERT INTO agent_market_lab.predictions (
                 id, tenant_id, made_at, statement, metric_series_id, comparator,
                 target, resolve_by, rationale, sources, outcome, resolved_at, score,
                 horizon_seconds, confidence, realised_value, realised_date, kind, feed
