@@ -38,6 +38,19 @@ async def feedback(actor, write_id: UUID, status: str, changes: str, operation_i
             return {'status': previous, 'write_id': str(write_id)}
         await conn.execute('INSERT INTO tank.trigger_feedback(tenant_id,write_id,status,changes,user_id,operation_id) VALUES($1,$2,$3,$4,$5,$6)', actor.tenant_id, write_id, status, changes, actor.user_id, operation_id)
         await conn.execute('UPDATE tank.trigger_writes SET feedback_status=$3 WHERE tenant_id=$1 AND id=$2', actor.tenant_id, write_id, status)
+        # Reuse the existing receipt feedback fields consumed by case studies.
+        # A foreign/repeated card cannot borrow another tenant's receipt.
+        await conn.execute("""UPDATE tank.ledger l
+            SET feedback=$4,feedback_note=$5,feedback_at=now(),feedback_by=$6
+            WHERE l.tenant_id=$1 AND l.region=$2 AND l.task_type='trigger.write'
+            AND EXISTS (SELECT 1 FROM tank.command_threads t
+                CROSS JOIN LATERAL jsonb_each(t.state->'cards') c
+                WHERE t.tenant_id=l.tenant_id AND c.value->>'tool'='trigger.write'
+                AND c.value->>'status'='confirmed'
+                AND c.value->'result'->>'write_id'=$3
+                AND c.value->'result'->>'ledger_id'=l.id::text)""",
+            actor.tenant_id, box_region(), str(write_id), status, changes, actor.user_id)
+
         await conn.execute("""UPDATE tank.training_pairs SET output=jsonb_set(output,'{feedback}',$4::jsonb),
             active=$5,approved_by=$6,polarity=$7,public=false,client_matter=true
             WHERE tenant_id=$1 AND region=$2 AND source='trigger.write' AND source_ref=$3""",
