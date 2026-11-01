@@ -21,7 +21,7 @@ including repeated moves and moves out of terminal states, are refused.
 | `agents/tisan/quotes.py:152` | Explicit acknowledgement email attempt; approved wording gate precedes SMTP setup and any mail-status write. Reuses the same `SmtpMailer` that Tiger imports. |
 | `agents/tisan/quotes.py:198` | Reads only the designated approved wording file, verbatim, with no default or caller-supplied wording. |
 | `agents/tisan/quotes.py:224` | Additive schema initialization and five private API routes, all using the existing founder/room-key guard. |
-| `agents/tisan/schema.sql:51` | Idempotent quote request/event tables, tenant composite foreign key, state constraints, indexes, forced RLS and room-role grants. |
+| `agents/tisan/schema.sql:1` | Idempotent quote request/event tables, tenant composite foreign key, state constraints, indexes, forced RLS and room-role grants. |
 | `agents/tisan/app.py:149` | Registers the quote API using the existing `gold_sources.founder` guard. |
 | `agents/tisan/Dockerfile:45` | Packages quotes/schema and existing SMTP implementation; includes repository Figma documents for the future approved wording file. |
 | `agents/tisan/Dockerfile.dockerignore:8` | Allows the reused SMTP source and existing Figma document tree in the build context. |
@@ -275,3 +275,84 @@ fixes were committed and pushed. Source/test commits: `b58d6250`, `ef6b46bf`,
 container is removed after verification. No production role/schema/data was
 accessed or changed. Hosted CI on this new head remains to be checked by root;
 no merge or founder browser acceptance is claimed.
+
+## PR #564 generated-memory EOF invariant correction
+
+Full Tank run `41355046121` identified the existing generator invariant:
+`tests/test_agent_memory_records.py::test_all_agent_schema_files_use_one_generator`
+requires the generated memory block to end the schema file. In source commit
+`f2e7b89f`, moved all quote DDL/grants before that block. Current locations are
+`agents/tisan/schema.sql:1` (J4 DDL), `:52` (guarded grants), and `:62` through EOF
+(generated memory). The generated block is byte-for-byte identical to the prior
+head; quote DDL/grants are unchanged apart from their position. No test waiver,
+assertion change, role/policy change or generator source change was made.
+
+Actual relocation and generator-roundtrip command, run from the isolated clone:
+
+```sh
+/tmp/base-reliability-venv/bin/python - <<'PY'
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from hermes.record_schema import AGENTS, BEGIN, END, generated_block, update_files
+root = Path.cwd()
+path = root / 'agents/tisan/schema.sql'
+before = path.read_bytes()
+end = before.index(END.encode()) + len(END.encode()) + 1
+block = before[:end]
+assert block == generated_block('tisan').encode()
+quote_ddl = before[end:].strip(b'\n')
+assert quote_ddl.startswith(b'-- J4:')
+path.write_bytes(quote_ddl + b'\n\n' + block)
+assert path.read_bytes().endswith(block)
+assert path.read_bytes().split(BEGIN.encode())[0].strip(b'\n') == quote_ddl
+with TemporaryDirectory(prefix='j4-generator-', dir=root) as directory:
+    target = Path(directory)
+    for agent in AGENTS:
+        relative = Path('tank/schema.sql') if agent == 'tank' else Path('agents') / ('_template' if agent == 'template' else agent) / 'schema.sql'
+        out = target / relative
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes((root / relative).read_bytes())
+    snapshots = {p.relative_to(target): p.read_bytes() for p in target.rglob('schema.sql')}
+    update_files(target)
+    assert all((target / p).read_bytes() == content for p, content in snapshots.items())
+print('Generated memory block preserved byte-for-byte; actual generator roundtrip unchanged for all 11 schemas')
+PY
+```
+
+Exit 0, printed exactly the final line above. The real `update_files` generator
+ran against copies of every schema in a temporary directory; all 11 files were
+unchanged after generation and the temporary directory was removed.
+
+Disposable database commands:
+
+```sh
+docker run --detach --name tisan-j4-generator-postgres --network bridge --publish 127.0.0.1::5432 --env POSTGRES_HOST_AUTH_METHOD=trust --tmpfs /var/lib/postgresql/data postgres:16
+docker port tisan-j4-generator-postgres 5432
+PYTHONPATH=/workspace/codex-tisan-j4/.test-deps MEMORY_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32785/postgres RLS_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32785/postgres J4_TEST_POSTGRES_PORT=32785 /tmp/base-reliability-venv/bin/python -m pytest -q tests/test_agent_memory_records.py tests/test_tenant_rls.py tests/test_tisan_quotes_postgres.py tests/test_tisan_quotes.py
+```
+
+The container bound `127.0.0.1:32785`. Initial collection failed because this
+local Python environment lacked `qdrant_client`; no tests ran in that attempt.
+Installed the existing repository-pinned dependency into the clone's ignored
+local test-only directory, then reran the same command:
+
+```sh
+/tmp/base-reliability-venv/bin/python -m pip install --target /workspace/codex-tisan-j4/.test-deps qdrant-client==1.20.0
+```
+
+Install exit 0. Final combined result: **139 passed, 13 warnings in 30.84s**,
+exit 0, **no skips**, including the exact failing generator-invariant test,
+the complete memory-record test file, actual disposable tenant RLS and quote
+PostgreSQL tests, and focused quote behavior tests. Memory tests use their
+existing deterministic encoder and in-memory Qdrant, with no model calls.
+
+```sh
+PATH=/tmp/base-reliability-venv/bin:$PATH ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+git diff --check
+```
+
+Ruff **All checks passed**; diff check no output; both exit 0. All verification
+completed before committing/pushing `f2e7b89f` to the same PR branch. This report
+is the only subsequent change. The named disposable container is removed after
+verification. Hosted checks on the new head remain pending. No production
+mutation, merge or founder browser acceptance is claimed.
