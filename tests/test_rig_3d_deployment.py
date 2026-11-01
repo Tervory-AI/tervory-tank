@@ -16,7 +16,7 @@ def test_docker_cmd_preserves_public_api_health_and_private_brain(tmp_path):
     admin, name = _admin_url(), 'rig3d_boot_' + uuid4().hex
     asyncio.run(_create_database(admin, name))
     script = r'''
-import importlib, json, os, re, secrets
+import importlib, inspect, json, os, re, secrets
 from pathlib import Path
 from fastapi.testclient import TestClient
 from uvicorn.importer import import_from_string
@@ -42,7 +42,9 @@ cmd = json.loads(next(line[4:] for line in (root/'agents/rig/Dockerfile').read_t
 assert cmd == ['uvicorn', 'rigbox.three_d.asgi:app', '--host', '0.0.0.0', '--port', '8000', '--no-proxy-headers', '--no-access-log']
 deployed = import_from_string(cmd[1])
 assert deployed is base
-assert all(any(r.path == path and r.methods == methods and r.endpoint is endpoint
+# The chassis lifespan wraps each endpoint for tenant scoping (#428, functools.wraps),
+# so compare the handlers underneath, not the wrapper objects.
+assert all(any(r.path == path and r.methods == methods and inspect.unwrap(r.endpoint) is inspect.unwrap(endpoint)
                for r in deployed.routes if hasattr(r, 'methods')) for path, methods, endpoint in routes)
 with TestClient(deployed) as client:
     assert protected_surface(client) == before

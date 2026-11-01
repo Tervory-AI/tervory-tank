@@ -465,8 +465,8 @@ def test_room_compose_policy_and_skills_match() -> None:
             assert "IF NOT EXISTS" in statement.upper()
     logic = (ROOT / "agents" / "rig" / "rigbox" / "logic.py").read_bytes()
     ground = (ROOT / "agents" / "rig" / "rigbox" / "ground.py").read_bytes()
-    assert logic == (ROOT / "tank" / "skills" / "rig.search" / "1.0.0" / "pure.py").read_bytes()
-    assert logic == (ROOT / "tank" / "skills" / "rig.setups" / "1.0.0" / "pure.py").read_bytes()
+    assert logic == (ROOT / "tank" / "skills" / "rig.search" / "1.1.0" / "pure.py").read_bytes()
+    assert logic == (ROOT / "tank" / "skills" / "rig.setups" / "1.1.0" / "pure.py").read_bytes()
     for name in ("rig.explain", "rig.ask", "rig.fit_suggest"):
         assert ground == (ROOT / "tank" / "skills" / name / "1.0.0" / "ground.py").read_bytes()
     hits: list[str] = []

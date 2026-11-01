@@ -104,6 +104,12 @@ class CandidateEvalRuntimeTests(unittest.TestCase):
             for case in pkg.cases:
                 with self.subTest(package=pkg.ref, case=case.get("name")):
                     self.assertIsInstance(case["input"], dict)
+                    if "expected" not in case:
+                        # gold.import_packages skips refusal cases (expected_error only);
+                        # Skala scores them as must_refuse checks.
+                        self.assertIs(case.get("must_refuse"), True)
+                        self.assertIsInstance(case.get("expected_error"), dict)
+                        continue
                     self.assertIsInstance(case["expected"], dict)
         cases = [json.loads(line) for line in (PACKAGE / "evals/cases.jsonl").read_text().splitlines()]
         self.assertTrue(all("expected_error" not in case for case in cases))
@@ -153,7 +159,7 @@ class CandidateEvalRuntimeTests(unittest.TestCase):
     def test_bundled_feeds_and_fixtures_match_existing_sources(self):
         self.assertIn(f"version: {PACKAGE.name}", (PACKAGE / "skill.yaml").read_text(encoding="utf-8"))
         files = [p for p in (PACKAGE / "feeds").rglob("*") if p.is_file() and p.suffix in {".py", ".sql"}]
-        self.assertEqual(len(files), 21)
+        self.assertEqual(len(files), 22)  # 1.3.0 adds feeds/keyless.py (imported by adapters.py)
         self.assertTrue((PACKAGE / "feeds/published.py").is_file())
         for path in files:
             original = ROOT / "agents/market_lab/feeds" / path.relative_to(PACKAGE / "feeds")

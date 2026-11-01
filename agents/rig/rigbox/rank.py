@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from rigbox.logic import _active, _haystack, _limit, _similarity, _sku, _tokens, public_product
+from rigbox.shopper_attributes import shopper_attributes, shopper_row
 
 _FILLER = frozenset(
     {
@@ -470,7 +471,9 @@ def _match(text: str, row: dict[str, Any]) -> float:
 
 
 def _text(row: dict[str, Any]) -> str:
-    return f"{_haystack(row)} {row.get('family') or ''}".lower()
+    # Only shopper-safe attributes are search text: a private value (a supplier
+    # cost) must not be findable by searching for it.
+    return f"{_haystack(shopper_row(row))} {row.get('family') or ''}".lower()
 
 
 def _fields(row: dict[str, Any]) -> list[str]:
@@ -481,11 +484,9 @@ def _fields(row: dict[str, Any]) -> list[str]:
         str(row.get("category") or ""),
         str(row.get("family") or ""),
     ]
-    attributes = row.get("attributes") or {}
-    if isinstance(attributes, dict):
-        for key, value in attributes.items():
-            fields.append(str(key))
-            fields.append(str(value))
+    for key, value in shopper_attributes(row.get("attributes")).items():
+        fields.append(str(key))
+        fields.append(str(value))
     return fields
 
 

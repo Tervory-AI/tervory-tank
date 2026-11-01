@@ -32,6 +32,9 @@ import json
 import logging
 import os
 import re
+import shutil
+import tempfile
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -203,9 +206,78 @@ class SkillContext:
         return str(res.get("content") or "")
 
 
+# ---------- skill scratch space ----------
+# The trigger.* engines (tank/skills/trigger.*/1.0.0/engine.py:12) unpack rules.zip into a
+# tempfile.TemporaryDirectory(prefix="trigger-skill-") when they start. Python removes it
+# only on a clean exit. Their run.py SIGKILLs the engine on its 30 s timeout and whenever
+# the call is cancelled (Tank shutting down cancels in-flight calls), and SIGTERM or SIGHUP
+# skip the cleanup too, so every such stop left ~350 inodes in /tmp for good. Approved
+# versions are never edited in place (AGENTS.md rule 7), so Tank, which starts every run,
+# removes what a killed engine left behind.
+SKILL_TEMP_PREFIXES = ("trigger-skill-",)
+# Far past the engines' 30 s limit: no live engine owns a folder this old.
+SKILL_TEMP_MAX_AGE_S = 3600
+SKILL_TEMP_SWEEP_EVERY_S = 600
+_last_temp_sweep: float | None = None
+
+
+def sweep_skill_temp(root: str | os.PathLike[str] | None = None, *, now: float | None = None,
+                     max_age_s: float = SKILL_TEMP_MAX_AGE_S) -> list[str]:
+    """Remove this user's skill scratch folders older than max_age_s; return their names."""
+    base = Path(root if root is not None else tempfile.gettempdir())
+    now = time.time() if now is None else now
+    removed: list[str] = []
+    try:
+        entries = list(os.scandir(base))
+    except OSError:
+        return removed
+    for entry in entries:
+        if not entry.name.startswith(SKILL_TEMP_PREFIXES):
+            continue
+        try:
+            info = entry.stat(follow_symlinks=False)
+            if not entry.is_dir(follow_symlinks=False) or info.st_uid != os.getuid():
+                continue
+            if now - info.st_mtime < max_age_s:
+                continue
+        except OSError:
+            continue
+        shutil.rmtree(entry.path, ignore_errors=True)
+        if not os.path.lexists(entry.path):
+            removed.append(entry.name)
+    return removed
+
+
+def _sweep_skill_temp_quietly() -> None:
+    try:
+        removed = sweep_skill_temp()
+    except Exception:  # never let housekeeping fail a skill run
+        log.exception("skill scratch sweep failed")
+        return
+    if removed:
+        log.info("removed %d stale skill scratch folders", len(removed))
+
+
+def _maybe_sweep_skill_temp() -> None:
+    """At most every SKILL_TEMP_SWEEP_EVERY_S per process, sweep in a background thread."""
+    global _last_temp_sweep
+    # Tests set this (tests/conftest.py) so no test sweeps the shared /tmp of the box.
+    if os.environ.get("TANK_SKILL_TEMP_SWEEP", "").strip().lower() == "off":
+        return
+    now = time.monotonic()
+    if _last_temp_sweep is not None and now - _last_temp_sweep < SKILL_TEMP_SWEEP_EVERY_S:
+        return
+    _last_temp_sweep = now
+    try:
+        threading.Thread(target=_sweep_skill_temp_quietly, name="skill-temp-sweep", daemon=True).start()
+    except Exception:  # e.g. RuntimeError: can't start new thread; housekeeping never fails a call
+        log.exception("skill scratch sweep could not start")
+
+
 # ---------- running ----------
 
 async def run_skill(pkg: SkillPackage, payload: dict[str, Any], ctx: SkillContext) -> dict[str, Any]:
+    _maybe_sweep_skill_temp()
     run = _import_run(pkg)
     started = time.perf_counter()
     out = await run(payload, ctx)

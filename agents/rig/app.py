@@ -370,6 +370,11 @@ async def _lifespan(app: FastAPI):
         retention_days()
         service = QuoteService(store, _TankModels(app.state.tank), RetailerHandoff(app.state.http),
                                PgQuotes(app.state.pool))
+        # Locate confirm re-reads offers live: approved-source API or Tiger
+        # check-now. No payment provider is wired: Locate checkout refuses.
+        from rigbox.locate_live import product_checkers
+
+        service.locate_checker = product_checkers(app.state.http)
         app.state.rig = service
         configured = os.environ.get("CATALOGUE_DIR", "").strip()
         root = Path(configured).resolve() if configured else None

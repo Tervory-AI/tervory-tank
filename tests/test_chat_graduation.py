@@ -84,7 +84,17 @@ async def test_chat_exact_repeat_has_zero_cost_both_jobs_in_savings_and_tenants_
                 json={'choices': [{'message': {'content': 'A local test answer.'}}],
                       'usage': {'prompt_tokens': 1000, 'completion_tokens': 100}}, request=httpx.Request('POST', url))
 
+    async def stream(base_url, api_key, body, on_token):
+        # Command turns stream through command_stream.completion (the OpenAI SDK),
+        # not httpx.AsyncClient.post; stand in at that seam with the same measured result.
+        sent.append(body)
+        await on_token('A local test answer.')
+        return httpx.Response(200, headers={'x-litellm-response-cost': '0.000001', 'x-litellm-model-group': body['model']},
+            json={'choices': [{'message': {'content': 'A local test answer.'}, 'finish_reason': 'stop'}],
+                  'usage': {'prompt_tokens': 1000, 'completion_tokens': 100, 'cost': 0.000001}})
+
     monkeypatch.setattr(b.tank.httpx, 'AsyncClient', Provider)
+    monkeypatch.setattr(b.tank, 'stream_completion', stream)
     for index, tenant in enumerate(b.tenants):
         headers = {'X-Tervory-Tenant': str(tenant), 'X-Tervory-User': 'founder-fixture'}
         thread = (await b.client.post('/v1/command/threads', json={}, headers=headers)).json()['thread_id']
