@@ -333,8 +333,14 @@ class QuoteService(Service):
                     if ship_to is not None:
                         body["ships_direct"] = True
                     return body
-                if cancelled != "sent":
+                if cancelled in ("cancelled", "missing"):
                     await refund_or_leave_due("supplier_order_failed", str(exc))
+                elif cancelled != "sent":
+                    # "unrecorded": the store failed after the outbox check, so
+                    # the order may still be placed with a draft PO. Nothing is
+                    # refunded here: the quote stays at cancelling, and
+                    # reconcile_payments cancels the order, then refunds.
+                    raise RigError("order", "The order could not be placed. The payment will be refunded.", 502)
                 supplied = {"purchase_order": {"state": "sent"},
                             "supplier_order": {"channel": "email", "transport": "sandbox_outbox",
                                                "duplicate": True, "reconciled": True}}
@@ -432,6 +438,9 @@ class QuoteService(Service):
         * an outbox Rig can't read, or a cancel that can't tell whether the
           PO was sent: nothing is cancelled or refunded; the quote is marked
           reconcile_error/needs_review and listed in "needs_review".
+          Flagged quotes are read in their own pass (own limit), after the
+          unflagged ones, so they never crowd newer refunds out. A quote that
+          settles drops needs_review and reconcile_error.
 
         Never places or sends an order.
         Returns {"checked", "reconciled": [...], "needs_review": [quote ids]}.
@@ -452,6 +461,10 @@ class QuoteService(Service):
                 return True  # no usable timestamp: old enough by definition
 
         settled: list[dict[str, Any]] = []
+
+        def cleared(state: dict[str, Any]) -> dict[str, Any]:
+            # A settled quote no longer needs a person: drop the review flags.
+            return {key: value for key, value in state.items() if key not in ("needs_review", "reconcile_error")}
 
         async def claimed(quote_id: str, state: dict[str, Any], states: set[str],
                           stamp: str | None) -> tuple[str, dict[str, Any], dict[str, Any]] | None:
@@ -507,9 +520,9 @@ class QuoteService(Service):
             except Exception:
                 await put_back(quote_id, claim, base)
                 return
-            done = {**base, "state": _REFUNDED_STATES.get(str(base.get("refund_reason")),
-                                                          "supplier_order_failed_refunded"),
-                    "reconciled": True, "refund": {"status": refunded.status}}
+            done = cleared({**base, "state": _REFUNDED_STATES.get(str(base.get("refund_reason")),
+                                                                  "supplier_order_failed_refunded"),
+                            "reconciled": True, "refund": {"status": refunded.status}})
             await self.store.swap_locate_state(tenant_id, quote_id, claim, done)
             settled.append({"quote_id": quote_id, "from": origin or current, "to": done["state"]})
 
@@ -518,7 +531,8 @@ class QuoteService(Service):
             # Map a strict cancel's result. current is the stored locate_state
             # (swapped by compare-and-swap); base is the cancelling state.
             if result == "sent":
-                done = {**base, "state": "supplier_ordered", "reconciled": True, "purchase_order_state": "sent"}
+                done = cleared({**base, "state": "supplier_ordered", "reconciled": True,
+                                "purchase_order_state": "sent"})
                 if await self.store.swap_locate_state(tenant_id, quote_id, current, done):
                     settled.append({"quote_id": quote_id, "from": origin, "to": "supplier_ordered"})
             elif result == "cancelled":
@@ -548,13 +562,22 @@ class QuoteService(Service):
             elif order["order"].get("state") == "cancelled":
                 await after_cancel(quote_id, claim, base, "cancelled", current)
             else:
+                # Accept's send refused with outbox_not_configured or order_mode,
+                # which send_supplier_order checks before writing anything: the
+                # PO was never sent, so the outbox check is skipped (as at Accept).
+                unsent = base.get("cancel_reason") == "supplier_order_failed" \
+                    and base.get("error") in ("outbox_not_configured", "order_mode")
                 try:
-                    result = await self.fulfilment.cancel(tenant_id, quote_id, str(base.get("cancel_reason")))
+                    result = await self.fulfilment.cancel(tenant_id, quote_id, str(base.get("cancel_reason")),
+                                                          unsent=unsent)
                 except Exception:
                     result = "unrecorded"
                 await after_cancel(quote_id, claim, base, result, current)
 
-        rows = await self.store.open_locate_payments(tenant_id, limit)
+        # Quotes flagged needs_review get their own pass with their own limit,
+        # so a backlog of flagged quotes never starves newer refunds.
+        rows = await self.store.open_locate_payments(tenant_id, limit) \
+            + await self.store.open_locate_payments(tenant_id, limit, flagged=True)
         for quote_id, state in rows:
             current = state.get("state")
             if current == "reconciling":
@@ -615,6 +638,7 @@ class QuoteService(Service):
             except Exception:
                 await put_back(quote_id, claim, base)
                 continue
+            done = cleared(done)
             await self.store.swap_locate_state(tenant_id, quote_id, claim, done)
             settled.append({"quote_id": quote_id, "from": current, "to": done["state"]})
 

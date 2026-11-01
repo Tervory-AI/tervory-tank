@@ -425,11 +425,18 @@ class MemoryStore(RetailerMemoryStore):
                 return True
         return False
 
-    async def open_locate_payments(self, tenant_id: str, limit: int = 100) -> list[tuple[str, dict[str, Any]]]:
-        """Locate quotes at payment_pending, paid, refund_due, cancelling or reconciling, oldest first."""
+    async def open_locate_payments(self, tenant_id: str, limit: int = 100, *,
+                                   flagged: bool = False) -> list[tuple[str, dict[str, Any]]]:
+        """Locate quotes at payment_pending, paid, refund_due, cancelling or reconciling, oldest first.
+
+        flagged=False (default) leaves out quotes marked needs_review;
+        flagged=True lists only those. Each has its own limit, so flagged
+        quotes never crowd newer refunds out of the reconciler's pass.
+        """
         rows = [(row["id"], copy.deepcopy(row["payload"]["locate_state"])) for row in self.quotes
                 if row["tenant_id"] == str(tenant_id)
-                and (row["payload"].get("locate_state") or {}).get("state") in _OPEN_PAYMENT_STATES]
+                and (row["payload"].get("locate_state") or {}).get("state") in _OPEN_PAYMENT_STATES
+                and ((row["payload"]["locate_state"].get("needs_review") is True) == bool(flagged))]
         return rows[:max(1, min(int(limit), 1000))]
 
     async def locate_states(self, tenant_id: str, quote_ids: list[str]) -> list[tuple[str, dict[str, Any]]]:
@@ -455,6 +462,13 @@ class MemoryStore(RetailerMemoryStore):
         """Rig-owned Locate order and draft supplier PO. First write wins per (tenant, quote)."""
         key = (str(tenant_id), order["quote_id"])
         created = key not in self.locate_orders
+        if created and any(tenant == key[0] and (row["order"]["number"] == order["number"]
+                                                  or row["purchase_order"]["number"] == purchase["number"])
+                           for (tenant, _quote), row in self.locate_orders.items()):
+            # Same as Postgres' UNIQUE (tenant_id, number): a number taken by
+            # another quote saves nothing.
+            from rigbox.quotes.senders import DeliveryError
+            raise DeliveryError("order_mismatch")
         if created:
             self.locate_orders[key] = {"order": copy.deepcopy(order), "purchase_order": copy.deepcopy(purchase)}
             self.locate_order_created[key] = datetime.now(timezone.utc)
@@ -1088,14 +1102,21 @@ class PgStore(RetailerPgStore):
             )
         return result.endswith(" 1")
 
-    async def open_locate_payments(self, tenant_id: str, limit: int = 100) -> list[tuple[str, dict[str, Any]]]:
-        """Locate quotes at payment_pending, paid, refund_due, cancelling or reconciling, oldest first."""
+    async def open_locate_payments(self, tenant_id: str, limit: int = 100, *,
+                                   flagged: bool = False) -> list[tuple[str, dict[str, Any]]]:
+        """Locate quotes at payment_pending, paid, refund_due, cancelling or reconciling, oldest first.
+
+        flagged=False (default) leaves out quotes marked needs_review;
+        flagged=True lists only those. Each has its own limit, so flagged
+        quotes never crowd newer refunds out of the reconciler's pass.
+        """
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 "SELECT id, payload->'locate_state' AS state FROM agent_rig.quotes"
                 " WHERE tenant_id = $1 AND payload->'locate_state'->>'state' = ANY($2::text[])"
+                " AND coalesce(payload->'locate_state'->'needs_review' = 'true'::jsonb, false) = $4"
                 " ORDER BY created_at LIMIT $3",
-                _uuid(tenant_id), sorted(_OPEN_PAYMENT_STATES), max(1, min(int(limit), 1000)),
+                _uuid(tenant_id), sorted(_OPEN_PAYMENT_STATES), max(1, min(int(limit), 1000)), bool(flagged),
             )
         return [(row["id"], json.loads(row["state"]) if isinstance(row["state"], str) else row["state"]) for row in rows]
 

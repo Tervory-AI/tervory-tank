@@ -181,8 +181,9 @@ class RigOrders:
         whether the PO was sent (for example the outbox file exists but can't be
         read): nothing is cancelled and the caller must not refund; a person or
         a later reconcile settles it. "unrecorded" means the store failed after
-        the outbox was checked; the caller still refunds and the open order
-        stays visible.
+        the outbox was checked; the order may still be placed, so the caller
+        must not refund yet: Accept leaves the quote at "cancelling" and
+        reconcile_payments cancels again, then refunds.
 
         Strict: when the outbox can't be checked for any reason (including
         outbox_not_configured or order_mode, since the mode or folder may have
