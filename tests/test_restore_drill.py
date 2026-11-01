@@ -1,7 +1,6 @@
 """Real local backup/restore round trip. No production endpoints or credentials."""
 import asyncio
 import os
-from pathlib import Path
 import shutil
 
 import pytest
