@@ -39,3 +39,14 @@ def test_no_foreign_private_holdout_criminal_or_invented_source(field, value):
 def test_unsupported_rule_quote_is_never_upgraded_to_verified_authority():
     r = row(); r["element_findings"][0]["basis"][0]["quote"] = "Unsupported factor supposedly controls"
     assert build_problem(r, OWNER)["authorities"] == []
+
+
+def test_paragraph_is_resolved_from_source_not_trusted_from_stored_model_metadata():
+    from agents.zenas.core.moot.hearing_sources import verified_paragraph
+    quote = "Notice received before the deadline satisfies the time requirement."
+    source = "[1] A different procedural fact is recorded in this first paragraph.\n[2] " + quote
+    assert verified_paragraph(source, quote) == 2
+    assert verified_paragraph(source + "\n[3] " + quote, quote) is None
+    r = row(); r["url"] = "javascript:alert(1)"
+    with pytest.raises(HearingError, match="invalid_source_url"):
+        build_problem(r, OWNER)
