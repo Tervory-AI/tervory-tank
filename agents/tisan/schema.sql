@@ -99,6 +99,12 @@ DO $$ BEGIN
             WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id',true),'')::uuid);
     END IF;
 END $$;
-GRANT SELECT,INSERT,UPDATE ON agent_tisan.quote_requests TO agent_tisan;
-GRANT SELECT,INSERT ON agent_tisan.quote_events TO agent_tisan;
-GRANT USAGE,SELECT ON SEQUENCE agent_tisan.quote_events_id_seq TO agent_tisan;
+-- Schemas may be installed before room roles are provisioned. Reapplying after
+-- provisioning grants only the existing room role; policies remain enforced.
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agent_tisan') THEN
+        GRANT SELECT,INSERT,UPDATE ON agent_tisan.quote_requests TO agent_tisan;
+        GRANT SELECT,INSERT ON agent_tisan.quote_events TO agent_tisan;
+        GRANT USAGE,SELECT ON SEQUENCE agent_tisan.quote_events_id_seq TO agent_tisan;
+    END IF;
+END $$;
