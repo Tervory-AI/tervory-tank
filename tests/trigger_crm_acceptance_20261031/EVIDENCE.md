@@ -1,3 +1,37 @@
+## Parallel normal-merge preparation after #498 — 1 November 2026
+
+Frozen heads superseding earlier evidence:
+
+| Input | Exact head |
+|---|---|
+| Main, including merged #498 | `858dbffa9ffcaeb6fb643dcab679cd593a773349` |
+| Reviewed #497 main-refresh candidate | `0de9c23f91f7ba74e3b5d5087591d8e3311150c6` |
+| Corrected #497 including real CLI fake-tank CI repair | `e06d4bd71ab5a2a397e941c86caceef06bfef55a` |
+| #499 tested merge before evidence-only commit | `320f2f3cb381df8fbc4d97840c179eeac2121977` |
+
+Existing acceptance code is byte-for-byte unchanged from 538d4313. Relative to
+corrected #497, this branch adds only its three original acceptance files.
+The main merge retained the CRM helper after all existing main code. Current
+ZA reader, public homes scope, PAT/CLI/device and Trigger auth are preserved.
+#497 must merge before #499; this prepares branches only, never merges main.
+
+Commands in `/workspace/codex-trigger-crm`:
+
+1. `git fetch origin && git checkout codex/trigger-crm-acceptance-20261031 && git merge origin/main`: resolved sole appended-helper conflict in workspace/lib/tank.ts keeping both sides; normal merge `d242ab4f`.
+2. `git merge 0de9c23f91f7ba74e3b5d5087591d8e3311150c6`: PASS, normal merge `1927f995`. After #497's real CLI failure was fixed, `git merge codex/trigger-crm-workspace-20261031`: PASS, normal merge `320f2f3c` includes corrected e06d4bd7.
+3. `CRM_ASSEMBLED_ROOT=/workspace/codex-trigger-crm PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q -s -p no:cacheprovider tests/trigger_crm_acceptance_20261031/test_combined.py tests/test_trigger_crm.py tests/test_trigger_crm_wsgi.py --tb=short`: **73 passed**, 7.21s. After final corrected #497 merge, same command with only `tests/trigger_crm_acceptance_20261031/test_combined.py`: **1 passed**, zero skips, 3.16s.
+4. `docker run --rm -d --name codex-crm-499-refresh-20261101 --memory 512m --cpus 1 -e POSTGRES_HOST_AUTH_METHOD=trust --tmpfs /var/lib/postgresql/data -p 127.0.0.1::5432 postgres:16.15`: PASS, synthetic loopback Postgres at 32787.
+5. `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank:tests:.crm-testdeps POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32787/postgres COMMAND_ACCEPTANCE_CLIENTS=1 COMMAND_TEST_TOOLS=/workspace/codex-trigger-crm/workspace/node_modules /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q -p no:cacheprovider tests/test_pat_route_corridor.py tests/test_personal_tokens.py tests/test_device_login.py tests/trigger_gate2/test_gate2.py tests/command_acceptance_20261031/test_cross_lane.py --tb=short`: **53 passed**, zero skips, 27.41s.
+6. `node tests/trigger_crm_workspace/contract.cjs`, `node tests/trigger_gate2/admin_contract.cjs`, `node tests/cli_sign_ins.cjs`: PASS. `node --test tests/live_page_sources.test.cjs`: **15 passed** including real regional reader. `node --expose-gc tests/device_login_next_fetch.cjs`: PASS, real Next transport and GC/deadline bounds.
+7. `workspace/node_modules/.bin/tsc --noEmit --incremental false -p workspace/tsconfig.json`: PASS. `/home/ammosync/trigger-crm-venv312/bin/ruff check tests/trigger_crm_acceptance_20261031/test_combined.py`: PASS. `node --check tests/trigger_crm_acceptance_20261031/combined.cjs`: PASS. `git diff --check`: PASS.
+8. On corrected #497 (all production/CLI files identical in #499): `TMPDIR=/home/ammosync/trigger-crm-tmp npm test --prefix cli`: **62 passed, 0 failed, 0 skipped**, 18.46s. The six actual CLI public-edge assertions/bodies are unchanged; loader now evaluates real Tank and regionTank. Syntax, version guard and CLI pack dry-run passed; see #497 evidence for reproduced failure and local /tmp quota correction.
+9. `git diff --exit-code 538d431331ba2db5efdbf2aed24e81dca4eb3e6c -- tests/trigger_crm_acceptance_20261031/test_combined.py tests/trigger_crm_acceptance_20261031/combined.cjs`: PASS. `git diff codex/trigger-crm-workspace-20261031 --stat`: only three acceptance files. `docker stop codex-crm-499-refresh-20261101`: PASS, own --rm test DB removed.
+
+One final normal push after verification; no force/rebase/reset or optional
+status commits. Fresh exact-head hosted CI/review required. No live CRM calls,
+model calls, secrets/settings, production SQL/writes or deployment. Founder
+browser acceptance/screenshots remain outstanding; branch proof is not done.
+
 ## Review correction dependency refresh — 1 November 2026
 
 Supersedes all older frozen source heads below.
