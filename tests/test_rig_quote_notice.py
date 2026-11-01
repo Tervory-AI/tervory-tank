@@ -118,13 +118,28 @@ async def test_shipped_notice_stale_recovery_and_real_receipts(real_chromium, mo
             await asyncio.sleep(0.01)
         assert server.started
         page = await real_chromium.new_page(viewport={"width": width, "height": 1000})
-        await page.route("**/*", lambda route: route.continue_() if route.request.url.startswith(base + "/") else route.abort())
+        notice_fetches = []
+
+        async def offline_only(route):
+            if not route.request.url.startswith(base + "/"):
+                return await route.abort()
+            if "/v1/rig/privacy-notice" in route.request.url:
+                notice_fetches.append(route.request.url)
+                if len(notice_fetches) == 2:
+                    # The refetch when the quote form opens, slow as on a busy CI runner.
+                    await asyncio.sleep(0.5)
+            await route.continue_()
+        await page.route("**/*", offline_only)
         await page.goto(base + "/widget/test")
         await page.locator("tervory-rig").evaluate('(el, theme) => el.setAttribute("theme", theme)', theme)
         await page.get_by_role("searchbox").fill("Core")
         await page.get_by_role("button", name="Search", exact=True).click()
         await page.locator('[data-action="quote-product"]').first.click()
         await expect(page.locator("form.quote [data-quote-privacy]")).to_have_text("Offline policy one <&>.")
+        # Opening the form refetches the notice and keeps showing the last one meanwhile, with
+        # Send disabled. Wait for that fetch to finish, or a slow one can return policy two after
+        # set_notice below and the first Send then succeeds (ci run 41246928486).
+        await expect(page.locator('form.quote button[type="submit"]')).to_be_enabled()
         await page.locator("#quote-name").fill("Offline Shopper")
         await page.locator("#quote-email").fill("shopper@example.test")
         await set_notice("Offline policy two.")
