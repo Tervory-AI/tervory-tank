@@ -1,3 +1,27 @@
+## Actual CLI fake-tank CI repair — 1 November 2026
+
+Reproduced failure from run 41358882569 / job 125004751849 at reviewed head
+0de9c23f. `cli/test/public-edge.test.mjs:6,13` now uses the existing real
+Workspace module loader with CLI's installed TypeScript, rather than a VM
+without require. Real Tank and regionTank load. No production code changes.
+Every byte from `function request` through all six test bodies is unchanged.
+
+Commands in `/workspace/codex-trigger-crm`:
+
+- `node --expose-gc --test cli/test/public-edge.test.mjs`: before fix **0 passed, 6 failed**, reproduced `require is not defined`.
+- `npm test --prefix cli`: after fix all six public-edge cases pass; full run **48 passed, 14 failed** because host `/tmp` quota prevents CSV/release/version-guard temporary writes. Not a passing run.
+- `TMPDIR=/home/ammosync/trigger-crm-tmp npm test --prefix cli`: **62 passed, 0 failed, 0 skipped**, 18.46s; this is the same npm test script as the actual CLI workflow, with only local temp placement changed.
+- `node --check cli/bin/tervory.mjs && node --check cli/src/client.mjs`: PASS.
+- `node --check cli/test/public-edge.test.mjs`: PASS.
+- `sh .github/scripts/cli_version_guard.sh origin/main`: PASS, no shipped CLI file changed; no version bump needed.
+- `npm pack --dry-run` from `cli/`: PASS, seven packaged files. Initial root-directory `npm pack --dry-run --prefix cli` was not accepted by npm and failed ENOENT; correct cwd passed.
+- Python source comparison against HEAD: all six public-edge test bodies/assertions identical. `git diff --check`: PASS.
+
+Code and this required evidence committed together, one normal final push to
+avoid optional status commits. Fresh exact-head CI required; previous green
+results do not apply. #499 will include this corrected candidate by normal merge.
+No live CRM, settings, secrets, production SQL/writes or model calls.
+
 ## Normal main merge after #498 — 1 November 2026
 
 Main `858dbffa9ffcaeb6fb643dcab679cd593a773349` merged normally into this same
