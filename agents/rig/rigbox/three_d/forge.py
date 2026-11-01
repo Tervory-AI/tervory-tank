@@ -4,9 +4,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path
 from typing import Protocol
-from uuid import UUID, uuid5, NAMESPACE_URL
+from uuid import UUID
 
 import httpx
 

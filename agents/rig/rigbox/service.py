@@ -12,7 +12,6 @@ import re
 import time
 import unicodedata
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 from urllib.parse import urlparse

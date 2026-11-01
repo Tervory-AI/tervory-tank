@@ -90,7 +90,7 @@ def _search(client: TestClient, key: str, origin: str, query: str) -> dict:
     return response.json()
 
 
-def test_rig_startup_loads_catalogues_on_postgres(tmp_path: Path, monkeypatch) -> None:
+def test_rig_startup_ignores_folders_then_explicit_test_import_on_postgres(tmp_path: Path, monkeypatch) -> None:
     admin = _admin_url()
     name = "rig_boot_" + uuid4().hex[:12]
     url = _database_url(admin, name)
@@ -105,6 +105,15 @@ def test_rig_startup_loads_catalogues_on_postgres(tmp_path: Path, monkeypatch) -
     try:
         app_module = _load_app()
         with TestClient(app_module.app) as client:
+            # A configured disk folder is ignored by the actual startup.
+            async def seed_test_catalogues():
+                from rig_fixture_loader import load_catalogue
+                async with app_module.app.state.pool.acquire() as conn:
+                    assert await conn.fetchval('SELECT count(*) FROM agent_rig.products') == 0
+                for folder in sorted(offline.iterdir()):
+                    if folder.is_dir():
+                        await load_catalogue(app_module.app.state.rig, folder)
+            client.portal.call(seed_test_catalogues)
             monkeypatch.delenv("RIG_TRUSTED_PROXY_CIDRS", raising=False)
             assert client.get("/health").status_code == 503
             monkeypatch.setenv("RIG_TRUSTED_PROXY_CIDRS", "0.0.0.0/0")
