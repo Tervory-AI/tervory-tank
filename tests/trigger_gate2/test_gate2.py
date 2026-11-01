@@ -289,6 +289,11 @@ def test_copy_defaults_legacy_rendering_and_standard_page_content(tmp_path):
         normalized = scaffold.validate(brief([{'name': page, 'copy': str(uuid4())}]))
         normalized['resolved_copy'] = {page: 'Tenant <copy> & {literal}.'}
         target = tmp_path / page
+        if page in {'home', 'about'}:
+            with pytest.raises(scaffold.ScaffoldError, match=rf"{page}.*tisan\.build"):
+                scaffold.write_project(normalized, target)
+            assert not (target / 'content/site.json').exists()
+            continue
         scaffold.write_project(normalized, target)
         source = (target / 'app' / ('page.tsx' if page == 'home' else page + '/page.tsx')).read_text()
         assert scaffold._jsx_text(normalized['resolved_copy'][page]) in source
