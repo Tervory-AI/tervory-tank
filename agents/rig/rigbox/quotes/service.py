@@ -438,12 +438,20 @@ class QuoteService(Service):
         * an outbox Rig can't read, or a cancel that can't tell whether the
           PO was sent: nothing is cancelled or refunded; the quote is marked
           reconcile_error/needs_review and listed in "needs_review".
-          Flagged quotes are read in their own pass (own limit), after the
-          unflagged ones, so they never crowd newer refunds out. A quote that
-          settles drops needs_review and reconcile_error.
+          A quote that settles drops needs_review and reconcile_error.
+
+        Batches: unflagged quotes, then flagged (needs_review) quotes, then
+        draft auto-order POs, each list capped at limit. Every claim records
+        the attempt time (store.locate_attempt), and each list is read least
+        recently tried first, so a quote that fails every run rotates behind
+        quotes not tried yet instead of blocking them. A backlog larger than
+        limit is worked through over several runs; nothing guarantees a given
+        quote is reached in the next run.
 
         Never places or sends an order.
         Returns {"checked", "reconciled": [...], "needs_review": [quote ids]}.
+        "checked" counts quotes read across the three lists, so it can reach
+        3 x limit; limit caps each list, not the total.
         """
         from datetime import datetime, timedelta, timezone
         from decimal import Decimal
@@ -480,6 +488,12 @@ class QuoteService(Service):
             claim = {**base, "state": "reconciling", "reconcile_from": current, "reconcile_at": now.isoformat()}
             if not await self.store.swap_locate_state(tenant_id, quote_id, state, claim):
                 return None
+            try:
+                # Rotation: the next run lists quotes not tried since before
+                # this one first, so one that fails every run can't block them.
+                await self.store.locate_attempt(tenant_id, quote_id, now)
+            except Exception as exc:  # noqa: BLE001 - ordering only; the claim stands
+                log.warning("locate reconcile attempt time not recorded: %s (%s)", quote_id, type(exc).__name__)
             return current, base, claim
 
         needs_review: list[str] = []
@@ -574,8 +588,9 @@ class QuoteService(Service):
                     result = "unrecorded"
                 await after_cancel(quote_id, claim, base, result, current)
 
-        # Quotes flagged needs_review get their own pass with their own limit,
-        # so a backlog of flagged quotes never starves newer refunds.
+        # Quotes flagged needs_review get their own list with their own limit,
+        # so flagged quotes can't fill the unflagged list. Both lists are read
+        # least recently tried first (see the docstring).
         rows = await self.store.open_locate_payments(tenant_id, limit) \
             + await self.store.open_locate_payments(tenant_id, limit, flagged=True)
         for quote_id, state in rows:
@@ -652,7 +667,7 @@ class QuoteService(Service):
         if callable(getattr(self.fulfilment, "reconcile", None)):
             try:
                 found = await self.fulfilment.reconcile(tenant_id=tenant_id, older_than_minutes=older_than_minutes,
-                                                        now=now, limit=limit)
+                                                        now=now, limit=limit, auto_only=True)
             except DeliveryError:
                 found = {}  # not sandbox order mode, or no outbox: nothing to settle
         stranded = list(found.get("stranded") or [])

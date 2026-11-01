@@ -490,6 +490,10 @@ CREATE TABLE IF NOT EXISTS agent_rig.supplier_purchase_orders (
 -- Auto-order: the sandbox outbox record once the PO is emailed to the source.
 ALTER TABLE agent_rig.supplier_purchase_orders ADD COLUMN IF NOT EXISTS sent jsonb;
 ALTER TABLE agent_rig.supplier_purchase_orders ADD COLUMN IF NOT EXISTS sent_at timestamptz;
+-- Pay on Accept reconciler: when it last claimed (tried) this quote. Each pass
+-- lists the least recently tried first, so quotes that fail every run rotate
+-- to the back instead of blocking newer ones.
+ALTER TABLE agent_rig.quotes ADD COLUMN IF NOT EXISTS locate_attempt_at timestamptz;
 
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE TABLE IF NOT EXISTS agent_rig.memory_records (

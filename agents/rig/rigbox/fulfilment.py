@@ -228,7 +228,7 @@ class RigOrders:
 
     async def reconcile(self, *, tenant_id: str, env: dict[str, str] | None = None,
                         limit: int = 200, older_than_minutes: int = 15,
-                        now: datetime | None = None) -> dict[str, Any]:
+                        now: datetime | None = None, auto_only: bool = False) -> dict[str, Any]:
         """Sandbox reconcile for send_supplier_order's recorded:false case.
 
         For each draft PO whose order is still placed, if the outbox file was
@@ -240,14 +240,18 @@ class RigOrders:
         outbox, cancels or refunds; the payment reconciler cancels and refunds
         stranded auto-order POs. A PO whose outbox file can't be read is
         listed in "unknown" (never in "stranded"). Safe to run repeatedly.
+        auto_only=True (the payment reconciler) lists only auto-ordered quotes,
+        least recently tried first: drafts placed without auto-order never
+        leave draft, so they would otherwise fill the list.
         """
         from rigbox import supplier_orders
 
         sandbox_orders(env)
         supplier_orders.outbox(env)
-        drafts = await self.store.draft_supplier_orders(tenant_id, limit)
+        listed = {"auto_only": True} if auto_only else {}
+        drafts = await self.store.draft_supplier_orders(tenant_id, limit, **listed)
         cutoff = (now or datetime.now(timezone.utc)) - timedelta(minutes=max(1, int(older_than_minutes)))
-        old = set(await self.store.draft_supplier_orders(tenant_id, limit, before=cutoff))
+        old = set(await self.store.draft_supplier_orders(tenant_id, limit, before=cutoff, **listed))
         fixed, stranded, unknown = [], [], []
         for quote_id in drafts:
             try:

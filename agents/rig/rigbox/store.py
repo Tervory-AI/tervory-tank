@@ -404,7 +404,8 @@ class MemoryStore(RetailerMemoryStore):
 
     async def add_quote(self, tenant_id: str, quote_id: str, payload: dict[str, Any], contact: dict[str, Any]) -> None:
         self.quotes.append(
-            {"tenant_id": str(tenant_id), "id": quote_id, "payload": payload, "contact": contact, "sent_at": None}
+            {"tenant_id": str(tenant_id), "id": quote_id, "payload": payload, "contact": contact, "sent_at": None,
+             "created_at": datetime.now(timezone.utc)}
         )
         await self.training_event(tenant_id, "rig_quote", quote_id, payload, {"request_id": quote_id})
 
@@ -427,17 +428,34 @@ class MemoryStore(RetailerMemoryStore):
 
     async def open_locate_payments(self, tenant_id: str, limit: int = 100, *,
                                    flagged: bool = False) -> list[tuple[str, dict[str, Any]]]:
-        """Locate quotes at payment_pending, paid, refund_due, cancelling or reconciling, oldest first.
+        """Locate quotes at payment_pending, paid, refund_due, cancelling or reconciling.
 
+        Least recently tried first: ordered by the reconciler's last attempt
+        (locate_attempt), or creation for a quote never tried. A quote that
+        fails every run therefore moves behind quotes not tried yet; it does
+        not hold its place at the front.
         flagged=False (default) leaves out quotes marked needs_review;
-        flagged=True lists only those. Each has its own limit, so flagged
-        quotes never crowd newer refunds out of the reconciler's pass.
+        flagged=True lists only those. Each call has its own limit, so flagged
+        quotes can't fill the unflagged list. A backlog larger than limit is
+        still worked through over several runs, not in one.
         """
-        rows = [(row["id"], copy.deepcopy(row["payload"]["locate_state"])) for row in self.quotes
-                if row["tenant_id"] == str(tenant_id)
-                and (row["payload"].get("locate_state") or {}).get("state") in _OPEN_PAYMENT_STATES
-                and ((row["payload"]["locate_state"].get("needs_review") is True) == bool(flagged))]
-        return rows[:max(1, min(int(limit), 1000))]
+        found = [row for row in self.quotes
+                 if row["tenant_id"] == str(tenant_id)
+                 and (row["payload"].get("locate_state") or {}).get("state") in _OPEN_PAYMENT_STATES
+                 and ((row["payload"]["locate_state"].get("needs_review") is True) == bool(flagged))]
+        found.sort(key=self._attempt_order)
+        return [(row["id"], copy.deepcopy(row["payload"]["locate_state"]))
+                for row in found[:max(1, min(int(limit), 1000))]]
+
+    @staticmethod
+    def _attempt_order(row: dict[str, Any]) -> datetime:
+        return row.get("locate_attempt_at") or row.get("created_at") or datetime.min.replace(tzinfo=timezone.utc)
+
+    async def locate_attempt(self, tenant_id: str, quote_id: str, at: datetime) -> None:
+        """Record when the reconciler last tried this quote. Tenant scoped."""
+        for row in self.quotes:
+            if row["tenant_id"] == str(tenant_id) and row["id"] == quote_id:
+                row["locate_attempt_at"] = at
 
     async def locate_states(self, tenant_id: str, quote_ids: list[str]) -> list[tuple[str, dict[str, Any]]]:
         """(quote id, locate_state) for these quotes, where one is recorded. Tenant scoped."""
@@ -500,15 +518,26 @@ class MemoryStore(RetailerMemoryStore):
         return "cancelled"
 
     async def draft_supplier_orders(self, tenant_id: str, limit: int = 200,
-                                    before: datetime | None = None) -> list[str]:
+                                    before: datetime | None = None, *, auto_only: bool = False) -> list[str]:
         """Quote ids whose PO is still draft and whose order is still placed.
 
-        With before, only POs created before that time.
+        With before, only POs created before that time. With auto_only, only
+        quotes whose locate_state says they were auto-ordered, least recently
+        tried first (locate_attempt, else the PO's creation): orders placed
+        without auto-order stay draft for a person and never fill the list.
         """
-        return [quote for (tenant, quote), row in self.locate_orders.items()
+        quotes = {row["id"]: row for row in self.quotes if row["tenant_id"] == str(tenant_id)}
+        keys = [(tenant, quote) for (tenant, quote), row in self.locate_orders.items()
                 if tenant == str(tenant_id) and row["purchase_order"]["state"] == "draft"
                 and row["order"]["state"] == "placed"
-                and (before is None or self.locate_order_created[(tenant, quote)] < before)][:limit]
+                and (before is None or self.locate_order_created[(tenant, quote)] < before)]
+        if auto_only:
+            def auto(quote: str) -> bool:
+                state = (quotes.get(quote) or {}).get("payload", {}).get("locate_state") or {}
+                return state.get("auto_order") is True
+            keys = [key for key in keys if auto(key[1])]
+            keys.sort(key=lambda key: (quotes[key[1]].get("locate_attempt_at") or self.locate_order_created[key]))
+        return [quote for _tenant, quote in keys][:limit]
 
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         for row in self.quotes:
@@ -1104,18 +1133,23 @@ class PgStore(RetailerPgStore):
 
     async def open_locate_payments(self, tenant_id: str, limit: int = 100, *,
                                    flagged: bool = False) -> list[tuple[str, dict[str, Any]]]:
-        """Locate quotes at payment_pending, paid, refund_due, cancelling or reconciling, oldest first.
+        """Locate quotes at payment_pending, paid, refund_due, cancelling or reconciling.
 
+        Least recently tried first: ordered by the reconciler's last attempt
+        (locate_attempt), or creation for a quote never tried. A quote that
+        fails every run therefore moves behind quotes not tried yet; it does
+        not hold its place at the front.
         flagged=False (default) leaves out quotes marked needs_review;
-        flagged=True lists only those. Each has its own limit, so flagged
-        quotes never crowd newer refunds out of the reconciler's pass.
+        flagged=True lists only those. Each call has its own limit, so flagged
+        quotes can't fill the unflagged list. A backlog larger than limit is
+        still worked through over several runs, not in one.
         """
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 "SELECT id, payload->'locate_state' AS state FROM agent_rig.quotes"
                 " WHERE tenant_id = $1 AND payload->'locate_state'->>'state' = ANY($2::text[])"
                 " AND coalesce(payload->'locate_state'->'needs_review' = 'true'::jsonb, false) = $4"
-                " ORDER BY created_at LIMIT $3",
+                " ORDER BY coalesce(locate_attempt_at, created_at), created_at LIMIT $3",
                 _uuid(tenant_id), sorted(_OPEN_PAYMENT_STATES), max(1, min(int(limit), 1000)), bool(flagged),
             )
         return [(row["id"], json.loads(row["state"]) if isinstance(row["state"], str) else row["state"]) for row in rows]
@@ -1169,16 +1203,22 @@ class PgStore(RetailerPgStore):
                 Decimal(order["price"]), order["currency"],
                 None if order["ship_to"] is None else _json(order["ship_to"]))
             if created:
-                await conn.execute(
+                po = await conn.fetchval(
                     "INSERT INTO agent_rig.supplier_purchase_orders (tenant_id, quote_id, number, state, source_id,"
                     " vendor_name, order_email, item_sku, item_url, quantity, unit_cost, currency, ship_to,"
                     " neutral_slip, instructions)"
-                    " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15)",
+                    " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15)"
+                    " ON CONFLICT DO NOTHING RETURNING true",
                     tenant, purchase["quote_id"], purchase["number"], purchase["state"], purchase["source_id"],
                     purchase["vendor_name"], purchase["order_email"], purchase["item_sku"], purchase["item_url"],
                     int(purchase["quantity"]), Decimal(purchase["unit_cost"]), purchase["currency"],
                     None if purchase["ship_to"] is None else _json(purchase["ship_to"]),
                     bool(purchase["neutral_slip"]), purchase["instructions"])
+                if not po:
+                    # The PO number belongs to another quote: raising here rolls
+                    # the order back too, so nothing is saved (same as memory).
+                    from rigbox.quotes.senders import DeliveryError
+                    raise DeliveryError("order_mismatch")
             saved = await self._locate_order(conn, tenant, order["quote_id"])
         if saved is None:
             from rigbox.quotes.senders import DeliveryError
@@ -1225,18 +1265,38 @@ class PgStore(RetailerPgStore):
         return "cancelled"
 
     async def draft_supplier_orders(self, tenant_id: str, limit: int = 200,
-                                    before: datetime | None = None) -> list[str]:
+                                    before: datetime | None = None, *, auto_only: bool = False) -> list[str]:
         """Quote ids whose PO is still draft and whose order is still placed (oldest first).
 
-        With before, only POs created before that time.
+        With before, only POs created before that time. With auto_only, only
+        quotes whose locate_state says they were auto-ordered, least recently
+        tried first (locate_attempt_at, else the PO's creation): orders placed
+        without auto-order stay draft for a person and never fill the list.
         """
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT p.quote_id FROM agent_rig.supplier_purchase_orders p JOIN agent_rig.locate_orders o"
-                " USING (tenant_id, quote_id) WHERE p.tenant_id = $1 AND p.state = 'draft' AND o.state = 'placed'"
-                " AND ($3::timestamptz IS NULL OR p.created_at < $3)"
-                " ORDER BY p.created_at LIMIT $2", _uuid(tenant_id), max(1, min(int(limit), 1000)), before)
+            if not auto_only:
+                rows = await conn.fetch(
+                    "SELECT p.quote_id FROM agent_rig.supplier_purchase_orders p JOIN agent_rig.locate_orders o"
+                    " USING (tenant_id, quote_id) WHERE p.tenant_id = $1 AND p.state = 'draft' AND o.state = 'placed'"
+                    " AND ($3::timestamptz IS NULL OR p.created_at < $3)"
+                    " ORDER BY p.created_at LIMIT $2", _uuid(tenant_id), max(1, min(int(limit), 1000)), before)
+            else:
+                rows = await conn.fetch(
+                    "SELECT p.quote_id FROM agent_rig.supplier_purchase_orders p JOIN agent_rig.locate_orders o"
+                    " USING (tenant_id, quote_id) JOIN agent_rig.quotes q ON q.tenant_id = p.tenant_id"
+                    " AND q.id = p.quote_id"
+                    " WHERE p.tenant_id = $1 AND p.state = 'draft' AND o.state = 'placed'"
+                    " AND ($3::timestamptz IS NULL OR p.created_at < $3)"
+                    " AND q.payload->'locate_state'->'auto_order' = 'true'::jsonb"
+                    " ORDER BY coalesce(q.locate_attempt_at, p.created_at), p.created_at LIMIT $2",
+                    _uuid(tenant_id), max(1, min(int(limit), 1000)), before)
         return [row["quote_id"] for row in rows]
+
+    async def locate_attempt(self, tenant_id: str, quote_id: str, at: datetime) -> None:
+        """Record when the reconciler last tried this quote. Tenant scoped."""
+        async with self.pool.acquire() as conn:
+            await conn.execute("UPDATE agent_rig.quotes SET locate_attempt_at = $3 WHERE tenant_id = $1 AND id = $2",
+                               _uuid(tenant_id), quote_id, at)
 
     async def _locate_order(self, conn: Any, tenant: UUID, quote_id: str) -> dict[str, Any] | None:
         order = await conn.fetchrow(
