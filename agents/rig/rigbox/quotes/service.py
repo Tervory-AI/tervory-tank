@@ -435,6 +435,11 @@ class QuoteService(Service):
           ("supplier_order_failed_refunded").
           If the supplier turns out to have it (the outbox file exists),
           record "supplier_ordered".
+        * reconciling from ordered or supplier_order_unconfirmed, older than
+          the cutoff (a reconciler claimed it there and stopped): read the
+          order. PO sent: "supplier_ordered". PO still draft on a placed
+          order: back to "ordered" (the draft-PO list picks it up). Anything
+          else: needs_review. Before, these were listed but never claimed.
         * an outbox Rig can't read, or a cancel that can't tell whether the
           PO was sent: nothing is cancelled or refunded; the quote is marked
           reconcile_error/needs_review and listed in "needs_review".
@@ -451,7 +456,10 @@ class QuoteService(Service):
         Never places or sends an order.
         Returns {"checked", "reconciled": [...], "needs_review": [quote ids]}.
         "checked" counts quotes read across the three lists, so it can reach
-        3 x limit; limit caps each list, not the total.
+        3 x limit; limit caps each list, not the total. When recording an
+        attempt time fails, the result also has "attempt_unrecorded" (quote
+        ids) and an error is logged: those quotes don't rotate, so a run
+        that keeps reporting it can starve newer quotes again.
         """
         from datetime import datetime, timedelta, timezone
         from decimal import Decimal
@@ -469,6 +477,7 @@ class QuoteService(Service):
                 return True  # no usable timestamp: old enough by definition
 
         settled: list[dict[str, Any]] = []
+        unrecorded: list[str] = []
 
         def cleared(state: dict[str, Any]) -> dict[str, Any]:
             # A settled quote no longer needs a person: drop the review flags.
@@ -494,6 +503,7 @@ class QuoteService(Service):
                 await self.store.locate_attempt(tenant_id, quote_id, now)
             except Exception as exc:  # noqa: BLE001 - ordering only; the claim stands
                 log.warning("locate reconcile attempt time not recorded: %s (%s)", quote_id, type(exc).__name__)
+                unrecorded.append(quote_id)
             return current, base, claim
 
         needs_review: list[str] = []
@@ -588,6 +598,30 @@ class QuoteService(Service):
                     result = "unrecorded"
                 await after_cancel(quote_id, claim, base, result, current)
 
+        async def settle_stuck_order(quote_id: str, state: dict[str, Any]) -> None:
+            # Left at "reconciling" from ordered/supplier_order_unconfirmed by a
+            # reconciler that stopped. A sent PO is no longer in the draft-PO
+            # list, so only this list can reach it; claimed() waits the cutoff.
+            got = await claimed(quote_id, state, {"ordered", "supplier_order_unconfirmed"}, None)
+            if got is None:
+                return
+            current, base, claim = got
+            try:
+                order = await self.store.locate_order(tenant_id, quote_id)
+            except Exception:
+                await put_back(quote_id, claim, base)
+                return
+            po = (order or {}).get("purchase_order") or {}
+            if order is not None and po.get("state") == "sent":
+                done = cleared({**base, "state": "supplier_ordered", "reconciled": True,
+                                "purchase_order_state": "sent"})
+                if await self.store.swap_locate_state(tenant_id, quote_id, claim, done):
+                    settled.append({"quote_id": quote_id, "from": current, "to": "supplier_ordered"})
+            elif order is not None and po.get("state") == "draft" and order["order"].get("state") == "placed":
+                await self.store.swap_locate_state(tenant_id, quote_id, claim, {**base, "state": "ordered"})
+            else:
+                await review(quote_id, claim, base)
+
         # Quotes flagged needs_review get their own list with their own limit,
         # so flagged quotes can't fill the unflagged list. Both lists are read
         # least recently tried first (see the docstring).
@@ -604,6 +638,12 @@ class QuoteService(Service):
                     else:
                         await settle_cancelling(quote_id, state)
                 except Exception as exc:  # noqa: BLE001 - every state here is reopened by a later run
+                    log.warning("locate reconcile left %s for the next run (%s)", quote_id, type(exc).__name__)
+                continue
+            if current in ("ordered", "supplier_order_unconfirmed"):  # only via "reconciling"
+                try:
+                    await settle_stuck_order(quote_id, state)
+                except Exception as exc:  # noqa: BLE001 - reconciling is reopened by a later run
                     log.warning("locate reconcile left %s for the next run (%s)", quote_id, type(exc).__name__)
                 continue
             got = await claimed(quote_id, state, {"payment_pending", "paid"},
@@ -715,7 +755,13 @@ class QuoteService(Service):
                 await stranded_one(quote_id, state)
             except Exception as exc:  # noqa: BLE001 - cancelling/refund_due are reopened by a later run
                 log.warning("locate reconcile left %s for the next run (%s)", quote_id, type(exc).__name__)
-        return {"checked": checked, "reconciled": settled, "needs_review": needs_review}
+        result: dict[str, Any] = {"checked": checked, "reconciled": settled, "needs_review": needs_review}
+        if unrecorded:
+            # Rotation depends on these writes: say so loudly, once per run.
+            log.error("locate reconcile: attempt time not recorded for %d quote(s); they will not rotate",
+                      len(unrecorded))
+            result["attempt_unrecorded"] = unrecorded
+        return result
 
     async def payment_webhook(self, body: bytes, signature: str) -> dict[str, Any]:
         """Verified provider webhook. Records the event on its quote, once.
