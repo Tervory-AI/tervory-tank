@@ -171,7 +171,7 @@ class RigOrders:
                 "supplier_order": sent}
 
     async def cancel(self, tenant_id: str, quote_id: str, reason: str,
-                     env: dict[str, str] | None = None) -> str:
+                     env: dict[str, str] | None = None, *, unsent: bool = False) -> str:
         """Cancel the order and its unsent PO before a refund. Never raises.
 
         Returns "cancelled", "missing", "sent", "unknown" or "unrecorded".
@@ -183,18 +183,21 @@ class RigOrders:
         a later reconcile settles it. "unrecorded" means the store failed after
         the outbox was checked; the caller still refunds and the open order
         stays visible.
+
+        Strict: when the outbox can't be checked for any reason (including
+        outbox_not_configured or order_mode, since the mode or folder may have
+        changed after a PO was written) the answer is "unknown". unsent=True
+        skips the outbox check; pass it only when send_supplier_order itself
+        refused with outbox_not_configured or order_mode, which it checks
+        before writing anything. The store still refuses a PO marked sent.
         """
         log = logging.getLogger(__name__)
         try:
-            if await self._reconcile_one(tenant_id, quote_id, env) is not None:
+            if not unsent and await self._reconcile_one(tenant_id, quote_id, env) is not None:
                 return "sent"
         except DeliveryError as exc:
-            # Only "no outbox configured" (or not in sandbox order mode) proves
-            # nothing was written. Anything else, such as outbox_unavailable,
-            # means the supplier may already have the PO.
-            if str(exc) not in ("outbox_not_configured", "order_mode"):
-                log.warning("locate order send state unknown before cancel")
-                return "unknown"
+            log.warning("locate order send state unknown before cancel: %s (%s)", quote_id, exc)
+            return "unknown"
         except Exception:  # noqa: BLE001
             log.warning("locate order reconcile before cancel failed")
             return "unrecorded"
@@ -235,7 +238,7 @@ class RigOrders:
         recording the order and sending the PO). This method never writes the
         outbox, cancels or refunds; the payment reconciler cancels and refunds
         stranded auto-order POs. A PO whose outbox file can't be read is
-        skipped (neither). Safe to run repeatedly.
+        listed in "unknown" (never in "stranded"). Safe to run repeatedly.
         """
         from rigbox import supplier_orders
 
@@ -244,16 +247,18 @@ class RigOrders:
         drafts = await self.store.draft_supplier_orders(tenant_id, limit)
         cutoff = (now or datetime.now(timezone.utc)) - timedelta(minutes=max(1, int(older_than_minutes)))
         old = set(await self.store.draft_supplier_orders(tenant_id, limit, before=cutoff))
-        fixed, stranded = [], []
+        fixed, stranded, unknown = [], [], []
         for quote_id in drafts:
             try:
                 purchase = await self._reconcile_one(tenant_id, quote_id, env)
             except DeliveryError:
-                # The outbox file can't be read: neither sent nor stranded.
-                logging.getLogger(__name__).warning("locate order send state unknown in reconcile")
+                # The outbox file can't be read: neither sent nor stranded. It
+                # is listed so a person sees the paid order waiting on them.
+                logging.getLogger(__name__).warning("locate order send state unknown in reconcile: %s", quote_id)
+                unknown.append(quote_id)
                 continue
             if purchase is not None:
                 fixed.append({"quote_id": quote_id, "purchase_order": purchase["number"]})
             elif quote_id in old:
                 stranded.append(quote_id)
-        return {"checked": len(drafts), "reconciled": fixed, "stranded": stranded}
+        return {"checked": len(drafts), "reconciled": fixed, "stranded": stranded, "unknown": unknown}

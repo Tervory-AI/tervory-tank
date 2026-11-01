@@ -259,7 +259,11 @@ class QuoteService(Service):
                 # Cancel Rig's order and unsent PO, then refund. cancel refuses
                 # (returns "sent") when the supplier already has the PO: then
                 # the order stands and nothing is refunded.
-                cancelled = await self.fulfilment.cancel(tenant_id, quote_id, f"supplier_order_failed:{exc}")
+                # send_supplier_order checks order mode and the outbox before it
+                # writes anything, so those two refusals prove nothing was sent.
+                cancelled = await self.fulfilment.cancel(
+                    tenant_id, quote_id, f"supplier_order_failed:{exc}",
+                    unsent=str(exc) in ("outbox_not_configured", "order_mode"))
                 if cancelled == "unknown":
                     # Rig can't tell whether the supplier has the PO, so it
                     # neither cancels nor refunds. The order and payment stand
