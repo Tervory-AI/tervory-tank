@@ -17,6 +17,7 @@ import tarfile
 import tempfile
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 _SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _PAGE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
@@ -88,7 +89,7 @@ def validate(payload: dict[str, Any]) -> dict[str, Any]:
     colours = _colours(_mapping(brand.get("colours"), "brand.colours"))
     fonts = _fonts(_mapping(brand.get("fonts"), "brand.fonts"))
     logo = _logo(brand.get("logo_url"))
-    return {
+    result = {
         "name": name,
         "slug": slug,
         "locale": locale,
@@ -97,6 +98,11 @@ def validate(payload: dict[str, Any]) -> dict[str, Any]:
         "fonts": fonts,
         "logo_url": logo,
     }
+    copies = {item["name"]: str(UUID(item["copy"])) for item in (payload.get("pages") or [])
+              if isinstance(item, dict) and item.get("copy") is not None and item["name"] in pages}
+    if copies:
+        result["copies"] = copies
+    return result
 
 
 def _pages(value: Any) -> list[str]:
@@ -106,6 +112,17 @@ def _pages(value: Any) -> list[str]:
         raise ScaffoldError("pages must be a short list")
     seen: list[str] = []
     for item in value:
+        if isinstance(item, dict):
+            if item.get("name") in seen:
+                raise ScaffoldError("a page name is not valid")
+            if set(item) - {"name", "copy"}:
+                raise ScaffoldError("a page name is not valid")
+            if item.get("copy") is not None:
+                try:
+                    UUID(item["copy"])
+                except (ValueError, TypeError, AttributeError):
+                    raise ScaffoldError("a page name is not valid") from None
+            item = item.get("name")
         if not isinstance(item, str) or _PAGE.fullmatch(item) is None or len(item) > 40:
             raise ScaffoldError("a page name is not valid")
         if item in _IGNORED_PAGES or item in seen:
@@ -233,14 +250,15 @@ def render_tailwind(colours: dict[str, str]) -> str:
     )
 
 
-def render_extra_page(label: str) -> str:
+def render_extra_page(label: str, copy: str | None = None) -> str:
     safe = _jsx_text(label)
+    body = "" if copy is None else f'      <p className="mt-3">{_jsx_text(copy)}</p>\n'
     return (
         "export default function Page() {\n"
         "  return (\n"
         "    <section>\n"
         f'      <h1 className="font-heading text-3xl">{safe}</h1>\n'
-        '      <p className="mt-3">This page is ready for content.</p>\n'
+        f"{body}"
         "    </section>\n"
         "  );\n"
         "}\n"
@@ -293,11 +311,21 @@ def write_project(brief: dict[str, Any], dest: Path) -> None:
         # The contact spec opens /contact. A site without that page must not ship it.
         (dest / "e2e" / "contact.spec.ts").unlink(missing_ok=True)
     for page in brief["pages"]:
+        copy = brief.get("resolved_copy", {}).get(page)
         if page in _STANDARD_PAGES:
+            if copy is not None:
+                file = dest / "app" / ("page.tsx" if page == "home" else page + "/page.tsx")
+                source = file.read_text(encoding="utf-8")
+                body = '<p className="mt-3">' + _jsx_text(copy) + '</p>'
+                if re.search(r'<p className="mt-3">.*?</p>', source, re.DOTALL):
+                    source = re.sub(r'<p className="mt-3">.*?</p>', lambda _: body, source, count=1, flags=re.DOTALL)
+                else:
+                    source = source.replace('</h1>', '</h1>\n      ' + body, 1)
+                file.write_text(source, encoding="utf-8")
             continue
         folder = dest / "app" / page
         folder.mkdir(parents=True, exist_ok=True)
-        (folder / "page.tsx").write_text(render_extra_page(_label(page)), encoding="utf-8")
+        (folder / "page.tsx").write_text(render_extra_page(_label(page), copy), encoding="utf-8")
 
 
 def project_files(project: Path) -> list[str]:
@@ -479,6 +507,33 @@ def select_visual_frames(reading: dict[str, Any], node_id: str, page: str) -> li
     return [{**frame, "page": page} for frame in selected]
 
 
+async def _resolve_copy(brief: dict[str, Any], tenant: str) -> None:
+    """Resolve references through Tank; the brief cannot supply its own body text."""
+    if not brief.get("copies"):
+        return
+    import httpx
+    key = os.environ.get("TANK_KEY", "")
+    if not key:
+        raise ScaffoldError("Writing record unavailable")
+    resolved = {}
+    async with httpx.AsyncClient(timeout=30, follow_redirects=False, trust_env=False) as client:
+        for page, write_id in brief["copies"].items():
+            try:
+                response = await client.get("http://tank:8000/v1/trigger/copy/" + write_id,
+                    params={"tenant_id": tenant}, headers={"X-Tank-Key": key,
+                    "X-Tervory-Tenant": tenant, "X-Tervory-Home-Region": os.environ.get("TANK_REGION", "us-east")})
+                response.raise_for_status()
+                data = response.json()
+                text = data["text"]
+                if (data["tenant_id"] != tenant or data["write_id"] != write_id
+                        or not isinstance(text, str) or not text.strip() or len(text) > 20000):
+                    raise ValueError
+            except (httpx.HTTPError, ValueError, KeyError, TypeError):
+                raise ScaffoldError("Writing record unavailable") from None
+            resolved[page] = text
+    brief["resolved_copy"] = resolved
+
+
 async def execute(
     payload: dict[str, Any],
     tenant_id: str,
@@ -489,6 +544,7 @@ async def execute(
     """Write the tarball for this tenant and, by default, run the checks first."""
     brief = validate(payload)
     tenant = _tenant(str(tenant_id))
+    await _resolve_copy(brief, tenant)
     root = _data_root(data_root)
     builds = (root / "builds").resolve()
     folder = builds / tenant / brief["slug"]
