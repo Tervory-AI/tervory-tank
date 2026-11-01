@@ -222,7 +222,7 @@ def _fit_key(row: dict[str, Any]) -> tuple[str, str, str]:
     )
 
 
-_OPEN_PAYMENT_STATES = frozenset({"payment_pending", "paid", "refund_due", "reconciling"})
+_OPEN_PAYMENT_STATES = frozenset({"payment_pending", "paid", "refund_due", "cancelling", "reconciling"})
 
 
 class MemoryStore(RetailerMemoryStore):
@@ -426,7 +426,7 @@ class MemoryStore(RetailerMemoryStore):
         return False
 
     async def open_locate_payments(self, tenant_id: str, limit: int = 100) -> list[tuple[str, dict[str, Any]]]:
-        """Locate quotes at payment_pending, paid, refund_due or reconciling, oldest first."""
+        """Locate quotes at payment_pending, paid, refund_due, cancelling or reconciling, oldest first."""
         rows = [(row["id"], copy.deepcopy(row["payload"]["locate_state"])) for row in self.quotes
                 if row["tenant_id"] == str(tenant_id)
                 and (row["payload"].get("locate_state") or {}).get("state") in _OPEN_PAYMENT_STATES]
@@ -1089,7 +1089,7 @@ class PgStore(RetailerPgStore):
         return result.endswith(" 1")
 
     async def open_locate_payments(self, tenant_id: str, limit: int = 100) -> list[tuple[str, dict[str, Any]]]:
-        """Locate quotes at payment_pending, paid, refund_due or reconciling, oldest first."""
+        """Locate quotes at payment_pending, paid, refund_due, cancelling or reconciling, oldest first."""
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 "SELECT id, payload->'locate_state' AS state FROM agent_rig.quotes"

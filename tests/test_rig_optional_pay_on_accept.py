@@ -646,6 +646,156 @@ async def test_a_crashed_auto_order_is_settled_after_the_store_turns_auto_order_
 
 
 @pytest.mark.asyncio
+async def test_a_failed_refund_due_write_after_accept_cancels_is_refunded_by_reconcile(monkeypatch, tmp_path):
+    """The cancel commits, then the refund_due write fails: the quote is left at
+    "cancelling", and the next reconcile reads the cancelled order and refunds
+    exactly once."""
+    from rigbox.fulfilment import RigOrders
+
+    async def send_refused(self, **kwargs):
+        raise DeliveryError("order_mode")
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
+    monkeypatch.setattr(RigOrders, "send_supplier_order", send_refused)
+    real, failures = store.locate_state, [1]
+
+    async def blip(tenant_id, quote_id, state):
+        if state.get("state") == "refund_due" and failures[0]:
+            failures[0] -= 1
+            raise ConnectionError("database blip")
+        return await real(tenant_id, quote_id, state)
+    monkeypatch.setattr(store, "locate_state", blip)
+    with pytest.raises(ConnectionError):
+        await service.locate_accept(TENANT, body)
+    quote_id = store.quotes[-1]["id"]
+    state = store.quotes[-1]["payload"]["locate_state"]
+    assert state["state"] == "cancelling" and state["cancel_reason"] == "supplier_order_failed"
+    assert store.locate_orders[(TENANT, quote_id)]["order"]["state"] == "cancelled"
+    assert service.payments.refunds == {}
+    assert (await service.reconcile_payments(TENANT))["reconciled"] == []  # too recent
+    result = await service.reconcile_payments(TENANT, now=later(30))
+    assert result["reconciled"] == [{"quote_id": quote_id, "from": "cancelling",
+                                     "to": "supplier_order_failed_refunded"}]
+    assert service.payments.refund_causes == ["supplier_order_failed"]
+    assert (await service.reconcile_payments(TENANT, now=later(60)))["reconciled"] == []
+    assert kinds(service.payments).count("refund") == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["raises", "returns_false"])
+async def test_a_failed_refund_due_swap_in_the_stranded_branch_is_refunded_next_run(monkeypatch, tmp_path, failure):
+    from rigbox.fulfilment import RigOrders
+
+    class Crash(Exception):
+        pass
+
+    async def killed(self, **kwargs):
+        raise Crash()
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
+    monkeypatch.setattr(RigOrders, "send_supplier_order", killed)
+    with pytest.raises(Crash):
+        await service.locate_accept(TENANT, body)
+    quote_id = store.quotes[-1]["id"]
+    real, failures = store.swap_locate_state, [1]
+
+    async def flaky(tenant_id, quote, old, new):
+        if new.get("state") == "refund_due" and failures[0]:
+            failures[0] -= 1
+            if failure == "raises":
+                raise ConnectionError("database blip")
+            return False
+        return await real(tenant_id, quote, old, new)
+    monkeypatch.setattr(store, "swap_locate_state", flaky)
+    first = await service.reconcile_payments(TENANT, now=later(30))
+    assert first["reconciled"] == [] and first["needs_review"] == []
+    state = store.quotes[-1]["payload"]["locate_state"]
+    assert state["state"] == "cancelling" and state["cancel_reason"] == "supplier_order_unsent"
+    assert store.locate_orders[(TENANT, quote_id)]["order"]["state"] == "cancelled"
+    assert service.payments.refunds == {}
+    second = await service.reconcile_payments(TENANT, now=later(60))
+    assert second["reconciled"] == [{"quote_id": quote_id, "from": "cancelling",
+                                     "to": "supplier_order_failed_refunded"}]
+    assert service.payments.refund_causes == ["supplier_order_unsent"]
+    assert (await service.reconcile_payments(TENANT, now=later(90)))["reconciled"] == []
+    assert kinds(service.payments).count("refund") == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["po_sent", "po_unsent", "order_vanished"])
+async def test_a_quote_left_cancelling_is_settled_from_the_order(monkeypatch, tmp_path, case):
+    """Rig stops inside the cancel, after writing "cancelling". The reconciler
+    reads the order: a PO the supplier has ends supplier_ordered with 0
+    refunds; an unsent one is cancelled and refunded once; no order at all is
+    listed for a person."""
+    from rigbox.fulfilment import RigOrders
+    real_send, real_cancel = RigOrders.send_supplier_order, RigOrders.cancel
+
+    class Killed(Exception):
+        pass
+
+    async def send_fails(self, **kwargs):
+        if case == "po_sent":
+            await real_send(self, **kwargs)  # the file reaches the outbox...
+            store.locate_orders[(TENANT, kwargs["quote_id"])]["purchase_order"].update(state="draft", sent=None)
+        raise DeliveryError("smtp_down")  # ...but Rig records a failure
+
+    async def killed(self, *args, **kwargs):
+        raise Killed()
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
+    monkeypatch.setattr(RigOrders, "send_supplier_order", send_fails)
+    monkeypatch.setattr(RigOrders, "cancel", killed)
+    with pytest.raises(Killed):
+        await service.locate_accept(TENANT, body)
+    monkeypatch.setattr(RigOrders, "cancel", real_cancel)
+    quote_id = store.quotes[-1]["id"]
+    assert store.quotes[-1]["payload"]["locate_state"]["state"] == "cancelling"
+    assert store.locate_orders[(TENANT, quote_id)]["order"]["state"] == "placed"
+    if case == "order_vanished":
+        del store.locate_orders[(TENANT, quote_id)]
+    result = await service.reconcile_payments(TENANT, now=later(30))
+    state = store.quotes[-1]["payload"]["locate_state"]
+    if case == "po_sent":
+        assert result["reconciled"] == [{"quote_id": quote_id, "from": "cancelling", "to": "supplier_ordered"}]
+        assert state["purchase_order_state"] == "sent" and "refund" not in kinds(service.payments)
+        assert store.locate_orders[(TENANT, quote_id)]["purchase_order"]["state"] == "sent"
+    elif case == "po_unsent":
+        assert result["reconciled"] == [{"quote_id": quote_id, "from": "cancelling",
+                                         "to": "supplier_order_failed_refunded"}]
+        assert kinds(service.payments).count("refund") == 1
+        assert store.locate_orders[(TENANT, quote_id)]["order"]["state"] == "cancelled"
+    else:
+        assert result["reconciled"] == [] and result["needs_review"] == [quote_id]
+        assert state["state"] == "cancelling" and state["needs_review"] is True
+        assert "refund" not in kinds(service.payments)
+    assert (await service.reconcile_payments(TENANT, now=later(60)))["reconciled"] == []
+
+
+@pytest.mark.asyncio
+async def test_an_order_saved_before_place_raised_is_never_refunded(monkeypatch, tmp_path):
+    """place_located_order can raise after its row is saved (order_mismatch).
+    Accept doesn't refund; the reconciler lists the quote in needs_review."""
+    from rigbox.fulfilment import RigOrders
+    real_place = RigOrders.place_located_order
+
+    async def saved_then_raises(self, **kwargs):
+        await real_place(self, **kwargs)
+        raise DeliveryError("order_mismatch")
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
+    monkeypatch.setattr(RigOrders, "place_located_order", saved_then_raises)
+    with pytest.raises(RigError) as raised:
+        await service.locate_accept(TENANT, body)
+    assert raised.value.status == 502 and "will be refunded" in raised.value.message
+    quote_id = store.quotes[-1]["id"]
+    state = store.quotes[-1]["payload"]["locate_state"]
+    assert state["state"] == "refund_due" and state["refund_reason"] == "order_failed"
+    for minutes in (30, 60):
+        result = await service.reconcile_payments(TENANT, now=later(minutes))
+        assert result["reconciled"] == [] and result["needs_review"] == [quote_id]
+    assert "refund" not in kinds(service.payments)
+    assert store.quotes[-1]["payload"]["locate_state"]["needs_review"] is True
+    assert store.locate_orders[(TENANT, quote_id)]["order"]["state"] == "placed"
+
+
+@pytest.mark.asyncio
 async def test_reconcile_is_test_mode_only(monkeypatch, tmp_path):
     store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
     monkeypatch.setenv("RIG_LOCATE_PAYMENTS_MODE", "live")
