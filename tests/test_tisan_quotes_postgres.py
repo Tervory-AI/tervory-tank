@@ -140,3 +140,48 @@ async def test_quote_rls_stays_off_before_the_platform_rollout():
         await conn.close()
         await admin.execute(f'DROP DATABASE {name}')
         await admin.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('rollout_on', [False, True])
+async def test_schema_reapplies_as_provisioned_room_without_tank_access(rollout_on):
+    """The room owns its tables but cannot resolve names inside Tank's schema."""
+    from chassis.roles import apply_roles
+
+    port = os.environ.get('J4_TEST_POSTGRES_PORT')
+    if not port:
+        pytest.skip('J4_TEST_POSTGRES_PORT must select a disposable local PostgreSQL')
+    options = dict(host='127.0.0.1', port=int(port), user='postgres', ssl=False)
+    admin = await asyncpg.connect(database='postgres', **options)
+    name = 'tisan_j4_owner_' + uuid4().hex
+    await admin.execute(f'CREATE DATABASE {name}')
+    conn = await asyncpg.connect(database=name, **options)
+    try:
+        await conn.execute('CREATE SCHEMA tank; CREATE TABLE tank.command_threads (id uuid)')
+        if rollout_on:
+            await conn.execute('ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY')
+        await conn.execute('CREATE SCHEMA agent_tisan')
+        schema = (ROOT / 'agents/tisan/schema.sql').read_text()
+        await conn.execute(schema)
+        # Reproduce #564's accidentally enabled state on BOTH quote tables.
+        await conn.execute('ALTER TABLE agent_tisan.quote_requests ENABLE ROW LEVEL SECURITY; '
+                           'ALTER TABLE agent_tisan.quote_requests FORCE ROW LEVEL SECURITY; '
+                           'ALTER TABLE agent_tisan.quote_events ENABLE ROW LEVEL SECURITY; '
+                           'ALTER TABLE agent_tisan.quote_events FORCE ROW LEVEL SECURITY')
+        await apply_roles(conn, {'AGENT_DB_PASSWORD_TISAN': 'disposable-test-password'})
+        await conn.execute('SET ROLE agent_tisan')
+        assert not await conn.fetchval("SELECT has_schema_privilege(current_user,'tank','USAGE')")
+        await conn.execute(schema)
+        await conn.execute(schema)
+        rows = await conn.fetch(
+            "SELECT c.relrowsecurity,c.relforcerowsecurity FROM pg_class c "
+            "JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='agent_tisan' "
+            "AND c.relname IN ('quote_requests','quote_events')")
+        assert len(rows) == 2
+        assert all(row['relrowsecurity'] == rollout_on and
+                   row['relforcerowsecurity'] == rollout_on for row in rows)
+    finally:
+        await conn.execute('RESET ROLE')
+        await conn.close()
+        await admin.execute(f'DROP DATABASE {name}')
+        await admin.close()

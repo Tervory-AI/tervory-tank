@@ -38,7 +38,8 @@ CREATE INDEX IF NOT EXISTS quote_events_tenant_request
 -- isolation is the tenant_id filter on every quote query (agents/tisan/quotes.py).
 -- The ELSE branch also turns RLS back off where it was already applied.
 DO $$ BEGIN
-    IF EXISTS (SELECT 1 FROM pg_class WHERE oid=to_regclass('tank.command_threads') AND relrowsecurity) THEN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+               WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
         ALTER TABLE agent_tisan.quote_requests ENABLE ROW LEVEL SECURITY;
         ALTER TABLE agent_tisan.quote_requests FORCE ROW LEVEL SECURITY;
         ALTER TABLE agent_tisan.quote_events ENABLE ROW LEVEL SECURITY;
