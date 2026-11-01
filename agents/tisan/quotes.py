@@ -50,7 +50,7 @@ class Contact(BaseModel):
 
 class Item(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
-    item_id: UUID
+    item_id: UUID = Field(strict=False)
     quantity: int = Field(ge=1, le=10000)
 
 
