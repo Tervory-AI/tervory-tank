@@ -7,6 +7,11 @@ uses the same relation phrases a shopper actually types.
 
 from __future__ import annotations
 
+async def load_catalogue(service, folder):
+    from rig_fixture_loader import load_catalogue as load
+    return await load(service, folder)
+
+
 import json
 import sys
 from pathlib import Path
@@ -21,7 +26,7 @@ sys.path.insert(0, str(ROOT / "agents" / "_chassis"))
 from rigbox.service import Service  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
-CATALOGUES = ROOT / "agents" / "rig" / "catalogues"
+CATALOGUES = ROOT / "tests" / "fixtures" / "rig_catalogues"
 CN = "33333333-3333-4333-8333-333333333333"
 EXAMPLE = "11111111-1111-4111-8111-111111111111"
 SECOND = "22222222-2222-4222-8222-222222222222"
@@ -50,7 +55,7 @@ async def _service() -> tuple[Service, Liar]:
     models = Liar()
     service = Service(MemoryStore(), models)
     for name in ("customnation", "example", "second"):
-        report = await service.load_folder(CATALOGUES / name)
+        report = await load_catalogue(service, CATALOGUES / name)
         assert report["products"]["rejected"] == []
         assert report["fits"]["rejected"] == []
     return service, models
@@ -79,8 +84,8 @@ async def test_short_tokens_do_not_match_inside_longer_words() -> None:
 async def test_false_relations_are_not_stitched_across_rows() -> None:
     service, models = await _service()
     questions = (
-        "Is the compact Staccato also a red dot?",
-        "Is Holosun a Staccato?",
+        "Is the compact LumaWorks also a red dot?",
+        "Is Holosun a LumaWorks?",
         "Is Cheely a red dot?",
         "Is Atlas a holster?",
         "Is the grip an optic?",
@@ -103,7 +108,7 @@ async def test_a_real_row_is_quoted_from_its_own_fields() -> None:
     assert "made-up" not in scope["cites"]
     compact = await service.ask(CN, "STI-C2-9", "Is the C2 compact?")
     assert compact["cites"] == ["STI-C2-9"]
-    assert "Staccato C2" in compact["answer"]
+    assert "LumaWorks C2" in compact["answer"]
     assert "compact" in compact["answer"]
     assert "Holosun" not in compact["answer"]
     assert "red dot" not in compact["answer"].lower()
@@ -112,10 +117,10 @@ async def test_a_real_row_is_quoted_from_its_own_fields() -> None:
 @pytest.mark.asyncio
 async def test_an_approved_fit_is_a_sentence_the_code_writes() -> None:
     service, _models = await _service()
-    answer = await service.ask(CN, "STI-C2-9", "Which optic fits the Staccato C2?")
+    answer = await service.ask(CN, "STI-C2-9", "Which optic fits the LumaWorks C2?")
     text = answer["answer"]
-    assert "Holosun 507C X2 fits Staccato C2." in text
-    assert "Trijicon RMR Type 2 fits Staccato C2." in text
+    assert "Holosun 507C X2 fits LumaWorks C2." in text
+    assert "Trijicon RMR Type 2 fits LumaWorks C2." in text
     assert LIE not in text
     assert "compact red dot" not in text.lower()
     assert set(answer["cites"]) >= {"HOL-507C-X2", "TRIJ-RMR-T2", "STI-C2-9"}
@@ -124,10 +129,10 @@ async def test_an_approved_fit_is_a_sentence_the_code_writes() -> None:
 @pytest.mark.asyncio
 async def test_relation_phrases_rank_the_part_being_asked_for() -> None:
     service, _models = await _service()
-    optic = _ids(await service.search(CN, "optic pairs with staccato", 3))
+    optic = _ids(await service.search(CN, "optic pairs with lumaworks", 3))
     holster = _ids(await service.search(CN, "holster compatible with c2", 3))
-    trigger = _ids(await service.search(CN, "trigger fits staccato", 3))
-    light = _ids(await service.search(CN, "x300 for staccato", 3))
+    trigger = _ids(await service.search(CN, "trigger fits lumaworks", 3))
+    light = _ids(await service.search(CN, "x300 for lumaworks", 3))
     scope = _ids(await service.search(EXAMPLE, "scope goes on the rifle", 3))
     shade = _ids(await service.search(SECOND, "shade to go with the lamp", 3))
     assert optic[0] in OPTICS

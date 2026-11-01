@@ -7,7 +7,7 @@ import asyncpg
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from rigbox.api import mount as mount_public
-from .api import mount
+from rigbox.three_d.api import mount
 from .sample import PUBLIC_KEY, PLAIN_KEY, seed
 
 
@@ -39,5 +39,5 @@ async def config():
             "kiosk_id": "00000000-0000-0000-0000-000000003d10"}
 
 
-bundle = Path(os.environ.get("RIG_3D_WIDGET_DIR", str(Path(__file__).with_name("widget"))))
+bundle = Path(os.environ.get("RIG_3D_WIDGET_DIR", str(Path(__file__).resolve().parents[3] / "agents/rig/rigbox/three_d/widget")))
 app.mount("/3d", StaticFiles(directory=bundle, html=True), name="rig-3d-sample")

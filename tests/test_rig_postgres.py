@@ -22,7 +22,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
-CATALOGUES = ROOT / "agents" / "rig" / "catalogues"
+CATALOGUES = ROOT / "tests" / "fixtures" / "rig_catalogues"
 
 
 def _admin_url() -> str:
@@ -125,7 +125,7 @@ def test_rig_startup_loads_catalogues_on_postgres(tmp_path: Path, monkeypatch) -
             assert classic.status_code == 200
             assert "rk_pub_customnation" not in classic.text
             assert "Custom Nation" not in classic.text
-            custom = _search(client, "rk_pub_customnation", "https://rig.tervory.com", "Staccato C2")
+            custom = _search(client, "rk_pub_customnation", "https://rig.tervory.com", "LumaWorks C2")
             assert custom["exact_match"] is True
             compact = next(item for item in custom["results"] if item["id"] == "STI-C2-9")
             assert compact["price"]["amount"] == 58999

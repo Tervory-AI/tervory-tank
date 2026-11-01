@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+async def load_catalogue(service, folder):
+    from rig_fixture_loader import load_catalogue as load
+    return await load(service, folder)
+
+
 import hashlib
 import importlib.util
 import json
@@ -21,9 +26,9 @@ from rigbox.page_route import mount_page  # noqa: E402
 from rigbox.service import RecordingHandoff, Service, hash_key  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
-EXAMPLE = ROOT / "agents" / "rig" / "catalogues" / "example"
-DEMO = ROOT / "agents" / "rig" / "catalogues" / "customnation"
-ARCHON = ROOT / "agents" / "rig" / "catalogues" / "archon"
+EXAMPLE = ROOT / "tests" / "fixtures" / "rig_catalogues" / "example"
+DEMO = ROOT / "tests" / "fixtures" / "rig_catalogues" / "customnation"
+ARCHON = ROOT / "tests" / "fixtures" / "rig_catalogues" / "archon"
 PAGE = ROOT / "agents" / "rig" / "rigbox" / "page"
 ORIGIN = "https://rig.tervory.com"
 PRODUCT = "Example Rifle 308 20in"
@@ -142,9 +147,9 @@ def test_rig_app_serves_a_search_page() -> None:
 async def test_offline_fixture_search_stays_available_without_live_page_defaults() -> None:
     store = MemoryStore()
     service = Service(store, Models(), RecordingHandoff())
-    demo = await service.load_folder(DEMO)
-    example = await service.load_folder(EXAMPLE)
-    archon = await service.load_folder(ARCHON)
+    demo = await load_catalogue(service, DEMO)
+    example = await load_catalogue(service, EXAMPLE)
+    archon = await load_catalogue(service, ARCHON)
     assert demo["keys"] == 1
     assert example["keys"] == 1
     assert archon["keys"] == 1
@@ -172,12 +177,12 @@ async def test_offline_fixture_search_stays_available_without_live_page_defaults
     assert client.get("/house").status_code == 200
     found = client.get(
         "/v1/rig/search",
-        params={"q": "Staccato", "limit": 12},
+        params={"q": "LumaWorks", "limit": 12},
         headers={"X-Rig-Key": demo_key, "Origin": ORIGIN},
     )
     assert found.status_code == 200
     names = [item["name"] for item in found.json()["results"]]
-    assert names[0] == "Staccato C2"
+    assert names[0] == "LumaWorks C2"
     assert all("Example" not in name for name in names)
     archon_hit = client.get(
         "/v1/rig/search",
@@ -264,7 +269,7 @@ async def test_shopper_and_dealer_pages_and_only_approved_fits_show() -> None:
 
     models.complete = complete
     service = Service(store, models, RecordingHandoff())
-    report = await service.load_folder(EXAMPLE)
+    report = await load_catalogue(service, EXAMPLE)
     assert report["keys"] == 1
     await store.put_key(TENANT, hash_key(ADMIN), "admin", [])
     await store.upsert_product(

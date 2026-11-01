@@ -6,6 +6,11 @@ The legacy /cn page is out of scope; v5 skins cover the shopper UI.
 
 from __future__ import annotations
 
+async def load_catalogue(service, folder):
+    from rig_fixture_loader import load_catalogue as load
+    return await load(service, folder)
+
+
 import asyncio
 import csv
 import json
@@ -28,11 +33,11 @@ from rigbox.reserve import SmtpMailer  # noqa: E402
 from rigbox.service import RecordingHandoff, Service, WebhookHandoff  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
-ARCHON = ROOT / "agents" / "rig" / "catalogues" / "archon"
-STACCATO = ROOT / "agents" / "rig" / "catalogues" / "customnation"
-EXAMPLE = ROOT / "agents" / "rig" / "catalogues" / "example"
+ARCHON = ROOT / "tests" / "fixtures" / "rig_catalogues" / "archon"
+LUMAWORKS = ROOT / "tests" / "fixtures" / "rig_catalogues" / "customnation"
+EXAMPLE = ROOT / "tests" / "fixtures" / "rig_catalogues" / "example"
 TENANT = "44444444-4444-4444-8444-444444444444"
-STACCATO_TENANT = "33333333-3333-4333-8333-333333333333"
+LUMAWORKS_TENANT = "33333333-3333-4333-8333-333333333333"
 EXAMPLE_TENANT = "11111111-1111-4111-8111-111111111111"
 ORIGIN = "https://rig.tervory.com"
 KEY = "rk_pub_archon"
@@ -380,7 +385,7 @@ def _sheet() -> tuple[dict[str, dict], dict[str, set[str]]]:
 
 async def _archon(handoff=None) -> Service:
     service = Service(MemoryStore(), handoff=handoff or RecordingHandoff())
-    report = await service.load_folder(ARCHON)
+    report = await load_catalogue(service, ARCHON)
     assert report["products"]["rejected"] == []
     assert report["products"]["added"] == 15
     assert report["fits"]["rejected"] == []
@@ -701,7 +706,7 @@ async def test_webhook_still_wins_and_missing_mail_does_not_send(monkeypatch: py
     mail = Mail()
     http = Http()
     service = Service(MemoryStore(), handoff=WebhookHandoff(http, mail))
-    await service.load_folder(EXAMPLE)
+    await load_catalogue(service, EXAMPLE)
     await service.quote(
         EXAMPLE_TENANT,
         {"product_id": "EXAMPLE-RIFLE-01", "contact": {"name": "Ada Buyer", "email": "ada@example.com"}},
@@ -730,13 +735,13 @@ def test_smtp_send_is_blocked_by_the_guard(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 @pytest.mark.asyncio
-async def test_staccato_search_is_unchanged() -> None:
+async def test_lumaworks_search_is_unchanged() -> None:
     service = Service(MemoryStore())
-    await service.load_folder(STACCATO)
-    await service.load_folder(ARCHON)
-    assert await service.search(STACCATO_TENANT, "Glock 19", 12) == {"results": []}
-    assert await service.search(STACCATO_TENANT, "", 12) == {"results": []}
-    found = await service.search(STACCATO_TENANT, "Staccato C2", 12)
+    await load_catalogue(service, LUMAWORKS)
+    await load_catalogue(service, ARCHON)
+    assert await service.search(LUMAWORKS_TENANT, "Glock 19", 12) == {"results": []}
+    assert await service.search(LUMAWORKS_TENANT, "", 12) == {"results": []}
+    found = await service.search(LUMAWORKS_TENANT, "LumaWorks C2", 12)
     assert found["exact_match"] is True
     compact = next(item for item in found["results"] if item["id"] == "STI-C2-9")
     assert list(compact) == ["id", "name", "brand", "category", "image", "price", "attributes"]
@@ -750,7 +755,7 @@ async def test_ask_muzzle_velocity_is_i_dont_know() -> None:
             raise AssertionError("the model must not be asked")
 
     service = Service(MemoryStore(), Quiet())
-    await service.load_folder(ARCHON)
+    await load_catalogue(service, ARCHON)
     body = await service.ask(
         TENANT,
         "ARCHON-TYPE-B",
@@ -781,28 +786,28 @@ def test_search_route_accepts_archon_filters() -> None:
 
 
 @pytest.mark.asyncio
-async def test_staccato_letter_queries_match_main_wording() -> None:
+async def test_lumaworks_letter_queries_match_main_wording() -> None:
     service = Service(MemoryStore())
-    await service.load_folder(STACCATO)
+    await load_catalogue(service, LUMAWORKS)
     expected = {
-        "staccato c": "No exact match for c.",
-        "staccato x": "No exact match for x.",
-        "Staccato c 4": "No exact match for c 4.",
-        "staccato z": "No exact match for z.",
+        "lumaworks c": "No exact match for c.",
+        "lumaworks x": "No exact match for x.",
+        "LumaWorks c 4": "No exact match for c 4.",
+        "lumaworks z": "No exact match for z.",
     }
     for query, message in expected.items():
-        body = await service.search(STACCATO_TENANT, query, 12)
+        body = await service.search(LUMAWORKS_TENANT, query, 12)
         assert body.get("message") == message
         assert body["exact_match"] is False
-        assert "staccato c," not in str(body.get("message") or "")
-    exact = await service.search(STACCATO_TENANT, "Staccato C2", 12)
+        assert "lumaworks c," not in str(body.get("message") or "")
+    exact = await service.search(LUMAWORKS_TENANT, "LumaWorks C2", 12)
     assert exact["exact_match"] is True
     assert exact.get("message") in (None, "")
-    pistol = await service.search(STACCATO_TENANT, "Staccato P", 12)
+    pistol = await service.search(LUMAWORKS_TENANT, "LumaWorks P", 12)
     assert pistol["exact_match"] is True
     assert any(item["id"] == "STI-P-9" for item in pistol["results"])
     for query in ("type b", "type c", "holster c", "red dot b"):
-        body = await service.search(STACCATO_TENANT, query, 12)
+        body = await service.search(LUMAWORKS_TENANT, query, 12)
         assert body["exact_match"] is True, query
         assert "No exact match" not in str(body.get("message") or "")
         assert body["results"]
@@ -812,17 +817,17 @@ async def test_staccato_letter_queries_match_main_wording() -> None:
 async def test_a_shop_with_email_and_no_mailer_matches_main(monkeypatch: pytest.MonkeyPatch) -> None:
     _guard_smtp(monkeypatch)
     service = Service(MemoryStore(), handoff=WebhookHandoff(None, None))
-    await service.load_folder(STACCATO)
+    await load_catalogue(service, LUMAWORKS)
     quoted = await service.quote(
-        STACCATO_TENANT,
+        LUMAWORKS_TENANT,
         {"product_id": "STI-C2-9", "contact": {"name": "Ada Buyer", "email": "ada@example.com"}},
     )
     assert quoted == {"request_id": quoted["request_id"]}
     assert "delivered" not in quoted
-    saved = await service.store.quotes_for(STACCATO_TENANT)
+    saved = await service.store.quotes_for(LUMAWORKS_TENANT)
     assert saved[0]["sent_at"] == "sent"
     example = Service(MemoryStore(), handoff=WebhookHandoff(Http(), Mail()))
-    await example.load_folder(EXAMPLE)
+    await load_catalogue(example, EXAMPLE)
     other = await example.quote(
         EXAMPLE_TENANT,
         {"product_id": "EXAMPLE-RIFLE-01", "contact": {"name": "Ada Buyer", "email": "ada@example.com"}},

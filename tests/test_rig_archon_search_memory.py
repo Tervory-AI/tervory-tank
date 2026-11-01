@@ -7,6 +7,11 @@ each finished search so past shopper queries are not lost.
 
 from __future__ import annotations
 
+async def load_catalogue(service, folder):
+    from rig_fixture_loader import load_catalogue as load
+    return await load(service, folder)
+
+
 import sys
 from pathlib import Path
 
@@ -19,13 +24,13 @@ sys.path.insert(0, str(ROOT / "agents" / "_chassis"))
 from rigbox.service import RecordingHandoff, Service  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
-ARCHON = ROOT / "agents" / "rig" / "catalogues" / "archon"
+ARCHON = ROOT / "tests" / "fixtures" / "rig_catalogues" / "archon"
 TENANT = "44444444-4444-4444-8444-444444444444"
 
 
 async def _archon() -> Service:
     service = Service(MemoryStore(), handoff=RecordingHandoff())
-    report = await service.load_folder(ARCHON)
+    report = await load_catalogue(service, ARCHON)
     assert report["products"]["added"] == 15
     return service
 

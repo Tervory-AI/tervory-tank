@@ -107,42 +107,6 @@ def price_patch(update: dict[str, Any]) -> dict[str, Any]:
     return patched
 
 
-def load_folder(folder: Path) -> dict[str, Any]:
-    publish_path = folder / "publish.json"
-    publish: dict[str, Any] = {}
-    publish_error = ""
-    if publish_path.is_file():
-        try:
-            publish = read_publish(publish_path.read_text(encoding="utf-8"))
-        except ValueError as exc:
-            publish_error = str(exc)
-    try:
-        tenant_id = tenant_id_for(folder.name, str(publish.get("tenant_id") or "") or None)
-    except ValueError:
-        tenant_id = ""
-        publish_error = publish_error or "tenant_id is not a uuid"
-    products_path = folder / "products.csv"
-    fits_path = folder / "fits.csv"
-    products = parse_products_csv(products_path.read_text(encoding="utf-8")) if products_path.is_file() else {
-        "rows": [],
-        "rejected": [{"row": 0, "reason": "products.csv is missing"}],
-    }
-    fits = parse_fits_csv(fits_path.read_text(encoding="utf-8")) if fits_path.is_file() else {
-        "rows": [],
-        "rejected": [],
-    }
-    market_path = folder / "market.csv"
-    market = parse_market_csv(market_path.read_text(encoding="utf-8")) if market_path.is_file() else None
-    return {
-        "slug": folder.name,
-        "tenant_id": tenant_id,
-        "publish": publish,
-        "publish_error": publish_error,
-        "products": products,
-        "fits": fits,
-        "market": market,
-    }
-
 
 def _parse_table(text: str, reader) -> dict[str, Any]:
     handle = io.StringIO(text)

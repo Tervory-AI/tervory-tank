@@ -6,6 +6,11 @@ The nightly clean-up deletes older rows from that table only.
 
 from __future__ import annotations
 
+async def load_catalogue(service, folder):
+    from rig_fixture_loader import load_catalogue as load
+    return await load(service, folder)
+
+
 import asyncio
 import importlib.util
 import inspect
@@ -28,7 +33,7 @@ from rigbox.recall import recall_days  # noqa: E402
 from rigbox.service import Service  # noqa: E402
 from rigbox.store import MemoryStore, PgStore  # noqa: E402
 
-CATALOGUES = ROOT / "agents" / "rig" / "catalogues"
+CATALOGUES = ROOT / "tests" / "fixtures" / "rig_catalogues"
 CN = "33333333-3333-4333-8333-333333333333"
 EXAMPLE = "11111111-1111-4111-8111-111111111111"
 VERSION = "window-v1"
@@ -119,17 +124,17 @@ async def test_a_search_uses_the_configured_window(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(service_mod, "rank_room", tracking)
     monkeypatch.setenv("RIG_SEARCH_RECALL_DAYS", "30")
     service = Service(MemoryStore(), Models())
-    report = await service.load_folder(CATALOGUES / "customnation")
+    report = await load_catalogue(service, CATALOGUES / "customnation")
     assert report["products"]["rejected"] == []
-    await service.search(CN, "optic for staccato", 12)
+    await service.search(CN, "optic for lumaworks", 12)
     service.store.searches[0]["created_at"] = _when(40)
     calls.clear()
-    await service.search(CN, "optic for staccato", 12)
-    assert calls == ["optic for staccato"]
+    await service.search(CN, "optic for lumaworks", 12)
+    assert calls == ["optic for lumaworks"]
     service.store.searches = [service.store.searches[0]]
     monkeypatch.setenv("RIG_SEARCH_RECALL_DAYS", "90")
     calls.clear()
-    again = await service.search(CN, "optic for staccato", 12)
+    again = await service.search(CN, "optic for lumaworks", 12)
     assert calls == []
     assert again["parts"][0]["reused"] is True
 

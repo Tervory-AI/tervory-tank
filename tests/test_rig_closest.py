@@ -7,6 +7,11 @@ comes back with exact_match false and the words "Closest matches".
 
 from __future__ import annotations
 
+async def load_catalogue(service, folder):
+    from rig_fixture_loader import load_catalogue as load
+    return await load(service, folder)
+
+
 import json
 import sys
 from pathlib import Path
@@ -24,7 +29,7 @@ from rigbox.page_route import mount_page  # noqa: E402
 from rigbox.service import Service  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
-CATALOGUES = ROOT / "agents" / "rig" / "catalogues"
+CATALOGUES = ROOT / "tests" / "fixtures" / "rig_catalogues"
 CN = "33333333-3333-4333-8333-333333333333"
 EXAMPLE = "11111111-1111-4111-8111-111111111111"
 SECOND = "22222222-2222-4222-8222-222222222222"
@@ -42,7 +47,7 @@ class Quiet:
 async def _service() -> Service:
     service = Service(MemoryStore(), Quiet())
     for name in ("customnation", "example", "second"):
-        report = await service.load_folder(CATALOGUES / name)
+        report = await load_catalogue(service, CATALOGUES / name)
         assert report["products"]["rejected"] == []
     return service
 
@@ -70,7 +75,7 @@ async def test_a_different_model_code_is_not_an_exact_hit() -> None:
     assert "No exact match" in branded["message"]
     assert _ids(branded)[0] == "SF-X300U"
 
-    centre = await service.search(CN, "staccato C3", 12)
+    centre = await service.search(CN, "lumaworks C3", 12)
     assert centre["exact_match"] is False
     assert centre["message"] == "No exact match for C3."
     assert set(_ids(centre)) >= {"STI-C2-9", "STI-P-9", "STI-XC-9"}
@@ -97,7 +102,7 @@ async def test_a_different_model_code_is_not_an_exact_hit() -> None:
 @pytest.mark.asyncio
 async def test_a_real_model_and_a_relation_stay_exact() -> None:
     service = await _service()
-    exact = await service.search(CN, "Staccato C2", 12)
+    exact = await service.search(CN, "LumaWorks C2", 12)
     assert exact["exact_match"] is True
     assert "message" not in exact
     assert _ids(exact)[0] == "STI-C2-9"
@@ -106,7 +111,7 @@ async def test_a_real_model_and_a_relation_stay_exact() -> None:
     assert scope["exact_match"] is True
     assert _ids(scope) == ["EXAMPLE-SCOPE-01"]
 
-    paired = await service.search(CN, "optic pairs with staccato", 3)
+    paired = await service.search(CN, "optic pairs with lumaworks", 3)
     assert paired["exact_match"] is True
     assert _ids(paired)[0] in {"HOL-507C-X2", "TRIJ-RMR-T2"}
 
@@ -219,13 +224,13 @@ async def test_the_word_after_a_brand_is_exact_only_from_the_catalogue_or_the_gl
             assert "message" not in found
     # Before the brand, the frequency list still applies: these are not model codes.
     for text in (
-        "scout staccato",
+        "scout lumaworks",
         "turbo holosun",
         "ice dawson",
-        "cs staccato",
-        "hd staccato",
+        "cs lumaworks",
+        "hd lumaworks",
         "eps holosun",
-        "oh staccato",
+        "oh lumaworks",
         "up holosun",
         "zqxv tenicor",
         "iwb tenicor",
@@ -247,8 +252,8 @@ async def test_the_word_after_a_brand_is_exact_only_from_the_catalogue_or_the_gl
         assert "message" not in found
         assert _ids(found)[0] == sku
     stocked = (
-        ("Staccato P", "STI-P-9"),
-        ("Staccato XC", "STI-XC-9"),
+        ("LumaWorks P", "STI-P-9"),
+        ("LumaWorks XC", "STI-XC-9"),
         ("Safariland ALS", "SAF-ALS-FULL"),
         ("Streamlight HL", "SL-TLR1"),
         ("Atlas flat", "ATLAS-FLAT"),
@@ -263,8 +268,8 @@ async def test_the_word_after_a_brand_is_exact_only_from_the_catalogue_or_the_gl
         assert sku in _ids(found)
         assert _ids(found)[0] == sku
     for text, phrase, sku in (
-        ("Staccato CS", "CS", "STI-C2-9"),
-        ("Staccato HD", "HD", "STI-C2-9"),
+        ("LumaWorks CS", "CS", "STI-C2-9"),
+        ("LumaWorks HD", "HD", "STI-C2-9"),
         ("Holosun EPS", "EPS", "HOL-507C-X2"),
         ("SureFire Scout", "Scout", "SF-X300U"),
         ("Streamlight Turbo", "Turbo", "SL-TLR1"),
@@ -278,7 +283,7 @@ async def test_the_word_after_a_brand_is_exact_only_from_the_catalogue_or_the_gl
         ("Tenicor Sagax", "Sagax", "TENICOR-VELO"),
         ("streamlight hll", "hll", "SL-TLR1"),
         ("X300W", "X300W", "SF-X300U"),
-        ("Staccato C4", "C4", "STI-C2-9"),
+        ("LumaWorks C4", "C4", "STI-C2-9"),
     ):
         found = await service.search(CN, text, 12)
         assert found["exact_match"] is False, text
@@ -306,7 +311,7 @@ class _Liar:
 async def test_ask_refuses_a_model_digit_the_row_does_not_have() -> None:
     models = _Liar()
     service = Service(MemoryStore(), models)
-    report = await service.load_folder(CATALOGUES / "customnation")
+    report = await load_catalogue(service, CATALOGUES / "customnation")
     assert report["products"]["rejected"] == []
     for question in ("Is TLR-7 listed?", "Is the RMR Type 3 listed?"):
         before = len(models.calls)
@@ -343,7 +348,7 @@ async def test_the_page_labels_closest_matches() -> None:
     assert body["exact_match"] is False
     assert body["message"] == "No exact match for X300V."
     assert body["results"][0]["id"] == "SF-X300U"
-    exact = client.get("/v1/rig/search", params={"q": "Staccato C2"}, headers=headers)
+    exact = client.get("/v1/rig/search", params={"q": "LumaWorks C2"}, headers=headers)
     assert exact.json()["exact_match"] is True
     assert "Closest matches" not in exact.text
 
@@ -382,7 +387,7 @@ async def test_spaced_codes_join_to_catalogue_codes() -> None:
     both = await service.search(CN, "c 2", 12)
     assert both["exact_match"] is True
     assert "STI-C2-9" in _ids(both)
-    branded = await service.search(CN, "Staccato c 2", 12)
+    branded = await service.search(CN, "LumaWorks c 2", 12)
     assert branded["exact_match"] is True
     assert _ids(branded)[0] == "STI-C2-9"
     grip = await service.search(CN, "e 2", 12)
@@ -397,7 +402,7 @@ async def test_spaced_codes_join_to_catalogue_codes() -> None:
     light = await service.search(CN, "Streamlight TLR 1", 12)
     assert light["exact_match"] is True
     assert _ids(light)[0] == "SL-TLR1"
-    missing = await service.search(CN, "Staccato c 4", 12)
+    missing = await service.search(CN, "LumaWorks c 4", 12)
     assert missing["exact_match"] is False
     assert missing["message"] == "No exact match for c 4."
     assert "STI-C2-9" in _ids(missing)

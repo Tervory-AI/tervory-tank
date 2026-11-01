@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+async def load_catalogue(service, folder):
+    from rig_fixture_loader import load_catalogue as load
+    return await load(service, folder)
+
+
 import json
 import sys
 import time
@@ -19,8 +24,8 @@ from rigbox.api import mount  # noqa: E402
 from rigbox.service import Service, hash_key  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
-EXAMPLE = ROOT / "agents" / "rig" / "catalogues" / "example"
-SECOND = ROOT / "agents" / "rig" / "catalogues" / "second"
+EXAMPLE = ROOT / "tests" / "fixtures" / "rig_catalogues" / "example"
+SECOND = ROOT / "tests" / "fixtures" / "rig_catalogues" / "second"
 TENANT = "11111111-1111-4111-8111-111111111111"
 SECOND_TENANT = "22222222-2222-4222-8222-222222222222"
 PUBLISHABLE = "rk_pub_examplebrand"
@@ -152,8 +157,8 @@ async def _loaded() -> tuple[Service, MemoryStore, Tank]:
     store = MemoryStore()
     models = Tank()
     service = Service(store, models)
-    example = await service.load_folder(EXAMPLE)
-    second = await service.load_folder(SECOND)
+    example = await load_catalogue(service, EXAMPLE)
+    second = await load_catalogue(service, SECOND)
     assert example["products"]["rejected"] == []
     assert second["products"]["rejected"] == []
     await store.put_key(TENANT, hash_key(ADMIN), "admin", [])
@@ -353,7 +358,7 @@ async def test_single_env_admin_key_binds_only_one_tenant(monkeypatch: pytest.Mo
     monkeypatch.setenv("RIG_ADMIN_KEY", "single-dealer-key")
     store = MemoryStore()
     service = Service(store, Tank())
-    await service.load_folder(EXAMPLE)
+    await load_catalogue(service, EXAMPLE)
     client = _client(service)
     allowed = client.get("/v1/rig/admin/fits", headers=_admin("single-dealer-key"))
     assert allowed.status_code == 200
@@ -441,7 +446,7 @@ async def test_import_feed_price_approve_and_reject_clear_only_that_tenant() -> 
     assert _cached(store, TENANT) == {("setups", RIFLE), ("graph", RIFLE)}
     assert ("setups", LAMP) in _cached(store, SECOND_TENANT)
 
-    await service.load_folder(EXAMPLE)
+    await load_catalogue(service, EXAMPLE)
     assert _cached(store, TENANT) == set()
     assert ("setups", LAMP) in _cached(store, SECOND_TENANT)
 

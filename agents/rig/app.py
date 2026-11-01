@@ -152,6 +152,8 @@ mount_page(app)
 
 @app.get("/gold/candidates")
 async def gold_candidates(
+    request: Request,
+    tenant_id: uuid.UUID | None = None,
     limit: int = Query(default=200, ge=1, le=200),
     x_tank_key: str = Header(default=""),
 ) -> list[dict[str, Any]]:
@@ -165,8 +167,9 @@ async def gold_candidates(
         matches = False
     if not matches:
         raise HTTPException(status_code=401, detail="room key required")
-    root = Path(os.environ.get("CATALOGUE_DIR", str(Path(__file__).resolve().parent / "catalogues")))
-    return _gold_candidates()(limit, region=os.environ.get("TANK_REGION", "us-east"), root=root)
+    with tenant_scope(tenant_id):
+        return await _gold_candidates()(_rig_service(request).store, str(tenant_id) if tenant_id else None,
+                                        limit, region=os.environ.get("TANK_REGION", "us-east"))
 
 
 def _gold_candidates():
@@ -376,24 +379,14 @@ async def _lifespan(app: FastAPI):
 
         service.locate_checker = product_checkers(app.state.http)
         app.state.rig = service
-        configured = os.environ.get("CATALOGUE_DIR", "").strip()
-        root = Path(configured).resolve() if configured else None
-        fixtures = {Path(__file__).resolve().parent / "catalogues", Path("/app/catalogues")}
-        reports = await service.load_catalogues(root) if root and root not in fixtures else []
-        for report in reports:
-            log_line(AGENT, json.dumps(_public_report(report)), tenant_id=report.get("tenant_id") or None)
+        with tenant_scope(None, administrative=True):
+            tenants = await store.tenant_ids()
         nightly = [
-            {
-                "tenant_id": report["tenant_id"],
-                "cron": "0 3 * * *",
-                "kind": "pull_feeds",
-                "input": {},
-            }
-            for report in reports
-            if report.get("tenant_id")
+            {"tenant_id": tenant, "cron": "0 3 * * *", "kind": "pull_feeds", "input": {}}
+            for tenant in tenants
         ]
         nightly.extend({"tenant_id": tenant, "cron": "*/5 * * * *", "kind": "retry_quotes", "input": {}}
-                       for tenant in await store.tenant_ids())
+                       for tenant in tenants)
         async with app.state.pool.acquire() as conn:
             await ensure_schedules(conn, schema_for(AGENT), nightly)
         from rigbox.price_events import consume_loop

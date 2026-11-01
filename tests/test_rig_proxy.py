@@ -5,6 +5,11 @@ The room key is a test stand-in. Shopper keys are not used.
 
 from __future__ import annotations
 
+async def load_catalogue(service, folder):
+    from rig_fixture_loader import load_catalogue as load
+    return await load(service, folder)
+
+
 import asyncio
 import importlib.util
 import json
@@ -27,7 +32,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TENANT = "11111111-1111-4111-8111-111111111111"
 OTHER = "22222222-2222-4222-8222-222222222222"
 ROOM_KEY = "room-test-key"
-EXAMPLE = ROOT / "agents" / "rig" / "catalogues" / "example"
+EXAMPLE = ROOT / "tests" / "fixtures" / "rig_catalogues" / "example"
 SCOPE = "EXAMPLE-SCOPE-01"
 
 
@@ -263,7 +268,7 @@ async def _loaded_service():
 
     models = _Models()
     service = Service(MemoryStore(), models)
-    report = await service.load_folder(EXAMPLE)
+    report = await load_catalogue(service, EXAMPLE)
     assert report["products"]["added"] == 3
     assert report["fits"]["added"] == 3
     return service, models

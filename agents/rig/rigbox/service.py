@@ -20,7 +20,6 @@ from urllib.parse import urlparse
 from rigbox.catalogue import (
     check_fit_refs,
     families_from,
-    load_folder,
     map_google_merchant,
     map_shopify,
     map_woocommerce,
@@ -826,16 +825,7 @@ class Service:
                 await store.mark_watch_applied(tenant_id, sku, url, stamp)
             return changed
 
-    async def load_catalogues(self, root: Path) -> list[dict[str, Any]]:
-        if not root.is_dir():
-            return []
-        reports = []
-        for folder in sorted(path for path in root.iterdir() if path.is_dir() and not path.name.startswith(".") and path.name != "samples"):
-            reports.append(await self.load_folder(folder))
-        return reports
-
-    async def load_folder(self, folder: Path) -> dict[str, Any]:
-        loaded = load_folder(folder)
+    async def import_catalogue(self, loaded: dict[str, Any]) -> dict[str, Any]:
         tenant = loaded["tenant_id"]
         report: dict[str, Any] = {"slug": loaded["slug"], "tenant_id": tenant, "products": {}, "fits": {}}
         if not tenant:
@@ -1116,24 +1106,8 @@ class Service:
 
     async def _shop(self, tenant_id: str) -> dict[str, Any]:
         retailer = await self.store.retailer(tenant_id) or {}
-        publish = _publish_for_slug(str(retailer.get("slug") or ""))
-        shop = publish.get("shop")
+        shop = retailer.get("shop")
         return shop if isinstance(shop, dict) else {}
-
-
-def _publish_for_slug(slug: str) -> dict[str, Any]:
-    if not slug:
-        return {}
-    configured = os.environ.get("CATALOGUE_DIR") or ""
-    base = Path(configured) if configured else Path(__file__).resolve().parents[1] / "catalogues"
-    path = base / slug / "publish.json"
-    if not path.is_file():
-        return {}
-    try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return loaded if isinstance(loaded, dict) else {}
 
 
 def _market_average(rows: list[dict[str, Any]], currency: str) -> dict[str, Any] | None:

@@ -24,7 +24,7 @@ from rigbox.api import mount
 from rigbox.locate import SupplyStore
 from rigbox.locate_live import confirm
 from rigbox.quotes.api import mount as mount_quotes
-from rigbox.quotes.sample import KEY, TENANT as SAMPLE, seed
+from fixtures.rig_quote_sample import KEY, TENANT as SAMPLE, seed
 from rigbox.fulfilment import NEUTRAL_SLIP, RigOrders, numbers
 from rigbox.quotes.senders import DeliveryError
 from rigbox.quotes.service import QuoteService, ship_address

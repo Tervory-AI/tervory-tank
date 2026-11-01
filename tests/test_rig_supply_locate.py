@@ -113,7 +113,7 @@ async def test_unapproved_missing_rule_fx_unknown_quantity_fail_closed():
 @pytest.mark.asyncio
 async def test_offline_distributor_import_reuses_parser_retains_quantity_eta():
     store, supply, product, _ = await network()
-    raw = (Path(__file__).resolve().parents[1] / "agents/rig/catalogues/samples/distributor.csv").read_text()
+    raw = (Path(__file__).resolve().parents[1] / "tests/fixtures/rig_feed_formats/distributor.csv").read_text()
     # This file is offline-only and has a non-standard sample UPC: map explicitly.
     result = await supply.import_catalogue(TENANT, "approved", {"format": "csv", "currency": "USD"}, raw, NOW)
     assert result == {"imported": 1, "rejected": []}
@@ -133,7 +133,7 @@ async def test_offline_distributor_import_reuses_parser_retains_quantity_eta():
 @pytest.mark.asyncio
 async def test_old_import_cannot_overwrite_new_observation():
     store, supply, _, _ = await network()
-    raw = (Path(__file__).resolve().parents[1] / "agents/rig/catalogues/samples/distributor.csv").read_text()
+    raw = (Path(__file__).resolve().parents[1] / "tests/fixtures/rig_feed_formats/distributor.csv").read_text()
     record = {"format": "csv", "currency": "USD"}
     await supply.import_catalogue(TENANT, "approved", record, raw, NOW)
     await supply.import_catalogue(TENANT, "approved", record, raw.replace(",12,", ",0,"), NOW - timedelta(minutes=5))
@@ -205,7 +205,7 @@ async def test_real_postgres_schema_twice_import_isolation_and_receipt_atomicity
             await store.put_retailer(TENANT, "desk-shop", None, None, "Desk shop", locate_enabled=True)
             supply = SupplyStore(store)
             await supply.source(TENANT, dict(id="approved", approved=True, priority=1, max_offer_age_seconds=3600))
-            raw = (Path(__file__).resolve().parents[1] / "agents/rig/catalogues/samples/distributor.csv").read_text()
+            raw = (Path(__file__).resolve().parents[1] / "tests/fixtures/rig_feed_formats/distributor.csv").read_text()
             await supply.import_catalogue(TENANT, "approved", {"format": "csv", "currency": "USD"}, raw, NOW)
             await supply.map_sku(TENANT, "desk", "approved", "SAMPLE-DESK")
             assert (await locate(store, TENANT, product))["public"]["status"] == "available_to_order"
@@ -308,7 +308,7 @@ async def test_http_locate_and_admin_ingestion_boundaries(monkeypatch):
         assert (await http.post("/v1/rig/admin/supply/sources", headers=public_headers, json=data)).status_code == 401
         admin_headers = {"X-Rig-Key": "admin-test-role"}
         assert (await http.post("/v1/rig/admin/supply/sources", headers=admin_headers, json=data)).status_code == 200
-        raw = (Path(__file__).resolve().parents[1] / "agents/rig/catalogues/samples/distributor.csv").read_text()
+        raw = (Path(__file__).resolve().parents[1] / "tests/fixtures/rig_feed_formats/distributor.csv").read_text()
         request = dict(source_id="new-source", record={"format": "csv", "currency": "USD"}, contents=raw, seen_at=NOW.isoformat())
         response = await http.post("/v1/rig/admin/supply/import", headers=admin_headers, json=request)
         assert response.status_code == 200 and response.json()["imported"] == 1

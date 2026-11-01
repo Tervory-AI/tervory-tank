@@ -28,7 +28,7 @@ def _load_gold():
 
 candidates = _load_gold().candidates
 
-CATALOGUES = ROOT / "agents" / "rig" / "catalogues"
+CATALOGUES = ROOT / "tests" / "fixtures" / "rig_catalogues"
 KEY = "room-key-for-gold"
 FIELDS = {"skill_id", "input", "expected", "label_source", "label_family", "region", "public"}
 

@@ -5,6 +5,11 @@ No database, no network. The mailer is a fake and SMTP is guarded.
 
 from __future__ import annotations
 
+async def load_catalogue(service, folder):
+    from rig_fixture_loader import load_catalogue as load
+    return await load(service, folder)
+
+
 import csv
 import json
 import re
@@ -25,7 +30,7 @@ from rigbox.page_route import mount_page  # noqa: E402
 from rigbox.service import Service, WebhookHandoff  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
-ARCHON = ROOT / "agents" / "rig" / "catalogues" / "archon"
+ARCHON = ROOT / "tests" / "fixtures" / "rig_catalogues" / "archon"
 V5 = ROOT / "agents" / "rig" / "rigbox" / "page" / "v5"
 TENANT = "44444444-4444-4444-8444-444444444444"
 ORIGIN = "https://rig.tervory.com"
@@ -45,7 +50,7 @@ def _client(mail: Mail | None = None) -> TestClient:
     import asyncio
 
     service = Service(MemoryStore(), handoff=WebhookHandoff(None, mail))
-    report = asyncio.run(service.load_folder(ARCHON))
+    report = asyncio.run(load_catalogue(service, ARCHON))
     assert report["products"]["added"] == 15
     assert report["market"] == {"rows": report["market"]["rows"], "rejected": []}
     app = FastAPI()

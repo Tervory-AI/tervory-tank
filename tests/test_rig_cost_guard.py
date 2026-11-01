@@ -49,7 +49,7 @@ from rigbox.api import mount  # noqa: E402
 from rigbox.catalogue import parse_products_csv  # noqa: E402
 from rigbox.quotes.api import mount as mount_quotes  # noqa: E402
 from rigbox.quotes.privacy import private_key, shopper_body  # noqa: E402
-from rigbox.quotes.sample import KEY, TENANT, seed  # noqa: E402
+from fixtures.rig_quote_sample import KEY, TENANT, seed  # noqa: E402
 from rigbox.quotes.service import QuoteService  # noqa: E402
 from rigbox.quotes.store import MemoryQuotes  # noqa: E402
 from rigbox.service import RecordingHandoff, Service  # noqa: E402
@@ -626,7 +626,7 @@ def test_fuzz_safe_names_and_archon_facts_pass_unchanged() -> None:
         assert shopper_attributes({"verified": [fact]}) == {"verified": [fact]}, name
         assert shopper_attributes({"verified": [{**fact, "value": [12, 15]}]})["verified"] == [{**fact, "value": [12, 15]}]
     facts = 0
-    with (ROOT / "agents" / "rig" / "catalogues" / "archon" / "products.csv").open(newline="") as handle:
+    with (ROOT / "tests" / "fixtures" / "rig_catalogues" / "archon" / "products.csv").open(newline="") as handle:
         for row in csv.DictReader(handle):
             attributes = json.loads(row.get("attributes") or "{}")
             verified = attributes.get("verified")

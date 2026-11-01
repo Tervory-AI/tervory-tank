@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_rig_real_box_public_api_and_sealed_execution(tmp_path):
     offline = tmp_path / "offline-catalogues"
-    shutil.copytree(ROOT / "agents/rig/catalogues", offline)
+    shutil.copytree(ROOT / "tests/fixtures/rig_catalogues", offline)
     executable = os.environ.get("RIG2_DOCKER", "docker")
     project = "rig2-box-" + uuid.uuid4().hex[:10]
     # The live checker requires literal corridor/proxy names. Use isolated
