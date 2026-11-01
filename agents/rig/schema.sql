@@ -164,6 +164,8 @@ ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS quote_notice jsonb;
 ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS locate_enabled boolean NOT NULL DEFAULT false;
 -- Optional blind ship: Locate orders ship from the other store straight to the shopper. Off by default.
 ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS blind_ship boolean NOT NULL DEFAULT false;
+-- Optional auto-order: send the PO to the approved source (sandbox outbox only). Off by default.
+ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS auto_order boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS agent_rig.feeds (
     tenant_id  uuid NOT NULL,
@@ -420,6 +422,9 @@ ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS site text NOT NULL
 ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS feed_id text NOT NULL DEFAULT '';
 -- Blind ship: this source must pack a neutral slip (no own branding or invoice in the parcel).
 ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS neutral_slip_required boolean NOT NULL DEFAULT false;
+-- Auto-order: the approved source's real vendor name and order inbox (not its site URL).
+ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS vendor_name text NOT NULL DEFAULT '';
+ALTER TABLE agent_rig.supply_sources ADD COLUMN IF NOT EXISTS order_email text NOT NULL DEFAULT '';
 
 -- Locate confirm. The offer page is re-read live before any hold is issued.
 ALTER TABLE agent_rig.supply_offers ADD COLUMN IF NOT EXISTS url text;
@@ -482,6 +487,9 @@ CREATE TABLE IF NOT EXISTS agent_rig.supplier_purchase_orders (
     UNIQUE (tenant_id, number),
     FOREIGN KEY (tenant_id, quote_id) REFERENCES agent_rig.locate_orders (tenant_id, quote_id)
 );
+-- Auto-order: the sandbox outbox record once the PO is emailed to the source.
+ALTER TABLE agent_rig.supplier_purchase_orders ADD COLUMN IF NOT EXISTS sent jsonb;
+ALTER TABLE agent_rig.supplier_purchase_orders ADD COLUMN IF NOT EXISTS sent_at timestamptz;
 
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE TABLE IF NOT EXISTS agent_rig.memory_records (

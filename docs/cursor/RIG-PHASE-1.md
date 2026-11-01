@@ -245,6 +245,7 @@ Optional, per store, **off by default** (`retailers.locate_enabled`). Custom Nat
 
 Further Optional switches on top of Locate checkout, each per store and **off by default**:
 - **Blind ship** (`retailers.blind_ship`): the approved source ships straight to the shopper. Accept takes the shopper's delivery address, and the supplier PO carries it plus a neutral-packing-slip instruction when the source is flagged `neutral_slip_required`. Shoppers never see the source, its cost or the PO.
+- **Auto-order** (`retailers.auto_order`): after a paid Accept, Rig emails its own supplier PO to the source's order inbox (sandbox outbox file only, `RIG_LOCATE_OUTBOX_DIR`; no live transport). A source needs a vendor name and order inbox; a failed send cancels the order and refunds, and a PO already sent is never cancelled.
 
 ## Plugged in last (configuration only, no code)
 1. Custom Nation's real suppliers and their keys: RIG-3's feed connections take them.
