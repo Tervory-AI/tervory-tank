@@ -1,3 +1,29 @@
+## Review scope correction — 1 November 2026
+
+Supersedes the previous command-scope manifest. Main `7a5132fa` merged at
+`620b5323`. `tank/command.py:33` SQUADS and `:98` allowed_tools are now textually
+identical to origin/main: no Trigger squad addition and no admin_trigger filter.
+The only Command changes from main are `trigger.crm.write` in FOUNDER_TOOLS,
+TriggerCRMWriteArgs and its adapter. Trigger writing access belongs to the
+separate trigger-gate2 branch. `tests/test_command.py` is restored to main.
+
+`tests/test_trigger_crm.py:146` tests every individual squad and all squads
+combined, with and without tenant-admin status: no client receives CRM write.
+Source/test head `b3b92c5e`.
+
+Exact commands in `/workspace/codex-trigger-crm`:
+
+- `git fetch origin && git checkout codex/trigger-crm-backend-20261031 && git merge origin/main`: PASS, no conflicts.
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q -p no:cacheprovider tests/test_trigger_crm.py tests/test_trigger_crm_wsgi.py --tb=short`: **72 passed**, one existing warning, 6.65s.
+- `/home/ammosync/trigger-crm-venv312/bin/ruff check tank/trigger_crm.py tests/test_trigger_crm.py`: PASS.
+- `git diff --check`: PASS.
+- Python AST/source comparison of SQUADS and allowed_tools against `git show origin/main:tank/command.py`: both identical; CRM founder tool retained.
+- Per-file commit and `git push origin codex/trigger-crm-backend-20261031`: PASS.
+
+Earlier hosted green results below cover older heads; fresh hosted checks are
+required. No live data, UI, model calls, settings or deployment changed.
+Founder browser acceptance and screenshots remain missing.
+
 ## Founder-only correction — 1 November 2026
 
 This section supersedes all earlier client-access authorizations below. CRM reads
