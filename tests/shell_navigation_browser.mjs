@@ -21,10 +21,18 @@ const css=await fs.readFile(path.join(root,'workspace/app/globals.css'),'utf8')+
 @font-face{font-family:Jost;src:url(/fonts/Jost-300-latin.woff2);font-weight:300}
 @font-face{font-family:Mono;src:url(/fonts/JetBrainsMono-latin.woff2)}
 :root{--font-inter:Inter;--font-jost:Jost;--font-mono:Mono}`;
-const server=createServer(async(req,res)=>{
+// Preload only repository assets; request paths never reach the filesystem.
+const assets=new Map();
+for(const name of await fs.readdir(path.join(root,'workspace/public/brand'))){
+ const file=path.join(root,'workspace/public/brand',name);
+ if((await fs.stat(file)).isFile()) assets.set(`/brand/${name}`,await fs.readFile(file));
+}
+for(const name of ['Inter-latin.woff2','Jost-300-latin.woff2','JetBrainsMono-latin.woff2']){
+ assets.set(`/fonts/${name}`,await fs.readFile(path.join(root,'workspace/app/fonts',name)));
+}
+const server=createServer((req,res)=>{
  if(req.url==='/bundle.js'){res.setHeader('Content-Type','text/javascript');res.end(bundle.outputFiles[0].text);return;}
- if(req.url.startsWith('/fonts/')){res.end(await fs.readFile(path.join(root,'workspace/app',req.url)));return;}
- if(req.url.startsWith('/brand/')){res.end(await fs.readFile(path.join(root,'workspace/public',req.url)));return;}
+ if(assets.has(req.url)){res.end(assets.get(req.url));return;}
  res.setHeader('Content-Type','text/html');res.end(`<style>${css}</style><div id="root"></div><script type="module" src="/bundle.js"></script>`);
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
