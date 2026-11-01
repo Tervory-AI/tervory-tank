@@ -242,6 +242,7 @@ class MemoryStore(RetailerMemoryStore):
         self.deleted_products: set[tuple[str, str]] = set()
         # Rig-owned Locate orders: (tenant, quote) -> {"order", "purchase_order"}.
         self.locate_orders: dict[tuple[str, str], dict[str, Any]] = {}
+        self.locate_order_created: dict[tuple[str, str], datetime] = {}
 
     async def deleted_skus(self, tenant_id: str) -> set[str]:
         return {sku for tenant, sku in self.deleted_products if tenant == str(tenant_id)}
@@ -417,6 +418,7 @@ class MemoryStore(RetailerMemoryStore):
         created = key not in self.locate_orders
         if created:
             self.locate_orders[key] = {"order": copy.deepcopy(order), "purchase_order": copy.deepcopy(purchase)}
+            self.locate_order_created[key] = datetime.now(timezone.utc)
         return {**copy.deepcopy(self.locate_orders[key]), "created": created}
 
     async def locate_order(self, tenant_id: str, quote_id: str) -> dict[str, Any] | None:
@@ -444,11 +446,16 @@ class MemoryStore(RetailerMemoryStore):
             row["purchase_order"]["state"] = "cancelled"
         return "cancelled"
 
-    async def draft_supplier_orders(self, tenant_id: str, limit: int = 200) -> list[str]:
-        """Quote ids whose PO is still draft and whose order is still placed."""
+    async def draft_supplier_orders(self, tenant_id: str, limit: int = 200,
+                                    before: datetime | None = None) -> list[str]:
+        """Quote ids whose PO is still draft and whose order is still placed.
+
+        With before, only POs created before that time.
+        """
         return [quote for (tenant, quote), row in self.locate_orders.items()
                 if tenant == str(tenant_id) and row["purchase_order"]["state"] == "draft"
-                and row["order"]["state"] == "placed"][:limit]
+                and row["order"]["state"] == "placed"
+                and (before is None or self.locate_order_created[(tenant, quote)] < before)][:limit]
 
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         for row in self.quotes:
@@ -1104,13 +1111,18 @@ class PgStore(RetailerPgStore):
                 " WHERE tenant_id = $1 AND quote_id = $2 AND state = 'draft'", tenant, quote_id)
         return "cancelled"
 
-    async def draft_supplier_orders(self, tenant_id: str, limit: int = 200) -> list[str]:
-        """Quote ids whose PO is still draft and whose order is still placed (oldest first)."""
+    async def draft_supplier_orders(self, tenant_id: str, limit: int = 200,
+                                    before: datetime | None = None) -> list[str]:
+        """Quote ids whose PO is still draft and whose order is still placed (oldest first).
+
+        With before, only POs created before that time.
+        """
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 "SELECT p.quote_id FROM agent_rig.supplier_purchase_orders p JOIN agent_rig.locate_orders o"
                 " USING (tenant_id, quote_id) WHERE p.tenant_id = $1 AND p.state = 'draft' AND o.state = 'placed'"
-                " ORDER BY p.created_at LIMIT $2", _uuid(tenant_id), max(1, min(int(limit), 1000)))
+                " AND ($3::timestamptz IS NULL OR p.created_at < $3)"
+                " ORDER BY p.created_at LIMIT $2", _uuid(tenant_id), max(1, min(int(limit), 1000)), before)
         return [row["quote_id"] for row in rows]
 
     async def _locate_order(self, conn: Any, tenant: UUID, quote_id: str) -> dict[str, Any] | None:
