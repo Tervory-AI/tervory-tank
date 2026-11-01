@@ -1,3 +1,20 @@
+## Review dependency refresh — 1 November 2026
+
+Rebased onto corrected backend `551979986876ea0795c0c2dee5eef2f67f606554`,
+which contains main `7a5132fa`. Workspace source head `5ab5816089f3be80ae322e51141d6d590c578695`.
+No new Workspace implementation changes. CRM remains founder-only.
+
+Commands in `/workspace/codex-trigger-crm`:
+
+- `git checkout codex/trigger-crm-workspace-20261031 && git rebase codex/trigger-crm-backend-20261031`: PASS, no conflicts.
+- `git push --force-with-lease=refs/heads/codex/trigger-crm-workspace-20261031:be137cb4146dee721125427c11a29810f9249ee0 origin codex/trigger-crm-workspace-20261031`: PASS, founder-authorized rebase.
+- `node tests/trigger_crm_workspace/contract.cjs`: PASS.
+- `workspace/node_modules/.bin/tsc --noEmit --incremental false -p workspace/tsconfig.json`: PASS, exit 0.
+- `git diff --check`: PASS.
+
+Earlier hosted results apply to older heads; current hosted checks pending.
+No founder browser acceptance/screenshots, production changes or new UI claimed.
+
 ## Founder-only correction — 1 November 2026
 
 Supersedes the client integration follow-up below. The route uses existing
