@@ -96,8 +96,6 @@ class EurLexAdapter:
             url = source_url(row["id"])
             raw = await http_get(url, {"Accept": "text/html", "User-Agent": USER_AGENT})
             text = legal_text(raw)
-            if not civil(text):
-                continue
             blobs.append(json.dumps({**row, "link": url, "text": text}, ensure_ascii=False).encode())
         return blobs
 
@@ -116,12 +114,23 @@ class EurLexAdapter:
             title, text = row["title"].strip(), row["text"].strip()
             if not title or len(text) < 100 or text == title:
                 raise ValueError("EUR-Lex full legal text required")
-            if _SPECIAL.search(text) or not civil(title + " " + text):
+            if _SPECIAL.search(text) or not civil(title):
+                continue
+            # Trade acts can also contain criminal provisions. Keep only civil
+            # articles, with original article headings and source attribution.
+            starts = list(re.finditer(r"(?m)^Article[ \t]+(\d+[a-z]?)\s*$", text))
+            sections = []
+            for index, match in enumerate(starts):
+                end = starts[index + 1].start() if index + 1 < len(starts) else len(text)
+                article = text[match.end():end].strip()
+                if article and civil(article):
+                    sections.append(Section("Article " + match[1], "Article " + match[1], article))
+            if not sections:
                 continue
             documents.append(build_document(
                 source, citation="CELEX:" + celex, title=title, level="international",
                 kind="regulation" if celex[5] == "R" else "statute", body="European Union",
-                sections=[Section("", title, text)], url=url, status="published",
-                doc_date=date.fromisoformat(row["date"]), effective_from=None, text=text,
+                sections=sections, url=url, status="published",
+                doc_date=date.fromisoformat(row["date"]), effective_from=None,
             ))
         return documents
