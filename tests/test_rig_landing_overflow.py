@@ -1,4 +1,5 @@
 """The shipped landing views contain decorative overflow without changing the viewport."""
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -52,5 +53,13 @@ async def test_decorative_overflow_preserves_viewport(real_chromium, tmp_path, w
     assert await page.evaluate('document.body.scrollWidth <= innerWidth')
     assert await page.evaluate(geometry) == before_geometry
     assert await page.locator('body').aria_snapshot() == before_accessible
-    assert await page.screenshot(path=str(tmp_path / 'after.png')) == before
+    after = await page.screenshot(path=str(tmp_path / 'after.png'))
+    # Keep exact equality while avoiding pytest's expensive binary sequence diff.
+    # A mismatching PNG previously spent the entire test timeout in difflib.
+    same_screenshot = after == before
+    assert same_screenshot, (
+        f"Screenshot changed: before_sha256={sha256(before).hexdigest()} "
+        f"after_sha256={sha256(after).hexdigest()}; "
+        f"files: {tmp_path / 'before.png'}, {tmp_path / 'after.png'}"
+    )
     await page.close()
