@@ -1,3 +1,28 @@
+## Founder-only correction — 1 November 2026
+
+Supersedes the client integration follow-up below. The route uses existing
+`isFounder` from `workspace/lib/admin.ts` before any Tank transport. A granted
+client, tenant admin and member are each refused on list and detail reads.
+Writes remain unavailable through this route; Tank separately enforces founder
+access and durable Command Confirm.
+
+Changed `workspace/app/api/trigger-crm/[...path]/route.ts:1,16,21` and
+`tests/trigger_crm_workspace/contract.cjs:77`. Source/test head:
+`c655fe021bb8c1d9461c5a573cf581ab460be573`; main merged at `71858c13`.
+
+Commands in `/workspace/codex-trigger-crm`:
+
+- `git checkout codex/trigger-crm-workspace-20261031 && git merge origin/main`: passed, no conflicts.
+- `node tests/trigger_crm_workspace/contract.cjs`: PASS, founder-only corridor and granted client/admin/member refusal before transport, existing tenant/query/envelope protections.
+- `workspace/node_modules/.bin/tsc --noEmit --incremental false -p workspace/tsconfig.json`: PASS, exit 0.
+- `git diff --check`: PASS.
+- Per-file commit and `git push origin codex/trigger-crm-workspace-20261031`: passed.
+
+Dependencies reused through an untracked node_modules symlink; never committed.
+No page, text, live records, model calls, production SQL or deployment changed.
+Hosted exact-head checks, founder browser acceptance and screenshots remain
+unverified. This is not founder completion evidence.
+
 # Trigger CRM Workspace read corridor
 
 Updated 31 October 2026, 11:23 PDT / 18:23 UTC. Draft; not deployed or founder accepted.
