@@ -13,6 +13,8 @@ jiter==0.18.0
 # Approved skill versions stay as published.
 pydantic==2.10.6
 PyYAML==6.0.3
+# Reuse the existing Researcher JSON Schema validator pin for BottleCRM contracts.
+jsonschema==4.26.0
 rapidfuzz==3.10.1
 selectolax==0.3.27
 redis==5.2.1

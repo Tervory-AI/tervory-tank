@@ -41,7 +41,7 @@ TOOLS = {
     "radix": ["radix.scan"],
     "zenas": ["zenas.ask", "zenas.matters", "zenas.review"],
 }
-FOUNDER_TOOLS = ["skala.list", "skala.evals", "skala.approve", "skala.retire",
+FOUNDER_TOOLS = ["trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
                  "ledger.receipts", "ledger.savings", "worker.build", "repo.prs", "repo.pr", "repo.file"]
 
 
@@ -1067,6 +1067,18 @@ class TriggerFeedbackArgs(Body):
         return self
 
 
+class TriggerCRMWriteArgs(Body):
+    resource: Literal["leads", "contacts", "estimates", "invoices"]
+    record_id: uuid.UUID | None = None
+    data: dict[str, Any] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def pinned_crm_contract(self):
+        from trigger_crm import validate_data
+        validate_data(self.resource, self.data, self.record_id is not None)
+        return self
+
+
 class SavingsArgs(Body):
     days: int = Field(default=30, ge=1, le=365)
 
@@ -1092,6 +1104,7 @@ class Adapter:
 
 
 ADAPTERS = {
+    "trigger.crm.write": Adapter("POST", "/v1/trigger/crm/write", TriggerCRMWriteArgs, "trigger.crm.write"),
     "trigger.voice.show": Adapter("POST", "/v1/trigger/voice.show", TriggerVoiceShowArgs, "trigger.voice.show"),
     "trigger.voice.set": Adapter("POST", "/v1/trigger/voice.set", TriggerVoiceSetArgs, "trigger.voice.set"),
     "trigger.voice.rollback": Adapter("POST", "/v1/trigger/voice.rollback", TriggerVoiceRollbackArgs, "trigger.voice.rollback"),

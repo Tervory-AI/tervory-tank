@@ -4540,6 +4540,7 @@ __import__("research").register(app, globals())
 app.include_router(__import__("command").router)
 __import__("personal_tokens").register(app)
 app.include_router(__import__("trigger_routes").router)
+app.include_router(__import__("trigger_crm").router)
 
 # ACCESS-1: scoped connections and browser-only credential handoff.
 app.include_router(__import__("access").router)

@@ -258,6 +258,9 @@ services:
       TANK_KEY_TEMPLATE: ${TANK_KEY_TEMPLATE:-}
       TANK_KEY_TIGER: ${TANK_KEY_TIGER:-}
       TANK_KEY_TRIGGER: ${TANK_KEY_TRIGGER:-}
+      TRIGGER_CRM_URL: ${TRIGGER_CRM_URL:-http://trigger-crm-backend:8000}
+      TRIGGER_CRM_TENANT_BINDINGS: ${TRIGGER_CRM_TENANT_BINDINGS:-}
+      TRIGGER_CRM_PAT_CONNECTOR: ${TRIGGER_CRM_PAT_CONNECTOR:-}
       TANK_KEY_MARKET_LAB: ${TANK_KEY_MARKET_LAB:-}
       TANK_KEY_RADIX: ${TANK_KEY_RADIX:-}
       TANK_KEY_TISAN: ${TANK_KEY_TISAN:-}
@@ -292,6 +295,7 @@ services:
       - tervory-gw-template
       - tervory-gw-tiger
       - tervory-gw-trigger
+      - tervory-gw-trigger-crm
       - tervory-gw-market_lab
       - tervory-gw-radix
       - tervory-gw-tisan
