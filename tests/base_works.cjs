@@ -29,6 +29,7 @@ function load(relative) {
   const requireFile = (name) => {
     if (mocks[name]) return mocks[name];
     if (name === '@/lib/tank') return load('workspace/lib/tank.ts');
+    if (name === '@/lib/workspace-origin') return load('workspace/lib/workspace-origin.ts');
     if (name.startsWith('.')) return load(path.relative(root, path.resolve(path.dirname(file), name + '.ts')));
     return workspaceRequire(name);
   };
@@ -36,6 +37,8 @@ function load(relative) {
   cache.set(file, module.exports);
   return module.exports;
 }
+// Node Request does not synthesize Host like a browser/proxy request does.
+const downloadRequest = url => new Request(url, {headers: {host: 'app.tervory.com'}});
 const record = (id, changes = {}) => ({ id, task_id: null, batch: 'shared-name', raw: { name: `Business ${id}` },
   profile: { name: { value: `Business ${id}`, source: 'input' }, website: { value: 'https://business.example/', source: 'input:verified' },
     phone: { value: '(617) 555-0100', source: 'site' }, emails: { value: ['contact@business.example'], source: 'site' } },
@@ -157,7 +160,7 @@ global.fetch = async (input, init) => {
   data.set('file', new File(['name,website\n' + Array.from({ length: 10 }, (_, i) => `Business ${i},https://business.example`).join('\n')], 'businesses.csv'));
   signedIn = false;
   assert.equal((await actions.uploadBaseCsv(data)).ok, false);
-  assert.equal((await download.GET(new Request('https://app.example/base/download?batch=shared-name'))).status, 401);
+  assert.equal((await download.GET(downloadRequest('https://app.tervory.com/base/download?batch=shared-name'))).status, 401);
   assert.equal(calls.length, 0);
   signedIn = true;
   const queued = await actions.uploadBaseCsv(data);
@@ -165,12 +168,12 @@ global.fetch = async (input, init) => {
   assert.equal(queued.rows, 10);
   assert.equal(calls[0].body.tenant_id, 'tenant-a');
   assert.equal((await actions.baseBatchStatus(queued.batch)).result.pending, 10);
-  assert.equal((await download.GET(new Request('https://app.example/base/download?batch=' + encodeURIComponent(queued.batch)))).status, 307);
+  assert.equal((await download.GET(downloadRequest('https://app.tervory.com/base/download?batch=' + encodeURIComponent(queued.batch)))).status, 307);
   store.set('tenant-a', Array.from({ length: 10 }, (_, i) => record(String(i), { batch: queued.batch })));
   const checked = await actions.baseBatchStatus(queued.batch);
   assert.equal(checked.result.total, 10);
   assert.equal(checked.result.verified, 10);
-  const response = await download.GET(new Request('https://app.example/base/download?tenant_id=forged&batch=' + encodeURIComponent(queued.batch)));
+  const response = await download.GET(downloadRequest('https://app.tervory.com/base/download?tenant_id=forged&batch=' + encodeURIComponent(queued.batch)));
   assert.equal(response.status, 307);
   const target = new URL(response.headers.get('location'));
   assert.equal(target.pathname, '/base/product/records.csv');
@@ -189,7 +192,7 @@ global.fetch = async (input, init) => {
   assert.equal((await page.loadBase()).batches.length, 0);
   assert.equal((await actions.baseBatchStatus(queued.batch)).ok, false);
   // The redirect carries no caller tenant; the product route derives it from the session.
-  assert.equal(new URL((await download.GET(new Request('https://app.example/base/download?tenant_id=tenant-a&batch=' + encodeURIComponent(queued.batch)))).headers.get('location')).searchParams.has('tenant_id'), false);
+  assert.equal(new URL((await download.GET(downloadRequest('https://app.tervory.com/base/download?tenant_id=tenant-a&batch=' + encodeURIComponent(queued.batch)))).headers.get('location')).searchParams.has('tenant_id'), false);
   assert.ok(!calls.some((call) => call.tenant === '00000000-0000-0000-0000-000000000001'));
   tenant = 'tenant-a';
   store.set(tenant, Array.from({ length: 1001 }, (_, i) => record(String(i))));
@@ -198,6 +201,6 @@ global.fetch = async (input, init) => {
   const repeated = store.get(tenant);
   repeated[1000] = repeated[999];
   assert.equal((await actions.baseBatchStatus('shared-name')).ok, false);
-  assert.equal((await download.GET(new Request('https://app.example/base/download'))).status, 400);
+  assert.equal((await download.GET(downloadRequest('https://app.tervory.com/base/download'))).status, 400);
   console.log('Base upload, polling, export, CSV safety, evidence and two-tenant isolation checks passed.');
 })().catch((error) => { console.error(error); process.exitCode = 1; });
