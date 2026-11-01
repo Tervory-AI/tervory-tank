@@ -30,6 +30,31 @@ Structural reconciliation checks all 180 original root IDs and 2318 baseline fie
 
 No application code or application tests changed. Figma structure checks and authoring screenshots are design evidence; founder acceptance remains pending.
 
+### Execution proof for the 14:25 revision
+
+Final Figma structural audit: **180 screens, 90 desktop, 90 mobile, 64 confirmation roots, zero errors**. All 2318 baseline field-value IDs/texts survive. Confirm and Cancel remain wired on every confirmation. Original desktop confirmation roots were expanded from their former 560px dialogs to full 1440px Trigger screens; mobile remains 375px. An intermediate width-based classification was corrected to use the explicit Desktop/Mobile screen names, then the complete audit was repeated.
+
+Native SPEC readbacks: CRM `192:10312` inside existing frame `101:8244`; Marketing `151:3973`; Chat bot `154:4349`. Markdown content matches the repository specifications, allowing native normalization of paragraph whitespace. Authoring screenshots reviewed: CRM desktop detail `94:1061`, Channels Filled `149:2696`, mobile drawer `153:4367`; earlier revision checks also covered lists, Composer and calendars. Founder test screenshots have not been supplied and are not claimed.
+
+Commands run for this revision in the private checkout:
+
+```sh
+git fetch origin main codex/crm-marketing-chat-design codex/crm-design
+git show origin/codex/crm-design:docs/figma/crm/SPEC.md
+git diff --check
+git add docs/figma/crm/MARKETING-SPEC.md
+git commit -m 'Apply founder single Trigger menu and Marketing reflow specification'
+git push origin codex/crm-marketing-chat-design
+git add docs/figma/crm/CHATBOT-SPEC.md
+git commit -m 'Document shared Trigger navigation and Chat bot reflow'
+git push origin codex/crm-marketing-chat-design
+git add docs/figma/crm/SPEC.md
+git commit -m 'Carry forward CRM schema and IDs with founder Trigger menu revision'
+git push origin codex/crm-marketing-chat-design
+```
+
+Results: fetch/source read/whitespace check passed; commits `5d21bb16`, `684b13bf`, `c2bb1c5d` pushed successfully. Figma structural checks used deterministic node traversal and native SPEC readback, without model API calls. Intermediate authoring API errors (unsupported native SPEC geometry/visibility and code-size limits) were corrected before readback; no failed operation is counted as completed. Local temporary-file quota errors were handled in private checkout scratch storage. No fetch, push or required-source read failed. Final proof updates are committed and pushed separately for each specification. Claude opens the PR; founder review and merging remain with the founder.
+
 DRAFT — founder approval pending. No application or live connection was created.
 
 Figma file: [Tervory designs](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=148-9). Page **4 · Marketing**, ID `148:9`. Branch `codex/crm-marketing-chat-design`.
