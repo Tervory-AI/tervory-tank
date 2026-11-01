@@ -147,3 +147,89 @@ PR467 remains draft. Independent review authority: chat `01a18da9-bec9-7291-a09e
 
 
 Harness checks and corrected failures: `node --check tests/command_acceptance_20261031/public_edge.cjs` and `consume_replay.cjs` PASS; `/tmp/base-reliability-venv/bin/ruff check --no-cache tests/command_acceptance_20261031 --select E9,F` PASS. Initial harness CI failed `tests/test_secrets.py` because a deliberately fake service placeholder was not recognized. Replaced only that literal with repository-standard `dummy-workspace-key`; `PYTHONPATH=tank /tmp/base-reliability-venv/bin/python -m pytest -q tests/test_secrets.py` → **2 passed, 9.03s**; subsequent hosted Tank PASS. `gh pr edit` failed on deprecated projectCards GraphQL fields; body updated using `gh api .../pulls/467 -X PATCH -F body=@...`. A local commit hit disk quota; sparse-checkout excluded only this lane's existing test artifacts, then commit/push succeeded. No push failed.
+
+## Founder continuation — 1 November 2026
+
+Work is isolated at `/workspace/codex-chat-cli-reland-20261031`. Existing branch
+`codex/chat-cli-reland-20261031` continues; nothing was reset. Merge `bab97f23`
+retains branch head `c7e74de3` and main `7a5132fa`. The only conflict was the two
+independent historical finding entries at the end of `.gitleaksignore`; both stay.
+Main's other changes merged automatically. The installer harness now supplies its
+own `TMPDIR` to both installer subprocesses (`cli/test/release.test.mjs:51,236`),
+because this host's `/tmp` quota caused write failures. Production code is unchanged
+by this continuation. Test commit `a3f156bc` adds the existing-token acceptance path.
+
+### Why #496 was reverted, and the existing fixes
+
+#504 reverted #496 following the [post-merge review](https://github.com/Tervory-AI/tervory-tank/pull/496#issuecomment-6548397925).
+The observed sign-in hang involved unbounded requests; Next's render-time GET tee
+also makes awaiting one body's cancellation hang. The existing fix at
+`workspace/lib/device-login.ts:63-81` uses a hard bound and drains error responses.
+`tests/device_login_next_fetch.cjs` reproduces the tee behavior before proving
+404/401/403/500 and stalled-response paths return. `tests/chats_command_stall.cjs`
+checks the conversation/roster/PAT proxy paths under stalled headers, stalled and
+trickling bodies, GC, redirects and live heartbeats.
+
+ZA approval deterministically rejected Boston's homes key: it is deliberately not
+a ZA Workspace key. The existing branch's scoped approval dependency is in
+`tank/personal_tokens.py:100-108`. The distinct-key tests at
+`tests/test_device_login.py:193,218,236,270` prove approval with the dedicated key,
+homes-key refusal, route/user/tenant restrictions and founder refusal. No key was
+read, configured or changed in this continuation. Founders' existing us-east token
+path does not require ZA approval configuration.
+
+The review also found customer model-name exposure and missing registry guards.
+The three customer regressions in the command below pass. `npm test` covers the
+private/self-hosted package, installer redirects, version bump guard and release
+checks. These fixes predate this continuation; none is recoded here. Review round 3
+approved code at `c7e74de3`; that historical review is not approval of this new head.
+
+### Commands and actual results
+
+All commands below ran from `/workspace/codex-chat-cli-reland-20261031`.
+
+```sh
+git fetch origin && git checkout codex/chat-cli-reland-20261031 && git merge origin/main
+# merge conflict: .gitleaksignore; retained both additions, removed markers
+npm ci --ignore-scripts --no-audit --no-fund --prefix cli
+npm ci --ignore-scripts --no-audit --no-fund --prefix workspace
+mkdir -p .task-tmp
+TMPDIR="$PWD/.task-tmp" npm test --prefix cli
+# 62 passed, 0 failed, 0 skipped (17.646 seconds)
+COMMAND_TEST_TOOLS="$PWD/cli/node_modules" node --expose-gc tests/chats_command_stall.cjs
+# PASS: bounded command/roster/PAT paths; live heartbeats preserved
+COMMAND_TEST_TOOLS="$PWD/cli/node_modules" node --expose-gc tests/device_login_next_fetch.cjs
+# PASS: Next dedupe lookup/decide/adapter errors and stalls + GC
+TMPDIR="$PWD/.task-tmp" workspace/node_modules/.bin/tsc --noEmit --incremental false -p workspace/tsconfig.json
+# exit 0, no diagnostics
+
+docker run -d --name chat-cli-506-acceptance -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=pooltest -p 127.0.0.1:55467:5432 postgres:16
+# disposable local PostgreSQL only; no production connection
+TMPDIR="$PWD/.task-tmp" COMMAND_ACCEPTANCE_CLIENTS=1 COMMAND_TEST_TOOLS="$PWD/cli/node_modules" PYTHONPATH=tank:tests POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55467/pooltest /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q -s -rs tests/command_acceptance_20261031/test_cross_lane.py tests/test_device_login.py tests/test_personal_tokens.py tests/test_pat_route_corridor.py tests/test_core1_proof.py::test_paused_ticks_do_not_create_runs_audits_or_reservations_and_resume tests/test_core1_proof.py::test_fresh_deploy_populates_proof_prices_idempotently_before_any_tick tests/test_command.py::test_models_roster_is_founder_only_and_404_for_everyone_else tests/test_command.py::test_customer_pin_is_refused_403_naming_no_model_before_any_write tests/test_command.py::test_customer_lap_over_every_cli_corridor_route_names_no_model_price_or_auto_model --junitxml=.task-tmp/final-acceptance.xml
+# 36 passed, 0 skipped, 12 deprecation warnings, 49.28 seconds
+git diff --check
+# exit 0
+```
+
+Initial runs are not hidden: without the checkout-local TMPDIR, 14 CLI tests failed
+with quota errors; after setting it at the runner level, four installer subprocess
+tests still failed because their explicit environment omitted TMPDIR. Passing their
+existing per-test temporary directory fixed all four. The initial 32-test Python
+CI selection passed before adding the founder regression; the final command above
+adds that regression and three existing customer checks.
+
+### Founder test remains outstanding
+
+`test_cross_lane.py:229` exercises an existing synthetic founder PAT (no login),
+the actual CLI `ask`, Workspace PAT proxy, Tank HTTP/SQL, and actual `/chats` API.
+It checks thread-list visibility, exact saved answer, identical receipt ledger ID,
+cost matching the disposable ledger, tenant ownership and one stubbed upstream
+request. All identities and responses are offline test inputs. It is not a live
+model call, native OS keychain proof, or founder browser screenshot.
+
+After founder-controlled merge/deployment, the founder runs a question through the
+CLI on the worker box using the existing token/keychain flow and opens that thread
+at `/chats` under the same user and tenant. The answer and receipt must agree.
+No founder screenshot exists yet; no offline screenshot is presented as one.
+No live message, sign-in, secret access, configuration, production SQL or deployment
+was performed. No new UI, text, sign-in implementation or pricing change was added.
