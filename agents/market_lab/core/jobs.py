@@ -278,7 +278,26 @@ async def perform_resolve(
             points = points_by_series[series_id]
         else:
             points = await _call(ledger.points_for, tenant_id, series_id)
-        nxt = resolve_prediction(row, points, clock)
+        from core.predictions import clock as prediction_clock
+        deadline = prediction_clock(row["resolve_by"])
+        if clock < deadline:
+            continue
+        if only_ids is not None:
+            # Warning resolution already selects an observation in its measured window.
+            observed = [p for p in points if str(p["date"])[:10] <= clock.date().isoformat()]
+            selected = max(observed, key=lambda p: str(p["date"])) if observed else None
+        else:
+            # A stale pre-horizon value is not evidence of the outcome. Wait for
+            # the first observation on/after the deadline; never read a future date.
+            observed = [p for p in points
+                        if deadline.date().isoformat() <= str(p["date"])[:10] <= clock.date().isoformat()]
+            selected = min(observed, key=lambda p: str(p["date"])) if observed else None
+        if selected is None:
+            continue
+        nxt = resolve_prediction(row, [{"date": deadline.date().isoformat(), "value": selected["value"]}], clock)
+        if nxt is not None:
+            nxt.update({key: row.get(key) for key in ("horizon_seconds", "confidence", "kind", "feed")})
+            nxt.update(realised_value=float(selected["value"]), realised_date=str(selected["date"])[:10])
         if nxt is None:
             continue
         if row.get("statement") != nxt["statement"] or row.get("target") != nxt["target"]:

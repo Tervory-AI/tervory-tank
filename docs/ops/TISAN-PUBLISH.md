@@ -174,3 +174,56 @@ Result: **52 passed in 7.00s**. `git diff origin/main --check` passed with no
 output. `git diff origin/main -- agents/tisan/Dockerfile` confirmed only the
 permitted COPY-line addition. These are offline results, not live acceptance
 or PR CI results. No screenshots from the founder's browser are available yet.
+
+## Merge verification against main 858dbffa
+
+Fast-forwarded this branch to the reviewed runbook head
+`0d6a0bcfc6fcb1591e4d7acd594a12bec2ee6299`, then merged
+`858dbffa9ffcaeb6fb643dcab679cd593a773349` without rebase or force.
+Resolved only `agents/tisan/app.py` and `agents/tisan/Dockerfile`, keeping both
+publish and quote mounts, all existing handlers, and the complete COPY inventory
+including quote schema, SMTP transport and Figma documentation. Trigger's
+accepted-copy scaffold changes remain from main. The reviewed dedicated-team
+instructions and Boston-only, empty-default runtime mappings remain intact.
+No live settings, GitHub publish APIs, Coolify APIs, teams or site apps were used.
+
+Commands and outcomes from `/workspace/codex-tisan-publish`:
+
+```sh
+/home/ammosync/trigger-crm-venv312/bin/python -m pytest -q tests/test_tisan_publish.py tests/tisan_promotion/test_promotion.py tests/tisan_promotion/test_tisan_promotion_api.py tests/test_tisan_quotes.py tests/test_tisan_scaffold.py tests/test_tisan_figma.py --basetemp=/workspace/codex-tisan-publish/.publish-test-tmp
+```
+
+**170 passed in 7.39s**, including all 52 publish/promotion cases.
+
+```sh
+/home/ammosync/trigger-crm-venv312/bin/ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+/home/ammosync/trigger-crm-venv312/bin/python -m compileall -q agents/tisan tank/main.py
+git diff origin/main --check
+```
+
+All passed. Comparing the entire staged main merge against the old branch with
+`git diff --check --cached` also reported an inherited blank line at EOF in
+`cli/src/update.mjs:167`; that file was not changed by publish. The publish diff
+against current main is clean.
+
+```sh
+mkdir -p .publish-pip-tmp
+TMPDIR=/workspace/codex-tisan-publish/.publish-pip-tmp /home/ammosync/trigger-crm-venv312/bin/python -m pip install --no-cache-dir --target .publish-test-deps -r agents/trigger/requirements.txt
+PYTHONPATH=/workspace/codex-tisan-publish/.publish-test-deps /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q tests/trigger_gate2/test_gate2.py --basetemp=/workspace/codex-tisan-publish/.publish-gate2-tmp
+```
+
+**13 passed, 9 skipped in 1.64s**; skipped cases require a test database.
+The initial attempt without the isolated dependency directory failed collection
+because the existing test interpreter lacked proselint. The checked-in Trigger
+requirements were installed only in this checkout and the rerun passed.
+
+From `workspace/`:
+
+```sh
+npm ci --no-audit --no-fund --cache /workspace/codex-tisan-publish/.publish-npm-cache
+NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy npm run build
+```
+
+Both passed; Next compiled, type-checked, generated all 38 static pages and
+finished build traces. The build used the existing CI's synthetic Clerk values,
+not credentials. No founder browser acceptance or live publish is claimed.

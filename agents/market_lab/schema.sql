@@ -81,6 +81,15 @@ CREATE TABLE IF NOT EXISTS agent_market_lab.predictions (
     score             numeric
 );
 
+-- Gate 2 adds metadata without changing historical prediction rows.
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS horizon_seconds bigint;
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS confidence double precision
+    CHECK (confidence >= 0 AND confidence <= 1 AND confidence NOT IN ('NaN'::float8, 'Infinity'::float8, '-Infinity'::float8));
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS realised_value numeric;
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS realised_date date;
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS kind text;
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS feed text;
+
 CREATE INDEX IF NOT EXISTS predictions_tenant_idx
     ON agent_market_lab.predictions (tenant_id, resolve_by);
 

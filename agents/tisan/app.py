@@ -147,3 +147,7 @@ _load_beside({}, 'tisan_promotion_api', 'promotion_api.py').mount(
     app, _load_beside({}, 'tisan_promotion', 'promotion.py'))
 
 _load_beside({}, 'tisan_publish', 'publish.py').mount(app, _load_beside({}, 'tisan_publish_promotion', 'promotion.py'))
+
+# J4 is API-only; no page, generated copy or automatic email acknowledgement.
+_load_beside({}, 'tisan_quotes', 'quotes.py').mount(
+    app, sys.modules['tisan_gold_sources'].founder)
