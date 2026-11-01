@@ -1,15 +1,16 @@
 import type { DashboardRead } from "@/lib/tank";
 import type { Paying, Signups } from "./sources";
-import greenDot from "./assets/status-dot-green.svg";
-import amberDot from "./assets/status-dot-amber.svg";
-import greyDot from "./assets/status-dot-grey.svg";
+const greenDot = "data:image/svg+xml,%3Csvg%20preserveAspectRatio%3D%22none%22%20overflow%3D%22visible%22%20style%3D%22display%3A%20block%3B%22%20width%3D%2210%22%20height%3D%2210%22%20viewBox%3D%220%200%2010%2010%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Ccircle%20id%3D%22Status%20dot%22%20cx%3D%225%22%20cy%3D%225%22%20r%3D%225%22%20fill%3D%22%231E7A46%22%2F%3E%0A%3C%2Fsvg%3E%0A";
+const amberDot = "data:image/svg+xml,%3Csvg%20preserveAspectRatio%3D%22none%22%20overflow%3D%22visible%22%20style%3D%22display%3A%20block%3B%22%20width%3D%2210%22%20height%3D%2210%22%20viewBox%3D%220%200%2010%2010%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Ccircle%20id%3D%22Status%20dot%22%20cx%3D%225%22%20cy%3D%225%22%20r%3D%225%22%20fill%3D%22%23B26B00%22%2F%3E%0A%3C%2Fsvg%3E%0A";
+const greyDot = "data:image/svg+xml,%3Csvg%20preserveAspectRatio%3D%22none%22%20overflow%3D%22visible%22%20style%3D%22display%3A%20block%3B%22%20width%3D%2210%22%20height%3D%2210%22%20viewBox%3D%220%200%2010%2010%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Ccircle%20id%3D%22Status%20dot%22%20cx%3D%225%22%20cy%3D%225%22%20r%3D%225%22%20fill%3D%22%238C94A6%22%2F%3E%0A%3C%2Fsvg%3E%0A";
 import { ControlActions, NeedsYou, WorkersActions } from "./widgets";
+import { checkingIn, type WorkersRead } from "./workers";
 import { count, money, passedSkills, signupAge, sourceLink, sparkPoints, wholeNumber, type activity, type Candidate, type DailyValue } from "./values";
 
 export type FounderView = {
   data: DashboardRead; signups: Signups; paying: Paying;
   activity: ReturnType<typeof activity>; paused: boolean; workersPaused: boolean;
-  models: Candidate[]; checks: number; now: number;
+  models: Candidate[]; checks: number; now: number; workers?: WorkersRead | null;
 };
 
 const squads = [
@@ -29,6 +30,19 @@ function Metric({ label, value, note, days, href }: { label: string; value: stri
     <p className="control-label">{label}</p>
     <a className="control-value" href={href}>{value}</a>
     <div className="control-metric-sub">{note && <a href={href}>{note}</a>}<a className="control-trend" href={href} aria-label={label}><Spark days={days} /></a></div>
+  </section>;
+}
+
+export function WorkersTile({ workers, now }: { workers: WorkersRead | null | undefined; now?: number }) {
+  const beat = workers?.worker ?? null;
+  const live = checkingIn(beat, now);
+  const status = !workers ? "Workers status unavailable" : !beat ? "No check-in yet" : !live ? "not checking in" : beat.state === "paused" ? "Paused" : beat.issue ? `Running · issue #${beat.issue}` : "Running · idle";
+  return <section className="dash-card" data-tile="workers"><div className="dash-subhead"><h2>Workers</h2><span className="dash-note">Boston host · WORKERS-2</span></div>
+    <div className="dash-row"><span>Status</span><span className={live ? "dash-chip" : "dash-problem"}>{status}</span></div>
+    <div className="dash-row"><span>Commit</span><span className="dash-note">{beat ? beat.commit.slice(0, 12) : "—"}</span></div>
+    <div className="dash-row"><span>Last check-in</span><span className="dash-note">{beat ? `${beat.seen_at} · ${beat.age_s}s ago` : "—"}</span></div>
+    {beat?.last_error && <div className="dash-row"><span>Last error</span><span className="dash-note">{beat.last_error}</span></div>}
+    <div className="dash-row"><span>{workers ? (workers.workers_paused ? "Workers are paused: no new task is taken" : "Workers take new tasks") : "Pause unavailable"}</span><WorkersActions paused={workers ? workers.workers_paused : null} /></div>
   </section>;
 }
 
@@ -57,7 +71,7 @@ export function FounderDashboard({ view }: { view: FounderView }) {
           const queued = rows.filter(row => row.status === "queued").reduce((total, row) => total + wholeNumber(row.jobs), 0);
           const dot = running ? greenDot : queued ? amberDot : greyDot;
           return <div className="control-squad-row" key={agent}>
-            <img src={dot.src} alt="" width="10" height="10" />
+            <img src={dot} alt="" width="10" height="10" />
             <p className="control-squad-name">{name}</p>
             <a className="control-squad-count" href={sourceLink("squad", { agent })}>{running ? <><span className="control-number">{running}</span> running</> : queued ? <><span className="control-number">{queued}</span> queued</> : "—"}</a>
           </div>;
@@ -81,5 +95,6 @@ export function FounderDashboard({ view }: { view: FounderView }) {
         <div className="control-quick"><a className="control-button primary" href="/chats">Open the window</a><a className="control-button" href="/tank/proof">Proof report</a></div>
       </section>
     </div>
+    <WorkersTile workers={view.workers} now={now} />
   </div>;
 }
