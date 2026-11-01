@@ -2,27 +2,21 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require('node:vm');
+const { workspace } = require('./workspace_loader.cjs');
 const {pathToFileURL} = require('node:url');
 const root = path.resolve(__dirname, '../..');
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
 assert.equal(new URL(input.origin).hostname, '127.0.0.1');
-const ts = require(path.join(process.env.COMMAND_TEST_TOOLS, 'typescript'));
-const source = ts.transpileModule(fs.readFileSync(path.join(root, 'workspace/lib/tank.ts'), 'utf8'), {
-  compilerOptions: {target:ts.ScriptTarget.ES2022, module:ts.ModuleKind.CommonJS}
-}).outputText;
-const moduleValue = {exports:{}};
 let upstreamCalls = 0;
 const upstreamStatuses = [];
-vm.runInNewContext(source, {module:moduleValue,exports:moduleValue.exports,
-  process:{env:{TANK_URL:input.origin,TANK_API_KEY:'dummy-workspace-key'}},
-  URL,Request,Response,Headers,Uint8Array,ReadableStream,AbortController,AbortSignal,setTimeout,clearTimeout,fetch:async(url,init)=>{
+const load = workspace({env:{TANK_URL:input.origin,TANK_API_KEY:'dummy-workspace-key'},
+  fetch:async(url,init)=>{
     assert.equal(new URL(url).origin,input.origin);
     assert.deepEqual(Object.keys(init.headers).sort(),['Authorization','Content-Type']);
     upstreamCalls++; const response = await fetch(url,init);
     upstreamStatuses.push(response.status); return response;
   }});
-const proxy = moduleValue.exports.personalCommandRequest;
+const proxy = load('lib/tank.ts').personalCommandRequest;
 const transport = async(url,init)=>{
   const request = new Request(url,init);
   return proxy(request,new URL(url).pathname.slice('/v1/command/'.length).split('/'));

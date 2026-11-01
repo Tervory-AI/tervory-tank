@@ -83,7 +83,11 @@ test('install.sh installs latest, honours TERVORY_CLI_VERSION, and refuses a tam
   assert.equal(latest.code, 0, latest.stderr);
   assert.match(latest.stdout, /SHA-256 verified: [0-9a-f]{64}/);
   assert.equal(readlinkSync(join(home, '.tervory/cli/current')), '0.1.1');
-  const version = await run(join(home, 'bin/tervory'), ['version'], { env: { PATH: process.env.PATH, HOME: home } });
+  // This installer-debris assertion excludes the independent passive-update cache.
+  // Keep the version probe offline and deterministic using the CLI's supported switch.
+  const version = await run(join(home, 'bin/tervory'), ['version'], {
+    env: { PATH: process.env.PATH, HOME: home, TERVORY_NO_UPDATE_CHECK: '1' },
+  });
   assert.equal(version.stdout, `tervory 0.1.1 (${PLATFORM})\n`);
 
   // Re-installing the same version swaps the directory (.new in, .old out) and leaves no debris.

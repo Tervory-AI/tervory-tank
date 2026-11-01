@@ -1,21 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import vm from 'node:vm';
-import ts from 'typescript';
+import { fileURLToPath } from 'node:url';
 import { run } from '../src/client.mjs';
 
-const source = await readFile(new URL('../../workspace/lib/tank.ts', import.meta.url), 'utf8');
-const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+// Load Tank and its regional dependencies as real modules, using CLI's installed TypeScript.
+process.env.COMMAND_TEST_TOOLS ??= fileURLToPath(new URL('../node_modules', import.meta.url));
+const { workspace } = await import('../../tests/command_acceptance_20261031/workspace_loader.cjs');
 const TENANT = '00000000-0000-0000-0000-000000000011';
 const ID = '00000000-0000-0000-0000-000000000022';
 const TOKEN = `tv1.us-east.${TENANT.replaceAll('-', '')}.${'x'.repeat(43)}`;
 
 function edge(upstream) {
-  const module = { exports: {} };
-  vm.runInNewContext(code, { exports: module.exports, module, process: { env: { TANK_URL: 'http://fake-tank:8000', TANK_API_KEY: 'dummy-must-not-forward' } },
-    URL, Request, Response, Headers, Uint8Array, ReadableStream, AbortController, AbortSignal, setTimeout, clearTimeout, fetch: upstream });
-  return module.exports.personalCommandRequest;
+  const load = workspace({
+    env: { TANK_URL: 'http://fake-tank:8000', TANK_API_KEY: 'dummy-must-not-forward' },
+    fetch: upstream,
+  });
+  return load('lib/tank.ts').personalCommandRequest;
 }
 function request(path, { token = TOKEN, host = 'app.tervory.com', method = 'GET', body, extra = {} } = {}) {
   return new Request(`https://${host}/v1/command/${path}`, { method, headers: {
