@@ -169,3 +169,11 @@ test("unimplemented schema keywords fail closed", () => {
   validateSchema("Test", { type: "string", format: "email" }, "slot", errors);
   expect(errors).toEqual(["slot: unsupported schema keyword format"]);
 });
+
+test("invalid image objects still report missing source and alt text", () => {
+  const data = fresh();
+  data.pages[0].sections[3].props.image = null;
+  const errors = checkContent(data).join("\n");
+  expect(errors).toContain("sections/3/props/image/src");
+  expect(errors).toContain("sections/3/props/image/alt");
+});
