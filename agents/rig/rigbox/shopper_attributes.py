@@ -142,9 +142,9 @@ def _strings(value: Any) -> list[str]:
 
 # "name: amount" or "name = amount" in any clause ("Weight: 2 kg; Dealer price: 4377", "1. Dealer price: 4377",
 # "_export_usd: 4377", "Dealer price, approx: 4377"): a number (any script) within the first 24 characters after
-# the separator. A clause starts at the text start or after ; | newline • · or ", ". The name stops at a hard
-# break; the amount may start after one ("Dealer price:\n4377") and then runs to the next hard break.
-_CLAUSE = re.compile(r"[;|\n\u2022\u00b7]|,\s")
+# the separator. A clause starts at the text start or after ; | • · ", " or any line break (\n \r \v \f NEL LS PS,
+# "Weight: 2 kg\rDealer price: 4377"). The name stops at a hard break; the amount may follow one ("Dealer price:\n4377").
+_CLAUSE = re.compile(r"[;|\n\r\v\f\x85\u2028\u2029\u2022\u00b7]|,\s")
 _PAIR = re.compile(
     r"[\W\d_]*?([A-Za-z][^:=;|\n\u2022\u00b7]{0,60}?)\s*[:=][\s;|\u2022\u00b7,]*([^;|\n\u2022\u00b7]{0,24})", re.DOTALL)
 # The be5300de opening-pair check, kept as is so nothing it hid can show.
