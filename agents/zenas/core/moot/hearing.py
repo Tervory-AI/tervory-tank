@@ -319,4 +319,26 @@ def ai_context(state: dict[str, Any], actor: Actor, token: str) -> dict[str, Any
     # sources/issues, never private bench notes that might encode that outcome.
     context["problem"].pop("bench_notes", None)
     context.pop("reveal", None)
+    context["seats"] = {s: {"kind": c["kind"], "epoch": c["epoch"]} for s, c in state["seats"].items()}
+    for entry in context["transcript"]:
+        entry.pop("actor_id", None)
     return context
+
+
+def resolve_ai(state: dict[str, Any], actor: Actor, revision: int, token: str,
+               reason: str, receipt: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Audit a failed/revoked generation without ever appending its text as a turn."""
+    out = _begin(state, actor, revision)
+    _operator(out, actor)
+    if out["pending_ai"] and out["pending_ai"]["token"] == token:
+        _invalidate_ai(out, reason)
+    matches = [a for a in out["ai_attempts"] if a["token"] == token]
+    _require(bool(matches), "ai_claim_invalid")
+    attempt = matches[-1]
+    attempt["resolution"] = reason
+    if receipt is not None:
+        saved = _receipt(receipt)
+        _require(not any(r["ledger_id"] == saved["ledger_id"] for r in out["receipts"]), "receipt_reused")
+        out["receipts"].append({**saved, "seat": attempt["seat"], "turn": None, "token": token,
+                                "discarded": True})
+    return _finish(out)
