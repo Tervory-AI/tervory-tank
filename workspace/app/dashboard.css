@@ -16,3 +16,4 @@
 .dash-status-running i{background:#001840}.dash-status-done i{background:#1e7a46}.dash-status-failed i{background:#e80008}
 .dash-client-root a:focus-visible{outline:3px solid #7498d3;outline-offset:3px}
 @media(max-width:650px){.dash-client-root .dash-client-kpis{grid-template-columns:1fr}}
+

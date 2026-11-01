@@ -58,6 +58,18 @@ export default function TasksPage() {
     return () => clearInterval(id);
   }, [tasks, refresh]);
 
+  // Dashboard deep links arrive before the asynchronous task list has rendered.
+  useEffect(() => {
+    const focusTask = () => {
+      if (!window.location.hash.startsWith("#task-")) return;
+      const target = document.getElementById(decodeURIComponent(window.location.hash.slice(1)));
+      if (target) { target.scrollIntoView({ block: "center" }); target.focus({ preventScroll: true }); }
+    };
+    focusTask();
+    window.addEventListener("hashchange", focusTask);
+    return () => window.removeEventListener("hashchange", focusTask);
+  }, [tasks]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
@@ -131,7 +143,7 @@ export default function TasksPage() {
               </h2>
               {items.length === 0 && <p className="empty">—</p>}
               {items.map((t) => (
-                <article key={t.id} className={`card ${t.status}`}>
+                <article id={`task-${t.id}`} tabIndex={-1} key={t.id} className={`card ${t.status}`}>
                   <header>
                     <b>{t.title}</b>
                     <span className="kind">{KINDS.find((k) => k.value === t.task_type)?.label ?? t.task_type}</span>
