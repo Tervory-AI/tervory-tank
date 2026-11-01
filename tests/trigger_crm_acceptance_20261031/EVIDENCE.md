@@ -1,3 +1,32 @@
+## Review correction dependency refresh — 1 November 2026
+
+Supersedes all older frozen source heads below.
+
+| Branch | Current tested head |
+|---|---|
+| #498 backend | `551979986876ea0795c0c2dee5eef2f67f606554` |
+| #497 Workspace | `5a66165485cba7f57e78b2c90c0f01ec3c54a990` |
+| #499 source before evidence-only commit | `06eb59acbc9d391641a248e5f8ae168074b3eaee` |
+| Main included by all three | `7a5132fadf30f1cb10e5c55c1d3cc216524dd64b` |
+
+Backend restored SQUADS and allowed_tools exactly to main; no Trigger squad
+addition or admin_trigger filter remains. CRM founder tool, args and adapter
+remain. Generic squad regression is restored to main. Eighteen parameterized
+client cases cover each individual squad and all grants, with/without admin.
+
+Commands in `/workspace/codex-trigger-crm`:
+
+- `git checkout codex/trigger-crm-acceptance-20261031 && git rebase codex/trigger-crm-workspace-20261031`: PASS, no conflicts. Workspace was first rebased onto corrected backend; this branch now contains both implementation heads, so no temporary assembly is needed.
+- `git push --force-with-lease=refs/heads/codex/trigger-crm-acceptance-20261031:a01c7ad45c5c3ba77ab4e2554d1cc7fa88db374f origin codex/trigger-crm-acceptance-20261031`: PASS, founder-authorized rebase.
+- `CRM_ASSEMBLED_ROOT=/workspace/codex-trigger-crm PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q -s -p no:cacheprovider tests/trigger_crm_acceptance_20261031/test_combined.py --tb=short`: **1 passed**, zero skips, one existing warning, 3.23s. Founder reads and client/admin/member denial, unconfirmed write refusal, region and org attestation refusal passed.
+- `git diff --check`: PASS.
+
+Backend focused suite: **72 passed**. Workspace route contract and TypeScript
+passed after rebase. Exact commands in their branch evidence documents.
+Current hosted checks pending; older green runs are not current-head proof.
+No live records, model calls, production changes or new UI. Founder browser
+acceptance and screenshots remain missing. Founder alone merges in order.
+
 ## Refreshed founder-only evidence — 1 November 2026
 
 This section supersedes all older source heads and client-grant acceptance below.
