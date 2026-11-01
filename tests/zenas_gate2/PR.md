@@ -18,7 +18,7 @@ Branch: `codex/zenas-gate2`. Founder merges; Claude opens the PR. This branch ha
 | `tests/test_zenas_eur_lex.py:1` | Discovery, legal text, civil scope, metadata and citations through existing research bridge. |
 | `tests/test_zenas_gate2_event_scope.py:1` | Exhaustive 49 agent/event permission combinations. |
 | `tests/test_moot_published_regions.py:1` | Real route and published reader across 16 box/request combinations; DB transport only is replaced. |
-| `tests/test_zenas_pool_corpus.py:22` | Existing catalogue inventory includes new source, with no supplied EUR-Lex snapshot. |
+| `tests/test_zenas_pool_corpus.py:24` | Existing catalogue inventory includes new source, with no supplied EUR-Lex snapshot. |
 
 Exact final commands and complete outputs: [verification.txt](verification.txt). Results: 98 Python tests passed; 33 regional/existing Moot tests passed; 15 Workspace tests passed; TypeScript, Ruff E9/F and whitespace checks passed. Tests are offline; the regulation alert suite uses a disposable loopback SMTP catcher. An earlier run with all sockets disabled had seven SMTP fixture setup errors; rerunning with loopback-only connections passed all 98 tests. During test development, transport assertions were corrected for undefined projection fields, regional store binding and the actual DB metadata/chunk shapes. No production behavior was relaxed to satisfy tests.
 
