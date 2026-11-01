@@ -157,9 +157,14 @@ def rls(box, folder):
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3600)
     if report.exists():
         import xml.etree.ElementTree as ET
-        for case in ET.parse(report).iter('testcase'):
-            if case.find('failure') is not None or case.find('error') is not None:
+        cases = list(ET.parse(report).iter('testcase'))
+        if not cases:
+            failures.append('tests/tenant_rls (no restored-copy tests executed)')
+        for case in cases:
+            if any(case.find(tag) is not None for tag in ('failure', 'error', 'skipped')):
                 failures.append(case.get('classname', '') + '::' + case.get('name', ''))
+    else:
+        failures.append('tests/tenant_rls (missing test report)')
     if result.returncode and not failures:
         failures.append('tests/tenant_rls/test_restored_copy.py (collection or runner failure)')
     return failures
