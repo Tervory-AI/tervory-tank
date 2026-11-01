@@ -229,7 +229,7 @@ class FakeProvider:
 
     def __init__(self, key="sk_test_double", test=True, status="captured"):
         self.key, self.test, self.status = key, test, status
-        self.captured, self.refunded = [], []
+        self.captured, self.refunded, self.refund_keys = [], [], []
 
     def keys(self):
         return [self.key]
@@ -238,8 +238,9 @@ class FakeProvider:
         self.captured.append((amount, currency, reference))
         return payments.Charge("ch_test_1", self.status, amount, currency, self.test)
 
-    async def refund(self, *, charge, reason):
+    async def refund(self, *, charge, reason, idempotency_key):
         self.refunded.append(reason)
+        self.refund_keys.append(idempotency_key)
         return payments.Charge(charge.reference, "refunded", charge.amount, charge.currency, True)
 
 

@@ -100,8 +100,9 @@ async def test_test_adapter_moves_money_at_most_once_per_key():
     assert first == again and first.status == "requires_capture" and first.amount == Decimal("1125.00")
     charge = await payments.capture_intent(adapter, first, reference="rig:t:q1", env=TEST_ENV)
     assert charge == await payments.capture_intent(adapter, first, reference="rig:t:q1", env=TEST_ENV) and charge.status == "captured"
-    refund = await payments.refund(adapter, charge, "order_failed", env=TEST_ENV)
-    assert refund == await payments.refund(adapter, charge, "order_failed", env=TEST_ENV)
+    refund = await payments.refund(adapter, charge, "order_failed", reference="rig:t:q1", env=TEST_ENV)
+    assert refund == await payments.refund(adapter, charge, "order_failed", reference="rig:t:q1", env=TEST_ENV)
+    assert adapter.calls[-1] == ("refund", "rig:t:q1:refund")
     assert kinds(adapter) == ["create_intent", "capture", "refund"]
     assert adapter.calls[0][1] == "rig:t:q1:intent" and adapter.calls[1][1] == "rig:t:q1:capture"
 
@@ -112,6 +113,10 @@ class LiveAdapter(payments.TestAdapter):
     async def create_intent(self, **kwargs):
         intent = await super().create_intent(**kwargs)
         return payments.Intent(intent.reference, intent.status, intent.amount, intent.currency, False)
+
+    async def find_intent(self, **kwargs):
+        intent = await super().find_intent(**kwargs)
+        return intent and payments.Intent(intent.reference, intent.status, intent.amount, intent.currency, False)
 
 
 @pytest.mark.asyncio
@@ -126,8 +131,17 @@ async def test_live_mode_is_refused_before_any_adapter_call(monkeypatch, tmp_pat
     store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path, adapter=LiveAdapter())
     with pytest.raises(RigError) as raised:
         await service.locate_accept(TENANT, body)
-    assert raised.value.status == 402 and kinds(service.payments) == ["create_intent"] and store.locate_orders == {}
-    assert store.quotes[-1]["payload"]["locate_state"]["state"] == "payment_refused"
+    # The adapter made an intent it can't prove is test-mode: never "not taken".
+    # The quote stays payment_pending; reconcile never voids or refunds an
+    # unproven intent, so it stays open (reconcile_error) for a person.
+    assert raised.value.status == 502 and kinds(service.payments) == ["create_intent"] and store.locate_orders == {}
+    state = store.quotes[-1]["payload"]["locate_state"]
+    assert state["state"] == "payment_pending" and state["note"] == "intent_unconfirmed"
+    assert state["payment"]["intent_key"].endswith(":intent") and "intent" not in state["payment"]
+    result = await service.reconcile_payments(TENANT, now=later(30))
+    assert result["reconciled"] == [] and kinds(service.payments) == ["create_intent", "find_intent"]
+    state = store.quotes[-1]["payload"]["locate_state"]
+    assert state["state"] == "payment_pending" and state["reconcile_error"] is True
 
 
 def test_the_test_adapter_is_not_wired_into_the_app_and_there_is_no_live_mode():
@@ -308,6 +322,170 @@ async def test_reconcile_refunds_a_pending_intent_that_was_captured_before_the_c
     assert list(service.payments.refunds.values())[0].status == "refunded" and store.locate_orders == {}
 
 
+class RefusesCapture(payments.TestAdapter):
+    """Capture is refused before any money moves (probe D)."""
+
+    async def capture_intent(self, *, intent, idempotency_key):
+        self.calls.append(("capture", idempotency_key))
+        raise payments.PaymentRefused("live_charge_refused")
+
+
+class UnprovenCapture(payments.TestAdapter):
+    """Capture takes the money but the charge can't be proven test-mode (probe K)."""
+
+    async def capture_intent(self, **kwargs):
+        charge = await super().capture_intent(**kwargs)
+        return payments.Charge(charge.reference, charge.status, charge.amount, charge.currency, False)
+
+
+@pytest.mark.asyncio
+async def test_a_refused_capture_is_voided(monkeypatch, tmp_path):
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path, adapter=RefusesCapture())
+    with pytest.raises(RigError) as raised:
+        await service.locate_accept(TENANT, body)
+    assert raised.value.status == 402
+    assert kinds(service.payments) == ["create_intent", "capture", "cancel_intent"] and store.locate_orders == {}
+    state = store.quotes[-1]["payload"]["locate_state"]
+    assert state["state"] == "payment_failed" and state["cancel"] == {"status": "canceled"}
+
+
+@pytest.mark.asyncio
+async def test_a_refusal_after_capture_is_refunded_by_reconcile(monkeypatch, tmp_path):
+    """Money was captured but the charge can't be proven test-mode: the shopper
+    is never told "not taken", the quote stays payment_pending, and the
+    reconciler refunds that charge, once."""
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path, adapter=UnprovenCapture())
+    with pytest.raises(RigError) as raised:
+        await service.locate_accept(TENANT, body)
+    assert raised.value.status == 502 and "refunded" in raised.value.message
+    assert kinds(service.payments) == ["create_intent", "capture", "cancel_intent"] and store.locate_orders == {}
+    state = store.quotes[-1]["payload"]["locate_state"]
+    assert state["state"] == "payment_pending" and state["note"] == "capture_unproven"
+    assert len(service.payments.charges) == 1 and service.payments.refunds == {}
+    quote_id = store.quotes[-1]["id"]
+    assert (await service.reconcile_payments(TENANT))["reconciled"] == []  # still in flight
+    result = await service.reconcile_payments(TENANT, now=later(30))
+    assert result["reconciled"] == [{"quote_id": quote_id, "from": "payment_pending", "to": "order_failed_refunded"}]
+    assert kinds(service.payments) == ["create_intent", "capture", "cancel_intent", "refund"]
+    assert service.payments.calls[-1] == ("refund", f"rig:{TENANT}:{quote_id}:refund")
+    assert list(service.payments.refunds.values())[0].status == "refunded" and store.locate_orders == {}
+    assert (await service.reconcile_payments(TENANT, now=later(60)))["reconciled"] == []
+    assert kinds(service.payments).count("refund") == 1
+
+
+@pytest.mark.asyncio
+async def test_a_lost_create_intent_response_is_voided_by_reconcile(monkeypatch, tmp_path):
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
+    body["payment_token"] = "tok_intent_lost"
+    with pytest.raises(RigError) as raised:
+        await service.locate_accept(TENANT, body)
+    assert raised.value.status == 502 and store.locate_orders == {}
+    state = store.quotes[-1]["payload"]["locate_state"]
+    quote_id = store.quotes[-1]["id"]
+    assert state["state"] == "payment_pending" and state["note"] == "intent_unconfirmed"
+    assert state["payment"]["intent_key"] == f"rig:{TENANT}:{quote_id}:intent" and "intent" not in state["payment"]
+    assert len(service.payments.intents) == 1  # authorized, response lost
+    result = await service.reconcile_payments(TENANT, now=later(30))
+    assert result["reconciled"] == [{"quote_id": quote_id, "from": "payment_pending", "to": "payment_failed"}]
+    assert kinds(service.payments) == ["create_intent", "find_intent", "cancel_intent"]
+    state = store.quotes[-1]["payload"]["locate_state"]
+    assert state["cancel"] == {"status": "canceled"} and state["payment"]["intent"].startswith("pi_test_")
+    assert service.payments.charges == {} and service.payments.refunds == {}
+
+
+@pytest.mark.asyncio
+async def test_a_create_intent_that_never_reached_the_provider_settles_as_failed(monkeypatch, tmp_path):
+    class Down(payments.TestAdapter):
+        async def create_intent(self, **kwargs):
+            raise ConnectionError("provider unreachable")
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path, adapter=Down())
+    with pytest.raises(RigError) as raised:
+        await service.locate_accept(TENANT, body)
+    assert raised.value.status == 502
+    assert store.quotes[-1]["payload"]["locate_state"]["state"] == "payment_pending"
+    result = await service.reconcile_payments(TENANT, now=later(30))
+    assert [item["to"] for item in result["reconciled"]] == ["payment_failed"]
+    assert store.quotes[-1]["payload"]["locate_state"]["note"] == "no_intent"
+    assert kinds(service.payments) == ["find_intent"]
+
+
+@pytest.mark.asyncio
+async def test_a_crash_between_ordered_and_the_supplier_send_is_cancelled_and_refunded(monkeypatch, tmp_path):
+    from rigbox.fulfilment import RigOrders
+
+    class Crash(Exception):
+        """Rig stops after recording "ordered", before the PO is sent."""
+
+    async def killed(self, **kwargs):
+        raise Crash()
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
+    monkeypatch.setattr(RigOrders, "send_supplier_order", killed)
+    with pytest.raises(Crash):
+        await service.locate_accept(TENANT, body)
+    quote_id = store.quotes[-1]["id"]
+    assert store.quotes[-1]["payload"]["locate_state"]["state"] == "ordered"
+    assert store.locate_orders[(TENANT, quote_id)]["purchase_order"]["state"] == "draft"
+    assert list(tmp_path.iterdir()) == []
+    assert (await service.reconcile_payments(TENANT))["reconciled"] == []  # too recent
+    result = await service.reconcile_payments(TENANT, now=later(30))
+    assert result["reconciled"] == [{"quote_id": quote_id, "from": "ordered", "to": "supplier_order_failed_refunded"}]
+    row = store.locate_orders[(TENANT, quote_id)]
+    assert row["order"]["state"] == "cancelled" and row["purchase_order"]["state"] == "cancelled"
+    assert kinds(service.payments) == ["create_intent", "capture", "refund"]
+    assert service.payments.calls[-1] == ("refund", f"rig:{TENANT}:{quote_id}:refund")
+    assert list(tmp_path.iterdir()) == []  # reconcile never sends
+    assert (await service.reconcile_payments(TENANT, now=later(60)))["reconciled"] == []
+    assert kinds(service.payments).count("refund") == 1
+
+
+@pytest.mark.asyncio
+async def test_a_stranded_po_the_supplier_has_is_not_refunded(monkeypatch, tmp_path):
+    """The PO file was written but Rig stopped before recording anything after
+    "ordered": reconcile marks it sent and never refunds."""
+    from rigbox import supplier_orders
+    from rigbox.fulfilment import RigOrders
+    real = RigOrders.send_supplier_order
+
+    class Crash(Exception):
+        pass
+
+    async def written_then_killed(self, **kwargs):
+        await real(self, **kwargs)
+        store.locate_orders[(TENANT, kwargs["quote_id"])]["purchase_order"].update(state="draft", sent=None)
+        raise Crash()
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
+    monkeypatch.setattr(RigOrders, "send_supplier_order", written_then_killed)
+    with pytest.raises(Crash):
+        await service.locate_accept(TENANT, body)
+    quote_id = store.quotes[-1]["id"]
+    result = await service.reconcile_payments(TENANT, now=later(30))
+    # RigOrders.reconcile finds the outbox file and marks the PO sent; nothing is stranded.
+    assert result["reconciled"] == [] and "refund" not in kinds(service.payments)
+    assert store.locate_orders[(TENANT, quote_id)]["purchase_order"]["state"] == "sent"
+    assert len(list(tmp_path.iterdir())) == 1 and supplier_orders.sent_record(tenant_id=TENANT, quote_id=quote_id)
+
+
+@pytest.mark.asyncio
+async def test_an_unconfirmed_supplier_order_is_never_refunded_on_a_guess(monkeypatch, tmp_path):
+    from rigbox import supplier_orders
+    from rigbox.fulfilment import RigOrders
+
+    async def send_fails(self, **kwargs):
+        raise DeliveryError("order_unavailable")
+
+    def unreadable(**kwargs):
+        raise DeliveryError("outbox_unavailable")
+    store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
+    monkeypatch.setattr(RigOrders, "send_supplier_order", send_fails)
+    monkeypatch.setattr(supplier_orders, "sent_record", unreadable)
+    assert (await service.locate_accept(TENANT, body))["state"] == "ordered"
+    assert store.quotes[-1]["payload"]["locate_state"]["state"] == "supplier_order_unconfirmed"
+    for minutes in (30, 60):
+        assert (await service.reconcile_payments(TENANT, now=later(minutes)))["reconciled"] == []
+    assert "refund" not in kinds(service.payments)
+    assert store.quotes[-1]["payload"]["locate_state"]["state"] == "supplier_order_unconfirmed"
+
+
 @pytest.mark.asyncio
 async def test_reconcile_is_test_mode_only(monkeypatch, tmp_path):
     store, service, orders, _, body = await paid_shop(monkeypatch, tmp_path)
@@ -417,6 +595,9 @@ async def test_real_postgres_reconcile_claims_each_stuck_quote_once(monkeypatch,
                 listed = await store.open_locate_payments(TENANT)
                 assert [quote_id for quote_id, _ in listed] == [paid, pending]
                 assert await store.open_locate_payments(str(uuid4())) == []
+                states = dict(await store.locate_states(TENANT, [done, pending, "req_missing"]))
+                assert set(states) == {done, pending} and states[done]["state"] == "supplier_ordered"
+                assert await store.locate_states(str(uuid4()), [done]) == []
                 old = listed[0][1]
                 swaps = await asyncio.gather(*(store.swap_locate_state(TENANT, paid, old, {**old, "n": i})
                                                for i in range(5)))

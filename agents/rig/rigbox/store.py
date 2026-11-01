@@ -432,6 +432,13 @@ class MemoryStore(RetailerMemoryStore):
                 and (row["payload"].get("locate_state") or {}).get("state") in _OPEN_PAYMENT_STATES]
         return rows[:max(1, min(int(limit), 1000))]
 
+    async def locate_states(self, tenant_id: str, quote_ids: list[str]) -> list[tuple[str, dict[str, Any]]]:
+        """(quote id, locate_state) for these quotes, where one is recorded. Tenant scoped."""
+        wanted = set(quote_ids)
+        return [(row["id"], copy.deepcopy(row["payload"]["locate_state"])) for row in self.quotes
+                if row["tenant_id"] == str(tenant_id) and row["id"] in wanted
+                and row["payload"].get("locate_state")]
+
     async def payment_event(self, tenant_id: str, quote_id: str, event: dict[str, Any]) -> bool:
         """Append a verified payment webhook event once per event id. Tenant scoped."""
         for row in self.quotes:
@@ -1089,6 +1096,17 @@ class PgStore(RetailerPgStore):
                 " WHERE tenant_id = $1 AND payload->'locate_state'->>'state' = ANY($2::text[])"
                 " ORDER BY created_at LIMIT $3",
                 _uuid(tenant_id), sorted(_OPEN_PAYMENT_STATES), max(1, min(int(limit), 1000)),
+            )
+        return [(row["id"], json.loads(row["state"]) if isinstance(row["state"], str) else row["state"]) for row in rows]
+
+    async def locate_states(self, tenant_id: str, quote_ids: list[str]) -> list[tuple[str, dict[str, Any]]]:
+        """(quote id, locate_state) for these quotes, where one is recorded. Tenant scoped."""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT id, payload->'locate_state' AS state FROM agent_rig.quotes"
+                " WHERE tenant_id = $1 AND id = ANY($2::text[]) AND payload ? 'locate_state'"
+                " ORDER BY created_at",
+                _uuid(tenant_id), [str(item) for item in quote_ids][:1000],
             )
         return [(row["id"], json.loads(row["state"]) if isinstance(row["state"], str) else row["state"]) for row in rows]
 

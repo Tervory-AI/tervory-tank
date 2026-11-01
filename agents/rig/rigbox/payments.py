@@ -10,8 +10,12 @@ Two adapter shapes pass the same guard:
 * PaymentProvider: one-shot capture(token) and refund (the #463 shape).
 * PaymentAdapter: pay on Accept. create_intent on Accept, capture, refund,
   and cancel_intent (void an authorization that was not captured), each
-  keyed by an idempotency key, plus webhook events verified with an
-  HMAC-SHA256 signature (verify_webhook). TestAdapter is the built-in fake
+  keyed by an idempotency key; find_intent (look an intent up by its
+  creation key, when the create response was lost); plus webhook events
+  verified with an HMAC-SHA256 signature (verify_webhook).
+
+Every refund is keyed "<reference>:refund", so a retried refund moves money
+at most once. TestAdapter is the built-in fake
   used by tests. It is never wired into the app, and there is no live mode.
 """
 from __future__ import annotations
@@ -59,7 +63,7 @@ class PaymentProvider(Protocol):
     async def capture(self, *, amount: Decimal, currency: str, token: str, reference: str,
                       metadata: dict[str, str]) -> Charge: ...
 
-    async def refund(self, *, charge: Charge, reason: str) -> Charge: ...
+    async def refund(self, *, charge: Charge, reason: str, idempotency_key: str) -> Charge: ...
 
 
 @dataclass(frozen=True)
@@ -98,7 +102,12 @@ class PaymentAdapter(Protocol):
         the intent was already captured (then nothing is voided)."""
         ...
 
-    async def refund(self, *, charge: Charge, reason: str) -> Charge: ...
+    async def find_intent(self, *, reference: str, idempotency_key: str) -> Intent | None:
+        """The intent created with this idempotency key, or None if none was
+        created. Used when create_intent's response was lost."""
+        ...
+
+    async def refund(self, *, charge: Charge, reason: str, idempotency_key: str) -> Charge: ...
 
 
 def live_key(value: str) -> bool:
@@ -133,14 +142,16 @@ async def capture(provider: PaymentProvider | None, *, amount: Any, currency: st
     return charge
 
 
-async def refund(provider: PaymentProvider | None, charge: Charge, reason: str,
+async def refund(provider: PaymentProvider | None, charge: Charge, reason: str, *, reference: str,
                  env: dict[str, str] | None = None) -> Charge:
-    return await guard(provider, env).refund(charge=charge, reason=reason)
+    """Refund a charge, keyed "<reference>:refund" so a retry refunds once."""
+    return await guard(provider, env).refund(charge=charge, reason=reason, idempotency_key=f"{reference}:refund")
 
 
 def intents(provider: Any) -> bool:
     """True when the configured adapter supports pay on Accept (intent then capture)."""
-    return all(callable(getattr(provider, name, None)) for name in ("create_intent", "capture_intent", "cancel_intent"))
+    return all(callable(getattr(provider, name, None))
+               for name in ("create_intent", "capture_intent", "cancel_intent", "find_intent"))
 
 
 def _proven(value: Any, kind: type) -> Any:
@@ -164,6 +175,29 @@ async def capture_intent(provider: Any, intent: Intent, *, reference: str,
     checked = guard(provider, env)
     charge = await checked.capture_intent(intent=_proven(intent, Intent), idempotency_key=f"{reference}:capture")
     return _proven(charge, Charge)
+
+
+async def find_intent(provider: Any, *, reference: str, env: dict[str, str] | None = None) -> Intent | None:
+    """The intent create_intent made for this reference, or None if it made none."""
+    checked = guard(provider, env)
+    found = await checked.find_intent(reference=reference, idempotency_key=f"{reference}:intent")
+    return None if found is None else _proven(found, Intent)
+
+
+async def captured_charge(provider: Any, intent: Intent, *, reference: str,
+                          env: dict[str, str] | None = None) -> Charge:
+    """The charge an earlier capture made, for refunding it only.
+
+    Same capture key, so the adapter returns the existing charge and moves no
+    money. Unlike capture_intent, the charge need not prove test mode: this is
+    used only to give money back (after a capture that could not be proven),
+    and still sits behind the guard.
+    """
+    checked = guard(provider, env)
+    charge = await checked.capture_intent(intent=intent, idempotency_key=f"{reference}:capture")
+    if not isinstance(charge, Charge) or charge.status != "captured":
+        raise PaymentRefused("capture_unconfirmed")
+    return charge
 
 
 async def cancel_intent(provider: Any, intent: Intent, *, reference: str,
@@ -226,9 +260,11 @@ class TestAdapter:
     """Built-in fake PaymentAdapter for tests. Deterministic, never moves money.
 
     token "tok_decline" declines the intent, "tok_capture_fails" fails capture,
-    "tok_capture_lost" captures but loses the response (raises ConnectionError).
+    "tok_capture_lost" captures but loses the response (raises ConnectionError),
+    "tok_intent_lost" creates the intent but loses that response.
     Same idempotency key -> same object, and each intent is captured, canceled
-    and each charge refunded at most once (counted in .calls). A canceled
+    and each charge refunded at most once (counted in .calls; refunds are
+    keyed by idempotency key, and .refunds maps charge reference -> refund). A canceled
     intent cannot be captured; a captured one cannot be canceled.
     """
 
@@ -240,6 +276,7 @@ class TestAdapter:
         self.intents: dict[str, Intent] = {}
         self.charges: dict[str, Charge] = {}
         self.refunds: dict[str, Charge] = {}
+        self.refund_keys: dict[str, Charge] = {}
         self.canceled: dict[str, Intent] = {}
         self.tokens: dict[str, str] = {}
         self.calls: list[tuple[str, str]] = []
@@ -258,7 +295,13 @@ class TestAdapter:
             self.intents[idempotency_key] = Intent(f"pi_test_{hashlib.sha256(idempotency_key.encode()).hexdigest()[:16]}",
                                                    status, Decimal(amount), currency, True)
             self.tokens[self.intents[idempotency_key].reference] = token
+            if token == "tok_intent_lost":
+                raise ConnectionError("create response lost")
         return self.intents[idempotency_key]
+
+    async def find_intent(self, *, reference: str, idempotency_key: str) -> Intent | None:
+        self.calls.append(("find_intent", idempotency_key))
+        return self.intents.get(idempotency_key)
 
     async def capture_intent(self, *, intent: Intent, idempotency_key: str) -> Charge:
         if idempotency_key not in self.charges:
@@ -282,11 +325,13 @@ class TestAdapter:
                                                     intent.amount, intent.currency, True)
         return self.canceled[idempotency_key]
 
-    async def refund(self, *, charge: Charge, reason: str) -> Charge:
-        if charge.reference not in self.refunds:
-            self.calls.append(("refund", charge.reference))
-            self.refunds[charge.reference] = Charge(charge.reference, "refunded", charge.amount, charge.currency, True)
-        return self.refunds[charge.reference]
+    async def refund(self, *, charge: Charge, reason: str, idempotency_key: str) -> Charge:
+        if idempotency_key not in self.refund_keys:
+            self.calls.append(("refund", idempotency_key))
+            self.refund_keys[idempotency_key] = Charge(charge.reference, "refunded", charge.amount,
+                                                       charge.currency, True)
+            self.refunds.setdefault(charge.reference, self.refund_keys[idempotency_key])
+        return self.refund_keys[idempotency_key]
 
     def event(self, event_id: str, kind: str, reference: str, *, timestamp: int | None = None) -> tuple[bytes, str]:
         """A signed webhook delivery, as the provider would send it."""
