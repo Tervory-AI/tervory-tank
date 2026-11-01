@@ -13,16 +13,16 @@ Module._resolveFilename = function (name, parent, ...rest) {
 require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true},
 }).outputText, filename);
-let session = { userId: 'alice', orgId: 'org_a' }, orgError, creations = 0;
+let session = { userId: 'alice', orgId: 'org_a' }, orgError, authError, membershipError, creations = 0;
 const clerk = {
-  auth: async () => session,
+  auth: async () => { if (authError) throw authError; return session; },
   currentUser: async () => ({ firstName: 'Alice' }),
   clerkClient: async () => ({
     organizations: {
       getOrganization: async ({ organizationId }) => { if (orgError) throw orgError; return { id: organizationId, name: 'Workspace' }; },
       createOrganization: async () => { creations++; return { id: 'org_personal', name: 'Alice workspace' }; },
     },
-    users: { getOrganizationMembershipList: async () => ({ data: [] }) },
+    users: { getOrganizationMembershipList: async () => { if (membershipError) throw membershipError; return { data: [] }; } },
   }),
 };
 const originalLoad = Module._load;
@@ -75,6 +75,10 @@ const tank = require('../../workspace/lib/tank.ts');
   assert.equal(calls.length, 4); // Concurrent requests coalesce.
   release();
   await Promise.all([first, second]);
+  // A different actor in the same tenant never inherits a success cooldown.
+  session = { userId: 'bob', orgId: 'org_a' };
+  mode = 403;
+  await assert.rejects(tenant.activeTenant);
   for (const status of [401, 403, 400, 404, 422]) {
     session = { userId: 'alice', orgId: `org_denied_${status}` };
     mode = status;
@@ -84,6 +88,14 @@ const tank = require('../../workspace/lib/tank.ts');
   orgError = new Error('Clerk denied');
   await assert.rejects(tenant.currentTenant, /Clerk denied/);
   orgError = undefined;
+  authError = new Error('Clerk auth failed');
+  await assert.rejects(tenant.currentTenant, /Clerk auth failed/);
+  await assert.rejects(tenant.activeTenant, /Clerk auth failed/);
+  authError = undefined;
+  session = { userId: 'alice', orgId: null };
+  membershipError = new Error('Clerk membership failed');
+  await assert.rejects(tenant.currentTenant, /Clerk membership failed/);
+  membershipError = undefined;
   session = { userId: null, orgId: null };
   assert.equal(await tenant.activeTenant(), null);
   await assert.rejects(tenant.currentTenant, /not signed in/);
