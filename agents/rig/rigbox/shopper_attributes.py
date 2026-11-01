@@ -115,10 +115,17 @@ def _strings(value: Any) -> list[str]:
     return []
 
 
-# An amount written as text: "4377", "R4377", "R 4,377.00", "USD 4377", "$4377"; not "2 Oct" or "15 rounds".
-_AMOUNT = re.compile(r"^[^A-Za-z0-9]*(?:[A-Za-z]{1,3}[^A-Za-z0-9]*)?[0-9][0-9.,\s]*[^A-Za-z0-9]*$")
+# An amount written as text: "4377", "R4377", "R 4,377.00", "USD 4377", "4377 ZAR", "4'377", and the same in
+# fullwidth or other digit scripts ("４３７７", "٤٣٧٧"); not "2 Oct" or "15 rounds" (a trailing code is
+# upper case). Matched after NFKC.
+_AMOUNT = re.compile(r"^[^A-Za-z\d]*(?:[A-Za-z]{1,3}[^A-Za-z\d]*)?\d[\d.,'\u2019\s]*[^A-Za-z\d]*(?:[A-Z]{1,3}[^A-Za-z\d]*)?$")
 
-_PAIR = re.compile(r"^\W*([A-Za-z][^:=\n]{0,60}?)\s*[:=]\s*\W{0,3}[A-Za-z]{0,3}\W{0,3}[0-9]")
+
+def _amount(text: str) -> bool:
+    return bool(_AMOUNT.match(unicodedata.normalize("NFKC", text)))
+
+
+_PAIR = re.compile(r"^\W*([A-Za-z][^:=\n]{0,60}?)\s*[:=]\s*\W{0,3}[A-Za-z]{0,3}\W{0,3}\d")
 
 
 def _private_pair(text: str) -> bool:
@@ -129,7 +136,7 @@ def _private_pair(text: str) -> bool:
 def _labelled_list(value: list[Any]) -> bool:
     """A flat list where a private-looking string sits beside a number."""
     has_number = any((isinstance(item, (int, float)) and not isinstance(item, bool))
-                     or (isinstance(item, str) and _AMOUNT.match(item)) for item in value)
+                     or (isinstance(item, str) and _amount(item)) for item in value)
     return has_number and any(private_name(item) for item in _strings(value))
 
 
@@ -154,7 +161,7 @@ def _scalars(value: Any) -> Any:
     return None
 
 
-_DIGIT = re.compile(r"[0-9]")
+_DIGIT = re.compile(r"\d")  # any digit script: "export_usd ４３７７" too
 
 
 def _pick(value: Any, keys: frozenset[str]) -> dict[str, Any] | None:
@@ -188,7 +195,7 @@ def _pick(value: Any, keys: frozenset[str]) -> dict[str, Any] | None:
         kept[key] = shaped
     if labelled:
         kept = {key: item for key, item in kept.items()
-                if item is None or (isinstance(item, str) and not _AMOUNT.match(item))}
+                if item is None or (isinstance(item, str) and not _amount(item))}
     return kept
 
 

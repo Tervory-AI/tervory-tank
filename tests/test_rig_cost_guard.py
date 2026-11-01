@@ -31,6 +31,7 @@ import logging
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -550,6 +551,16 @@ def _spellings(word: str) -> set[str]:
     return out
 
 
+_FULLWIDTH_K = "".join(chr(ord(ch) + 0xFEE0) for ch in str(_CANARY))
+_ARABIC_K = "".join(chr(0x0660 + int(ch)) for ch in str(_CANARY))
+
+
+def _visible(shown: str) -> str:
+    """What a shopper reads: fullwidth folded, every digit script as 0-9, separators gone."""
+    text = "".join(str(unicodedata.digit(ch)) if ch.isdigit() else ch for ch in unicodedata.normalize("NFKC", shown))
+    return re.sub(r"[\s,.'\u2019]", "", text)
+
+
 def _fuzz_shapes(name: Any) -> list[dict[str, Any]]:
     k = _CANARY
     url = "https://sample-arms.example/"
@@ -581,6 +592,15 @@ def _fuzz_shapes(name: Any) -> list[dict[str, Any]]:
         {"stock": {"status": name, "qty": f"R{k}"}},
         {"features": [name, str(k)]},
         {"size": [name, f"R{k}"]},
+        # Round 5: trailing currency, apostrophe and NBSP separators, fullwidth and Arabic-Indic digits.
+        {"stock": {"status": name, "qty": f"{k} ZAR"}},
+        {"price_history": [{"label": name, "price": f"{k:,} USD"}, {"label": name, "price": "4'377"}]},
+        {"features": [name, f"{k}ZAR"]},
+        {"stock": {"status": name, "qty": "R\u00a04\u00a0377"}},
+        {"features": [name, _FULLWIDTH_K]},
+        {"options": {"finish": [{"code": "x", "label": name, "price": f"USD{_FULLWIDTH_K}"}], "trim": [name, _ARABIC_K]}},
+        {"stock": {"status": f"{name} {_FULLWIDTH_K}"}},
+        {"detail": f"{name}: {_ARABIC_K}"},
     ]
 
 
@@ -591,7 +611,7 @@ def test_fuzz_private_names_never_leak_a_canary() -> None:
     for name in names:
         for shape in _fuzz_shapes(name):
             shown = json.dumps(shopper_attributes(shape), ensure_ascii=False)
-            assert str(_CANARY) not in shown and f"{_CANARY:,}" not in shown, (name, shape, shown)
+            assert str(_CANARY) not in _visible(shown), (name, shape, shown)
             checked += 1
     assert checked > 2000, checked
 
