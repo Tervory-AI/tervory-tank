@@ -65,3 +65,25 @@ async def test_actual_room_turn_retry_is_idempotent_and_privacy_is_projected(mon
         assert "never counsel" not in first.text and "actor_id" not in first.text
         saved = await HearingStore(pg_store.pool).load(OWNER, state["id"])
         assert saved["transcript"][0]["reasoning"]["opposing_argument"]
+
+
+@pytest.mark.asyncio
+async def test_ai_counsel_start_creates_swapped_pair_atomically(monkeypatch, pg_store):
+    app = application(monkeypatch, pg_store)
+    seats = {seat: {"kind": "ai"} for seat in HUMANS}
+    state = await pg_store.create(OWNER, str(uuid4()), problem(), seats)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        lock = await client.post(f"/moot/hearings/{state['id']}/lock?home_region=us-east", headers=headers(),
+            json={"request_id": str(uuid4()), "revision": 0, "payload": {}})
+        assert lock.status_code == 200
+        body = {"request_id": str(uuid4()), "revision": 1, "payload": {}}
+        path = f"/moot/hearings/{state['id']}/start?home_region=us-east"
+        first = await client.post(path, headers=headers(), json=body)
+        repeat = await client.post(path, headers=headers(), json=body)
+        assert first.status_code == repeat.status_code == 200
+        assert first.json()["hearing"]["phase"] == "hearing"
+        result = await client.get(f"/moot/hearings/{state['id']}/fairness?home_region=us-east", headers=headers())
+        report = result.json()["fairness"]
+        assert report["status"] == "incomplete"
+        secondary = await pg_store.load(OWNER, report["second_hearing"])
+        assert secondary["phase"] == "locked" and secondary["floor"] == "respondent"

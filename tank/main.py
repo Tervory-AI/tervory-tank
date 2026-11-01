@@ -3520,7 +3520,7 @@ _ZENAS_PATH = re.compile(
     r"|^moot/matches/student$"
     r"|^moot/matches/[0-9a-fA-F-]{36}/publish$"
     r"|^moot/hearing-sources$|^moot/hearings$"
-    r"|^moot/hearings/[0-9a-fA-F-]{36}(/(edit|lock|start|handover|issue|turn|ai|abandon|publish))?$"
+    r"|^moot/hearings/[0-9a-fA-F-]{36}(/(edit|lock|start|handover|issue|turn|ai|abandon|publish|pair|fairness))?$"
 )
 
 

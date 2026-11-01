@@ -57,3 +57,12 @@ def test_changed_settings_mixed_controllers_and_uncertainty_are_honest_states():
     assert evidence(a, b)["status"] == "settings_mismatch"
     b["transcript"][0]["controller"] = "human"
     assert evidence(a, b)["status"] == "counsel_controller_changed"
+
+
+def test_public_fairness_never_exports_unpublished_partner_or_actor_identifiers():
+    from agents.zenas.core.moot.fairness import public_evidence
+    a, b = paired()
+    result = public_evidence(evidence(a, b))
+    assert a["id"] not in str(result) and b["id"] not in str(result)
+    assert "owner_id" not in result and result["settings_verified"] is False
+    assert result["reading"] == "The paired hearing is incomplete."

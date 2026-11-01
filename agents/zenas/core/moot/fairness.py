@@ -70,3 +70,24 @@ def evidence(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any]:
     same_seat = first["counsel_seats"][decisions[0]] == second["counsel_seats"][decisions[1]]
     return {**result, "status": "measured", "same_party_wins_both": same_party,
             "same_seat_wins_both": same_seat, "decisions": decisions}
+
+
+def public_evidence(result: dict[str, Any]) -> dict[str, Any]:
+    labels = {
+        "incomplete": "The paired hearing is incomplete.",
+        "problem_changed": "The paired problems differ.",
+        "seats_not_swapped": "The counsel seats were not exchanged.",
+        "counsel_controller_changed": "Counsel control changed during the comparison.",
+        "judge_controller_changed": "Judge control changed during the comparison.",
+        "settings_mismatch": "The runs used different model settings.",
+        "settings_unverified": "The model settings have not been verified.",
+        "uncertain_decision": "The evidence does not support a definite comparative result.",
+    }
+    reading = labels.get(result["status"], "Fairness check not measured.")
+    if result["status"] == "measured":
+        reading = ("The same party prevailed in both runs." if result["same_party_wins_both"]
+                   else "The same AI seat prevailed in both runs." if result["same_seat_wins_both"]
+                   else "The paired runs had different results.")
+    # Partner IDs and private actor/model details never become a public export.
+    return {"reading": reading, **{k: result[k] for k in (
+        "settings_verified", "same_party_wins_both", "same_seat_wins_both")}}

@@ -90,7 +90,7 @@ def register_routes(app, pool, tenant_store, box_region, tank):
                 OR state->'seats'->'judge'->>'user_id'=$3)
                 ORDER BY updated_at DESC LIMIT 100""", UUID(actor.tenant_id), actor.region, actor.user_id)
         return {"hearings": [{"id": s["id"], "title": s["problem"]["title"], "phase": s["phase"],
-            "revision": s["revision"]} for s in (HearingStore._decode(r["state"]) for r in rows)]}
+            "revision": s["revision"], "first_side": s.get("first_side", "applicant")} for s in (HearingStore._decode(r["state"]) for r in rows)]}
 
     @app.post("/moot/hearings", status_code=201)
     async def create(body: CreateIn, home_region: str, x_tank_key: str = Header(default=""),
@@ -116,8 +116,17 @@ def register_routes(app, pool, tenant_store, box_region, tank):
         except hearing.HearingError as exc:
             error(exc)
 
+    @app.get("/moot/hearings/{hearing_id}/fairness")
+    async def fairness(hearing_id: UUID, home_region: str, x_tank_key: str = Header(default=""),
+        x_moot_tenant: str = Header(default=""), x_moot_actor: str = Header(default=""), x_moot_founder: str = Header(default="")):
+        actor = await identity(home_region, x_tank_key, x_moot_tenant, x_moot_actor, x_moot_founder)
+        try:
+            return {"fairness": await HearingStore(pool()).fairness(actor, str(hearing_id))}
+        except hearing.HearingError as exc:
+            error(exc)
+
     @app.post("/moot/hearings/{hearing_id}/{action}")
-    async def command(hearing_id: UUID, action: Literal["edit", "lock", "start", "handover", "issue", "turn", "ai", "abandon", "publish"],
+    async def command(hearing_id: UUID, action: Literal["edit", "lock", "start", "handover", "issue", "turn", "ai", "abandon", "publish", "pair"],
         body: CommandIn, home_region: str, seat: Literal["applicant", "respondent", "judge"] | None = Query(default=None), x_tank_key: str = Header(default=""), x_moot_tenant: str = Header(default=""),
         x_moot_actor: str = Header(default=""), x_moot_founder: str = Header(default="")):
         actor = await identity(home_region, x_tank_key, x_moot_tenant, x_moot_actor, x_moot_founder)
@@ -129,6 +138,8 @@ def register_routes(app, pool, tenant_store, box_region, tank):
                 # Participants can advance a configured AI seat, never change its role.
                 delegated = hearing.Actor(actor.tenant_id, state["owner_id"], actor.region, True)
                 state = await AIExecutor(store, tank()).run(delegated, str(hearing_id), str(body.request_id), body.revision)
+            elif action in ("pair", "start"):
+                state = await store.create_pair(actor, str(hearing_id), str(body.request_id), body.revision, start=action == "start")
             elif action == "edit":
                 hearing._operator(state, actor)
                 problem = await edited_problem(pool(), actor, state["problem"], body.payload.get("changes"))

@@ -133,7 +133,19 @@ class HearingStore:
         fields into that platform scope; the private tenant hearing stays private.
         """
         from .publication import public_rows
-        problem, match = public_rows(state)
+        report = None
+        if state.get("fairness_pair_id"):
+            from .fairness import evidence
+            row = await conn.fetchrow("""SELECT a.state AS first_state,b.state AS second_state
+                FROM agent_zenas.moot_hearing_pairs p
+                JOIN agent_zenas.moot_hearings a ON a.id=p.first_hearing AND a.tenant_id=p.tenant_id AND a.region=p.region
+                JOIN agent_zenas.moot_hearings b ON b.id=p.second_hearing AND b.tenant_id=p.tenant_id AND b.region=p.region
+                WHERE p.id=$1 AND p.tenant_id=$2 AND p.region=$3""", UUID(state["fairness_pair_id"]),
+                UUID(state["tenant_id"]), state["region"])
+            if row is None:
+                raise hearing.HearingError("pair_unavailable")
+            report = evidence(self._decode(row["first_state"]), self._decode(row["second_state"]))
+        problem, match = public_rows(state, report)
         platform = UUID("00000000-0000-0000-0000-000000000001")
         await conn.execute("""INSERT INTO agent_zenas.moot_problems(id,tenant_id,region,title,body,locked)
             VALUES($1,$2,$3,$4,$5::jsonb,true)""", problem["id"], platform, state["region"],
@@ -142,26 +154,36 @@ class HearingStore:
             VALUES($1,$2,$3,$4,$5,true,$6::jsonb,$7::jsonb)""", UUID(state["id"]), platform,
             problem["id"], state["region"], match["mode"], json.dumps(match["fairness"]), json.dumps(match["runs"]))
 
-    async def create_pair(self, actor: hearing.Actor, hearing_id: str, request_id: str, revision: int) -> dict[str, Any]:
+    async def create_pair(self, actor: hearing.Actor, hearing_id: str, request_id: str, revision: int,
+                          *, start: bool = False) -> dict[str, Any]:
         from .fairness import pair
         pair_id = str(uuid5(NAMESPACE_URL, f"tervory:moot:pair:{actor.tenant_id}:{hearing_id}:{request_id}"))
         second_id = str(uuid5(NAMESPACE_URL, pair_id + ":swapped"))
-        fingerprint = self.fingerprint({"action": "pair", "revision": revision})
+        action = "start" if start else "pair"
+        fingerprint = self.fingerprint({"action": action, "revision": revision})
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 state = await self._row(conn, actor, hearing_id, lock=True)
                 if await self._request(conn, actor, hearing_id, request_id, fingerprint):
                     return state
-                first, second = pair(state, actor, revision, pair_id, second_id)
-                await conn.execute("""INSERT INTO agent_zenas.moot_hearings(id,tenant_id,region,revision,state)
-                    VALUES($1,$2,$3,0,$4::jsonb)""", UUID(second_id), UUID(actor.tenant_id), actor.region, json.dumps(second))
-                await conn.execute("""INSERT INTO agent_zenas.moot_hearing_pairs(id,tenant_id,region,owner_id,first_hearing,second_hearing)
-                    VALUES($1,$2,$3,$4,$5,$6)""", UUID(pair_id), UUID(actor.tenant_id), actor.region, actor.user_id, UUID(hearing_id), UUID(second_id))
-                await conn.execute("""UPDATE agent_zenas.moot_hearings SET state=$4::jsonb,revision=$5,updated_at=now()
-                    WHERE tenant_id=$1 AND region=$2 AND id=$3 AND revision=$6""", UUID(actor.tenant_id), actor.region,
+                both_ai = all(state["seats"][s]["kind"] == "ai" for s in hearing.SIDES)
+                if start and (state.get("fairness_pair_id") or not both_ai):
+                    first = hearing.change(state, actor, revision, "start", {})
+                else:
+                    first, second = pair(state, actor, revision, pair_id, second_id)
+                    if start:
+                        first["phase"] = "hearing"
+                    await conn.execute("""INSERT INTO agent_zenas.moot_hearings(id,tenant_id,region,revision,state)
+                        VALUES($1,$2,$3,0,$4::jsonb)""", UUID(second_id), UUID(actor.tenant_id), actor.region, json.dumps(second))
+                    await conn.execute("""INSERT INTO agent_zenas.moot_hearing_pairs(id,tenant_id,region,owner_id,first_hearing,second_hearing)
+                        VALUES($1,$2,$3,$4,$5,$6)""", UUID(pair_id), UUID(actor.tenant_id), actor.region, actor.user_id, UUID(hearing_id), UUID(second_id))
+                    await self._record(conn, actor, second, request_id, fingerprint, "paired_copy")
+                changed = await conn.fetchval("""UPDATE agent_zenas.moot_hearings SET state=$4::jsonb,revision=$5,updated_at=now()
+                    WHERE tenant_id=$1 AND region=$2 AND id=$3 AND revision=$6 RETURNING revision""", UUID(actor.tenant_id), actor.region,
                     UUID(hearing_id), json.dumps(first), first["revision"], revision)
-                await self._record(conn, actor, first, request_id, fingerprint, "pair")
-                await self._record(conn, actor, second, request_id, fingerprint, "paired_copy")
+                if changed is None:
+                    raise hearing.HearingError("stale_revision")
+                await self._record(conn, actor, first, request_id, fingerprint, action)
                 return first
 
     async def fairness(self, actor: hearing.Actor, hearing_id: str) -> dict[str, Any]:
