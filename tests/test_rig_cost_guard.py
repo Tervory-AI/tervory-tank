@@ -848,3 +848,31 @@ def test_copy_phrases_count_only_in_ascii_digits_beside_a_private_word() -> None
     for items in (["Heavy duty", "2-year warranty"], ["Supplier warranty card", "2 magazines"],
                   ["Heavy duty", "Pack of 50", "Gen 5"]):
         assert shopper_attributes({"features": items}) == {"features": items}, items
+
+
+_LINE_BREAKS = ("\r", "\v", "\f", "\x85", "\u2028", "\u2029")
+
+
+def test_a_second_pair_after_any_line_break_is_hidden() -> None:
+    # A lone CR, VT, FF, NEL, LS or PS starts a clause like "\n" does; be5300de and #529 showed the second pair.
+    for br in _LINE_BREAKS:
+        for text in (f"Weight: 2 kg{br}Dealer price: 4377", f"Finish: black{br}Cost = R4377",
+                     f"Weight: 2 kg{br}1. export_usd: 4377", f"Colour: black{br}Supplier cost: 4377 AUD",
+                     f"Weight: 2 kg{br}Dealer price, approx: 4377", f"Weight: 2 kg{br}Dealer price:{br}4377"):
+            for value in ({"detail": text}, {"summary": text}, {"tagline": text}):
+                assert "4377" not in json.dumps(shopper_attributes(value)), (value, br)
+
+
+def test_a_second_pair_after_any_line_break_is_hidden_inside_lists() -> None:
+    for br in _LINE_BREAKS:
+        text = f"Weight: 2 kg{br}Dealer price: 4377"
+        for value in ({"features": [text]}, {"in_box": ["Black", text]}, {"features": ["Heavy duty", text]},
+                      {"options": {"trim": [text]}}):
+            assert "4377" not in json.dumps(shopper_attributes(value)), (value, br)
+
+
+def test_text_split_by_any_line_break_without_a_private_pair_is_kept() -> None:
+    for br in _LINE_BREAKS:
+        for text in (f"Weight: 2 kg{br}Colour: black", f"Heavy duty: yes{br}Colour: black",
+                     f"Supplier warranty: yes{br}Finish: black", f"Holds 17 rounds{br}Finish: black"):
+            assert shopper_attributes({"detail": text}) == {"detail": text}, (text, br)
