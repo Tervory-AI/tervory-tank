@@ -217,3 +217,67 @@ def approved_letter() -> dict[str, str] | None:
         return value
     except (OSError, ValueError, KeyError, TypeError):
         return None
+
+
+def mount(app: Any, guard) -> None:
+    """Private room API, using the existing verified-founder and room-key guard."""
+    from contextlib import asynccontextmanager
+    from fastapi import Header, HTTPException, Query
+
+    prior = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def lifespan(instance):
+        async with prior(instance):
+            schema = Path(__file__).with_name('schema.sql').read_text()
+            async with instance.state.pool.acquire() as conn:
+                await conn.execute(schema[schema.index('-- J4:'):])
+            yield
+
+    app.router.lifespan_context = lifespan
+
+    def store():
+        return Quotes(app.state.pool)
+
+    async def result(operation):
+        try:
+            return await operation
+        except Missing:
+            raise HTTPException(404, 'not_found') from None
+        except Refused:
+            raise HTTPException(409, 'invalid_transition') from None
+
+    @app.post('/quotes', status_code=201)
+    async def create_quote(body: Create, x_tank_key: str = Header(default=''),
+                           x_tervory_admin: str = Header(default='')):
+        guard(x_tank_key, x_tervory_admin)
+        return await result(store().create(body.tenant_id, x_tervory_admin,
+                            body.data.model_dump(mode='json'), submitted=True))
+
+    @app.get('/quotes')
+    async def list_quotes(tenant_id: UUID, limit: int = Query(default=100, ge=1, le=200),
+                          x_tank_key: str = Header(default=''),
+                          x_tervory_admin: str = Header(default='')):
+        guard(x_tank_key, x_tervory_admin)
+        return await result(store().list(tenant_id, limit))
+
+    @app.get('/quotes/{request_id}')
+    async def read_quote(request_id: UUID, tenant_id: UUID,
+                         x_tank_key: str = Header(default=''),
+                         x_tervory_admin: str = Header(default='')):
+        guard(x_tank_key, x_tervory_admin)
+        return await result(store().read(tenant_id, request_id))
+
+    @app.post('/quotes/{request_id}/state')
+    async def move_quote(request_id: UUID, body: Move,
+                         x_tank_key: str = Header(default=''),
+                         x_tervory_admin: str = Header(default='')):
+        guard(x_tank_key, x_tervory_admin)
+        return await result(store().move(body.tenant_id, request_id, x_tervory_admin, body.state))
+
+    @app.post('/quotes/{request_id}/email')
+    async def email_quote(request_id: UUID, tenant_id: UUID,
+                          x_tank_key: str = Header(default=''),
+                          x_tervory_admin: str = Header(default='')):
+        guard(x_tank_key, x_tervory_admin)
+        return await result(store().send_acknowledgement(tenant_id, request_id))
