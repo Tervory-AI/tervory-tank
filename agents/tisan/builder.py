@@ -204,7 +204,7 @@ async def execute(payload: dict, tenant_id: str, *, tank: Any = None, http: Any 
         plan = await make_plan(payload, tenant, contract, tank)
         brief["pages"] = [p["name"] for p in plan["pages"]]
         copy_ids, media = payload.get("copy", {}), payload.get("media", {})
-        if not isinstance(copy_ids, dict) or not isinstance(media, dict):
+        if not isinstance(copy_ids, dict) or not isinstance(media, dict) or any(not isinstance(v, str) for v in copy_ids.values()):
             raise ValueError("copy and media must be maps")
         pending = list(slots(plan, contract))
         known_copy = {s[0] for s in pending if not s[5]}
