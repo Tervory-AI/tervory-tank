@@ -42,3 +42,36 @@ Result: fetch succeeded, already up to date, diff check passed. Main was merged 
 Pending proof: Claude opens the PR; PR CI and separate review have not run. No founder staging/browser test or screenshots exist yet. The contract explicitly defers section visuals until approved Figma; this build proves validation, content assembly and existing scaffold checks, not section rendering. The live acceptance flow still depends on the sections, publish and Trigger changes being merged, founder skill approval in Skala, then the founder's /chats → accepted Trigger copy → staging page test. Do not call the live job done before that proof.
 
 Deploy-on-merge: the changes under agents/tisan redeploy the Tisan room and its regional copies; Tank runtime changes deploy with the main stack. No live deployment or production mutation was performed here. The founder merges.
+
+## PR #571 review fixes
+
+All four review findings addressed on the same branch, with normal pushes and no reset or merge:
+- `builder.accepted_copy` now sends the actual #567 endpoint's required `tenant_id` query as well as the tenant/region/key headers. A regression test mounts #567's actual router with ASGI: omission yields 422, the builder read succeeds, a foreign tenant yields 404, and wrong region/header/key are refused. Only database rows are doubled.
+- The scaffold call is given only home/contact/privacy names. It no longer generates static custom or about routes that would shadow #570's content catch-all. The complete plan still goes to `content/site.json`. Contact, its existing API and privacy are retained when planned. Archive and real production-server tests cover support/about routes, accepted page titles and stored accepted section props.
+- The additive `tisan.plan` seed is before BEGIN GENERATED AGENT MEMORY. The actual `hermes.record_schema.update_files` roundtrip is byte-identical and retains the policy; the generated END marker is at EOF.
+- Removed the unused `sys` import from `tests/test_tisan_builder.py` that failed CI Ruff.
+
+Dependency sources used for the interface test (isolated under this checkout's .git, not merged or edited): #567 head `7187e816bad70ddb82abd81933ab297091ade3b5`; #570 head `1b0b64d29ae2c27f384f3d428288b3f371722ead`. The test uses the real manifest, route and template, not a fixture copy. The ASGI test automatically uses the repository route after #567 merges; before then `TISAN_TRIGGER_ROUTES` selects its actual source. The real build similarly selects #570 through `TISAN_TEMPLATE` until it merges.
+
+Exact final focused command:
+
+```sh
+TISAN_TRIGGER_ROUTES=/workspace/codex-tisan-builder/.git/tisan-integration/tank/trigger_routes.py PYTHONPATH=tank /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q tests/test_command.py::test_plans_are_bounded_and_cannot_supply_authority tests/test_command.py::test_adapters_force_identity_and_do_not_accept_paid_route_overrides tests/test_command.py::test_scan_adapter_preserves_packaged_skill_input tests/test_tisan_builder.py tests/test_tisan_builder_adapter.py tests/test_tisan_builder_interfaces.py tests/test_tisan_scaffold.py
+```
+
+Result: **51 passed, 2 skipped, 2 warnings in 2.13s**. Both skipped tests require explicit real npm build execution; the interface/build test was run separately below. Warnings are the same Pydantic field-shadowing warnings recorded above.
+
+```sh
+TMPDIR=/workspace/codex-tisan-builder/.git/builder-tmp TISAN_TRIGGER_ROUTES=/workspace/codex-tisan-builder/.git/tisan-integration/tank/trigger_routes.py TISAN_TEMPLATE=/workspace/codex-tisan-builder/.git/tisan-integration/agents/tisan/templates/next-site TISAN_RUN_BUILD=1 TISAN_NPM_OFFLINE=1 TISAN_NPM_CACHE=/home/ammosync/.npm PYTHONPATH=tank /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q -s tests/test_tisan_builder_interfaces.py
+```
+
+Result: **3 passed, 2 warnings in 121.11s**. Actual Trigger ASGI copy reads supplied all text; the original build and unchanged extracted archive each passed offline npm ci, lint, build and test. The production server returned support/about with their accepted title metadata (200), contact/privacy (200), the existing contact POST response (202, `{"ok":true}`), and an unplanned route (404). Generated archive: `.git/builder-tmp/pytest-of-ammosync/pytest-1/test_built_custom_route_uses_a0/data/builds/11111111-1111-4111-8111-111111111111/integration-build/1.tar.gz`.
+
+```sh
+/home/ammosync/trigger-crm-venv312/bin/python -m ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+git diff --check
+```
+
+Results: **All checks passed!**; diff check clean.
+
+This proves routing/content plumbing, not approved section visuals: #570's section components still await approved Figma and intentionally render nothing. No #570 source was changed here. Founder staging acceptance/screenshots are still pending, and CI for the new pushed head must be green before any merge. PR #571 remains unmerged.
