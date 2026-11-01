@@ -15,6 +15,7 @@ import { ensureCaseStudyReports } from "./tank";
 export type Tenant = { tenantId: string; orgId: string; orgName: string; userId: string };
 
 async function registered(tenant: Tenant): Promise<Tenant> {
+  // Transient report bookkeeping outages do not invalidate Clerk identity.
   await ensureCaseStudyReports(tenant);
   return tenant;
 }

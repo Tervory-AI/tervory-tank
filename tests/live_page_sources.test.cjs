@@ -71,12 +71,104 @@ test('Moot index reads published room matches through Tank, with US home and no 
   assert.doesNotMatch(html, forbidden);
 });
 
-test('Moot uses its existing empty state for empty, malformed, and unavailable replies', async () => {
-  for (const fetch of [() => response({ matches: [] }), () => response({ matches: [{}] }), failed, () => { throw new Error('offline'); }]) {
-    const html = await render(harness(fetch), 'app/moot/page.tsx');
-    assert.match(html, /No published matches yet\./);
-    assert.doesNotMatch(html, forbidden);
+test('Moot transport bounds a hung read and preserves caller cancellation', async () => {
+  const abortingFetch = (_url, options) => new Promise((resolve, reject) => {
+    assert.ok(options.signal instanceof AbortSignal);
+    if (options.signal.aborted) reject(options.signal.reason);
+    else options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+  });
+  const controller = new AbortController();
+  const callerRead = harness(abortingFetch).load('lib/tank.ts').mootPublishedMatches(undefined, controller.signal);
+  controller.abort();
+  await assert.rejects(callerRead, { name: 'AbortError' });
+  // AbortSignal.timeout is unref'ed; retain a handle for this mocked transport.
+  const keepAlive = setTimeout(() => {}, 12000);
+  try {
+    const start = Date.now();
+    const result = await harness(abortingFetch).load('app/moot/store.ts').listPublishedMatches();
+    assert.deepEqual(result, { status: 'unavailable' });
+    assert.ok(Date.now() - start >= 9900);
+  } finally {
+    clearTimeout(keepAlive);
   }
+});
+
+test('Moot reader distinguishes empty, malformed, and unavailable replies without leaking details', async () => {
+  const cases = [
+    [() => response({ matches: [] }), 'empty'],
+    [() => response({ matches: [{}] }), 'malformed'],
+    [() => response({}), 'malformed'],
+    [() => response(null), 'malformed'],
+    [() => new Response('{broken'), 'malformed'],
+    [failed, 'unavailable'],
+    [() => { throw new Error('private upstream details'); }, 'unavailable'],
+    [() => { throw new DOMException('timed out', 'TimeoutError'); }, 'unavailable'],
+  ];
+  for (const [fetch, status] of cases) {
+    const reader = harness(fetch).load('app/moot/store.ts');
+    assert.equal((await reader.listPublishedMatches()).status, status);
+    assert.equal((await reader.getMatch(id)).status, status === 'empty' ? 'missing' : status);
+    if (status !== 'empty') await assert.rejects(reader.isPublicWatch(id), /Moot published matches/);
+    assert.doesNotMatch(JSON.stringify(await reader.listPublishedMatches()), /private upstream details|timed out/);
+  }
+});
+
+test('Moot pages reserve the empty and missing states for successful reads', async () => {
+  const empty = await render(harness(() => response({ matches: [] })), 'app/moot/page.tsx');
+  assert.match(empty, /No published matches yet\./);
+  assert.doesNotMatch(empty, /role="alert"/);
+  for (const [fetch, state] of [[failed, 'unavailable'], [() => response({ matches: [{}] }), 'malformed']]) {
+    for (const page of ['app/moot/page.tsx', 'app/moot/[match]/page.tsx']) {
+      const html = await render(harness(fetch), page, { params: Promise.resolve({ match: id }) });
+      assert.match(html, /role="alert"/);
+      assert.match(html, new RegExp(`data-moot-state="${state}"`));
+      assert.match(html, /Room unavailable/);
+      assert.doesNotMatch(html, /No published matches yet|Published civil appeal/);
+      assert.doesNotMatch(html, forbidden);
+    }
+  }
+});
+
+test('Moot readiness distinguishes failures from healthy empty without returning match content', async () => {
+  for (const [fetch, status, state] of [
+    [() => response({ matches: [] }), 200, 'empty'],
+    [() => response({ matches: [match] }), 200, 'available'],
+    [failed, 503, 'unavailable'],
+    [() => response({}), 502, 'malformed'],
+  ]) {
+    const result = await harness(fetch).load('app/moot/status/route.ts').GET();
+    assert.equal(result.status, status);
+    assert.equal(result.headers.get('cache-control'), 'no-store');
+    assert.equal(result.headers.get('x-robots-tag'), 'noindex');
+    assert.deepEqual(await result.json(), { status: state });
+  }
+});
+
+test('Moot validates every rendered field and excludes private/offline content', async () => {
+  const invalid = [
+    { ...match, matchId: 'invalid' }, { ...match, title: '' },
+    { ...match, transcript: [{}] }, { ...match, judgmentReasons: [null] },
+    { ...match, authorities: [{ name: 'Unsafe', source_url: 'javascript:alert(1)' }] },
+    { ...match, fairnessReading: null }, { ...match, judgmentOrder: [] },
+    { ...match, reveal: {} }, { ...match, costUsd: '0' },
+  ];
+  for (const row of invalid) {
+    assert.deepEqual(await harness(() => response({ matches: [row] })).load('app/moot/store.ts').listPublishedMatches(), { status: 'malformed' });
+  }
+  const reader = harness(() => response({ matches: [
+    { ...match, published: false, transcript: 'private' },
+    { ...match, title: '[TEST]' },
+    { ...match, matchId: '00000000-0000-0000-0000-000000000001' },
+  ] })).load('app/moot/store.ts');
+  assert.deepEqual(await reader.listPublishedMatches(), { status: 'empty', matches: [] });
+  assert.deepEqual(await reader.getMatch(id), { status: 'missing' });
+  assert.equal(await reader.isPublicWatch(id), false);
+  const publicReader = harness(() => response({ matches: [{ ...match, authorities: [{ name: 'Court', source_url: '' }], privateNotes: 'never serialize', transcript: [{ role: 'judge', text: 'Order', secret: 'hidden' }] }] })).load('app/moot/store.ts');
+  const found = await publicReader.getMatch(id);
+  assert.equal(found.status, 'available');
+  assert.equal(found.match.matchId, id);
+  assert.equal(await publicReader.isPublicWatch(id), true);
+  assert.doesNotMatch(JSON.stringify(found), /never serialize|hidden|privateNotes|secret/);
 });
 
 test('Moot detail calls the real reader and refuses private, fixture, missing, and invalid matches', async () => {
