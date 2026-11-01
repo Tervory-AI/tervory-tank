@@ -46,7 +46,7 @@ PRIVATE_KEY_PATTERN = (
     r"cost|duty|margin|landed|markup|profit|wholesale|(^|_)export|(^|_)(buy|purchase|dealer|trade)_?price"
     r"|(^|_)vat($|_)|(^|_)fx($|_)|exchange_rate|supplier|pricing_rule|^store$|^source_id$|ship.?from|^region$|^seen_at$"
 )
-_PRIVATE = re.compile(PRIVATE_KEY_PATTERN, re.I)
+_PRIVATE = re.compile(PRIVATE_KEY_PATTERN, re.IGNORECASE)
 
 # Display copy and presentation flags the widget, /rig pages and cn.py read.
 _DISPLAY = {
@@ -90,7 +90,7 @@ _CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 # real location, "Dealer price" is not.
 _PRICING = re.compile(
     r"cost|duty|margin|landed|markup|profit|wholesale|(^|_)export|(^|_)(buy|purchase|dealer|trade)_?price"
-    r"|(^|_)vat($|_)|(^|_)fx($|_)|exchange_rate|pricing_rule", re.I)
+    r"|(^|_)vat($|_)|(^|_)fx($|_)|exchange_rate|pricing_rule", re.IGNORECASE)
 
 
 def _forms(name: str) -> tuple[str, str, str]:
@@ -140,31 +140,177 @@ def _strings(value: Any) -> list[str]:
     return []
 
 
-# "name: amount" or "name = amount": a number (any script) within the first 12 characters after the separator.
-_PAIR = re.compile(r"^\W*([A-Za-z][^:=\n]{0,60}?)\s*[:=]\s*(.{0,12})", re.S)
+# "name: amount" or "name = amount" in any clause ("Weight: 2 kg; Dealer price: 4377", "1. Dealer price: 4377",
+# "_export_usd: 4377", "Dealer price, approx: 4377"): a number (any script) within the first 24 characters after
+# the separator. A clause starts at the text start or after ; | • · ", " or any line break (\n \r \v \f NEL LS PS,
+# "Weight: 2 kg\rDealer price: 4377"). The name stops at a hard break; the amount may follow one ("Dealer price:\n4377").
+_CLAUSE = re.compile(r"[;|\n\r\v\f\x85\u2028\u2029\u2022\u00b7]|,\s")
+_PAIR = re.compile(
+    r"[\W\d_]*?([A-Za-z][^:=;|\n\u2022\u00b7]{0,60}?)\s*[:=][\s;|\u2022\u00b7,]*([^;|\n\u2022\u00b7]{0,24})", re.DOTALL)
+# The be5300de opening-pair check, kept as is so nothing it hid can show.
+_OPENING_PAIR = re.compile(r"^\W*([A-Za-z][^:=\n]{0,60}?)\s*[:=]\s*(.{0,12})", re.DOTALL)
+
+
+# A label that runs straight into an amount, from any word start: "Dealer price, 4377", "Dealer price 4377",
+# "Weight: 2 kg,Dealer price: 4377", "Dealer price \u00b7 : 4377", "Cost - R4377", "Dealer price: 4\u00b7377".
+# The label is a run of letters, spaces, "_", "'", "-" and breaks; each word end in it is tried, and the last two
+# words before any money word are screened. Separators, dashes, spaces and breaks may sit between label and
+# amount. The amount starts with a non-letter or a money prefix ("R4377", "approx 4377") and ends at the next
+# break, unless that break splits a digit run ("4\u00b7377") or what comes before it holds no number and no word
+# ("$\u00b74,377", "R\u20284377", "ap\u00b7prox 4377"). It must read as money (_money_shaped), so a copy number
+# after a private-looking word ("Heavy duty, 680 g", "Heavy duty Gen 5") is kept. Only adds to the pair checks.
+_BREAKS = ";|,\n\r\v\f\x85\u2028\u2029\u2022\u00b7"
+_WORD_START = re.compile(r"(?<![A-Za-z])[A-Za-z]")
+_LABEL_RUN = re.compile(r"[A-Za-z][A-Za-z _'\-\u00ad\u200b-\u200f\u2060-\u2064\ufeff" + _BREAKS + r"]{0,60}")
+_GAP = re.compile(r"[\s:=\-" + _BREAKS + r"]*")
+_SPLIT_DIGITS = re.compile(r"(?<=\d)[" + _BREAKS + r"](?=\d)")
+_AMOUNT_BREAK = re.compile(r"[" + _BREAKS + r"]")
+_MONEY_WORDS = r"approx\w*|about|around|only|was|r|usd|zar|eur|gbp|aud|cad|nzd"
+_MONEY_PREFIX = re.compile(r"(?:" + _MONEY_WORDS + r")\.?\s*(?=[^\sA-Za-z])", re.I)
+_MONEY_WORD = re.compile(_MONEY_WORDS, re.I)
+_FRAGMENT = re.compile(
+    r"\s*(?:[^\sA-Za-z]*|[A-Za-z]{1,2}|(?i:a|ap|app|appr|appro|approx|ab|abo|abou|ar|aro|arou|aroun))\s*")
+_LABEL_WORD = re.compile(r"[A-Za-z'_]+")
+_LABEL_SPLIT = re.compile(r"[\s\-" + _BREAKS + r"]+")
+
+
+def _label_amount(form: str) -> bool:
+    for start in _WORD_START.finditer(form):
+        label = _LABEL_RUN.match(form, start.start())
+        # Every word end is tried as the end of the label, so a label may run across a break ("Dealer\nprice: 4377")
+        # and a money word split by a break is read as the amount ("Dealer price, a\u00b7pprox 4377").
+        ends = [start.start() + m.end() for m in _LABEL_WORD.finditer(label.group())]
+        if any(_label_amount_at(form, start.start(), end) for end in ends):
+            return True
+    return False
+
+
+def _label_amount_at(form: str, begin: int, end: int) -> bool:
+    label = form[begin:end]
+    raw = _LABEL_SPLIT.split(label)
+    words = list(raw)
+    while words and _MONEY_WORD.fullmatch(words[-1]):
+        words.pop()
+    if not words or not private_name(" ".join(words[-2:])):
+        return False
+    gap = _GAP.match(form, end)
+    pieces = _AMOUNT_BREAK.split(_SPLIT_DIGITS.sub("", form[gap.end():gap.end() + 48]))
+    amount = pieces[0]
+    for piece in pieces[1:3]:
+        if _has_number(amount) or not _FRAGMENT.fullmatch(amount):
+            break
+        amount = amount.rstrip() + piece.lstrip()
+    amount = amount.strip()
+    if not amount or (amount[0].isalpha() and not _MONEY_PREFIX.match(amount)):
+        return False
+    # A number glued to a word is a model or code ("Heavy duty IPX7", "M13x1"), unless that word is money or the
+    # label needs it to be private ("R4377", "Cost4377", "Buy price4377").
+    if (gap.end() == end and not _MONEY_WORD.fullmatch(raw[-1]) and not private_name(words[-1])
+            and private_name(" ".join(words[-2:-1]))):
+        return False
+    # Copy phrases are read with the label words before the amount ("Gen 5", "Pack of 50").
+    return _money_shaped(amount) and _has_number(_COPY_NUMBER.sub(" ", f"{label} {amount}".lower()))
+
+
+# Words that may sit in an amount ("85 total", "4.4 thousand", "4377 AUD"); any other word makes it copy
+# ("1000 lb rating", "1913 rail", "4140 steel").
+_AMOUNT_WORD = re.compile(
+    r"total|retail|nett?|price|value|only|mark|grand|thousand|hundred|million|bucks?|quid|sterling|apiece|inc|incl"
+    r"|excl?|vat|gst|tax|rands?|dollars?|euros?|pounds?|yen|cents?|approx\w*|about|around|was|now|each|per|unit")
+
+
+def _money_shaped(amount: str) -> bool:
+    """Text after a private label that reads as money, not copy: a number left once ASCII copy phrases are
+    taken out ("680 g" and "17 rounds" are copy), with a currency sign or word, or with no other word than
+    an amount word or a three-letter currency code ("4377", "R4377", "$4,377.00", "4377 AUD", "85 total")."""
+    if any(unicodedata.category(ch) == "Cf" for ch in amount):
+        return _amount_text(amount)
+    if not _has_number(_COPY_NUMBER.sub(" ", amount.lower())):
+        return False
+    folded = unicodedata.normalize("NFKC", amount)
+    if any(unicodedata.category(ch) == "Sc" for ch in amount) or _MONEY.search(folded.lower()):
+        return True
+    words = [token for token in _TOKEN.findall(_COPY_NUMBER.sub(" ", amount))
+             if len(token) >= 3 and token.isalpha()]
+    return all(_AMOUNT_WORD.fullmatch(word.lower()) or (len(word) == 3 and word.isupper()) for word in words)
 
 
 def _private_pair(text: str) -> bool:
-    match = _PAIR.match(unicodedata.normalize("NFKC", text))  # fullwidth "Ｂｕｙ Ｐｒｉｃｅ: 4377" too
-    return bool(match) and _has_number(match.group(2)) and private_name(match.group(1))
+    # Raw and NFKC: NFKC folds fullwidth labels ("Ｂｕｙ Ｐｒｉｃｅ: 4377") but turns "Ⅳ" into letters.
+    for form in (text, unicodedata.normalize("NFKC", text)):
+        matches = [_OPENING_PAIR.match(form)]
+        matches += [_PAIR.match(form, start) for start in (0, *(m.end() for m in _CLAUSE.finditer(form)))]
+        if any(match and _has_number(match.group(2)) and private_name(match.group(1)) for match in matches):
+            return True
+        if _label_amount(form):
+            return True
+    return False
+
+
+# Currency and unit-price words: a string with a number and one of these is an amount ("approximately R4377",
+# "43 rand", "99 per unit").
+_MONEY = re.compile(
+    r"(?<![a-z])r\s?\d|\b(usd|zar|eur|gbp|rand|dollars?|euros?|pounds?|cents?|per|each|ea|unit|net|incl|excl"
+    r"|approx\w*|about|around)\b")
+_TOKEN = re.compile(r"[^\W_]+")
+
+
+# Numbers that are product copy, not an amount: "2-year warranty", "2 magazines", "Holds 17 rounds", "Pack of 50", "Gen 5".
+# ASCII digits only, matched on the text as written: a copy phrase in another script or with invisible characters
+# ("\u2167\u2165 rounds", "\uff18\uff15 rounds", "Holds 8\u200b5 rounds") is not copy, so its number still counts.
+_COPY_NUMBER = re.compile(
+    r"[0-9]+(?:\s*-\s*|\s+)?(?:years?|yrs?|months?|weeks?|days?|hours?|magazines?|mags?|rounds?|packs?|pieces?|pcs?"
+    r"|sets?|slots?|inch(?:es)?|mm|cm|kg|g|lbs?|oz|ml)\b"
+    r"|\b(?:pack|set|box|case)\s+of\s+[0-9]+\b|\b(?:holds|gen|mk)\s*[0-9]+\b")
+
+
+def _amount_text(text: str) -> bool:
+    """A string that reads as an amount rather than copy.
+
+    It holds a number and has 3 or more numeric characters in any script ("4377 rand", "USD 4,377.00",
+    "\u2163\u2162\u2166\u2166"), has no word of 3 or more letters ("R 43", "4.4k", "NDM3Nw=="), carries a currency
+    sign or word ("\u20ac43", "43 rand", "99 per unit"), or keeps a number once known copy phrases are taken out
+    ("85 total", "85 AUD", "4.4 thousand", "was 85", "\u2167\u2165 total"). Only "2-year warranty",
+    "2 magazines", "Holds 17 rounds", "Pack of 50", "Gen 5" and the like, in ASCII digits, are copy.
+    """
+    # Copy phrases are matched on the text as written, and never when it hides invisible characters.
+    visible = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+    left = text.lower() if visible != text else _COPY_NUMBER.sub(" ", text.lower())
+    text = visible
+    numeric = sum(unicodedata.numeric(ch, None) is not None for ch in text)
+    if not numeric:
+        return False
+    # A word is a whole token of 3+ letters with no numeric character ("NDM3Nw" is not one).
+    words = [token for token in _TOKEN.findall(text)
+             if len(token) >= 3 and all(ch.isalpha() and unicodedata.numeric(ch, None) is None for ch in token)]
+    folded = unicodedata.normalize("NFKC", text).lower()
+    return (numeric >= 3 or not words or any(unicodedata.category(ch) == "Sc" for ch in text)
+            or bool(_MONEY.search(folded)) or _has_number(left))
 
 
 def _labelled_list(value: list[Any]) -> bool:
-    """A flat list where a private-looking string sits beside (or carries) a number in any form."""
-    has_number = any((isinstance(item, (int, float)) and not isinstance(item, bool))
-                     or (isinstance(item, str) and _has_number(item)) for item in value)
-    return has_number and any(private_name(item) for item in _strings(value))
+    """A flat list where a private-looking string labels an amount: it sits beside a number or an
+    amount-like string, or carries a number itself ("Dealer price 4377"). A private word beside
+    ordinary copy (["Heavy duty", "2-year warranty"]) labels nothing."""
+    private = [item for item in _strings(value) if private_name(item)]
+    if not private:
+        return False
+    if any(_has_number(item) for item in private):
+        return True
+    return any((isinstance(item, (int, float)) and not isinstance(item, bool))
+               or (isinstance(item, str) and _amount_text(item)) for item in value)
 
 
 def _scalars(value: Any) -> Any:
     """A scalar, or a list of scalars. Anything nested is dropped (None).
 
-    A list holding a private-looking string and a number is dropped whole:
-    in ["export_usd", 4377] the string labels the number beside it. Text
-    that opens with a "name: number" pair whose name is private
-    ("export_usd: 4377", "Dealer price = R4377") is dropped. Prose is not
-    otherwise screened word by word, since copy such as "heavy duty" or
-    "supplier warranty" is ordinary there and labels no number.
+    A list where a private-looking string labels an amount is dropped whole:
+    in ["export_usd", 4377] or ["Dealer price", "R 4,377"] the string labels
+    the amount beside it. Text with a "name: number" pair whose name is
+    private, in any clause ("export_usd: 4377", "Weight: 2 kg; Dealer price
+    = R4377") is dropped. Prose is not otherwise screened word by word, since
+    copy such as "heavy duty" or "supplier warranty" is ordinary there and
+    labels no amount: ["Heavy duty", "2-year warranty"] is kept.
     """
     if isinstance(value, str):
         return None if _private_pair(value) else value
