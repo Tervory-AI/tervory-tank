@@ -240,6 +240,16 @@ jobs:
           # Market Lab real-Postgres proofs (subscriptions, round trip, real Tank, documents,
           # warning job); they skip without it. Tervory Review on #486, item 2.
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/market_test
+      - name: Runner memory and kernel log after a failed suite
+        # A crashed xdist worker looks the same whether pytest-timeout killed it or the
+        # kernel did (OOM). This prints the evidence; it never changes the result.
+        if: failure()
+        continue-on-error: true
+        timeout-minutes: 2
+        run: |
+          free -m || true
+          df -h /dev/shm /tmp || true
+          { sudo -n dmesg -T 2>/dev/null || echo "dmesg not readable on this runner"; } | grep -iE 'oom|killed process|segfault|out of memory|not readable' | tail -n 40
 
   workspace:
     needs: [changes, runner]
