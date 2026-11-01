@@ -1,5 +1,35 @@
 # Chat bot · design proposal
 
+## Trigger menu revision · founder 1 November 2026, 14:25
+
+This revision supersedes the earlier Workspace/CRM submenu design and the pending Estimates rename. CRM is Trigger. Applied across all 180 founder/store screens: CRM 92 (64 entity screens plus 28 confirmations), Marketing 44 and Chat bot 44. Every original screen ID, field value node and confirmation step is retained.
+
+One 240px left menu only. Top: the existing approved Tervory on-white logo, client switcher, then Trigger bound to `color/accent/trigger` (`VariableID:72:9815`). The source asset is `workspace/public/brand/tervory-logo-on-white.png`, image hash `f5ac182d72fee0efa7e44827420ee36fb292e8d9`; the white stamp is not used.
+
+| Draft group | Areas in order |
+|---|---|
+| Writing | write, voice |
+| CRM | Leads, Accounts, Contacts, Opportunities, Cases, Tasks |
+| Sales | Quotes, Invoices |
+| Marketing | Channels, Calendar, Composer, Google reviews |
+| Chat bot | Inbox, Settings |
+
+Bottom: All products (back to all products), Receipts, Billing, Settings. Group labels and the All products label remain draft wording for founder approval. The Workspace product list is removed from every Trigger screen. Quotes is the founder-authorized display name for BottleCRM Estimates; schema names, estimate bindings and confirmation fields remain unchanged.
+
+Shared editable component set `180:8549`: desktop menu `180:8387`, mobile menu `180:8467`; mobile bar `180:8550`. At 1440, work area starts at x=240 and is 1200px wide, with 1136px usable content after 32px side padding: a 180px gain. Lists use full-width tables; wide schemas keep horizontal scrolling without deleting columns. Detail forms use two columns; Composer draft/check panels sit beside each other. At 375, content stacks below a 64px Trigger bar. One drawer contains the same 240px menu and groups; its 375px overlay includes a dismiss scrim. Groups scroll vertically on mobile, while top/bottom controls stay pinned.
+
+Drawer roots retain their IDs: CRM `98:9181` / `98:9227`, Marketing `150:4047` / `150:4061`, Chat bot `153:4367` / `153:4381`. Navigation to designed areas is wired; cross-page actions are Figma file references. No new Writing or account destination screens were invented.
+
+In-screen design-index strips are removed; the screen registers below are the design index on SPEC only. Existing page titles remain. Channels has one compact 64px row per channel: name, account, status and exactly one visible Connect or Disconnect button according to state. Disconnect retains its confirmation. Mobile Channels uses horizontal table scrolling.
+
+The 42 client-site widget frames remain client-branded visitor surfaces without Trigger founder chrome. They are not Trigger store screens and retain their existing IDs and source fields.
+
+### Revision validation
+
+Structural reconciliation checks all 180 original root IDs and 2318 baseline field-value IDs/texts (CRM 1678, Marketing 380, Chat bot 260). No baseline field was removed or changed. The expanded hidden-layer audit also sees 164 pre-existing CRM table-header value internals omitted by the original visible-instance snapshot; these are header internals, not added records. All 64 confirmation roots remain. Every desktop root has exactly one 240px Trigger menu and a 1200px work area; every mobile root has the Trigger bar and one same-page drawer. No old Workspace product labels or in-screen design-index frame remains.
+
+No application code or application tests changed. Figma structure checks and authoring screenshots are design evidence; founder acceptance remains pending.
+
 DRAFT — founder approval pending. Design only; no bot, live connection, lead or quote was created.
 
 Figma file: [Tervory designs](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=148-10). Page **5 · Chat bot**, ID `148:10`. Branch `codex/crm-marketing-chat-design`.
@@ -8,7 +38,7 @@ Figma file: [Tervory designs](https://www.figma.com/design/ZnphBOJU6657tohGLD3Iz
 
 Founder pasted brief, 1 November 2026; existing CRM page `93:2` and `origin/codex/crm-design:docs/figma/crm/SPEC.md`; `agents/trigger/README.md`; widget brand model from `agents/tisan/templates/next-site/app/tokens.css`. All newly drawn wording is draft wording for founder approval. Store-side screens are founder-only, like CRM; the website widget is the separate visitor-facing surface. No old rejected dashboard, client sidebar, signup or billing proposal is approved by this design job.
 
-Store: exact CRM field/action/mobile components `93:6`, `93:4`, `93:9`, side menu item variants `43:409` / `43:421`, founder chrome, typography and CRM accent `VariableID:72:9823`. Desktop 1440×900 and mobile 375×812. Existing CRM entity screens are preserved. Leads and Estimates receive drafts; the Estimates menu has not been renamed.
+Store: existing CRM field/action components `93:6` and `93:4`, local variables and typography are reused. Trigger chrome and responsive layout follow the controlling revision above. Leads and Quotes receive drafts; underlying Estimate bindings remain unchanged.
 
 Website widget: no Tervory logo, founder menu, CRM accent or internal development labels. Widget component set `152:3622` has 14 variants (7 views × Zero/Filled) and linked instances across 1440×900, 390×844 and additionally 375×812. Body uses Atkinson Hyperlegible and headings Literata, matching the existing Tisan template. Blank host area is not a fabricated client website. No client logo/name/content is invented.
 
@@ -273,7 +303,7 @@ Figma collection **Chat bot / Client brand · unconfigured**, mode **Awaiting cl
 ## Founder confirmation and draft lifecycle
 
 - Lead capture creates a **draft** in Leads with source-conversation identity. Store confirmation reviews name/contact/details before activation. Do not treat visitor submission or a prototype click as store consent.
-- Quote request creates a **draft** in Estimates with contact, request, requested items and source conversation. Store confirmation is required before any quote is issued; no amount, price, payment, currency or invoice is invented. This design does not add payment or billing flows.
+- Quote request creates a **draft** in Quotes (BottleCRM Estimates) with contact, request, requested items and source conversation. Store confirmation is required before any quote is issued; no amount, price, payment, currency or invoice is invented. This design does not add payment or billing flows.
 - Send reply: review the exact conversation, recipient and outgoing text before confirmation; no reply is sent here.
 - Hand over: review conversation/person/reason before confirmation. No fabricated staff roster or availability is supplied.
 - Bot settings: review enabled state, opening hours/time zone, greeting, allowed source sets and hand-over rules before confirmation. On/Off/Save settings are draft controls only.
@@ -287,7 +317,7 @@ The current BottleCRM Lead/Estimate schema is reused for named CRM fields where 
 |---|---|---|
 | Website widget, conversation list/detail, human inbox/handover | Chatwoot, already on Boston per the founder brief | Reuse existing deployment; exact supported widget/inbox API and branding contract need verification before implementation; this design did not inspect secrets or deploy it |
 | Catalogue/FAQ/document source restriction and source links | Existing client-scoped data/retrieval and Chatwoot message metadata | Verify actual source mapping; never recode an available engine or let Chatwoot itself imply retrieval exists |
-| Leads / Estimates draft records and confirmation | Existing BottleCRM and Tervory confirmation components | Verify adapter mapping and draft lifecycle; no new CRM implementation |
+| Leads / Quotes (BottleCRM Estimates) draft records and confirmation | Existing BottleCRM and Tervory confirmation components | Verify adapter mapping and draft lifecycle; no new CRM implementation |
 | Settings | Existing widget/inbox configuration where supported | Reuse supported settings; no settings were changed |
 
 No model calls were used for drafting or checking this design. Future answering must follow the existing product architecture; it is not implemented or enabled by these frames.
@@ -385,14 +415,13 @@ All greetings, client identities, visitor/bot/person messages, review states, so
 
 ## Validation and evidence
 
-Deterministic audit: 44 store screens, 42 widget screens, 260 store field-value instances; viewport errors 0, unbound solid widget fills 0, wrong widget font families 0. Store editable descendant types: FRAME=192, TEXT=832, INSTANCE=492. Visual composition checks include mobile sourced answer, mobile quote draft and desktop store transcript. Save draft actions were pinned in the footer so they remain visible while form content scrolls. No complete-UI raster was used; Figma authoring proof is not founder browser acceptance. Founder approval and final review remain pending.
-
+Initial creation audit (before the 14:25 reflow): Deterministic audit: 44 store screens, 42 widget screens, 260 store field-value instances; viewport errors 0, unbound solid widget fills 0, wrong widget font families 0. Store editable descendant types: FRAME=192, TEXT=832, INSTANCE=492. Visual composition checks include mobile sourced answer, mobile quote draft and desktop store transcript. Save draft actions were pinned in the footer so they remain visible while form content scrolls. No complete-UI raster was used; Figma authoring proof is not founder browser acceptance. Founder approval and final review remain pending. Current geometry and preservation evidence is recorded in the controlling revision above; descendant counts here are historical.
 
 ## Final handoff proof · 1 November 2026
 
-Native Figma SPEC: `154:4349`. Draft close-control wording: **Close**; this also awaits approval. Existing CRM retains all 64 screen IDs; 34 source submenus have the exact order ending Estimates → Marketing → Chat bot, with zero order errors. The rename decision block `149:34013` is a child of original SPEC frame `101:8244`.
+Native Figma SPEC: `154:4349`. Draft close-control wording: **Close**; this also awaits approval. The controlling 14:25 revision above supersedes the earlier submenu and rename proof. Existing screen registers and confirmation IDs remain valid.
 
-Mobile source/local drawers were resized/rebuilt within their existing/new IDs so all ten labels and Close fit inside 375×812. Newly created store menus use the original CRM white-menu paint overrides with only the current module active; this avoids importing the dark workspace-menu defaults. No original CRM entity content was changed. New content-container spacing is linked to existing `space/*` variables.
+Mobile drawers now use the shared Trigger menu and a dismiss scrim within the same preserved root IDs. Content spacing uses existing space variables; original entity field nodes and values remain.
 
 Final rendered-binding audit: 46 distinct label/binding pairs, zero wrong heading/body font families. Exact rendered field paths follow below. The arrays/dictionary paths in the conceptual field register describe the same proposed data contract; none is an assertion of an existing scheduler or Chatwoot API.
 
@@ -464,4 +493,3 @@ Figma authoring screenshots reviewed: sourced-answer widget `152:4231`, quote wi
 | Draft lead | `[lead.id]` |
 | Draft estimate | `[estimate.id]` |
 | Sources | `[bot.sources]` |
-
