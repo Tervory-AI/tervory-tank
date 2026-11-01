@@ -30,6 +30,10 @@ _OFFICIAL_STATUTES = frozenset({"govza-acts", "govza-regulations"})
 # The US scheduler allows two hours for the entire night. A progressing bulk
 # archive must also yield; its no-progress watchdog alone cannot bound it.
 _US_COURTLISTENER_SECONDS = 30 * 60
+# ZA's existing scheduler also allows two hours. With 18 live catalogue
+# sources, five minutes each leaves thirty minutes for the remaining jobs.
+# A slow early source must not starve every court archive later in the list.
+_ZA_SOURCE_SECONDS = 5 * 60
 
 
 def packaged_snapshots(region: str) -> dict[str, list[bytes]]:
@@ -119,6 +123,21 @@ async def run_nightly(
 
 
 async def _update_nightly_source(store: Store, source, **kwargs) -> None:
+    if kwargs["region"] == "za" and kwargs["live"] and kwargs["snapshots"] is None:
+        window = asyncio.timeout(_ZA_SOURCE_SECONDS)
+        try:
+            async with window:
+                await _update_source(store, source, **kwargs)
+        except TimeoutError:
+            if not window.expired():
+                raise
+            await store.record_source(source)
+            await store.record_run(
+                source.source_id, status="stalled",
+                detail="nightly source time budget reached; the next run retries from the saved checkpoint",
+                documents=await store.instrument_count(source.source_id), when=kwargs["when"],
+            )
+        return
     bounded = (
         kwargs["region"] == "us-east" and source.source_id == "courtlistener"
         and kwargs["live"] and kwargs["snapshots"] is None
@@ -492,7 +511,7 @@ async def _live_archive(
             when=when,
         )
         return True
-    except Exception:
+    except (Exception, asyncio.CancelledError):
         # The judgments already stored stay; the next night resumes after them.
         await stream.keep_progress()
         raise
