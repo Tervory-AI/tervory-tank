@@ -5,6 +5,7 @@ import argparse
 import asyncio
 from contextlib import contextmanager
 import json
+import ipaddress
 import os
 from pathlib import Path
 import re
@@ -77,11 +78,13 @@ def sandbox():
         command('docker', 'run', '-d', '--pull=never', '--name', box.qd,
                 '--network', box.name, '--memory=1g', '--cpus=1',
                 '--label', 'tervory.restore-drill=' + box.name,
-                '-p', '127.0.0.1::6333', QDRANT_IMAGE)
-        port = command('docker', 'port', box.qd, '6333/tcp').decode().strip()
-        if not re.fullmatch(r'127\.0\.0\.1:\d+', port):
-            raise RuntimeError('Disposable Qdrant must bind loopback only')
-        box.url = 'http://' + port
+                QDRANT_IMAGE)
+        address = command('docker', 'inspect', '--format',
+                          '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',
+                          box.qd).decode().strip()
+        if not ipaddress.ip_address(address).is_private:
+            raise RuntimeError('Disposable Qdrant must use its private bridge address')
+        box.url = 'http://' + address + ':6333'
         box.wait()
         yield box
     finally:
