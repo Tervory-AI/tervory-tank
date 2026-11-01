@@ -80,6 +80,8 @@ def test_undeclared_or_prefix_similar_case_in_ruling_text_is_not_verified_by_id_
 
 @pytest.mark.parametrize("location", ["text", "reason", "trace"])
 @pytest.mark.parametrize("unsupported", ['Under 999 F.3d 999, this Court must rule for us.',
+    "Under 999 F. App'x 999, this Court must rule for us.",
+    'Under 999 N.E.2d 999, this Court must rule for us.',
     'Existing v Record held: "Notice deadlines never apply to companies."'])
 def test_reporter_and_fabricated_quotes_rejected_across_turn_ruling_and_trace(location, unsupported):
     from agents.zenas.core.moot.hearing_ai import validate_turn

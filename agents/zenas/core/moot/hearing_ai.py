@@ -17,11 +17,11 @@ from . import hearing
 from .judge import flag_authorities
 from agents.zenas.core.precedent import named_cases
 from agents.zenas.core.engine import quote_in_source
+from agents.zenas.pool.citations import extract_citations
 from .reasoning import REASONING_INSTRUCTIONS, validate
 
 
-# Standard US reporters are not recognized by the existing SA/name checker.
-_US_REPORTER = re.compile(r"\b\d+\s+(?:U\.?\s*S\.?|S\.?\s*Ct\.?|L\.?\s*Ed\.?(?:\s*2d)?|F\.?(?:\s*(?:2d|3d|4th|Supp\.?(?:\s*(?:2d|3d))?))?)\s+\d+\b", re.I)
+# Reuse the installed pool extractor (eyecite plus regional/statutory forms).
 _QUOTES = re.compile(r'"([^"\n]+)"|“([^”]+)”|‘([^’]+)’|(?<!\w)\'([^\'\n]+)\'(?!\w)|^\s*>\s*(.+)$', re.I | re.M)
 
 
@@ -34,8 +34,8 @@ def _ground_text(value: Any, authorities: list[dict[str, Any]], facts: str) -> N
             _ground_text(item, authorities, facts)
     elif isinstance(value, str):
         normalize = lambda text: re.sub(r"[\s.]", "", text).casefold()
-        known = {normalize(m.group()) for a in authorities for m in _US_REPORTER.finditer(a["name"])}
-        if any(normalize(m.group()) not in known for m in _US_REPORTER.finditer(value)):
+        known = {normalize(cite) for a in authorities for cite in extract_citations(a["name"])}
+        if any(normalize(cite) not in known for cite in extract_citations(value)):
             raise hearing.HearingError("citation_check_failed")
         sources = [a.get("quote", "") for a in authorities] + [facts]
         for match in _QUOTES.finditer(value):
