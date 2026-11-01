@@ -85,3 +85,22 @@ async def test_valid_missing_and_typed_tenants_are_unchanged(app):
         assert (await client.get("/v1/header")).json() == {"tenant": ""}
         assert (await client.get("/v1/typed", params={"tenant_id": tenant})).json() == {"tenant": tenant}
         assert (await client.get("/v1/typed", params={"tenant_id": "nope"})).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_tenant_path_called_directly_rejects_malformed_tenant_with_422():
+    """tenant_path's own check (not bind_tenant_endpoints') turns "nope" into a 422."""
+    from fastapi import HTTPException
+
+    seen = []
+
+    @tenant_path("tenant")
+    async def direct(tenant: str):
+        seen.append(tenant)
+        return tenant
+
+    with pytest.raises(HTTPException) as raised:
+        await direct("nope")
+    assert raised.value.status_code == 422
+    assert raised.value.detail == "A workspace is required."
+    assert seen == []
