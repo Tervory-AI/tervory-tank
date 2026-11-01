@@ -6,6 +6,7 @@ import { signupSource, payingSource } from "./sources";
 import { readWorkers } from "./workers";
 import { FounderDashboard } from "./view";
 import { activity, candidates, wholeNumber } from "./values";
+import "./dashboard.css";
 import "./control.css";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,6 @@ export default async function ControlPage() {
     throw new Error("Control panel pause state is incomplete.");
   }
   return <FounderDashboard view={{ data, signups, paying, activity: activity(data, now),
-    paused: pause.paid_paused, workersPaused: workers.workers_paused, models: candidates(models),
+    paused: pause.paid_paused, workersPaused: workers.workers_paused, workers, models: candidates(models),
     checks: gold.skills.reduce((total, skill) => total + wholeNumber(skill.candidates), 0), now }} />;
 }
