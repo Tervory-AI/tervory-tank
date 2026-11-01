@@ -124,7 +124,7 @@ test("workspace destinations remain explicit across product-host root rewrites",
 });
 
 test("room menus do not retain known incorrect workspace destinations", () => {
-  for (const file of ["base/view.tsx", "tank/view.tsx", "skala/view.tsx", "market-lab/view.tsx", "tisan/tisan.tsx", "radix/view.tsx", "tiger/view.tsx", "zenas/view.tsx"]) {
+  for (const file of ["base/view.tsx", "tank/view.tsx", "skala/view.tsx", "market-lab/view.tsx", "tisan/tisan.tsx", "radix/view.tsx", "tiger/view.tsx", "zenas/view.tsx", "rig/copy.ts", "review/console.tsx"]) {
     const source = readFileSync(new URL(`workspace/app/${file}`, root), "utf8");
     assert.doesNotMatch(source, /href: "\/", label: "Chats"|href="\/">Chats/);
     assert.doesNotMatch(source, /href: "\/(?:ledger|tasks|dashboard)", label: "Dashboard"/);
