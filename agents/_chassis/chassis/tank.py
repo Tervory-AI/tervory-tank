@@ -6,6 +6,7 @@ import asyncio
 import os
 import time
 from typing import Any
+import uuid
 
 import httpx
 
@@ -138,13 +139,21 @@ def _wait_limit() -> float:
     return value if value > 0 else _BACKGROUND_WAIT_S
 
 
+def _same_uuid(a: Any, b: Any) -> bool:
+    """Tenant ids bind by value: case and hyphens in the caller's form never break a call."""
+    try:
+        return uuid.UUID(str(a)) == uuid.UUID(str(b))
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
 def _check_execution(data: dict[str, Any], tenant_id: str, task_type: str) -> None:
     """Legacy/unknown receipts pass through; present evidence must bind this call."""
     execution = data.get("execution")
     if execution is None:
         return
     if not isinstance(execution, dict) or execution.get("version") != 1 or any((
-        execution.get("tenant_id") != tenant_id, execution.get("task_type") != task_type,
+        not _same_uuid(execution.get("tenant_id"), tenant_id), execution.get("task_type") != task_type,
         execution.get("ledger_id") != str(data.get("ledger_id")), execution.get("model") != data.get("model"),
     )):
         raise RuntimeError("tank execution receipt does not match this call")
