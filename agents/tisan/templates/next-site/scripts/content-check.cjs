@@ -76,14 +76,13 @@ const documentSchema = {
     ...manifest.site.props.properties,
     pages: {
       type: "array",
-      minItems: 1,
       items: {
         type: "object",
         additionalProperties: false,
         required: ["name", "path", "title", "sections"],
         properties: {
-          name: { ...text, pattern: "^[a-z0-9-]{1,40}$" },
-          path: { ...text, pattern: "^/(?:[a-z0-9-]+(?:/[a-z0-9-]+)*)?$" },
+          name: text,
+          path: { ...text, pattern: "^/(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)?$" },
           title: text,
           sections: {
             type: "array",
@@ -120,8 +119,7 @@ function checkContent(content) {
         if (seen.has(page[key])) errors.push(`${prefix}/${key}: duplicate value`);
         seen.add(page[key]);
       }
-      if (["/contact", "/privacy"].includes(page.path) || /^\/(api|_next)(\/|$)/.test(page.path))
-        errors.push(`${prefix}/path: reserved route`);
+      if (/^\/(api|_next)(\/|$)/.test(page.path)) errors.push(`${prefix}/path: reserved route`);
       const ids = new Set();
       if (Array.isArray(page.sections))
         page.sections.forEach((section, sectionIndex) => {
