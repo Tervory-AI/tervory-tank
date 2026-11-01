@@ -233,6 +233,16 @@ jobs:
           TIGER_MAIL_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
           RIG_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
           TRAINING_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
+      - name: Runner memory and kernel log after a failed suite
+        # A crashed xdist worker looks the same whether pytest-timeout killed it or the
+        # kernel did (OOM). This prints the evidence; it never changes the result.
+        if: failure()
+        continue-on-error: true
+        timeout-minutes: 2
+        run: |
+          free -m || true
+          df -h /dev/shm /tmp || true
+          { sudo -n dmesg -T 2>/dev/null || echo "dmesg not readable on this runner"; } | grep -iE 'oom|killed process|segfault|out of memory|not readable' | tail -n 40
 
   workspace:
     needs: [changes, runner]
