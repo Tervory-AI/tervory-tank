@@ -125,3 +125,18 @@ $ git diff --check origin/main
 
 exit_code=0
 
+$ env PYTHONPATH=.:tank:agents/_chassis /home/ammosync/.codex/za-readiness-20261101/venv/bin/pytest -q tests/test_moot_published_regions.py tests/test_moot_1a.py --disable-socket --allow-unix-socket
+.................................                                        [100%]
+================= quarantine (2 entries, tests/quarantine.txt) =================
+   not collected  tests/test_room_seal.py::test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.yml]  [xfail] waits on Docassemble's removal in a separate PR (contract drafting moves into agent-zenas), not test drift: this compose file has no raw-compose marker, so in Coolify's normal mode the Docassemble service joins Coolify's internet-facing app network as well as the internal assembly network. Delete this entry in the PR that removes the file
+   not collected  tests/test_room_seal.py::test_no_room_service_would_leak_when_coolify_deploys_it[agents/zenas/docker-compose.docassemble.za.yml]  [xfail] waits on Docassemble's removal in a separate PR (contract drafting moves into agent-zenas), not test drift: this compose file has no raw-compose marker, so in Coolify's normal mode the Docassemble service joins Coolify's internet-facing app network as well as the internal assembly network. Delete this entry in the PR that removes the file
+33 passed in 1.01s
+exit_code=0
+
+$ /home/ammosync/.codex/za-readiness-20261101/venv/bin/ruff check --select E9,F agents/zenas/app.py tests/test_moot_published_regions.py
+All checks passed!
+exit_code=0
+
+$ git diff --check origin/main
+
+exit_code=0
