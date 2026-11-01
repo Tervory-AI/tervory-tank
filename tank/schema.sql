@@ -2201,6 +2201,11 @@ CREATE OR REPLACE TRIGGER policy_skill_revalidation
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS cache_read_tokens integer NOT NULL DEFAULT 0;
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS cache_write_tokens integer NOT NULL DEFAULT 0;
 
+-- Tisan plans structure only; accepted Trigger writes supply every text slot.
+INSERT INTO tank.policy(task_type,rung,model,cache_scope,max_tokens_out,eval_threshold,min_shadow_samples,auto_promote)
+VALUES ('tisan.plan',1,'luna','tenant',3000,0.99,200,false)
+ON CONFLICT DO NOTHING;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
@@ -2251,8 +2256,3 @@ CREATE TABLE IF NOT EXISTS agent_tank.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
-
--- Tisan plans structure only; accepted Trigger writes supply every text slot.
-INSERT INTO tank.policy(task_type,rung,model,cache_scope,max_tokens_out,eval_threshold,min_shadow_samples,auto_promote)
-VALUES ('tisan.plan',1,'luna','tenant',3000,0.99,200,false)
-ON CONFLICT DO NOTHING;
