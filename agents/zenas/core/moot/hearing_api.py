@@ -17,6 +17,7 @@ from .hearing_store import HearingStore
 
 class CreateIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    home_region: Literal["us-east", "za"] | None = None
     request_id: UUID
     worked_id: UUID
     seats: dict[str, dict[str, Any]]
@@ -24,6 +25,7 @@ class CreateIn(BaseModel):
 
 class CommandIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    home_region: Literal["us-east", "za"] | None = None
     request_id: UUID
     revision: int = Field(ge=0)
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -95,6 +97,8 @@ def register_routes(app, pool, tenant_store, box_region, tank):
     @app.post("/moot/hearings", status_code=201)
     async def create(body: CreateIn, home_region: str, x_tank_key: str = Header(default=""),
         x_moot_tenant: str = Header(default=""), x_moot_actor: str = Header(default=""), x_moot_founder: str = Header(default="")):
+        if body.home_region is not None and body.home_region != home_region:
+            raise HTTPException(403, "wrong_region")
         actor = await identity(home_region, x_tank_key, x_moot_tenant, x_moot_actor, x_moot_founder)
         if not actor.founder:
             raise HTTPException(403, "operator_required")
@@ -121,6 +125,8 @@ def register_routes(app, pool, tenant_store, box_region, tank):
         body: CommandIn, home_region: str, seat: Literal["applicant", "respondent", "judge"] | None = Query(default=None), x_tank_key: str = Header(default=""), x_moot_tenant: str = Header(default=""),
         x_moot_actor: str = Header(default=""), x_moot_founder: str = Header(default="")):
         actor = await identity(home_region, x_tank_key, x_moot_tenant, x_moot_actor, x_moot_founder)
+        if body.home_region is not None and body.home_region != home_region:
+            raise HTTPException(403, "wrong_region")
         store = HearingStore(pool())
         try:
             state = await store.load(actor, str(hearing_id))
