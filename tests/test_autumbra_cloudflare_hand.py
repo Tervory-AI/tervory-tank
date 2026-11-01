@@ -268,3 +268,55 @@ def test_watch_has_no_credential_read_or_cloudflare_import():
         text = (root / name).read_text()
         assert "CLOUDFLARE_API_TOKEN_ENFORCE" not in text
         assert "import CloudflareEdgeControl" not in text
+
+
+def test_approved_shield_is_automatically_undone_on_failed_health(tmp_path):
+    api = FakeCloudflare()
+    control = edge(api, health=lambda: False)
+    cfg = settings(ApplyMode.approve_each)
+    pending = apply_from_payload(payload(), settings=cfg, control=control, data_dir=tmp_path)
+    approval = accept_threat_payload({"schema_version": "ghost.threat.v1", "action": "approve_shield",
+                                     "site": "tervory.com", "tenant_id": TENANT,
+                                     "prior_receipt_id": pending["id"]})
+    receipt = approve_pending(approval, settings=cfg, control=control, data_dir=tmp_path)
+    assert receipt["outcome"] == "auto_undone_health_failed" and not receipt["applied"]
+    assert receipt["auto_undo"]["control"] == "cloudflare"
+    assert [r["id"] for r in api.rules] == [OTHER]
+
+
+def test_enforce_process_queue_rate_limit_then_undo(tmp_path, monkeypatch):
+    from agents.ghost.enforce_app import create_enforce_app, submit_payload, submit_undo
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("TENANT_ID", TENANT)
+    monkeypatch.delenv("THREAT_PAYLOAD_QUEUE", raising=False)
+    api = FakeCloudflare()
+    app = create_enforce_app()
+    app.state.control, app.state.settings = edge(api), settings()
+    receipt = submit_payload(payload(), app=app, settings=settings())
+    assert receipt["control"] == "cloudflare" and receipt["applied"] is True
+    undone = submit_undo(undo_payload(receipt), app=app)
+    assert undone["control"] == "cloudflare" and undone["outcome"] == "undone"
+    assert [r["id"] for r in api.rules] == [OTHER]
+    assert len(app.state.threat_queue.list_receipts()) == 2
+
+
+def test_auth_marker_is_only_in_request_header_not_durable_state_or_repr(tmp_path):
+    api = FakeCloudflare()
+    def handler(request):
+        assert request.headers["Authorization"] == "Bearer offline-test-marker"
+        return api(request)
+    control = CloudflareEdgeControl(tenant_id=TENANT, site="tervory.com", token="offline-test-marker",
+                                    transport=httpx.MockTransport(handler), health_probe=lambda: True)
+    receipt = apply_from_payload(payload(), settings=settings(), control=control, data_dir=tmp_path)
+    assert "offline-test-marker" not in json.dumps(receipt)
+    assert "offline-test-marker" not in repr(control)
+    assert all("offline-test-marker" not in p.read_text() for p in tmp_path.glob("*.json*"))
+
+
+def test_fixture_rate_limit_behavior_is_unchanged_when_token_empty(monkeypatch):
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN_ENFORCE", "")
+    fixture = FixtureEdgeControl(tenant_id=TENANT)
+    receipt = apply_from_payload(payload(), settings=settings(), control=fixture)
+    assert receipt["control"] == "fixture_edge" and receipt["applied"] is False
+    assert fixture.list_blocked() == []
