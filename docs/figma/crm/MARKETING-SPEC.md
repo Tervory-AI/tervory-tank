@@ -1,5 +1,35 @@
 # Marketing · design proposal
 
+## Trigger menu revision · founder 1 November 2026, 14:25
+
+This revision supersedes the earlier Workspace/CRM submenu design and the pending Estimates rename. CRM is Trigger. Applied across all 180 founder/store screens: CRM 92 (64 entity screens plus 28 confirmations), Marketing 44 and Chat bot 44. Every original screen ID, field value node and confirmation step is retained.
+
+One 240px left menu only. Top: the existing approved Tervory on-white logo, client switcher, then Trigger bound to `color/accent/trigger` (`VariableID:72:9815`). The source asset is `workspace/public/brand/tervory-logo-on-white.png`, image hash `f5ac182d72fee0efa7e44827420ee36fb292e8d9`; the white stamp is not used.
+
+| Draft group | Areas in order |
+|---|---|
+| Writing | write, voice |
+| CRM | Leads, Accounts, Contacts, Opportunities, Cases, Tasks |
+| Sales | Quotes, Invoices |
+| Marketing | Channels, Calendar, Composer, Google reviews |
+| Chat bot | Inbox, Settings |
+
+Bottom: All products (back to all products), Receipts, Billing, Settings. Group labels and the All products label remain draft wording for founder approval. The Workspace product list is removed from every Trigger screen. Quotes is the founder-authorized display name for BottleCRM Estimates; schema names, estimate bindings and confirmation fields remain unchanged.
+
+Shared editable component set `180:8549`: desktop menu `180:8387`, mobile menu `180:8467`; mobile bar `180:8550`. At 1440, work area starts at x=240 and is 1200px wide, with 1136px usable content after 32px side padding: a 180px gain. Lists use full-width tables; wide schemas keep horizontal scrolling without deleting columns. Detail forms use two columns; Composer draft/check panels sit beside each other. At 375, content stacks below a 64px Trigger bar. One drawer contains the same 240px menu and groups; its 375px overlay includes a dismiss scrim. Groups scroll vertically on mobile, while top/bottom controls stay pinned.
+
+Drawer roots retain their IDs: CRM `98:9181` / `98:9227`, Marketing `150:4047` / `150:4061`, Chat bot `153:4367` / `153:4381`. Navigation to designed areas is wired; cross-page actions are Figma file references. No new Writing or account destination screens were invented.
+
+In-screen design-index strips are removed; the screen registers below are the design index on SPEC only. Existing page titles remain. Channels has one compact 64px row per channel: name, account, status and exactly one visible Connect or Disconnect button according to state. Disconnect retains its confirmation. Mobile Channels uses horizontal table scrolling.
+
+The 42 client-site widget frames remain client-branded visitor surfaces without Trigger founder chrome. They are not Trigger store screens and retain their existing IDs and source fields.
+
+### Revision validation
+
+Structural reconciliation checks all 180 original root IDs and 2318 baseline field-value IDs/texts (CRM 1678, Marketing 380, Chat bot 260). No baseline field was removed or changed. The expanded hidden-layer audit also sees 164 pre-existing CRM table-header value internals omitted by the original visible-instance snapshot; these are header internals, not added records. All 64 confirmation roots remain. Every desktop root has exactly one 240px Trigger menu and a 1200px work area; every mobile root has the Trigger bar and one same-page drawer. No old Workspace product labels or in-screen design-index frame remains.
+
+No application code or application tests changed. Figma structure checks and authoring screenshots are design evidence; founder acceptance remains pending.
+
 DRAFT — founder approval pending. No application or live connection was created.
 
 Figma file: [Tervory designs](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=148-9). Page **4 · Marketing**, ID `148:9`. Branch `codex/crm-marketing-chat-design`.
@@ -8,11 +38,11 @@ Figma file: [Tervory designs](https://www.figma.com/design/ZnphBOJU6657tohGLD3Iz
 
 Source: founder's pasted Marketing and Chat bot design brief, 1 November 2026; existing CRM page `93:2` and `origin/codex/crm-design:docs/figma/crm/SPEC.md`; `agents/trigger/README.md`. The new design words are drafts, explicitly authorized for approval in this design job. Founder-only screens; this is not clearance to implement or publish client UI. Existing rejected client dashboards, signup/billing screens and sidebar proposals are not revived.
 
-CRM field/action/mobile components `93:6`, `93:4`, `93:9`, side menu item variants `43:409` / `43:421`, founder chrome, local variables and typography are reused. CRM accent remains `VariableID:72:9823` (#0369A1); Jost Light headings, Inter body. Desktop 1440×900; mobile 375×812. Vertical content scrolling and horizontal calendar/navigation scrolling are intentional. Desktop composer puts Trigger findings beside the drafted copy; mobile stacks those panels.
+Existing CRM field/action components `93:6` and `93:4`, local variables and typography are reused. Trigger chrome and responsive layout follow the controlling revision above. Jost Light headings and Inter body remain.
 
 ## Menu and approval items
 
-Existing CRM submenu order is Leads, Accounts, Contacts, Opportunities, Cases, Tasks, Invoices, Estimates, Marketing, Chat bot. Marketing and Chat bot were appended in 34 CRM desktop/mobile source submenus. Estimates is unchanged everywhere. Founder decision: **rename Estimates to Quotes in the menu** — approval item only, not applied. Native CRM decision SPEC `149:34013` records it. No global client menu was changed.
+The founder's 14:25 revision above replaces the old Workspace/CRM submenu. Quotes is now applied as the display name; the former approval-only rename decision is superseded.
 
 ## Screen register
 
@@ -211,7 +241,7 @@ Actions: Confirm, Cancel.
 
 ## Channel coverage and limits
 
-All seven channels have separate connection cards and per-channel preview panels: Facebook, Instagram, LinkedIn, X, TikTok, YouTube, Google Business Profile. Connection states: Connected, Needs reconnecting, Off. Post states: Draft, Awaiting approval, Scheduled, Published, Failed. Calendar rows/cards retain channel and status. Google posts reuse the same Composer; Google reviews show a saved-voice reply draft and checker findings before confirmation.
+All seven channels have compact connection rows and per-channel preview panels: Facebook, Instagram, LinkedIn, X, TikTok, YouTube, Google Business Profile. Connection states: Connected, Needs reconnecting, Off. Post states: Draft, Awaiting approval, Scheduled, Published, Failed. Calendar rows/cards retain channel and status. Google posts reuse the same Composer; Google reviews show a saved-voice reply draft and checker findings before confirmation.
 
 Every preview includes `post.previews[channel].text`, `.length`, `channel_limits[channel].limit` and `.unit`. Limits are data and must be read from the chosen adapter and current post format/account capabilities; never invent a single universal character count. The draft shows each limit slot explicitly, with a bracketed binding until the adapter is chosen. Read-only official references checked for future adapter mapping: [LinkedIn](https://learn.microsoft.com/en-us/linkedin/compliance/integrations/shares/ugc-post-api) documents 3,000 characters; [X](https://docs.x.com/fundamentals/counting-characters) documents a 280 weighted-character standard post and twitter-text counting; [TikTok direct video](https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post) documents 2,200 UTF-16 runes for caption; [YouTube](https://developers.google.com/youtube/data/reference/rest/v3/videos) documents description max 5,000 bytes, not characters. Facebook, Instagram and Google Business Profile numeric constraints require verification against the selected adapter/official endpoint before implementation. A missing limit blocks scheduling; approval wording for that validation is still draft. No platform API was called or credential accessed.
 
@@ -326,14 +356,13 @@ All view names, labels, actions, statuses and day abbreviations below await foun
 
 ## Validation and proof
 
-Current deterministic audit: 44 screens; 380 field-value instances; viewport errors 0. Editable descendant types: FRAME=564, TEXT=1460, INSTANCE=704. No complete-UI raster was used. Source components and native logo instances remain linked. Visual checks identified and repaired horizontal container sizing and button wrapping. Final visual checks and source/field reconciliation are recorded before handoff; Figma authoring screenshots are not founder acceptance screenshots. No live application test or founder approval is claimed.
-
+Initial creation audit (before the 14:25 reflow): Current deterministic audit: 44 screens; 380 field-value instances; viewport errors 0. Editable descendant types: FRAME=564, TEXT=1460, INSTANCE=704. No complete-UI raster was used. Source components and native logo instances remain linked. Visual checks identified and repaired horizontal container sizing and button wrapping. Final visual checks and source/field reconciliation are recorded before handoff; Figma authoring screenshots are not founder acceptance screenshots. No live application test or founder approval is claimed. Current geometry and preservation evidence is recorded in the controlling revision above; descendant counts here are historical.
 
 ## Final handoff proof · 1 November 2026
 
-Native Figma SPEC: `151:3973`. Draft close-control wording: **Close**; this also awaits approval. Existing CRM retains all 64 screen IDs; 34 source submenus have the exact order ending Estimates → Marketing → Chat bot, with zero order errors. The rename decision block `149:34013` is a child of original SPEC frame `101:8244`.
+Native Figma SPEC: `151:3973`. Draft close-control wording: **Close**; this also awaits approval. The controlling 14:25 revision above supersedes the earlier submenu and rename proof. Existing screen registers and confirmation IDs remain valid.
 
-Mobile source/local drawers were resized/rebuilt within their existing/new IDs so all ten labels and Close fit inside 375×812. Newly created store menus use the original CRM white-menu paint overrides with only the current module active; this avoids importing the dark workspace-menu defaults. No original CRM entity content was changed. New content-container spacing is linked to existing `space/*` variables.
+Mobile drawers now use the shared Trigger menu and a dismiss scrim within the same preserved root IDs. Content spacing uses existing space variables; original entity field nodes and values remain.
 
 Final rendered-binding audit: 82 distinct label/binding pairs, zero wrong heading/body font families. Exact rendered field paths follow below. The arrays/dictionary paths in the conceptual field register describe the same proposed data contract; none is an assertion of an existing scheduler or Chatwoot API.
 
@@ -441,4 +470,3 @@ Figma authoring screenshots reviewed: Composer desktop `149:7134`, calendar mobi
 | Reply | `[reply.text]` |
 | Channel | `[channel.name]` |
 | Account | `[channel.account_name]` |
-
