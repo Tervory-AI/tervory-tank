@@ -68,7 +68,10 @@ test("the approved shared confirmation is reused and removed sections stay absen
   const widgets = readFileSync(new URL("./widgets.tsx", import.meta.url), "utf8");
   const view = readFileSync(new URL("./view.tsx", import.meta.url), "utf8");
   assert.ok(widgets.includes("<ApproveAllReady"));
-  for (const removed of ["GHOST-1", "AGENT-1", "BATCH-1", "WORKERS-2", "Health unavailable", "Case study", "Saved this month", "Daily budget", "Storage used"]) {
+  // Founder 1 Nov: retain main's worker diagnostics alongside the reduced layout.
+  assert.ok(view.includes("<WorkersTile workers={view.workers} now={now}"));
+  assert.ok(view.includes("not checking in"));
+  for (const removed of ["GHOST-1", "AGENT-1", "BATCH-1", "Health unavailable", "Case study", "Saved this month", "Daily budget", "Storage used"]) {
     assert.ok(!view.includes(removed) && !widgets.includes(removed), removed);
   }
 });
