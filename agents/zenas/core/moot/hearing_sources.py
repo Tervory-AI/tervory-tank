@@ -79,3 +79,22 @@ async def worked_problem(pool: Any, actor: Actor, worked_id: str) -> dict[str, A
     if row is None:
         raise HearingError("not_found")
     return build_problem(dict(row), actor)
+
+
+async def edited_problem(pool: Any, actor: Actor, current: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any]:
+    base = await worked_problem(pool, actor, current["worked_id"])
+    allowed = {"title", "facts", "issues", "bundles", "bench_notes", "fact_records"}
+    if not isinstance(changes, dict) or set(changes) - allowed:
+        raise HearingError("invalid_problem_edit")
+    for key, value in changes.items():
+        if key == "facts" and (not isinstance(value, str) or not quote_in_source(value, base["facts"])):
+            raise HearingError("unsupported_fact")
+        if key == "fact_records":
+            if not isinstance(value, list):
+                raise HearingError("invalid_facts")
+            for record in value:
+                if (not isinstance(record, dict) or record.get("status") not in ("sourced", "contested", "assumed")
+                    or record["status"] == "sourced" and not quote_in_source(str(record.get("text") or ""), base["facts"])):
+                    raise HearingError("unsupported_fact")
+        base[key] = value
+    return base

@@ -324,6 +324,8 @@ def ai_context(state: dict[str, Any], actor: Actor, token: str) -> dict[str, Any
     # sources/issues, never private bench notes that might encode that outcome.
     context["problem"].pop("bench_notes", None)
     context.pop("reveal", None)
+    context.pop("receipts", None)
+    context.pop("cost_usd", None)
     context["seats"] = {s: {"kind": c["kind"], "epoch": c["epoch"]} for s, c in state["seats"].items()}
     for entry in context["transcript"]:
         entry.pop("actor_id", None)

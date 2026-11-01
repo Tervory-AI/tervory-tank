@@ -3519,6 +3519,8 @@ _ZENAS_PATH = re.compile(
     r"|^moot/matches/ai-ai$"
     r"|^moot/matches/student$"
     r"|^moot/matches/[0-9a-fA-F-]{36}/publish$"
+    r"|^moot/hearing-sources$|^moot/hearings$"
+    r"|^moot/hearings/[0-9a-fA-F-]{36}(/(edit|lock|start|handover|issue|turn|ai|abandon|publish))?$"
 )
 
 
@@ -3694,6 +3696,23 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     headers: dict[str, str] = {}
     if path.startswith("regulations/"):
         headers["X-Tank-Key"] = os.environ.get("TANK_KEY_ZENAS", "")
+    if path == "moot/hearing-sources" or path == "moot/hearings" or path.startswith("moot/hearings/"):
+        # Only the Workspace service can attest Clerk-derived actor/tenant identity.
+        # Discard caller-supplied founder flags; Tank derives that capability.
+        import hmac
+        supplied_key = request.headers.get("x-tank-key", "")
+        workspace_key = os.environ.get("TANK_API_KEY", "")
+        actor = request.headers.get("x-moot-actor", "")
+        tenant = request.headers.get("x-moot-tenant", "")
+        if not workspace_key or not hmac.compare_digest(supplied_key, workspace_key) or not actor:
+            raise HTTPException(404, "not_found")
+        try:
+            uuid.UUID(tenant)
+        except ValueError:
+            raise HTTPException(404, "not_found") from None
+        founder = __import__("admin").founder_allowed(supplied_key, actor)
+        headers.update({"X-Tank-Key": os.environ.get("TANK_KEY_ZENAS", ""),
+            "X-Moot-Actor": actor, "X-Moot-Tenant": tenant, "X-Moot-Founder": "1" if founder else "0"})
     content_type = request.headers.get("content-type")
     if content_type:
         headers["content-type"] = content_type
