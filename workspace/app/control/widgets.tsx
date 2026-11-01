@@ -18,17 +18,17 @@ export function ControlActions({ paused }: { paused: boolean }) {
   }}>{paused ? "Resume paid work" : "Pause all paid work"}</button>;
 }
 
-export function WorkersActions({ paused }: { paused: boolean }) {
+export function WorkersActions({ paused }: { paused: boolean | null }) {
   const [pending, start] = useTransition();
   const [failed, setFailed] = useState(false);
   const router = useRouter();
-  return <button type="button" className="control-button" disabled={pending} aria-busy={pending} aria-invalid={failed || undefined} onClick={() => {
+  return <button type="button" className="control-button" disabled={pending || paused == null} aria-busy={pending} aria-invalid={failed || undefined} onClick={() => {
     start(async () => {
       const result = await workersPauseAction(!paused);
       setFailed(Boolean(result.error));
       router.refresh();
     });
-  }}>{paused ? "Resume workers" : "Pause workers"}</button>;
+  }}>{paused == null ? "Workers pause unavailable" : paused ? "Resume workers" : "Pause workers"}</button>;
 }
 
 function Switch({ taskType }: { taskType: string }) {
