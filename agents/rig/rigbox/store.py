@@ -1193,6 +1193,12 @@ class PgStore(RetailerPgStore):
         on (tenant, quote) alone let concurrent inserts raise on the number
         index. If nothing is saved for this quote afterwards (its number is
         taken by another quote), DeliveryError("order_mismatch").
+        The PO insert targets UNIQUE (tenant_id, number) only: a PO number
+        taken by another quote raises the same DeliveryError("order_mismatch")
+        inside the transaction, so the order rolls back too. The PO's
+        (tenant, quote) key can't clash there (the order row was just created
+        and the PO's foreign key needs it), so any other conflict raises
+        instead of being swallowed.
         """
         tenant = _uuid(tenant_id)
         async with self.pool.acquire() as conn, conn.transaction():
@@ -1208,7 +1214,7 @@ class PgStore(RetailerPgStore):
                     " vendor_name, order_email, item_sku, item_url, quantity, unit_cost, currency, ship_to,"
                     " neutral_slip, instructions)"
                     " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15)"
-                    " ON CONFLICT DO NOTHING RETURNING true",
+                    " ON CONFLICT (tenant_id, number) DO NOTHING RETURNING true",
                     tenant, purchase["quote_id"], purchase["number"], purchase["state"], purchase["source_id"],
                     purchase["vendor_name"], purchase["order_email"], purchase["item_sku"], purchase["item_url"],
                     int(purchase["quantity"]), Decimal(purchase["unit_cost"]), purchase["currency"],
@@ -1266,7 +1272,9 @@ class PgStore(RetailerPgStore):
 
     async def draft_supplier_orders(self, tenant_id: str, limit: int = 200,
                                     before: datetime | None = None, *, auto_only: bool = False) -> list[str]:
-        """Quote ids whose PO is still draft and whose order is still placed (oldest first).
+        """Quote ids whose PO is still draft and whose order is still placed.
+
+        Oldest PO first; with auto_only, least recently tried first.
 
         With before, only POs created before that time. With auto_only, only
         quotes whose locate_state says they were auto-ordered, least recently
