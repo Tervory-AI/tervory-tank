@@ -9,7 +9,12 @@ import manifest from "../sections/manifest.json";
 import fixture from "./fixtures/site.json";
 
 const roots: string[] = [];
-const fresh = () => structuredClone(fixture);
+const fresh = () => structuredClone(fixture) as {
+  schema: string;
+  nav: { label: string; href: string }[];
+  ui: { menu_open: string; menu_close: string; skip_link: string };
+  pages: { name: string; path: string; title: string; sections: { type: string; id: string; props: Record<string, unknown> }[] }[];
+};
 function root() {
   const dir = mkdtempSync(join(tmpdir(), "tisan-content-"));
   roots.push(dir);
@@ -36,7 +41,7 @@ test("all missing text, image and alt slots are listed in one result", () => {
     { type: "image-text", id: "image", props: { side: "left" } },
     { type: "product-grid", id: "products", props: { items: [{ image: {} }, {}] } },
     { type: "gallery", id: "gallery", props: { images: [{ src: "", alt: " " }, {}] } },
-  ] as typeof data.pages[0].sections;
+  ];
   const errors = checkContent(data).join("\n");
   for (const path of [
     "site/ui/menu_open", "site/ui/menu_close", "site/ui/skip_link", "site/nav/0/label",
@@ -62,7 +67,7 @@ test("refuses bad types, enums, array bounds, string lengths, URLs and unknown p
     { heading: "Test", cta: { href: "//outside.example", label: "Test" } },
   ]) {
     const data = fresh();
-    data.pages[0].sections[0].props = props as typeof data.pages[0].sections[0].props;
+    data.pages[0].sections[0].props = props;
     expect(checkContent(data).length).toBeGreaterThan(0);
   }
   const data = fresh();
