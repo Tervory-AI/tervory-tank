@@ -633,3 +633,14 @@ CREATE TABLE IF NOT EXISTS agent_zenas.moot_hearing_events (
     created_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, hearing_id, revision)
 );
+CREATE TABLE IF NOT EXISTS agent_zenas.moot_hearing_learning (
+    tenant_id uuid NOT NULL,
+    hearing_id uuid NOT NULL REFERENCES agent_zenas.moot_hearings(id),
+    turn_number integer NOT NULL,
+    candidate jsonb NOT NULL,
+    status text NOT NULL DEFAULT 'pending_review' CHECK (status IN ('pending_review', 'accepted', 'rejected')),
+    reviewed_by text,
+    reviewed_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id, hearing_id, turn_number)
+);

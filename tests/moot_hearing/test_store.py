@@ -101,3 +101,19 @@ async def test_founder_publish_roundtrip_uses_existing_public_reader_without_pri
     assert rows[0]["judgmentOrder"] == "Independent order"
     assert "never counsel" not in json.dumps(rows) and "actor_id" not in json.dumps(rows)
     assert rows[0]["reveal"] == "real holding hidden until judgment"
+
+
+@pytest.mark.asyncio
+async def test_closed_reasoning_becomes_pending_review_never_automatic_gold(pg_store):
+    from .test_reasoning import trace
+    s = await new(pg_store)
+    for seat, kind, extra in [("applicant", "submission", {}), ("judge", "question", {"target": "respondent"}),
+        ("respondent", "submission", {}), ("judge", "ruling", {"order": "Independent order", "reasons": ["Independent reason"], "authority_ids": ["case-1"]})]:
+        s = await pg_store.mutate(HUMANS[seat], s["id"], str(uuid4()), s["revision"], "turn", {"kind": kind, "text": seat + " words", "reasoning": trace(), **extra},
+            lambda s, a, r, p: turn(s, a, r, p))
+    async with pg_store.pool.acquire() as conn:
+        rows = await conn.fetch("SELECT status,candidate,reviewed_by FROM agent_zenas.moot_hearing_learning WHERE tenant_id=$1 AND hearing_id=$2",
+            UUID(OWNER.tenant_id), UUID(s["id"]))
+    assert len(rows) == 4 and all(r["status"] == "pending_review" and r["reviewed_by"] is None for r in rows)
+    assert all(json.loads(r["candidate"])["verdict"] is None for r in rows)
+    assert "never counsel" not in str(rows) and "real holding hidden" not in str(rows)

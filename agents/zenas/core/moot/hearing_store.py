@@ -112,6 +112,13 @@ class HearingStore:
                     updated["revision"], state["revision"])
                 if result is None:
                     raise hearing.HearingError("stale_revision")
+                if updated["phase"] == "closed" and state["phase"] != "closed":
+                    from .hearing_learning import candidates
+                    for candidate in candidates(updated):
+                        await conn.execute("""INSERT INTO agent_zenas.moot_hearing_learning
+                            (tenant_id,hearing_id,turn_number,candidate)
+                            VALUES($1,$2,$3,$4::jsonb)""", UUID(actor.tenant_id), UUID(hearing_id),
+                            candidate["turn_number"], json.dumps(candidate))
                 if updated["published"] and not state["published"]:
                     hearing._operator(state, actor)
                     await self._publish(conn, updated)
