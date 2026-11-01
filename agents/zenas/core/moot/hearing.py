@@ -85,9 +85,18 @@ def _problem(value: Any, region: str) -> dict[str, Any]:
     _require(len(set(ids)) == len(ids), "duplicate_authority")
     # Whitelist snapshots: verification is performed by the worked-matter adapter
     # before this domain function; arbitrary caller fields cannot enter the state.
-    return {key: deepcopy(value[key]) for key in (
+    result = {key: deepcopy(value[key]) for key in (
         "worked_id", "region", "kind", "criminal", "title", "facts", "issues",
         "bundles", "bench_notes", "real_holding", "authorities")}
+    records = value.get("fact_records") or [{"id": "facts", "text": value["facts"], "status": "sourced"}]
+    _require(isinstance(records, list) and 0 < len(records) <= 200, "invalid_facts")
+    checked = []
+    for record in records:
+        _require(isinstance(record, dict) and record.get("status") in ("sourced", "contested", "assumed"), "invalid_facts")
+        checked.append({"id": _text(record.get("id"), maximum=200), "text": _text(record.get("text")), "status": record["status"]})
+    _require(len({r["id"] for r in checked}) == len(checked), "invalid_facts")
+    result["fact_records"] = checked
+    return result
 
 
 def authorize(state: dict[str, Any], actor: Actor) -> None:
@@ -239,6 +248,10 @@ def turn(state: dict[str, Any], actor: Actor, revision: int, payload: dict[str, 
              "actor_id": actor.user_id if ai_token is None else None, "epoch": controller["epoch"],
              "kind": kind, "text": text, "authority_ids": list(dict.fromkeys(cited)),
              "issue": out["current_issue"]}
+    if payload.get("reasoning") is not None:
+        from .reasoning import validate
+        entry["reasoning"] = validate(out["problem"], payload["reasoning"])
+    _require(len(out["transcript"]) < 500, "hearing_turn_limit")
     out["transcript"].append(entry)
     out["citations"] = list(dict.fromkeys([*out["citations"], *cited]))
     if seat != "judge":
@@ -282,7 +295,8 @@ def view(state: dict[str, Any], actor: Actor, seat: str | None = None) -> dict[s
         out["seats"] = {s: {"kind": c["kind"], "epoch": c["epoch"]} for s, c in out["seats"].items()}
         for entry in out["transcript"]:
             entry.pop("actor_id", None)
-    out["problem"] = {k: deepcopy(problem[k]) for k in ("title", "facts", "issues")}
+    out["problem"] = {k: deepcopy(problem[k]) for k in ("title", "facts", "issues", "fact_records")}
+    out["problem"]["authorities"] = [{k: deepcopy(a[k]) for k in ("id", "name", "quote", "source_url", "weight") if k in a} for a in problem["authorities"]]
     if seat in SIDES:
         # Existing recursive bench-note stripping also applies to nested counsel bundles.
         from agents.zenas.core.moot.problem import _strip_private
@@ -291,7 +305,6 @@ def view(state: dict[str, Any], actor: Actor, seat: str | None = None) -> dict[s
         out["problem"]["bundle"] = bundle
     if seat == "judge":
         out["problem"]["bench_notes"] = deepcopy(problem["bench_notes"])
-        out["problem"]["real_holding"] = problem["real_holding"]
     if state["phase"] == "closed" or state["published"]:
         out["reveal"] = problem["real_holding"]
     return out
@@ -301,4 +314,9 @@ def ai_context(state: dict[str, Any], actor: Actor, token: str) -> dict[str, Any
     _operator(state, actor)
     p = state["pending_ai"]
     _require(p is not None and p["token"] == token and p["revision"] == state["revision"], "ai_claim_invalid")
-    return view(state, actor, p["seat"])
+    context = view(state, actor, p["seat"])
+    # Deliberation must not aim at the actual holding. Even an AI judge receives
+    # sources/issues, never private bench notes that might encode that outcome.
+    context["problem"].pop("bench_notes", None)
+    context.pop("reveal", None)
+    return context
