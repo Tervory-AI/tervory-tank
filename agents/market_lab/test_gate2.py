@@ -103,3 +103,79 @@ async def test_postgres_insert_binds_all_metadata_without_mutating_original():
     assert len(conn.args) == 19
     assert conn.args[13:] == (28 * 86400, .75, 13, (NOW + timedelta(days=28)).date(), "surge", "feed")
     assert "horizon_seconds" not in row
+
+
+@pytest.mark.asyncio
+async def test_tank_research_job_writes_only_claims_with_openable_sources(monkeypatch):
+    import importlib.util
+    from types import SimpleNamespace
+    from core.document_read import extract
+    from core.documents import accept, page
+    import core.research_adapter
+
+    spec = importlib.util.spec_from_file_location("gate2_room", Path(__file__).parent / "app.py")
+    room = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(room)
+    ledger = MemoryLedger()
+    file_id = str(uuid4())
+    data = b'date,value,unit,series\n2026-09-01,100,cartons,inventory\n2026-09-08,110,cartons,inventory\n'
+    await accept(ledger, TENANT, file_id, 'history.csv', extract('history.csv', data), region='us-east')
+
+    class Context:
+        async def __aenter__(self):
+            return ledger
+        async def __aexit__(self, *_):
+            pass
+
+    original_get = room.os.environ.get
+    monkeypatch.setattr(room.os.environ, 'get', lambda name, *args: True if name == 'DATABASE_URL' else original_get(name, *args))
+    monkeypatch.setattr(room, '_ledger', Context)
+    async def no_web(*args, **kwargs):
+        raise AssertionError('stored evidence must not call web research or a model')
+    monkeypatch.setattr(core.research_adapter, 'research_web', no_web)
+    ctx = SimpleNamespace(tenant_id=TENANT, input={'question': 'inventory'})
+    result = await room.research(ctx)
+    assert result['cost_usd'] == 0
+    assert result['answer'].splitlines() == [c['claim'] for c in result['citations']]
+    assert result['citations']
+    for citation in result['citations']:
+        assert citation['url'].startswith(f'/market-lab/sources/{file_id}')
+        assert await page(ledger, TENANT, file_id) is not None
+        assert await page(ledger, OTHER, file_id) is None
+    assert ledger.reports[0]['answer'] == result['answer']
+    assert ledger.reports[0]['tenant_id'] == TENANT
+
+
+@pytest.mark.asyncio
+async def test_isolated_postgres_metadata_round_trip():
+    import os
+    import asyncpg
+    socket = os.environ.get('GATE2_POSTGRES_SOCKET')
+    if not socket:
+        pytest.skip('opt-in disposable Gate 2 database')
+    assert Path(socket).resolve() == (Path(__file__).parents[2] / '.gate2-pg-socket').resolve()
+    conn = await asyncpg.connect(host=socket, user='postgres', database='market_lab_gate2_test')
+    transaction = conn.transaction()
+    await transaction.start()
+    try:
+        ledger = PostgresLedger(conn)
+        await ledger.apply_schema()
+        await ledger.apply_schema()
+        row = prediction()
+        await ledger.save_prediction(row)
+        assert await ledger.predictions_for(OTHER) == []
+        result = await perform_resolve(tenant_id=TENANT, ledger=ledger,
+                                      now=NOW + timedelta(days=30),
+                                      points_by_series={'series': [{'date': '2026-01-30', 'value': 13}]})
+        assert result['resolved'] == 1
+        rows = await ledger.predictions_for(TENANT)
+        realised = next(r for r in rows if r['outcome'] == 'hit')
+        assert realised['realised_value'] == 13
+        assert realised['realised_date'].isoformat() == '2026-01-30'
+        assert realised['horizon_seconds'] == 28 * 86400
+        assert realised['confidence'] == .75
+        assert (await ledger.calibration_for(TENANT))['curves'][0]['brier_score'] == .0625
+        assert (await ledger.calibration_for(OTHER))['curves'] == []
+    finally:
+        await transaction.rollback()
+        await conn.close()
