@@ -57,6 +57,7 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 import asyncpg
+import execution_receipt
 import httpx
 from command_stream import StreamFailure, TokenSink, completion as stream_completion
 import redis.asyncio as aioredis
@@ -656,6 +657,9 @@ class RouteRequest(BaseModel):
 
 
 class RouteResponse(BaseModel):
+    # Actual foreground dispatch evidence; absent for cache/code/batch results.
+    execution: dict[str, Any] | None = None
+    settings_hash: str | None = None  # No effective-settings attestation exists yet.
     ledger_id: uuid.UUID
     model: str
     rung: int
@@ -1365,16 +1369,17 @@ async def run_route(
             await conn.execute("""UPDATE tank.ledger SET outcome='sent',sent_at=$3
                 WHERE id=$1 AND tenant_id=$2 AND offpeak_job_id=$1""", _receipt_id, req.tenant_id, sent_at)
     started = time.perf_counter()
+    dispatched_settings = {"max_tokens": max_tokens, **generation}
     try:
         if _on_token is not None and req.task_type == "command.turn":
             r = await stream_completion(LITELLM_URL, LITELLM_MASTER_KEY,
-                                        {"model": model, "messages": messages, "max_tokens": max_tokens, **generation}, _on_token)
+                                        {"model": model, "messages": messages, **dispatched_settings}, _on_token)
         else:
             async with httpx.AsyncClient(timeout=120) as client:
                 r = await client.post(
                     f"{LITELLM_URL}/v1/chat/completions",
                     headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-                    json={"model": model, "messages": messages, "max_tokens": max_tokens, **generation},
+                    json={"model": model, "messages": messages, **dispatched_settings},
                 )
     except StreamFailure as exc:
         ledger_id = uuid.uuid4()
@@ -1517,6 +1522,9 @@ async def run_route(
         ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
         tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd if cost_status == "set" else None, latency_ms=latency_ms,
         finish_reason=finish_reason, escalation=escalation, cache_read_tokens=cache_read, cache_write_tokens=cache_write,
+        execution=execution_receipt.capture(ledger_id=str(ledger_id), tenant_id=str(req.tenant_id), task_type=req.task_type,
+            requested_model=model, answered_model=answered, dispatched=dispatched_settings,
+            headers=r.headers, response=data, delivered=outcome == "delivered"),
     )
 
 

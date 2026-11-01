@@ -51,7 +51,8 @@ class TankClient:
             body["interactive"] = False
         data = await self._post("/v1/route", body)
         if background and _queued(data):
-            return await self._wait_job(str(tenant_id), str(data["id"]))
+            data = await self._wait_job(str(tenant_id), str(data["id"]))
+        _check_execution(data, str(tenant_id), task_type)
         return data
 
     async def _wait_job(self, tenant_id: str, job_id: str) -> dict[str, Any]:
@@ -135,3 +136,19 @@ def _wait_limit() -> float:
     except ValueError:
         return _BACKGROUND_WAIT_S
     return value if value > 0 else _BACKGROUND_WAIT_S
+
+
+def _check_execution(data: dict[str, Any], tenant_id: str, task_type: str) -> None:
+    """Legacy/unknown receipts pass through; present evidence must bind this call."""
+    execution = data.get("execution")
+    if execution is None:
+        return
+    if not isinstance(execution, dict) or execution.get("version") != 1 or any((
+        execution.get("tenant_id") != tenant_id, execution.get("task_type") != task_type,
+        execution.get("ledger_id") != str(data.get("ledger_id")), execution.get("model") != data.get("model"),
+    )):
+        raise RuntimeError("tank execution receipt does not match this call")
+    # Dispatched parameters do not attest gateway/provider defaults. Never promote
+    # that audit hash into the resolved-settings field used by comparisons.
+    if execution.get("settings_hash") is not None or data.get("settings_hash") is not None:
+        raise RuntimeError("tank effective settings attestation is unsupported")
