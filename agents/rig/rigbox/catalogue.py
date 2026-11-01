@@ -72,16 +72,6 @@ def families_from(products: list[dict[str, Any]]) -> dict[str, list[str]]:
     return {key: sorted(value) for key, value in grouped.items()}
 
 
-def read_publish(text: str) -> dict[str, Any]:
-    try:
-        loaded = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise ValueError("publish file is not JSON") from exc
-    if not isinstance(loaded, dict):
-        raise ValueError("publish file must be an object")
-    return loaded
-
-
 def map_shopify(body: Any, currency: str) -> dict[str, Any]:
     return _map_shopify(body, currency)
 

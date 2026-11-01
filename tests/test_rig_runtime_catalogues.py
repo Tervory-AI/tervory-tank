@@ -73,6 +73,8 @@ def test_no_catalogues_or_test_keys_can_ship_in_rig():
         assert not (runtime / 'rigbox/three_d' / name).exists()
     assert not hasattr(Service, 'load_folder')
     assert not hasattr(Service, 'load_catalogues')
+    assert not hasattr(Service, 'import_catalogue')
+    assert not hasattr(Service, '_apply_publish')
     dockerfile = (runtime / 'Dockerfile').read_text()
     assert 'catalogues' not in dockerfile
     assert 'tests' not in dockerfile

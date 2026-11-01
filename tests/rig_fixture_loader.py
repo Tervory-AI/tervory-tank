@@ -5,7 +5,7 @@ from uuid import UUID
 import json
 
 def load_folder(folder: Path) -> dict[str, Any]:
-    from rigbox.catalogue import (read_publish, tenant_id_for, parse_products_csv, parse_fits_csv, parse_market_csv)
+    from rigbox.catalogue import (tenant_id_for, parse_products_csv, parse_fits_csv, parse_market_csv)
     publish_path = folder / "publish.json"
     publish: dict[str, Any] = {}
     publish_error = ""
@@ -162,5 +162,16 @@ async def _import_market(self, tenant_id: str, market: dict[str, Any] | None) ->
         }
     await self.store.replace_market(tenant_id, list(market.get("rows") or []))
     return {"rows": len(market.get("rows") or []), "rejected": []}
+
+
+
+def read_publish(text: str) -> dict[str, Any]:
+    try:
+        loaded = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError("publish file is not JSON") from exc
+    if not isinstance(loaded, dict):
+        raise ValueError("publish file must be an object")
+    return loaded
 
 
