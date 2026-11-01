@@ -14,6 +14,7 @@ from rigbox.logic import _active, _limit, _similarity, _tokens, approved, money,
 from rigbox.rank import _FILLER
 from rigbox.rank import _FUZZY, _common_english, _intent, _shopping_word
 from rigbox.rank import search as rank_search
+from rigbox.shopper_attributes import shopper_attributes
 
 # Category labels are split so this file stays clear of the shared room word list.
 _SIDEARM = "Pist" + "ols"
@@ -682,8 +683,7 @@ def _outside_brand(query: str, products: list[dict[str, Any]]) -> str:
         listed.update(_tokens(str(row.get("brand") or "")))
         listed.update(_tokens(str(row.get("category") or "")))
         listed.update(_tokens(_sku(row)))
-        attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
-        for key, value in attributes.items():
+        for key, value in shopper_attributes(row.get("attributes")).items():
             listed.update(_tokens(str(key)))
             listed.update(_tokens(str(value)))
     words = re.findall(r"[A-Za-z0-9]+", query)

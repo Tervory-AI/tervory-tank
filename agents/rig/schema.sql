@@ -316,6 +316,46 @@ CREATE INDEX IF NOT EXISTS rig_feed_receipts_tenant_created ON agent_rig.feed_re
 ALTER TABLE agent_rig.supplier_costs ADD COLUMN IF NOT EXISTS feed_metadata jsonb NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE agent_rig.feed_receipts ADD COLUMN IF NOT EXISTS feed_id text NOT NULL DEFAULT '';
 
+-- COST-GUARD (#505): pricing inputs a catalogue import put in attributes
+-- (Custom Nation's export_usd) live here, never in agent_rig.products.attributes.
+-- Store-only: no shopper query reads this table. The import moves them on
+-- write (rigbox.catalogue._product_row), and the two statements below move keys
+-- already stored. Both are repeat-safe: copy first, then strip, so a second
+-- run finds nothing to move. On conflict the value still in attributes wins,
+-- because it came from the newest import (for example a re-import after a
+-- rollback). The pattern is rigbox.shopper_attributes.PRIVATE_KEY_PATTERN
+-- (a test keeps them identical). PgStore.apply_schema logs how many products
+-- still carry a matching key afterwards, so a silent no-op (for example under
+-- forced RLS with no tenant set) shows up in the startup log.
+-- Reverse (rollback to a build that reads costs from attributes), run by hand:
+--   UPDATE agent_rig.products p SET attributes = p.attributes || x.attributes
+--   FROM agent_rig.product_private_attributes x
+--   WHERE x.tenant_id = p.tenant_id AND x.sku = p.sku
+CREATE TABLE IF NOT EXISTS agent_rig.product_private_attributes (
+    tenant_id uuid NOT NULL,
+    sku text NOT NULL,
+    attributes jsonb NOT NULL DEFAULT '{}'::jsonb,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, sku),
+    FOREIGN KEY (tenant_id, sku) REFERENCES agent_rig.products(tenant_id, sku) ON DELETE CASCADE
+);
+INSERT INTO agent_rig.product_private_attributes (tenant_id, sku, attributes)
+SELECT p.tenant_id, p.sku, (
+    SELECT jsonb_object_agg(e.key, e.value) FROM jsonb_each(p.attributes) AS e(key, value)
+    WHERE e.key ~* 'cost|duty|margin|landed|markup|profit|wholesale|(^|_)export|(^|_)(buy|purchase|dealer|trade)_?price|(^|_)vat($|_)|(^|_)fx($|_)|exchange_rate|supplier|pricing_rule|^store$|^source_id$|ship.?from|^region$|^seen_at$')
+FROM agent_rig.products p
+WHERE jsonb_typeof(p.attributes) = 'object'
+  AND EXISTS (SELECT 1 FROM jsonb_object_keys(p.attributes) AS k(key)
+              WHERE k.key ~* 'cost|duty|margin|landed|markup|profit|wholesale|(^|_)export|(^|_)(buy|purchase|dealer|trade)_?price|(^|_)vat($|_)|(^|_)fx($|_)|exchange_rate|supplier|pricing_rule|^store$|^source_id$|ship.?from|^region$|^seen_at$')
+ON CONFLICT (tenant_id, sku) DO UPDATE
+    SET attributes = agent_rig.product_private_attributes.attributes || EXCLUDED.attributes, updated_at = now();
+UPDATE agent_rig.products p SET attributes = coalesce((
+    SELECT jsonb_object_agg(e.key, e.value) FROM jsonb_each(p.attributes) AS e(key, value)
+    WHERE NOT e.key ~* 'cost|duty|margin|landed|markup|profit|wholesale|(^|_)export|(^|_)(buy|purchase|dealer|trade)_?price|(^|_)vat($|_)|(^|_)fx($|_)|exchange_rate|supplier|pricing_rule|^store$|^source_id$|ship.?from|^region$|^seen_at$'), '{}'::jsonb)
+WHERE jsonb_typeof(p.attributes) = 'object'
+  AND EXISTS (SELECT 1 FROM jsonb_object_keys(p.attributes) AS k(key)
+              WHERE k.key ~* 'cost|duty|margin|landed|markup|profit|wholesale|(^|_)export|(^|_)(buy|purchase|dealer|trade)_?price|(^|_)vat($|_)|(^|_)fx($|_)|exchange_rate|supplier|pricing_rule|^store$|^source_id$|ship.?from|^region$|^seen_at$');
+
 -- RIG-5: immutable model revisions, reviewed anchors and a per-tenant add-on.
 -- A forge result is never a shopper asset until both automatic and human checks pass.
 CREATE TABLE IF NOT EXISTS agent_rig.rig_3d_entitlements (
