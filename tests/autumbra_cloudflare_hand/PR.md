@@ -21,7 +21,7 @@ restoration of the real control belong to the separately approved follow-up.
 - `agents/ghost/cloudflare_edge.py:17`: egress code hold and setting name.
 - `agents/ghost/cloudflare_edge.py:34`: site-bound Rulesets control, allowlisted
   zones, fixed API origin, bounded requests and fixed errors.
-- `agents/ghost/cloudflare_edge.py:79`: fixed-rule apply and owned rule records.
+- `agents/ghost/cloudflare_edge.py:83`: fixed-rule apply and owned rule records.
 - `agents/ghost/cloudflare_edge.py:137`: ownership-checked single-rule Undo.
 - `agents/ghost/cloudflare_edge.py:155`: health callback, false when absent or
   failed. API reachability is never reported as site health.
