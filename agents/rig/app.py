@@ -157,7 +157,7 @@ async def gold_candidates(
     limit: int = Query(default=200, ge=1, le=200),
     x_tank_key: str = Header(default=""),
 ) -> list[dict[str, Any]]:
-    """Room key only. Catalogue compatibility lists, marked public."""
+    """Room key only. Private uploaded-product labels for an explicit tenant."""
     key = os.environ.get("TANK_KEY", "")
     # compare_digest on str rejects some headers with TypeError. Bytes compare
     # instead, so a bad or non-ASCII header is 401.
