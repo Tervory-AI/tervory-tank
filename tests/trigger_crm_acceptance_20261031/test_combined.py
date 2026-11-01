@@ -99,29 +99,36 @@ def test_actual_workspace_tank_corridor_and_unconfirmed_write(monkeypatch):
             time.sleep(.025)
         assert server.started
         env = {**os.environ, 'CRM_ASSEMBLED_ROOT': str(ROOT), 'TANK_URL': f'http://127.0.0.1:{port}'}
-        for expected_status in (200, 403):
-            env['CRM_EXPECT_CLIENT_STATUS'] = str(expected_status)
+        for granted in (True, False):
+            grant['enabled'] = granted
             result = subprocess.run(['node', str(Path(__file__).with_name('combined.cjs'))], env=env, capture_output=True, text=True, timeout=30, check=False)
             assert result.returncode == 0, result.stdout + result.stderr
             grant['enabled'] = False
-        assert calls == ['/api/leads/', '/api/contacts/', '/api/invoices/estimates/', '/api/contacts/',
+        assert calls == ['/api/leads/', '/api/contacts/', '/api/invoices/estimates/',
                          '/api/leads/', '/api/contacts/', '/api/invoices/estimates/']
         headers = {'x-tank-key': 'dummy-workspace-key', 'x-tervory-user': 'offline-founder', 'x-tervory-tenant': tenant}
         with httpx.Client(base_url=f'http://127.0.0.1:{port}', trust_env=False) as client:
             response = client.post('/v1/trigger/crm/write', headers={**headers, 'x-confirmed': 'true'}, json={
                 'resource': 'contacts', 'data': {'first_name': 'Offline', 'last_name': 'Synthetic'}})
             assert response.status_code == 409
-            assert len(calls) == 7
+            assert len(calls) == 6
             response = client.get('/v1/trigger/crm/contacts', headers={**headers, 'x-tervory-home-region': 'za'})
             assert response.status_code == 403
-            assert len(calls) == 7
+            assert len(calls) == 6
             attestation['org'] = '00000000-0000-0000-0000-000000000015'
             response = client.get('/v1/trigger/crm/contacts?page=2', headers=headers)
             assert response.status_code == 502
             assert 'Offline' not in response.text
-            assert len(calls) == 8
+            assert len(calls) == 7
+            before = len(calls)
+            for user, role in [('offline-client', ''), ('offline-admin', 'org:admin'), ('offline-member', 'org:member')]:
+                denied_headers = {**headers, 'x-tervory-user': user, 'x-tervory-role': role}
+                for method, endpoint in [('GET', '/v1/trigger/crm/contacts'), ('POST', '/v1/trigger/crm/write')]:
+                    denied = client.request(method, endpoint, headers=denied_headers, json={'resource': 'contacts', 'data': {'first_name': 'Offline', 'last_name': 'Synthetic'}} if method == 'POST' else None)
+                    assert denied.status_code == 403
+            assert len(calls) == before
         print(result.stdout.strip())
-        print('PASS client persisted grant -> 200; revoked grant -> 403 with zero additional CRM calls; wrong organization -> 502 before projection')
+        print('PASS founder-only with grants enabled/disabled; client/admin/member refused before CRM; unconfirmed founder write -> 409; wrong region -> 403; wrong organization -> 502')
     finally:
         server.should_exit = True
         thread.join(timeout=5)
