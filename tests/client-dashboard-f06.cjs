@@ -1,0 +1,42 @@
+/* Offline regression of production dashboard; fixture data never leaves this process. */
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const Module = require('node:module');
+const ts = require('../workspace/node_modules/typescript');
+const React = require('../workspace/node_modules/react');
+const { renderToStaticMarkup } = require('../workspace/node_modules/react-dom/server');
+let fail = false;
+let data = {jobs_done:1234,granted_squads:['base','zenas'],recent:['queued','running','done','failed','done'].map((status,i)=>({id:`job-${i}`,title:`Own job ${i}`,status}))};
+const savings = {as_of:'2026-11-01T12:00:00Z',month:{saved:'8557.1'}};
+const load = Module._load;
+Module._load = function(name,parent,main){
+ if(name==='@clerk/nextjs/server')return {currentUser:async()=>({firstName:'Alex'})};
+ if(name==='@/lib/tenant')return {activeTenant:async()=>({tenantId:'own-tenant',orgName:'Own organisation'})};
+ if(name==='@/lib/tank')return {readClientDashboard:async tenant=>{assert.equal(tenant,'own-tenant');if(fail)throw Error('offline');return data;}};
+ if(name==='./tank/proof/savings-actions')return {readClientSavings:async()=>fail?null:savings};
+ if(name==='./tank/proof/savings-set')return {SavingsLive:()=>React.createElement('div',null,'Savings report fixture')};
+ if(name==='next/navigation')return {redirect:()=>{throw Error('redirect')}};
+ return load.call(this,name,parent,main);
+};
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(m,file)=>m._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,file);
+require.extensions['.css']=()=>{};
+const Page=require('../workspace/app/page.tsx').default;
+const {localGreeting}=require('../workspace/app/dashboard-greeting.tsx');
+(async()=>{
+ for(const [hour,label] of [[0,'morning'],[11,'morning'],[12,'afternoon'],[17,'afternoon'],[18,'evening'],[23,'evening']])assert.equal(localGreeting(hour),`Good ${label}`);
+ const render=async()=>renderToStaticMarkup(await Page({searchParams:Promise.resolve({})}));
+ const html=await render();
+ for(const text of ['Credits left','Waiting on you','Needs attention','Own job 4','Price tracking','Legal research'])assert(!html.includes(text),text);
+ for(const text of ['1,234','$8,557','Queued','In progress','Ready','Failed','Business lists','Legal'])assert(html.includes(text),text);
+ for(let i=0;i<4;i++)assert(html.includes(`href="/tasks#task-job-${i}"`));
+ assert(html.includes('href="/base"')&&html.includes('href="/zenas"'));
+ assert(!html.includes('href="/tiger"')&&!html.includes('href="/market-lab"'));
+ assert(html.includes('href="#your-savings"')&&html.includes('Savings report fixture'));
+ data={jobs_done:0,granted_squads:[],recent:[]};
+ const empty=await render();assert(empty.includes('No work yet.'));assert(!empty.includes('href="/base"'));
+ fail=true;const error=await render();assert(error.includes('Your activity could not be loaded'));assert(!error.includes('No work yet.'));assert(!error.includes('$0'));
+ fs.mkdirSync('tests/artifacts/f06',{recursive:true});
+ const css=fs.readFileSync('workspace/app/control/dashboard.css','utf8')+fs.readFileSync('workspace/app/dashboard.css','utf8');
+ for(const [name,body]of [['filled',html],['zero',empty],['error',error]])fs.writeFileSync(`tests/artifacts/f06/${name}.html`,`<!doctype html><meta charset="utf-8"><style>body{margin:0}${css}</style>${body}`);
+ console.log('F06 production render: tenant scope, grants, four states/links, zero/error, formats, savings preservation and local greeting boundaries passed.');
+})().catch(e=>{console.error(e);process.exitCode=1});
