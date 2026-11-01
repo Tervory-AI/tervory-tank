@@ -22,7 +22,9 @@ MOVES = {
     'acknowledged': {'quoted'}, 'quoted': {'accepted', 'declined'},
     'accepted': set(), 'declined': set(),
 }
-EMAIL_WORDING = Path(__file__).resolve().parents[2] / 'docs/figma/tisan/QUOTE-EMAILS.md'
+_HERE = Path(__file__).resolve().parent
+_ROOT = _HERE.parents[1] if _HERE.name == 'tisan' else _HERE
+EMAIL_WORDING = _ROOT / 'docs/figma/tisan/QUOTE-EMAILS.md'
 
 
 class Refused(ValueError):
