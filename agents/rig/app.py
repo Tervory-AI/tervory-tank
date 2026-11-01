@@ -153,7 +153,7 @@ mount_page(app)
 @app.get("/gold/candidates")
 async def gold_candidates(
     request: Request,
-    tenant_id: uuid.UUID | None = None,
+    tenant_id: str | None = None,
     limit: int = Query(default=200, ge=1, le=200),
     x_tank_key: str = Header(default=""),
 ) -> list[dict[str, Any]]:
@@ -167,6 +167,11 @@ async def gold_candidates(
         matches = False
     if not matches:
         raise HTTPException(status_code=401, detail="room key required")
+    if tenant_id is not None:
+        try:
+            tenant_id = str(uuid.UUID(tenant_id))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="The request is not valid.") from None
     with tenant_scope(tenant_id):
         return await _gold_candidates()(_rig_service(request).store, str(tenant_id) if tenant_id else None,
                                         limit, region=os.environ.get("TANK_REGION", "us-east"))

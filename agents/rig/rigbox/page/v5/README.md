@@ -15,11 +15,9 @@ Built from the approved Figma file "Rig" (pages "Rig — Search v5" and "Custom 
 | Get A Quote | `POST /v1/rig/quote`, the shop's existing quote request (Custom Nation letter to the shop email in its retailer database record) |
 | I don't know | the search's `honest` state (`nothing`, `not_stocked`) |
 
-## Sample, labelled on the page
+## Offline regression data
 
-- `sample-suppliers.json`: Supplier A, B and C stock, lead time and price. Not from distributor feeds. The best in-stock offer always equals the catalogue price, so the build total equals the quote total.
-- `catalogues/archon/market.csv`: market rows from "Sample retailer 1–4".
-- Catalogue prices are the demo prices already in `catalogues/archon/products.csv`.
+Supplier offers and catalogue regression data live only under `tests/fixtures/`. They are not packaged in the runtime image.
 
 ## Media
 

@@ -12,7 +12,6 @@ from typing import Any
 from uuid import UUID
 
 from rigbox.catalogue import families_from
-from rigbox.logic import approved
 from rigbox.shopper_attributes import shopper_rows
 
 MAX_CANDIDATES = 200
@@ -36,7 +35,7 @@ async def candidates(store: Any, tenant_id: str | None, limit: int = 200, *, reg
     families = families_from(products)
     grouped: dict[str, list[dict[str, Any]]] = {}
     for fit in await store.fits(tenant):
-        if not approved(fit):
+        if fit.get("approved") is not True:
             continue
         labelled = _label_fit(fit, by_sku, families)
         if labelled is not None:
