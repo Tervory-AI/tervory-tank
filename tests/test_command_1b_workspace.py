@@ -19,3 +19,11 @@ def test_command_page_boundaries():
         cwd=ROOT, capture_output=True, text=True, check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_command_window_header_hides_totals_without_a_selected_chat():
+    result = subprocess.run(
+        ["node", str(ROOT / "tests/command_window_header.cjs")],
+        cwd=ROOT, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

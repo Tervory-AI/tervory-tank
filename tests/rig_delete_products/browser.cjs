@@ -20,7 +20,7 @@ function load(file,bindings={}) {
 }
 async function main() {
   const out=path.resolve(process.argv[2]);
-  const tank=load('workspace/lib/tank.ts');
+  const tank=load('workspace/lib/tank.ts',{'@/app/api/zenas/tank':load('workspace/app/api/zenas/tank.ts')});
   const actions=load('workspace/app/rig/admin/actions.ts',{
     '@clerk/nextjs/server':{auth:async()=>({userId:actor.userId,orgRole:'org:member'})},
     '@/lib/tenant':{activeTenant:async()=>actor},
