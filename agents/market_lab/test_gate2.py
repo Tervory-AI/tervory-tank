@@ -117,7 +117,10 @@ async def test_tank_research_job_writes_only_claims_with_openable_sources(monkey
     spec = importlib.util.spec_from_file_location("gate2_room", Path(__file__).parent / "app.py")
     room = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(room)
-    ledger = MemoryLedger()
+    class ResearchLedger(MemoryLedger):
+        async def save_report(self, row):
+            super().save_report(row)
+    ledger = ResearchLedger()
     file_id = str(uuid4())
     data = b'date,value,unit,series\n2026-09-01,100,cartons,inventory\n2026-09-08,110,cartons,inventory\n'
     await accept(ledger, TENANT, file_id, 'history.csv', extract('history.csv', data), region='us-east')
