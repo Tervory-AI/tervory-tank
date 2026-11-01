@@ -6,8 +6,6 @@ production settings, model calls, widget changes or live data writes.
 
 from __future__ import annotations
 
-from rig_fixture_loader import load_catalogue
-
 import asyncio
 import json
 import os
@@ -23,7 +21,8 @@ from playwright.async_api import async_playwright, expect
 import uvicorn
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path[:0] = [str(ROOT / "agents/rig"), str(ROOT / "agents/_chassis")]
+sys.path[:0] = [str(ROOT / "tests"), str(ROOT / "agents/rig"), str(ROOT / "agents/_chassis")]
+from rig_fixture_loader import load_catalogue  # noqa: E402
 from rigbox.api import mount  # noqa: E402
 from rigbox.page_route import mount_page  # noqa: E402
 from rigbox.service import Service  # noqa: E402
