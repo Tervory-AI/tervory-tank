@@ -387,3 +387,81 @@ All greetings, client identities, visitor/bot/person messages, review states, so
 
 Deterministic audit: 44 store screens, 42 widget screens, 260 store field-value instances; viewport errors 0, unbound solid widget fills 0, wrong widget font families 0. Store editable descendant types: FRAME=192, TEXT=832, INSTANCE=492. Visual composition checks include mobile sourced answer, mobile quote draft and desktop store transcript. Save draft actions were pinned in the footer so they remain visible while form content scrolls. No complete-UI raster was used; Figma authoring proof is not founder browser acceptance. Founder approval and final review remain pending.
 
+
+## Final handoff proof · 1 November 2026
+
+Native Figma SPEC: `154:4349`. Draft close-control wording: **Close**; this also awaits approval. Existing CRM retains all 64 screen IDs; 34 source submenus have the exact order ending Estimates → Marketing → Chat bot, with zero order errors. The rename decision block `149:34013` is a child of original SPEC frame `101:8244`.
+
+Mobile source/local drawers were resized/rebuilt within their existing/new IDs so all ten labels and Close fit inside 375×812. Newly created store menus use the original CRM white-menu paint overrides with only the current module active; this avoids importing the dark workspace-menu defaults. No original CRM entity content was changed. New content-container spacing is linked to existing `space/*` variables.
+
+Final rendered-binding audit: 46 distinct label/binding pairs, zero wrong heading/body font families. Exact rendered field paths follow below. The arrays/dictionary paths in the conceptual field register describe the same proposed data contract; none is an assertion of an existing scheduler or Chatwoot API.
+
+Commands run in `/workspace/codex-crm-marketing-chat-design` unless absolute paths are shown:
+
+```sh
+git clone https://github.com/Tervory-AI/tervory-tank.git /workspace/codex-crm-marketing-chat-design
+git fetch origin main codex/crm-design
+git checkout -B codex/crm-marketing-chat-design origin/main
+ls agents/trigger/README.md
+git --no-pager show origin/codex/crm-design:docs/figma/crm/SPEC.md
+git diff --check
+git add docs/figma/crm/CHATBOT-SPEC.md
+git commit -m 'Document Chat bot widget and store screens with draft approval gates'
+git push origin codex/crm-marketing-chat-design
+```
+
+Results: clone/fetch/checkout/required source-file read succeeded; whitespace check passed; commits `e4f441ba` (Marketing) and `b285cce9` (Chat bot) pushed successfully. The first commit attempt lacked a local author identity and failed; the existing Codex identity from the prior CRM checkout was reused locally, then commit/push passed. A temporary helper write under `/tmp` failed with `Disk quota exceeded`; the authorized private checkout and its `.git` scratch area remained writable. No required source file, fetch or push failed. Figma API validation rejected intermediate type/scroll/reaction operations; the canvas was inspected after each failure, then targeted corrections were applied. No failed operation is counted as a completed screen. No application tests were run because no application code changed. No secrets or production data were read.
+
+Figma authoring screenshots reviewed: sourced-answer widget `152:4231`, quote widget `152:4647`, conversation desktop `149:15281`, mobile drawer `153:4367`. These are design-review evidence, not founder acceptance screenshots. Separate reviewer chat was notified; review is not claimed complete. Claude opens the PR from this branch; the founder alone merges. Founder approval and his own Figma/browser review remain pending.
+
+## Exact rendered binding register
+
+| Draft field label | Rendered binding |
+|---|---|
+| Visitor | `[conversation.visitor]` |
+| Last message | `[conversation.last_message]` |
+| Status | `[conversation.status]` |
+| Assigned person | `[conversation.assignee]` |
+| Updated at | `[conversation.updated_at]` |
+| Sources used | `[conversation.sources]` |
+| Reply | `[reply.text]` |
+| Message | `[conversation.messages.Visitor.text]` |
+| Who answered | `[conversation.messages.Visitor.author]` |
+| Sources | `[conversation.messages.Visitor.sources]` |
+| Message | `[conversation.messages.Bot.text]` |
+| Who answered | `[conversation.messages.Bot.author]` |
+| Sources | `[conversation.messages.Bot.sources]` |
+| Message | `[conversation.messages.Person.text]` |
+| Who answered | `[conversation.messages.Person.author]` |
+| Sources | `[conversation.messages.Person.sources]` |
+| Conversation | `[handover.conversation]` |
+| Person | `[handover.assignee]` |
+| Reason | `[handover.reason]` |
+| Availability | `[handover.availability]` |
+| Draft status | `[lead.status]` |
+| Name | `[lead.first_name]` |
+| Last name | `[lead.last_name]` |
+| Email | `[lead.email]` |
+| Phone | `[lead.phone]` |
+| Source conversation | `[lead.source_ref]` |
+| Notes | `[lead.description]` |
+| Draft status | `[estimate.status]` |
+| Title | `[estimate.title]` |
+| Contact | `[estimate.contact]` |
+| Request | `[estimate.notes]` |
+| Line items | `[estimate.line_items]` |
+| Source conversation | `[estimate.custom_fields.source_conversation]` |
+| Bot | `[bot.enabled]` |
+| Opening hours | `[bot.opening_hours]` |
+| Time zone | `[bot.time_zone]` |
+| Greeting | `[bot.greeting]` |
+| Catalogue | `[bot.sources.catalogue]` |
+| FAQs | `[bot.sources.faqs]` |
+| Documents | `[bot.sources.documents]` |
+| Hand-over rules | `[bot.handover_rules]` |
+| Conversation | `[conversation.id]` |
+| Recipient | `[conversation.visitor]` |
+| Draft lead | `[lead.id]` |
+| Draft estimate | `[estimate.id]` |
+| Sources | `[bot.sources]` |
+
