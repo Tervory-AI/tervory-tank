@@ -222,6 +222,9 @@ def _fit_key(row: dict[str, Any]) -> tuple[str, str, str]:
     )
 
 
+_OPEN_PAYMENT_STATES = frozenset({"payment_pending", "paid", "refund_due", "cancelling", "reconciling"})
+
+
 class MemoryStore(RetailerMemoryStore):
     """In-memory stand-in. Tests never open a database."""
 
@@ -410,6 +413,42 @@ class MemoryStore(RetailerMemoryStore):
         for row in self.quotes:
             if row["tenant_id"] == str(tenant_id) and row["id"] == quote_id:
                 row["payload"] = {**row["payload"], "locate_state": state}
+
+    async def swap_locate_state(self, tenant_id: str, quote_id: str, old: dict[str, Any],
+                                new: dict[str, Any]) -> bool:
+        """Compare-and-swap the quote's locate_state. Tenant scoped."""
+        for row in self.quotes:
+            if row["tenant_id"] == str(tenant_id) and row["id"] == quote_id:
+                if row["payload"].get("locate_state") != old:
+                    return False
+                row["payload"] = {**row["payload"], "locate_state": copy.deepcopy(new)}
+                return True
+        return False
+
+    async def open_locate_payments(self, tenant_id: str, limit: int = 100) -> list[tuple[str, dict[str, Any]]]:
+        """Locate quotes at payment_pending, paid, refund_due, cancelling or reconciling, oldest first."""
+        rows = [(row["id"], copy.deepcopy(row["payload"]["locate_state"])) for row in self.quotes
+                if row["tenant_id"] == str(tenant_id)
+                and (row["payload"].get("locate_state") or {}).get("state") in _OPEN_PAYMENT_STATES]
+        return rows[:max(1, min(int(limit), 1000))]
+
+    async def locate_states(self, tenant_id: str, quote_ids: list[str]) -> list[tuple[str, dict[str, Any]]]:
+        """(quote id, locate_state) for these quotes, where one is recorded. Tenant scoped."""
+        wanted = set(quote_ids)
+        return [(row["id"], copy.deepcopy(row["payload"]["locate_state"])) for row in self.quotes
+                if row["tenant_id"] == str(tenant_id) and row["id"] in wanted
+                and row["payload"].get("locate_state")]
+
+    async def payment_event(self, tenant_id: str, quote_id: str, event: dict[str, Any]) -> bool:
+        """Append a verified payment webhook event once per event id. Tenant scoped."""
+        for row in self.quotes:
+            if row["tenant_id"] == str(tenant_id) and row["id"] == quote_id:
+                seen = list(row["payload"].get("payment_events") or [])
+                if any(item.get("id") == event["id"] for item in seen):
+                    return False
+                row["payload"] = {**row["payload"], "payment_events": [*seen, event]}
+                return True
+        return False
 
     async def place_locate_order(self, tenant_id: str, order: dict[str, Any],
                                  purchase: dict[str, Any]) -> dict[str, Any]:
@@ -1038,6 +1077,51 @@ class PgStore(RetailerPgStore):
                 _uuid(tenant_id), quote_id, _json(state),
             )
 
+    async def swap_locate_state(self, tenant_id: str, quote_id: str, old: dict[str, Any],
+                                new: dict[str, Any]) -> bool:
+        """Compare-and-swap the quote's locate_state in one statement (jsonb equality)."""
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(
+                "UPDATE agent_rig.quotes SET payload = jsonb_set(payload, '{locate_state}', $4::jsonb)"
+                " WHERE tenant_id = $1 AND id = $2 AND payload->'locate_state' = $3::jsonb",
+                _uuid(tenant_id), quote_id, _json(old), _json(new),
+            )
+        return result.endswith(" 1")
+
+    async def open_locate_payments(self, tenant_id: str, limit: int = 100) -> list[tuple[str, dict[str, Any]]]:
+        """Locate quotes at payment_pending, paid, refund_due, cancelling or reconciling, oldest first."""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT id, payload->'locate_state' AS state FROM agent_rig.quotes"
+                " WHERE tenant_id = $1 AND payload->'locate_state'->>'state' = ANY($2::text[])"
+                " ORDER BY created_at LIMIT $3",
+                _uuid(tenant_id), sorted(_OPEN_PAYMENT_STATES), max(1, min(int(limit), 1000)),
+            )
+        return [(row["id"], json.loads(row["state"]) if isinstance(row["state"], str) else row["state"]) for row in rows]
+
+    async def locate_states(self, tenant_id: str, quote_ids: list[str]) -> list[tuple[str, dict[str, Any]]]:
+        """(quote id, locate_state) for these quotes, where one is recorded. Tenant scoped."""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT id, payload->'locate_state' AS state FROM agent_rig.quotes"
+                " WHERE tenant_id = $1 AND id = ANY($2::text[]) AND payload ? 'locate_state'"
+                " ORDER BY created_at",
+                _uuid(tenant_id), [str(item) for item in quote_ids][:1000],
+            )
+        return [(row["id"], json.loads(row["state"]) if isinstance(row["state"], str) else row["state"]) for row in rows]
+
+    async def payment_event(self, tenant_id: str, quote_id: str, event: dict[str, Any]) -> bool:
+        """Append a verified payment webhook event once per event id, in one statement."""
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(
+                "UPDATE agent_rig.quotes SET payload = jsonb_set(payload, '{payment_events}',"
+                " COALESCE(payload->'payment_events', '[]'::jsonb) || jsonb_build_array($3::jsonb))"
+                " WHERE tenant_id = $1 AND id = $2"
+                " AND NOT COALESCE(payload->'payment_events', '[]'::jsonb) @> jsonb_build_array(jsonb_build_object('id', $4::text))",
+                _uuid(tenant_id), quote_id, _json(event), str(event["id"]),
+            )
+        return result.endswith(" 1")
+
     _ORDER_COLUMNS = "quote_id, number, state, product_id, price, currency, ship_to, cancel_reason"
     _PO_COLUMNS = ("quote_id, number, state, source_id, vendor_name, order_email, item_sku, item_url, quantity,"
                    " unit_cost, currency, ship_to, neutral_slip, instructions, sent")
@@ -1046,14 +1130,20 @@ class PgStore(RetailerPgStore):
                                  purchase: dict[str, Any]) -> dict[str, Any]:
         """Rig-owned Locate order and draft supplier PO, in one transaction.
 
-        ON CONFLICT DO NOTHING on (tenant, quote): a retry or a concurrent
-        second Accept reads back the first order instead of making another.
+        ON CONFLICT DO NOTHING with no conflict target: a retry or a concurrent
+        second Accept for the same quote reads back the first order instead of
+        making another. With no target, a clash on either unique index
+        ((tenant, quote) or (tenant, number), and the number is derived from
+        the quote) waits for the first insert and then does nothing; a target
+        on (tenant, quote) alone let concurrent inserts raise on the number
+        index. If nothing is saved for this quote afterwards (its number is
+        taken by another quote), DeliveryError("order_mismatch").
         """
         tenant = _uuid(tenant_id)
         async with self.pool.acquire() as conn, conn.transaction():
             created = await conn.fetchval(
                 "INSERT INTO agent_rig.locate_orders (tenant_id, quote_id, number, state, product_id, price, currency, ship_to)"
-                " VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) ON CONFLICT (tenant_id, quote_id) DO NOTHING RETURNING true",
+                " VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) ON CONFLICT DO NOTHING RETURNING true",
                 tenant, order["quote_id"], order["number"], order["state"], order["product_id"],
                 Decimal(order["price"]), order["currency"],
                 None if order["ship_to"] is None else _json(order["ship_to"]))
@@ -1069,7 +1159,9 @@ class PgStore(RetailerPgStore):
                     None if purchase["ship_to"] is None else _json(purchase["ship_to"]),
                     bool(purchase["neutral_slip"]), purchase["instructions"])
             saved = await self._locate_order(conn, tenant, order["quote_id"])
-        assert saved is not None
+        if saved is None:
+            from rigbox.quotes.senders import DeliveryError
+            raise DeliveryError("order_mismatch")
         return {**saved, "created": bool(created)}
 
     async def locate_order(self, tenant_id: str, quote_id: str) -> dict[str, Any] | None:

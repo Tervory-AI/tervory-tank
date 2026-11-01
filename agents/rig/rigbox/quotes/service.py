@@ -20,6 +20,11 @@ from .notice import notice, receipt
 _ADDRESS = {"name": 120, "street": 200, "street2": 200, "city": 120, "zip": 20, "state": 120,
             "country": 2, "phone": 40}
 _ADDRESS_REQUIRED = ("name", "street", "city", "zip", "country")
+log = logging.getLogger("agent")
+# Where a refund_due quote ends once its refund is through, by refund_reason.
+_REFUNDED_STATES = {"order_failed": "order_failed_refunded",
+                    "supplier_order_failed": "supplier_order_failed_refunded",
+                    "supplier_order_unsent": "supplier_order_failed_refunded"}
 
 
 def ship_address(value: Any) -> dict[str, str]:
@@ -213,6 +218,10 @@ class QuoteService(Service):
         if ship_to is not None:
             state["blind_ship"] = True
             payload["ship_to"] = ship_to
+        if auto:
+            # How this order was placed, kept with the quote: the reconciler
+            # gates on it, never on the store's current auto_order flag.
+            state["auto_order"] = True
         evidence = await self._notice_receipt(tenant_id, body.get("notice_version"))
         if evidence:
             payload["notice_receipt"] = evidence
@@ -223,18 +232,65 @@ class QuoteService(Service):
             state.update(changes)
             await self.store.locate_state(tenant_id, quote_id, dict(state))
 
+        async def refund_or_leave_due(cause: str, error: str) -> None:
+            # refund_due is written before the refund, so a refund that fails
+            # (or whose response is lost) is retried by reconcile_payments with
+            # the same idempotency key. Either way the shopper gets a 502.
+            await record(state="refund_due", refund_reason=cause, error=error,
+                         refund_due_at=datetime.now(timezone.utc).isoformat())
+            if cause == "order_failed":
+                # place_located_order can raise after its row was saved
+                # (order_mismatch): never refund an order that exists. A person
+                # settles it; reconcile_payments lists it in needs_review.
+                try:
+                    saved = await self.store.locate_order(tenant_id, quote_id)
+                except Exception:  # noqa: BLE001 - unknown: the reconciler checks again
+                    saved = True
+                if saved is not None:
+                    raise RigError("order", "The order could not be placed. The payment will be refunded.",
+                                   502) from None
+            try:
+                refunded = await payments.refund(provider, charge, cause, reference=reference)
+            except Exception as refund_exc:  # noqa: BLE001 - left due for the reconciler
+                log.warning("locate refund failed, left refund_due: %s (%s)", quote_id, type(refund_exc).__name__)
+                raise RigError("order", "The order could not be placed. The payment will be refunded.", 502) from None
+            await record(state=_REFUNDED_STATES[cause], refund={"status": refunded.status})
+            raise RigError("order", "The order could not be placed. The payment was refunded.", 502) from None
+
         if stored.get("delivery") != "sent":
             await record(state="confirmed", note="retailer_not_reached")
             return {"request_id": quote_id, "state": "confirmed", "price": price,
                     "message": "Your request is saved. No payment was taken."}
         reference = f"rig:{tenant_id}:{quote_id}"
-        try:
-            charge = await payments.capture(provider, amount=price["amount"], currency=price["currency"],
-                                            token=token, reference=reference,
-                                            metadata={"quote_id": quote_id, "product_id": row["sku"]})
-        except payments.PaymentRefused:
-            await record(state="payment_refused")
-            raise RigError("payment", "The payment was not taken.", 402) from None
+        metadata = {"quote_id": quote_id, "product_id": row["sku"]}
+        if payments.intents(provider):
+            # Pay on Accept: an intent for the held price, then capture. Both
+            # are keyed by the quote reference, so a retry never charges twice.
+            # payment_pending (with the intent's key) is written first, so a
+            # lost create response still leaves a quote reconcile_payments can
+            # find (find_intent) and void.
+            pending = {"intent_key": f"{reference}:intent", "provider": provider.name, "test": True}
+            await record(state="payment_pending", pending_at=datetime.now(timezone.utc).isoformat(), payment=pending)
+            try:
+                intent = await payments.create_intent(provider, amount=price["amount"], currency=price["currency"],
+                                                      token=token, reference=reference, metadata=metadata)
+            except Exception:
+                await record(note="intent_unconfirmed")
+                raise RigError("payment", "The payment could not be confirmed. Any charge will be refunded.",
+                               502) from None
+            await record(payment={**pending, "intent": intent.reference, "test": intent.test})
+            if intent.status != "requires_capture":
+                await record(state="payment_failed")
+                raise RigError("payment", "The payment was not taken.", 402)
+            charge = await self._capture_or_void(provider, intent, reference, record)
+        else:
+            # One-shot capture: no intent exists, so a refusal took nothing.
+            try:
+                charge = await payments.capture(provider, amount=price["amount"], currency=price["currency"],
+                                                token=token, reference=reference, metadata=metadata)
+            except payments.PaymentRefused:
+                await record(state="payment_refused")
+                raise RigError("payment", "The payment was not taken.", 402) from None
         if charge.status != "captured":
             await record(state="payment_failed")
             raise RigError("payment", "The payment was not taken.", 402)
@@ -245,9 +301,7 @@ class QuoteService(Service):
                 tenant_id=tenant_id, quote_id=quote_id, located=held["private"], price=price,
                 ship={"address": ship_to} if ship_to else None)
         except DeliveryError as exc:
-            refunded = await payments.refund(provider, charge, "order_failed")
-            await record(state="order_failed_refunded", error=str(exc), refund={"status": refunded.status})
-            raise RigError("order", "The order could not be placed. The payment was refunded.", 502) from None
+            await refund_or_leave_due("order_failed", str(exc))
         await record(state="ordered", ordered_at=datetime.now(timezone.utc).isoformat(),
                      order=order["order"]["number"], purchase_order=order["purchase_order"]["number"])
         if auto:
@@ -261,6 +315,11 @@ class QuoteService(Service):
                 # the order stands and nothing is refunded.
                 # send_supplier_order checks order mode and the outbox before it
                 # writes anything, so those two refusals prove nothing was sent.
+                # "cancelling" is written first: if Rig stops, or the next write
+                # fails, after the cancel commits, reconcile_payments finds the
+                # quote at cancelling, reads the order and settles it.
+                await record(state="cancelling", cancel_reason="supplier_order_failed", error=str(exc),
+                             cancelling_at=datetime.now(timezone.utc).isoformat())
                 cancelled = await self.fulfilment.cancel(
                     tenant_id, quote_id, f"supplier_order_failed:{exc}",
                     unsent=str(exc) in ("outbox_not_configured", "order_mode"))
@@ -275,10 +334,7 @@ class QuoteService(Service):
                         body["ships_direct"] = True
                     return body
                 if cancelled != "sent":
-                    refunded = await payments.refund(provider, charge, "supplier_order_failed")
-                    await record(state="supplier_order_failed_refunded", error=str(exc),
-                                 refund={"status": refunded.status})
-                    raise RigError("order", "The order could not be placed. The payment was refunded.", 502) from None
+                    await refund_or_leave_due("supplier_order_failed", str(exc))
                 supplied = {"purchase_order": {"state": "sent"},
                             "supplier_order": {"channel": "email", "transport": "sandbox_outbox",
                                                "duplicate": True, "reconciled": True}}
@@ -291,6 +347,371 @@ class QuoteService(Service):
         if ship_to is not None:
             body["ships_direct"] = True
         return body
+
+    async def _capture_or_void(self, provider: Any, intent: Any, reference: str, record: Any) -> Any:
+        """Capture the intent. When capture fails, or its response is lost, void
+        the authorization so the shopper's funds are released.
+
+        Returns the captured charge. A cancel that reports "captured" means the
+        lost capture went through: payments.retrieve reads that charge (nothing
+        is captured again), and it must still prove test mode.
+        A refused capture (PaymentRefused, for example a charge that can't be
+        proven test-mode) is voided the same way; if the cancel then reports
+        "captured", money may have moved, so it is not re-captured: the quote
+        stays payment_pending (note capture_unproven) and reconcile_payments
+        refunds it. If the cancel itself fails, the quote also stays
+        payment_pending and the shopper is told any charge will be refunded.
+        """
+        from rigbox import payments
+
+        refused = False
+        try:
+            charge = await payments.capture_intent(provider, intent, reference=reference)
+        except payments.PaymentRefused:
+            charge, refused = None, True
+        except Exception:
+            charge = None
+        if charge is not None and charge.status == "captured":
+            return charge
+        try:
+            voided = await payments.cancel_intent(provider, intent, reference=reference)
+        except Exception:
+            await record(note="capture_unconfirmed")
+            raise RigError("payment", "The payment could not be confirmed. Any charge will be refunded.", 502) from None
+        if voided.status == "captured" and refused:
+            await record(note="capture_unproven")
+            raise RigError("payment", "The payment could not be confirmed. Any charge will be refunded.", 502)
+        if voided.status == "captured":
+            try:
+                charge = await payments.retrieve(provider, intent)
+            except Exception:
+                await record(note="capture_unconfirmed")
+                raise RigError("payment", "The payment could not be confirmed. Any charge will be refunded.",
+                               502) from None
+            if charge.test is not True:
+                await record(note="capture_unproven")
+                raise RigError("payment", "The payment could not be confirmed. Any charge will be refunded.", 502)
+            return charge
+        await record(state="payment_failed", cancel={"status": voided.status})
+        raise RigError("payment", "The payment was not taken.", 402)
+
+    async def reconcile_payments(self, tenant_id: str, *, older_than_minutes: int = 15,
+                                 now: Any = None, limit: int = 100) -> dict[str, Any]:
+        """Settle Locate quotes left at payment_pending or paid by a crash.
+
+        Test-mode payments only (payments.guard). Only quotes older than the
+        cutoff, so an Accept still in flight is never touched. Each quote is
+        claimed with a compare-and-swap on its locate_state ("reconciling"),
+        so two reconcilers never settle the same quote.
+
+        * an order exists (crash after it was placed): record "ordered";
+        * paid, no order: refund the charge ("order_failed_refunded");
+        * payment_pending: cancel the intent ("payment_failed"); if the
+          provider says it was already captured, refund that charge. With no
+          intent reference (the create response was lost) the intent is
+          looked up by its creation key (find_intent); none means nothing
+          was authorized ("payment_failed").
+        * refund_due (the order is cancelled or was never placed, and the
+          refund failed or its response was lost): refund again with the same
+          key and record the refunded state. For refund_reason order_failed it
+          first checks for an order saved anyway: one that exists is listed in
+          needs_review and not refunded.
+        * cancelling (written before every cancel; Rig stopped, or the next
+          write failed, after the cancel): read the Rig order. Cancelled:
+          refund_due, then refund. Placed: the strict cancel again, with the
+          same mapping ("sent" -> supplier_ordered, "cancelled" -> refund_due
+          and refund, "unknown" -> needs_review). No order: needs_review.
+        * ordered + draft PO, for quotes whose locate_state says they were
+          auto-ordered (never the store's current flag): a PO older than the
+          cutoff with no outbox file was never sent (Rig stopped between
+          recording the order and sending it). Record cancelling, cancel Rig's
+          order and PO, record refund_due, then refund
+          ("supplier_order_failed_refunded").
+          If the supplier turns out to have it (the outbox file exists),
+          record "supplier_ordered".
+        * an outbox Rig can't read, or a cancel that can't tell whether the
+          PO was sent: nothing is cancelled or refunded; the quote is marked
+          reconcile_error/needs_review and listed in "needs_review".
+
+        Never places or sends an order.
+        Returns {"checked", "reconciled": [...], "needs_review": [quote ids]}.
+        """
+        from datetime import datetime, timedelta, timezone
+        from decimal import Decimal
+
+        from rigbox import payments
+
+        provider = payments.guard(self.payments)
+        now = now or datetime.now(timezone.utc)
+        cutoff = now - timedelta(minutes=max(1, int(older_than_minutes)))
+
+        def old(value: Any) -> bool:
+            try:
+                return datetime.fromisoformat(str(value)) <= cutoff
+            except ValueError:
+                return True  # no usable timestamp: old enough by definition
+
+        settled: list[dict[str, Any]] = []
+
+        async def claimed(quote_id: str, state: dict[str, Any], states: set[str],
+                          stamp: str | None) -> tuple[str, dict[str, Any], dict[str, Any]] | None:
+            current = state.get("state")
+            if current == "reconciling":
+                if not old(state.get("reconcile_at")):
+                    return None
+                current = state.get("reconcile_from")
+            if current not in states or (stamp is not None and not old(state.get(stamp))):
+                return None
+            base = {key: value for key, value in state.items() if key not in {"reconcile_from", "reconcile_at"}}
+            base["state"] = current
+            claim = {**base, "state": "reconciling", "reconcile_from": current, "reconcile_at": now.isoformat()}
+            if not await self.store.swap_locate_state(tenant_id, quote_id, state, claim):
+                return None
+            return current, base, claim
+
+        needs_review: list[str] = []
+
+        async def put_back(quote_id: str, claim: dict[str, Any], base: dict[str, Any]) -> None:
+            # Put it back for the next run; never echo provider errors.
+            await self.store.swap_locate_state(tenant_id, quote_id, claim, {**base, "reconcile_error": True})
+
+        async def review(quote_id: str, current: dict[str, Any], base: dict[str, Any]) -> None:
+            # Rig can't settle this one safely: flag it for a person, list it,
+            # and touch neither the order nor the money.
+            await self.store.swap_locate_state(tenant_id, quote_id, current,
+                                               {**base, "reconcile_error": True, "needs_review": True})
+            needs_review.append(quote_id)
+
+        async def settle_refund_due(quote_id: str, state: dict[str, Any], *, stamp: str | None = "refund_due_at",
+                                    origin: str | None = None) -> None:
+            # The order is cancelled (or was never placed): refund with the same
+            # "<reference>:refund" key, so a refund that went through but lost
+            # its response moves no more money. Never looks for an order to
+            # keep, except for order_failed: place_located_order can raise after
+            # its row was saved, so an order that exists is flagged, not refunded.
+            got = await claimed(quote_id, state, {"refund_due"}, stamp)
+            if got is None:
+                return
+            current, base, claim = got
+            reference = f"rig:{tenant_id}:{quote_id}"
+            price, payment = base.get("price") or {}, base.get("payment") or {}
+            try:
+                if base.get("refund_reason") == "order_failed" \
+                        and await self.store.locate_order(tenant_id, quote_id) is not None:
+                    await review(quote_id, claim, base)
+                    return
+                charge = payments.Charge(str(payment["reference"]), "captured", Decimal(str(price["amount"])),
+                                         str(price["currency"]), True)
+                refunded = await payments.refund(provider, charge, str(base.get("refund_reason") or "refund_due"),
+                                                 reference=reference)
+            except Exception:
+                await put_back(quote_id, claim, base)
+                return
+            done = {**base, "state": _REFUNDED_STATES.get(str(base.get("refund_reason")),
+                                                          "supplier_order_failed_refunded"),
+                    "reconciled": True, "refund": {"status": refunded.status}}
+            await self.store.swap_locate_state(tenant_id, quote_id, claim, done)
+            settled.append({"quote_id": quote_id, "from": origin or current, "to": done["state"]})
+
+        async def after_cancel(quote_id: str, current: dict[str, Any], base: dict[str, Any], result: str,
+                               origin: str) -> None:
+            # Map a strict cancel's result. current is the stored locate_state
+            # (swapped by compare-and-swap); base is the cancelling state.
+            if result == "sent":
+                done = {**base, "state": "supplier_ordered", "reconciled": True, "purchase_order_state": "sent"}
+                if await self.store.swap_locate_state(tenant_id, quote_id, current, done):
+                    settled.append({"quote_id": quote_id, "from": origin, "to": "supplier_ordered"})
+            elif result == "cancelled":
+                due = {**base, "state": "refund_due", "refund_reason": base.get("cancel_reason"),
+                       "refund_due_at": now.isoformat()}
+                if await self.store.swap_locate_state(tenant_id, quote_id, current, due):
+                    await settle_refund_due(quote_id, due, stamp=None, origin=origin)
+            elif result == "unknown":
+                await review(quote_id, current, base)  # never refund on a guess
+            else:
+                await put_back(quote_id, current, base)  # unrecorded or missing: next run
+
+        async def settle_cancelling(quote_id: str, state: dict[str, Any]) -> None:
+            # Rig wrote "cancelling" before cancelling the order, then stopped
+            # (or the next write failed). Read the order to see how far it got.
+            got = await claimed(quote_id, state, {"cancelling"}, "cancelling_at")
+            if got is None:
+                return
+            current, base, claim = got
+            try:
+                order = await self.store.locate_order(tenant_id, quote_id)
+            except Exception:
+                await put_back(quote_id, claim, base)
+                return
+            if order is None:
+                await review(quote_id, claim, base)
+            elif order["order"].get("state") == "cancelled":
+                await after_cancel(quote_id, claim, base, "cancelled", current)
+            else:
+                try:
+                    result = await self.fulfilment.cancel(tenant_id, quote_id, str(base.get("cancel_reason")))
+                except Exception:
+                    result = "unrecorded"
+                await after_cancel(quote_id, claim, base, result, current)
+
+        rows = await self.store.open_locate_payments(tenant_id, limit)
+        for quote_id, state in rows:
+            current = state.get("state")
+            if current == "reconciling":
+                current = state.get("reconcile_from")
+            if current in ("refund_due", "cancelling"):
+                try:
+                    if current == "refund_due":
+                        await settle_refund_due(quote_id, state)
+                    else:
+                        await settle_cancelling(quote_id, state)
+                except Exception as exc:  # noqa: BLE001 - every state here is reopened by a later run
+                    log.warning("locate reconcile left %s for the next run (%s)", quote_id, type(exc).__name__)
+                continue
+            got = await claimed(quote_id, state, {"payment_pending", "paid"},
+                                "paid_at" if current == "paid" else "pending_at")
+            if got is None:
+                continue
+            current, base, claim = got
+            reference = f"rig:{tenant_id}:{quote_id}"
+            price, payment = base.get("price") or {}, base.get("payment") or {}
+            try:
+                amount, currency = Decimal(str(price["amount"])), str(price["currency"])
+                order = await self.store.locate_order(tenant_id, quote_id)
+                if order is not None:
+                    done = {**base, "state": "ordered", "reconciled": True,
+                            "order": order["order"]["number"], "purchase_order": order["purchase_order"]["number"]}
+                elif current == "paid":
+                    charge = payments.Charge(str(payment["reference"]), "captured", amount, currency, True)
+                    refunded = await payments.refund(provider, charge, "reconcile_unordered", reference=reference)
+                    done = {**base, "state": "order_failed_refunded", "reconciled": True,
+                            "refund": {"status": refunded.status}}
+                else:
+                    if payment.get("intent"):
+                        intent = payments.Intent(str(payment["intent"]), "requires_capture", amount, currency, True)
+                    else:
+                        # The create response was lost: look the intent up by its key.
+                        intent = await payments.find_intent(provider, reference=reference)
+                    if intent is None:
+                        done = {**base, "state": "payment_failed", "reconciled": True, "note": "no_intent"}
+                    else:
+                        voided = await payments.cancel_intent(provider, intent, reference=reference)
+                        if voided.status == "canceled":
+                            done = {**base, "state": "payment_failed", "reconciled": True,
+                                    "payment": {**payment, "intent": intent.reference},
+                                    "cancel": {"status": "canceled"}}
+                        elif voided.status == "captured":
+                            # Captured before the crash, or a capture that could not be
+                            # proven test-mode: read that charge (nothing is captured
+                            # again) and refund it.
+                            charge = await payments.retrieve(provider, intent)
+                            refunded = await payments.refund(provider, charge, "reconcile_unordered",
+                                                             reference=reference)
+                            done = {**base, "state": "order_failed_refunded", "reconciled": True,
+                                    "payment": {**payment, "intent": intent.reference, "reference": charge.reference},
+                                    "refund": {"status": refunded.status}}
+                        else:
+                            raise payments.PaymentRefused("cancel_unconfirmed")
+            except Exception:
+                await put_back(quote_id, claim, base)
+                continue
+            await self.store.swap_locate_state(tenant_id, quote_id, claim, done)
+            settled.append({"quote_id": quote_id, "from": current, "to": done["state"]})
+
+        checked = len(rows)
+        # Ordered + draft PO. RigOrders.reconcile lists draft POs older than the
+        # cutoff: "stranded" (no outbox file), "reconciled" (the file exists, so
+        # the PO is now marked sent) and "unknown" (the outbox can't be read).
+        # Only quotes whose own locate_state says they were auto-ordered are
+        # touched; the store's current auto_order flag is never consulted.
+        found: dict[str, Any] = {}
+        if callable(getattr(self.fulfilment, "reconcile", None)):
+            try:
+                found = await self.fulfilment.reconcile(tenant_id=tenant_id, older_than_minutes=older_than_minutes,
+                                                        now=now, limit=limit)
+            except DeliveryError:
+                found = {}  # not sandbox order mode, or no outbox: nothing to settle
+        stranded = list(found.get("stranded") or [])
+        sent = [str(item.get("quote_id")) for item in found.get("reconciled") or [] if isinstance(item, dict)]
+        unknown = list(found.get("unknown") or [])
+        ids = stranded + sent + unknown
+        rows = await self.store.locate_states(tenant_id, ids) if ids else []
+        checked += len(rows)
+
+        async def stranded_one(quote_id: str, state: dict[str, Any]) -> None:
+            if quote_id in unknown:
+                # Rig can't tell whether the supplier has the PO: flag it for
+                # a person, never cancel or refund.
+                got = await claimed(quote_id, state, {"ordered", "supplier_order_unconfirmed"}, "ordered_at")
+                if got is not None:
+                    _, base, claim = got
+                    await review(quote_id, claim, base)
+                return
+            # Stranded POs are already older than the cutoff; a PO just marked
+            # sent waits the cutoff too, so an Accept still in flight records it.
+            got = await claimed(quote_id, state, {"ordered", "supplier_order_unconfirmed"},
+                                None if quote_id in stranded else "ordered_at")
+            if got is None:
+                return
+            current, base, claim = got
+            if quote_id in sent:
+                await after_cancel(quote_id, claim, base, "sent", current)
+                return
+            # Write the intent before cancelling: a crash or a failed write
+            # after the cancel leaves "cancelling", which the next run settles.
+            cancelling = {**base, "state": "cancelling", "cancel_reason": "supplier_order_unsent",
+                          "cancelling_at": now.isoformat()}
+            if not await self.store.swap_locate_state(tenant_id, quote_id, claim, cancelling):
+                return
+            try:
+                result = await self.fulfilment.cancel(tenant_id, quote_id, "reconcile_unsent")
+            except Exception:
+                result = "unrecorded"
+            await after_cancel(quote_id, cancelling, cancelling, result, current)
+
+        for quote_id, state in rows:
+            if state.get("auto_order") is not True:
+                continue  # placed without auto-order: a person sends that PO
+            try:
+                await stranded_one(quote_id, state)
+            except Exception as exc:  # noqa: BLE001 - cancelling/refund_due are reopened by a later run
+                log.warning("locate reconcile left %s for the next run (%s)", quote_id, type(exc).__name__)
+        return {"checked": checked, "reconciled": settled, "needs_review": needs_review}
+
+    async def payment_webhook(self, body: bytes, signature: str) -> dict[str, Any]:
+        """Verified provider webhook. Records the event on its quote, once.
+
+        No shopper key: the HMAC signature is the authentication. Refused
+        (503) unless payments are in test mode with an adapter configured.
+        Events are an audit trail only; they never move an order forward.
+        """
+        import re
+        from datetime import datetime, timezone
+        from uuid import UUID
+
+        from chassis.tenant_db import tenant_scope
+
+        from rigbox import payments
+
+        try:
+            event = payments.verify_webhook(self.payments, body, signature)
+        except payments.PaymentRefused as exc:
+            if str(exc) in {"webhook_signature", "webhook_stale", "webhook_payload"}:
+                raise RigError("signature", "The webhook could not be verified.", 400) from None
+            raise RigError("unavailable", "Payments are not available.", 503) from None
+        match = re.fullmatch(r"rig:([0-9a-fA-F-]{36}):(req_[0-9a-f]{32})", str(event["data"].get("reference") or ""))
+        try:
+            tenant = str(UUID(match.group(1))) if match else ""
+        except ValueError:
+            tenant = ""
+        if not tenant:
+            return {"received": True, "recorded": False}
+        # The signed reference is the authentication; scope the write to its tenant.
+        with tenant_scope(tenant):
+            recorded = await self.store.payment_event(tenant, match.group(2), {
+                "id": event["id"], "type": event["type"][:64],
+                "received_at": datetime.now(timezone.utc).isoformat()})
+        return {"received": True, "recorded": recorded}
 
     async def deliver(self, tenant: str, quote_id: str) -> None:
         quote = await self.quote_store.claim(tenant, quote_id)
