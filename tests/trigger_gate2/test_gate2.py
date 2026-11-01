@@ -281,7 +281,9 @@ def test_copy_defaults_legacy_rendering_and_standard_page_content(tmp_path):
     clean = scaffold.validate(injected)
     assert 'resolved_copy' not in clean
     old = scaffold.render_extra_page('Products')
-    assert 'This page is ready for content.' in old
+    assert 'This page is ready for content.' not in old
+    assert '<p' not in old
+    assert '<h1 className="font-heading text-3xl">Products</h1>' in old
     assert scaffold.render_extra_page('Products', None) == old
     for page in ['home', 'about', 'contact', 'privacy']:
         normalized = scaffold.validate(brief([{'name': page, 'copy': str(uuid4())}]))
@@ -295,6 +297,23 @@ def test_copy_defaults_legacy_rendering_and_standard_page_content(tmp_path):
     duplicate = str(uuid4())
     with pytest.raises(scaffold.ScaffoldError):
         scaffold.validate(brief([{'name': 'products', 'copy': duplicate}, {'name': 'products', 'copy': str(uuid4())}]))
+
+
+@pytest.mark.parametrize('copy', [None, 'Accepted <tenant> & {literal} text.'])
+def test_extra_pages_never_write_default_sentence(copy, tmp_path):
+    scaffold = scaffold_module()
+    normalized = scaffold.validate(brief(['home', 'products']))
+    if copy is not None:
+        normalized['resolved_copy'] = {'products': copy}
+    scaffold.write_project(normalized, tmp_path / 'project')
+    source = (tmp_path / 'project/app/products/page.tsx').read_text()
+    assert 'This page is ready for content.' not in source
+    if copy is None:
+        assert '<p' not in source
+    else:
+        assert source.count('<p') == 1
+        assert f'<p className="mt-3">{scaffold._jsx_text(copy)}</p>' in source
+        assert '<tenant>' not in source and '{literal}' not in source
 
 
 @pytest.mark.asyncio
