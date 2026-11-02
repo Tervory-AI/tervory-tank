@@ -925,4 +925,3 @@ async def test_real_postgres_reconcile_claims_each_stuck_quote_once(monkeypatch,
             await pool.close()
     finally:
         await _drop_database(admin, name)
-
