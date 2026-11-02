@@ -180,7 +180,7 @@ def export_records(rows: list[dict[str, Any]]) -> str:
     identity = ["record_id", "licence_key", "state", "licence_type", "name"]
     contacts = ["email", "other_emails", "phone", "other_phones", "website", "other_websites"]
     contacts += [name for network in SOCIAL_NETWORKS for name in (network, f"other_{network}")]
-    columns = identity + contacts
+    columns = identity + contacts + ["technologies", "sells_online", "site_newest_year"]
     columns += [f"{name}_{part}" for name in contacts for part in ("source_url", "checked_at", "reason")]
     exported = []
     for row in rows:
