@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 
 import command
 import radix_passive_routes as corridor
-from test_command import TENANT, OTHER, runtime, command_pool, api
+from test_command import TENANT, OTHER, runtime as runtime, command_pool as command_pool, api as api
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'agents/radix'))
 from passive_store import artifact_id, target_url

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from test_radix_passive import database, no_external_network, tools, store, A, B, TARGET, ARTIFACT
+from test_radix_passive import database as database, no_external_network as no_external_network, tools, store, A, B, TARGET, ARTIFACT
 
 FIXTURES = Path(__file__).parent / 'fixtures/radix-passive'
 
