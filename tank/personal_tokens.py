@@ -135,6 +135,15 @@ async def identity(request: Request) -> command.Actor:
     if not cli_route(request):
         # Same answer as an unknown route; no database lookup, nothing about the token.
         raise HTTPException(404, "Not Found")
+    actor, _ = await bearer_identity(request, audience="cli")
+    return actor
+
+
+async def bearer_identity(request: Request, *, audience: str) -> tuple[command.Actor, Any]:
+    """One hash lookup for both corridors; audience is a server-owned constant."""
+    if audience not in {"cli", "mcp"}:
+        raise ValueError("unknown credential audience")
+    authorization = request.headers.get("authorization", "")
     scheme, _, token = authorization.partition(" ")
     match = TOKEN.fullmatch(token) if scheme.lower() == "bearer" else None
     if match is None:
@@ -147,9 +156,9 @@ async def identity(request: Request) -> command.Actor:
     with tenant_scope(tenant):
         async with command.db().acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT token_id,user_id,last_used_at < now() - interval '1 minute' AS stale FROM tank.personal_tokens "
+                "SELECT token_id,user_id,client_id,name,last_used_at < now() - interval '1 minute' AS stale FROM tank.personal_tokens "
                 "WHERE tenant_id=$1 AND region=$2 AND token_hash=$3 AND revoked_at IS NULL "
-                "AND (expires_at IS NULL OR expires_at > now())",
+                f"AND audience='{audience}' AND (expires_at IS NULL OR expires_at > now())",
                 tenant, region, digest(token),
             )
             if row is not None and row.get("stale") is not False:
@@ -160,7 +169,7 @@ async def identity(request: Request) -> command.Actor:
             raise HTTPException(401, "Personal token refused")
         # Headers for user, tenant, role and squad are never used on this path.
         # Existing Tank authorization re-reads founder membership and squad grants.
-        return await command.authorized_actor(command.Actor(tenant, row["user_id"], False))
+        return await command.authorized_actor(command.Actor(tenant, row["user_id"], False)), row
 
 
 @router.post("", status_code=201)
