@@ -2328,3 +2328,70 @@ CREATE TABLE IF NOT EXISTS agent_tank.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
+
+-- MCP G1: reuse CLI credentials, with a distinct audience and public-client binding.
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS audience text NOT NULL DEFAULT 'cli'
+    CHECK (audience IN ('cli','mcp'));
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS client_id text;
+
+-- Public OAuth client metadata, not tenant-owned records or credentials.
+CREATE TABLE IF NOT EXISTS tank.oauth_clients (
+    client_id text PRIMARY KEY,
+    client_name text NOT NULL CHECK (length(client_name) BETWEEN 1 AND 100),
+    redirect_uris jsonb NOT NULL,
+    source_address_hash text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS oauth_clients_source ON tank.oauth_clients(source_address_hash,created_at);
+
+-- The code envelope supplies only a tenant scope; its hash must match before use.
+CREATE TABLE IF NOT EXISTS tank.oauth_codes (
+    code_hash text PRIMARY KEY CHECK (code_hash ~ '^[0-9a-f]{64}$'),
+    tenant_id uuid NOT NULL,
+    user_id text NOT NULL,
+    region text NOT NULL CHECK (region='us-east'),
+    client_id text NOT NULL,
+    client_name text NOT NULL,
+    redirect_uri text NOT NULL,
+    challenge text NOT NULL,
+    resource text NOT NULL CHECK (resource='https://app.tervory.com/mcp'),
+    expires_at timestamptz NOT NULL,
+    consumed_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS oauth_codes_tenant ON tank.oauth_codes(tenant_id,expires_at);
+
+CREATE TABLE IF NOT EXISTS tank.mcp_sessions (
+    session_hash text PRIMARY KEY CHECK (session_hash ~ '^[0-9a-f]{64}$'),
+    tenant_id uuid NOT NULL,
+    user_id text NOT NULL,
+    token_id uuid NOT NULL REFERENCES tank.personal_tokens(token_id),
+    client_id text NOT NULL,
+    thread_id uuid NOT NULL REFERENCES tank.command_threads(thread_id),
+    initialized boolean NOT NULL DEFAULT false,
+    expires_at timestamptz NOT NULL DEFAULT now() + interval '30 days'
+);
+CREATE INDEX IF NOT EXISTS mcp_sessions_owner ON tank.mcp_sessions(tenant_id,token_id);
+
+-- Match personal_tokens exactly: staged installations stay staged. Enforced
+-- installations get both the permissive policy and the restrictive boundary.
+DO $$
+DECLARE tab text;
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        FOREACH tab IN ARRAY ARRAY['oauth_codes','mcp_sessions'] LOOP
+            EXECUTE format('ALTER TABLE tank.%I ENABLE ROW LEVEL SECURITY',tab);
+            EXECUTE format('ALTER TABLE tank.%I FORCE ROW LEVEL SECURITY',tab);
+            IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid=format('tank.%I',tab)::regclass AND polname='tenant_access') THEN
+                EXECUTE format($policy$CREATE POLICY tenant_access ON tank.%I FOR ALL TO PUBLIC
+                    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)$policy$,tab);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid=format('tank.%I',tab)::regclass AND polname='tenant_boundary') THEN
+                EXECUTE format($policy$CREATE POLICY tenant_boundary ON tank.%I AS RESTRICTIVE FOR ALL TO PUBLIC
+                    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)$policy$,tab);
+            END IF;
+        END LOOP;
+    END IF;
+END
+$$;
