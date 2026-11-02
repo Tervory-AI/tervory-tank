@@ -1,6 +1,4 @@
 """Identity backups reuse encrypted streaming/archive code with fixed ZA scope."""
-from pathlib import Path
-from unittest.mock import AsyncMock
 
 import pytest
 
