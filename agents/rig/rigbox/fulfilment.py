@@ -200,7 +200,9 @@ class RigOrders:
             return "unknown"
         except Exception:  # noqa: BLE001
             log.warning("locate order reconcile before cancel failed")
-            return "unrecorded"
+            # Reconciliation may fail after finding the supplier's outbox PO.
+            # Until its send state is known, neither cancel nor refund it.
+            return "unknown"
         try:
             return await self.store.cancel_locate_order(tenant_id, quote_id, reason[:120])
         except Exception:  # noqa: BLE001 — the refund still happens; the store sees the open order
