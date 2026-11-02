@@ -22,8 +22,7 @@ function render(file, fields, legacy = false) {
     if (cache.has(full)) return cache.get(full);
     let source = fs.readFileSync(full, 'utf8');
     if (legacy && /(?:reference|batch)-workflow\.tsx$/.test(full)) {
-      source = source.replace('import { pageFieldEntries } from "./field-visibility";\n', '')
-        .replaceAll('pageFieldEntries(row.fields)', 'Object.entries(row.fields)');
+      source = source.replaceAll('pageFields(row.fields)', 'Object.entries(row.fields)');
     }
     const compiled = ts.transpileModule(source, {compilerOptions: {jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022}}).outputText;
     const module = {exports: {}};
@@ -57,4 +56,5 @@ for (const file of ['reference-workflow.tsx', 'batch-workflow.tsx']) {
 const strip = file => ts.transpileModule(fs.readFileSync(path.join(root, 'workspace/app/base', file), 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS}}).outputText;
 function simple(file) {const m = {exports: {}}; new Function('exports', strip(file))(m.exports); return m.exports;}
 assert.deepEqual(simple('csv.ts').CONTACT_QUALITY_COLUMNS, keys);
-assert.ok(keys.every(k => simple('field-visibility.ts').PAGE_FIELD_EXCLUSIONS.includes(k)));
+const exclusions = fs.readFileSync(path.join(root, 'workspace/app/base/display.ts'), 'utf8').match(/pageFieldExclusions[^=]*=\s*new Set\(\[([\s\S]*?)\]\)/)[1];
+assert.ok(keys.every(k => exclusions.includes(`"${k}"`)));

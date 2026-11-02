@@ -28,6 +28,8 @@ BASE_CORE = [
     "base.business_data",
     "base.verify",
 ]
+OPTIONAL_SKILLS = ["base.site_signals"]
+
 # A vertical engine is two skills: <engine>.ingest and <engine>.profile.
 ENGINE_SKILLS = ("ingest", "profile")
 
@@ -353,6 +355,12 @@ async def enrich_one(
         if url:
             scr = await call("base.scrape_site", {"website": url})
             cost += cost_of(scr)
+            if refs and refs.get("base.site_signals") and not scr.get("archived"):
+                signals = await call("base.site_signals", {**scr, "website": url})
+                cost += cost_of(signals)
+                merge(profile, signals.get("fields") or {}, reliability, decisions)
+                passes["2b_signals"] = {"skill": named("base.site_signals", signals),
+                                       "ms": signals.get("_ms")}
             src = "site"
             if scr.get("archived"):
                 profile["archived_site"] = {"value": {"text": scr.get("text", ""), "date": scr.get("archive_date"),

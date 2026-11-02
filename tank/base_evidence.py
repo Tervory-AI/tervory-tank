@@ -11,6 +11,7 @@ from selectolax.parser import HTMLParser
 
 observations: ContextVar[list[dict[str, Any]] | None] = ContextVar("base_field_observations", default=None)
 FIELDS = ("website", "phone", "email", "socials")
+SITE_SIGNAL_FIELDS = ("technologies", "sells_online", "site_newest_year")
 EMAIL = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
 PHONE = re.compile(r"(?:\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b")
 SOCIAL_NETWORKS = {
@@ -235,4 +236,20 @@ def row_fields(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
                         and item.get("checked_at") == first.get("checked_at")):
                     result[key] = {**item, "verified": True, "reason": None, "contact_value": primary}
             break
+    # Optional passive signals retain the observation date and exact source evidence.
+    # Keep the legacy field set unchanged until an approved signals pass has run.
+    if passes.get("2b_signals"):
+        for name in SITE_SIGNAL_FIELDS:
+            candidate = profile.get(name)
+            if not isinstance(candidate, dict):
+                continue
+            evidence = candidate.get("evidence") or []
+            source, checked = public_url(candidate.get("source_url")), candidate.get("checked_at")
+            valid = bool(source and checked and evidence and candidate.get("value") is not None
+                         and all(isinstance(item, dict) and public_url(item.get("source_url"))
+                                 and item.get("text") and item.get("checked_at") for item in evidence))
+            result[name] = {**field(candidate.get("value"), source, checked),
+                            "verified": valid, "reason": None if valid else field()["reason"],
+                            "confidence": candidate.get("confidence", 0), "source": candidate.get("source"),
+                            "evidence": evidence}
     return result

@@ -10,7 +10,7 @@ import re
 from typing import Any
 from urllib.parse import urlsplit
 
-from base_evidence import FIELDS, SOCIAL_NETWORKS, phone, social_network
+from base_evidence import FIELDS, SITE_SIGNAL_FIELDS, SOCIAL_NETWORKS, phone, social_network
 
 COUNTS = ("attempted", "website", "phone", "email", "email_and_phone", "email_only", "phone_only", "neither", "verified", "failed")
 RUNGS = {1: "paid model", 2: "cheaper model", 3: "code", 4: "cache"}
@@ -185,6 +185,9 @@ def export_records(rows: list[dict[str, Any]]) -> str:
     quality_columns = ("phone_e164", "phone_valid", "phone_line_type", "email_syntax_ok", "email_disposable")
     columns += list(quality_columns)
     columns += [f"{name}_{part}" for name in quality_columns for part in ("source_url", "checked_at", "confidence")]
+    columns += list(SITE_SIGNAL_FIELDS)
+    columns += [f"{name}_{part}" for name in SITE_SIGNAL_FIELDS
+                for part in ("source_url", "checked_at", "evidence", "confidence")]
     exported = []
     for row in rows:
         fields = obj(row["fields"])
@@ -218,6 +221,12 @@ def export_records(rows: list[dict[str, Any]]) -> str:
                 record[name] = item.get("value")
                 for part in ("source_url", "checked_at", "confidence"):
                     record[f"{name}_{part}"] = item.get(part)
+        for name in SITE_SIGNAL_FIELDS:
+            signal = fields.get(name) or {}
+            if signal.get("verified"):
+                record[name] = signal.get("value")
+                for part in ("source_url", "checked_at", "evidence", "confidence"):
+                    record[f"{name}_{part}"] = signal.get(part)
         exported.append(record)
     return csv_text(exported, columns)
 
