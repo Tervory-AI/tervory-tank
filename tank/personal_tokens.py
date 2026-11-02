@@ -147,7 +147,7 @@ async def identity(request: Request) -> command.Actor:
     with tenant_scope(tenant):
         async with command.db().acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT token_id,user_id,last_used_at < now() - interval '1 minute' AS stale FROM tank.personal_tokens "
+                "SELECT token_id,user_id,identity_tenant_admin,last_used_at < now() - interval '1 minute' AS stale FROM tank.personal_tokens "
                 "WHERE tenant_id=$1 AND region=$2 AND token_hash=$3 AND revoked_at IS NULL "
                 "AND (expires_at IS NULL OR expires_at > now())",
                 tenant, region, digest(token),
@@ -160,7 +160,9 @@ async def identity(request: Request) -> command.Actor:
             raise HTTPException(401, "Personal token refused")
         # Headers for user, tenant, role and squad are never used on this path.
         # Existing Tank authorization re-reads founder membership and squad grants.
-        return await command.authorized_actor(command.Actor(tenant, row["user_id"], False))
+        tenant_admin = (region == "za" and row["user_id"].startswith("zitadel:")
+                        and row.get("identity_tenant_admin") is True)
+        return await command.authorized_actor(command.Actor(tenant, row["user_id"], False, tenant_admin=tenant_admin))
 
 
 @router.post("", status_code=201)
