@@ -182,6 +182,37 @@ async def test_quality_does_not_borrow_another_contacts_provenance():
     assert all(name not in row_fields(row) for name in QUALITY)
 
 
+
+@pytest.mark.asyncio
+async def test_product_records_csv_and_apollo_snapshot_retain_quality(monkeypatch):
+    import httpx
+    from base_product_fixtures import TENANT, fixture_app
+    monkeypatch.setenv("TANK_API_KEY", "local-fixture")
+    app, store = fixture_app()
+    row = await quality_row()
+    row["fields"] = row_fields(row)
+    store.rows[TENANT].append(row)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://fixture",
+                                 headers={"X-Tank-Key": "local-fixture"}) as client:
+        params = {"tenant_id": str(TENANT)}
+        response = await client.get("/v1/base-product/records", params=params)
+        assert response.status_code == 200
+        assert response.json()["rows"][0]["fields"]["phone_valid"]["value"] is True
+        response = await client.get("/v1/base-product/records.csv", params=params)
+        assert response.status_code == 200
+        exported = list(csv.DictReader(io.StringIO(response.text.lstrip("\ufeff"))))
+        assert exported[0]["phone_line_type"] == "fixed-or-mobile"
+        assert exported[0]["email_syntax_ok"] == "True"
+        response = await client.post("/v1/base-product/comparison", json={**params,
+            "csv": "licence_key,phone,email\n5-74-00001,2125550199,other@quality.example\n"})
+        assert response.status_code == 200
+        response = await client.get("/v1/base-product/comparison", params=params)
+        compared = response.json()["rows"][0]
+        assert compared["outcomes"]["phone"] == "disagreements"
+        assert compared["base"]["phone_valid"]["value"] is True
+        assert compared["base"]["email_disposable"]["value"] is False
+
+
 def test_page_rendering_is_byte_identical_with_and_without_quality():
     result = subprocess.run(["node", "tests/base_contact_quality_pages.cjs"], cwd=ROOT, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
