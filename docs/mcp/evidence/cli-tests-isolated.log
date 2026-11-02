@@ -1,0 +1,386 @@
+
+> @tervory/cli@0.1.1 test
+> node --expose-gc --test test/*.test.mjs
+
+TAP version 13
+# Subtest: login is a browser device approval: no paste prompt, polls, stores a refreshable credential
+ok 1 - login is a browser device approval: no paste prompt, polls, stores a refreshable credential
+  ---
+  duration_ms: 130.248343
+  type: 'test'
+  ...
+# Subtest: ZA login goes straight to the ZA Tank and approval still opens the one Workspace
+ok 2 - ZA login goes straight to the ZA Tank and approval still opens the one Workspace
+  ---
+  duration_ms: 28.227961
+  type: 'test'
+  ...
+# Subtest: denied and expired approvals store nothing
+ok 3 - denied and expired approvals store nothing
+  ---
+  duration_ms: 4.527194
+  type: 'test'
+  ...
+# Subtest: a 401 or 403 while polling stops login at once instead of polling to expiry
+ok 4 - a 401 or 403 while polling stops login at once instead of polling to expiry
+  ---
+  duration_ms: 4.802326
+  type: 'test'
+  ...
+# Subtest: expiring access token refreshes once, rotates the keychain copy, then calls Tank
+ok 5 - expiring access token refreshes once, rotates the keychain copy, then calls Tank
+  ---
+  duration_ms: 7.065438
+  type: 'test'
+  ...
+# Subtest: expired or revoked refresh asks for login; logout revokes on the server and clears the keychain
+ok 6 - expired or revoked refresh asks for login; logout revokes on the server and clears the keychain
+  ---
+  duration_ms: 1.540597
+  type: 'test'
+  ...
+# Subtest: revoked token refused before command execution
+ok 7 - revoked token refused before command execution
+  ---
+  duration_ms: 1.423799
+  type: 'test'
+  ...
+# Subtest: refresh and device codes are redacted from terminal output
+ok 8 - refresh and device codes are redacted from terminal output
+  ---
+  duration_ms: 0.427591
+  type: 'test'
+  ...
+# Subtest: chat streams steps tokens receipt and N cancels without confirm
+ok 9 - chat streams steps tokens receipt and N cancels without confirm
+  ---
+  duration_ms: 6.993118
+  type: 'test'
+  ...
+# Subtest: one-shot defaults model to Auto and EOF cancels
+ok 10 - one-shot defaults model to Auto and EOF cancels
+  ---
+  duration_ms: 2.129002
+  type: 'test'
+  ...
+# Subtest: pinned model shows Tank-priced Auto comparison and never computes one
+ok 11 - pinned model shows Tank-priced Auto comparison and never computes one
+  ---
+  duration_ms: 1.91567
+  type: 'test'
+  ...
+# Subtest: customer receipt (no model names from Tank) shows dollar figures and the Auto label only
+ok 12 - customer receipt (no model names from Tank) shows dollar figures and the Auto label only
+  ---
+  duration_ms: 0.303712
+  type: 'test'
+  ...
+# Subtest: client cannot propose founder tools
+ok 13 - client cannot propose founder tools
+  ---
+  duration_ms: 0.846815
+  type: 'test'
+  ...
+# Subtest: known squad action uses code, creates pending card, requires explicit yes
+ok 14 - known squad action uses code, creates pending card, requires explicit yes
+  ---
+  duration_ms: 10.340735
+  type: 'test'
+  ...
+# Subtest: CSV file intake maps existing batch records without model
+ok 15 - CSV file intake maps existing batch records without model
+  ---
+  duration_ms: 93.283287
+  type: 'test'
+  ...
+# Subtest: build prints brief and declines without worker action
+ok 16 - build prints brief and declines without worker action
+  ---
+  duration_ms: 1.383948
+  type: 'test'
+  ...
+# Subtest: token region alone chooses endpoint; no mutable origin option
+ok 17 - token region alone chooses endpoint; no mutable origin option
+  ---
+  duration_ms: 0.799464
+  type: 'test'
+  ...
+# Subtest: threads and receipts preserve ledger numbers without rounding or estimates
+ok 18 - threads and receipts preserve ledger numbers without rounding or estimates
+  ---
+  duration_ms: 2.730215
+  type: 'test'
+  ...
+# Subtest: transport errors do not expose token or response body and never retry
+ok 19 - transport errors do not expose token or response body and never retry
+  ---
+  duration_ms: 0.425612
+  type: 'test'
+  ...
+# Subtest: terminal controls and complete credential strings are redacted
+ok 20 - terminal controls and complete credential strings are redacted
+  ---
+  duration_ms: 0.175682
+  type: 'test'
+  ...
+# Subtest: SSE handles UTF-8 and event boundaries split across reads
+ok 21 - SSE handles UTF-8 and event boundaries split across reads
+  ---
+  duration_ms: 1.696678
+  type: 'test'
+  ...
+# Subtest: stream truncation is not silently accepted or retried
+ok 22 - stream truncation is not silently accepted or retried
+  ---
+  duration_ms: 1.598298
+  type: 'test'
+  ...
+# Subtest: stateful sanitizer redacts synthetic credentials and controls at every character boundary
+ok 23 - stateful sanitizer redacts synthetic credentials and controls at every character boundary
+  ---
+  duration_ms: 58.874453
+  type: 'test'
+  ...
+# Subtest: actual showTurn path redacts split tokens and controls while streaming ordinary text
+ok 24 - actual showTurn path redacts split tokens and controls while streaming ordinary text
+  ---
+  duration_ms: 64.769005
+  type: 'test'
+  ...
+# Subtest: UTF-8 transport splits at every byte preserve sanitizer state
+ok 25 - UTF-8 transport splits at every byte preserve sanitizer state
+  ---
+  duration_ms: 28.02564
+  type: 'test'
+  ...
+# Subtest: authoritative replace discards preview and seq duplicates never duplicate the final answer
+ok 26 - authoritative replace discards preview and seq duplicates never duplicate the final answer
+  ---
+  duration_ms: 0.725203
+  type: 'test'
+  ...
+# Subtest: whole-string output strips C1 controls in titles cards models and receipts
+ok 27 - whole-string output strips C1 controls in titles cards models and receipts
+  ---
+  duration_ms: 0.391552
+  type: 'test'
+  ...
+# Subtest: job watcher observes steps and receipts until terminal state with read-only polls
+ok 28 - job watcher observes steps and receipts until terminal state with read-only polls
+  ---
+  duration_ms: 0.627773
+  type: 'test'
+  ...
+# Subtest: job watcher stops at its bound and does not repeat action or turn
+ok 29 - job watcher stops at its bound and does not repeat action or turn
+  ---
+  duration_ms: 0.512143
+  type: 'test'
+  ...
+# Subtest: job watcher cancellation and failed state stop without retry
+ok 30 - job watcher cancellation and failed state stop without retry
+  ---
+  duration_ms: 0.317301
+  type: 'test'
+  ...
+# Subtest: reopened chat shows saved messages and follows existing job without another model turn
+ok 31 - reopened chat shows saved messages and follows existing job without another model turn
+  ---
+  duration_ms: 0.725094
+  type: 'test'
+  ...
+# Subtest: review of \#506 B2: help hides models and --model; founder roster is formatted, never raw JSON
+ok 32 - review of \#506 B2: help hides models and --model; founder roster is formatted, never raw JSON
+  ---
+  duration_ms: 0.596053
+  type: 'test'
+  ...
+# Subtest: review of \#506 B2: a customer --model pin is refused by Tank (403) and the CLI names no model
+ok 33 - review of \#506 B2: a customer --model pin is refused by Tank (403) and the CLI names no model
+  ---
+  duration_ms: 0.746804
+  type: 'test'
+  ...
+# Subtest: review of \#506 B2: a customer receipt on a historic pin keeps the Auto line without any model field
+ok 34 - review of \#506 B2: a customer receipt on a historic pin keeps the Auto line without any model field
+  ---
+  duration_ms: 0.16521
+  type: 'test'
+  ...
+# Subtest: deviceCall is bounded when Tank accepts and never answers, or stalls the body
+ok 35 - deviceCall is bounded when Tank accepts and never answers, or stalls the body
+  ---
+  duration_ms: 635.070931
+  type: 'test'
+  ...
+# Subtest: deviceCall passes an abort signal to the transport
+ok 36 - deviceCall passes an abort signal to the transport
+  ---
+  duration_ms: 3.084887
+  type: 'test'
+  ...
+# Subtest: stalled body + gc: deviceCall, Tank.json, a stalled stream and latest.json all end at their deadlines
+ok 37 - stalled body + gc: deviceCall, Tank.json, a stalled stream and latest.json all end at their deadlines
+  ---
+  duration_ms: 2094.981575
+  type: 'test'
+  ...
+# Subtest: no headers + gc: Tank.request ends at its header deadline
+ok 38 - no headers + gc: Tank.request ends at its header deadline
+  ---
+  duration_ms: 530.604414
+  type: 'test'
+  ...
+# Subtest: redirects are refused, never followed, on every bounded call
+ok 39 - redirects are refused, never followed, on every bounded call
+  ---
+  duration_ms: 69.62849
+  type: 'test'
+  ...
+# Subtest: Ctrl-C (the caller signal) still aborts a stalled stream at once
+ok 40 - Ctrl-C (the caller signal) still aborts a stalled stream at once
+  ---
+  duration_ms: 223.221178
+  type: 'test'
+  ...
+# Subtest: every early stop of events() aborts the upstream fetch and closes the connection
+ok 41 - every early stop of events() aborts the upstream fetch and closes the connection
+  ---
+  duration_ms: 485.301254
+  type: 'test'
+  ...
+# Subtest: a stream that finishes normally is not aborted
+ok 42 - a stream that finishes normally is not aborted
+  ---
+  duration_ms: 8.035053
+  type: 'test'
+  ...
+# Subtest: public adapter forwards only PAT and content type to fixed local Tank
+ok 43 - public adapter forwards only PAT and content type to fixed local Tank
+  ---
+  duration_ms: 695.859895
+  type: 'test'
+  ...
+# Subtest: public path refuses revoked PAT without leaking upstream body
+ok 44 - public path refuses revoked PAT without leaking upstream body
+  ---
+  duration_ms: 429.654628
+  type: 'test'
+  ...
+# Subtest: public path rejects foreign region malformed tokens worker endpoints and identity queries before fetch
+ok 45 - public path rejects foreign region malformed tokens worker endpoints and identity queries before fetch
+  ---
+  duration_ms: 225.506341
+  type: 'test'
+  ...
+# Subtest: public path preserves replay cursor SSE and cancellation signal
+ok 46 - public path preserves replay cursor SSE and cancellation signal
+  ---
+  duration_ms: 198.195605
+  type: 'test'
+  ...
+# Subtest: public POST body is bounded and content type checked
+ok 47 - public POST body is bounded and content type checked
+  ---
+  duration_ms: 220.336853
+  type: 'test'
+  ...
+# Subtest: the public adapter never forwards the model roster; the CLI shows customers no models and no raw JSON
+ok 48 - the public adapter never forwards the model roster; the CLI shows customers no models and no raw JSON
+  ---
+  duration_ms: 185.169085
+  type: 'test'
+  ...
+# Subtest: release is reproducible and the manifest matches the bytes
+ok 49 - release is reproducible and the manifest matches the bytes
+  ---
+  duration_ms: 3334.726736
+  type: 'test'
+  ...
+# Subtest: a default build (as the Workspace image runs it) offers cli/package.json's version
+ok 50 - a default build (as the Workspace image runs it) offers cli/package.json's version
+  ---
+  duration_ms: 3211.819162
+  type: 'test'
+  ...
+# Subtest: install.sh installs latest, honours TERVORY_CLI_VERSION, and refuses a tampered tarball
+ok 51 - install.sh installs latest, honours TERVORY_CLI_VERSION, and refuses a tampered tarball
+  ---
+  duration_ms: 7762.483512
+  type: 'test'
+  ...
+# Subtest: tervory update: latest, TERVORY_CLI_VERSION pin, and checksum refusal
+ok 52 - tervory update: latest, TERVORY_CLI_VERSION pin, and checksum refusal
+  ---
+  duration_ms: 2278.1264
+  type: 'test'
+  ...
+# Subtest: install.sh: deadlines on every download, wrapped in main, atomic swap
+ok 53 - install.sh: deadlines on every download, wrapped in main, atomic swap
+  ---
+  duration_ms: 0.850275
+  type: 'test'
+  ...
+# Subtest: install.sh refuses an https->http redirect over wget and over curl (behaviour, not text)
+ok 54 - install.sh refuses an https->http redirect over wget and over curl (behaviour, not text)
+  ---
+  duration_ms: 4338.717083
+  type: 'test'
+  ...
+# Subtest: update notice: at most daily, silent on failure
+ok 55 - update notice: at most daily, silent on failure
+  ---
+  duration_ms: 1237.249929
+  type: 'test'
+  ...
+# Subtest: fails: shipped CLI code changed, version not bumped
+ok 56 - fails: shipped CLI code changed, version not bumped
+  ---
+  duration_ms: 709.637459
+  type: 'test'
+  ...
+# Subtest: fails for each shipped path: bin, install.sh, scripts, package-lock
+ok 57 - fails for each shipped path: bin, install.sh, scripts, package-lock
+  ---
+  duration_ms: 3319.203113
+  type: 'test'
+  ...
+# Subtest: fails: version lowered, lockfile not bumped, or no CHANGELOG entry
+ok 58 - fails: version lowered, lockfile not bumped, or no CHANGELOG entry
+  ---
+  duration_ms: 1722.588173
+  type: 'test'
+  ...
+# Subtest: passes: shipped code changed with a higher version, matching lockfile and CHANGELOG entry
+ok 59 - passes: shipped code changed with a higher version, matching lockfile and CHANGELOG entry
+  ---
+  duration_ms: 575.827016
+  type: 'test'
+  ...
+# Subtest: passes: only docs or tests changed, no bump needed
+ok 60 - passes: only docs or tests changed, no bump needed
+  ---
+  duration_ms: 417.073611
+  type: 'test'
+  ...
+# Subtest: passes: the base branch has no cli/ yet (first version)
+ok 61 - passes: the base branch has no cli/ yet (first version)
+  ---
+  duration_ms: 450.272588
+  type: 'test'
+  ...
+# Subtest: this checkout: package.json, package-lock.json and CHANGELOG agree on the version
+ok 62 - this checkout: package.json, package-lock.json and CHANGELOG agree on the version
+  ---
+  duration_ms: 332.142118
+  type: 'test'
+  ...
+1..62
+# tests 62
+# suites 0
+# pass 62
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 30561.942533
