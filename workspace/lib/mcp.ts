@@ -15,7 +15,7 @@ const RETURN = ["content-type", "mcp-session-id", "mcp-protocol-version", "www-a
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const DEADLINE = 65_000;
 
-async function body(request: Request): Promise<Uint8Array | undefined> {
+async function body(request: Request): Promise<Uint8Array<ArrayBuffer> | undefined> {
   if (!request.body) return undefined;
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -60,7 +60,7 @@ export async function mcpPublicRequest(request: Request, operation: keyof typeof
   const stop = new AbortController();
   try {
     const payload = request.method === "POST" ? await body(request) : undefined;
-    const response = await boundedFetch(new URL(PATHS[operation], TANK_URL), {
+    const response = await boundedFetch<Response>(new URL(PATHS[operation], TANK_URL), {
       method: request.method, headers, ...(payload ? { body: payload } : {}), cache: "no-store",
       signal: AbortSignal.any([request.signal, stop.signal]),
     }, DEADLINE, async value => value);
