@@ -441,8 +441,8 @@ async def enrich_one(
             page = next((page for page in observations if number in page.get("phones", [])), {})
             source = profile.get("phone") if number == val(profile, "phone") else profile.get("phones")
             phone_inputs.append({**(source or {}), "value": number,
-                                 **({"source_url": page.get("source_url"), "checked_at": page.get("checked_at")}
-                                    if page else {})})
+                                 **({"source": "site", "confidence": 80, "source_url": page.get("source_url"),
+                                     "checked_at": page.get("checked_at")} if page else {})})
         for number in (raw_input.get("phone"), raw_input.get("voice_phone"), (engine_in or {}).get("phone")):
             if number:
                 phone_inputs.append({"value": number, "source": "input", "confidence": 90,
