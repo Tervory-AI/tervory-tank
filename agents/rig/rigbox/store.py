@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 import logging
@@ -90,6 +91,22 @@ _SEARCH_FTS = _SEARCH_FTS_TEMPLATE.replace("{shopper_text}", _SHOPPER_TEXT)
 
 def schema_sql() -> str:
     return SCHEMA_PATH.read_text(encoding="utf-8")
+
+
+log = logging.getLogger("agent")
+
+# apply_schema runs at every boot, and ALTER TABLE ... ADD COLUMN IF NOT EXISTS
+# takes an ACCESS EXCLUSIVE lock even when the column is already there. Each
+# statement gets a lock timeout (SET LOCAL: that statement's transaction only)
+# and a few retries with backoff, so a long transaction holding agent_rig.quotes
+# fails the boot cleanly instead of queueing every Rig query behind it.
+SCHEMA_LOCK_TIMEOUT = "5s"
+SCHEMA_LOCK_ATTEMPTS = 4
+SCHEMA_LOCK_BACKOFF = 0.5  # seconds, doubled after each timeout
+
+
+def _lock_not_available(exc: BaseException) -> bool:
+    return getattr(exc, "sqlstate", None) == "55P03"
 
 
 def schema_statements() -> list[str]:
@@ -774,6 +791,11 @@ class PgStore(RetailerPgStore):
         """
         # Optional DDL errors must roll back before the existing-schema fallback
         # or next statement. Keep SET LOCAL per statement on scoped pools.
+        # Each statement runs in its own transaction that first sets
+        # lock_timeout with set_config(..., true) (SET LOCAL), so the timeout
+        # ends with that statement and never reaches the session. A lock
+        # timeout (55P03) is retried with backoff (statements are repeat-safe);
+        # once the attempts run out it is logged and raised like any failure.
         checkout = self.pool.acquire(autocommit=True) if isinstance(self.pool, TenantPool) else self.pool.acquire()
         async with checkout as conn:
             for statement in schema_statements():
@@ -781,7 +803,23 @@ class PgStore(RetailerPgStore):
                 if not sql:
                     continue
                 try:
-                    await conn.execute(statement)
+                    for attempt in range(1, SCHEMA_LOCK_ATTEMPTS + 1):
+                        try:
+                            async with conn.transaction():
+                                await conn.execute("SELECT set_config('lock_timeout', $1, true)",
+                                                   SCHEMA_LOCK_TIMEOUT)
+                                await conn.execute(statement)
+                            break
+                        except Exception as exc:
+                            if not _lock_not_available(exc):
+                                raise
+                            if attempt == SCHEMA_LOCK_ATTEMPTS:
+                                log.error("rig schema: lock not acquired after %d attempts (lock_timeout %s): %s",
+                                          attempt, SCHEMA_LOCK_TIMEOUT, " ".join(sql.split())[:80])
+                                raise
+                            log.warning("rig schema: lock timeout, retry %d of %d", attempt,
+                                        SCHEMA_LOCK_ATTEMPTS - 1)
+                            await asyncio.sleep(SCHEMA_LOCK_BACKOFF * 2 ** (attempt - 1))
                 except Exception as exc:
                     if _optional_schema_statement(sql):
                         continue
