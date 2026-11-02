@@ -41,6 +41,7 @@ try {
     assert((await page.locator(".engine-inspector h3").textContent()).length > 5);
   }
   const firstTab = page.getByRole("tablist", { name: "Tank stages" }).getByRole("tab").first();
+  await firstTab.click();
   await firstTab.focus();
   await page.keyboard.press("ArrowRight");
   assert.equal(await page.locator(".engine-node.active .stage-number").textContent(), "2");
