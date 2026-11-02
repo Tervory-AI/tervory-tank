@@ -182,6 +182,8 @@ def export_records(rows: list[dict[str, Any]]) -> str:
     contacts += [name for network in SOCIAL_NETWORKS for name in (network, f"other_{network}")]
     columns = identity + contacts
     columns += [f"{name}_{part}" for name in contacts for part in ("source_url", "checked_at", "reason")]
+    quality_columns = ("phone_e164", "phone_valid", "phone_line_type", "email_syntax_ok", "email_disposable")
+    columns += list(quality_columns)
     exported = []
     for row in rows:
         fields = obj(row["fields"])
@@ -209,6 +211,10 @@ def export_records(rows: list[dict[str, Any]]) -> str:
             reason = csv_reason(fields["socials"].get("reason"), "socials") or f"No verified {SOCIAL_NAMES[network]} link found for this business."
             write(network, values[:1], reason, fields["socials"] if not fields["socials"].get("verified") else None)
             write(f"other_{network}", values[1:])
+        for name in quality_columns:
+            item = fields.get(name) or {}
+            if item.get("verified"):
+                record[name] = item.get("value")
         exported.append(record)
     return csv_text(exported, columns)
 
