@@ -153,6 +153,10 @@ services:
       # CLI sign-in approval from the primary-region web app (two approval routes, plus the user's own
       # sign-in list/revoke; never founders). Must differ from TANK_API_KEY and TANK_HOMES_KEY.
       TANK_DEVICE_APPROVAL_KEY: ${TANK_DEVICE_APPROVAL_KEY:-}
+      # Optional ZA identity provider; empty preserves the Boston approval path.
+      IDENTITY_ISSUER: ${IDENTITY_ISSUER:-}
+      IDENTITY_CLIENT_ID: ${IDENTITY_CLIENT_ID:-}
+      IDENTITY_ORG_TENANTS: ${IDENTITY_ORG_TENANTS:-}
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
       ZA_HOSTED_MODELS: ${ZA_HOSTED_MODELS:-}
       TANK_PROVIDER_ALLOW: ${TANK_PROVIDER_ALLOW:-}
