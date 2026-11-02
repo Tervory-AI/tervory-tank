@@ -12,7 +12,6 @@ import pytest_asyncio
 from fastapi import FastAPI
 
 import command
-import device_login
 import mcp_oauth as oauth
 import mcp_server
 import personal_tokens as pat
