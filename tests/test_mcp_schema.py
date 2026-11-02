@@ -1,4 +1,5 @@
 """Apply the real schema and startup-guard SQL to staged and enforced copies."""
+# ruff: noqa: F811 -- imported pytest fixtures are injected by name.
 import ast
 from pathlib import Path
 from uuid import uuid4
