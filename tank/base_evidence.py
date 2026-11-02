@@ -207,4 +207,31 @@ def row_fields(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
                                     else [item["value"] for item in ordered],
                                     match["source_url"], match["checked_at"]), "items": ordered,
                             "source_kind": winner.get("source_kind")}
+    # Add quality only for the exact contact and observation that survived the
+    # existing verification guards. Do not change existing evidence or order.
+    for name, collection, identity, keys in (
+        ("phone", "phone_quality", "phone", ("phone_e164", "phone_valid", "phone_line_type")),
+        ("email", "email_quality", "email", ("email_syntax_ok", "email_disposable")),
+    ):
+        if not result[name].get("verified"):
+            continue
+        quality = (profile.get(collection) or {}).get("value") or []
+        if not isinstance(quality, list):
+            continue
+        first = (result[name].get("items") or [result[name]])[0]
+        primary = first.get("value")
+        primary = primary[0] if isinstance(primary, list) and primary else primary
+        for candidate in quality:
+            observed = candidate.get(identity)
+            same = phone(observed) == phone(primary) if name == "phone" else str(observed).lower() == str(primary).lower()
+            if not same:
+                continue
+            evidence = candidate.get(keys[0]) or {}
+            if evidence.get("source_url") != first.get("source_url") or evidence.get("checked_at") != first.get("checked_at"):
+                continue
+            for key in keys:
+                item = candidate.get(key)
+                if isinstance(item, dict):
+                    result[key] = {**item, "verified": True, "reason": None, "contact_value": primary}
+            break
     return result
