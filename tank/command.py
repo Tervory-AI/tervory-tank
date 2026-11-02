@@ -1177,7 +1177,11 @@ def validate_action(action: PlannedAction, actor: Actor) -> PlannedAction:
     # arbitrary URLs/HTTP methods, approval flags, and path traversal segments.
     try:
         args = schema.model_validate(action.arguments).model_dump(mode="json", exclude_none=True)
-    except ValidationError:
+    except ValidationError as error:
+        if action.tool == "radix.passive.scan" and any(
+            item["loc"] == ("commit",) for item in error.errors()
+        ):
+            raise HTTPException(422, "invalid artifact") from None
         raise HTTPException(422, "The action arguments are invalid") from None
     return PlannedAction(tool=action.tool, arguments=args)
 
@@ -1469,7 +1473,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             else:
                 detail = result.get("detail") if isinstance(result, dict) else None
                 card["error"] = (detail if action.tool == "radix.passive.scan"
-                                 and detail in {"invalid artifact", "domain proof required"}
+                                 and isinstance(detail, str) and detail in {"invalid artifact", "domain proof required"}
                                  else "The action was refused or failed. It has not been retried.")
             await step(conn, row, state, {"step_id": card_id, "label": adapter.label,
                                           "actor": action.tool.split('.')[0],
