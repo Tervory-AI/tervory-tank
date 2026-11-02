@@ -10,11 +10,15 @@ import jwt
 import pytest
 from starlette.requests import Request
 
-import command
 import identity_oidc as oidc
 import personal_tokens as pat
-from test_device_login import device  # noqa: F401
-from test_command import runtime, command_pool, TENANT  # noqa: F401
+from test_device_login import device as device_fixture
+from test_command import runtime as runtime_fixture, command_pool as command_pool_fixture, TENANT
+
+# Reuse the existing real-Postgres fixtures under their original pytest names.
+device = device_fixture
+runtime = runtime_fixture
+command_pool = command_pool_fixture
 
 CLIENT = '123@tervory'
 ORG = '10001'
