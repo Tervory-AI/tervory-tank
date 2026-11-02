@@ -83,6 +83,14 @@ try {
   for (const width of [320, 375, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     assert.equal(await page.evaluate(() => document.body.scrollWidth <= innerWidth), true, `Page overflow at ${width}`);
+    const badgeFits = await page.locator(".receipt-tabs").evaluate(tabs => {
+      const bounds = tabs.getBoundingClientRect();
+      return [...tabs.children].every(child => {
+        const box = child.getBoundingClientRect();
+        return box.left >= bounds.left - 1 && box.right <= bounds.right + 1;
+      });
+    });
+    assert(badgeFits, `Receipt tab or Example badge clips at ${width}`);
     await page.screenshot({ path: `${output}/homepage-${width}.png`, fullPage: true });
   }
   // Check both real form instances against the preview-only signup file.
