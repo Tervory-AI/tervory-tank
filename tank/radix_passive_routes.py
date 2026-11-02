@@ -54,7 +54,9 @@ def build_router(tank):
                 headers={'X-Tank-Key': key, 'X-Tervory-Tenant': str(tenant)}, follow_redirects=False)
             if response.status_code not in {200,201}:
                 detail = response.json().get('detail')
-                if response.status_code == 403 and detail == 'domain proof required':
+                if response.status_code == 403 and isinstance(detail, str) and detail in {
+                    'domain proof required', 'scan not authorized'
+                }:
                     raise HTTPException(403, 'domain proof required')
                 if response.status_code == 422 and isinstance(detail, list) and any(
                     item.get('loc') == ['body', 'artifact'] and item.get('msg') == 'Value error, invalid artifact'
