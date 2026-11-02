@@ -42,7 +42,7 @@ TOOLS = {
     "zenas": ["zenas.ask", "zenas.matters", "zenas.review"],
 }
 FOUNDER_TOOLS = ["trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
-                 "ledger.receipts", "ledger.savings", "worker.build", "repo.prs", "repo.pr", "repo.file"]
+                 "ledger.receipts", "ledger.savings", "worker.build", "repo.prs", "repo.pr", "repo.file", "radix.domain.prove", "radix.passive.scan", "radix.findings"]
 
 
 def db() -> Any:
@@ -999,6 +999,19 @@ class SourceFile(Body):
     text: str = Field(max_length=20000)
 
 
+class RadixDomainArgs(Body):
+    domain: str = Field(min_length=1, max_length=253)
+
+
+class RadixPassiveArgs(Body):
+    url: str = Field(max_length=300)
+    commit: str = Field(default="", max_length=200)
+
+
+class RadixFindingsArgs(Body):
+    scan_id: uuid.UUID
+
+
 class ScanArgs(Body):
     files: list[SourceFile] = Field(min_length=1, max_length=20)
 
@@ -1122,6 +1135,9 @@ ADAPTERS = {
     "rig.search": Adapter("GET", "/v1/rig/search", QueryArgs, "Search the product catalogue"),
     "rig.ask": Adapter("POST", "/v1/rig/ask", RigAskArgs, "Ask about a product", True, "paid_run"),
     "tisan.scaffold": Adapter("POST", "/v1/skala/tisan.scaffold/run", ScaffoldArgs, "Create a site scaffold", False, "other", "tisan.scaffold"),
+    "radix.domain.prove": Adapter("POST", "/v1/radix/passive/domains", RadixDomainArgs, "radix.domain.prove"),
+    "radix.passive.scan": Adapter("POST", "/v1/radix/passive/scans", RadixPassiveArgs, "radix.passive.scan"),
+    "radix.findings": Adapter("GET", "/v1/radix/passive/scans/{scan_id}/findings", RadixFindingsArgs, "radix.findings"),
     "radix.scan": Adapter("POST", "/v1/skala/scan.static/run", ScanArgs, "Scan supplied source text", False, "other", "scan.static"),
     "zenas.ask": Adapter("POST", "/v1/zenas/answers", ZenasAskArgs, "Ask a civil law question", True, "paid_run"),
     "zenas.matters": Adapter("POST", "/v1/zenas/matters", MatterArgs, "Create a matter"),
@@ -1242,6 +1258,10 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
     args = dict(action.arguments)
     path = adapter.path
     scope = {"tenant_id": str(actor.tenant_id)}
+    if action.tool == "radix.passive.scan":
+        args = {"target": args["url"], "artifact": "commit:" + args["commit"]}
+    elif action.tool == "radix.findings":
+        path = path.format(scan_id=args.pop("scan_id"))
     if action.tool.startswith("zenas."):
         scope["home_region"] = box_region()
     if "{skill_id}" in path:
@@ -1277,6 +1297,9 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     method, path, params, body = adapter_request(action, actor)
     headers = {"X-Tank-Key": TANK_API_KEY, "X-Tervory-User": actor.user_id,
                "X-Tervory-Tenant": str(actor.tenant_id)}
+    if action.tool in {"radix.domain.prove", "radix.passive.scan", "radix.findings"}:
+        from main import box_region
+        headers.update({"X-Tervory-Squad": "radix", "X-Tervory-Region": box_region()})
     headers["X-Tervory-Role"] = "org:admin" if actor.tenant_admin else ""
     if current_actor(actor).founder:
         headers["X-Tervory-Admin"] = actor.user_id
@@ -1286,6 +1309,10 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     if len(response.content) > 256000:
         raise ValueError("Tool response is too large; outcome needs reconciliation")
     result = response.json()
+    if action.tool == "radix.domain.prove" and 200 <= response.status_code < 300:
+        result = {key: result[key] for key in ("name", "value", "expires_at")}
+    elif action.tool == "radix.passive.scan" and 200 <= response.status_code < 300:
+        result = {"scan_id": result["scan_id"]}
     if action.tool == "ledger.receipts" and 200 <= response.status_code < 300:
         rows = result.get("ledger", [])
         if not isinstance(rows, list) or any(str(row.get("tenant_id")) != str(actor.tenant_id) for row in rows):
