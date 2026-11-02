@@ -216,3 +216,65 @@ async def test_legacy_csv_bytes_remain_identical_with_signals_appended():
     assert exported["site_newest_year"] == "2026"
     assert exported["sells_online_source_url"] == SITE
     assert json.loads(exported["sells_online_evidence"])[0]["text"] == "<button>Add to cart</button>"
+
+
+def test_base_pages_render_identically_while_site_signals_remain_export_only():
+    import subprocess
+    result = subprocess.run(["node", "-"], cwd=ROOT, capture_output=True, text=True, input=r'''
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const {createRequire} = require('node:module');
+const req = createRequire(process.cwd() + '/workspace/package.json');
+const ts = req('typescript');
+const React = req('react');
+const {renderToStaticMarkup} = req('react-dom/server');
+const runtime = req('react/jsx-runtime');
+const field = {value: 'Recorded public detail', verified: true, source_url: 'https://recorded.example/', checked_at: '2026-11-01T12:00:00Z', reason: null};
+const legacy = {website: {...field, value: 'https://recorded.example/'}, phone: {...field, value: '+15125550101'}, email: {...field, value: ['mail@recorded.example']}, socials: {...field, value: ['https://facebook.com/recorded']}};
+const enriched = {...legacy, technologies: {...field, value: [{name:'WordPress', evidence: []}]}, sells_online: {...field, value: false}, site_newest_year: {...field, value: 2026}};
+function render(component, fields, original) {
+  const row = {record_id: 'recorded', name: 'Recorded business', state: 'DC', fields};
+  const records = {total: 1, rows: [row]};
+  let slot = 0;
+  const hooks = {...React, useEffect: () => {}, useCallback: callback => callback,
+    useState: initial => {const index = slot++; return [(component === 'batch-workflow' ? index === 0 : index === 9) ? records : initial, () => {}];}};
+  const cache = new Map();
+  function load(file) {
+    file = path.resolve(file);
+    if(cache.has(file)) return cache.get(file);
+    let source = fs.readFileSync(file, 'utf8');
+    if(original && file.endsWith(component + '.tsx')) source = source.replace('pageFields(row.fields).map', 'Object.entries(row.fields).map');
+    const code = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX}}).outputText;
+    const module = {exports: {}};
+    cache.set(file, module.exports);
+    const localRequire = name => {
+      if(name === 'react') return hooks;
+      if(name === 'react/jsx-runtime') return runtime;
+      if(name === 'next/navigation') return {useRouter: () => ({refresh() {}})};
+      if(name.startsWith('.')) {
+        const stem = path.resolve(path.dirname(file), name);
+        return load(fs.existsSync(stem+'.tsx') ? stem+'.tsx' : stem+'.ts');
+      }
+      throw new Error('Unexpected dependency: ' + name);
+    };
+    new Function('require', 'module', 'exports', code)(localRequire, module, module.exports);
+    cache.set(file, module.exports);
+    return module.exports;
+  }
+  const mod = load('workspace/app/base/' + component + '.tsx');
+  const Component = component === 'batch-workflow' ? mod.BatchWorkflow : mod.ReferenceWorkflow;
+  return renderToStaticMarkup(React.createElement(Component, {signedIn: true, selected: 'Recorded batch'}));
+}
+for(const component of ['reference-workflow', 'batch-workflow']) {
+  const before = render(component, legacy, true);
+  assert.ok(before.includes('Recorded business'));
+  assert.ok(before.includes('Recorded public detail') === false);
+  assert.ok(before.includes('Website') && before.includes('Social links'));
+  assert.ok(before.includes('https://recorded.example/'));
+  assert.equal(render(component, legacy, false), before);
+  assert.equal(render(component, enriched, false), before, component + ': full rendered markup must remain byte-identical');
+}
+console.log('Both Base pages: complete rendered markup byte-identical with all three site signals present.');
+''')
+    assert result.returncode == 0, result.stdout + result.stderr
