@@ -1,0 +1,25 @@
+Collecting mcp==2.3.0
+  Downloading mcp-2.3.0-py3-none-any.whl.metadata (6.6 kB)
+Requirement already satisfied: pydantic==2.10.6 in /home/ammosync/trigger-crm-venv312/lib/python3.12/site-packages (2.10.6)
+Requirement already satisfied: anyio>=4.9 in /home/ammosync/trigger-crm-venv312/lib/python3.12/site-packages (from mcp==2.3.0) (4.15.1)
+Collecting httpx2>=2.10.0 (from mcp==2.3.0)
+  Using cached httpx2-2.16.0-py3-none-any.whl.metadata (10 kB)
+Requirement already satisfied: jsonschema>=4.20.0 in /home/ammosync/trigger-crm-venv312/lib/python3.12/site-packages (from mcp==2.3.0) (4.26.0)
+Collecting mcp-types==2.3.0 (from mcp==2.3.0)
+  Downloading mcp_types-2.3.0-py3-none-any.whl.metadata (1.9 kB)
+Requirement already satisfied: opentelemetry-api>=1.28.0 in /home/ammosync/trigger-crm-venv312/lib/python3.12/site-packages (from mcp==2.3.0) (1.45.2)
+INFO: pip is looking at multiple versions of mcp to determine which version is compatible with other requirements. This could take a while.
+ERROR: Cannot install mcp==2.3.0 and pydantic==2.10.6 because these package versions have conflicting dependencies.
+
+The conflict is caused by:
+    The user requested pydantic==2.10.6
+    mcp 2.3.0 depends on pydantic>=2.12.0
+
+Additionally, some packages in these conflicts have no matching distributions available for your environment:
+    pydantic
+
+To fix this you could try to:
+1. loosen the range of package versions you've specified
+2. remove package versions to allow pip to attempt to solve the dependency conflict
+
+ERROR: ResolutionImpossible: for help visit https://pip.pypa.io/en/latest/topics/dependency-resolution/#dealing-with-dependency-conflicts
