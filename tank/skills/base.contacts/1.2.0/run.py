@@ -143,8 +143,9 @@ async def _discover(payload: dict, ctx) -> dict:
 
 
 # Quality is deterministic. MX keeps the existing free DNS-over-HTTPS path.
-from pathlib import Path
 import ipaddress
+from pathlib import Path
+
 import phonenumbers
 
 _DISPOSABLE = frozenset(line.strip().lower() for line in
