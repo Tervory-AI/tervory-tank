@@ -266,6 +266,7 @@ class MemoryStore(RetailerMemoryStore):
         self.deleted_products: set[tuple[str, str]] = set()
         # Rig-owned Locate orders: (tenant, quote) -> {"order", "purchase_order"}.
         self.locate_orders: dict[tuple[str, str], dict[str, Any]] = {}
+        self.locate_order_created: dict[tuple[str, str], datetime] = {}
         # Pricing inputs moved out of attributes at import. Store-only.
         self.private_attributes: dict[tuple[str, str], dict[str, Any]] = {}
 
@@ -380,6 +381,7 @@ class MemoryStore(RetailerMemoryStore):
         quote_notice: dict[str, str] | None = None,
         locate_enabled: bool | None = None,
         blind_ship: bool | None = None,
+        auto_order: bool | None = None,
     ) -> None:
         previous = self.retailers.get(str(tenant_id), {})
         theme = theme if theme is not None else self.retailers.get(str(tenant_id), {}).get("theme", "neutral")
@@ -392,7 +394,45 @@ class MemoryStore(RetailerMemoryStore):
             else bool(previous.get("locate_enabled", False)),
             # Optional blind ship (Locate orders ship straight to the shopper). Off by default.
             "blind_ship": bool(blind_ship) if blind_ship is not None else bool(previous.get("blind_ship", False)),
-            "shop": copy.deepcopy(previous.get("shop", {}))}
+            # Optional auto-order (sandbox outbox only). Off by default.
+            "shop": copy.deepcopy(previous.get("shop", {})),
+            "auto_order": bool(auto_order) if auto_order is not None else bool(previous.get("auto_order", False))}
+
+
+    async def draft_supplier_orders(self, tenant_id: str, limit: int = 200,
+                                    before: datetime | None = None) -> list[str]:
+        """Quote ids whose PO is still draft and whose order is still placed.
+
+        With before, only POs created before that time.
+        """
+        return [quote for (tenant, quote), row in self.locate_orders.items()
+                if tenant == str(tenant_id) and row["purchase_order"]["state"] == "draft"
+                and row["order"]["state"] == "placed"
+                and (before is None or self.locate_order_created[(tenant, quote)] < before)][:limit]
+
+
+    async def cancel_locate_order(self, tenant_id: str, quote_id: str, reason: str) -> str:
+        """Cancel a placed order and its unsent PO. Refuses ("sent") once the PO was sent."""
+        row = self.locate_orders.get((str(tenant_id), quote_id))
+        if row is None:
+            return "missing"
+        if row["purchase_order"]["state"] == "sent":
+            return "sent"
+        if row["order"]["state"] == "placed":
+            row["order"].update(state="cancelled", cancel_reason=reason)
+        if row["purchase_order"]["state"] == "draft":
+            row["purchase_order"]["state"] = "cancelled"
+        return "cancelled"
+
+
+    async def supplier_po_sent(self, tenant_id: str, quote_id: str, sent: dict[str, Any]) -> dict[str, Any] | None:
+        """draft -> sent, once. None when the PO is missing or not a draft."""
+        row = self.locate_orders.get((str(tenant_id), quote_id))
+        if row is None or row["purchase_order"]["state"] != "draft":
+            return None
+        row["purchase_order"].update(state="sent", sent=copy.deepcopy(sent))
+        return copy.deepcopy(row["purchase_order"])
+
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         row = self.retailers.get(str(tenant_id))
@@ -453,6 +493,7 @@ class MemoryStore(RetailerMemoryStore):
         created = key not in self.locate_orders
         if created:
             self.locate_orders[key] = {"order": copy.deepcopy(order), "purchase_order": copy.deepcopy(purchase)}
+            self.locate_order_created[key] = datetime.now(timezone.utc)
         return {**copy.deepcopy(self.locate_orders[key]), "created": created}
 
     async def locate_order(self, tenant_id: str, quote_id: str) -> dict[str, Any] | None:
@@ -957,12 +998,15 @@ class PgStore(RetailerPgStore):
         quote_notice: dict[str, str] | None = None,
         locate_enabled: bool | None = None,
         blind_ship: bool | None = None,
+        auto_order: bool | None = None,
     ) -> None:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship)
-                VALUES ($1, $2, $3, $4, $5, coalesce($6, 'neutral'), $7::jsonb, coalesce($8, false), coalesce($9, false))
+                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship,
+                                             auto_order)
+                VALUES ($1, $2, $3, $4, $5, coalesce($6, 'neutral'), $7::jsonb, coalesce($8, false), coalesce($9, false),
+                        coalesce($10, false))
                 ON CONFLICT (tenant_id) DO UPDATE SET
                     slug = EXCLUDED.slug,
                     email = EXCLUDED.email,
@@ -971,7 +1015,8 @@ class PgStore(RetailerPgStore):
                     theme = coalesce($6, agent_rig.retailers.theme),
                     quote_notice = coalesce($7::jsonb, agent_rig.retailers.quote_notice),
                     locate_enabled = coalesce($8, agent_rig.retailers.locate_enabled),
-                    blind_ship = coalesce($9, agent_rig.retailers.blind_ship)
+                    blind_ship = coalesce($9, agent_rig.retailers.blind_ship),
+                    auto_order = coalesce($10, agent_rig.retailers.auto_order)
                 """,
                 _uuid(tenant_id),
                 str(slug),
@@ -982,12 +1027,66 @@ class PgStore(RetailerPgStore):
                 json.dumps(quote_notice) if quote_notice is not None else None,
                 None if locate_enabled is None else bool(locate_enabled),
                 None if blind_ship is None else bool(blind_ship),
+                None if auto_order is None else bool(auto_order),
             )
+
+
+    async def draft_supplier_orders(self, tenant_id: str, limit: int = 200,
+                                    before: datetime | None = None) -> list[str]:
+        """Quote ids whose PO is still draft and whose order is still placed (oldest first).
+
+        With before, only POs created before that time.
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT p.quote_id FROM agent_rig.supplier_purchase_orders p JOIN agent_rig.locate_orders o"
+                " USING (tenant_id, quote_id) WHERE p.tenant_id = $1 AND p.state = 'draft' AND o.state = 'placed'"
+                " AND ($3::timestamptz IS NULL OR p.created_at < $3)"
+                " ORDER BY p.created_at LIMIT $2", _uuid(tenant_id), max(1, min(int(limit), 1000)), before)
+        return [row["quote_id"] for row in rows]
+
+
+    async def cancel_locate_order(self, tenant_id: str, quote_id: str, reason: str) -> str:
+        """Cancel a placed order and its unsent PO, in one transaction.
+
+        The PO row is locked first; a PO already sent refuses the whole cancel
+        ("sent"), so the supplier never holds an order Rig marked cancelled.
+        """
+        tenant = _uuid(tenant_id)
+        async with self.pool.acquire() as conn, conn.transaction():
+            po_state = await conn.fetchval(
+                "SELECT state FROM agent_rig.supplier_purchase_orders WHERE tenant_id = $1 AND quote_id = $2"
+                " FOR UPDATE", tenant, quote_id)
+            if po_state is None:
+                return "missing"
+            if po_state == "sent":
+                return "sent"
+            await conn.execute(
+                "UPDATE agent_rig.locate_orders SET state = 'cancelled', cancel_reason = $3, updated_at = now()"
+                " WHERE tenant_id = $1 AND quote_id = $2 AND state = 'placed'", tenant, quote_id, reason)
+            await conn.execute(
+                "UPDATE agent_rig.supplier_purchase_orders SET state = 'cancelled', updated_at = now()"
+                " WHERE tenant_id = $1 AND quote_id = $2 AND state = 'draft'", tenant, quote_id)
+        return "cancelled"
+
+
+    async def supplier_po_sent(self, tenant_id: str, quote_id: str, sent: dict[str, Any]) -> dict[str, Any] | None:
+        """draft -> sent, once (a single conditional UPDATE). None when not a draft."""
+        async with self.pool.acquire() as conn:
+            updated = await conn.fetchval(
+                "UPDATE agent_rig.supplier_purchase_orders SET state = 'sent', sent = $3::jsonb, sent_at = now(),"
+                " updated_at = now() WHERE tenant_id = $1 AND quote_id = $2 AND state = 'draft' RETURNING true",
+                _uuid(tenant_id), quote_id, _json(sent))
+            if not updated:
+                return None
+            saved = await self._locate_order(conn, _uuid(tenant_id), quote_id)
+        return saved["purchase_order"] if saved else None
+
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship, shop FROM agent_rig.retailers WHERE tenant_id = $1",
+                "SELECT slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship, auto_order, shop FROM agent_rig.retailers WHERE tenant_id = $1",
                 _uuid(tenant_id),
             )
         if row is None:
@@ -995,7 +1094,9 @@ class PgStore(RetailerPgStore):
         return {"slug": row["slug"], "email": row["email"], "webhook": row["webhook"], "name": row["name"] or "", "theme": row["theme"],
                 "quote_notice": json.loads(row["quote_notice"]) if isinstance(row["quote_notice"], str) else row["quote_notice"],
                 "locate_enabled": bool(row["locate_enabled"]), "blind_ship": bool(row["blind_ship"]),
+                "auto_order": bool(row["auto_order"]),
                 "shop": json.loads(row["shop"]) if isinstance(row["shop"], str) else row["shop"]}
+
 
     async def replace_market(self, tenant_id: str, rows: list[dict[str, Any]]) -> None:
         async with self.pool.acquire() as conn:
@@ -1112,9 +1213,9 @@ class PgStore(RetailerPgStore):
                 _uuid(tenant_id), quote_id, _json(state),
             )
 
-    _ORDER_COLUMNS = "quote_id, number, state, product_id, price, currency, ship_to"
+    _ORDER_COLUMNS = "quote_id, number, state, product_id, price, currency, ship_to, cancel_reason"
     _PO_COLUMNS = ("quote_id, number, state, source_id, vendor_name, order_email, item_sku, item_url, quantity,"
-                   " unit_cost, currency, ship_to, neutral_slip, instructions")
+                   " unit_cost, currency, ship_to, neutral_slip, instructions, sent")
 
     async def place_locate_order(self, tenant_id: str, order: dict[str, Any],
                                  purchase: dict[str, Any]) -> dict[str, Any]:
@@ -1173,11 +1274,13 @@ class PgStore(RetailerPgStore):
             for key, value in out.items():
                 if isinstance(value, Decimal):
                     out[key] = str(value.quantize(Decimal("0.01")))
-            if isinstance(out.get("ship_to"), str):
-                out["ship_to"] = json.loads(out["ship_to"])
+            for key in ("ship_to", "sent"):
+                if isinstance(out.get(key), str):
+                    out[key] = json.loads(out[key])
             return out
 
         return {"order": plain(order), "purchase_order": plain(purchase)}
+
 
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         async with self.pool.acquire() as conn:

@@ -22,7 +22,7 @@ async function rigProxy(){if(sourceError)throw Error('unavailable');return savin
 Module._load = function (name, parent, isMain) {
   if (name === 'server-only') return {};
   if (name === 'stripe') return class StripeFixture {
-    constructor() {this.subscriptions={list:async function*(){
+    constructor() {this.balance={retrieve:async()=>({livemode:false})};this.subscriptions={list:async function*(){
       yield {customer:'customer-one',items:{data:[{price:{unit_amount:1200}}]}};
       yield {customer:'customer-one',items:{data:[{price:{unit_amount:1500}}]}};
       yield {customer:'free-customer',items:{data:[{price:{unit_amount:0}}]}};
@@ -32,7 +32,7 @@ Module._load = function (name, parent, isMain) {
   if (name === '@clerk/nextjs/server') return {
     auth: async () => ({userId: founder ? 'founder-fixture' : 'client-fixture'}),
     currentUser: async () => ({firstName: 'Alex'}),
-    clerkClient: async () => ({users: {getCount:async()=>2,getUserList:async()=>({totalCount:2,data:[{id:'user-one',firstName:'Alex',lastName:'Example',createdAt:Date.UTC(2026,9,21),publicMetadata:{company:'Example Company',country:'United States',plan:'Trial'}}]})}}),
+    clerkClient: async () => ({users: {getCount:async()=>1,getUserList:async()=>({totalCount:1,data:[{id:'user-one',firstName:'Alex',lastName:'Example',createdAt:Date.UTC(2026,9,21),publicMetadata:{company:'Example Company',country:'United States',plan:'Trial'}}]})}}),
   };
   if (name === '@/lib/admin') return {isFounder: id => id === 'founder-fixture'};
   if (name === '@/lib/tenant') return {activeTenant: async()=>({tenantId:'fixture',orgName:'Example Company',userId:'client-fixture'})};
@@ -42,7 +42,7 @@ Module._load = function (name, parent, isMain) {
     readFounderDashboard: async()=>fixture, readPaidPause:async()=>({paid_paused:false,refused:[]}),
     readDashboardCandidates:async()=>[], setPaidPause:async()=>({}),switchProvenModel:async()=>({ok:true}),
   };
-  if (name === 'next/navigation') return {notFound:()=>{throw Error('404')},redirect:()=>{throw Error('redirect')}};
+  if (name === 'next/navigation') return {useRouter:()=>({refresh(){}}),notFound:()=>{throw Error('404')},redirect:()=>{throw Error('redirect')}};
   if (name === 'next/cache') return {revalidatePath:()=>{}};
   return original.call(this, name, parent, isMain);
 };
@@ -71,13 +71,18 @@ async function render() {
   assert(unavailable.includes('Your activity could not be loaded'));
   sourceError=false;
   const {FounderDashboard} = require('../workspace/app/control/view.tsx');
-  const view={data:fixture,signups:{total:1,recent:[{id:'user',name:'Alex Example',company:'Example Company',country:'United States',plan:'Trial',createdAt:Date.UTC(2026,9,21)}],days:[]},paying:0,paused:false,models:[],refused:[],errors:[]};
+  const {activity}=require('../workspace/app/control/values.ts');
+  const now=Date.UTC(2026,9,21,12);
+  const view={data:fixture,activity:activity(fixture,now),now,checks:0,workersPaused:false,signups:{total:1,thisWeek:1,recent:[{id:'user',name:'Alex Example',company:'Example Company',country:'United States',plan:'Trial',createdAt:Date.UTC(2026,9,21)}],days:[]},paying:{total:0,thisWeek:0,days:[]},paused:false,models:[],refused:[],errors:[]};
   const control=renderToStaticMarkup(React.createElement(FounderDashboard,{view}));
-  for (const label of ['Approve all ready','GHOST-1','AGENT-1','BATCH-1']) assert(control.includes(label));
+  for (const label of ['Control panel','Nothing needs you.','Squad workers','Workers']) assert(control.includes(label));
+  for (const label of ['GHOST-1','AGENT-1','BATCH-1']) assert(!control.includes(label));
+  // The original assets render in plain Node without an SVG module loader.
+  assert(control.includes('data:image/svg+xml,'));
   // WORKERS-2 tile: status, commit, last check-in, Pause/Resume; "not checking in" after 3 minutes.
   assert(control.includes('Workers status unavailable') && control.includes('Workers pause unavailable'));
   const beat=(ageS,state='running',issue=211)=>({worker:'boston',state,issue,commit:'c379a45deadbeef',last_error:null,seen_at:new Date(Date.now()-ageS*1000).toISOString(),age_s:ageS,checking_in:ageS<=180});
-  const tile=w=>renderToStaticMarkup(React.createElement(FounderDashboard,{view:{...view,workers:w}}));
+  const tile=w=>renderToStaticMarkup(React.createElement(FounderDashboard,{view:{...view,workers:w,now:Date.now()}}));
   const live=tile({workers_paused:false,worker:beat(30),stale_after_s:180});
   assert(live.includes('Running · issue #211') && live.includes('c379a45deadb') && live.includes('Pause workers') && !live.includes('not checking in'));
   const stale=tile({workers_paused:true,worker:beat(200,'paused',null),stale_after_s:180});
@@ -85,10 +90,10 @@ async function render() {
   assert(tile({workers_paused:false,worker:null,stale_after_s:180}).includes('No check-in yet'));
   const {signupSource,payingSource}=require('../workspace/app/control/sources.ts');
   process.env.STRIPE_SECRET_KEY='sk_test_dummy';
-  assert.equal(await payingSource(),2);
+  await assert.rejects(()=>payingSource(),/requires Stripe live data/);
   delete process.env.STRIPE_SECRET_KEY;
   await assert.rejects(()=>payingSource(),/not connected/);
-  assert.equal((await signupSource()).total,2);
+  assert.equal((await signupSource()).total,1);
   assert.equal((await signupSource()).recent[0].name,'Alex Example');
   const dir=path.join(root,'tests/artifacts/dash-1');fs.mkdirSync(dir,{recursive:true});
   const css=fs.readFileSync(path.join(root,'workspace/app/globals.css'),'utf8') + fs.readFileSync(path.join(root,'workspace/app/control/dashboard.css'),'utf8');
