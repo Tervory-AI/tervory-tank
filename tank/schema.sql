@@ -2333,3 +2333,9 @@ CREATE TABLE IF NOT EXISTS agent_tank.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
+
+-- IDENTITY-ZA: existing token format/lifetimes remain unchanged. Trusted role
+-- snapshot is set only by verified OIDC issuance; refresh/revoke preserve the row.
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS identity_tenant_admin boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.device_authorizations ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT 'workspace'
+    CHECK (provider IN ('workspace', 'zitadel'));
