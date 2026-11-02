@@ -97,8 +97,9 @@ SCAFFOLD_TIMEOUT_S = 600
 
 app = create_app(
     agent=AGENT,
-    handlers={"ping": ping, "scaffold": scaffold, "figma": figma},
-    job_timeouts={"scaffold": SCAFFOLD_TIMEOUT_S},
+    handlers={"ping": ping, "scaffold": scaffold, "figma": figma,
+              "build": lambda ctx: _load_beside(_figma_cache(), "tisan_builder", "builder.py").handle(ctx)},
+    job_timeouts={"scaffold": SCAFFOLD_TIMEOUT_S, "build": SCAFFOLD_TIMEOUT_S},
     schedules=[
         {
             "tenant_id": HEARTBEAT_TENANT,
@@ -133,6 +134,8 @@ async def eval_case(body: EvalCase, x_tank_key: str = Header(default="")) -> dic
         raise HTTPException(401, "room key required")
     if body.skill_id == "tisan.figma":
         module = _load_beside(_figma_cache(), "tisan_figma", "figma.py")
+    elif body.skill_id == "tisan.build":
+        module = _load_beside(_figma_cache(), "tisan_builder", "builder.py")
     elif body.skill_id == "tisan.scaffold":
         module = _scaffold_module()
     else:
@@ -145,6 +148,8 @@ async def eval_case(body: EvalCase, x_tank_key: str = Header(default="")) -> dic
 # API-only promotion reuses founder identity, the Tisan data volume and Coolify.
 _load_beside({}, 'tisan_promotion_api', 'promotion_api.py').mount(
     app, _load_beside({}, 'tisan_promotion', 'promotion.py'))
+
+_load_beside({}, 'tisan_publish', 'publish.py').mount(app, _load_beside({}, 'tisan_publish_promotion', 'promotion.py'))
 
 # J4 is API-only; no page, generated copy or automatic email acknowledgement.
 _load_beside({}, 'tisan_quotes', 'quotes.py').mount(

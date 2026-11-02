@@ -1,26 +1,38 @@
-import { ApproveAllReady } from "../skala/approve-all";
 import type { DashboardRead } from "@/lib/tank";
-import type { Signups } from "./sources";
-import { ControlActions, WorkersActions } from "./widgets";
+import type { Paying, Signups } from "./sources";
+const greenDot = "data:image/svg+xml,%3Csvg%20preserveAspectRatio%3D%22none%22%20overflow%3D%22visible%22%20style%3D%22display%3A%20block%3B%22%20width%3D%2210%22%20height%3D%2210%22%20viewBox%3D%220%200%2010%2010%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Ccircle%20id%3D%22Status%20dot%22%20cx%3D%225%22%20cy%3D%225%22%20r%3D%225%22%20fill%3D%22%231E7A46%22%2F%3E%0A%3C%2Fsvg%3E%0A";
+const amberDot = "data:image/svg+xml,%3Csvg%20preserveAspectRatio%3D%22none%22%20overflow%3D%22visible%22%20style%3D%22display%3A%20block%3B%22%20width%3D%2210%22%20height%3D%2210%22%20viewBox%3D%220%200%2010%2010%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Ccircle%20id%3D%22Status%20dot%22%20cx%3D%225%22%20cy%3D%225%22%20r%3D%225%22%20fill%3D%22%23B26B00%22%2F%3E%0A%3C%2Fsvg%3E%0A";
+const greyDot = "data:image/svg+xml,%3Csvg%20preserveAspectRatio%3D%22none%22%20overflow%3D%22visible%22%20style%3D%22display%3A%20block%3B%22%20width%3D%2210%22%20height%3D%2210%22%20viewBox%3D%220%200%2010%2010%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Ccircle%20id%3D%22Status%20dot%22%20cx%3D%225%22%20cy%3D%225%22%20r%3D%225%22%20fill%3D%22%238C94A6%22%2F%3E%0A%3C%2Fsvg%3E%0A";
+import { ControlActions, NeedsYou, WorkersActions } from "./widgets";
 import { checkingIn, type WorkersRead } from "./workers";
+import { count, money, passedSkills, signupAge, sourceLink, sparkPoints, wholeNumber, type activity, type Candidate, type DailyValue } from "./values";
 
-export const money = (value: number | null | undefined) => value == null ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
-export function Spark({ values, green = false }: { values: number[]; green?: boolean }) {
-  if (values.length < 2) return <p className="dash-note">Not enough history for a trend.</p>;
-  const max = Math.max(...values), min = Math.min(...values), range = max - min || 1;
-  const points = values.map((n, i) => `${i * 118 / (values.length - 1) + 1},${30 - (n - min) / range * 28}`).join(" ");
-  return <svg className="dash-spark" viewBox="0 0 120 32" role="img" aria-label="Daily history"><polyline points={points} fill="none" stroke={green ? "#1e7a46" : "#001840"} strokeWidth="1.5" /></svg>;
-}
-export function Card({ label, value, note, values, green }: { label: string; value: string | number; note: string; values?: number[]; green?: boolean }) {
-  return <section className="dash-card"><p className="dash-label">{label}</p><p className={`dash-value${green ? " dash-good" : ""}`}>{value}</p><p className="dash-note">{note}</p>{values && <Spark values={values} green={green} />}</section>;
-}
-const agents = ["Base", "Tiger", "Market Lab", "Rig", "Tisan", "Radix", "Zenas"];
 export type FounderView = {
-  data: DashboardRead | null; signups: Signups | null; paying: number | null;
-  paused: boolean | null; errors: string[]; models: { task_type: string; candidate_model: string | null; n: number; agreement: number | null; min_shadow_samples?: number; eligible: boolean; prim_cost?: number | null; cand_cost?: number | null }[];
-  refused: { task: string; path: string; at: string }[];
-  workers?: WorkersRead | null;
+  data: DashboardRead; signups: Signups; paying: Paying;
+  activity: ReturnType<typeof activity>; paused: boolean; workersPaused: boolean;
+  models: Candidate[]; checks: number; now: number; workers?: WorkersRead | null;
 };
+
+const squads = [
+  ["base", "Base"], ["tiger", "Tiger"], ["market_lab", "Market Lab"], ["rig", "Rig"],
+  ["tisan", "Tisan"], ["radix", "Radix"], ["zenas", "Zenas"],
+] as const;
+
+export function Spark({ days }: { days: DailyValue[] }) {
+  const points = sparkPoints(days.map(day => day.value));
+  return <span className="control-spark">{points && <svg width="120" height="32" viewBox="0 0 120 32" aria-hidden="true">
+    <polyline points={points} fill="none" stroke="#001840" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>}</span>;
+}
+
+function Metric({ label, value, note, days, href }: { label: string; value: string; note?: React.ReactNode; days: DailyValue[]; href: string }) {
+  return <section className="control-card control-metric">
+    <p className="control-label">{label}</p>
+    <a className="control-value" href={href}>{value}</a>
+    <div className="control-metric-sub">{note && <a href={href}>{note}</a>}<a className="control-trend" href={href} aria-label={label}><Spark days={days} /></a></div>
+  </section>;
+}
+
 export function WorkersTile({ workers, now }: { workers: WorkersRead | null | undefined; now?: number }) {
   const beat = workers?.worker ?? null;
   const live = checkingIn(beat, now);
@@ -33,46 +45,56 @@ export function WorkersTile({ workers, now }: { workers: WorkersRead | null | un
     <div className="dash-row"><span>{workers ? (workers.workers_paused ? "Workers are paused: no new task is taken" : "Workers take new tasks") : "Pause unavailable"}</span><WorkersActions paused={workers ? workers.workers_paused : null} /></div>
   </section>;
 }
-export function FounderDashboard({ view, squads }: { view: FounderView; squads?: import("react").ReactNode }) {
-  const { data, signups, paying } = view;
-  const today = new Date().toISOString().slice(0, 10);
-  const daily = data?.daily ?? [];
-  const day = daily.find(row => row.day === today);
-  const unpriced = daily.reduce((sum, row) => sum + (row.unpriced || 0), 0);
-  const spent = data ? daily.reduce((sum, row) => sum + Number(row.spent), 0) : null;
-  const code = day && day.delivered > 0 ? `${Math.round(day.code / day.delivered * 100)}% by code` : "No completed calls today.";
-  return <div className="dashboard-root dash-control">
-    <header className="dash-top"><img className="dash-brand" src="/brand/tervory-logo.png" alt="Tervory" /><h1>Control panel</h1><span className="dash-health">Health unavailable · GHOST-1</span><ControlActions paused={view.paused} /></header>
-    {view.errors.length > 0 && <p role="alert" className="dash-problem">{view.errors.join(" ")}</p>}
-    <div className="dash-kpis">
-      <Card label="Sign-ups" value={signups?.total ?? "—"} note={signups ? "From Clerk" : "Clerk unavailable"} values={signups?.days.map(day => day.value)} />
-      <Card label="Paying clients" value={paying ?? "—"} note={paying == null ? "Stripe unavailable" : "Distinct customers · active paid plans"} />
-      <Card label="Work done today" value={data ? day?.delivered ?? 0 : "—"} note={code} values={data?.daily.map(row => row.delivered)} />
-      <Card label="Recorded spend this month" value={unpriced && spent === 0 ? "price not set" : money(spent)} note={unpriced ? `${unpriced} calls excluded: price not set` : "Budget source not connected"} values={unpriced ? undefined : data?.daily.map(row => Number(row.spent))} />
-      <Card label="Saved this month" value={money(data?.saved_usd)} note="No recorded baseline to compare" green />
+
+export function FounderDashboard({ view }: { view: FounderView }) {
+  const { data, signups, paying, activity, now } = view;
+  const unpriced = data.daily.reduce((sum, row) => sum + (row.unpriced || 0), 0);
+  return <div className="control-panel">
+    <header className="control-top">
+      <img src="/brand/tervory-logo.png" alt="Tervory AI" width="180" height="33" />
+      <h1>Control panel</h1>
+      <ControlActions paused={view.paused} />
+    </header>
+    <div className="control-metrics">
+      <Metric label="Sign-ups" value={count(signups.total)} note={<>+<span className="control-number">{signups.thisWeek}</span> this week</>} days={signups.days} href={sourceLink("signups")} />
+      <Metric label="Paying clients" value={String(paying.total)} note={<>+<span className="control-number">{paying.thisWeek}</span> this week</>} days={paying.days} href={sourceLink("paying")} />
+      <Metric label="Work done today" value={count(activity.delivered)} note={<><span className="control-number">{activity.codePercent}</span>% by code, no model</>} days={activity.work} href={sourceLink("activity", { day: new Date(now).toISOString().slice(0, 10) })} />
+      <Metric label="Recorded spend this month" value={unpriced && activity.spent === 0 ? "price not set" : money(activity.spent)} note={unpriced ? `${unpriced} calls excluded: price not set` : undefined} days={unpriced ? [] : activity.spend} href={sourceLink("activity")} />
     </div>
-    <div className="dash-middle">
-      <section className="dash-card"><h2>Case study · AmmoSync on Base</h2><div className="dash-case-charts"><div><p className="dash-label">Verified records by state</p><div className="dash-chart-space"><p className="dash-empty">AmmoSync’s data source is not linked.</p></div></div><div><p className="dash-label">Cost per verified record</p><div className="dash-chart-space"><p className="dash-empty">No measured Apollo comparison yet.</p></div></div></div><p className="dash-empty">Headline numbers will appear when records and their costs can be attributed to this case study.</p><div className="dash-case-actions"><button className="dash-button" disabled>Run next state · AGENT-1</button><button className="dash-button" disabled>Export case study · no source</button></div></section>
-      <section className="dash-card"><h2>Needs you</h2>
-        <div className="dash-row"><span>{data ? `${data.skills?.length ?? 0} skills awaiting review` : "Skill reviews unavailable"}</span><ApproveAllReady className="dash-button" /></div>
-        {view.models.filter(row => row.candidate_model && row.eligible && row.prim_cost != null && row.cand_cost != null && row.cand_cost < row.prim_cost).map(row => <div className="dash-row" key={row.task_type}><span>{row.task_type} · {row.n} comparisons · {Math.round(Number(row.agreement) * 100)}% agreement</span><ControlActions taskType={row.task_type} /></div>)}
-        <div className="dash-row"><span>Paid steps</span><span className="dash-note">No pending-action source connected</span></div>
-        <div className="dash-row"><span>Daily check</span><a className="dash-button" href="/skala/gold">Open checks</a></div>
-        <div className="dash-row"><span>Ghost issues unavailable</span><button className="dash-button" disabled>Look · GHOST-1</button><button className="dash-button" disabled>Let it fix · GHOST-1</button></div>
+    <NeedsYou skills={passedSkills(data.skills!).length} models={view.models} checks={view.checks} />
+    <div className="control-bottom">
+      <section className="control-card control-squad">
+        <h2>Squad</h2>
+        {squads.map(([agent, name]) => {
+          const rows = data.squad!.filter(row => row.agent === agent);
+          const running = rows.filter(row => row.status === "running").reduce((total, row) => total + wholeNumber(row.jobs), 0);
+          const queued = rows.filter(row => row.status === "queued").reduce((total, row) => total + wholeNumber(row.jobs), 0);
+          const dot = running ? greenDot : queued ? amberDot : greyDot;
+          return <div className="control-squad-row" key={agent}>
+            <img src={dot} alt="" width="10" height="10" />
+            <p className="control-squad-name">{name}</p>
+            <a className="control-squad-count" href={sourceLink("squad", { agent })}>{running ? <><span className="control-number">{running}</span> running</> : queued ? <><span className="control-number">{queued}</span> queued</> : "—"}</a>
+          </div>;
+        })}
+      </section>
+      <section className="control-card control-signups">
+        <div className="control-head"><h2>Latest sign-ups</h2><a className="control-button" href="/control/signups">All <span className="control-number">{signups.total}</span></a></div>
+        {signups.recent.map(user => {
+          const age = signupAge(user.createdAt, now);
+          const parts = age.match(/^(\d+)(.*)$/);
+          return <div className="control-signup-row" key={user.id}>
+          <div className="control-signup-who"><p>{user.name}</p><p>{user.company} · {user.country}</p></div>
+          <span className="control-plan">{user.plan}</span>
+          <a className="control-age" href={sourceLink("signups", { user: user.id })}>{parts ? <><span className="control-number">{parts[1]}</span>{parts[2]}</> : age}</a>
+        </div>;
+        })}
+      </section>
+      <section className="control-card control-controls">
+        <h2>Controls</h2>
+        <div className="control-workers"><p>Squad workers</p><WorkersActions paused={view.workersPaused} /></div>
+        <div className="control-quick"><a className="control-button primary" href="/chats">Open the window</a><a className="control-button" href="/tank/proof">Proof report</a></div>
       </section>
     </div>
-    <div className="dash-bottom">
-      <section className="dash-card"><div className="dash-subhead"><h2>Squad</h2><span className="dash-note">This server only</span></div>{agents.map(name => {
-        const key = name.toLowerCase().replaceAll(" ", "_");
-        const running = data?.squad?.filter(row => row.agent === key && row.status === "running").reduce((sum,row) => sum + row.jobs, 0);
-        return <div className="dash-row" key={name}><span>{name}</span><span className="dash-note">{data ? `${running ?? 0} running jobs` : "Activity unavailable"}</span><button className="dash-button" disabled>Pause / Start · AGENT-1</button></div>;
-      })}<p className="dash-note">Room health and other servers are not connected.</p></section>
-      <section className="dash-card"><div className="dash-subhead"><h2>Latest sign-ups</h2><a className="dash-button" href="/control/signups">All {signups?.total ?? "sign-ups"}</a></div>{signups?.recent.length ? signups.recent.map(user => <div className="dash-row" key={user.id}><span><strong>{user.name}</strong><br /><span className="dash-note">{user.company ?? "Company not provided"} · {user.country ?? "Country not provided"}</span></span><span className="dash-chip">{user.plan ?? "Plan not recorded"}</span></div>) : <p className="dash-empty">{signups ? "No sign-ups yet." : "Sign-ups could not be loaded."}</p>}</section>
-      <section className="dash-card"><h2>Controls</h2><div className="dash-row"><span>Shadow checks</span><span className="dash-note">{data ? `${data.shadow_policies} policies on` : "Unavailable"} · MODELS-2</span></div><div className="dash-row"><span>Overnight batches</span><span className="dash-note">{data ? `${data.batch_policies} eligible policies` : "Unavailable"} · BATCH-1</span></div><div className="dash-row"><span>Paid tools without asking</span><span className="dash-note">No global setting · CORE-1</span></div><div className="dash-row"><span>Squad builds Tervory</span><span className="dash-note">Unavailable · AGENT-1</span></div><div className="dash-row"><span>Daily budget</span><span className="dash-note">Not connected</span></div><div className="dash-row"><span>Server load</span><span className="dash-note">Unavailable · GHOST-1</span></div><div className="dash-row"><span>Storage used</span><span className="dash-note">Unavailable · BUCKET-1</span></div><div className="dash-actions"><a className="dash-button primary" href="/admin">Open the window</a><a className="dash-button" href="/admin">Proof report</a></div></section>
-    </div>
-    <div style={{marginTop:18}}><WorkersTile workers={view.workers} /></div>
-    <section className="dash-card" style={{marginTop:18}}><h2>Stopped by the pause</h2>{view.refused.length ? view.refused.map((row,i) => <p className="dash-note" key={i}>{row.task} · {row.path} · {row.at}</p>) : <p className="dash-empty">No recorded refusals.</p>}</section>
-    {squads}
-    <p className="dash-footer">Live measurements only. Unavailable sources stay empty. Controls apply to this server.</p>
+    <WorkersTile workers={view.workers} now={now} />
   </div>;
 }

@@ -67,9 +67,8 @@ global.fetch = async(url,options)=>{
   assert(unavailable.includes('role="alert"') && !unavailable.includes('role="switch"'));
   const empty=renderToStaticMarkup(React.createElement(ClientSquads,{initial:{clients:[],page:0,more:false}}));
   assert(empty.includes('No clients on this page.'));
-  const {FounderDashboard}=require('../workspace/app/control/view.tsx');
-  const view={data:null,signups:null,paying:null,paused:null,errors:[],models:[],refused:[]};
-  const html=renderToStaticMarkup(React.createElement(FounderDashboard,{view,squads:React.createElement(ClientSquads,{initial:clients,selectedClient:'org-fixture',initialState:state})}));
+  // This tile is tested independently of the reduced Figma control-panel layout.
+  const html=tile;
   const css=fs.readFileSync(path.join(root,'workspace/app/control/dashboard.css'),'utf8')+fs.readFileSync(path.join(root,'workspace/app/control/client-squads.css'),'utf8');
   const fonts="@font-face{font-family:Jost;src:url('/fonts/Jost-300-latin.woff2')}@font-face{font-family:Inter;src:url('/fonts/Inter-latin.woff2')}@font-face{font-family:Mono;src:url('/fonts/JetBrainsMono-latin.woff2')}html,body{margin:0}:root{--font-jost:Jost;--font-inter:Inter;--font-mono:Mono}";
   const out=path.join(require('node:os').tmpdir(),'command1a-ui');fs.mkdirSync(out,{recursive:true});

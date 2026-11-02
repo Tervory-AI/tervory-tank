@@ -223,6 +223,23 @@ class Holds:
                 VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6)""", UUID(str(tenant)), hold_id, product_id,
                 json.dumps(public), json.dumps(private), expires_at)
 
+    async def peek(self, tenant: str, hold_id: str, now: datetime) -> dict | None:
+        """Read a usable hold without consuming it (for refusals that must not burn it)."""
+        if self.pool is None:
+            row = self.store.supply_state.get(str(tenant), {}).get("holds", {}).get(hold_id)
+            if row is None or row["used_at"] is not None or row["expires_at"] <= now:
+                return None
+            return {key: row[key] for key in ("product_id", "public", "private")}
+        import json
+
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow("""SELECT product_id, public, private FROM agent_rig.supply_holds
+                WHERE tenant_id=$1 AND id=$2 AND used_at IS NULL AND expires_at > $3""", UUID(str(tenant)), hold_id, now)
+        if row is None:
+            return None
+        load = lambda value: json.loads(value) if isinstance(value, str) else value  # noqa: E731
+        return {"product_id": row["product_id"], "public": load(row["public"]), "private": load(row["private"])}
+
     async def take(self, tenant: str, hold_id: str, now: datetime) -> dict | None:
         """Consume once. Expired, used or another tenant's hold returns None."""
         if self.pool is None:
@@ -287,7 +304,8 @@ async def confirm(store: Any, tenant: str, product: dict, checker: LiveChecker, 
     public = {"status": "available_to_order", "eta": offer.get("eta"),
               "price": {"amount": str(amount), "currency": product["currency"]},
               "expires_at": expires_at.isoformat()}
-    private = {"offer": offer, "source": {**{key: source.get(key) for key in ("id", "provider", "site")},
+    private = {"offer": offer, "source": {**{key: source.get(key) for key in
+                                             ("id", "provider", "site", "vendor_name", "order_email")},
                                           "neutral_slip_required": source.get("neutral_slip_required") is True},
                "live": {**evidence, "price": str(live.price), "currency": live.currency,
                         "checked_at": live.checked_at.isoformat()},
