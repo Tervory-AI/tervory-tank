@@ -44,3 +44,5 @@ python-multipart==0.0.31
 feedparser==6.0.14
 # feedparser's only dependency, pinned so a new release cannot change parsing under us.
 feedparser-sgmllib==2.1.0
+# Offline phone validation and line types from Apache-2.0 libphonenumber metadata.
+phonenumbers==9.0.42
