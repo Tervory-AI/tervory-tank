@@ -22,11 +22,10 @@ test("layout has landmarks and the document language", () => {
   const layout = readFileSync("app/layout.tsx", "utf8");
   expect(layout).toContain("<html");
   expect(layout).toContain("lang={site.locale}");
-  expect(layout).toContain("<header");
-  expect(layout).toContain("<nav");
-  expect(layout).toContain('aria-label="Primary"');
   expect(layout).toContain("<main");
-  expect(layout).toContain("<footer");
+  expect(layout).not.toContain("<header");
+  expect(layout).not.toContain("<nav");
+  expect(layout).not.toContain("<footer");
 });
 
 test("focus is visible", () => {
@@ -52,9 +51,11 @@ test("components do not hard-code colours", () => {
   }
 });
 
-test("the logo has alternative text when a logo is set", () => {
+test("layout does not invent logo or navigation wording", () => {
   const layout = readFileSync("app/layout.tsx", "utf8");
-  expect(layout).toContain("alt={`${site.name} logo`}");
+  expect(layout).not.toContain("site.name");
+  expect(layout).not.toContain("site.pages");
+  expect(layout).not.toContain("Skip to content");
 });
 
 test("contact form posts to the placeholder and has labels", () => {

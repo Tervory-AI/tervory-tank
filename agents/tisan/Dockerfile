@@ -42,7 +42,7 @@ RUN apt-get update \
     && PLAYWRIGHT_BROWSERS_PATH=/opt/tisan-browser /opt/tisan-check/node_modules/.bin/playwright install --with-deps chromium \
     && rm -rf /tmp/npm-warm \
     && chown -R agent:agent /opt/npm-cache /data
-COPY agents/tisan/app.py agents/tisan/promotion.py agents/tisan/promotion_api.py agents/tisan/builder.py agents/tisan/quotes.py agents/tisan/schema.sql /app/
+COPY agents/tisan/app.py agents/tisan/promotion.py agents/tisan/promotion_api.py agents/tisan/publish.py agents/tisan/builder.py agents/tisan/quotes.py agents/tisan/schema.sql /app/
 # Reuse Tiger's SMTP transport without copying other rooms or their configuration.
 COPY agents/rig/rigbox/reserve.py /app/quote_smtp.py
 COPY docs/figma /app/docs/figma
