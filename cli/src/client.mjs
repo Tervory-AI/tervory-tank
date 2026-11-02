@@ -104,6 +104,24 @@ export function approvalUrl(code, region) {
   return `${APPROVAL_ORIGIN}/cli/device?${new URLSearchParams({ code, region })}`;
 }
 
+// ZA's optional identity provider is pinned independently of the Tank origin.
+export function identityApprovalUrl(start, region) {
+  if (start.identity_provider !== 'zitadel') return approvalUrl(start.user_code, region);
+  if (region !== 'za' || typeof start.user_code !== 'string' || !/^[A-Z0-9-]{4,40}$/.test(start.user_code)) {
+    throw new Error('Login refused by Tank.');
+  }
+  try {
+    const base = new URL(start.verification_uri);
+    const url = new URL(start.verification_uri_complete || start.verification_uri);
+    for (const value of [base, url]) {
+      if (value.origin !== 'https://auth.za.tervory.com' || value.username || value.password || value.hash) {
+        throw new Error();
+      }
+    }
+    return url.href;
+  } catch { throw new Error('Login refused by Tank.'); }
+}
+
 /** Unauthenticated device-login call to the region's public origin (Workspace for us-east, Tank for ZA). */
 // Each device-login call is bounded: a Tank that accepts the connection and never
 // answers must not stall login (or the poll loop past its 10-minute deadline).
@@ -163,9 +181,9 @@ export async function session(store, transport = fetch, now = Date.now) {
 async function login(region, { store, transport, io }) {
   const name = String(io.deviceName?.() ?? 'tervory-cli').replace(/[\x00-\x1f\x7f-\x9f]/g, '').trim().slice(0, 100) || 'tervory-cli';
   const start = await deviceCall(region, 'code', { device_name: name }, transport);
-  if (start.error || typeof start.device_code !== 'string' || !USER_CODE.test(start.user_code)) throw new Error('Login refused by Tank.');
-  // Built here, not taken from the server: the browser only ever opens the Workspace.
-  const url = approvalUrl(start.user_code, region);
+  if (start.error || typeof start.device_code !== 'string') throw new Error('Login refused by Tank.');
+  // Existing Workspace approval is unchanged; Zitadel URLs must match the fixed ZA origin.
+  const url = identityApprovalUrl(start, region);
   io.write(`Approve this device in your browser (${safe(name)}, ${region}):\n  ${url}\nConfirm the page shows code ${start.user_code}.\n`);
   await Promise.resolve(io.open?.(url)).catch(() => {});
   const sleep = io.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms)));
