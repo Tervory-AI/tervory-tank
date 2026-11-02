@@ -49,12 +49,11 @@ from rigbox.api import mount  # noqa: E402
 from rigbox.catalogue import parse_products_csv  # noqa: E402
 from rigbox.quotes.api import mount as mount_quotes  # noqa: E402
 from rigbox.quotes.privacy import private_key, shopper_body  # noqa: E402
-from rigbox.quotes.sample import KEY, TENANT, seed  # noqa: E402
+from fixtures.rig_quote_sample import KEY, TENANT, seed  # noqa: E402
 from rigbox.quotes.service import QuoteService  # noqa: E402
 from rigbox.quotes.store import MemoryQuotes  # noqa: E402
 from rigbox.service import RecordingHandoff, Service  # noqa: E402
-import rigbox.shopper_attributes as sa  # noqa: E402
-from rigbox.shopper_attributes import PRIVATE_KEY_PATTERN, SHOPPER_ATTRIBUTES, shopper_attributes  # noqa: E402
+from rigbox.shopper_attributes import _PRICING, PRIVATE_KEY_PATTERN, SHOPPER_ATTRIBUTES, shopper_attributes  # noqa: E402
 from rigbox.store import MemoryStore, PgStore  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "rig" / "sample-cost-guard.csv"
@@ -135,7 +134,8 @@ def _app(mode: str) -> tuple[FastAPI, QuoteService, Echo]:
 def _clean(text: str) -> None:
     for word in SECRETS:
         assert word not in text, word
-    assert "437" not in text  # 90101's export_usd value
+    # 90101's export_usd value, as a whole number: a random request id may contain "437" as hex.
+    assert not re.search(r"(?<![0-9A-Za-z])437(?![0-9A-Za-z])", text)
     assert "ZEPHYR" not in text
 
 
@@ -626,7 +626,7 @@ def test_fuzz_safe_names_and_archon_facts_pass_unchanged() -> None:
         assert shopper_attributes({"verified": [fact]}) == {"verified": [fact]}, name
         assert shopper_attributes({"verified": [{**fact, "value": [12, 15]}]})["verified"] == [{**fact, "value": [12, 15]}]
     facts = 0
-    with (ROOT / "agents" / "rig" / "catalogues" / "archon" / "products.csv").open(newline="") as handle:
+    with (ROOT / "tests" / "fixtures" / "rig_catalogues" / "aurora" / "products.csv").open(newline="") as handle:
         for row in csv.DictReader(handle):
             attributes = json.loads(row.get("attributes") or "{}")
             verified = attributes.get("verified")
@@ -699,7 +699,7 @@ _AMOUNT_FORMS = (
     "$4,377", "R4377", "R 4 377,00", "\u20ac4.377", "4 377 \u20ac", "\u00a34377", "US$4,377", "USD 4,377.00",
     "4377 ZAR", "4377 zar", "4377 rand", "\u00a54377", "\u20b94,377", "-4377", "\u22124377", "(4377)",
     "(R 4,377.00)", "-R4,377", "+4377", "~4377", "4.377e3", "4.377E+03", "4.377\u00d710\u00b3", "4377/ea", "4377k",
-    "43\u200b77", "43\u00ad77", "R\uff14,\uff13\uff17\uff17",
+    "43\u200b77", "43\u00ad77", "R\uff14,\uff13\uff17\uff17", "approximately R4377", "\u2163\u2162\u2166\u2166",
 )
 
 
@@ -745,4 +745,167 @@ def test_a_provenance_location_is_display_copy_and_keeps_qty() -> None:
     # Every pricing word is also a private key, so the location rule never shows a key the strip would move.
     for word in ("cost", "duty", "margin", "landed", "markup", "profit", "wholesale", "export", "buy_price",
                  "purchase_price", "dealer_price", "trade_price", "vat", "fx", "exchange_rate", "pricing_rule"):
-        assert private_key(word) and sa._PRICING.search(word), word
+        assert private_key(word) and _PRICING.search(word), word
+
+
+_TEXT_KEYS = ("detail", "summary", "tagline")
+
+
+def test_every_private_pair_in_free_text_is_hidden() -> None:
+    # Any clause, a leading list number or "_", a word before the amount, Roman numerals (NFKC folds them to letters).
+    for text in (
+        "Weight: 2 kg; Dealer price: 4377",
+        "Weight: 2 kg, Dealer price: 4377",
+        "Weight: 2 kg\nexport_usd = 4377",
+        "Weight: 2 kg \u2022 Dealer price: R 4,377.00",
+        "Weight: 2 kg | unit cost: 4377",
+        "1. Dealer price: 4377",
+        "_export_usd: 4377",
+        "Dealer price: approximately R4377",
+        "Dealer price: \u2163\u2162\u2166\u2166",
+        "Dealer price, approx: 4377",
+        "\uff22\uff55\uff59 \uff30\uff52\uff49\uff43\uff45: 4377",
+    ):
+        for key in _TEXT_KEYS:
+            assert shopper_attributes({key: text}) == {}, (key, text)
+        # In a list the private item carries its amount, so the list goes whole.
+        assert shopper_attributes({"in_box": ["Pistol", text]}) == {}, text
+
+
+def test_free_text_without_a_private_pair_is_kept() -> None:
+    for text in (
+        "Ships in: 3 days, Warranty = 5 years",
+        "Thread: 1/2x28; Rail: 1913 Picatinny",
+        "Weight: 680 g; Capacity: 17 rounds \u2022 Gen \u2163",
+        "Heavy duty frame. Supplier warranty included.",
+        "1. Steel slide; 2. Polymer frame",
+    ):
+        for key in _TEXT_KEYS:
+            assert shopper_attributes({key: text}) == {key: text}, (key, text)
+
+
+def test_a_private_word_beside_ordinary_copy_keeps_the_list() -> None:
+    # A private word labels an amount, not copy: these lists are kept whole.
+    for items in (
+        ["Heavy duty", "2-year warranty"],
+        ["Supplier warranty card", "2 magazines"],
+        ["Heavy-duty rail", "Holds 17 rounds", "Black"],
+        ["Heavy duty", "Pack of 50", "Gen 5"],
+    ):
+        for key in ("features", "in_box", "included"):
+            assert shopper_attributes({key: items}) == {key: items}, (key, items)
+    # Beside an amount (a number, a short or currency-marked string) or carrying one, the list goes.
+    for items in (
+        ["Dealer price", 4377],
+        ["Dealer price", "4377 rand"],
+        ["Dealer price", "USD 4,377.00 each"],
+        ["Dealer price", "approximately R4377"],
+        ["Heavy duty", "\u20ac4377 value"],
+        ["Black", "Dealer price 4377"],
+        ["Dealer price", "99 per unit"],
+        ["Dealer price", "\u2163\u2162\u2166\u2166"],
+        ["Dealer price", "\u56db\u5343\u4e09\u767e\u4e03\u5341\u4e03"],
+        ["Dealer price", "NDM3Nw=="],
+        # Copy with a long number beside a private word stays on the safe side.
+        ["Heavy duty", "1913 Picatinny"],
+    ):
+        for key in ("features", "in_box", "included"):
+            assert shopper_attributes({key: items}) == {}, (key, items)
+
+
+def test_a_short_amount_with_a_word_beside_a_private_word_drops_the_list() -> None:
+    # #529 review: a 1-2 digit amount next to an ordinary word is still the labelled amount.
+    for items in (
+        ["Dealer price", "85 total"], ["Cost", "85 AUD"], ["Landed", "85 bucks"], ["Supplier cost", "was 85"],
+        ["Dealer price", "4.4 thousand"], ["Cost", "43 hundred"], ["Trade price", "44k total"], ["Cost", "85/box"],
+        ["Wholesale", "85 rands"], ["export_usd", "85 nett"], ["Cost", "85 apiece"], ["Dealer price", "\u2078\u2075 total"],
+        ["Dealer price", "43 hundred", "77 total"], ["85 total", "Supplier cost"],
+    ):
+        for key in ("features", "in_box", "included"):
+            assert shopper_attributes({key: items}) == {}, (key, items)
+        assert shopper_attributes({"options": {"trim": items}}) == {"options": {}}, items
+
+
+def test_an_amount_after_a_break_following_the_separator_is_held() -> None:
+    # be5300de held these (its amount window crossed the break); #529's clause split must not show them.
+    for text in ("Dealer price:\n4377", "Dealer price:\r\n4377", "Dealer price =\n4377", "Cost:\nR4377",
+                 "export_usd:\n4377", "Dealer price: \u2022 4377", "Dealer price: | 4377", "Dealer price:; 4377",
+                 "Dealer price:\u00b74377", "Weight: 2 kg; Dealer price:\n4377"):
+        for key in ("detail", "summary", "tagline"):
+            assert "4377" not in json.dumps(shopper_attributes({key: text})), (key, text)
+    # A private name's own clause with no number does not reach into the next clause.
+    for text in ("Heavy duty: yes; Weight: 2 kg", "Supplier warranty: yes\nWeight: 680 g"):
+        assert shopper_attributes({"detail": text}) == {"detail": text}, text
+
+
+def test_copy_phrases_count_only_in_ascii_digits_beside_a_private_word() -> None:
+    # A copy phrase is ASCII digits as written: Roman, fullwidth, Arabic-Indic, superscript or zero-width forms
+    # of the same phrase still count as the labelled amount, and so do Roman numerals before a plain word.
+    for amount in ("\u2167\u2165 total", "\u2167\u2165 AUD", "was \u2167\u2165", "\u2167\u2165 in stock",
+                   "\u2167\u2165 rounds", "\uff18\uff15 rounds", "\u0668\u0665 magazines", "\u2078\u2075 days",
+                   "8\u200b5 rounds", "Holds 8\u200b5 rounds", "Pack of \uff18\uff15", "Gen \u2167"):
+        for key in ("features", "in_box", "included"):
+            assert shopper_attributes({key: ["Dealer price", amount]}) == {}, (key, amount)
+    for items in (["Heavy duty", "2-year warranty"], ["Supplier warranty card", "2 magazines"],
+                  ["Heavy duty", "Pack of 50", "Gen 5"]):
+        assert shopper_attributes({"features": items}) == {"features": items}, items
+
+
+_LINE_BREAKS = ("\r", "\v", "\f", "\x85", "\u2028", "\u2029")
+
+
+def test_a_second_pair_after_any_line_break_is_hidden() -> None:
+    # A lone CR, VT, FF, NEL, LS or PS starts a clause like "\n" does; be5300de and #529 showed the second pair.
+    for br in _LINE_BREAKS:
+        for text in (f"Weight: 2 kg{br}Dealer price: 4377", f"Finish: black{br}Cost = R4377",
+                     f"Weight: 2 kg{br}1. export_usd: 4377", f"Colour: black{br}Supplier cost: 4377 AUD",
+                     f"Weight: 2 kg{br}Dealer price, approx: 4377", f"Weight: 2 kg{br}Dealer price:{br}4377"):
+            for value in ({"detail": text}, {"summary": text}, {"tagline": text}):
+                assert "4377" not in json.dumps(shopper_attributes(value)), (value, br)
+
+
+def test_a_second_pair_after_any_line_break_is_hidden_inside_lists() -> None:
+    for br in _LINE_BREAKS:
+        text = f"Weight: 2 kg{br}Dealer price: 4377"
+        for value in ({"features": [text]}, {"in_box": ["Black", text]}, {"features": ["Heavy duty", text]},
+                      {"options": {"trim": [text]}}):
+            assert "4377" not in json.dumps(shopper_attributes(value)), (value, br)
+
+
+def test_text_split_by_any_line_break_without_a_private_pair_is_kept() -> None:
+    for br in _LINE_BREAKS:
+        for text in (f"Weight: 2 kg{br}Colour: black", f"Heavy duty: yes{br}Colour: black",
+                     f"Supplier warranty: yes{br}Finish: black", f"Holds 17 rounds{br}Finish: black"):
+            assert shopper_attributes({"detail": text}) == {"detail": text}, (text, br)
+
+
+_CLAUSE_BREAKS = (", ", ",", ";", " | ", "\n", "\r\n", "\u2028", " \u00b7 ", "\u00b7", " \u2022 ")
+
+
+def test_a_private_label_running_into_an_amount_without_a_separator_is_hidden() -> None:
+    # Free text with no ":" or "=" after the label; #532 and earlier showed these.
+    for text in ("Dealer price, 4377", "Dealer price 4377", "Cost, R4377", "Cost - R4377", "Our cost is 4377",
+                 "export_usd 4377", "Supplier cost, $4,377.00", "Landed 4377 AUD", "Wholesale \u00b7 approx 4377",
+                 "Buy price\n4377", "Dealer\nprice: 4377", "Cost4377", "unit cost, \uff14\uff13\uff17\uff17"):
+        for value in ({"detail": text}, {"summary": text}, {"features": [text]}, {"options": {"trim": [text]}}):
+            assert "4377" not in json.dumps(shopper_attributes(value), ensure_ascii=False), value
+            assert "4377" not in json.dumps(shopper_attributes(value)), value
+
+
+def test_a_break_inside_a_private_pair_is_hidden() -> None:
+    # A break inside the pair: before the label, between label and separator, or inside the amount.
+    for br in _CLAUSE_BREAKS:
+        for text in (f"Weight: 2 kg{br}Dealer price: 4377", f"Weight: 2 kg; Dealer price{br}: 4377",
+                     f"Weight: 2 kg; Dealer price: 4{br}377", f"Cost: ${br}4,377.00", f"Cost: R{br}4377",
+                     f"Dealer price: a{br}pprox 4377", f"Finish: black{br}Cost{br}= 4377"):
+            for value in ({"detail": text}, {"features": [text]}, {"features": ["Heavy duty", text]}):
+                assert "4377" not in json.dumps(shopper_attributes(value)), (value, br)
+
+
+def test_ordinary_copy_after_a_private_looking_word_is_kept() -> None:
+    # Copy numbers ("680 g", "Pack of 50", "Gen 5", "IPX7", "1913 Picatinny") after a private-looking word stay.
+    for br in (" ", ", ", ",", "\n", " \u00b7 ", " - "):
+        for tail in ("680 g", "1000 lb rating", "Pack of 50", "Gen 5", "IPX7", "MIL-STD 1913", "M13x1 LH",
+                     "2-year warranty", "17 rounds", "4140 steel"):
+            for text in (f"Heavy duty{br}{tail}", f"Weight: 2 kg; Heavy duty{br}{tail}", f"Cost-effective{br}{tail}"):
+                assert shopper_attributes({"detail": text}) == {"detail": text}, text

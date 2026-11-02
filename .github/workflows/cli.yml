@@ -1,0 +1,122 @@
+name: cli
+on:
+  pull_request:
+    paths:
+      - 'cli/**'
+      - 'tank/personal_tokens.py'
+      - 'tank/device_login.py'
+      - 'workspace/lib/device-login.ts'
+      - 'workspace/app/cli/**'
+      - 'workspace/lib/tank.ts'
+      - 'workspace/app/v1/command/**'
+      - 'workspace/middleware.ts'
+      - 'workspace/next.config.ts'
+      - 'workspace/public/cli/**'
+      - 'workspace/Dockerfile'
+      - 'workspace/.gitignore'
+      - 'docker-compose.yml'
+      - '.github/workflows/cli-release.yml'
+      - '.github/workflows/cli.yml'
+      - '.github/scripts/cli_version_guard.sh'
+permissions:
+  contents: read
+concurrency:
+  group: cli-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  fake-tank:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+      - name: CLI changed means a version bump (published versions are immutable)
+        # A change to cli/bin, cli/src, cli/install.sh, cli/package-lock.json or cli/scripts
+        # needs a version above the base branch's, the same version in package-lock.json and
+        # a CHANGELOG entry. A base branch without cli/ has nothing to compare against.
+        # Inputs reach the script only as environment variables.
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "refs/heads/$BASE_REF"
+          sh .github/scripts/cli_version_guard.sh FETCH_HEAD
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: cli
+      - run: node --check bin/tervory.mjs && node --check src/client.mjs
+        working-directory: cli
+      - run: npm test
+        working-directory: cli
+      - run: npm pack --dry-run
+        working-directory: cli
+      - name: Never publishable to a registry
+        run: |
+          node -e '
+            const p = require("./cli/package.json");
+            if (p.private !== true) { console.error("cli/package.json must keep \"private\": true (self-hosted only, no npm)."); process.exit(1); }
+            if (p.publishConfig?.registry !== "https://registry.invalid/") { console.error("cli publishConfig.registry must stay https://registry.invalid/."); process.exit(1); }'
+      - name: Workspace serves the release files signed-out
+        run: |
+          for route in '"/cli/install.sh"' '"/cli/latest.json"' '"/cli/releases(.*)"'; do
+            grep -qF "$route" workspace/middleware.ts || { echo "workspace/middleware.ts isPublic is missing $route"; exit 1; }
+          done
+      - name: No CLI release artifacts are committed (build outputs only)
+        run: |
+          committed=$(git ls-files workspace/public/cli)
+          if [ -n "$committed" ]; then echo "CLI release files are build outputs (workspace/Dockerfile cli-release stage); remove:"; echo "$committed"; exit 1; fi
+          grep -qxF '/public/cli/' workspace/.gitignore || { echo "workspace/.gitignore must ignore /public/cli/"; exit 1; }
+      - name: Release build is reproducible
+        run: |
+          node cli/scripts/build-release.mjs --out "$RUNNER_TEMP/cli-a"
+          node cli/scripts/build-release.mjs --out "$RUNNER_TEMP/cli-b"
+          diff -r "$RUNNER_TEMP/cli-a" "$RUNNER_TEMP/cli-b"
+          # The release, latest.json and therefore install.sh / tervory update offer cli/package.json's version.
+          want=$(node -p 'require("./cli/package.json").version')
+          node -e '
+            const fs = require("fs"), [dir, want] = process.argv.slice(1);
+            const latest = JSON.parse(fs.readFileSync(dir + "/latest.json"));
+            const m = JSON.parse(fs.readFileSync(dir + "/" + latest.manifest));
+            if (latest.version !== want || m.version !== want || latest.manifest !== "releases/" + want + "/manifest.json")
+              throw new Error("release offers " + latest.version + " / manifest " + m.version + ", package.json is " + want);
+            console.log("release offers " + want);' "$RUNNER_TEMP/cli-a" "$want"
+      - name: The Workspace image builds and serves the same release at /cli/
+        # Same command the deploy runs (docker-compose.yml additional_contexts.cli=./cli),
+        # stopped at the release stage; the build stage copies it into public/cli so Next serves it.
+        # The image's checksums verify its own tarballs, and every tarball has the same entries
+        # (names, modes, owners, sizes, mtimes) and the same file bytes as the direct build above.
+        # The archive bytes themselves can differ between GNU tar versions (the image's Debian
+        # tar 1.34 vs the runner's 1.35 encode ustar headers differently), so they are compared
+        # by contents here and the served manifest is checked against the served files.
+        run: |
+          grep -qE '^\s+cli: \./cli$' docker-compose.yml || { echo "docker-compose.yml workspace build needs additional_contexts.cli: ./cli"; exit 1; }
+          grep -qxF 'COPY --from=cli-release /out/cli ./public/cli' workspace/Dockerfile || { echo "workspace/Dockerfile must copy the CLI release into public/cli"; exit 1; }
+          docker buildx build --build-context cli=cli -f workspace/Dockerfile --target cli-files \
+            --output "type=local,dest=$RUNNER_TEMP/cli-image" workspace
+          A="$RUNNER_TEMP/cli-a"; B="$RUNNER_TEMP/cli-image"
+          diff -r -x '*.tar.gz' -x manifest.json -x SHA256SUMS "$A" "$B"
+          (cd "$B"/releases/*/ && sha256sum --strict -c SHA256SUMS)
+          node -e '
+            const fs = require("fs"), path = require("path"), crypto = require("crypto");
+            const [a, b] = process.argv.slice(1).map(d => { const v = JSON.parse(fs.readFileSync(path.join(d, "latest.json"))).version;
+              return { dir: path.join(d, "releases", v), m: JSON.parse(fs.readFileSync(path.join(d, "releases", v, "manifest.json"))) }; });
+            const strip = m => JSON.stringify({ ...m, artifacts: Object.fromEntries(Object.entries(m.artifacts).map(([k, x]) => [k, x.file])) });
+            if (strip(a.m) !== strip(b.m)) throw new Error("manifest differs beyond hashes");
+            for (const x of Object.values(b.m.artifacts)) { const buf = fs.readFileSync(path.join(b.dir, x.file));
+              if (buf.length !== x.size || crypto.createHash("sha256").update(buf).digest("hex") !== x.sha256) throw new Error("image manifest does not match " + x.file); }
+          ' "$A" "$B"
+          bad=0
+          for f in "$A"/releases/*/*.tar.gz; do
+            g="$B/${f#"$A"/}"
+            rm -rf /tmp/xa /tmp/xb && mkdir -p /tmp/xa /tmp/xb && tar -xzf "$f" -C /tmp/xa && tar -xzf "$g" -C /tmp/xb
+            # Same entries (names, modes, owners, sizes, mtimes) and the same bytes in every file.
+            if ! diff <(tar -tvzf "$f") <(tar -tvzf "$g") || ! diff -r --no-dereference /tmp/xa /tmp/xb; then
+              bad=1; echo "release contents differ: ${f##*/}"
+            fi
+          done
+          echo "runner: $(tar --version | head -1); $(gzip --version | head -1); npm $(npm -v)"
+          docker run --rm node:22-slim sh -c 'echo "image: $(tar --version | head -1); $(gzip --version | head -1); npm $(npm -v)"'
+          test "$bad" = 0
+          test -s "$RUNNER_TEMP/cli-image/install.sh" && test -s "$RUNNER_TEMP/cli-image/latest.json"

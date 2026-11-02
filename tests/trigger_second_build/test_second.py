@@ -184,7 +184,7 @@ async def test_tenant_admin_scope_revocation_and_no_confirmation_bypass(env):
     for h in [headers(user='member'), {**headers(user='admin', role='org:admin'), 'X-Tank-Key': 'wrong'}]:
         assert (await env.client.post('/v1/trigger/voice.show', json={}, headers=h)).status_code in {401, 403}
     catalog = (await env.client.get('/v1/command/tools', headers=headers(user='admin', role='org:admin'))).json()
-    assert 'trigger.voice.set' in catalog and 'worker.build' not in catalog and 'trigger.write' not in catalog
+    assert set(command.TOOLS['trigger']) <= set(catalog) and 'worker.build' not in catalog
     env.model.assert_not_called()
 
 
@@ -212,9 +212,14 @@ async def test_mutated_user_source_cannot_be_proposed(env):
 
 @pytest.mark.asyncio
 async def test_house_write_records_private_pending_pair_then_feedback(env):
-    response = await env.client.post('/v1/trigger/write', json={'text': 'Describe the supplied product.'}, headers=headers())
-    assert response.status_code == 200, response.text
-    result = response.json()
+    write_thread = UUID((await command.create_thread(command.NewThread(title='Offline writing'), env.actor))['thread_id'])
+    async with command.editing(write_thread, env.actor) as (conn, row, state):
+        action = command.validate_action(command.PlannedAction(tool='trigger.write',
+            arguments={'text': 'Describe the supplied product.'}), env.actor)
+        card = await command.propose_action(conn, row, state, action, env.actor)
+    saved = await confirm(env, card)
+    assert saved['status'] == 'confirmed', saved
+    result = saved['result']
     assert result['report']['style_source'] == 'house'
     assert [call.args for call in env.checkers.await_args_list] == [
         (str(TENANT), 'trigger.' + component, {'text': result['text']})

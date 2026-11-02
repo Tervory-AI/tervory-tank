@@ -19,7 +19,7 @@ pytestmark = pytest.mark.skipif(not shutil.which("blender"), reason="Runs in req
 @pytest.mark.parametrize("name", ["ai-sample.glb", "scan.obj"])
 async def test_neutral_samples_pass_all_real_tools(tmp_path, name):
     source = tmp_path / name
-    shutil.copyfile(ROOT / "agents/rig/forge/samples" / name, source)
+    shutil.copyfile(ROOT / "tests/fixtures/rig_forge_models" / name, source)
     steps = []
     async def receipt(stage, outcome):
         steps.append((stage, outcome))
@@ -62,7 +62,7 @@ async def test_defective_scan_stops_before_conversion(tmp_path, defect):
 @pytest.mark.asyncio
 async def test_receipt_delivery_failure_prevents_next_step(tmp_path):
     source = tmp_path / "scan.obj"
-    shutil.copyfile(ROOT / "agents/rig/forge/samples/scan.obj", source)
+    shutil.copyfile(ROOT / "tests/fixtures/rig_forge_models/scan.obj", source)
     async def receipt(stage, outcome):
         raise RuntimeError("receipt service unavailable")
     with pytest.raises(RuntimeError, match="receipt service"):

@@ -391,7 +391,8 @@ class MemoryStore(RetailerMemoryStore):
             "locate_enabled": bool(locate_enabled) if locate_enabled is not None
             else bool(previous.get("locate_enabled", False)),
             # Optional blind ship (Locate orders ship straight to the shopper). Off by default.
-            "blind_ship": bool(blind_ship) if blind_ship is not None else bool(previous.get("blind_ship", False))}
+            "blind_ship": bool(blind_ship) if blind_ship is not None else bool(previous.get("blind_ship", False)),
+            "shop": copy.deepcopy(previous.get("shop", {}))}
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         row = self.retailers.get(str(tenant_id))
@@ -986,14 +987,15 @@ class PgStore(RetailerPgStore):
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship FROM agent_rig.retailers WHERE tenant_id = $1",
+                "SELECT slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship, shop FROM agent_rig.retailers WHERE tenant_id = $1",
                 _uuid(tenant_id),
             )
         if row is None:
             return None
         return {"slug": row["slug"], "email": row["email"], "webhook": row["webhook"], "name": row["name"] or "", "theme": row["theme"],
                 "quote_notice": json.loads(row["quote_notice"]) if isinstance(row["quote_notice"], str) else row["quote_notice"],
-                "locate_enabled": bool(row["locate_enabled"]), "blind_ship": bool(row["blind_ship"])}
+                "locate_enabled": bool(row["locate_enabled"]), "blind_ship": bool(row["blind_ship"]),
+                "shop": json.loads(row["shop"]) if isinstance(row["shop"], str) else row["shop"]}
 
     async def replace_market(self, tenant_id: str, rows: list[dict[str, Any]]) -> None:
         async with self.pool.acquire() as conn:
@@ -1118,14 +1120,20 @@ class PgStore(RetailerPgStore):
                                  purchase: dict[str, Any]) -> dict[str, Any]:
         """Rig-owned Locate order and draft supplier PO, in one transaction.
 
-        ON CONFLICT DO NOTHING on (tenant, quote): a retry or a concurrent
-        second Accept reads back the first order instead of making another.
+        ON CONFLICT DO NOTHING with no conflict target: a retry or a concurrent
+        second Accept for the same quote reads back the first order instead of
+        making another. With no target, a clash on either unique index
+        ((tenant, quote) or (tenant, number), and the number is derived from
+        the quote) waits for the first insert and then does nothing; a target
+        on (tenant, quote) alone let concurrent inserts raise on the number
+        index. If nothing is saved for this quote afterwards (its number is
+        taken by another quote), DeliveryError("order_mismatch").
         """
         tenant = _uuid(tenant_id)
         async with self.pool.acquire() as conn, conn.transaction():
             created = await conn.fetchval(
                 "INSERT INTO agent_rig.locate_orders (tenant_id, quote_id, number, state, product_id, price, currency, ship_to)"
-                " VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) ON CONFLICT (tenant_id, quote_id) DO NOTHING RETURNING true",
+                " VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) ON CONFLICT DO NOTHING RETURNING true",
                 tenant, order["quote_id"], order["number"], order["state"], order["product_id"],
                 Decimal(order["price"]), order["currency"],
                 None if order["ship_to"] is None else _json(order["ship_to"]))
@@ -1141,7 +1149,9 @@ class PgStore(RetailerPgStore):
                     None if purchase["ship_to"] is None else _json(purchase["ship_to"]),
                     bool(purchase["neutral_slip"]), purchase["instructions"])
             saved = await self._locate_order(conn, tenant, order["quote_id"])
-        assert saved is not None
+        if saved is None:
+            from rigbox.quotes.senders import DeliveryError
+            raise DeliveryError("order_mismatch")
         return {**saved, "created": bool(created)}
 
     async def locate_order(self, tenant_id: str, quote_id: str) -> dict[str, Any] | None:

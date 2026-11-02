@@ -1,5 +1,6 @@
 """Actual dispatch metadata only; all upstream calls are offline doubles."""
 import json
+import uuid
 from uuid import uuid4
 
 import httpx
@@ -86,3 +87,18 @@ async def test_actual_route_receipt_after_escalation_and_cache_remain_distinct(l
     escalated = await b.tank.run_route(request(b, b.tenants[1]))
     assert escalated.rung == 2 and escalated.escalation
     assert escalated.execution["requested_model"] == sent[-1]["model"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("form", ["upper", "hex", "braced"])
+async def test_receipt_binds_tenant_by_value_not_spelling(form):
+    execution = receipt()
+    value = uuid.UUID(execution["tenant_id"])
+    tenant = {"upper": str(value).upper(), "hex": value.hex, "braced": "{" + str(value) + "}"}[form]
+    async def transport(req):
+        return httpx.Response(200, json={"ledger_id": execution["ledger_id"], "model": "actual-group",
+            "settings_hash": None, "execution": execution})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        client = TankClient("http://offline", "offline-test-key", "zenas", http)
+        result = await client.route(tenant, "moot.counsel", [])
+        assert result["execution"] == execution

@@ -5,6 +5,12 @@
 !agents/_chassis/**
 !agents/tisan/
 !agents/tisan/**
+!agents/rig/
+!agents/rig/rigbox/
+!agents/rig/rigbox/reserve.py
+!docs/
+!docs/figma/
+!docs/figma/**
 !ops/
 !ops/live_check.mjs
 !ops/live_check_banned.txt

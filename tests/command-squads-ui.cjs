@@ -24,6 +24,7 @@ Module._load = function(name,parent,isMain) {
   };
   if(name==='@/lib/admin')return {isFounder:id=>id==='founder-fixture'};
   if(name==='@/lib/tenant')return {tenantIdFor:id=>{assert.equal(id,'org-fixture');return tenant}};
+  if(name==='@/app/api/zenas/tank')return require('../workspace/app/api/zenas/tank.ts');
   if(name==='@/lib/tank')return require('../workspace/lib/tank.ts');
   if(name==='next/navigation')return {notFound:()=>{throw Error('404')}};
   return original.call(this,name,parent,isMain);

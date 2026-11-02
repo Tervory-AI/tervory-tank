@@ -88,7 +88,7 @@ async def test_shipped_notice_stale_recovery_and_real_receipts(real_chromium, mo
     import uvicorn
     from rigbox.api import mount
     from rigbox.quotes.hosting import mount as mount_widget
-    from rigbox.quotes.sample import KEY, TENANT, seed
+    from fixtures.rig_quote_sample import KEY, TENANT, seed
     from rigbox.store import MemoryStore
 
     sock = socket.socket()

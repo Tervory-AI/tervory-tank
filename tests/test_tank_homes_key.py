@@ -163,6 +163,8 @@ def test_homes_key_may_call_za_founder_feeds(
         ("POST", "/v1/zenas/cases/convert", b'{"home_region":"za","judgment":"a client memo"}', b"home_region=za"),
         ("GET", "/v1/zenas/matters", b"", b"home_region=za"),
         ("POST", "/v1/route", b"{}", b""),
+        ("GET", "/v1/command/threads", b"", b""),
+        ("POST", "/v1/command/device/approval/BCDF-GHJK", b'{"action":"approve"}', b""),
         ("GET", "/health", b"", b""),
         ("POST", "/v1/zenas/tenants", _tenant_body("us-east"), b""),
         ("POST", "/v1/zenas/tenants", _tenant_body(), b"home_region=us-east"),
@@ -193,3 +195,70 @@ def test_unset_homes_key_matches_nothing(monkeypatch: pytest.MonkeyPatch, za: _R
 
 def test_homes_key_is_not_an_agent_key() -> None:
     assert not "TANK_HOMES_KEY".startswith("TANK_KEY_")
+
+
+@pytest.mark.parametrize('query', [
+    b'home_region=za',
+    b'home_region=za&match_id=7c57d276-ac1a-40bd-9154-36271c7c48df',
+])
+def test_homes_key_reads_only_published_za_moot_through_local_proxy(za, query):
+    path = '/v1/zenas/moot/published'
+    assert _auth('GET', path, query=query) == main.HOMES_PRINCIPAL
+    response = asyncio.run(main.zenas_proxy('moot/published', _request('GET', path, query=query)))
+    assert response.status_code == 200
+    assert za.calls == ['GET http://agent-zenas:8000/moot/published']
+
+
+@pytest.mark.parametrize(('method', 'body', 'query'), [
+    ('POST', b'', b'home_region=za'),
+    ('PUT', b'', b'home_region=za'),
+    ('PATCH', b'', b'home_region=za'),
+    ('DELETE', b'', b'home_region=za'),
+    ('HEAD', b'', b'home_region=za'),
+    ('GET', b'{}', b'home_region=za'),
+    ('GET', b' ', b'home_region=za'),
+    ('GET', b'{"home_region":"za"}', b''),
+    ('GET', b'', b''),
+    ('GET', b'', b'home_region='),
+    ('GET', b'', b'home_region=us-east'),
+    ('GET', b'', b'home_region=eu-west'),
+    ('GET', b'', b'home_region=za&home_region=us-east'),
+    ('GET', b'', b'home_region=us-east&home_region=za'),
+    ('GET', b'', b'home_region=za&home_region=za'),
+    ('GET', b'', b'home_region=za&match_id=a&match_id=b'),
+    ('GET', b'', b'home_region=za&published=false'),
+    ('GET', b'', b'home_region=za&tenant_id=11111111-1111-1111-1111-111111111111'),
+    ('GET', b'', b'home_region=za&include_unpublished=true'),
+    ('GET', b'', b'home_region=za&extra='),
+])
+def test_published_moot_exception_rejects_all_other_request_shapes(za, method, body, query):
+    with pytest.raises(HTTPException) as caught:
+        _auth(method, '/v1/zenas/moot/published', body, query)
+    assert caught.value.status_code == 403
+    assert za.calls == []
+
+
+@pytest.mark.parametrize(('method', 'path'), [
+    ('POST', '/v1/keys'),
+    ('POST', '/v1/credentials'),
+    ('POST', '/v1/zenas/credentials'),
+    ('GET', '/v1/zenas/drafts'),
+    ('GET', '/v1/zenas/matters'),
+    ('GET', '/v1/zenas/moot/hearings'),
+    ('GET', '/v1/zenas/moot/hearings/7c57d276-ac1a-40bd-9154-36271c7c48df'),
+    ('POST', '/v1/zenas/moot/hearings/7c57d276-ac1a-40bd-9154-36271c7c48df/publish'),
+    ('GET', '/v1/zenas/moot/matches'),
+])
+def test_public_read_grants_no_credential_or_private_hearing_route(za, method, path):
+    with pytest.raises(HTTPException) as caught:
+        _auth(method, path, query=b'home_region=za')
+    assert caught.value.status_code == 403
+    assert za.calls == []
+
+
+def test_homes_key_cannot_read_published_hearings_on_boston(monkeypatch, za):
+    monkeypatch.setenv('TANK_REGION', 'us-east')
+    with pytest.raises(HTTPException) as caught:
+        _auth('GET', '/v1/zenas/moot/published', query=b'home_region=za')
+    assert caught.value.status_code == 403
+    assert za.calls == []
