@@ -1,0 +1,44 @@
+- Connect consent · Pending · Desktop · Proposed, not approved — node `231:10255` — reuses `10:369`, `180:8390`, `93:6`, `93:4`.
+- Connect consent · Pending · Mobile · Proposed, not approved — node `231:10306` — reuses `10:369`, `180:8390`, `93:6`, `93:4`.
+- Connect consent · Approved · Desktop · Proposed, not approved — node `231:10356` — reuses `10:369`, `180:8390`.
+- Connect consent · Approved · Mobile · Proposed, not approved — node `231:10376` — reuses `10:369`, `180:8390`.
+- Connect consent · Denied · Desktop · Proposed, not approved — node `231:10396` — reuses `10:369`, `180:8390`.
+- Connect consent · Denied · Mobile · Proposed, not approved — node `231:10416` — reuses `10:369`, `180:8390`.
+- Connect consent · Invalid · Desktop · Proposed, not approved — node `231:10436` — reuses `10:369`, `180:8390`.
+- Connect consent · Invalid · Mobile · Proposed, not approved — node `231:10456` — reuses `10:369`, `180:8390`.
+- Connect consent · Expired · Desktop · Proposed, not approved — node `231:10476` — reuses `10:369`, `180:8390`.
+- Connect consent · Expired · Mobile · Proposed, not approved — node `231:10496` — reuses `10:369`, `180:8390`.
+- Connect consent · ZA founder refusal · Desktop · Proposed, not approved — node `231:10516` — reuses `10:369`, `180:8390`, `93:6`.
+- Connect consent · ZA founder refusal · Mobile · Proposed, not approved — node `231:10539` — reuses `10:369`, `180:8390`, `93:6`.
+- CLI sign-ins and connected apps · Connected · Desktop · Proposed, not approved — node `231:11794` — reuses `10:369`, `180:8390`, `137:157`.
+- CLI sign-ins and connected apps · Connected · Mobile · Proposed, not approved — node `231:11832` — reuses `10:369`, `180:8390`, `137:157`.
+- Rig Plugins / MCP connections · Saved with a token · Desktop · Proposed, not approved — node `231:11870` — reuses `10:369`, `180:8390`, `93:4`.
+- Rig Plugins / MCP connections · Saved with a token · Mobile · Proposed, not approved — node `231:11900` — reuses `10:369`, `180:8390`, `93:4`.
+- Rig Plugins / MCP connections · Needs sign-in · Desktop · Proposed, not approved — node `231:11930` — reuses `10:369`, `180:8390`, `93:4`.
+- Rig Plugins / MCP connections · Needs sign-in · Mobile · Proposed, not approved — node `231:11958` — reuses `10:369`, `180:8390`, `93:4`.
+- Rig Plugins / MCP connections · Connected · Desktop · Proposed, not approved — node `231:11986` — reuses `10:369`, `180:8390`, `93:4`.
+- Rig Plugins / MCP connections · Connected · Mobile · Proposed, not approved — node `231:12014` — reuses `10:369`, `180:8390`, `93:4`.
+- Rig Plugins / MCP connections · Sign-in failed · Desktop · Proposed, not approved — node `231:12042` — reuses `10:369`, `180:8390`, `93:4`.
+- Rig Plugins / MCP connections · Sign-in failed · Mobile · Proposed, not approved — node `231:12070` — reuses `10:369`, `180:8390`, `93:4`.
+- Rig Plugins / MCP connections · Server not approved by Tervory · Desktop · Proposed, not approved — node `231:12098` — reuses `10:369`, `180:8390`.
+- Rig Plugins / MCP connections · Server not approved by Tervory · Mobile · Proposed, not approved — node `231:12124` — reuses `10:369`, `180:8390`.
+- Rig Plugins / MCP connections · Expanded · Desktop · Proposed, not approved — node `231:12150` — reuses `10:369`, `180:8390`, `93:4`.
+- Rig Plugins / MCP connections · Expanded · Mobile · Proposed, not approved — node `231:12187` — reuses `10:369`, `180:8390`, `93:4`.
+- Tisan Plugins / MCP connections · Saved with a token · Desktop · Proposed, not approved — node `231:12224` — reuses `10:369`, `180:8390`, `93:4`.
+- Tisan Plugins / MCP connections · Saved with a token · Mobile · Proposed, not approved — node `231:12254` — reuses `10:369`, `180:8390`, `93:4`.
+- Tisan Plugins / MCP connections · Needs sign-in · Desktop · Proposed, not approved — node `231:12284` — reuses `10:369`, `180:8390`, `93:4`.
+- Tisan Plugins / MCP connections · Needs sign-in · Mobile · Proposed, not approved — node `231:12312` — reuses `10:369`, `180:8390`, `93:4`.
+- Tisan Plugins / MCP connections · Connected · Desktop · Proposed, not approved — node `231:12340` — reuses `10:369`, `180:8390`, `93:4`.
+- Tisan Plugins / MCP connections · Connected · Mobile · Proposed, not approved — node `231:12368` — reuses `10:369`, `180:8390`, `93:4`.
+- Tisan Plugins / MCP connections · Sign-in failed · Desktop · Proposed, not approved — node `231:12396` — reuses `10:369`, `180:8390`, `93:4`.
+- Tisan Plugins / MCP connections · Sign-in failed · Mobile · Proposed, not approved — node `231:12424` — reuses `10:369`, `180:8390`, `93:4`.
+- Tisan Plugins / MCP connections · Server not approved by Tervory · Desktop · Proposed, not approved — node `231:12452` — reuses `10:369`, `180:8390`.
+- Tisan Plugins / MCP connections · Server not approved by Tervory · Mobile · Proposed, not approved — node `231:12478` — reuses `10:369`, `180:8390`.
+- Tisan Plugins / MCP connections · Expanded · Desktop · Proposed, not approved — node `231:12504` — reuses `10:369`, `180:8390`, `93:4`.
+- Tisan Plugins / MCP connections · Expanded · Mobile · Proposed, not approved — node `231:12541` — reuses `10:369`, `180:8390`, `93:4`.
+- Founder MCP servers · Servers · Desktop · Proposed, not approved — node `231:12578` — reuses `10:369`, `180:8390`, `93:4`, `43:27`, `43:24`.
+- Founder MCP servers · Servers · Mobile · Proposed, not approved — node `231:12629` — reuses `10:369`, `180:8390`, `93:4`, `43:27`, `43:24`.
+- Founder MCP servers · Add server · Desktop · Proposed, not approved — node `231:12680` — reuses `10:369`, `180:8390`, `93:4`, `93:6`.
+- Founder MCP servers · Add server · Mobile · Proposed, not approved — node `231:12712` — reuses `10:369`, `180:8390`, `93:4`, `93:6`.
+- Founder MCP servers · Remove server · Desktop · Proposed, not approved — node `231:12744` — reuses `10:369`, `180:8390`, `93:4`, `93:6`.
+- Founder MCP servers · Remove server · Mobile · Proposed, not approved — node `231:12774` — reuses `10:369`, `180:8390`, `93:4`, `93:6`.
