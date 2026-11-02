@@ -618,12 +618,15 @@ async def feed_price(tenant_id: uuid.UUID, site: str, sku: str = "", upc: str = 
     return {"found": True, "item": data, "receipt": {k: row[k] for k in ("source", "fetched_at", "row_count", "distributor", "id")}}
 
 
-async def public_get(url: str, *, headers=None, limit=2_000_000) -> tuple[bytes, dict]:
-    """Resolve, validate all answers, pin the connection, retain TLS hostname.
+@asynccontextmanager
+async def public_stream(url: str, *, method: str = "GET", headers=None, content=None):
+    """One pinned public HTTPS request; callers bound both duration and bytes.
 
-    No environment proxy, credentials in URLs, automatic redirects or localhost
-    fallback. The caller owns any authentication headers and the destination.
+    Shared by feeds and MCP, including metadata and OAuth POSTs. Resolve on
+    every request, validate every answer, and preserve Host/SNI on the pinned IP.
     """
+    if method not in {"GET", "POST"}:
+        raise ValueError("Method refused")
     origin(url)
     p = urlsplit(url)
     answers = await asyncio.get_running_loop().getaddrinfo(p.hostname, 443, type=socket.SOCK_STREAM)
@@ -632,13 +635,24 @@ async def public_get(url: str, *, headers=None, limit=2_000_000) -> tuple[bytes,
         raise ValueError("Private address refused")
     target = httpx.URL(url).copy_with(host=addresses[0])
     async with httpx.AsyncClient(timeout=25, trust_env=False, follow_redirects=False) as client:
-        async with client.stream("GET", target, headers={**(headers or {}), "Host": p.hostname},
+        async with client.stream(method, target, content=content, headers={**(headers or {}), "Host": p.hostname},
                                  extensions={"sni_hostname": p.hostname}) as response:
-            if response.status_code != 200 and response.status_code != 206: raise ValueError("Source unavailable")
+            if 300 <= response.status_code < 400:
+                raise ValueError("Redirect refused")
+            yield response
+
+
+async def public_get(url: str, *, headers=None, limit=2_000_000) -> tuple[bytes, dict]:
+    """Resolve, validate all answers, pin the connection, retain TLS hostname."""
+    async with asyncio.timeout(25):
+        async with public_stream(url, headers=headers) as response:
+            if response.status_code not in {200, 206}:
+                raise ValueError("Source unavailable")
             data = bytearray()
             async for chunk in response.aiter_bytes():
                 data.extend(chunk)
-                if len(data) > limit: raise ValueError("Source too large")
+                if len(data) > limit:
+                    raise ValueError("Source too large")
             return bytes(data), dict(response.headers)
 
 
