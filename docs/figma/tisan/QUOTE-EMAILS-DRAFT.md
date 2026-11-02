@@ -7,6 +7,31 @@ item list rendered as text or escaped list items, never trusted HTML.
 No marketing, tracking pixels, remote images, payment fields or payment links.
 The request itself records the customer's approval to request a quote.
 
+## Responsive layout revision — 1 November 2026
+
+Each email has a 600px version and a 375px phone version on Figma page
+**3 · Tisan quote**. The original frame IDs now identify the 600px versions.
+Subject, plain-text body, rendered HTML wording, HTML source and all braced
+variables are unchanged. Jost/Inter and existing brand-token bindings are retained.
+Text reflows at its existing font size; frame height grows to fit. The review
+frame uses 32px side padding at 600px and 20px at 375px; HTML preview padding
+remains 24px. These are draft designs, not sent emails or approved implementation.
+
+| Email | 600px frame | 375px frame |
+| --- | --- | --- |
+| E1 | 166:4191 | 207:21765 |
+| E2 | 166:4200 | 207:21783 |
+| E3 | 166:4209 | 207:21812 |
+| E4 | 166:4218 | 207:21833 |
+| E5 | 166:4227 | 207:21850 |
+| E6 | 166:4236 | 207:21866 |
+| E7 | 166:4245 | 207:21883 |
+
+Validation: all 14 frame widths checked; every text layer matches its original
+and paired version exactly; only Jost/Inter fonts; zero text-bound overflow
+findings. The longest email (E2) was visually inspected at both widths using
+Figma-rendered screenshots. Founder acceptance is still pending.
+
 ## E1 · Customer · Request received · submitted
 
 Subject: We received your quote request — {shop_name}
