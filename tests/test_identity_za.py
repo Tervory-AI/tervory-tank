@@ -177,3 +177,34 @@ async def test_za_oidc_issue_refresh_revoke_and_verified_roles(device, provider,
     assert (await client.post('/v1/command/device/refresh', json={'refresh_token': fresh['refresh_token']})).json()['error'] == 'invalid_grant'
     with pytest.raises(Exception):
         await pat.identity(request(fresh['access_token']))
+
+
+@pytest.mark.asyncio
+async def test_boston_approval_key_still_works_while_zitadel_is_enabled(device, provider, monkeypatch):
+    client, pool, runtime = device
+    runtime.box_region = lambda: 'za'
+    monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', 'dummy-za-approval-key')
+    started = await client.post('/v1/command/device/code', json={'device_name': 'legacy-synthetic', 'approval': 'workspace'})
+    assert started.status_code == 200
+    data = started.json()
+    assert data['device_code'].startswith('tvd1.za.') and provider.calls == []
+    assert data['verification_uri'].startswith('https://workspace.fixture/cli/device')
+    headers = {'x-tank-key': 'dummy-za-approval-key', 'x-tervory-user': 'client', 'x-tervory-tenant': str(TENANT)}
+    approved = await client.post('/v1/command/device/approval/' + data['user_code'], json={'action': 'approve'}, headers=headers)
+    assert approved.status_code == 200
+    grant = await client.post('/v1/command/device/token', json={'device_code': data['device_code']})
+    assert grant.status_code == 200 and grant.json()['access_token'].startswith('tv1.za.')
+    next_code = await client.post('/v1/command/device/code', json={'device_name': 'identity-synthetic'})
+    assert next_code.json()['identity_provider'] == 'zitadel'
+
+
+@pytest.mark.asyncio
+async def test_signed_but_unmapped_org_mints_no_tank_credential(device, provider):
+    client, pool, runtime = device
+    runtime.box_region = lambda: 'za'
+    provider.claims[oidc.ORG_CLAIM] = '99999'
+    code = (await client.post('/v1/command/device/code', json={'device_name': 'synthetic'})).json()['device_code']
+    response = await client.post('/v1/command/device/token', json={'device_code': code})
+    assert response.status_code == 400 and response.json() == {'error': 'invalid_grant'}
+    async with pool.acquire() as conn:
+        assert await conn.fetchval('SELECT count(*) FROM tank.personal_tokens') == 0
