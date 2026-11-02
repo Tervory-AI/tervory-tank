@@ -1,22 +1,22 @@
 """Contact quality: invented offline contacts, unchanged legacy evidence/CSV, no models."""
 from __future__ import annotations
 
-from copy import deepcopy
 import csv
 import importlib.util
 import io
-import json
-from pathlib import Path
 import subprocess
+import sys
+from copy import deepcopy
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from base_evidence import row_fields
 from base_metrics import export_records
 from base_product_fixtures import AT, finished, raw
+
 from agents.base.engines.ffl import reference
-import sys
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents" / "base"))
 from pipeline import enrich_one, merge
 
@@ -51,7 +51,7 @@ def test_rfc_5321_syntax_and_octet_limits(email, valid):
 
 def test_phone_types_are_library_metadata_and_country_not_guessed():
     import phonenumbers
-    for typ, label in CONTACTS._LINE_TYPES.items():
+    for typ in CONTACTS._LINE_TYPES:
         sample = phonenumbers.example_number_for_type("US", typ)
         if sample is None:
             continue
@@ -183,13 +183,23 @@ async def test_quality_does_not_borrow_another_contacts_provenance():
 
 
 def test_page_rendering_is_byte_identical_with_and_without_quality():
-    result = subprocess.run(["node", "tests/base_contact_quality_pages.cjs"], cwd=ROOT, capture_output=True, text=True)
+    result = subprocess.run(["node", "tests/base_contact_quality_pages.cjs"], cwd=ROOT, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
 
 
 # Frozen pre-B1 export function from main 23cb9f31: byte-for-byte regression oracle.
 from typing import Any
-from base_metrics import obj, verified_contacts, csv_reason, csv_text, SOCIAL_NETWORKS, SOCIAL_NAMES, social_network
+
+from base_metrics import (
+    SOCIAL_NAMES,
+    SOCIAL_NETWORKS,
+    csv_reason,
+    csv_text,
+    obj,
+    social_network,
+    verified_contacts,
+)
+
 
 def legacy_export_records(rows: list[dict[str, Any]]) -> str:
     identity = ["record_id", "licence_key", "state", "licence_type", "name"]
@@ -204,10 +214,10 @@ def legacy_export_records(rows: list[dict[str, Any]]) -> str:
 
         def write(name: str, values: list[dict[str, str]], reason: str | None = None,
                   missing: dict[str, Any] | None = None) -> None:
-            record[name] = "; ".join(item["value"] for item in values)
+            record[name] = "; ".join(item["value"] for item in values)  # noqa: B023 - frozen legacy oracle
             for part in ("source_url", "checked_at"):
-                record[f"{name}_{part}"] = "; ".join(item[part] for item in values) if values else (missing or {}).get(part)
-            record[f"{name}_reason"] = reason if not values else None
+                record[f"{name}_{part}"] = "; ".join(item[part] for item in values) if values else (missing or {}).get(part)  # noqa: B023
+            record[f"{name}_reason"] = reason if not values else None  # noqa: B023
 
         emails = verified_contacts(fields["email"])
         write("email", emails[:1], csv_reason(fields["email"].get("reason"), "email"),
