@@ -207,3 +207,41 @@ async def refresh(row, data: dict) -> dict:
     except Refused:
         await state(row, 'sign_in_failed')
         raise SignInRequired() from None
+
+
+# Workspace server corridor; no browser-supplied tenant/user assertions are accepted.
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
+from command import Actor, identity, authorized_actor
+
+router = APIRouter(prefix='/v1/command/mcp')
+
+
+class StartBody(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    vault: str = Field(max_length=40)
+    connection_id: str = Field(max_length=36)
+
+
+class CallbackBody(BaseModel):
+    model_config = ConfigDict(extra='forbid', hide_input_in_errors=True)
+    state: str = Field(max_length=500)
+    code: str | None = Field(default=None, max_length=8000)
+    error: str | None = Field(default=None, max_length=200)
+    iss: str | None = Field(default=None, max_length=2000)
+
+
+@router.post('/oauth/start')
+async def start_route(body: StartBody, actor: Actor = Depends(identity)):
+    try:
+        return {'url': await start(await authorized_actor(actor), body.vault, body.connection_id)}
+    except Refused:
+        raise HTTPException(409, 'Secure connection refused.') from None
+
+
+@router.post('/oauth/callback')
+async def callback_route(body: CallbackBody, actor: Actor = Depends(identity)):
+    try:
+        return {'ok': await callback(await authorized_actor(actor), body.state, body.code, body.error, body.iss)}
+    except Refused:
+        raise HTTPException(409, 'Secure connection refused.') from None
