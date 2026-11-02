@@ -16,7 +16,9 @@ from base_evidence import row_fields
 from base_metrics import export_records
 from base_product_fixtures import AT, finished, raw
 from agents.base.engines.ffl import reference
-from agents.base.pipeline import enrich_one, merge
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents" / "base"))
+from pipeline import enrich_one, merge
 
 ROOT = Path(__file__).resolve().parents[1]
 QUALITY = ("phone_e164", "phone_valid", "phone_line_type", "email_syntax_ok", "email_disposable")
@@ -124,7 +126,6 @@ async def test_pipeline_passes_site_and_raw_phones_country_and_provenance():
     assert profile["phone_valid"]["value"] is False
 
 
-@pytest.mark.asyncio
 async def quality_row():
     row = finished(reference.project(raw()))
     page = row["passes"]["2b"]["field_observations"][1]
