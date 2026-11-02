@@ -96,6 +96,12 @@ try {
   const form = page.locator("form.release").first();
   await form.getByRole("button").click();
   await form.getByRole("status").filter({ hasText: "That address was not saved. Try again." }).waitFor();
+  const autoPage = await context.newPage();
+  await autoPage.emulateMedia({ reducedMotion: "no-preference" });
+  await autoPage.goto(url);
+  await autoPage.waitForFunction(() => document.querySelector(".engine-node.active .stage-number")?.textContent === "2", { timeout: 10000 });
+  assert.match(await autoPage.locator(".rig-caption").textContent(), /pairing the accessories/);
+  await autoPage.close();
   assert.equal(errors.length, 0, errors.join("\n"));
   console.log(JSON.stringify({ result: "PASS", widths: [320, 375, 768, 1440], images: assets.length, engineStages: 5, rigStates: 5, switches: 5, receiptRows: 4, csv: "PASS", pdf: "PASS", forms: "saved + failed", javascriptErrors: errors, screenshotDirectory: output }, null, 2));
 } finally {
