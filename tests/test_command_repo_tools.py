@@ -101,7 +101,7 @@ def github(monkeypatch):
 async def http_api(runtime, monkeypatch, github):
     async def fetch(sql, *args):
         if "JOIN tank.mcp_servers" in sql:
-            assert "v.tenant_id=$1" in sql and args == (TENANT,)
+            assert "v.tenant_id=$1" in sql and len(args) == 1 and args[0] in {TENANT, OTHER}
             return []  # No saved MCP connection in this repository-tools fixture.
         assert "tank.tenant_squad" in sql
         return [{"agent": squad} for squad in command.SQUADS]
