@@ -206,8 +206,13 @@ async def poll(body: Poll) -> JSONResponse:
 
 @router.post("/refresh")
 async def refresh(body: Refresh) -> JSONResponse:
+    return await rotate_refresh(body.refresh_token, audience="cli")
+
+
+async def rotate_refresh(presented: str, *, audience: str, client_id: str | None = None) -> JSONResponse:
+    """CLI and OAuth share token format, lifetimes and atomic one-use rotation."""
     box = region()
-    match = REFRESH.fullmatch(body.refresh_token)
+    match = REFRESH.fullmatch(presented)
     if match is None or match.group(1) != box:
         return error("invalid_grant")
     tenant = uuid.UUID(hex=match.group(2))
@@ -219,9 +224,10 @@ async def refresh(body: Refresh) -> JSONResponse:
             token_id = await conn.fetchval(
                 "UPDATE tank.personal_tokens SET token_hash=$4,expires_at=$5,refresh_hash=$6,refresh_expires_at=$7 "
                 "WHERE tenant_id=$1 AND region=$2 AND refresh_hash=$3 AND revoked_at IS NULL "
+                "AND audience=$8 AND client_id IS NOT DISTINCT FROM $9 "
                 "AND refresh_expires_at > now() RETURNING token_id",
-                tenant, box, pat.digest(body.refresh_token), pat.digest(access), issued + ACCESS_TTL,
-                pat.digest(rotated), issued + REFRESH_TTL)
+                tenant, box, pat.digest(presented), pat.digest(access), issued + ACCESS_TTL,
+                pat.digest(rotated), issued + REFRESH_TTL, audience, client_id)
     if token_id is None:
         return error("invalid_grant")
     return JSONResponse(grant(access, rotated, token_id, box, issued), headers=NO_STORE)
@@ -254,7 +260,7 @@ async def revoke(request: Request) -> JSONResponse:
         async with command.db().acquire() as conn:
             await conn.execute(
                 f"UPDATE tank.personal_tokens SET revoked_at=coalesce(revoked_at,now()) "
-                f"WHERE tenant_id=$1 AND region=$2 AND {column}=$3", tenant, box, pat.digest(token))
+                f"WHERE tenant_id=$1 AND region=$2 AND {column}=$3 AND audience='cli'", tenant, box, pat.digest(token))
     # RFC 7009: the same answer whether or not the token existed.
     return JSONResponse({"revoked": True}, headers=NO_STORE)
 
