@@ -1,10 +1,12 @@
 """Real local backup/restore round trip. No production endpoints or credentials."""
 import asyncio
+from contextlib import contextmanager
 import os
 import shutil
 
 import pytest
 
+from ops import restore_drill as restore_module
 from ops.restore_drill import command, drill, newest, sandbox
 from r2_archive import PLATFORM_TENANT, archive_file
 
@@ -62,6 +64,18 @@ def test_offline_encrypted_roundtrip(tmp_path, monkeypatch, region, identity_fil
     recipient = command('age-keygen', '-y', str(identity)).decode().strip()
     store = ArchiveStore(region)
     public = region == 'za'
+    if region == 'za':
+        original_sandbox = restore_module.sandbox
+
+        @contextmanager
+        def check_restored_identity_data():
+            with original_sandbox() as restored:
+                yield restored
+                # Assert restored data as well as a schema/table count, before
+                # the disposable container is destroyed. Synthetic row only.
+                assert restored.sql('SELECT count(*) FROM public.synthetic_identity', 'identity_restore') == '1'
+
+        monkeypatch.setattr(restore_module, 'sandbox', check_restored_identity_data)
 
     async def prepare():
         with sandbox() as source:
