@@ -19,8 +19,8 @@ export function safe(value) {
   return sanitizer.write(value) + sanitizer.end();
 }
 // Access (tv1), refresh (tvr1) and device-code (tvd1) credentials are never shown.
-const redact = value => value.replace(/tv[rd]?1\.(?:us-east|za)\.[A-Za-z0-9_.-]+/g, '[redacted]');
-const PREFIXES = ['tv1.', 'tvr1.', 'tvd1.'];
+const redact = value => value.replace(/(?:tv[rd]?1\.(?:us-east|za)\.|tzd1\.)[A-Za-z0-9_.-]+/g, '[redacted]');
+const PREFIXES = ['tv1.', 'tvr1.', 'tvd1.', 'tzd1.'];
 
 /** Keep terminal-control and credential state across arbitrary SSE chunks. */
 export class StreamSanitizer {
