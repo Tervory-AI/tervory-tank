@@ -23,6 +23,7 @@ from tenant_db import tenant_scope
 
 router = APIRouter(tags=['MCP'])
 PROTOCOL = '2025-11-25'
+READ_WAIT_SECONDS = 60
 ORIGINS = frozenset({ISSUER, 'https://claude.ai', 'https://chatgpt.com', 'https://cursor.com'})
 SESSION = re.compile(r'[A-Za-z0-9_-]{43}\Z')
 _background: set[asyncio.Task] = set()
@@ -94,7 +95,7 @@ async def call_tool(params: dict, actor, row):
             done.exception()  # Retrieve failures after the caller's wait ended.
     task.add_done_callback(finished)
     try:
-        confirmed = await asyncio.wait_for(asyncio.shield(task), timeout=60)
+        confirmed = await asyncio.wait_for(asyncio.shield(task), timeout=READ_WAIT_SECONDS)
     except TimeoutError:
         payload = {**pending, 'status': 'running', 'message': 'The call is still running.'}
         return {'content': [{'type': 'text', 'text': command.dump(payload)}]}
@@ -135,7 +136,7 @@ async def endpoint(request: Request):
                 await conn.execute('DELETE FROM tank.mcp_sessions WHERE tenant_id=$1 AND token_id=$2 AND session_hash=$3',
                                    actor.tenant_id, credential['token_id'], pat.digest(session))
             return Response(status_code=204, headers=device.NO_STORE)
-        accept = request.headers.get('accept', '')
+        accept = {part.split(';')[0].strip().lower() for part in request.headers.get('accept', '').split(',')}
         if not all(media in accept for media in ('application/json', 'text/event-stream')):
             return Response(status_code=406, headers=device.NO_STORE)
         if request.headers.get('content-type', '').split(';')[0].lower() != 'application/json':
@@ -156,7 +157,8 @@ async def endpoint(request: Request):
             if ('id' not in message or request.headers.get('mcp-session-id')
                     or not isinstance(params.get('protocolVersion'), str)
                     or not isinstance(params.get('capabilities'), dict)
-                    or not isinstance(params.get('clientInfo'), dict)):
+                    or not isinstance(params.get('clientInfo'), dict)
+                    or not all(isinstance(params['clientInfo'].get(key), str) for key in ('name', 'version'))):
                 return rpc_error(ident, -32602, 'Invalid params')
             session = secrets.token_urlsafe(32)
             thread = await command.create_thread(command.NewThread(title=credential['name']), actor)
