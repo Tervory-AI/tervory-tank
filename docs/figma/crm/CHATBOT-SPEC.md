@@ -1,5 +1,226 @@
 # Chat bot · design proposal
 
+## Founder review corrections · 1 November 2026, 17:20
+
+This section controls the current canvas and supersedes earlier raw-label, mobile-table and on-page-history descriptions. Every visible field label uses plain wording. All wording in the mapping below is **draft for founder approval**. API field names and paths remain documentation only; no API property or endpoint was renamed. Every original screen ID, field node and confirmation step remains.
+
+The visible navigation labels are **Write** and **Voice**. The client switcher uses the draft placeholder **Client**. Zero values use the existing em dash. Filled values are plain-word design annotations such as **[Invoice number]**, **[Client]** and **[Status]**, never raw API paths or invented client records. They show which data belongs in each slot; they are not live facts. This replaces the former raw bracketed API annotations throughout all 180 Trigger founder/store screens.
+
+At 375px, each CRM record is one 76px two-line card. The first line contains the identifier and party; the second contains an amount/date and status. The original card click opens the corresponding full detail screen. Additional list fields remain preserved in hidden card layers; full fields remain visible on detail screens. Missing summary slots are linked copies of existing detail field components, never fabricated data fields. Zero lists remain empty.
+
+| Area | Line 1: identifier; party | Line 2: amount/date; status |
+|---|---|---|
+| Leads | First name + Last name; Company | Next follow-up; Status |
+| Accounts | Reference; Name | Created; Active |
+| Contacts | First name + Last name; Company | Created; Do not call |
+| Opportunities | Name; Client | Amount; Stage |
+| Cases | Name; Client | First reply due; Status |
+| Tasks | Title; Client | Due date; Status |
+| Invoices | Invoice number; Client | Total; Status |
+| Quotes | Quote number; Client | Total; Status |
+| Google Business Profile posts | Post; Profile | Published at; Status |
+| Chat bot inbox | Visitor; Assigned person | Updated at; Status |
+
+Contacts use their existing Do not call flag as the contact state; no unsupported generic status was invented. Mobile posts and inbox use the same two-line card layout, with their retained fields on Post detail / Conversation detail. Channels use an 88px two-line connection card on mobile: channel/account, then status and the one state-dependent button.
+
+Channels no longer has the Connected / Needs reconnecting / Off legend below the title. Desktop rows remain 64px high. Account is narrowed to 390px; Status is widened to 362px. The same one-button state rule and disconnect confirmation remain.
+
+Visible canvas SPEC frames: CRM `101:8244`, Marketing `210:2897`, Chat bot `210:6156`. Marketing and Chat bot are actual FRAME nodes, each with an editable, complete canvas rendering of the matching Markdown and its preserved native SPEC document (`151:3973` / `154:4349`). CRM native SPEC remains `192:10312`. The canvas rendering is generated from the native Markdown source, not maintained as a separate document. These documentation frames are outside product viewports; screen indexes and API names occur here only.
+
+The two old Workspace menu specimens `93:14` and `99:8146` were moved, with IDs preserved, from CRM to **Archive · Trigger design history**, page `208:11727`. They are no longer hidden clutter on page `93:2`.
+
+### Complete new draft label mapping
+
+All new labels below await founder wording approval. Entries with the same label retain distinct underlying API fields; the API identity belongs in this SPEC only.
+
+| API field / previous wording | Draft visible label |
+|---|---|
+| `accepted_at` | Accepted |
+| `accepted_by_email` | Acceptance email |
+| `accepted_by_name` | Accepted by |
+| `accepted_ip` | Acceptance IP address |
+| `accepted_user_agent` | Acceptance browser |
+| `account` | Client |
+| `account_detail` | Client details |
+| `account_name` | Client |
+| `address_line` | Address line |
+| `aging_status` | Age status |
+| `amount` | Amount |
+| `amount_due` | Amount due |
+| `amount_paid` | Amount paid |
+| `amount_source` | Amount source |
+| `annual_revenue` | Annual revenue |
+| `assigned_to` | Assigned to |
+| `billing_address_line` | Billing address line |
+| `billing_city` | Billing city |
+| `billing_country` | Billing country |
+| `billing_period` | Billing period |
+| `billing_postcode` | Billing postcode |
+| `billing_state` | Billing state or region |
+| `case` | Case |
+| `case_type` | Case type |
+| `cases` | Cases |
+| `child_count` | Related case count |
+| `city` | City |
+| `client_address_line` | Client address line |
+| `client_city` | Client city |
+| `client_country` | Client country |
+| `client_email` | Client email |
+| `client_name` | Client |
+| `client_phone` | Client phone |
+| `client_postcode` | Client postcode |
+| `client_state` | Client state or region |
+| `close_date` | Close date |
+| `closed_by` | Closed by |
+| `closed_on` | Closed |
+| `company_name` | Company |
+| `contact` | Contact |
+| `contact_name` | Contact |
+| `contacts` | Contacts |
+| `converted_to_invoice` | Converted invoice |
+| `country` | Country |
+| `country_display` | Country |
+| `created_at` | Created |
+| `created_by` | Created by |
+| `created_on_arrow` | Created |
+| `currency` | Currency |
+| `custom_fields` | Additional fields |
+| `days_in_stage` | Days in stage |
+| `declined_at` | Declined |
+| `department` | Department |
+| `deposit` | Deposit |
+| `deposit_invoice` | Deposit invoice |
+| `deposit_percent` | Deposit percentage |
+| `description` | Description |
+| `details` | Details |
+| `discount_amount` | Discount amount |
+| `discount_type` | Discount type |
+| `discount_value` | Discount value |
+| `do_not_call` | Do not call |
+| `Draft estimate` | Draft quote |
+| `due_date` | Due date |
+| `email` | Email |
+| `escalation_count` | Escalations |
+| `estimate_number` | Quote number |
+| `expiry_date` | Expiry date |
+| `external_id` | External reference |
+| `external_source` | External source |
+| `first_name` | First name |
+| `first_response_at` | First reply |
+| `first_response_by` | First replied by |
+| `first_response_by_details` | First responder details |
+| `first_response_sla_deadline` | First reply due |
+| `id` | Reference |
+| `industry` | Industry |
+| `introduction` | Introduction |
+| `invoice_number` | Invoice number |
+| `invoice_title` | Title |
+| `is_active` | Active |
+| `is_expired` | Expired |
+| `is_overdue` | Overdue |
+| `is_problem` | Problem |
+| `is_sla_first_response_at_risk` | First reply at risk |
+| `is_sla_first_response_breached` | First reply overdue |
+| `is_sla_resolution_at_risk` | Resolution at risk |
+| `is_sla_resolution_breached` | Resolution overdue |
+| `is_unanswered` | Awaiting reply |
+| `issue_date` | Issue date |
+| `job_title` | Job title |
+| `kanban_order` | Board order |
+| `last_contacted` | Last contacted |
+| `last_enquiry_at` | Last enquiry |
+| `last_escalation_fired_at` | Last escalated |
+| `last_name` | Last name |
+| `last_outbound_at` | Last message sent |
+| `last_reminder_sent` | Last reminder |
+| `lead` | Lead |
+| `lead_source` | Lead source |
+| `line_items` | Items |
+| `line_items_count` | Item count |
+| `line_items_total` | Items total |
+| `linked_accounts` | Linked clients |
+| `linkedin_url` | LinkedIn profile |
+| `name` | Name |
+| `next_follow_up` | Next follow-up |
+| `notes` | Notes |
+| `number_of_employees` | Employee count |
+| `opportunities` | Opportunities |
+| `opportunity` | Opportunity |
+| `opportunity_amount` | Potential value |
+| `opportunity_type` | Opportunity type |
+| `org` | Organisation |
+| `organization` | Company |
+| `paid_at` | Paid |
+| `parent` | Parent case |
+| `parent_summary` | Parent case summary |
+| `payment_date` | Payment date |
+| `payment_method` | Payment method |
+| `payment_terms` | Payment terms |
+| `payments` | Payments |
+| `phone` | Phone |
+| `phone_e164` | International phone number |
+| `pipeline` | Pipeline |
+| `po_number` | Purchase order number |
+| `postcode` | Postcode |
+| `priority` | Priority |
+| `probability` | Probability |
+| `project` | Project |
+| `project_billing_type` | Project billing |
+| `quantity` | Quantity |
+| `rating` | Rating |
+| `reference_number` | Reference number |
+| `reminder_count` | Reminder count |
+| `reminder_days_after` | Remind days after due |
+| `reminder_days_before` | Remind days before due |
+| `reminder_enabled` | Reminders on |
+| `reminder_frequency` | Reminder interval |
+| `resolution_sla_deadline` | Resolution due |
+| `resolved_at` | Resolved |
+| `rollups` | Related totals |
+| `salutation` | Salutation |
+| `sent_at` | Sent |
+| `shipping_amount` | Shipping amount |
+| `sla_first_response_hours` | First reply target in hours |
+| `sla_paused_at` | Response target paused |
+| `sla_resolution_hours` | Resolution target in hours |
+| `source` | Source |
+| `source_detail` | Source details |
+| `source_ref` | Source reference |
+| `stage` | Stage |
+| `stage_changed_at` | Stage changed |
+| `stage_kind` | Stage type |
+| `stage_label` | Stage |
+| `start_project` | Start project |
+| `state` | State or region |
+| `status` | Status |
+| `subtotal` | Subtotal |
+| `tags` | Tags |
+| `tasks` | Tasks |
+| `tax_amount` | Tax amount |
+| `tax_rate` | Tax rate |
+| `teams` | Teams |
+| `template` | Template |
+| `terms` | Terms |
+| `time_summary` | Time summary |
+| `title` | Title |
+| `total_amount` | Total |
+| `unit_price` | Unit price |
+| `updated_at` | Last updated |
+| `updated_by` | Updated by |
+| `viewed_at` | Viewed |
+| `voice` | Voice |
+| `waiting_since` | Waiting since |
+| `website` | Website |
+| `write` | Write |
+
+### Review correction validation
+
+Passed: all 180 original screen roots and all 2318 original field-value node IDs remain; all 64 confirmation screens retain wired Confirm and Cancel controls. Zero visible technical field syntax or lowercase Write/Voice errors was found. The 24 CRM Filled list cards and the two Filled post/inbox summaries have exactly two lines and a detail destination; Zero lists remain empty. Complete canvas SPEC text matches native Markdown. Screenshots checked: Invoices mobile list `97:7684`, Invoices desktop detail `97:8098`, Channels desktop `149:2696`, Channels mobile `149:3459`, mobile inbox `149:14641`, and the visible Marketing/Chat bot SPEC headings and body. Value wording intentionally changes to plain annotations; field identities and API contracts remain.
+
+Authoring screenshots are design evidence, not founder acceptance screenshots. No application code, live data, model API, secrets, connection setup or deployment is part of this correction. The founder's own visual acceptance remains pending.
+
+Commands for this review: `git fetch origin main codex/crm-marketing-chat-design`, `git diff --check`, followed separately for each finished SPEC file by `git add <file>`, `git commit` and `git push origin codex/crm-marketing-chat-design`. Fetch passed. Push results and final audit totals are recorded after the checks. Claude opens the PR; the founder merges.
+
 ## Trigger menu revision · founder 1 November 2026, 14:25
 
 This revision supersedes the earlier Workspace/CRM submenu design and the pending Estimates rename. CRM is Trigger. Applied across all 180 founder/store screens: CRM 92 (64 entity screens plus 28 confirmations), Marketing 44 and Chat bot 44. Every original screen ID, field value node and confirmation step is retained.
@@ -8,7 +229,7 @@ One 240px left menu only. Top: the existing approved Tervory on-white logo, clie
 
 | Draft group | Areas in order |
 |---|---|
-| Writing | write, voice |
+| Writing | Write, Voice |
 | CRM | Leads, Accounts, Contacts, Opportunities, Cases, Tasks |
 | Sales | Quotes, Invoices |
 | Marketing | Channels, Calendar, Composer, Google reviews |
