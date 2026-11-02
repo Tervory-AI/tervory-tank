@@ -10,6 +10,8 @@ from case_study_templates import empty_figures
 
 AT = datetime(2026, 10, 2, tzinfo=UTC)
 A, B = uuid.UUID(int=1), uuid.UUID(int=2)
+START = datetime(2026, 10, 1, tzinfo=UTC)
+END = datetime(2026, 10, 4, tzinfo=UTC)
 
 
 def record(key, website):
@@ -30,6 +32,7 @@ class Store:
         if "FROM tank.base_apollo_records" in sql:
             assert "r.tenant_id=$1" in sql and "i.tenant_id=$1" in sql
             assert "i.imported_at >= $2 AND i.imported_at < $3" in sql
+            assert args[1:] == (START, END)
             return self.imports.get(args[0], [])
         # Snapshot evidence must work without current-period result rows.
         return []
@@ -40,7 +43,7 @@ class Store:
 
 async def figures(store, tenant):
     result = empty_figures("base", date(2026, 10, 1), date(2026, 10, 3))
-    await base(store, tenant, "us-east", AT, AT, result)
+    await base(store, tenant, "us-east", START, END, result)
     return result
 
 
@@ -78,3 +81,23 @@ async def test_missing_comparison_has_zero_outcomes_and_coverage():
     assert len(scoreboard) == 19
     assert all(item["value"] == 0 for item in scoreboard.values())
     assert scoreboard["base.vs_apollo.coverage"]["apollo_returned"] == 0
+
+
+@pytest.mark.asyncio
+async def test_additional_comparison_fields_are_included(monkeypatch):
+    import case_study_sources
+    original = case_study_sources.compare
+
+    def extended(results, apollo):
+        result = original(results, apollo)
+        for state in result["states"]:
+            state["additional_field"] = {"matches": state["records"]}
+        return result
+
+    monkeypatch.setattr(case_study_sources, "compare", extended)
+    snapshot = record("one", "one.example")
+    values = await figures(Store({A: [{"licence_key": "one", "base_snapshot": snapshot,
+                                      "fields": {"website": "one.example"}}]}), A)
+    assert values["base.vs_apollo.additional_field.matches"]["value"] == 1
+    assert values["base.vs_apollo.additional_field.records_compared"]["value"] == 1
+    assert values["base.vs_apollo.additional_field.neither"]["value"] == 0
