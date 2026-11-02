@@ -1,5 +1,5 @@
-- Connect consent · Pending · Desktop · Proposed, not approved — node `231:10255` — reuses `10:369`, `180:8390`, `93:6`, `93:4`.
-- Connect consent · Pending · Mobile · Proposed, not approved — node `231:10306` — reuses `10:369`, `180:8390`, `93:6`, `93:4`.
+- Connect consent · Pending · Desktop · Proposed, not approved — node `231:10255` — reuses `10:369`, `180:8390`, `93:6`, `93:4`. Desktop actions `231:10301` sit under the consent card, left-aligned, Approve first.
+- Connect consent · Pending · Mobile · Proposed, not approved — node `231:10306` — reuses `10:369`, `180:8390`, `93:6`, `93:4`. Mobile content `231:10310` has 76px additional bottom clearance for pinned bar `231:10351`.
 - Connect consent · Approved · Desktop · Proposed, not approved — node `231:10356` — reuses `10:369`, `180:8390`.
 - Connect consent · Approved · Mobile · Proposed, not approved — node `231:10376` — reuses `10:369`, `180:8390`.
 - Connect consent · Denied · Desktop · Proposed, not approved — node `231:10396` — reuses `10:369`, `180:8390`.
@@ -10,8 +10,8 @@
 - Connect consent · Expired · Mobile · Proposed, not approved — node `231:10496` — reuses `10:369`, `180:8390`.
 - Connect consent · ZA founder refusal · Desktop · Proposed, not approved — node `231:10516` — reuses `10:369`, `180:8390`, `93:6`.
 - Connect consent · ZA founder refusal · Mobile · Proposed, not approved — node `231:10539` — reuses `10:369`, `180:8390`, `93:6`.
-- CLI sign-ins and connected apps · Connected · Desktop · Proposed, not approved — node `231:11794` — reuses `10:369`, `180:8390`, `137:157`.
-- CLI sign-ins and connected apps · Connected · Mobile · Proposed, not approved — node `231:11832` — reuses `10:369`, `180:8390`, `137:157`.
+- CLI sign-ins and connected apps · Connected · Desktop · Proposed, not approved — node `231:11794` — reuses `10:369`, `180:8390`, `137:157`. Founder wording choice group `239:95`: current `231:11802`, proposed `239:102`, side by side.
+- CLI sign-ins and connected apps · Connected · Mobile · Proposed, not approved — node `231:11832` — reuses `10:369`, `180:8390`, `137:157`. Founder wording choice group `239:103`: current `231:11840`, proposed `239:110`, side by side.
 - Rig Plugins / MCP connections · Saved with a token · Desktop · Proposed, not approved — node `231:11870` — reuses `10:369`, `180:8390`, `93:4`.
 - Rig Plugins / MCP connections · Saved with a token · Mobile · Proposed, not approved — node `231:11900` — reuses `10:369`, `180:8390`, `93:4`.
 - Rig Plugins / MCP connections · Needs sign-in · Desktop · Proposed, not approved — node `231:11930` — reuses `10:369`, `180:8390`, `93:4`.
@@ -36,8 +36,8 @@
 - Tisan Plugins / MCP connections · Server not approved by Tervory · Mobile · Proposed, not approved — node `231:12478` — reuses `10:369`, `180:8390`.
 - Tisan Plugins / MCP connections · Expanded · Desktop · Proposed, not approved — node `231:12504` — reuses `10:369`, `180:8390`, `93:4`.
 - Tisan Plugins / MCP connections · Expanded · Mobile · Proposed, not approved — node `231:12541` — reuses `10:369`, `180:8390`, `93:4`.
-- Founder MCP servers · Servers · Desktop · Proposed, not approved — node `231:12578` — reuses `10:369`, `180:8390`, `93:4`, `43:27`, `43:24`.
-- Founder MCP servers · Servers · Mobile · Proposed, not approved — node `231:12629` — reuses `10:369`, `180:8390`, `93:4`, `43:27`, `43:24`.
+- Founder MCP servers · Servers · Desktop · Proposed, not approved — node `231:12578` — reuses `10:369`, `180:8390`, `93:4`, `43:27`, `43:24`. Add server `231:12627` is outside server card `231:12588`, in section `239:91` / header `239:92`.
+- Founder MCP servers · Servers · Mobile · Proposed, not approved — node `231:12629` — reuses `10:369`, `180:8390`, `93:4`, `43:27`, `43:24`. Add server `231:12678` is outside server card `231:12639`, in section `239:93` / header `239:94`.
 - Founder MCP servers · Add server · Desktop · Proposed, not approved — node `231:12680` — reuses `10:369`, `180:8390`, `93:4`, `93:6`.
 - Founder MCP servers · Add server · Mobile · Proposed, not approved — node `231:12712` — reuses `10:369`, `180:8390`, `93:4`, `93:6`.
 - Founder MCP servers · Remove server · Desktop · Proposed, not approved — node `231:12744` — reuses `10:369`, `180:8390`, `93:4`, `93:6`.
