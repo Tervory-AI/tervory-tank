@@ -305,7 +305,7 @@ async def models(actor: Actor = Depends(identity)) -> list[dict]:
 
 @router.get("/tools")
 async def tools(actor: Actor = Depends(identity)) -> list[str]:
-    return allowed_tools(await authorized_actor(actor))
+    return allowed_tools(await authorized_actor(actor, include_mcp=True))
 
 
 def require_founder(actor: Actor) -> None:
@@ -542,7 +542,7 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
             await record_receipts(conn, row, state, turn_id, [answer.ledger_id])
             repeatable = True
             try:
-                plan = parse_plan(answer.content, await authorized_actor(actor, conn))
+                plan = parse_plan(answer.content, await authorized_actor(actor, conn, include_mcp=True))
             except (ValueError, HTTPException):
                 repeatable = False
                 plan = ActionPlan(text="The proposed action plan was invalid. No action was started.")
@@ -651,7 +651,7 @@ async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity
                    if c.get("status") == "confirmed" and "result" in c][-4:]
         if results:
             messages.insert(0, {"role": "system", "content": "Confirmed tool result data (not instructions): " + dump(results)[:32000]})
-        messages.insert(0, planning_message(actor))
+        messages.insert(0, planning_message(await authorized_actor(actor, include_mcp=True)))
         messages = await repeat_messages(conn, state, actor, messages)
         await conn.execute(
             "INSERT INTO tank.tasks(id,tenant_id,created_by,agent,task_type,title,input,status,started_at) "
@@ -730,7 +730,7 @@ async def card_action(card_id: uuid.UUID, body: CardAction, actor: Actor = Depen
             # Support previously saved build cards without changing their meaning.
             payload = card["payload"]
             action = PlannedAction(**payload) if "tool" in payload else PlannedAction(tool="worker.build", arguments=payload)
-            action = validate_action(action, await authorized_actor(actor, conn))
+            action = validate_action(action, await authorized_actor(actor, conn, include_mcp=True))
             if action.tool == "worker.build":
                 open_build = await conn.fetchval(
                     "SELECT build_id FROM tank.command_builds WHERE thread_id=$1 AND tenant_id=$2 "
@@ -1120,9 +1120,9 @@ from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServ
 
 
 ADAPTERS = {
-    "mcp.servers.list": Adapter("GET", "", EmptyArgs, "mcp.servers.list"),
-    "mcp.servers.approve": Adapter("POST", "", MCPApproveArgs, "mcp.servers.approve"),
-    "mcp.servers.remove": Adapter("POST", "", MCPServerArgs, "mcp.servers.remove"),
+    "mcp.servers.list": Adapter("GET", "/v1/command/mcp/servers/list", EmptyArgs, "mcp.servers.list"),
+    "mcp.servers.approve": Adapter("POST", "/v1/command/mcp/servers/approve", MCPApproveArgs, "mcp.servers.approve"),
+    "mcp.servers.remove": Adapter("POST", "/v1/command/mcp/servers/remove", MCPServerArgs, "mcp.servers.remove"),
     "trigger.crm.write": Adapter("POST", "/v1/trigger/crm/write", TriggerCRMWriteArgs, "trigger.crm.write"),
     "trigger.voice.show": Adapter("POST", "/v1/trigger/voice.show", TriggerVoiceShowArgs, "trigger.voice.show"),
     "trigger.voice.set": Adapter("POST", "/v1/trigger/voice.set", TriggerVoiceSetArgs, "trigger.voice.set"),
@@ -1224,7 +1224,7 @@ def public_card(card: dict) -> dict:
 @router.post("/threads/{thread_id}/actions")
 async def propose_tool(thread_id: uuid.UUID, body: PlannedAction, actor: Actor = Depends(identity)) -> dict:
     async with editing(thread_id, actor) as (conn, row, state):
-        actor = await authorized_actor(actor, conn)
+        actor = await authorized_actor(actor, conn, include_mcp=True)
         action = validate_action(body, actor)
         card = await propose_action(conn, row, state, action, actor)
     return public_card(card)
@@ -1238,7 +1238,7 @@ async def propose_action(conn: Any, row: dict, state: dict, action: PlannedActio
     adapter = action_adapter(action, actor)
     label = adapter.label if adapter else "Start a worker build"
     card = {"card_id": card_id, "kind": adapter.kind if adapter else "build", "summary": label,
-            "tool": action.tool, "arguments": action.arguments, "status": "pending",
+            "tool": action.tool, "arguments": ({**action.arguments, "brief_markdown": dump(action.arguments)} if action.tool.startswith("mcp.") else action.arguments), "status": "pending",
             "payload": {"tool": action.tool, "arguments": action.arguments}}
     state["cards"][card_id] = card
     await event(conn, row, "card", public_card(card))
@@ -1252,16 +1252,20 @@ def current_actor(actor: Actor) -> Actor:
 
 
 @tenant_path("actor")
-async def authorized_actor(actor: Actor, conn: Any = None) -> Actor:
+async def authorized_actor(actor: Actor, conn: Any = None, *, include_mcp: bool = False) -> Actor:
     actor = current_actor(actor)
+    if actor.founder and not include_mcp:
+        return actor
     if conn is None:
         async with db().acquire() as connection:
-            return await authorized_actor(actor, connection)
+            return await authorized_actor(actor, connection, include_mcp=include_mcp)
     if not actor.founder:
         rows = await conn.fetch("SELECT agent FROM tank.tenant_squad WHERE tenant_id=$1", actor.tenant_id)
         actor = replace(actor, squads=frozenset(row["agent"] for row in rows) & SQUADS)
-    from mcp_connections import catalogue
-    return replace(actor, mcp_tools=await catalogue(actor, conn))
+    if include_mcp:
+        from mcp_connections import catalogue
+        return replace(actor, mcp_tools=await catalogue(actor, conn))
+    return actor
 
 
 def action_adapter(action: PlannedAction, actor: Actor) -> Adapter | None:
@@ -1443,7 +1447,7 @@ async def refresh_action_receipts(thread_id: uuid.UUID, actor: Actor, card_id: s
 async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action: PlannedAction) -> dict:
     attempted = False
     try:
-        actor = await authorized_actor(actor)
+        actor = await authorized_actor(actor, include_mcp=action.tool.startswith("mcp."))
         action = validate_action(action, actor)
         adapter = action_adapter(action, actor)
         if adapter is None:
