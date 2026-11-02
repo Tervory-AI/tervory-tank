@@ -156,13 +156,17 @@ def rls(box, folder):
                              '--tb=no', f'--junitxml={report}'], cwd=ROOT, env=env,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3600)
     if report.exists():
-        import xml.etree.ElementTree as ET
-        cases = list(ET.parse(report).iter('testcase'))
+        # pytest wrote this report locally. Read it as text, not with an XML parser
+        # (Semgrep use-defused-xml): one <testcase ...> element per test.
+        text = report.read_text(encoding='utf-8')
+        cases = re.findall(r'<testcase\b([^>]*?)(?:/>|>(.*?)</testcase>)', text, re.S)
         if not cases:
             failures.append('tests/tenant_rls (no restored-copy tests executed)')
-        for case in cases:
-            if any(case.find(tag) is not None for tag in ('failure', 'error', 'skipped')):
-                failures.append(case.get('classname', '') + '::' + case.get('name', ''))
+        for attrs, body in cases:
+            if re.search(r'<(failure|error|skipped)\b', body or ''):
+                classname = re.search(r'classname="([^"]*)"', attrs)
+                name = re.search(r'\bname="([^"]*)"', attrs)
+                failures.append((classname.group(1) if classname else '') + '::' + (name.group(1) if name else ''))
     else:
         failures.append('tests/tenant_rls (missing test report)')
     if result.returncode and not failures:
