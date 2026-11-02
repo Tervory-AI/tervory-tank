@@ -37,7 +37,7 @@ Exit 0. Installed the repository's pinned runtime/test dependencies in this chec
 .venv/bin/python -m pytest -q -ra tests/test_base_* tests/test_skills_offline.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
 ```
 
-Exit 0: **224 passed, 54 skipped, 14 warnings in 110.27s**. This run included every requested Base test module and the complete offline skill eval test. The warnings are existing FastAPI lifecycle deprecations. An earlier run found one incorrect new-test assumption: `notmailinator.com` is itself on the upstream disposable list. Replaced the negative test domain with an invented `.example` domain; no production workaround.
+Exit 0: **224 passed, 54 skipped, 14 warnings in 110.27s**. This run included every requested Base test module and the complete offline skill eval test. The warnings are existing FastAPI lifecycle deprecations and Pydantic field-shadowing warnings. An earlier run found one incorrect new-test assumption: `notmailinator.com` is itself on the upstream disposable list. Replaced the negative test domain with an invented `.example` domain; no production workaround.
 
 An initial `--disable-socket` run without `--allow-unix-socket` blocked Python asyncio's internal socketpair. The final command above allows the internal event loop and loopback only; external sockets remain blocked.
 
@@ -61,11 +61,16 @@ batch-workflow.tsx: full HTML byte-identical; all five quality fields excluded
 These are offline invented test values, never loaded into a live screen and not claimed as the founder's test. The check compares complete rendered HTML against the existing field loop and original fields, with the candidate quality evidence added only to the new rendering input.
 
 ```sh
-cd workspace && npm ci --ignore-scripts --no-audit --no-fund
+npm ci --ignore-scripts --no-audit --no-fund
+```
+
+The npm command ran with working directory `/workspace/codex-base-b1-contacts/workspace`.
+
+```sh
 cd workspace && npx tsc --noEmit
 ```
 
-Each was run from the repository root as a separate command. Both exited 0; TypeScript produced no diagnostics. The npm command installed 45 packages from the existing lockfile without changing it.
+The TypeScript command ran from the repository root. Both exited 0; TypeScript produced no diagnostics. The npm command installed 45 packages from the existing lockfile without changing it.
 
 ```sh
 .venv/bin/ruff check tank/skills/base.contacts/1.2.0/run.py tank/skills/base.verify/1.1.0/run.py tests/test_base_contact_quality.py
