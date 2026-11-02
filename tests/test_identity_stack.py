@@ -12,9 +12,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SETUP = runpy.run_path(str(ROOT / 'ops/identity/setup.py'))
 
 
-def test_setup_creates_project_app_roles_policies_once_and_verifies_owner():
+@pytest.mark.parametrize('omit_defaults', [False, True])
+def test_setup_creates_project_app_roles_policies_once_and_verifies_owner(omit_defaults):
     state = {'project': None, 'roles': [], 'app': None,
-             'login': {'allowRegister': True}, 'lockout': {}, 'writes': []}
+             'login': {'allowRegister': True, 'passwordCheckLifetime': '86400s', 'allowDomainDiscovery': True}, 'lockout': {}, 'writes': []}
     def api(request):
         path, method = request.url.path, request.method
         body = json.loads(request.content) if request.content else {}
@@ -36,7 +37,10 @@ def test_setup_creates_project_app_roles_policies_once_and_verifies_owner():
             state['roles'].append({'key': body['roleKey']})
             result = {}
         elif path.endswith('/apps/_search'):
-            result = {'result': [state['app']] if state['app'] else []}
+            app = state['app']
+            if app and omit_defaults:
+                app = {'oidcConfig': {k: v for k, v in app['oidcConfig'].items() if k != 'version'}}
+            result = {'result': [app] if app else []}
         elif path.endswith('/apps/oidc'):
             assert body == SETUP['APP']
             assert body['authMethodType'] == 'OIDC_AUTH_METHOD_TYPE_NONE'
@@ -53,7 +57,8 @@ def test_setup_creates_project_app_roles_policies_once_and_verifies_owner():
                 state[name].update(body)
                 result = {}
             else:
-                result = {'policy': state[name]}
+                policy = {k: v for k, v in state[name].items() if not omit_defaults or v is not False}
+                result = {'policy': policy}
         else:
             pytest.fail(f'Unexpected setup API call: {method} {path}')
         return httpx.Response(200, json=result)
@@ -64,6 +69,8 @@ def test_setup_creates_project_app_roles_policies_once_and_verifies_owner():
         before = list(state['writes'])
         assert configure.run() == first and state['writes'] == before
         assert state['login']['allowRegister'] is False
+        assert state['login']['passwordCheckLifetime'] == '86400s'
+        assert state['login']['allowDomainDiscovery'] is True
         assert state['login']['passwordlessType'] == 'PASSWORDLESS_TYPE_ALLOWED'
         assert set(state['login']['secondFactors']) == {'SECOND_FACTOR_TYPE_OTP', 'SECOND_FACTOR_TYPE_U2F'}
         assert state['login']['multiFactors'] == ['MULTI_FACTOR_TYPE_U2F_WITH_VERIFICATION']
