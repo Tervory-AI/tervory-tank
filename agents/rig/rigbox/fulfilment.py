@@ -181,8 +181,9 @@ class RigOrders:
         whether the PO was sent (for example the outbox file exists but can't be
         read): nothing is cancelled and the caller must not refund; a person or
         a later reconcile settles it. "unrecorded" means the store failed after
-        the outbox was checked; the caller still refunds and the open order
-        stays visible.
+        the outbox was checked; the order may still be placed, so the caller
+        must not refund yet: Accept leaves the quote at "cancelling" and
+        reconcile_payments cancels again, then refunds.
 
         Strict: when the outbox can't be checked for any reason (including
         outbox_not_configured or order_mode, since the mode or folder may have
@@ -227,7 +228,7 @@ class RigOrders:
 
     async def reconcile(self, *, tenant_id: str, env: dict[str, str] | None = None,
                         limit: int = 200, older_than_minutes: int = 15,
-                        now: datetime | None = None) -> dict[str, Any]:
+                        now: datetime | None = None, auto_only: bool = False) -> dict[str, Any]:
         """Sandbox reconcile for send_supplier_order's recorded:false case.
 
         For each draft PO whose order is still placed, if the outbox file was
@@ -239,14 +240,18 @@ class RigOrders:
         outbox, cancels or refunds; the payment reconciler cancels and refunds
         stranded auto-order POs. A PO whose outbox file can't be read is
         listed in "unknown" (never in "stranded"). Safe to run repeatedly.
+        auto_only=True (the payment reconciler) lists only auto-ordered quotes,
+        least recently tried first: drafts placed without auto-order never
+        leave draft, so they would otherwise fill the list.
         """
         from rigbox import supplier_orders
 
         sandbox_orders(env)
         supplier_orders.outbox(env)
-        drafts = await self.store.draft_supplier_orders(tenant_id, limit)
+        listed = {"auto_only": True} if auto_only else {}
+        drafts = await self.store.draft_supplier_orders(tenant_id, limit, **listed)
         cutoff = (now or datetime.now(timezone.utc)) - timedelta(minutes=max(1, int(older_than_minutes)))
-        old = set(await self.store.draft_supplier_orders(tenant_id, limit, before=cutoff))
+        old = set(await self.store.draft_supplier_orders(tenant_id, limit, before=cutoff, **listed))
         fixed, stranded, unknown = [], [], []
         for quote_id in drafts:
             try:
