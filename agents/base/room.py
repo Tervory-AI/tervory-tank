@@ -15,6 +15,7 @@ from chassis.job_contract import Job
 from chassis.tenant_db import tenant_scope
 
 from pipeline import (
+    OPTIONAL_SKILLS,
     SkillCall,
     enrich_queued,
     prepare_batch,
@@ -183,6 +184,11 @@ class SkillClient:
             versions[skill_id] = version
             ref = data.get("ref")
             refs[skill_id] = ref if isinstance(ref, str) and ref else f"{skill_id}@{version}"
+        for skill_id in OPTIONAL_SKILLS:
+            version = await self.approved(skill_id)
+            if version:
+                versions[skill_id] = version
+                refs[skill_id] = f"{skill_id}@{version}"
         return versions, refs
 
     async def approved(self, skill_id: str) -> str | None:
