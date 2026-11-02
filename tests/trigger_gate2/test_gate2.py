@@ -221,8 +221,9 @@ async def test_accepted_copy_resolves_tenant_reference_and_escapes_generated_bod
         name = next(n for n in tar.getnames() if n.endswith('app/products/page.tsx'))
         source = tar.extractfile(name).read().decode()
         assert scaffold._jsx_text(result['text']) in source and '<script>' not in source and '{content}' not in source
-        about = next(n for n in tar.getnames() if n.endswith('app/about/page.tsx'))
-        assert tar.extractfile(about).read() == (ROOT / 'agents/tisan/templates/next-site/app/about/page.tsx').read_bytes()
+        # The sections template (#570) has no about or home page file; content comes from
+        # content/site.json through tisan.build. Scaffold writes neither page here.
+        assert not any(n.endswith('app/about/page.tsx') for n in tar.getnames())
     with pytest.raises(scaffold.ScaffoldError, match='Writing record unavailable'):
         await scaffold.execute(payload, str(OTHER), data_root=tmp_path)
     assert not (tmp_path / 'builds' / str(OTHER)).exists()
