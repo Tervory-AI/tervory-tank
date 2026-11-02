@@ -80,11 +80,11 @@ services:
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: Tervory bootstrap
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINEKEY_TYPE: "1"
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINEKEY_EXPIRATIONDATE: ${IDENTITY_BOOTSTRAP_KEY_EXPIRATION:?founder sets bootstrap expiry}
-      ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /bootstrap/login-client.pat
+      ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /login/login-client.pat
       ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
       ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME: Instance Login Client
       ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE: ${LOGIN_CLIENT_PAT_EXPIRATION:?founder sets login client expiry}
-    volumes: [identity_bootstrap:/bootstrap]
+    volumes: [identity_bootstrap:/bootstrap, identity_login_token:/login]
     networks: [database]
     depends_on:
       zitadel-init:
@@ -122,10 +122,10 @@ services:
     environment:
       ZITADEL_API_URL: http://zitadel-api:8080
       NEXT_PUBLIC_BASE_PATH: /ui/v2/login
-      ZITADEL_SERVICE_USER_TOKEN_FILE: /bootstrap/login-client.pat
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /login/login-client.pat
       ZITADEL_SESSION_COOKIE_SECRET: ${LOGIN_SESSION_COOKIE_SECRET:?founder sets LOGIN_SESSION_COOKIE_SECRET}
       CUSTOM_REQUEST_HEADERS: Host:auth.za.tervory.com,X-Forwarded-Proto:https
-    volumes: [identity_bootstrap:/bootstrap:ro]
+    volumes: [identity_login_token:/login:ro]
     expose: ["3000"]
     networks: [database, proxy]
     depends_on:
@@ -134,13 +134,21 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: ${COOLIFY_PROXY_NETWORK:?existing Coolify proxy network name}
-      traefik.http.routers.identity-za-login.rule: Host(`auth.za.tervory.com`) && (PathPrefix(`/ui/v2/login`) || Path(`/`))
+      traefik.http.routers.identity-za-login.rule: Host(`auth.za.tervory.com`) && PathPrefix(`/ui/v2/login`)
       traefik.http.routers.identity-za-login.entrypoints: https
       traefik.http.routers.identity-za-login.tls: "true"
       traefik.http.routers.identity-za-login.tls.certresolver: letsencrypt
       traefik.http.routers.identity-za-login.priority: "200"
       traefik.http.routers.identity-za-login.service: identity-za-login
       traefik.http.services.identity-za-login.loadbalancer.server.port: "3000"
+      traefik.http.middlewares.identity-za-root.replacepath.path: /ui/v2/login/
+      traefik.http.routers.identity-za-root.rule: Host(`auth.za.tervory.com`) && Path(`/`)
+      traefik.http.routers.identity-za-root.entrypoints: https
+      traefik.http.routers.identity-za-root.tls: "true"
+      traefik.http.routers.identity-za-root.tls.certresolver: letsencrypt
+      traefik.http.routers.identity-za-root.priority: "300"
+      traefik.http.routers.identity-za-root.service: identity-za-login
+      traefik.http.routers.identity-za-root.middlewares: identity-za-root
     healthcheck:
       test: [CMD, node, /app/healthcheck.mjs, http://localhost:3000/ui/v2/login/healthy]
       interval: 10s
@@ -150,18 +158,40 @@ services:
     build:
       context: ../..
       dockerfile: ops/identity/Dockerfile.setup
+      target: configure
     restart: "no"
     volumes: [identity_bootstrap:/bootstrap]
     networks: [database]
     depends_on:
       zitadel-api:
         condition: service_healthy
+  identity-backup:
+    build:
+      context: ../..
+      dockerfile: ops/identity/Dockerfile.setup
+      target: backup
+    restart: unless-stopped
+    environment:
+      TANK_REGION: za
+      POSTGRES_ZITADEL_PASSWORD: ${POSTGRES_ZITADEL_PASSWORD:?founder sets POSTGRES_ZITADEL_PASSWORD}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:?existing ZA storage account}
+      R2_ACCESS_KEY_ID_ZENAS: ${R2_ACCESS_KEY_ID_ZENAS:?existing ZA Zenas storage credential name}
+      R2_SECRET_ACCESS_KEY_ZENAS: ${R2_SECRET_ACCESS_KEY_ZENAS:?existing ZA Zenas storage credential name}
+      R2_BUCKET_ZENAS_ZA: ${R2_BUCKET_ZENAS_ZA:?existing ZA backup bucket}
+      R2_BACKUP_RECIPIENT: ${R2_BACKUP_RECIPIENT:?existing public age recipient}
+    networks: [database, backup_outbound]
+    depends_on:
+      tervory-setup:
+        condition: service_completed_successfully
 volumes:
+  identity_login_token:
+    name: identity-za-login-token
   identity_database:
     name: identity-za-postgres
   identity_bootstrap:
     name: identity-za-bootstrap
 networks:
+  backup_outbound: {}
   database:
     internal: true
   proxy:
