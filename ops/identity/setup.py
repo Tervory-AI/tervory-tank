@@ -21,6 +21,12 @@ APP = {
 LOGIN = {'allowUsernamePassword': True, 'allowRegister': False, 'allowExternalIdp': False,
          'forceMfa': False, 'passwordlessType': 'PASSWORDLESS_TYPE_ALLOWED'}
 LOCKOUT = {'maxPasswordAttempts': '5', 'maxOtpAttempts': '5'}
+LOGIN_FIELDS = set(LOGIN) | {
+    'hidePasswordReset', 'ignoreUnknownUsernames', 'defaultRedirectUri',
+    'passwordCheckLifetime', 'externalLoginCheckLifetime', 'mfaInitSkipLifetime',
+    'secondFactorCheckLifetime', 'multiFactorCheckLifetime', 'allowDomainDiscovery',
+    'disableLoginWithEmail', 'disableLoginWithPhone', 'forceMfaLocalOnly',
+}
 
 
 class SetupError(ValueError):
@@ -67,7 +73,8 @@ class Configure:
         app = self.search(root + '/apps/_search', APP['name'])
         if app:
             config = app.get('oidcConfig', {})
-            if any(config.get(k) != v for k, v in APP.items() if k != 'name'):
+            if any(config.get(k, 'OIDC_VERSION_1_0' if k == 'version' else None) != v
+                   for k, v in APP.items() if k != 'name'):
                 raise SetupError('Existing CLI application configuration differs')
             client_id = config['clientId']
         else:
@@ -75,8 +82,15 @@ class Configure:
         for name, desired in [('login', LOGIN), ('lockout', LOCKOUT)]:
             path = '/admin/v1/policies/' + name
             current = self.request('GET', path).get('policy', {})
-            if any(current.get(k) != v for k, v in desired.items()):
-                self.request('PUT', path, json=desired)
+            # Protobuf JSON may omit false/default values. Preserve every
+            # unrelated writable policy setting when the API requires PUT.
+            differs = any((str(current.get(k, 0)) != str(v) if name == 'lockout'
+                           else current.get(k, False if v is False else None) != v)
+                          for k, v in desired.items())
+            if differs:
+                fields = LOGIN_FIELDS if name == 'login' else set(LOCKOUT)
+                update = {k: current[k] for k in fields if k in current}
+                self.request('PUT', path, json={**update, **desired})
         policy = self.request('GET', '/admin/v1/policies/login').get('policy', {})
         for field, suffix, wanted in [
             ('secondFactors', 'second_factors', ['SECOND_FACTOR_TYPE_OTP', 'SECOND_FACTOR_TYPE_U2F']),
