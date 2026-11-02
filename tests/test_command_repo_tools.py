@@ -99,9 +99,16 @@ def github(monkeypatch):
 
 @pytest_asyncio.fixture
 async def http_api(runtime, monkeypatch, github):
+    async def fetch(sql, *args):
+        if "JOIN tank.mcp_servers" in sql:
+            assert "v.tenant_id=$1" in sql and args == (TENANT,)
+            return []  # No saved MCP connection in this repository-tools fixture.
+        assert "tank.tenant_squad" in sql
+        return [{"agent": squad} for squad in command.SQUADS]
+
     @asynccontextmanager
     async def acquire():
-        yield SimpleNamespace(fetch=AsyncMock(return_value=[{"agent": squad} for squad in command.SQUADS]))
+        yield SimpleNamespace(fetch=fetch)
 
     monkeypatch.setattr(command, "db", lambda: SimpleNamespace(acquire=acquire))
     app = runtime.app = FastAPI()
