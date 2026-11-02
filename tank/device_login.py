@@ -55,6 +55,8 @@ NO_STORE = {"Cache-Control": "no-store", "Pragma": "no-cache"}
 class NewCode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     device_name: str = Field(min_length=1, max_length=100)
+    # Explicit legacy callers can keep the Boston approval path during cutover.
+    approval: Literal["workspace"] | None = None
 
 
 class Poll(BaseModel):
@@ -129,7 +131,7 @@ def platform():
 async def create_code(body: NewCode) -> JSONResponse:
     box = region()
     import identity_oidc
-    if identity_oidc.configured():
+    if identity_oidc.configured() and body.approval != "workspace":
         from identity_device import create
         return await create(clean_name(body.device_name))
     device_code = f"tvd1.{box}.{secrets.token_urlsafe(32)}"
