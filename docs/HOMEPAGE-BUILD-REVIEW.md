@@ -89,3 +89,37 @@ The 320/768 screenshots and example CSV/PDF are also available in `/dev/shm/terv
 ## Remaining acceptance
 
 The preview was queued to open in the founder's Codex browser panel. Founder browser acceptance and screenshots have not yet been received and are not claimed. Claude opens the PR from this branch under the founder's rule 12; the founder merges. No PR has been opened by Codex. The separate review thread's findings and founder acceptance remain pending.
+
+## Review correction — receipt badge and PDF appearance
+
+Fixed the reported 320px clipping in `site/app/homepage.css:259`: the receipt tab row now wraps with a 12px gap, and the Example badge cannot shrink. No wording changed. `site/check-homepage-browser.mjs:81` checks every tab and the badge against their container bounds at all four viewport widths. At 320px, the badge's right edge is 296px, equal to its container edge; all three elements fit.
+
+PDF appearance is now visually verified, beyond the earlier file-generation check. Rendering the initial PDF exposed the dark homepage surround in print. `site/app/homepage.css:264` now sets a white print canvas, A4 landscape paper, 12mm margins, contrasting table headings and rules, and visible overflow. Both savings and per-call PDFs render as one readable page without clipping. These are agent browser/PDF checks, not founder acceptance.
+
+Repeated after the correction:
+
+```sh
+cd /workspace/codex-homepage-build/site
+npm run build
+TMPDIR=/dev/shm npm run check
+/home/ammosync/trigger-crm-venv312/bin/python -m pytest ../tests/test_site_homepage.py -q
+TMPDIR=/dev/shm PLAYWRIGHT_MODULE=/tmp/tervory-job8-widget-resume/node_modules/playwright/index.mjs BROWSER_EXECUTABLE=/home/ammosync/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell node check-homepage-browser.mjs
+```
+
+PASS: production build; public-page and signup-store checks; `3 passed in 0.32s`; full browser workflow checks plus the new receipt-bounds assertions. An initial browser rerun was interrupted when the preview process stopped; the preview was restarted with the documented isolated-store command, and the complete rerun passed.
+
+PDF review tooling was isolated under `/dev/shm`, with no project/runtime dependency added:
+
+```sh
+/home/ammosync/trigger-crm-venv312/bin/pip install --disable-pip-version-check --no-cache-dir --target /dev/shm/tervory-pdf-review pypdfium2 pillow
+```
+
+Playwright generated each receipt view with `page.pdf({ printBackground: true, preferCSSPageSize: true })`. PDFium opened both actual PDF files, confirmed one page each, and rendered them with `page.render(scale=1.2).to_pil().save(...)`. The resulting images were visually inspected:
+
+![Receipt tabs at 320px](screenshots/homepage-build/receipt-tabs-320-after.png)
+
+![Savings PDF rendered by PDFium](screenshots/homepage-build/receipt-savings-review.png)
+
+![Per-call PDF rendered by PDFium](screenshots/homepage-build/receipt-per-call-review.png)
+
+Nothing merged or deployed. Founder browser acceptance remains pending.
