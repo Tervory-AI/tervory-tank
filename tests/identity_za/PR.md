@@ -43,28 +43,28 @@ lifetimes. The existing revoke ends both access and refresh.
 - `tank/identity_device.py:17`: provider device grant to hash-only local pending state.
 - `tank/identity_device.py:45`: serialized single-use grant exchange into existing
   personal_tokens rows; no upstream token or raw device code is persisted.
-- `tank/device_login.py:56`: optional explicit legacy approval selector.
-- `tank/device_login.py:146`: optional identity start; token polling branches by
+- `tank/device_login.py:59`: optional explicit legacy approval selector.
+- `tank/device_login.py:131`: optional identity start; token polling branches by
   the new wrapped provider code, leaving the old code/approval routes working.
 - `tank/personal_tokens.py:150`: verified role snapshot read only after token-hash
   match; only ZA Zitadel identities can use it. Founder list behavior is unchanged.
 - `tank/schema.sql:2339`: additive/idempotent role and provider columns, defaulting
   old rows to false/workspace; format and token lifetimes are unchanged.
-- `tank/requirements.txt:1`: standard PyJWT verification added, using the existing
+- `tank/requirements.txt:49`: standard PyJWT verification added, using the existing
   cryptography backend rather than implementing JWT cryptography.
-- `docker-compose.za.yml:156`: the three public identity settings reach ZA Tank only.
-- `.env.example:1`: new setting names only, with no values.
-- `cli/src/client.mjs:99`: fixed-origin Zitadel verification URL validation;
+- `docker-compose.za.yml:157`: the three public identity settings reach ZA Tank only.
+- `.env.example:487`: new setting names only, with no values.
+- `cli/src/client.mjs:108`: fixed-origin Zitadel verification URL validation;
   old us-east/Workspace URL construction remains unchanged. Wrapped codes are
   also redacted across streamed chunk boundaries.
 - `cli/package.json:4`, `cli/package-lock.json:3`, `cli/CHANGELOG.md:3`: CLI 0.1.2.
 - `cli/README.md:26`: ZA founder setup and unchanged disabled-provider behavior.
-- `jobs/train/backup.py:81`: own fixed identity database dump through the existing
+- `jobs/train/backup.py:86`: own fixed identity database dump through the existing
   encrypted pipe/archive path; ZA Zenas scope only, identity archive label.
 - `ops/restore_drill.py:99`: identity manifest selection and required-archive guard.
 - `ops/restore_drill.py:179`: restore identity to a separate disposable database;
   no production SQL, no identity user rows in result JSON.
-- `docs/ops/RESTORE-DRILL.md:1`: ZA identity drill steps and secret-volume limits.
+- `docs/ops/RESTORE-DRILL.md:124`: ZA identity drill steps and secret-volume limits.
 - `tests/test_identity_za.py:1`, `tests/test_identity_stack.py:1`,
   `tests/test_identity_backup.py:1`, `tests/test_restore_drill.py:1`,
   `cli/test/identity-za.test.mjs:1`: synthetic-only tests described below.
