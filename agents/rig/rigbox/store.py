@@ -1213,9 +1213,9 @@ class PgStore(RetailerPgStore):
                 _uuid(tenant_id), quote_id, _json(state),
             )
 
-    _ORDER_COLUMNS = "quote_id, number, state, product_id, price, currency, ship_to"
+    _ORDER_COLUMNS = "quote_id, number, state, product_id, price, currency, ship_to, cancel_reason"
     _PO_COLUMNS = ("quote_id, number, state, source_id, vendor_name, order_email, item_sku, item_url, quantity,"
-                   " unit_cost, currency, ship_to, neutral_slip, instructions")
+                   " unit_cost, currency, ship_to, neutral_slip, instructions, sent")
 
     async def place_locate_order(self, tenant_id: str, order: dict[str, Any],
                                  purchase: dict[str, Any]) -> dict[str, Any]:
