@@ -42,7 +42,7 @@ TOOLS = {
     "zenas": ["zenas.ask", "zenas.matters", "zenas.review"],
 }
 FOUNDER_TOOLS = ["trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
-                 "ledger.receipts", "ledger.savings", "worker.build", "repo.prs", "repo.pr", "repo.file"]
+                 "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file"]
 
 
 def db() -> Any:
@@ -994,6 +994,17 @@ class ScaffoldArgs(Body):
     brand: dict[str, Any]
 
 
+class TisanBuildArgs(Body):
+    name: str = Field(min_length=1, max_length=80)
+    slug: str = Field(min_length=1, max_length=60, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    locale: str = Field(default="en", pattern=r"^[a-z]{2}(?:-[A-Z]{2})?$")
+    brand: dict[str, Any]
+    request: str | None = Field(default=None, min_length=1, max_length=16000)
+    plan: dict[str, Any] | None = None
+    copy: dict[str, str] = Field(default_factory=dict)
+    media: dict[str, str] = Field(default_factory=dict)
+
+
 class SourceFile(Body):
     path: str = Field(min_length=1, max_length=200)
     text: str = Field(max_length=20000)
@@ -1122,6 +1133,7 @@ ADAPTERS = {
     "rig.search": Adapter("GET", "/v1/rig/search", QueryArgs, "Search the product catalogue"),
     "rig.ask": Adapter("POST", "/v1/rig/ask", RigAskArgs, "Ask about a product", True, "paid_run"),
     "tisan.scaffold": Adapter("POST", "/v1/skala/tisan.scaffold/run", ScaffoldArgs, "Create a site scaffold", False, "other", "tisan.scaffold"),
+    "tisan.build": Adapter("POST", "/v1/skala/tisan.build/run", TisanBuildArgs, "tisan.build", False, "other", "tisan.build"),
     "radix.scan": Adapter("POST", "/v1/skala/scan.static/run", ScanArgs, "Scan supplied source text", False, "other", "scan.static"),
     "zenas.ask": Adapter("POST", "/v1/zenas/answers", ZenasAskArgs, "Ask a civil law question", True, "paid_run"),
     "zenas.matters": Adapter("POST", "/v1/zenas/matters", MatterArgs, "Create a matter"),
