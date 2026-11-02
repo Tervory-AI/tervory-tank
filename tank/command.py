@@ -41,7 +41,7 @@ TOOLS = {
     "radix": ["radix.scan"],
     "zenas": ["zenas.ask", "zenas.matters", "zenas.review"],
 }
-FOUNDER_TOOLS = ["skala.list", "skala.evals", "skala.approve", "skala.retire",
+FOUNDER_TOOLS = ["trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
                  "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file"]
 
 
@@ -72,9 +72,15 @@ def key_matches(presented: str, expected: str) -> bool:
 
 
 async def identity(request: Request) -> Actor:
-    from main import TANK_API_KEY, box_region
+    from main import TANK_API_KEY
     if not key_matches(request.headers.get("x-tank-key", ""), TANK_API_KEY):
         raise HTTPException(401, "Workspace authentication required")
+    return await signed_in_actor(request)
+
+
+async def signed_in_actor(request: Request) -> Actor:
+    """The Clerk-derived user and tenant headers. Call only after the service key is checked."""
+    from main import box_region
     user = request.headers.get("x-tervory-user", "").strip()
     tenant = request.headers.get("x-tervory-tenant")
     if not user:
@@ -99,7 +105,7 @@ def allowed_tools(actor: Actor) -> list[str]:
     squads = TOOLS.keys() if actor.founder else actor.squads & SQUADS
     founder_tools = [name for name in FOUNDER_TOOLS
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
-    voice_tools = ["trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"] if actor.tenant_admin and not actor.founder else []
+    voice_tools = TOOLS["trigger"] if actor.tenant_admin and not actor.founder else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]] + founder_tools + voice_tools)
 
 
@@ -223,6 +229,46 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
     }
 
 
+# Engine and model names, provider models and price-book rows are founder-only (as in
+# the Workspace receipt). Customers get the dollar figures and the "What Auto would
+# have cost" label, never a serving, baseline, requested or Auto model name. Customer
+# views are allowlists, so a field added later stays founder-only until listed here.
+# Durable state is not rewritten.
+MODEL_NAME_KEYS = frozenset({"model", "baseline_model", "auto_model", "requested_model"})
+CUSTOMER_RECEIPT_KEYS = frozenset({
+    "step_id", "ledger_id", "tokens_in", "tokens_out", "cost_usd", "baseline_cost_usd", "saved_usd",
+    "cost_status", "baseline_status", "auto_cost_usd", "auto_cost_status", "auto_priced_at",
+    "auto_cost_label", "auto_cost_basis",
+})
+CUSTOMER_STEP_DROP = frozenset({"auto_comparison", "requested_model", "model"})
+CUSTOMER_MESSAGE_KEYS = frozenset({"message_id", "role", "content", "attachments", "repeatable"})
+
+
+def public_receipt(receipt: dict, founder: bool) -> dict:
+    return receipt if founder else {k: v for k, v in receipt.items() if k in CUSTOMER_RECEIPT_KEYS}
+
+
+def public_step(payload: dict, founder: bool) -> dict:
+    # auto_comparison is the frozen policy model and its price book row.
+    return payload if founder else {k: v for k, v in payload.items() if k not in CUSTOMER_STEP_DROP}
+
+
+def public_message(message: dict, founder: bool) -> dict:
+    return message if founder else {k: v for k, v in message.items() if k in CUSTOMER_MESSAGE_KEYS}
+
+
+def public_event(kind: str, data: dict, founder: bool) -> dict:
+    if founder:
+        return data
+    if kind == "receipt":
+        return {**data, "rows": [public_receipt(r, False) for r in data.get("rows", [])]}
+    if kind == "step":
+        return public_step(data, False)
+    if kind == "message":
+        return public_message(data, False)
+    return data
+
+
 def totals(rows: list[dict]) -> dict:
     complete = all(r["saved_usd"] is not None for r in rows)
     return {
@@ -242,6 +288,17 @@ def thread_totals(state: dict) -> dict:
             "saved_usd": None if pending else recorded["saved_usd"],
             "receipt_status": "pending" if pending else "recorded",
             "recorded_spent_usd": sum(r["cost_usd"] for r in state["receipts"] if r["cost_usd"] is not None)}
+
+
+@router.get("/models")
+async def models(actor: Actor = Depends(identity)) -> list[dict]:
+    # The roster carries provider models and prices: founders only. Everyone else
+    # (Workspace session or CLI token) gets a plain 404, as if the route did not exist.
+    actor = await authorized_actor(actor)
+    if not actor.founder:
+        raise HTTPException(404, "Not Found")
+    from main import list_models
+    return await list_models()
 
 
 @router.get("/tools")
@@ -329,12 +386,34 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
         row = await owned(conn, thread_id, actor)
     state = unpack(row["state"])
     amounts = thread_totals(state)
+    founder = current_actor(actor).founder
     return {"thread": {"thread_id": str(thread_id), "title": row["title"], "updated_at": row["updated_at"],
                        "spent_usd": amounts["cost_usd"], "saved_usd": amounts["saved_usd"], "receipt_status": amounts["receipt_status"],
                        "recorded_spent_usd": amounts["recorded_spent_usd"]},
-            "messages": state["messages"], "steps": list(state["steps"].values()),
+            "messages": [public_message(m, founder) for m in state["messages"]],
+            "steps": [public_step(s, founder) for s in state["steps"].values()],
             "cards": [public_card(c) for c in state["cards"].values()],
-            "receipts": state["receipts"]}
+            "receipts": [public_receipt(r, founder) for r in state["receipts"]], "seq": row["seq"]}
+
+
+@router.get("/tasks/{task_id}/receipts")
+async def task_receipts(task_id: uuid.UUID, actor: Actor = Depends(identity)) -> dict:
+    async with db().acquire() as conn:
+        task = await conn.fetchrow(
+            "SELECT t.ledger_id,to_jsonb(l) AS data FROM tank.tasks t "
+            "LEFT JOIN tank.ledger l ON l.id=t.ledger_id AND l.tenant_id=t.tenant_id "
+            "WHERE t.id=$1 AND t.tenant_id=$2 AND t.created_by=$3",
+            task_id, actor.tenant_id, actor.user_id,
+        )
+    if task is None:
+        raise HTTPException(404, "no such task for this tenant")
+    if task["ledger_id"] is not None and task["data"] is None:
+        raise HTTPException(409, "Receipt evidence is missing or outside this tenant")
+    rows = [receipt_row(unpack(task["data"]), str(task_id))] if task["data"] is not None else []
+    founder = current_actor(actor).founder
+    return {"rows": [public_receipt(r, founder) for r in rows], "totals": totals(rows) if rows else
+            {"cost_usd": None, "baseline_cost_usd": None, "saved_usd": None},
+            "status": "recorded" if rows and rows[0]["cost_usd"] is not None else "pending"}
 
 
 @router.patch("/threads/{thread_id}")
@@ -350,6 +429,7 @@ def sse(kind: str, data: dict) -> str:
 
 
 async def replay(thread_id: uuid.UUID, actor: Actor, after: int, *, turn_id: str | None = None):
+    founder = current_actor(actor).founder
     while True:
         async with db().acquire() as conn:
             row = await conn.fetchrow(
@@ -364,7 +444,7 @@ async def replay(thread_id: uuid.UUID, actor: Actor, after: int, *, turn_id: str
         for item in events:
             data = unpack(item["data"])
             after = data["seq"]
-            yield sse(item["kind"], data)
+            yield sse(item["kind"], public_event(item["kind"], data, founder))
         if len(events) == 500:
             continue
         if turn_id is None or row["active_turn"] != turn_id:
@@ -511,7 +591,8 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
                 await receipt_pending(conn, row, turn_id)
             await step(conn, row, state, {**state["steps"][turn_id], "label": "Answer failed", "status": "failed",
                                           "receipt_status": "pending" if pending else "recorded" if receipt_known else "not_started"})
-            message = (f"The pinned model {model} did not answer. Pinned models never fall back; choose Auto or another model."
+            # Never echo the pinned name: this text is stored on the task and streamed.
+            message = ("The pinned model did not answer. Pinned models never fall back; choose Auto or another model."
                        if model not in (None, "auto") and answer is None else
                        "The answer could not be completed. Check routing policy and service availability.")
             await conn.execute(
@@ -525,6 +606,10 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
 @router.post("/threads/{thread_id}/turn")
 async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity)):
     if body.model not in (None, "auto"):
+        # Pinning is founder-only. The refusal names no model and does not say whether
+        # the requested name exists on the roster.
+        if not current_actor(actor).founder:
+            raise HTTPException(403, "Only Auto is available on this account")
         from main import list_models
         if body.model not in {m["name"] for m in await list_models()}:
             raise HTTPException(422, "Model is not on the roster")
@@ -897,10 +982,15 @@ class SkillVersionArgs(Body):
     version: str = Field(max_length=50, pattern=r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$")
 
 
+class ScaffoldPage(Body):
+    name: str = Field(min_length=1, max_length=40)
+    copy: uuid.UUID | None = None
+
+
 class ScaffoldArgs(Body):
     name: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9-]+$")
-    pages: list[str] | None = Field(default=None, min_length=1, max_length=20)
+    pages: list[str | ScaffoldPage] | None = Field(default=None, min_length=1, max_length=20)
     brand: dict[str, Any]
 
 
@@ -941,10 +1031,12 @@ class ReviewArgs(Body):
 
 
 class TriggerCheckArgs(Body):
-    text: str = Field(min_length=1, max_length=20000)
+    # The existing 32,000-byte action envelope remains authoritative.
+    text: str = Field(min_length=1, max_length=32000)
 
 
 class TriggerWriteArgs(TriggerCheckArgs):
+    text: str = Field(min_length=1, max_length=20000)
     document_type: Literal["copy", "article", "document", "legal"] = "copy"
     register: str | None = Field(default=None, max_length=100)
     template: str | None = Field(default=None, max_length=100)
@@ -986,6 +1078,18 @@ class TriggerFeedbackArgs(Body):
         return self
 
 
+class TriggerCRMWriteArgs(Body):
+    resource: Literal["leads", "contacts", "estimates", "invoices"]
+    record_id: uuid.UUID | None = None
+    data: dict[str, Any] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def pinned_crm_contract(self):
+        from trigger_crm import validate_data
+        validate_data(self.resource, self.data, self.record_id is not None)
+        return self
+
+
 class SavingsArgs(Body):
     days: int = Field(default=30, ge=1, le=365)
 
@@ -1011,6 +1115,7 @@ class Adapter:
 
 
 ADAPTERS = {
+    "trigger.crm.write": Adapter("POST", "/v1/trigger/crm/write", TriggerCRMWriteArgs, "trigger.crm.write"),
     "trigger.voice.show": Adapter("POST", "/v1/trigger/voice.show", TriggerVoiceShowArgs, "trigger.voice.show"),
     "trigger.voice.set": Adapter("POST", "/v1/trigger/voice.set", TriggerVoiceSetArgs, "trigger.voice.set"),
     "trigger.voice.rollback": Adapter("POST", "/v1/trigger/voice.rollback", TriggerVoiceRollbackArgs, "trigger.voice.rollback"),
@@ -1098,6 +1203,15 @@ def planning_message(actor: Actor) -> dict:
 
 def public_card(card: dict) -> dict:
     return {k: v for k, v in card.items() if k not in {"payload", "evidence_ids"}}
+
+
+@router.post("/threads/{thread_id}/actions")
+async def propose_tool(thread_id: uuid.UUID, body: PlannedAction, actor: Actor = Depends(identity)) -> dict:
+    async with editing(thread_id, actor) as (conn, row, state):
+        actor = await authorized_actor(actor, conn)
+        action = validate_action(body, actor)
+        card = await propose_action(conn, row, state, action, actor)
+    return public_card(card)
 
 
 async def propose_action(conn: Any, row: dict, state: dict, action: PlannedAction, actor: Actor | None = None) -> dict:

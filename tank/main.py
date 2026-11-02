@@ -481,9 +481,21 @@ async def _homes_founder_feed(request: Request, path: str) -> bool:
     Returns False when the path is not one of those routes. A matching route
     with the wrong home, a body, or extra fields is refused here. Allowed
     bodies are the fields those routes already take (source, review). They
-    carry no document, matter, or client text.
+    carry no document, matter, or client text. The public Moot read is GET-only,
+    with no body and only home_region=za and an optional match_id query.
     """
     method = request.method
+    if path == "/v1/zenas/moot/published":
+        params = request.query_params
+        if (
+            method != "GET"
+            or await request.body()
+            or set(params) - {"home_region", "match_id"}
+            or params.getlist("home_region") != [ZA_REGION]
+            or len(params.getlist("match_id")) > 1
+        ):
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+        return True
     load = _HOMES_LOAD.fullmatch(path)
     allowed = (
         (method == "GET" and path == "/v1/zenas/pool/status")
@@ -529,8 +541,11 @@ async def _homes_key_scope(request: Request) -> None:
     It may set a za tenant's home. It may also read pool status, load one
     source, read or run the self-test, read or set the review switch, and read
     or run case conversion, each only with home_region=za. Those routes return names, counts, dates,
-    errors and scores. Documents, matters and client data stay refused.
+    errors and scores. It may read explicitly published ZA Moot hearings only;
+    drafts, matters, unpublished hearings and client data stay refused.
     The Boston Workspace holds this key. It never holds the ZA TANK_API_KEY.
+    It cannot approve CLI device sign-ins: those use the separate
+    TANK_DEVICE_APPROVAL_KEY (personal_tokens.device_approval_actor).
     """
     if box_region() != ZA_REGION:
         raise HTTPException(status_code=403, detail=_HOMES_DENIED)
@@ -4523,7 +4538,9 @@ __import__("research").register(app, globals())
 
 # COMMAND-1A: conversation routes live in their own module.
 app.include_router(__import__("command").router)
+__import__("personal_tokens").register(app)
 app.include_router(__import__("trigger_routes").router)
+app.include_router(__import__("trigger_crm").router)
 
 # ACCESS-1: scoped connections and browser-only credential handoff.
 app.include_router(__import__("access").router)

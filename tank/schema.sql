@@ -2201,6 +2201,83 @@ CREATE OR REPLACE TRIGGER policy_skill_revalidation
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS cache_read_tokens integer NOT NULL DEFAULT 0;
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS cache_write_tokens integer NOT NULL DEFAULT 0;
 
+-- CLI-1: bearer credentials are never persisted; scope remains local to this box.
+CREATE TABLE IF NOT EXISTS tank.personal_tokens (
+    token_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    user_id text NOT NULL,
+    region text NOT NULL CHECK (region IN ('us-east','za')),
+    name text NOT NULL CHECK (length(name) BETWEEN 1 AND 100),
+    token_hash text NOT NULL UNIQUE CHECK (token_hash ~ '^[0-9a-f]{64}$'),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    revoked_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS personal_tokens_owner ON tank.personal_tokens(tenant_id,user_id);
+-- Follow an existing RLS rollout; do not turn it on for a legacy installation.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        ALTER TABLE tank.personal_tokens ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE tank.personal_tokens FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.personal_tokens'::regclass AND polname='tenant_access') THEN
+            CREATE POLICY tenant_access ON tank.personal_tokens FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.personal_tokens'::regclass AND polname='tenant_boundary') THEN
+            CREATE POLICY tenant_boundary ON tank.personal_tokens AS RESTRICTIVE FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+    END IF;
+END
+$$;
+
+-- CLI device sign-in (#496): the CLI asks for a device code, a signed-in Workspace
+-- user approves it, and the box issues an org-scoped credential in personal_tokens.
+-- Additive and idempotent. Every secret is stored only as a SHA-256 hash.
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS device_name text CHECK (device_name IS NULL OR length(device_name) BETWEEN 1 AND 100);
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS expires_at timestamptz;
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS last_used_at timestamptz;
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS refresh_hash text CHECK (refresh_hash IS NULL OR refresh_hash ~ '^[0-9a-f]{64}$');
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS refresh_expires_at timestamptz;
+CREATE UNIQUE INDEX IF NOT EXISTS personal_tokens_refresh ON tank.personal_tokens(refresh_hash) WHERE refresh_hash IS NOT NULL;
+CREATE TABLE IF NOT EXISTS tank.device_authorizations (
+    device_hash text PRIMARY KEY CHECK (device_hash ~ '^[0-9a-f]{64}$'),
+    user_code text NOT NULL UNIQUE CHECK (user_code ~ '^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$'),
+    region text NOT NULL CHECK (region IN ('us-east','za')),
+    device_name text NOT NULL CHECK (length(device_name) BETWEEN 1 AND 100),
+    status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','denied','consumed')),
+    -- Set only by a signed-in Workspace approval; NULL while pending or denied.
+    tenant_id uuid,
+    user_id text,
+    token_id uuid,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    expires_at timestamptz NOT NULL,
+    decided_at timestamptz,
+    last_polled_at timestamptz,
+    CHECK (status NOT IN ('approved','consumed') OR (tenant_id IS NOT NULL AND user_id IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS device_authorizations_expiry ON tank.device_authorizations(expires_at);
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        ALTER TABLE tank.device_authorizations ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE tank.device_authorizations FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.device_authorizations'::regclass AND polname='tenant_access') THEN
+            CREATE POLICY tenant_access ON tank.device_authorizations FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.device_authorizations'::regclass AND polname='tenant_boundary') THEN
+            CREATE POLICY tenant_boundary ON tank.device_authorizations AS RESTRICTIVE FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+    END IF;
+END
+$$;
+
 -- Tisan plans structure only; accepted Trigger writes supply every text slot.
 INSERT INTO tank.policy(task_type,rung,model,cache_scope,max_tokens_out,eval_threshold,min_shadow_samples,auto_promote)
 VALUES ('tisan.plan',1,'luna','tenant',3000,0.99,200,false)
