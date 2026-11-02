@@ -10,7 +10,6 @@ import command
 import device_login as device
 import identity_oidc as oidc
 import personal_tokens as pat
-from tenant_db import tenant_scope
 
 PREFIX = 'tzd1.'
 
