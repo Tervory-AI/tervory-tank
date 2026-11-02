@@ -4,6 +4,6 @@ License: MIT (see LICENSE). Built-in independently authored fingerprints only.
 Sources: src/fingerprints/{platforms,commerce,ecommerce-global,analytics,services}.ts
 The upstream TypeScript files are preserved verbatim under upstream/.
 fingerprints.json concatenates exported arrays and selects cms, platform, ecommerce,
-payments, analytics, scheduling, booking and forms categories. No external imports.
+payment, analytics, product-analytics and tag-manager categories. No external imports.
 Runtime evaluates only HTML, scriptSrc, meta and headers against already fetched data.
 No probes, DNS, JavaScript execution, cookies, robots or additional requests.
