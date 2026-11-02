@@ -128,7 +128,7 @@ async def test_fingerprints_and_booking_quote_actions_have_evidence():
       <a href="https://quote.example/recorded">Request a quote</a></body></html>''')
     items = out["fields"]["technologies"]["value"]
     names = {item["name"] for item in items}
-    assert {"WordPress", "Google Analytics", "Stripe", "https://calendar.example/recorded", "https://quote.example/recorded"} <= names
+    assert {"WordPress", "Google Analytics 4", "Stripe", "https://calendar.example/recorded", "https://quote.example/recorded"} <= names
     assert all(item["evidence"] and item["confidence"] > 0 for item in items)
     assert "sells_online" not in out["fields"]  # Widgets alone do not establish a purchase path.
     assert (await signals("<p>Our article mentions WordPress, Shopify and Stripe.</p>"))["fields"] == {}
@@ -197,6 +197,7 @@ async def test_false_sales_verifies_but_archived_or_undated_signals_do_not():
 @pytest.mark.asyncio
 async def test_legacy_csv_bytes_remain_identical_with_signals_appended():
     row = finished(reference.project(raw()))
+    row["record_id"] = "recorded-base-b2"
     row["fields"] = row_fields(row)
     before = export_records([row])
     out = await signals('<button>Add to cart</button><footer>Copyright 2026 Recorded</footer>')
