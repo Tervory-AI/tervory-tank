@@ -183,13 +183,20 @@ List rows and lifecycle actions are connected for founder review; no engine is i
 | B-CONFIRM-QUOTED-375 | 166:4155 | 375 | confirm-quoted |
 | B-CONFIRM-ACCEPTED-375 | 166:4167 | 375 | confirm-accepted |
 | B-CONFIRM-DECLINED-375 | 166:4179 | 375 | confirm-declined |
-| E1 | 166:4191 | 960 | E1 |
-| E2 | 166:4200 | 960 | E2 |
-| E3 | 166:4209 | 960 | E3 |
-| E4 | 166:4218 | 960 | E4 |
-| E5 | 166:4227 | 960 | E5 |
-| E6 | 166:4236 | 960 | E6 |
-| E7 | 166:4245 | 960 | E7 |
+| E1 | 166:4191 | 600 | E1 |
+| E2 | 166:4200 | 600 | E2 |
+| E3 | 166:4209 | 600 | E3 |
+| E4 | 166:4218 | 600 | E4 |
+| E5 | 166:4227 | 600 | E5 |
+| E6 | 166:4236 | 600 | E6 |
+| E7 | 166:4245 | 600 | E7 |
+| E1-375 | 207:21765 | 375 | E1 |
+| E2-375 | 207:21783 | 375 | E2 |
+| E3-375 | 207:21812 | 375 | E3 |
+| E4-375 | 207:21833 | 375 | E4 |
+| E5-375 | 207:21850 | 375 | E5 |
+| E6-375 | 207:21866 | 375 | E6 |
+| E7-375 | 207:21883 | 375 | E7 |
 | B-MENU-375 | 167:3263 | 375 | menu-open |
 | A-FILLED-ONE-390 | 170:3036 | 390 | filled-one |
 | A-FILLED-ONE-768 | 170:3096 | 768 | filled-one |
@@ -400,6 +407,8 @@ plain-text body, editable rendered HTML preview and exact HTML source. No market
 Founder approval must cover recipients, reply routing, omitted optional rows,
 item rendering, date/time formatting and the exact copy in the draft email file.
 
+Every email now has a 600px frame and a matching 375px phone frame. Original frame IDs identify the 600px versions. Subject, plain text, rendered HTML wording, HTML source and every braced variable are unchanged. Text reflows at existing font sizes with Jost/Inter and existing token bindings. All 14 widths and exact text pairs pass; zero text-bound overflow findings. E2 was visually checked at both widths. All wording remains draft pending founder approval.
+
 ## Verification and review evidence
 
 Source reads, library inspection, component/variable reuse and frame inventory
@@ -450,7 +459,7 @@ Result: 90 frames, 713 instances, 2,135 visible text nodes, only Jost/Inter,
 0 horizontal or vertical overflow findings, 128 existing prototype destinations.
 These are design checks, not a live implementation test or founder acceptance.
 
-## Final checks and current review status
+## Original checks before responsive email revision
 
 - Desktop Workspace shells preserve the canonical menu's 900px minimum height,
   grow for longer request details, and show Connections, The Squad and New Notices.
@@ -470,3 +479,15 @@ These are design checks, not a live implementation test or founder acceptance.
   Founder browser screenshots and separate PR review are not yet available and are not claimed.
 - Only docs/figma/tisan/SPEC.md and docs/figma/tisan/QUOTE-EMAILS-DRAFT.md are changed
   in git. No production runtime, source template, API, schema or live-data file changed.
+
+
+## Responsive email revision — 1 November 2026
+
+Every email now has a 600px frame and a matching 375px phone frame. Original frame IDs identify the 600px versions. Subject, plain text, rendered HTML wording, HTML source and every braced variable are unchanged. Text reflows at existing font sizes with Jost/Inter and existing token bindings. All 14 widths and exact text pairs pass; zero text-bound overflow findings. E2 was visually checked at both widths. All wording remains draft pending founder approval.
+The 90-frame audit above predates these seven new phone frames; there are now 97 screen/email frames.
+
+Local checks: a Python comparison against the previous email-draft commit found
+all fourteen fenced plain-text/HTML blocks unchanged; the screen register now has
+97 unique screen/email rows plus SPEC. `git diff --check` passed. Screenshots were
+rendered by Figma for design inspection, not taken from the founder's browser.
+No approval or email sending is claimed.
