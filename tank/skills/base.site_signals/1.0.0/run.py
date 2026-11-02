@@ -140,9 +140,16 @@ async def run(payload: dict, ctx) -> dict:
                 dates["copyright_year"].append((max(years), match.group(), source))
         for match in re.finditer(r"\b(?:we do not sell online|no online (?:sales|ordering)|in[- ]store (?:purchases|sales) only)\b", text, re.I):
             negative.append({"text": match.group(), "source_url": source})
+    observed_dates = {str(page.get("source_url") or website): page.get("checked_at") for page in pages}
+    for observed in payload.get("_base_observations") or []:
+        observed_dates.setdefault(str(observed.get("source_url")), observed.get("checked_at"))
+    for tech in technologies.values():
+        for item in tech["evidence"]:
+            item["checked_at"] = observed_dates.get(item["source_url"])
     fields = {}
     def field(value, evidence, confidence=90):
-        return {"value": value, "source": "site:code", "source_kind": "website", "source_url": evidence[0]["source_url"],
+        evidence = [{**item, "checked_at": observed_dates.get(item["source_url"])} for item in evidence]
+        return {"value": value, "checked_at": evidence[0].get("checked_at"), "source": "site:code", "source_kind": "website", "source_url": evidence[0]["source_url"],
                 "confidence": confidence, "evidence": evidence}
     if technologies:
         items = sorted(technologies.values(), key=lambda t: t["name"])
