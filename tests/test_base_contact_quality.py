@@ -88,7 +88,7 @@ async def test_each_email_gets_own_mx_and_disposable_status_without_smtp():
     assert quality["bad-address"]["email_mx_ok"]["value"] is None
     assert sorted(requests) == ["mailinator.com", "no-mail.example", "quality.example"]
     assert CONTACTS.disposable("sub.mailinator.com")
-    assert not CONTACTS.disposable("notmailinator.com")
+    assert not CONTACTS.disposable("mailinator.com.quality.example")
 
 
 @pytest.mark.asyncio
