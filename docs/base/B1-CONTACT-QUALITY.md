@@ -10,7 +10,7 @@ Implementation is pushed. This is **not founder-browser acceptance** and no live
 - `tank/skills/base.contacts/1.2.0/run.py:196`: all supplied site/profile/input phone numbers get E.164 (null if unparseable), validity, metadata line type, and country agreement. No country is invented: input is an ISO alpha-2 country, absent/unsupported country is unknown. No carrier lookups, SMTP mailbox probing, calls, texts or models.
 - `tank/skills/base.contacts/1.2.0/data/UPSTREAM.txt:1`: disposable-email-domains vendored at commit `aa73ac1b77f440ebdcca0872cf2ebbd73fadce70`, with the CC0 licence in `data/LICENSE.txt`; no runtime download.
 - `agents/base/pipeline.py:436`: send site/profile/raw phone values, record country, and original contact observations; line 464 uses the existing confidence/source-aware `merge` for the new fields.
-- `tank/skills/base.verify/1.1.0/run.py:116`: selected-phone adjustment of +5 when valid, known line type and country matches; -5 when invalid. Unknown quality does not invent a bonus. Existing score is unchanged when the candidate's quality metadata is absent.
+- `tank/skills/base.verify/1.2.0/run.py:116`: selected-phone adjustment of +5 when valid, known line type and country matches; -5 when invalid. Unknown quality does not invent a bonus. Existing score is unchanged when the candidate's quality metadata is absent.
 - `tank/base_evidence.py:210`: append only the five authorized quality fields, matched to the exact primary verified contact and each field's original source/date. Existing contact evidence remains unchanged; blocked/archived observations cannot acquire quality evidence.
 - `tank/base_metrics.py:185`: append the five CSV value columns and their source URL, check date and confidence columns. No pre-existing header or value changes. `tank/base_product.py` already delegates records.csv to this exporter and snapshots the complete fields for Apollo comparison; no change to that file was needed.
 - `workspace/app/base/csv.ts:53`: additive five-field export schema.
@@ -73,7 +73,7 @@ cd workspace && npx tsc --noEmit
 The TypeScript command ran from the repository root. Both exited 0; TypeScript produced no diagnostics. The npm command installed 45 packages from the existing lockfile without changing it.
 
 ```sh
-.venv/bin/ruff check tank/skills/base.contacts/1.2.0/run.py tank/skills/base.verify/1.1.0/run.py tests/test_base_contact_quality.py
+.venv/bin/ruff check tank/skills/base.contacts/1.2.0/run.py tank/skills/base.verify/1.2.0/run.py tests/test_base_contact_quality.py
 git diff --check
 ```
 
@@ -115,4 +115,4 @@ git config user.email 'codex@users.noreply.github.com'
 
 No merge to main, deployment, approval, production SQL, live-data change, or live model call was performed.
 
-**Founder-browser screenshots: pending.** No screenshots of the founder's next DC run exist in this work. Acceptance still requires the founder to approve `base.contacts 1.2.0` and `base.verify 1.1.0` in `/skala`, run DC, and inspect/download the resulting evidence/CSV in his own browser. The new Base page fields remain withheld pending Figma approval. Do not call the product task done based solely on these offline results.
+**Founder-browser screenshots: pending.** No screenshots of the founder's next DC run exist in this work. Acceptance still requires the founder to approve `base.contacts 1.2.0` and `base.verify 1.2.0` (built on the 1.1.0 in #584) in `/skala`, run DC, and inspect/download the resulting evidence/CSV in his own browser. The new Base page fields remain withheld pending Figma approval. Do not call the product task done based solely on these offline results.

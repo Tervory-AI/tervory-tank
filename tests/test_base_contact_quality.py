@@ -32,7 +32,7 @@ def load(relative):
 
 
 CONTACTS = load("tank/skills/base.contacts/1.2.0/run.py")
-VERIFY = load("tank/skills/base.verify/1.1.0/run.py")
+VERIFY = load("tank/skills/base.verify/1.2.0/run.py")
 
 
 @pytest.mark.parametrize("email,valid", [

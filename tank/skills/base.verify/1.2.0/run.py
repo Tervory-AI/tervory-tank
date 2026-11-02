@@ -9,6 +9,7 @@ strong field alone. Agreement between independent sources earns a bonus; disagre
 """
 
 import re
+from datetime import date, datetime, timezone
 from urllib.parse import urlparse
 
 
@@ -107,8 +108,27 @@ async def run(payload: dict, ctx) -> dict:
         if engine.get("inventory_signal"):
             vert = min(15, vert + 3)
 
-    # --- staleness: the little we can tell without a crawl date
-    if site and not (_v(profile, "emails") or socials.get("count") or _v(profile, "description")):
+    # --- staleness: explicit recorded dates supplement the existing thin-site check.
+    freshness = _v(profile, "site_freshness", {}) or {}
+    today = date.fromisoformat(str(payload["as_of"])[:10]) if payload.get("as_of") else datetime.now(timezone.utc).date()
+    dated = []
+    if isinstance(freshness, dict):
+        for key in ("last_modified", "newest_post"):
+            item = freshness.get(key) or {}
+            try:
+                observed = date.fromisoformat(str(item.get("value"))[:10])
+            except (ValueError, TypeError):
+                continue
+            if observed <= today and item.get("evidence"):
+                dated.append(observed)
+        # Copyright is a weak template signal, never proof of fresh editorial content.
+        if dated:
+            checks["site_dated_content_stale"] = (today - max(dated)).days > 730
+            if site and checks["site_dated_content_stale"]:
+                flags.append("site_thin_or_stale")
+
+    # --- existing thin-site heuristic
+    if site and "site_thin_or_stale" not in flags and not (_v(profile, "emails") or socials.get("count") or _v(profile, "description")):
         flags.append("site_thin_or_stale")
 
     # Only the selected phone's own quality changes the score. Missing metadata
