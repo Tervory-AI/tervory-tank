@@ -36,35 +36,28 @@ def test_title_and_description_have_one_source() -> None:
     assert "Tervory AI: specialist AI" not in layout
 
 
-def test_homepage_uses_the_brief_copy_and_logo_files() -> None:
+def test_homepage_uses_approved_figma_copy_and_local_assets() -> None:
+    import re
+
     page = (SITE / "app" / "page.tsx").read_text(encoding="utf-8")
-    footer = (SITE / "app" / "footer.tsx").read_text(encoding="utf-8")
+    copy = (SITE / "app" / "home-copy.ts").read_text(encoding="utf-8")
     form = (SITE / "app" / "release-form.tsx").read_text(encoding="utf-8")
+    interactions = (SITE / "app" / "home-interactions.tsx").read_text(encoding="utf-8")
     for line in (
-        "Tervory AI · In build",
-        "Specialist AI for the work that runs a business.",
-        "How it works",
-        "Describe the job the way you would brief a colleague.",
-        "It gets cheaper the more it works",
-        "The squad",
-        "Nine specialists. Each one built for a single job.",
-        "Measured, not promised",
-        "Be first in",
-        "We are opening to a small group of businesses first.",
+        "Specialist AI that gets cheaper the more it works.",
+        "Facts over hype. Work over fluff.",
+        "What each product does",
+        "Your shadow realm for digital threats.",
+        "Attorney review is available as an option when you need it.",
     ):
-        assert line in page, line
-    assert "Every answer shows its sources, the model that ran it, and what it cost." in footer
+        assert line in copy, line
     assert "Get early access" in form and "Join the list" in form
-    for name, mark in (
-        ("Base", "/brand/base-on-light.png"),
-        ("Tiger", "/brand/tiger-on-light.png"),
-        ("Market Lab", "/brand/market-lab-on-light.png"),
-        ("Rig", "/brand/rig-on-light.png"),
-        ("Tisan", "/brand/tisan-on-light.png"),
-        ("Radix", "/brand/radix-on-light.png"),
-        ("Zenas", "/brand/zenas-on-light.png"),
-        ("Skala", "/brand/skala-on-light.png"),
-        ("Tank", "/brand/tank-on-light.png"),
-    ):
-        assert name in page and mark in page
-        assert (SITE / "public" / mark.lstrip("/")).is_file()
+    assert 'fetch("/api/release-notice"' in form
+    assert "fetch(" not in interactions  # Illustrations must not call paid/live services.
+    assert "figma.com/api/mcp/asset" not in page + interactions
+    assert "QUOTE-EMAILS" not in page + interactions
+    assets = list((SITE / "public" / "home").iterdir())
+    assert len(assets) == 27
+    assert all(asset.stat().st_size > 0 for asset in assets)
+    for src in re.findall(r'src="(/home/[^"]+)"', page + interactions):
+        assert (SITE / "public" / src.lstrip("/")).stat().st_size > 0
