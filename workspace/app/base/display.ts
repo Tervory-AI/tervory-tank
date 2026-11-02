@@ -63,3 +63,9 @@ export function receiptLabel(row: Expense): string {
   if (row.vendor) return "Business lookup";
   return ({ 1: "AI check", 2: "Lower-cost AI check", 3: "Automatic check", 4: "Previously checked result" } as Record<number, string>)[row.rung] || "Business check";
 }
+
+// Evidence and downloads retain these fields; page presentation awaits approved Figma frames.
+export const pageFieldExclusions: ReadonlySet<string> = new Set(["technologies", "sells_online", "site_newest_year"]);
+export function pageFields<T>(fields: Record<string, T>): [string, T][] {
+  return Object.entries(fields).filter(([name]) => !pageFieldExclusions.has(name));
+}
