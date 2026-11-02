@@ -210,7 +210,7 @@ async def refresh(row, data: dict) -> dict:
 
 
 # Workspace server corridor; no browser-supplied tenant/user assertions are accepted.
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from command import Actor, identity, authorized_actor
 
@@ -232,7 +232,9 @@ class CallbackBody(BaseModel):
 
 
 @router.post('/oauth/start')
-async def start_route(body: StartBody, actor: Actor = Depends(identity)):
+async def start_route(request: Request, actor: Actor = Depends(identity)):
+    from access import parse
+    body = await parse(request, StartBody, limit=2000)
     try:
         return {'url': await start(await authorized_actor(actor), body.vault, body.connection_id)}
     except Refused:
@@ -240,7 +242,9 @@ async def start_route(body: StartBody, actor: Actor = Depends(identity)):
 
 
 @router.post('/oauth/callback')
-async def callback_route(body: CallbackBody, actor: Actor = Depends(identity)):
+async def callback_route(request: Request, actor: Actor = Depends(identity)):
+    from access import parse
+    body = await parse(request, CallbackBody, limit=12000)
     try:
         return {'ok': await callback(await authorized_actor(actor), body.state, body.code, body.error, body.iss)}
     except Refused:
