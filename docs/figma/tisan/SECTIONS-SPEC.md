@@ -1,6 +1,10 @@
 # Tisan sections — SECTIONS-SPEC
 
+> Canvas SPEC snapshot. The design-stage commands and screenshots recorded below belong to the original `codex/tisan-sections-design` work; they are retained as source documentation, not claimed as checks from this commit. This documentation sync on `codex/tisan-sections-design` changes only this Markdown file; all 7,573 Figma nodes outside SPEC were verified unchanged (fingerprint `853efa7b`). SPEC text was read back and its screenshot checked: 1440 × 3456, no text overflow.
+
 Status: founder approval pending. This is a client-website design proposal, not Tervory UI and not authorization to implement unapproved frames.
+
+**Maximum-length frames are on hold (founder, 1 November, 17:20 PT).** Keep every existing “max” master and review frame unchanged. Claude is tightening the section limits in the shared contract; wait for the new maximums before redrawing those frames. The limits and max specimens described below record the earlier contract and are not the new maximums or approval to implement them.
 
 [Open page 6 · Tisan sections](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=197-9). SPEC frame: `205:5479`. Short review board: `202:5473`.
 
