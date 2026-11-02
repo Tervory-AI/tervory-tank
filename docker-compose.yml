@@ -258,6 +258,9 @@ services:
       TANK_KEY_TEMPLATE: ${TANK_KEY_TEMPLATE:-}
       TANK_KEY_TIGER: ${TANK_KEY_TIGER:-}
       TANK_KEY_TRIGGER: ${TANK_KEY_TRIGGER:-}
+      TRIGGER_CRM_URL: ${TRIGGER_CRM_URL:-http://trigger-crm-backend:8000}
+      TRIGGER_CRM_TENANT_BINDINGS: ${TRIGGER_CRM_TENANT_BINDINGS:-}
+      TRIGGER_CRM_PAT_CONNECTOR: ${TRIGGER_CRM_PAT_CONNECTOR:-}
       TANK_KEY_MARKET_LAB: ${TANK_KEY_MARKET_LAB:-}
       TANK_KEY_RADIX: ${TANK_KEY_RADIX:-}
       TANK_KEY_TISAN: ${TANK_KEY_TISAN:-}
@@ -292,6 +295,7 @@ services:
       - tervory-gw-template
       - tervory-gw-tiger
       - tervory-gw-trigger
+      - tervory-gw-trigger-crm
       - tervory-gw-market_lab
       - tervory-gw-radix
       - tervory-gw-tisan
@@ -382,6 +386,9 @@ services:
   workspace:
     build:
       context: ./workspace
+      # The image builds the self-hosted CLI release from cli/ (served at /cli/).
+      additional_contexts:
+        cli: ./cli
       args:
         NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
     restart: unless-stopped
@@ -391,6 +398,8 @@ services:
       # Founder-only: set a za tenant's home on the ZA Tank (tenant id + region code only).
       TANK_URL_ZA: ${TANK_URL_ZA:-}
       TANK_API_KEY_ZA: ${TANK_API_KEY_ZA:-}
+      # Records ZA CLI sign-in approvals and lists/revokes ZA CLI sign-ins on the ZA Tank.
+      TANK_DEVICE_APPROVAL_KEY_ZA: ${TANK_DEVICE_APPROVAL_KEY_ZA:-}
       TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       # New production org id = old org id its data was filed under (not secrets). See workspace/lib/tenant.ts.
       TERVORY_TENANT_ALIASES: ${TERVORY_TENANT_ALIASES:-}

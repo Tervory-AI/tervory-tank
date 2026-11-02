@@ -122,39 +122,20 @@ def test_tiger_structured_matches_split_by_month(tmp_path):
     assert "synthetic" in tiger._family(planted, agree, True)
 
 
-def test_rig_catalogue_months_are_separate_families(tmp_path):
-    _room(ROOT / "agents" / "_chassis")
-    _room(ROOT / "agents" / "rig")
-    rig = _load("rig_label_families", ROOT / "agents" / "rig" / "gold_sources.py")
-
-    def write(name: str, observed: str, *, synthetic: bool = False) -> None:
-        folder = tmp_path / name
-        folder.mkdir()
-        publish = {
-            "tenant_id": "44444444-4444-4444-8444-444444444444",
-            "gold": "public", "region": "us-east", "observed_on": observed,
-        }
-        if synthetic:
-            publish["synthetic"] = True
-        (folder / "publish.json").write_text(json.dumps(publish), encoding="utf-8")
-        (folder / "products.csv").write_text(
-            "sku,name,brand,category,price,currency,image_url,active\n"
-            "PART-1,Part,Brand,part,10.00,USD,https://example.com/a.jpg,yes\n"
-            "PART-2,Host,Brand,host,12.00,USD,https://example.com/b.jpg,yes\n",
-            encoding="utf-8",
-        )
-        (folder / "fits.csv").write_text("part_sku,fits_sku,fits_family\nPART-1,PART-2,\n", encoding="utf-8")
-
-    write("august", "2026-08-02")
-    write("november", "2026-11-02")
-    write("planted", "2026-08-02", synthetic=True)
-    rows = rig.candidates(limit=20, region="us-east", root=tmp_path)
-    assert {row["label_family"] for row in rows} == {
-        "fitment:august:2026-08",
-        "fitment:november:2026-11",
-        "fitment-synthetic:planted:2026-08",
-    }
-    assert all(row["label_family"] for row in rows)
+def test_rig_families_follow_the_approved_database_content():
+    import asyncio
+    from test_rig_gold import candidates, uploaded
+    from rigbox.store import MemoryStore
+    async def check():
+        store = MemoryStore()
+        tenant = str(uuid.uuid4())
+        await uploaded(store, tenant)
+        rows = await candidates(store, tenant)
+        assert rows[0]['label_family'] == rows[1]['label_family']
+        assert rows == await candidates(store, tenant)
+        await store.upsert_fit(tenant, dict(part_sku='PART-1', fits_sku='BASE-1', rule={'mount': 'new'}, approved=True))
+        assert rows[0]['label_family'] != (await candidates(store, tenant))[0]['label_family']
+    asyncio.run(check())
 
 
 def test_tisan_approval_months_are_separate_families(tmp_path, monkeypatch):

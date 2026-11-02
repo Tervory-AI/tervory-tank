@@ -104,7 +104,7 @@ def mount_page(application: FastAPI) -> None:
 
     @application.get("/cn-classic", include_in_schema=False)
     async def cn_classic_page(request: Request) -> HTMLResponse:
-        """Classic Custom Nation sheet UI (rk_pub_customnation). Secondary path."""
+        """Classic Custom Nation sheet UI. Secondary path."""
         return await _shopper_html(request)
 
     @application.get("/house", include_in_schema=False)

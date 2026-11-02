@@ -1,0 +1,39 @@
+name: cli-release
+# Review of #506, should-fix 4: a tag builds the self-hosted CLI release and keeps it as a
+# workflow artifact only. Nothing is published or deployed from here: no registry, no
+# GitHub release, no upload anywhere else. app.tervory.com serves the copy that the
+# Workspace image builds (workspace/Dockerfile, cli-release stage) from the same source.
+on:
+  push:
+    tags:
+      - 'cli-v*'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+      - name: Tag matches cli/package.json
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(node -p 'require("./cli/package.json").version')
+          [ "$TAG" = "cli-v$version" ] || { echo "Tag $TAG does not match cli/package.json version $version"; exit 1; }
+          grep -q "^## $version" cli/CHANGELOG.md || { echo "cli/CHANGELOG.md has no entry for $version"; exit 1; }
+      - name: Build twice; byte-identical
+        run: |
+          node cli/scripts/build-release.mjs --out "$RUNNER_TEMP/cli-release"
+          node cli/scripts/build-release.mjs --out "$RUNNER_TEMP/cli-check"
+          diff -r "$RUNNER_TEMP/cli-release" "$RUNNER_TEMP/cli-check"
+          cat "$RUNNER_TEMP/cli-release/releases/"*/SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: tervory-cli-${{ github.ref_name }}
+          path: ${{ runner.temp }}/cli-release
+          if-no-files-found: error
+          retention-days: 90

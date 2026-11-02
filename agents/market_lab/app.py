@@ -102,14 +102,19 @@ async def research(ctx: JobContext) -> dict:
         if not question:
             return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
         if os.environ.get("DATABASE_URL"):
-            from core.documents import matched
+            from core.evidence import answer as cited_answer
+            from uuid import uuid4
+            from datetime import datetime, timezone
             async with _ledger() as ledger:
-                found = await matched(ledger, ctx.tenant_id, question)
-            if found:
-                found.sort(key=lambda item: (item[0], item[1]), reverse=True)
-                facts = [item[2] for item in found[:5]]
-                return {"answer": "\n".join(fact["text"] for fact in facts),
-                        "citations": [{"claim": fact["text"], "url": fact["href"], "source": fact["name"]} for fact in facts], "cost_usd": 0}
+                saved = await cited_answer(ledger, ctx.tenant_id, question, engine=case_plan()["engine"])
+                facts = saved.get("facts") or []
+                if facts:
+                    text = "\n".join(fact["text"] for fact in facts)
+                    citations = [{"claim": fact["text"], "url": fact["href"], "source": fact["name"]} for fact in facts]
+                    await ledger.save_report({"id": str(uuid4()), "tenant_id": ctx.tenant_id,
+                                              "made_at": datetime.now(timezone.utc), "question": question,
+                                              "answer": text, "citations": citations})
+                    return {"answer": text, "citations": citations, "cost_usd": 0}
         from core.research_adapter import research_web
 
         result = await research_web(ctx.tenant_id, question)
@@ -126,6 +131,12 @@ async def research(ctx: JobContext) -> dict:
             memory=_SafeMemory(ctx.memory),
         )
     return {"answer": answer["answer"], "citations": answer["citations"]}
+
+
+async def calibration(ctx: JobContext) -> dict:
+    """Data only; a Workspace view requires its own approved Figma frame."""
+    async with _ledger() as ledger:
+        return await ledger.calibration_for(ctx.tenant_id)
 
 
 class _SafeMemory:
@@ -192,6 +203,7 @@ app = create_app(
         "opportunities": opportunities,
         "resolve": resolve,
         "research": research,
+        "calibration": calibration,
     },
     schedules=_schedules(),
     job_timeouts={"refresh": 86400, "feed_links": 7200},

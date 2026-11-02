@@ -56,7 +56,7 @@ def test_no_workflow_uses_pull_request_target(path: Path) -> None:
 def test_ci_keeps_job_names_and_main_push_trigger() -> None:
     text = CI.read_text(encoding="utf-8")
     jobs = _load(CI)["jobs"]
-    assert set(jobs) == {"security", "changes", "runner", "tank", "workspace", "savings-page"}
+    assert set(jobs) == {"security", "changes", "runner", "tank", "workspace", "command-acceptance", "savings-page"}
     assert "push:" in text and "branches: [main]" in text
     assert _load(CI)["permissions"] == {"contents": "read"}
 

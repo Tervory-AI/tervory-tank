@@ -16,10 +16,14 @@ from .house_style import RULES as HOUSE_RULES
 class CheckIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tenant_id: UUID
+    text: str = Field(min_length=1, max_length=32000)
+
+
+class CheckerIn(CheckIn):
     text: str = Field(min_length=1, max_length=20000)
 
 
-class WriteIn(CheckIn):
+class WriteIn(CheckerIn):
     document_type: Literal["copy", "article", "document", "legal"] = "copy"
     register: str | None = Field(default=None, max_length=100)
     template: str | None = Field(default=None, max_length=100)

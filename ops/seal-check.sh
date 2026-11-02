@@ -12,6 +12,8 @@
 #   tiger-browser-gateway on tervory-gw-tiger;
 #   agent-rig, rig-brain and rig-browser-gateway on tervory-gw-rig;
 #   egress-proxy on egress (compose names it <project>_egress).
+# Trigger and Radix passive-egress use the exact compose attachments below;
+# their private networks must remain internal and extra attachments always fail.
 #
 # Rooms are found by labels, never by container name. Coolify's normal mode names
 # containers <service>-<uuid>-<timestamp>; Raw Compose mode names them
@@ -116,10 +118,14 @@ for id in $ids; do
       outward+=("$net")
     fi
   done
-  # Rig's public API keeps its corridor and existing app proxy network; only its sandbox and browser are
-  # sealed. Check every Rig service, even if a sealed network was removed.
+  # Check exact compose attachments even if a required internal network was removed.
+  # Rig's public API keeps its existing app proxy network; Trigger gets only its
+  # corridor/checkers, and Radix passive-egress gets only gw/proxy-link/egress.
   expected_nets=""
   case "$service" in
+    agent-trigger) expected_nets="tervory-gw-trigger ${project}_checkers" ;;
+    trigger-languagetool) expected_nets="${project}_checkers" ;;
+    passive-egress) expected_nets="tervory-gw-radix ${project}_proxy-link ${project}_egress" ;;
     agent-rig) expected_nets="tervory-gw-rig 59f8cnpelzwsyte1atyjc4fv" ;;
     rig-brain) expected_nets="tervory-gw-rig ${project}_sandbox ${project}_forge-control" ;;
     rig-forge) expected_nets="${project}_forge-control ${project}_forge-egress" ;;
@@ -137,6 +143,9 @@ for id in $ids; do
     for net in $expected_nets; do
       if [[ " $networks " != *" $net "* ]]; then
         APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }NOT SEALED: $name missing $net"
+      elif [[ "$service" == "agent-trigger" && "$net" == "tervory-gw-trigger" ]] ||
+           [[ "$service" == "passive-egress" && "$net" == "${project}_egress" ]]; then
+        continue
       elif [[ "$service" != "agent-rig" && "$net" != "tervory-gw-rig" && !( "$service" == "rig-forge-egress" && "$net" == "${project}_forge-outbound" ) ]]; then
         internal_flag "$net"
         if [[ "$FLAG" != "true" ]]; then
@@ -144,7 +153,7 @@ for id in $ids; do
         fi
       fi
     done
-    # Rig's exact-network check above already accounts for each attachment.
+    # The exact-network check above already accounts for each attachment.
     if (( on_internal )); then
       APP_SEALED[$uuid]=$(( APP_SEALED[$uuid] + 1 ))
     fi

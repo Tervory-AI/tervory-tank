@@ -31,7 +31,7 @@ from rigbox.store import MemoryStore, PgStore  # noqa: E402
 
 TENANT = "11111111-1111-4111-8111-111111111111"
 OTHER = "22222222-2222-4222-8222-222222222222"
-SAMPLES = ROOT / "agents" / "rig" / "catalogues" / "samples"
+SAMPLES = ROOT / "tests" / "fixtures" / "rig_feed_formats"
 SITE = "https://supplier.example"
 
 
