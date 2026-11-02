@@ -48,3 +48,8 @@ export function csvCell(value: unknown): string {
   if ((/^[\s\uFEFF]*[=+@-]/.test(text) || /^[\t\r\n]/.test(text)) && !/^\+?[1-9][0-9]{6,14}$/.test(text)) text = "'" + text;
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
+
+/** Additive evidence/export schema; these fields await Base page Figma approval. */
+export const CONTACT_QUALITY_COLUMNS = [
+  "phone_e164", "phone_valid", "phone_line_type", "email_syntax_ok", "email_disposable",
+] as const;
