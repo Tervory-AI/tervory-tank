@@ -5,6 +5,7 @@ When the home page cannot be read by a plain fetch (slow, JavaScript-built, a se
 Tiger renders it in a real browser. Interactive human checks are recorded, never solved."""
 
 import re
+from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse
 
 from selectolax.parser import HTMLParser
@@ -66,7 +67,7 @@ async def _get(ctx, url: str, responses: list | None = None) -> str | None:
         if r.status_code < 400 and "text/html" in r.headers.get("content-type", ""):
             html = r.text[:600_000]
             if responses is not None:
-                responses.append({"source_url": str(getattr(r, "url", None) or url), "html": html,
+                responses.append({"checked_at": datetime.now(timezone.utc).isoformat(), "source_url": str(getattr(r, "url", None) or url), "html": html,
                                   "headers": {key: r.headers[key] for key in RESPONSE_HEADERS if key in r.headers}})
             return html
     except Exception:  # noqa: BLE001
@@ -95,7 +96,7 @@ async def run(payload: dict, ctx) -> dict:
         rendered, blocked = await _tiger_html(ctx, site)
         if rendered:
             home, via = rendered, "tiger"
-            responses = [{"source_url": site, "html": rendered, "headers": {}}]
+            responses = [{"checked_at": datetime.now(timezone.utc).isoformat(), "source_url": site, "html": rendered, "headers": {}}]
         elif blocked and home is None:
             return _empty("blocked by human check", "tiger")
     if home is None:
