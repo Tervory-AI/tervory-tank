@@ -77,6 +77,15 @@ class Configure:
             current = self.request('GET', path).get('policy', {})
             if any(current.get(k) != v for k, v in desired.items()):
                 self.request('PUT', path, json=desired)
+        policy = self.request('GET', '/admin/v1/policies/login').get('policy', {})
+        for field, suffix, wanted in [
+            ('secondFactors', 'second_factors', ['SECOND_FACTOR_TYPE_OTP', 'SECOND_FACTOR_TYPE_U2F']),
+            ('multiFactors', 'multi_factors', ['MULTI_FACTOR_TYPE_U2F_WITH_VERIFICATION']),
+        ]:
+            existing = policy.get(field, [])
+            for factor in wanted:
+                if factor not in existing:
+                    self.request('POST', '/admin/v1/policies/login/' + suffix, json={'type': factor})
         # Bootstrap volume contains resource identifiers only in this file.
         return {'client_id': client_id, 'project_id': project_id, 'owner_org_id': org}
 
