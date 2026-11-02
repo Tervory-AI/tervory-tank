@@ -128,6 +128,10 @@ def platform():
 @router.post("/code")
 async def create_code(body: NewCode) -> JSONResponse:
     box = region()
+    import identity_oidc
+    if identity_oidc.configured():
+        from identity_device import create
+        return await create(clean_name(body.device_name))
     device_code = f"tvd1.{box}.{secrets.token_urlsafe(32)}"
     name = clean_name(body.device_name)
     with platform():
@@ -159,6 +163,10 @@ async def create_code(body: NewCode) -> JSONResponse:
 @router.post("/token")
 async def poll(body: Poll) -> JSONResponse:
     box = region()
+    import identity_oidc
+    if body.device_code.startswith('tzd1.') and identity_oidc.configured():
+        from identity_device import poll as identity_poll
+        return await identity_poll(body.device_code)
     match = DEVICE_CODE.fullmatch(body.device_code)
     if match is None or match.group(1) != box:
         return error("invalid_grant")
@@ -264,7 +272,7 @@ async def pending(conn: Any, code: str, box: str) -> Any:
         raise HTTPException(404, "Sign-in code not found")
     row = await conn.fetchrow(
         "SELECT device_hash,user_code,region,device_name,status,created_at,expires_at FROM tank.device_authorizations "
-        "WHERE user_code=$1 AND region=$2 FOR UPDATE", code, box)
+        "WHERE user_code=$1 AND region=$2 AND provider='workspace' FOR UPDATE", code, box)
     if row is None or row["status"] != "pending" or row["expires_at"] <= now():
         raise HTTPException(404, "Sign-in code not found or expired")
     return row
