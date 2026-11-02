@@ -82,8 +82,13 @@ def figures(report):
 def assert_complete(report, product):
     specs = (*TANK, *PRODUCTS[product])
     found = figures(report)
-    assert len(found) == len(specs)
-    assert set(found) == {spec.id for spec in specs}
+    expected = {spec.id for spec in specs}
+    if product == "base":
+        expected.update(f"base.vs_apollo.{field}.{outcome}"
+                        for field in ("website", "phone", "email")
+                        for outcome in ("matches", "base_only", "apollo_only", "disagreements", "neither", "records_compared"))
+        expected.add("base.vs_apollo.coverage")
+    assert set(found) == expected
     for spec in specs:
         assert found[spec.id]["type"] == spec.type
         assert found[spec.id]["unit"] == spec.unit
