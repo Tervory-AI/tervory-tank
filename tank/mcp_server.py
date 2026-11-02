@@ -175,6 +175,8 @@ async def endpoint(request: Request):
                 await conn.execute('UPDATE tank.mcp_sessions SET initialized=true WHERE tenant_id=$1 AND token_id=$2 AND session_hash=$3',
                                    actor.tenant_id, credential['token_id'], pat.digest(session))
             return Response(status_code=202, headers=device.NO_STORE)
+        if method is None and ('result' in message or 'error' in message):
+            return Response(status_code=202, headers=device.NO_STORE)
         if 'id' not in message:
             if isinstance(method, str) and method.startswith('notifications/') or method is None and ('result' in message or 'error' in message):
                 return Response(status_code=202, headers=device.NO_STORE)
