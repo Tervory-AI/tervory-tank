@@ -112,9 +112,11 @@ def build_router(tank):
         owner, room, _ = await authorize(request, vault, tenant_id)
         result = {'vault': vault, 'enabled': True, 'message': None, 'secrets': [], 'files': [], 'links': [], 'connections': []}
         async with tank.pool().acquire() as conn:
-            rows = await conn.fetch('SELECT kind, name, metadata FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 ORDER BY created_at,id', owner, vault)
+            rows = await conn.fetch('SELECT kind, name, metadata, mcp_state FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 ORDER BY created_at,id', owner, vault)
         for row in rows:
             meta = json.loads(row['metadata']) if isinstance(row['metadata'], str) else dict(row['metadata'])
+            if row['kind'] == 'connections':
+                meta = {**meta, 'mcp_state': row['mcp_state']}
             result[row['kind']].append(meta)
         if room == 'market_lab':
             feeds = await room_call(room, 'GET', '/market/feeds', owner)
@@ -189,7 +191,20 @@ def build_router(tank):
                 'status': 'needs_auth' if auth_type == 'provider' else 'saved', 'last_used': None, 'has_token': bool(token)}
         encrypted = seal({'token': token}, f'plugins:v1:{owner}:{vault}:connection:{ident}') if token else None
         await save(owner, vault, 'connections', ident, meta, encrypted)
+        from command import Actor, current_actor
+        from mcp_connections import discover
+        actor = current_actor(Actor(owner, request.headers['x-tervory-user'], False, frozenset({VAULTS[vault]})))
+        await discover(actor, vault, ident, force=True)
         return reply({'ok': True})
+
+    @router.post('/{vault}/connections/{ident}/discover')
+    async def discover_connection(vault: str, ident: str, request: Request):
+        data = await body(request)
+        owner, room, user = await authorize(request, vault, data.get('tenant_id'))
+        from command import Actor, current_actor
+        from mcp_connections import discover
+        tools = await discover(current_actor(Actor(owner, user, False, frozenset({room}))), vault, ident, force=True)
+        return reply({'tools': tools})
 
     @router.post('/{vault}/files')
     async def files(vault: str, tenant_id: str, request: Request):
