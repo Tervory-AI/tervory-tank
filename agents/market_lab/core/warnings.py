@@ -185,6 +185,9 @@ async def run(
                     rationale="Past observed episodes; association does not establish cause.",
                     sources=[{"warning_id": ident, "evidence": source_link(doc_id)}],
                 )
+                # Freeze only the completed, non-overlapping history available
+                # at issuance. Future outcomes never revise this confidence.
+                prediction.update(confidence=stats["hit_rate"], kind=config["id"], feed=config["source"])
                 await ledger.save_prediction(prediction)
                 await ledger.conn.execute(
                     """INSERT INTO agent_market_lab.warnings

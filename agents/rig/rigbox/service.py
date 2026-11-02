@@ -12,15 +12,11 @@ import re
 import time
 import unicodedata
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 from urllib.parse import urlparse
 
 from rigbox.catalogue import (
-    check_fit_refs,
-    families_from,
-    load_folder,
     map_google_merchant,
     map_shopify,
     map_woocommerce,
@@ -826,60 +822,6 @@ class Service:
                 await store.mark_watch_applied(tenant_id, sku, url, stamp)
             return changed
 
-    async def load_catalogues(self, root: Path) -> list[dict[str, Any]]:
-        if not root.is_dir():
-            return []
-        reports = []
-        for folder in sorted(path for path in root.iterdir() if path.is_dir() and not path.name.startswith(".") and path.name != "samples"):
-            reports.append(await self.load_folder(folder))
-        return reports
-
-    async def load_folder(self, folder: Path) -> dict[str, Any]:
-        loaded = load_folder(folder)
-        tenant = loaded["tenant_id"]
-        report: dict[str, Any] = {"slug": loaded["slug"], "tenant_id": tenant, "products": {}, "fits": {}}
-        if not tenant:
-            reason = loaded["publish_error"] or "no tenant"
-            report["products"] = {"added": 0, "updated": 0, "rejected": [{"row": 0, "reason": reason}]}
-            report["fits"] = {"added": 0, "updated": 0, "rejected": []}
-            return report
-        products = loaded["products"]
-        if products["rejected"]:
-            report["products"] = {"added": 0, "updated": 0, "rejected": products["rejected"]}
-        else:
-            added = updated = 0
-            for row in products["rows"]:
-                action = await self.store.upsert_product(tenant, row)
-                if action == "added":
-                    added += 1
-                elif action == "updated":
-                    updated += 1
-            report["products"] = {"added": added, "updated": updated, "rejected": []}
-            for family, members in families_from(await self.store.products(tenant)).items():
-                await self.store.set_family(tenant, family, members)
-            report["market"] = await self._import_market(tenant, loaded.get("market"))
-        if not loaded["publish_error"]:
-            await self._apply_publish(tenant, loaded["slug"], loaded["publish"], report)
-        fits = loaded["fits"]
-        if fits["rejected"]:
-            report["fits"] = {"added": 0, "updated": 0, "rejected": fits["rejected"]}
-            return report
-        known = {str(row["sku"]) for row in await self.store.products(tenant)}
-        family_names = set(families_from(await self.store.products(tenant)))
-        ref_errors = check_fit_refs(fits["rows"], known, family_names)
-        if ref_errors:
-            report["fits"] = {"added": 0, "updated": 0, "rejected": ref_errors}
-            return report
-        existing = {_fit_key(row) for row in await self.store.fits(tenant)}
-        added = updated = 0
-        for row in fits["rows"]:
-            if _fit_key(row) in existing:
-                updated += 1
-            else:
-                added += 1
-            await self.store.upsert_fit(tenant, row)
-        report["fits"] = {"added": added, "updated": updated, "rejected": []}
-        return report
 
     async def pull_feeds(self, tenant_id: str, fetch: Any) -> list[dict[str, Any]]:
         reports = []
@@ -1033,62 +975,7 @@ class Service:
                 lines = await self._fit_why(tenant_id, centre, pair[0], pair[1])
                 product["why"] = " · ".join(line for line in lines if line)
 
-    async def _apply_publish(self, tenant_id: str, slug: str, publish: dict[str, Any], report: dict[str, Any]) -> None:
-        keys = publish.get("keys") if isinstance(publish.get("keys"), list) else []
-        parsed: list[tuple[str, list[str]]] = []
-        rejected: list[dict[str, Any]] = []
-        for index, item in enumerate(keys, start=1):
-            if not isinstance(item, dict):
-                rejected.append({"row": index, "reason": "key must start with rk_pub_ and list origins"})
-                continue
-            raw = str(item.get("key") or "")
-            origins = item.get("origins")
-            if _KEY.fullmatch(raw) is None or not isinstance(origins, list) or not origins:
-                rejected.append({"row": index, "reason": "key must start with rk_pub_ and list origins"})
-                continue
-            parsed.append((raw, [str(origin) for origin in origins]))
-        if rejected:
-            report["keys_rejected"] = rejected
-        else:
-            for raw, origins in parsed:
-                await self.store.put_key(tenant_id, hash_key(raw), "publishable", origins)
-            report["keys"] = len(parsed)
-        email = publish.get("email")
-        webhook = publish.get("webhook")
-        await self.store.put_retailer(
-            tenant_id,
-            slug,
-            str(email) if email else None,
-            str(webhook) if webhook else None,
-            str(publish.get("name") or ""),
-        )
-        templates = publish.get("setup_templates")
-        if isinstance(templates, dict):
-            for category, roles in templates.items():
-                await self.store.set_template(tenant_id, str(category), roles)
-        feed = publish.get("feed")
-        if isinstance(feed, dict) and feed.get("url") and feed.get("format"):
-            await self.store.put_feed(
-                tenant_id,
-                str(feed["format"]),
-                str(feed["url"]),
-                str(feed.get("currency") or ""),
-            )
 
-    async def _import_market(self, tenant_id: str, market: dict[str, Any] | None) -> dict[str, Any]:
-        if market is None:
-            return {"rows": 0, "rejected": []}
-        if market.get("rejected"):
-            return {"rows": 0, "rejected": list(market["rejected"])}
-        known = {str(row.get("sku") or "") for row in await supply_catalogue(self.store, tenant_id)}
-        unknown = [row for row in market.get("rows") or [] if str(row.get("sku") or "") not in known]
-        if unknown:
-            return {
-                "rows": 0,
-                "rejected": [{"row": row.get("row") or 0, "reason": "sku is not in this catalogue"} for row in unknown],
-            }
-        await self.store.replace_market(tenant_id, list(market.get("rows") or []))
-        return {"rows": len(market.get("rows") or []), "rejected": []}
 
     async def _store_quote(self, tenant_id: str, payload: dict[str, Any], contact: dict[str, Any]) -> dict[str, Any]:
         quote_id = "req_" + uuid4().hex
@@ -1116,24 +1003,8 @@ class Service:
 
     async def _shop(self, tenant_id: str) -> dict[str, Any]:
         retailer = await self.store.retailer(tenant_id) or {}
-        publish = _publish_for_slug(str(retailer.get("slug") or ""))
-        shop = publish.get("shop")
+        shop = retailer.get("shop")
         return shop if isinstance(shop, dict) else {}
-
-
-def _publish_for_slug(slug: str) -> dict[str, Any]:
-    if not slug:
-        return {}
-    configured = os.environ.get("CATALOGUE_DIR") or ""
-    base = Path(configured) if configured else Path(__file__).resolve().parents[1] / "catalogues"
-    path = base / slug / "publish.json"
-    if not path.is_file():
-        return {}
-    try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return loaded if isinstance(loaded, dict) else {}
 
 
 def _market_average(rows: list[dict[str, Any]], currency: str) -> dict[str, Any] | None:

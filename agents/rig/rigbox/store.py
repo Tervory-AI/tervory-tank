@@ -391,7 +391,8 @@ class MemoryStore(RetailerMemoryStore):
             "locate_enabled": bool(locate_enabled) if locate_enabled is not None
             else bool(previous.get("locate_enabled", False)),
             # Optional blind ship (Locate orders ship straight to the shopper). Off by default.
-            "blind_ship": bool(blind_ship) if blind_ship is not None else bool(previous.get("blind_ship", False))}
+            "blind_ship": bool(blind_ship) if blind_ship is not None else bool(previous.get("blind_ship", False)),
+            "shop": copy.deepcopy(previous.get("shop", {}))}
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         row = self.retailers.get(str(tenant_id))
@@ -986,14 +987,15 @@ class PgStore(RetailerPgStore):
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship FROM agent_rig.retailers WHERE tenant_id = $1",
+                "SELECT slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship, shop FROM agent_rig.retailers WHERE tenant_id = $1",
                 _uuid(tenant_id),
             )
         if row is None:
             return None
         return {"slug": row["slug"], "email": row["email"], "webhook": row["webhook"], "name": row["name"] or "", "theme": row["theme"],
                 "quote_notice": json.loads(row["quote_notice"]) if isinstance(row["quote_notice"], str) else row["quote_notice"],
-                "locate_enabled": bool(row["locate_enabled"]), "blind_ship": bool(row["blind_ship"])}
+                "locate_enabled": bool(row["locate_enabled"]), "blind_ship": bool(row["blind_ship"]),
+                "shop": json.loads(row["shop"]) if isinstance(row["shop"], str) else row["shop"]}
 
     async def replace_market(self, tenant_id: str, rows: list[dict[str, Any]]) -> None:
         async with self.pool.acquire() as conn:

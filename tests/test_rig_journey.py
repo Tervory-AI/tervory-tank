@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from rig_fixture_loader import load_catalogue
+
 import json
 import re
 import sys
@@ -20,9 +22,9 @@ from rigbox.api import mount  # noqa: E402
 from rigbox.service import Service  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
-CN = ROOT / "agents" / "rig" / "catalogues" / "customnation"
-EXAMPLE = ROOT / "agents" / "rig" / "catalogues" / "example"
-SECOND = ROOT / "agents" / "rig" / "catalogues" / "second"
+CN = ROOT / "tests" / "fixtures" / "rig_catalogues" / "lumaworks"
+EXAMPLE = ROOT / "tests" / "fixtures" / "rig_catalogues" / "example"
+SECOND = ROOT / "tests" / "fixtures" / "rig_catalogues" / "second"
 TENANT = "33333333-3333-4333-8333-333333333333"
 EXAMPLE_TENANT = "11111111-1111-4111-8111-111111111111"
 SECOND_TENANT = "22222222-2222-4222-8222-222222222222"
@@ -53,7 +55,7 @@ def _host(url: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_staccato_accessories_stay_in_the_closed_catalogue() -> None:
+async def test_lumaworks_accessories_stay_in_the_closed_catalogue() -> None:
     for path in CN.iterdir():
         if not path.is_file():
             continue
@@ -67,13 +69,13 @@ async def test_staccato_accessories_stay_in_the_closed_catalogue() -> None:
     store = MemoryStore()
     models = Models()
     service = Service(store, models)
-    report = await service.load_folder(CN)
+    report = await load_catalogue(service, CN)
     assert report["products"]["rejected"] == []
     assert report["fits"]["rejected"] == []
     assert report["market"]["rejected"] == []
     assert report["market"]["rows"] == 32
-    await service.load_folder(EXAMPLE)
-    await service.load_folder(SECOND)
+    await load_catalogue(service, EXAMPLE)
+    await load_catalogue(service, SECOND)
     looked: list[str] = []
     original = store.market_for
 
@@ -83,8 +85,8 @@ async def test_staccato_accessories_stay_in_the_closed_catalogue() -> None:
 
     store.market_for = watch
 
-    found = await service.search(TENANT, "Staccato", 12)
-    assert [item["name"] for item in found["results"]] == ["Staccato C2", "Staccato P", "Staccato XC"]
+    found = await service.search(TENANT, "LumaWorks", 12)
+    assert [item["name"] for item in found["results"]] == ["LumaWorks C2", "LumaWorks P", "LumaWorks XC"]
     assert all("market" not in item for item in found["results"])
     assert looked == []
 
@@ -151,9 +153,9 @@ async def test_staccato_accessories_stay_in_the_closed_catalogue() -> None:
     mount(app)
     client = TestClient(app)
     shopper = {"X-Rig-Key": KEY, "Origin": ORIGIN}
-    listed = client.get("/v1/rig/search", params={"q": "Staccato"}, headers=shopper)
+    listed = client.get("/v1/rig/search", params={"q": "LumaWorks"}, headers=shopper)
     assert listed.status_code == 200
-    assert [item["name"] for item in listed.json()["results"]] == ["Staccato C2", "Staccato P", "Staccato XC"]
+    assert [item["name"] for item in listed.json()["results"]] == ["LumaWorks C2", "LumaWorks P", "LumaWorks XC"]
     assert looked == []
 
     both = client.post(
@@ -180,7 +182,7 @@ async def test_staccato_accessories_stay_in_the_closed_catalogue() -> None:
     assert again["lines"][0]["market"]["amount"] == 10000
     assert models.calls == []
 
-    other = client.get("/v1/rig/search", params={"q": "Staccato"}, headers={"X-Rig-Key": EXAMPLE_KEY, "Origin": ORIGIN})
+    other = client.get("/v1/rig/search", params={"q": "LumaWorks"}, headers={"X-Rig-Key": EXAMPLE_KEY, "Origin": ORIGIN})
     assert other.status_code == 200
     assert other.json()["results"] == []
     foreign = client.post(
@@ -219,7 +221,7 @@ async def test_a_market_sheet_cannot_add_a_sku_the_catalogue_does_not_have(tmp_p
         encoding="utf-8",
     )
     service = Service(MemoryStore(), Models())
-    report = await service.load_folder(folder)
+    report = await load_catalogue(service, folder)
     assert report["products"]["added"] == 1
     assert report["market"]["rows"] == 0
     assert report["market"]["rejected"][0]["reason"] == "sku is not in this catalogue"

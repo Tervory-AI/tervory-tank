@@ -46,7 +46,6 @@ services:
       RIG_FORGE_TRELLIS_ENABLED: ${RIG_FORGE_TRELLIS_ENABLED:-false}
       HERMES_URL: http://hermes:8000
       DATA_DIR: /data
-      CATALOGUE_DIR: /app/catalogues
     volumes:
       - agent_rig_data:/data
     networks:

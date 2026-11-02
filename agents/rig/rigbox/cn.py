@@ -2,7 +2,7 @@
 options, fits and price comparison from the catalogue sheets.
 
 Nothing here invents a product, a price, or a fit. Every id comes from the
-rows passed in. The other demo catalogue does not call this.
+rows passed in.
 """
 
 from __future__ import annotations

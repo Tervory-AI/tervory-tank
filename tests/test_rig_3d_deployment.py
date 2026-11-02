@@ -20,7 +20,7 @@ import importlib, inspect, json, os, re, secrets
 from pathlib import Path
 from fastapi.testclient import TestClient
 from uvicorn.importer import import_from_string
-from rigbox.three_d.sample import seed, PUBLIC_KEY
+from fixtures.rig_three_d.sample import seed, PUBLIC_KEY
 
 root = Path.cwd()
 base = importlib.import_module('app').app
@@ -69,7 +69,7 @@ with TestClient(deployed) as client:
     assert client.get('/health').status_code == 503
     deployed.state.pool = pool
 '''
-    env = {**os.environ, 'PYTHONPATH': 'agents/rig:agents/_chassis', 'AGENT_NAME': 'rig',
+    env = {**os.environ, 'PYTHONPATH': 'tests:agents/rig:agents/_chassis', 'AGENT_NAME': 'rig',
            'DATABASE_URL': _database_url(admin, name), 'DATA_DIR': str(tmp_path),
            'TANK_KEY': uuid4().hex, 'CATALOGUE_DIR': str(tmp_path / 'empty-catalogues'),
            # RIG-4 (#247): /health is 503 unless a trusted proxy range is configured.
