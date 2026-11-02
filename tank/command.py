@@ -42,7 +42,8 @@ TOOLS = {
     "zenas": ["zenas.ask", "zenas.matters", "zenas.review"],
 }
 FOUNDER_TOOLS = ["trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
-                 "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file"]
+                 "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
+                 "radix.domain.prove", "radix.passive.scan", "radix.findings"]
 
 
 def db() -> Any:
@@ -701,7 +702,7 @@ async def card_action(card_id: uuid.UUID, body: CardAction, actor: Actor = Depen
         # Recover a crashed process without replaying an uncertain side effect.
         if card["status"] == "executing":
             started = datetime.fromisoformat(card["started_at"])
-            if (datetime.now(timezone.utc) - started).total_seconds() > ACTION_TIMEOUT + 30:
+            if (datetime.now(timezone.utc) - started).total_seconds() > action_timeout(card.get("tool")) + 30:
                 card.update(status="unknown", retry_safe=False, error="The action outcome is unknown. Do not repeat it until checked.")
                 card["receipt_status"] = "pending"
                 await step(conn, row, state, {"step_id": str(card_id), "label": "Action outcome unknown",
@@ -880,6 +881,11 @@ async def get_followups(build_id: uuid.UUID, after: int = Query(default=0, ge=0)
 MAX_PLAN_BYTES = 64_000
 MAX_ACTIONS = 4
 ACTION_TIMEOUT = 180
+
+
+def action_timeout(tool: str | None) -> int:
+    return 390 if tool == "radix.passive.scan" else ACTION_TIMEOUT
+
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 MAX_THREAD_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
@@ -1010,6 +1016,19 @@ class SourceFile(Body):
     text: str = Field(max_length=20000)
 
 
+class RadixDomainArgs(Body):
+    domain: str = Field(min_length=1, max_length=253)
+
+
+class RadixPassiveArgs(Body):
+    url: str = Field(max_length=300)
+    commit: str = Field(default="", max_length=200)
+
+
+class RadixFindingsArgs(Body):
+    scan_id: uuid.UUID
+
+
 class ScanArgs(Body):
     files: list[SourceFile] = Field(min_length=1, max_length=20)
 
@@ -1133,6 +1152,9 @@ ADAPTERS = {
     "rig.search": Adapter("GET", "/v1/rig/search", QueryArgs, "Search the product catalogue"),
     "rig.ask": Adapter("POST", "/v1/rig/ask", RigAskArgs, "Ask about a product", True, "paid_run"),
     "tisan.scaffold": Adapter("POST", "/v1/skala/tisan.scaffold/run", ScaffoldArgs, "Create a site scaffold", False, "other", "tisan.scaffold"),
+    "radix.domain.prove": Adapter("POST", "/v1/radix/passive/domains", RadixDomainArgs, "radix.domain.prove"),
+    "radix.passive.scan": Adapter("POST", "/v1/radix/passive/scans", RadixPassiveArgs, "radix.passive.scan"),
+    "radix.findings": Adapter("GET", "/v1/radix/passive/scans/{scan_id}/findings", RadixFindingsArgs, "radix.findings"),
     "tisan.build": Adapter("POST", "/v1/skala/tisan.build/run", TisanBuildArgs, "tisan.build", False, "other", "tisan.build"),
     "radix.scan": Adapter("POST", "/v1/skala/scan.static/run", ScanArgs, "Scan supplied source text", False, "other", "scan.static"),
     "zenas.ask": Adapter("POST", "/v1/zenas/answers", ZenasAskArgs, "Ask a civil law question", True, "paid_run"),
@@ -1168,7 +1190,11 @@ def validate_action(action: PlannedAction, actor: Actor) -> PlannedAction:
     # arbitrary URLs/HTTP methods, approval flags, and path traversal segments.
     try:
         args = schema.model_validate(action.arguments).model_dump(mode="json", exclude_none=True)
-    except ValidationError:
+    except ValidationError as error:
+        if action.tool == "radix.passive.scan" and any(
+            item["loc"] == ("commit",) for item in error.errors()
+        ):
+            raise HTTPException(422, "invalid artifact") from None
         raise HTTPException(422, "The action arguments are invalid") from None
     return PlannedAction(tool=action.tool, arguments=args)
 
@@ -1254,6 +1280,10 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
     args = dict(action.arguments)
     path = adapter.path
     scope = {"tenant_id": str(actor.tenant_id)}
+    if action.tool == "radix.passive.scan":
+        args = {"target": args["url"], "artifact": "commit:" + args["commit"]}
+    elif action.tool == "radix.findings":
+        path = path.format(scan_id=args.pop("scan_id"))
     if action.tool.startswith("zenas."):
         scope["home_region"] = box_region()
     if "{skill_id}" in path:
@@ -1289,6 +1319,9 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     method, path, params, body = adapter_request(action, actor)
     headers = {"X-Tank-Key": TANK_API_KEY, "X-Tervory-User": actor.user_id,
                "X-Tervory-Tenant": str(actor.tenant_id)}
+    if action.tool in {"radix.domain.prove", "radix.passive.scan", "radix.findings"}:
+        from main import box_region
+        headers.update({"X-Tervory-Squad": "radix", "X-Tervory-Region": box_region()})
     headers["X-Tervory-Role"] = "org:admin" if actor.tenant_admin else ""
     if current_actor(actor).founder:
         headers["X-Tervory-Admin"] = actor.user_id
@@ -1298,6 +1331,10 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     if len(response.content) > 256000:
         raise ValueError("Tool response is too large; outcome needs reconciliation")
     result = response.json()
+    if action.tool == "radix.domain.prove" and 200 <= response.status_code < 300:
+        result = {key: result[key] for key in ("name", "value", "expires_at")}
+    elif action.tool == "radix.passive.scan" and 200 <= response.status_code < 300:
+        result = {"scan_id": result["scan_id"]}
     if action.tool == "ledger.receipts" and 200 <= response.status_code < 300:
         rows = result.get("ledger", [])
         if not isinstance(rows, list) or any(str(row.get("tenant_id")) != str(actor.tenant_id) for row in rows):
@@ -1429,7 +1466,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
         # Recheck immediately before dispatch; a queued card is not authority.
         require_tool(current_actor(actor), action.tool)
         attempted = True
-        async with asyncio.timeout(ACTION_TIMEOUT):
+        async with asyncio.timeout(action_timeout(action.tool)):
             if action.tool.startswith("trigger."):
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
@@ -1447,7 +1484,10 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if card["status"] == "confirmed":
                 card["result"] = result
             else:
-                card["error"] = "The action was refused or failed. It has not been retried."
+                detail = result.get("detail") if isinstance(result, dict) else None
+                card["error"] = (detail if action.tool == "radix.passive.scan"
+                                 and isinstance(detail, str) and detail in {"invalid artifact", "domain proof required"}
+                                 else "The action was refused or failed. It has not been retried.")
             await step(conn, row, state, {"step_id": card_id, "label": adapter.label,
                                           "actor": action.tool.split('.')[0],
                                           "status": "done" if card["status"] == "confirmed" else "failed",
