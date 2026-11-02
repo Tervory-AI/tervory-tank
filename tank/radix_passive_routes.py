@@ -53,6 +53,14 @@ def build_router(tank):
                 json=body, params=params, timeout=390 if operation == 'scans' else 15,
                 headers={'X-Tank-Key': key, 'X-Tervory-Tenant': str(tenant)}, follow_redirects=False)
             if response.status_code not in {200,201}:
+                detail = response.json().get('detail')
+                if response.status_code == 403 and detail == 'domain proof required':
+                    raise HTTPException(403, 'domain proof required')
+                if response.status_code == 422 and isinstance(detail, list) and any(
+                    item.get('loc') == ['body', 'artifact'] and item.get('msg') == 'Value error, invalid artifact'
+                    for item in detail if isinstance(item, dict)
+                ):
+                    raise HTTPException(422, 'invalid artifact')
                 raise HTTPException(response.status_code if response.status_code in {403,404,409,422} else 503,
                                     'Radix request incomplete')
             return JSONResponse(response.json(), status_code=response.status_code,
