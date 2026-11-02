@@ -3261,7 +3261,7 @@ class EvalRun(BaseModel):
 
 async def run_room_eval(pkg: skala.SkillPackage, payload: dict[str, Any], ctx: skala.SkillContext) -> dict[str, Any]:
     key = os.environ.get("TANK_KEY_TISAN", "")
-    if pkg.id not in {"tisan.figma", "tisan.scaffold"} or not key or _http is None:
+    if pkg.id not in {"tisan.figma", "tisan.scaffold", "tisan.build"} or not key or _http is None:
         raise RuntimeError("eval room is unavailable")
     response = await _http.post(
         "http://agent-tisan:8000/evals/run",
@@ -3288,7 +3288,7 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
         pkg, lambda: __import__("skala_revalidation").eval_context(
             __import__("sys").modules[__name__], pkg,
             make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here)),
-        execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold"} else None,
+        execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold", "tisan.build"} else None,
     )
     if __import__("skala_revalidation").ACTIVE.get() is not None:
         return await __import__("skala_revalidation").record(
