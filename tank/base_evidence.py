@@ -231,7 +231,8 @@ def row_fields(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
                 continue
             for key in keys:
                 item = candidate.get(key)
-                if isinstance(item, dict):
+                if (isinstance(item, dict) and item.get("source_url") == first.get("source_url")
+                        and item.get("checked_at") == first.get("checked_at")):
                     result[key] = {**item, "verified": True, "reason": None, "contact_value": primary}
             break
     return result
