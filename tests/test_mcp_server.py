@@ -1,4 +1,5 @@
 """Real MCP to Command proposals, Confirm, ownership and durable receipts."""
+# ruff: noqa: F811 -- imported pytest fixtures are injected by name.
 import asyncio
 import json
 import uuid
@@ -118,6 +119,7 @@ async def test_origin_versions_accept_and_session_lifecycle(mcp_api):
     assert (await rpc(client, {**headers, 'mcp-protocol-version': '2024-11-05'}, 'ping')).status_code == 400
     assert (await rpc(client, {**headers, 'accept': 'application/json'}, 'ping')).status_code == 406
     assert (await client.get('/mcp', headers=headers)).status_code == 405
+    assert (await client.post('/mcp', headers=headers, json={'jsonrpc': '2.0', 'id': 7, 'result': {}})).status_code == 202
     assert (await rpc(client, headers, 'resources/list')).json()['error']['code'] == -32601
     assert (await client.post('/mcp', headers={**headers, 'content-type': 'application/json'}, content='[]')).json()['error']['code'] == -32600
     assert (await client.post('/mcp', headers={**headers, 'content-type': 'application/json'}, content='{')).json()['error']['code'] == -32700
