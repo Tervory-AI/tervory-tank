@@ -215,7 +215,7 @@ async def dispatch(action, actor) -> tuple[int, dict]:
                 result = {'ok': True}
             else:
                 raise HTTPException(403, 'This tool is not available to this user')
-        return 200, {**result, 'ledger_id': await receipt(actor, name)}
+        return 200, {**result, 'text': json.dumps(result, default=str, ensure_ascii=False)[:12000], 'ledger_id': await receipt(actor, name)}
     tools = await catalogue(actor)
     tool = tools.get(name)
     if not tool:
@@ -236,7 +236,7 @@ async def dispatch(action, actor) -> tuple[int, dict]:
         # Bound the result retained in the Confirm card, independently of transport size.
         if len(json.dumps(result).encode()) > 64_000:
             result = {'content': [{'type': 'text', 'text': json.dumps(result, ensure_ascii=False)[:12000]}]}
-        return 200, {'data': result, 'ledger_id': ledger_id}
+        return 200, {'data': result, 'text': json.dumps(result, ensure_ascii=False)[:12000], 'ledger_id': ledger_id}
     except SignInRequired:
         await state(row, 'needs_sign_in')
     except Refused:
