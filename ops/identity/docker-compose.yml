@@ -1,0 +1,169 @@
+# coolify: raw compose
+# Coolify resource: identity-za, ZA server only. Base directory: ops/identity.
+# Separate database/bootstrap volumes; never attach the main ZA database.
+# Settings (founder enters values only in Coolify): ZITADEL_MASTERKEY (immutable,
+# exactly 32 ASCII characters), LOGIN_SESSION_COOKIE_SECRET (>=32 characters),
+# POSTGRES_ADMIN_PASSWORD, POSTGRES_ZITADEL_PASSWORD, IDENTITY_ADMIN_EMAIL,
+# IDENTITY_ADMIN_TEMP_PASSWORD, IDENTITY_BOOTSTRAP_KEY_EXPIRATION,
+# LOGIN_CLIENT_PAT_EXPIRATION, COOLIFY_PROXY_NETWORK (existing proxy network name).
+# No SMTP settings: founder configures SMTP in the Zitadel console.
+# Unmodified upstream v4.20.0, release 22 Oct 2026; API and Login index digests verified.
+x-database: &database
+  ZITADEL_DATABASE_POSTGRES_HOST: identity-postgres
+  ZITADEL_DATABASE_POSTGRES_PORT: "5432"
+  ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+  ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
+  ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${POSTGRES_ZITADEL_PASSWORD:?founder sets POSTGRES_ZITADEL_PASSWORD}
+  ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+x-runtime: &runtime
+  <<: *database
+  ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY:?founder sets immutable 32-character ZITADEL_MASTERKEY}
+  ZITADEL_EXTERNALDOMAIN: auth.za.tervory.com
+  ZITADEL_EXTERNALPORT: "443"
+  ZITADEL_EXTERNALSECURE: "true"
+  ZITADEL_TLS_ENABLED: "false"
+  ZITADEL_LOGSTORE_ACCESS_STDOUT_ENABLED: "false"
+  ZITADEL_LOG_LEVEL: warn
+  ZITADEL_DEFAULTINSTANCE_LOGINPOLICY_ALLOWREGISTER: "false"
+  ZITADEL_DEFAULTINSTANCE_LOGINPOLICY_ALLOWEXTERNALIDP: "false"
+  ZITADEL_DEFAULTINSTANCE_LOGINPOLICY_PASSWORDLESSTYPE: "1"
+  ZITADEL_DEFAULTINSTANCE_LOCKOUTPOLICY_MAXPASSWORDATTEMPTS: "5"
+  ZITADEL_DEFAULTINSTANCE_LOCKOUTPOLICY_MAXOTPATTEMPTS: "5"
+  ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
+  ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: https://auth.za.tervory.com/ui/v2/login/
+  ZITADEL_OIDC_DEFAULTLOGINURLV2: https://auth.za.tervory.com/ui/v2/login/login?authRequest=
+  ZITADEL_OIDC_DEFAULTLOGOUTURLV2: https://auth.za.tervory.com/ui/v2/login/logout?post_logout_redirect=
+  ZITADEL_SAML_DEFAULTLOGINURLV2: https://auth.za.tervory.com/ui/v2/login/login?samlRequest=
+services:
+  identity-postgres:
+    image: postgres:16.15@sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?founder sets POSTGRES_ADMIN_PASSWORD}
+    volumes: [identity_database:/var/lib/postgresql/data]
+    networks: [database]
+    healthcheck:
+      test: [CMD, pg_isready, -U, postgres, -d, postgres]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  zitadel-init:
+    image: ghcr.io/zitadel/zitadel:v4.20.0@sha256:9ea0e9ecfdc43115da871242e40a0320f2ece864c7cd8b5d41a863a7f4902499
+    restart: "no"
+    command: [init]
+    environment:
+      <<: *database
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?founder sets POSTGRES_ADMIN_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+    networks: [database]
+    depends_on:
+      identity-postgres:
+        condition: service_healthy
+  zitadel-setup:
+    image: ghcr.io/zitadel/zitadel:v4.20.0@sha256:9ea0e9ecfdc43115da871242e40a0320f2ece864c7cd8b5d41a863a7f4902499
+    restart: "no"
+    user: "0"
+    command: [setup, --masterkeyFromEnv]
+    environment:
+      <<: *runtime
+      ZITADEL_FIRSTINSTANCE_ORG_NAME: Tervory
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: ${IDENTITY_ADMIN_EMAIL:?founder sets IDENTITY_ADMIN_EMAIL}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_ADDRESS: ${IDENTITY_ADMIN_EMAIL:?founder sets IDENTITY_ADMIN_EMAIL}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_VERIFIED: "true"
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${IDENTITY_ADMIN_TEMP_PASSWORD:?founder sets IDENTITY_ADMIN_TEMP_PASSWORD}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "true"
+      ZITADEL_FIRSTINSTANCE_MACHINEKEYPATH: /bootstrap/machine-key.json
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: tervory-bootstrap
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: Tervory bootstrap
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINEKEY_TYPE: "1"
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINEKEY_EXPIRATIONDATE: ${IDENTITY_BOOTSTRAP_KEY_EXPIRATION:?founder sets bootstrap expiry}
+      ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /bootstrap/login-client.pat
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME: Instance Login Client
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE: ${LOGIN_CLIENT_PAT_EXPIRATION:?founder sets login client expiry}
+    volumes: [identity_bootstrap:/bootstrap]
+    networks: [database]
+    depends_on:
+      zitadel-init:
+        condition: service_completed_successfully
+  zitadel-api:
+    image: ghcr.io/zitadel/zitadel:v4.20.0@sha256:9ea0e9ecfdc43115da871242e40a0320f2ece864c7cd8b5d41a863a7f4902499
+    command: [start, --masterkeyFromEnv]
+    restart: unless-stopped
+    environment: *runtime
+    expose: ["8080"]
+    networks: [database, proxy]
+    depends_on:
+      zitadel-setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, /app/zitadel, ready]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${COOLIFY_PROXY_NETWORK:?existing Coolify proxy network name}
+      traefik.http.routers.identity-za-api.rule: Host(`auth.za.tervory.com`)
+      traefik.http.routers.identity-za-api.entrypoints: https
+      traefik.http.routers.identity-za-api.tls: "true"
+      traefik.http.routers.identity-za-api.tls.certresolver: letsencrypt
+      traefik.http.routers.identity-za-api.priority: "100"
+      traefik.http.routers.identity-za-api.service: identity-za-api
+      traefik.http.services.identity-za-api.loadbalancer.server.port: "8080"
+      traefik.http.services.identity-za-api.loadbalancer.server.scheme: h2c
+  zitadel-login:
+    image: ghcr.io/zitadel/zitadel-login:v4.20.0@sha256:f1abfdf3c5d16eda03cad3b584226207ecc640ca5c679d7c45abbbce7d1d63f0
+    restart: unless-stopped
+    user: "0"
+    environment:
+      ZITADEL_API_URL: http://zitadel-api:8080
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /bootstrap/login-client.pat
+      ZITADEL_SESSION_COOKIE_SECRET: ${LOGIN_SESSION_COOKIE_SECRET:?founder sets LOGIN_SESSION_COOKIE_SECRET}
+      CUSTOM_REQUEST_HEADERS: Host:auth.za.tervory.com,X-Forwarded-Proto:https
+    volumes: [identity_bootstrap:/bootstrap:ro]
+    expose: ["3000"]
+    networks: [database, proxy]
+    depends_on:
+      zitadel-api:
+        condition: service_healthy
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${COOLIFY_PROXY_NETWORK:?existing Coolify proxy network name}
+      traefik.http.routers.identity-za-login.rule: Host(`auth.za.tervory.com`) && (PathPrefix(`/ui/v2/login`) || Path(`/`))
+      traefik.http.routers.identity-za-login.entrypoints: https
+      traefik.http.routers.identity-za-login.tls: "true"
+      traefik.http.routers.identity-za-login.tls.certresolver: letsencrypt
+      traefik.http.routers.identity-za-login.priority: "200"
+      traefik.http.routers.identity-za-login.service: identity-za-login
+      traefik.http.services.identity-za-login.loadbalancer.server.port: "3000"
+    healthcheck:
+      test: [CMD, node, /app/healthcheck.mjs, http://localhost:3000/ui/v2/login/healthy]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  tervory-setup:
+    build:
+      context: ../..
+      dockerfile: ops/identity/Dockerfile.setup
+    restart: "no"
+    volumes: [identity_bootstrap:/bootstrap]
+    networks: [database]
+    depends_on:
+      zitadel-api:
+        condition: service_healthy
+volumes:
+  identity_database:
+    name: identity-za-postgres
+  identity_bootstrap:
+    name: identity-za-bootstrap
+networks:
+  database:
+    internal: true
+  proxy:
+    external: true
+    name: ${COOLIFY_PROXY_NETWORK:?existing Coolify proxy network name}
