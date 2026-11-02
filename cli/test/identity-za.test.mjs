@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { identityApprovalUrl, run } from '../src/client.mjs';
+import { identityApprovalUrl, run, safe, StreamSanitizer } from '../src/client.mjs';
 
 const start = {
   identity_provider: 'zitadel', device_code: 'tzd1.synthetic-offline', user_code: '1234-5678',
@@ -49,4 +49,14 @@ test('ZA login opens Zitadel and stores only the unchanged Tank credential pair'
   assert.equal(JSON.parse(saved).access_token, grant.access_token);
   assert.equal(JSON.parse(saved).refresh_token, grant.refresh_token);
   assert(!saved.includes(start.device_code));
+});
+
+
+test('wrapped identity device codes are redacted across every chunk boundary', () => {
+  const code = 'tzd1.synthetic-offline-device-code';
+  assert.equal(safe(code), '[redacted]');
+  for (let split = 0; split <= code.length; split++) {
+    const sanitizer = new StreamSanitizer();
+    assert.equal(sanitizer.write(code.slice(0, split)) + sanitizer.write(code.slice(split)) + sanitizer.end(), '[redacted]');
+  }
 });
