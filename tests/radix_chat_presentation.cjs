@@ -20,7 +20,7 @@ for (const founder of [false,true]) {
   assert.equal(generic.radix, undefined);
   assert(generic.results.some(item => item.value.includes('first 5')));
 }
-const proof = presentCard({summary:'Radix test',card_id:'p',kind:'other',tool:'radix.domain.prove',arguments:{domain:'example.test'},result:{name:'_tervory-verify.example.test',value:'tervory-public-proof',expires_at:'2026-11-02T00:00:00Z',TANK_API_KEY:'NEVER-EXPOSE'}},false);
+const proof = presentCard({summary:'Radix test',card_id:'p',kind:'other',tool:'radix.domain.prove',arguments:{domain:'example.test'},result:{name:'_tervory-verify.example.test',value:'tervory-public-proof',expires_at:'2026-11-02T00:00:00Z',TANK_API_KEY:'placeholder-NEVER-EXPOSE'}},false);
 assert.equal(proof.radix.value,'tervory-public-proof');assert.equal(proof.radix.domain,'example.test');assert(!JSON.stringify(proof).includes('NEVER-EXPOSE'));
 const malformed = presentCard({summary:'Radix test',card_id:'x',kind:'other',tool:'radix.findings', result:{findings:[null, {explanation:{secret:'hidden'},remediation:'<script>alert(1)</script>'}]}},false);
 assert.equal(malformed.radix.findings[1].explanation,undefined);
