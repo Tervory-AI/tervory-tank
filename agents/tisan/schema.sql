@@ -1,4 +1,5 @@
--- J4: submission is approval; only item identifiers/quantities and email are kept.
+-- J4: submission is approval; contact name/email/phone/company/reply method,
+-- item type/description/quantity/notes/reference, and the immutable quote snapshot are kept.
 CREATE TABLE IF NOT EXISTS agent_tisan.quote_requests (
     tenant_id uuid NOT NULL,
     id uuid NOT NULL,
@@ -31,6 +32,56 @@ CREATE TABLE IF NOT EXISTS agent_tisan.quote_events (
 );
 CREATE INDEX IF NOT EXISTS quote_events_tenant_request
     ON agent_tisan.quote_events (tenant_id,request_id,id);
+-- Nullable additions preserve legacy JSON and legacy quoted rows verbatim.
+ALTER TABLE agent_tisan.quote_requests
+    ADD COLUMN IF NOT EXISTS quote_amount numeric
+        CHECK (quote_amount > 0 AND quote_amount < 'Infinity'::numeric AND scale(quote_amount) <= 2),
+    ADD COLUMN IF NOT EXISTS quote_currency text CHECK (quote_currency ~ '^[A-Z]{3}$'),
+    ADD COLUMN IF NOT EXISTS valid_until timestamptz CHECK (isfinite(valid_until)),
+    ADD COLUMN IF NOT EXISTS quote_message text
+        CHECK (length(quote_message) BETWEEN 1 AND 2000 AND quote_message ~ '[^[:space:]]');
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+        WHERE conrelid='agent_tisan.quote_requests'::regclass AND conname='quote_snapshot_complete') THEN
+        ALTER TABLE agent_tisan.quote_requests ADD CONSTRAINT quote_snapshot_complete CHECK (
+            (quote_amount IS NULL AND quote_currency IS NULL AND valid_until IS NULL AND quote_message IS NULL)
+            OR (quote_amount IS NOT NULL AND quote_currency IS NOT NULL AND valid_until IS NOT NULL AND quote_message IS NOT NULL));
+    END IF;
+END $$;
+
+-- A new snapshot is written only on acknowledged -> quoted. Later state/mail
+-- updates retain it, and legacy quoted records without a snapshot remain readable.
+CREATE OR REPLACE FUNCTION agent_tisan.keep_quote_snapshot() RETURNS trigger
+LANGUAGE plpgsql AS $$ BEGIN
+    IF TG_OP='INSERT' THEN
+        IF NEW.quote_amount IS NOT NULL OR NEW.quote_currency IS NOT NULL
+            OR NEW.valid_until IS NOT NULL OR NEW.quote_message IS NOT NULL THEN
+            RAISE EXCEPTION 'invalid_transition' USING ERRCODE='23514';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF ROW(NEW.quote_amount,NEW.quote_currency,NEW.valid_until,NEW.quote_message)
+        IS DISTINCT FROM ROW(OLD.quote_amount,OLD.quote_currency,OLD.valid_until,OLD.quote_message) THEN
+        IF OLD.state <> 'acknowledged' OR NEW.state <> 'quoted' OR OLD.quote_amount IS NOT NULL THEN
+            RAISE EXCEPTION 'invalid_transition' USING ERRCODE='23514';
+        END IF;
+    END IF;
+    IF OLD.state='acknowledged' AND NEW.state='quoted' THEN
+        IF NEW.quote_amount IS NULL OR NEW.quote_currency IS NULL OR NEW.valid_until IS NULL
+            OR NEW.quote_message IS NULL OR NEW.valid_until <= clock_timestamp() THEN
+            RAISE EXCEPTION 'invalid_transition' USING ERRCODE='23514';
+        END IF;
+    END IF;
+    RETURN NEW;
+END $$;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger
+        WHERE tgrelid='agent_tisan.quote_requests'::regclass AND tgname='quote_snapshot_once') THEN
+        CREATE TRIGGER quote_snapshot_once BEFORE INSERT OR UPDATE ON agent_tisan.quote_requests
+            FOR EACH ROW EXECUTE FUNCTION agent_tisan.keep_quote_snapshot();
+    END IF;
+END $$;
+
 -- Follow the platform RLS rollout; never turn RLS on by itself (the pattern of
 -- tank.personal_tokens in tank/schema.sql). An unconditional ENABLE here made Tank's
 -- startup guard (tank/main.py _startup) refuse its owner login on 1 Nov 2026. Until
