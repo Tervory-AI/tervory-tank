@@ -162,10 +162,10 @@ class Cart:
             if retailer.get('locate_enabled') is not True:
                 raise CommerceError('locate_disabled')
             available = await locate(self.store, tenant, product, now=moment)
-            if available['public']['status'] == 'available_to_order':
+            enough = (available['public']['status'] == 'available_to_order'
+                      and Decimal(str(available['store'].get('quantity') or 0)) >= quantity)
+            if enough:
                 # Supplier quantity is checked again at checkout as well.
-                if Decimal(str(available['store'].get('quantity') or 0)) < quantity:
-                    raise CommerceError('stock')
                 checked = await confirm(self.store, tenant, product, self.service.locate_checker,
                                         secret=hold_secret(), now=moment, ttl=WINDOW)
                 if 'hold_id' not in checked:
@@ -181,7 +181,7 @@ class Cart:
                 line.update(kind='locate', price=money(checked['public']['price']['amount']),
                             delivery=delivery({'ship_days': days, 'eta': eta}), located=private)
                 line['hold_id'] = checked['hold_id']
-            elif available['public']['status'] == 'unavailable' and back_order is True:
+            elif (available['public']['status'] == 'unavailable' or not enough) and back_order is True:
                 # Back-order is explicit; price comes from the store's own public product.
                 shown = await self.service.product(tenant, sku)
                 if shown['price']['currency'] != line['currency']:
