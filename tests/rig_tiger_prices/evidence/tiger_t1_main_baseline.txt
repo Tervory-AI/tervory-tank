@@ -1,5 +1,5 @@
 Clean origin/main checkout: /workspace/codex-tiger-t1-main-baseline
-Commit: 3fc94027 (origin/main, fetched 2026-11-03)
+Commit: cf95a07e (origin/main, fetched 2026-11-03)
 Tracked and untracked working-tree changes: none
 Exit status: 1
 
@@ -106,7 +106,7 @@ E     # Node.js v22.23.4
 E     # Subtest: tests/tiger_works/workspace.test.cjs
 E     not ok 1 - tests/tiger_works/workspace.test.cjs
 E       ---
-E       duration_ms: 57.41851
+E       duration_ms: 67.976525
 E       type: 'test'
 E       location: '/workspace/codex-tiger-t1-main-baseline/tests/tiger_works/workspace.test.cjs:1:1'
 E       failureType: 'testCodeFailure'
@@ -123,10 +123,10 @@ E     # fail 1
 E     # cancelled 0
 E     # skipped 0
 E     # todo 0
-E     # duration_ms 69.019411
+E     # duration_ms 78.329788
 E
 E   assert 1 == 0
-E    +  where 1 = CompletedProcess(args=['node', '--test', 'tests/tiger_works/workspace.test.cjs'], returncode=1, stdout="TAP version 13...# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 69.019411\n", stderr='').returncode
+E    +  where 1 = CompletedProcess(args=['node', '--test', 'tests/tiger_works/workspace.test.cjs'], returncode=1, stdout="TAP version 13...# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 78.329788\n", stderr='').returncode
 _________ test_real_chromium_markup_stores_history_and_one_price_alert _________
 tests/test_tiger_works.py:237: in test_real_chromium_markup_stores_history_and_one_price_alert
     result = await browser.public_result(page, {"ok": True, "url": URL}, html, tmp_path,
@@ -154,4 +154,4 @@ FAILED tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_r
 FAILED tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[429]
 FAILED tests/test_tiger_works.py::test_workspace_actions_and_safe_unread_display
 FAILED tests/test_tiger_works.py::test_real_chromium_markup_stores_history_and_one_price_alert
-6 failed in 9.38s
+6 failed in 14.21s
