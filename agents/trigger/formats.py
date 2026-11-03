@@ -1,5 +1,9 @@
 """Fixed writing formats. Limits are verified publisher limits, never advice."""
+import json
+import re
+import unicodedata
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 FormatName = Literal[
@@ -38,10 +42,85 @@ FORMATS = {
 }
 
 
+# X's published counting rules and official v3 configuration, checked 2026-11-03:
+# https://docs.x.com/fundamentals/counting-characters
+# https://github.com/twitter/twitter-text/blob/30e2430d90cff3b46393ea54caf511441983c260/config/v3.json
+# Matching data provenance/licences: sources/x_text.json and x_text-LICENSE.txt.
+_X_DATA = json.loads((Path(__file__).parent / 'sources/x_text.json').read_text())
+_X_CONFIG = _X_DATA['configuration']
+_X_TLDS = frozenset(_X_DATA['tlds'])
+_X_EMOJI = re.compile(_X_DATA['emoji_utf16_pattern'])
+_X_URL = re.compile(
+    r'(?<![\w@＠$＄#＃-])(?P<scheme>https?://)?'
+    r'(?P<host>(?:[^\W_][\w-]*\.)+[^\W_][\w-]*)'
+    r'(?::[0-9]+)?(?:[/?#][^\s<>"\u2018\u2019\u201c\u201d]*)?', re.IGNORECASE)
+
+
+def _x_urls(text: str):
+    """Recognize published TLDs and IDNA-valid labels without a network lookup."""
+    for match in _X_URL.finditer(text):
+        host = match['host']
+        try:
+            # IDNA rejects labels exceeding 63 encoded bytes, including Unicode.
+            encoded = host.encode('idna').decode('ascii')
+        except UnicodeError:
+            continue
+        if any('_' in label for label in encoded.split('.')[-2:]):
+            continue
+        if len(encoded) > 253 or any(label.startswith('-') or label.endswith('-') for label in encoded.split('.')):
+            continue
+        if host.rsplit('.', 1)[-1].casefold() not in _X_TLDS and encoded.rsplit('.', 1)[-1].casefold() not in _X_TLDS:
+            continue
+        value = match[0].rstrip('.,!?;:\'…')
+        # Keep balanced URL parentheses, but leave prose's closing punctuation out.
+        while value and value[-1] in ')]}' and value.count(value[-1]) > value.count({')': '(', ']': '[', '}': '{'}[value[-1]]):
+            value = value[:-1]
+        yield match.start(), match.start() + len(value)
+
+
+def _x_codepoints(text: str) -> int:
+    total = 0
+    for char in text:
+        point = ord(char)
+        total += next((r['weight'] for r in _X_CONFIG['ranges'] if r['start'] <= point <= r['end']),
+                      _X_CONFIG['defaultWeight'])
+    return total // _X_CONFIG['scale']
+
+
+def _x_plain(text: str, discount_emoji: bool) -> int:
+    if not discount_emoji:
+        return _x_codepoints(text)
+    # Upstream's generated emoji expression matches UTF-16 units. Use those units
+    # only for matching; decode unmatched spans back to Unicode code points.
+    encoded = text.encode('utf-16-le', errors='surrogatepass')
+    units = ''.join(chr(int.from_bytes(encoded[i:i+2], 'little')) for i in range(0, len(encoded), 2))
+    def codepoints(span):
+        raw = b''.join(ord(c).to_bytes(2, 'little') for c in span)
+        return _x_codepoints(raw.decode('utf-16-le', errors='surrogatepass'))
+    total, start = 0, 0
+    for match in _X_EMOJI.finditer(units):
+        total += codepoints(units[start:match.start()]) + 2
+        start = match.end()
+    return total + codepoints(units[start:])
+
+
+def _x_length(text: str, *, discount_emoji: bool = True) -> int:
+    """NFC; official weight-one ranges/default two; each URL 23, each emoji two.
+
+    The False mode exists to exercise upstream's legacy v2 fixture group; current
+    X posts always use the default v3 emoji-discounting rules.
+    """
+    text = unicodedata.normalize('NFC', text)
+    total, start = 0, 0
+    for lower, upper in _x_urls(text):
+        total += _x_plain(text[start:lower], discount_emoji) + _X_CONFIG['transformedURLLength']
+        start = upper
+    return total + _x_plain(text[start:], discount_emoji)
+
+
 def length(text: str, name: str) -> int:
     if name == 'X post':
-        from twitter_text import parse_tweet
-        return parse_tweet(text).weightedLength
+        return _x_length(text)
     return len(text)
 
 
