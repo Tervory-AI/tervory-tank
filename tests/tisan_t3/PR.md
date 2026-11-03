@@ -13,14 +13,14 @@ package was changed. The existing generic /chats cards carry the results.
 | `agents/tisan/builder.py:256` | Retain the known slug and allocated build number when checks fail; no failed archive is fabricated. |
 | `agents/tisan/builder.py:269` | After a passed, failed or refused build, attempt one `ctx.memory.remember` call with kind `build`, measured checks/details and confidence 1.0. Evidence contains the job ID and actual archive filename when present. The returned record ID is `memory_id`. An outage logs its exception class only and preserves the build outcome. |
 | `agents/tisan/publish.py:150` | Room-key-only, tenant-and-slug-bound `/publish/latest` reads the existing promotion journal, selecting only succeeded publish operations. No success returns a status with no URL or sentence. No Coolify/GitHub call is made. |
-| `tank/tisan_requests.py:12` | Four client tools and a strict forward transition table: requested to changes_requested or accepted; changes_requested to accepted; accepted terminal. |
+| `tank/tisan_requests.py:12` | Four client tools; requested to changes_requested or accepted; changes_requested to itself only after a newer build and different commit, or to accepted; accepted terminal. |
 | `tank/tisan_requests.py:41` | Fixed same-room preview read; validate and return only succeeded build, full commit and HTTPS staging origin. |
 | `tank/tisan_requests.py:67` | Literal parameterized SQL, tenant-scoped transactions, row locking, immutable events and operation identity prevent cross-tenant or refused writes. Feedback binds text to the latest succeeded build; sign-off after feedback needs a newer build and different commit. |
-| `tank/tisan_requests.py:128` | Explicit `tisan.request`/`preview`/`feedback`/`handover` commands propose existing cards with a code receipt, without calling a model. Request and feedback take JSON arguments; preview and handover also accept a plain request UUID. |
+| `tank/tisan_requests.py:128` | Explicit `tisan.request`/`preview`/`feedback`/`handover` commands propose existing cards with a code receipt, without calling a model. Request and feedback take JSON arguments; preview and handover also accept a plain slug. Preview, feedback and handover select the tenant’s newest open request for that slug. |
 | `tank/tisan_requests.py:148` | Existing authenticated Actor/require_tool/confirmation pattern; three mutations require the exact executing Confirm-card binding. Preview is a $0 read. Each successful operation returns a real $0 code ledger receipt. |
 | `tank/tisan_requests.py:188` | Existing long-build cards can read their owned room job's completed checks and memory ID. Foreign tenant/job results and receipt injection are rejected; no job is resubmitted. |
 | `tank/command.py:28`, `:55`, `:120` | Expose the four client tools to the founder and verified tenant admins only, like Trigger. Ordinary members retain their current tools, and tisan.build remains founder-only. |
-| `tank/command.py:401` | Hydrate a confirmed founder build card on the existing thread read; the existing browser polling picks up completed measurements and memory_id. No UI changes. |
+| `tank/command.py:401` | Hydrate completed build result data on the existing thread read. Existing card labels display build_id, url and status. request_id, commit, memory_id and checks remain hidden and each needs an approved Figma frame before it can appear. No UI changes. |
 | `tank/command.py:488`, `:1047`, `:1227`, `:1456`, `:1650` | Deterministic planning, request arguments derived from the existing TisanBuildArgs fields, ADAPTERS, actor-supplied identity and confirmed dispatch. Clients cannot inject tenant/user/region, plan/copy/media or approval fields into a request. |
 | `tank/main.py:4197` | Mount the client router. `_startup:753` is unchanged and still applies the complete additive schema through its existing admin/raw pool selection. |
 | `tank/schema.sql:2595` | Add requests and request events before the generated memory block. Follow personal_tokens exactly: only join existing RLS, FORCE it and install both tenant policies; leave legacy installations staged. |
@@ -346,3 +346,53 @@ Final main JUnit failures/errors (each entry is an observed result, not an attri
 The final Tisan/Command regression result remains **333 passed, 11 skipped**; the opt-in disposable Postgres quote checks separately passed **6 tests**. Q1 checks were absent from main, so item 3 (k6) was skipped as instructed. No Docker image-size change is claimed.
 
 Founder `/chats` acceptance and its screenshots are pending. No live test tenant data was created, no staging publish was performed, and no browser acceptance is claimed. Claude opens the PR; the founder merges. This branch is ready for review with the full-suite and acceptance blockers explicitly outstanding.
+
+
+## Review fixes for #612
+
+The six review items are implemented on the same branch, after merging `origin/main` (`8299ff94`). The dispatch conflict retained both Tisan Confirm tools and main's `radix.repo.scan`.
+
+| File and line | Review correction |
+| --- | --- |
+| `tank/tisan_requests.py:19`, `:93`, `:188` | Preview, feedback and handover take validated slug, select the tenant's newest open request, and return existing 404 when none is open. Tenant and slug filtering are both enforced. |
+| `tank/tisan_requests.py:133`, `:230` | Successful results expose only existing display aliases build_id, url and status; status is the request state. Completed build data also has build_id. No resultFields changes or new UI labels. |
+| `agents/tisan/builder.py:279` | Only a result-provided slug enters memory; raw input slug is never substituted. |
+| `agents/tisan/builder.py:273`, `:291` | A crash attempts exactly one memory write and then re-raises the same exception, even if memory is down, preserving chassis job failure. |
+| `tank/tisan_requests.py:161` | JSON arguments must be objects; arrays, null, strings and numbers return existing 422. |
+| `tank/tisan_requests.py:15`, `:32` | Repeat changes_requested is allowed only for a newer published build with a different commit. Same-build feedback writes nothing; accepted remains final. |
+| `tests/test_tisan_requests.py:44` | Regression tests cover refused/crashed slug omission, re-raise with memory outage, object validation, multiple feedback rounds, newest open request, tenant isolation and build_id hydration. |
+| `tests/tisan_t3/card_contract.cjs:1` | Executes the real presentation module for founder and client views: existing Site, Build, Result and Status labels appear; hidden fields do not. |
+
+**Hidden fields requiring approved Figma frames:** request_id, commit, memory_id and checks. They remain in result data. The earlier statement that memory_id would appear on the card without UI changes was incorrect and is corrected above. No founder-browser screenshot or live acceptance is claimed.
+
+Commands and observed results for the review changes:
+
+```sh
+git fetch origin && git merge origin/main
+# One command.py conflict resolved retaining both sides; merge committed b95caaab.
+# Before each sequential push:
+git fetch origin main && git merge origin/main && git push origin codex/tisan-t3-requests
+# Every push succeeded.
+
+PYTHONPATH=tank:.git/t3-deps /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q tests/test_tisan_requests.py --disable-socket --allow-hosts=127.0.0.1,localhost --basetemp=/workspace/codex-tisan-t3-runtime/review-unit
+# 12 passed, 6 skipped (no database URL), 3 warnings in 4.78s.
+
+docker run --rm -d --name codex-tisan-t3-review-postgres -e POSTGRES_HOST_AUTH_METHOD=trust -p 127.0.0.1::5432 --tmpfs /var/lib/postgresql/data postgres:16.15
+# Disposable loopback-only Postgres on port 32861; no production SQL.
+
+TMPDIR=/workspace/codex-tisan-t3-runtime PYTHONPATH=tank:.git/t3-deps POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32861/postgres /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q tests/test_tisan_*.py tests/tisan_j4/ tests/tisan_promotion/ tests/test_command.py --disable-socket --allow-hosts=127.0.0.1,localhost --basetemp=/workspace/codex-tisan-t3-runtime/review-regression
+# 338 passed, 11 skipped, 25 warnings in 62.07s.
+
+TMPDIR=/workspace/codex-tisan-t3-runtime PYTHONPATH=tank:.git/t3-deps POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32861/postgres /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q tests/test_tisan_requests.py --disable-socket --allow-hosts=127.0.0.1,localhost --basetemp=/workspace/codex-tisan-t3-runtime/review-final
+# 20 passed, 3 warnings in 9.54s (includes newest-open and slug-plan tests added after regression collection).
+
+node tests/tisan_t3/card_contract.cjs
+# 6 existing-card projections passed; hidden fields excluded.
+
+/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+# All checks passed.
+git diff --check
+# Passed.
+```
+
+Q1 remains absent from main's run_checks; k6 is still skipped. Final-head CI Tank result is recorded in this PR's final verification update, so recording it does not create another untested head.
