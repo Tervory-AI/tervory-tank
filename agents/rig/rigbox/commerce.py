@@ -118,7 +118,10 @@ class Platform:
     async def stock(self, product: dict) -> dict:
         """Read the store's own product, including price and available quantity."""
         if self.kind == 'woocommerce':
-            p = await self.request('GET', '/products/' + quote(str(product['product_id']), safe=''))
+            path = '/products/' + str(int(product['product_id']))
+            if product.get('variant_id'):
+                path += '/variations/' + str(int(product['variant_id']))
+            p = await self.request('GET', path)
             return {'price': money(p['price']), 'available': p['stock_status'] == 'instock',
                     'quantity': p.get('stock_quantity')}
         if self.kind == 'shopify':
@@ -151,6 +154,8 @@ class Platform:
                 item = {'quantity': line['quantity']}
                 if line['kind'] == 'stock':
                     item['product_id'] = int(line['platform_product']['product_id'])
+                    if line['platform_product'].get('variant_id'):
+                        item['variation_id'] = int(line['platform_product']['variant_id'])
                 else:
                     item.update(sku='tervory-rig-line', name=line['title'])
                 amount = money(Decimal(line['price']) * line['quantity'])
@@ -196,22 +201,37 @@ class Platform:
                       'total': money(p['cart_amount']), 'currency': p['currency']['code']}
         if result['currency'] != currency:
             raise CommerceError('currency')
+        result['merchandise'] = money(sum(Decimal(line['price']) * line['quantity'] for line in lines))
         return result
 
     async def read(self, remote: dict, event: dict | None = None) -> dict:
         """Return a minimal verified order projection, never the raw customer data."""
         if self.kind == 'woocommerce':
             p = await self.request('GET', '/orders/' + quote(remote['id'], safe=''))
-            return {'paid': bool(p.get('date_paid')) and p['status'] in ('processing', 'completed'),
+            merchandise = sum(Decimal(item['total']) for item in p['line_items'])
+            fees = sum(Decimal(item['total']) for item in p.get('fee_lines', []))
+            calculated = merchandise + fees + Decimal(p.get('shipping_total', '0')) + Decimal(p.get('total_tax', '0'))
+            return {'paid': bool(p.get('date_paid')) and p['status'] not in ('refunded', 'failed'),
+                    'merchandise': money(merchandise), 'totals_valid': money(calculated) == money(p['total']),
                     'total': money(p['total']), 'currency': p['currency'], 'order_id': str(p['id'])}
         if self.kind == 'shopify':
-            p = (await self.graphql('query($id:ID!){draftOrder(id:$id){order{id displayFinancialStatus totalPriceSet{shopMoney{amount currencyCode}}}}}',
-                                    {'id': remote['id']}))['draftOrder']
-            order = p.get('order') if p else None
+            fields = 'id tags displayFinancialStatus subtotalPriceSet{shopMoney{amount currencyCode}} totalPriceSet{shopMoney{amount currencyCode}} totalTaxSet{shopMoney{amount}} totalShippingPriceSet{shopMoney{amount}}'
+            if event and event.get('admin_graphql_api_id'):
+                order = (await self.graphql('query($id:ID!){order(id:$id){' + fields + '}}',
+                                             {'id': event['admin_graphql_api_id']}))['order']
+                if order and 'tervory:' + remote['reference'] not in order.get('tags', []):
+                    return {'paid': False}
+            else:
+                p = (await self.graphql('query($id:ID!){draftOrder(id:$id){order{' + fields + '}}}',
+                                        {'id': remote['id']}))['draftOrder']
+                order = p.get('order') if p else None
             if not order:
                 return {'paid': False}
             amount = order['totalPriceSet']['shopMoney']
+            subtotal = Decimal(order['subtotalPriceSet']['shopMoney']['amount'])
+            calculated = subtotal + Decimal(order['totalTaxSet']['shopMoney']['amount']) + Decimal(order['totalShippingPriceSet']['shopMoney']['amount'])
             return {'paid': order['displayFinancialStatus'] == 'PAID', 'total': money(amount['amount']),
+                    'merchandise': money(subtotal), 'totals_valid': money(calculated) == money(amount['amount']),
                     'currency': amount['currencyCode'], 'order_id': order['id']}
         # The signed callback supplies an order id, but cart_id from read-back is
         # the authority that binds that order to this checkout and tenant.
@@ -223,8 +243,12 @@ class Platform:
         else:
             p = await self.request('GET', '/v2/orders/' + str(int(event['data']['id'])))
         if p.get('cart_id') != remote['id']:
-            raise CommerceError('order_mismatch')
+            return {'paid': False}
+        subtotal = Decimal(p['subtotal_ex_tax'])
+        calculated = subtotal + Decimal(p['subtotal_tax']) + sum(Decimal(p.get(k, '0')) for k in
+            ('shipping_cost_inc_tax', 'handling_cost_inc_tax', 'wrapping_cost_inc_tax'))
         return {'paid': p.get('payment_status') == 'captured', 'total': money(p['total_inc_tax']),
+                'merchandise': money(subtotal), 'totals_valid': money(calculated) == money(p['total_inc_tax']),
                 'currency': p['currency_code'], 'order_id': str(p['id'])}
 
     async def cancel(self, remote: dict):
