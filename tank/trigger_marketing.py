@@ -91,7 +91,7 @@ class Marketing:
             row = await self.post(tenant, args.post_id, conn=conn, lock=True)
             if existing:
                 return public(row)
-            if row['revision'] != args.expected_revision or row['state'] in {'published', 'cancelled'} or row['delivery'] == 'inflight':
+            if row['revision'] != args.expected_revision or row['state'] in {'published', 'cancelled'} or (row['delivery'] == 'inflight' and operation != 'post.cancel'):
                 raise HTTPException(409)
             state, target, generation = row['state'], row['location'], row['connection_generation']
             if operation == 'post.edit':
@@ -107,6 +107,8 @@ class Marketing:
                 if row['channel'] == 'gbp':
                     current = await self.google.location(tenant)
                     target, generation = current['location'], current['generation']
+                    if (args.location, args.connection_generation) != (target, generation):
+                        raise HTTPException(409)
                 row = await conn.fetchrow('''UPDATE tank.trigger_posts SET state='approved',approved_revision=revision,
                     location=$3,connection_generation=$4,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING *''',
                     tenant, args.post_id, target, generation)
@@ -121,7 +123,7 @@ class Marketing:
                     delivery='pending',retryable=false,retry_at=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING *''',
                     tenant, args.post_id, args.planned_at, args.time_zone)
             elif operation == 'post.cancel':
-                row = await conn.fetchrow("UPDATE tank.trigger_posts SET state='cancelled',retryable=false,retry_at=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING *", tenant, args.post_id)
+                row = await conn.fetchrow("UPDATE tank.trigger_posts SET state='cancelled',delivery='done',retryable=false,retry_at=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING *", tenant, args.post_id)
             elif operation == 'post.retry':
                 if state != 'failed' or not row['retryable'] or row['delivery'] != 'pending' or row['approved_revision'] != row['revision']:
                     raise HTTPException(409)
@@ -160,7 +162,7 @@ class Marketing:
 
     async def reviews(self, tenant):
         current = await self.google.location(tenant)
-        checked = utc_now()
+        checked = current['reviews_checked_at']
         rows = await self.google.pages(tenant, 'https://mybusiness.googleapis.com/v4/' + current['location'] + '/reviews', 'reviews',
                                        params={'orderBy': 'updateTime desc', 'pageSize': 50})
         found = []
@@ -175,6 +177,7 @@ class Marketing:
                 updated = datetime.fromisoformat(review['updateTime'])
                 if current['reviews_checked_at'] and updated <= current['reviews_checked_at']:
                     continue
+                checked = max(checked, updated) if checked else updated
                 record = {'review_id': ident, 'rating': review.get('starRating', ''), 'text': review.get('comment', ''), 'updated_at': updated}
                 await conn.execute('''INSERT INTO tank.trigger_gbp_reviews(tenant_id,location,review_id,rating,text,updated_at)
                     VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(tenant_id,location,review_id)
