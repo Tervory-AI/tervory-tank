@@ -10,7 +10,7 @@ Desktop is 1440×900 with a 1200px work area and 1136px content width. Mobile is
 
 ## Fields, labels and record identity
 
-One rendered field per idea. The linked account field is Clients; account name is its display value, not another field. Contact name resolves the linked Contact and is not duplicated. Invoice and quote client snapshots are distinct Bill-to name, Bill-to email, Bill-to phone and Bill-to address fields. Country is shown once; country_display formats country. Stage is shown once; stage_label formats stage. Created is shown once; created_on_arrow formats created_at. Fields omitted from lists remain on detail screens. Hidden redundant nodes preserve their IDs.
+One rendered field per idea. The linked account field is Client; account name is its display value, not another field. Contact name resolves the linked Contact and is not duplicated. Invoice and quote client snapshots are distinct Bill-to name, Bill-to email, Bill-to phone and Bill-to address fields. Country is shown once; country_display formats country. Stage is shown once; stage_label formats stage. Created is shown once; created_on_arrow formats created_at. Fields omitted from lists remain on detail screens. Hidden redundant nodes preserve their IDs.
 
 Reference (id), Board order (kanban_order/board_order), Organisation (org), Acceptance IP address (accepted_ip) are hidden on user screens, including confirmations. UUIDs remain internal navigation/API arguments. They never identify a record in confirmation copy. No data or API field is removed.
 
@@ -23,21 +23,21 @@ Plain header row with a bottom border, no header card treatment, same cell paddi
 - Leads: First name, Last name, Company, Email, Status, Source, Next follow-up, Assigned to.
 - Clients: Name, Email, Phone, Industry, Assigned to.
 - Contacts: First name, Last name, Email, Company, Phone, Do not call.
-- Opportunities: Name, Clients, Stage, Amount, Currency, Probability, Closed, Assigned to.
-- Cases: Name, Status, Priority, Clients, Assigned to, First reply due, Resolution due.
-- Tasks: Title, Status, Priority, Due date, Assigned to, Clients.
-- Invoices: Invoice number, Title, Clients, Status, Due date, Total, Amount due, Currency.
-- Quotes: Quote number, Title, Clients, Status, Expiry date, Total, Currency.
+- Opportunities: Name, Client, Stage, Amount, Currency, Probability, Closed, Assigned to.
+- Cases: Name, Status, Priority, Client, Assigned to, First reply due, Resolution due.
+- Tasks: Title, Status, Priority, Due date, Assigned to, Client.
+- Invoices: Invoice number, Title, Client, Status, Due date, Total, Amount due, Currency.
+- Quotes: Quote number, Title, Client, Status, Expiry date, Total, Currency.
 
-Invoice Items and Payments are tables on detail screens. Items: Item, Quantity, Unit price, Subtotal, row Delete. Payments: Amount, Payment date, Payment method, Reference number, row Delete. At 375 these tables scroll horizontally within the detail viewport. Filled rows are bracketed field slots; Zero has No items yet. / No payments yet. Each row Delete opens the existing corresponding confirmation with invoice context and the selected row's identity and amounts. Delete payment and Delete line item are absent from the page-level action row. No invoice-record Delete endpoint is invented.
+Invoice Items and Payments are tables on detail screens. Items: Item, Quantity, Unit price, Subtotal, row Delete. Payments: Amount, Payment date, Payment method, Reference number, row Delete. At 375 these tables scroll horizontally within the detail viewport. Filled rows are bracketed field slots. Zero retains No items yet. / No payments yet. and shows an em-dash row template with a disabled Delete specimen, never a real record; it has no Delete reaction. Each row Delete opens the existing corresponding confirmation with invoice context and the selected row's identity and amounts. Delete payment and Delete line item are absent from the page-level action row. No invoice-record Delete endpoint is invented.
 
 ## Actions and confirmations
 
-Action labels are centred. Confirm is primary. Delete actions are destructive and last after ordinary actions. Existing action order remains consistent within each record type; Invoice actions are Send, Mark paid, Record payment. All existing confirmation steps and frame IDs remain.
+Action labels are centred. Confirm is navy primary for non-destructive operations; only Delete confirmations are red. The Confirm specimen in 93:3 / 93:4 is centred and navy primary. Delete actions are destructive and last after ordinary actions. Existing action order remains consistent within each record type; Invoice actions are Send, Mark paid, Record payment. All existing confirmation steps and frame IDs remain.
 
-Every confirmation shows a record name or number. Send includes Recipient email. Convert includes Quote number, Total and Currency. Delete payment includes Invoice number, Amount and Payment date; Delete line item includes Invoice number, Name, Quantity and Unit price. No internal Reference is shown.
+Every confirmation shows a record name or number. Send includes Recipient email. Convert includes Quote number, Total and Currency. Delete payment includes Invoice number, Amount and Payment date; Delete line item includes Invoice number, Item, Quantity and Unit price. Convert always shows [Currency], not an em-dash. No internal Reference is shown.
 
-Record payment and Mark paid show Invoice number, Amount due and Currency at the top, then inputs. Amount *, Payment date * and Payment method * are required by PaymentCreateRequest in the pinned BottleCRM OpenAPI. Amount is a decimal input bounded by outstanding balance; Payment date is a date control; Payment method is a choice control from the existing enum. Reference number and Notes are optional inputs. The asterisk marks required inputs. The design shows outlined editable-control specimens, not submitted values or live payment records. Confirm and Cancel remain pinned on mobile; the scroll viewport stops above them and content has footer-height plus 24px clearance. A real payment requires the founder's final confirmation.
+Record payment and Mark paid show their title, Invoices and Nothing runs until you confirm., then Invoice number, Amount due and Currency context, then inputs. Record payment requires Amount *, Payment date * and Payment method * under PaymentCreateRequest. Mark paid accepts the same fields optionally, so its Amount, Payment date and Payment method have no required asterisks. Amount is a decimal input bounded by outstanding balance; Payment date is a date control; Payment method is a choice control from the existing enum. Reference number and Notes are optional inputs. The asterisk marks required inputs. The design shows outlined editable-control specimens, not submitted values or live payment records. Confirm and Cancel remain pinned on mobile; the scroll viewport stops above them and content has footer-height plus 24px clearance. A real payment requires the founder's final confirmation.
 
 No public client routes or links. Public-link fields are not exposed. Money uses its record currency without conversion. API operations and tenant scoping remain as specified below.
 
@@ -188,7 +188,221 @@ No public client routes or links. Public-link fields are not exposed. Money uses
 - ← Quotes
 - Item
 
-Contextual bracket slots use the same plain labels, including [Full name], [Client name], [Opportunity name], [Case name], [Task title], [Invoice number], [Quote number], [Recipient email], [Clients] and each Bill-to field label. Amount, Payment date, Payment method, Reference number, Notes, Item, Quantity, Unit price and Subtotal use their existing words in bracketed table/input slots. The choice control uses the existing ⌄ glyph. These slots are annotations, not fake live records.
+Contextual bracket slots use the same plain labels, including [Client], [Full name], [Client name], [Opportunity name], [Case name], [Task title], [Invoice number], [Quote number], [Recipient email], [Client] and each Bill-to field label. Amount, Payment date, Payment method, Reference number, Notes, Item, Quantity, Unit price and Subtotal use their existing words in bracketed table/input slots. The choice control uses the existing ⌄ glyph. These slots are annotations, not fake live records.
+
+## Fix round 2 · review states and source verification
+
+All original root IDs and the eight original invoice table IDs are retained. Added 99 scrolled review frames covering every visible field on 32 long detail screens and four long payment forms, plus two drawer end states. These are static review offsets of the existing editable screens, not new routes or invented records. A field is covered only when its complete control fits in a review viewport. Original top views remain available. Source view plus scrolled views cover every visible field; counts were checked per source.
+
+Four dedicated Items and Payments states expose both tables and their row Delete controls. Desktop shows the full tables. At 375 the table review is scrolled to its right edge to expose Delete; the existing horizontal table content is retained. Zero states show only em-dashes and disabled Delete specimens; No items yet. and No payments yet. sit outside horizontal scrolling. Original Zero tables remain empty of records.
+
+Contacts account_detail is hidden on all four detail variants; account is Client, and linked_accounts is Linked clients. These are one singular relationship and one collection. Clients stays the menu, list title and back-link label. Singular fields and table headers use Client / [Client].
+
+### BottleCRM Mark paid source
+
+Verified pinned BottleCRM commit cd7c12a607df1719518fcdaf289864f6ba7d0bcd, [backend/invoices/api_views.py lines 762–789](https://github.com/Django-CRM/Django-CRM/blob/cd7c12a607df1719518fcdaf289864f6ba7d0bcd/backend/invoices/api_views.py#L762-L789). Line 766 declares a partial PaymentCreateSerializer. Lines 783–787 read amount, payment_method, payment_date, reference_number and notes from request.data. Missing amount defaults to invoice.amount_due (783); method defaults to OTHER (784); date defaults to timezone.localdate() (785). The payload is validated by the payment serializer at 789, then saved at 796. The inputs are accepted, not ignored. Mark paid therefore retains optional payment inputs; a blank payload settles the full amount due using those defaults. Record payment keeps its required inputs. No payment call was made.
+
+### Changed original fields · singular Client
+
+- Root `97:2543`, field `97:2787`: `account` → Client / [Client].
+- Root `97:2800`, field `97:3047`: `account` → Client / [Client].
+- Root `97:3060`, field `97:3185`: `account` → Client / [Client].
+- Root `97:3200`, field `97:3328`: `account` → Client / [Client].
+- Root `97:3522`, field `97:3705`: `account` → Client / [Client].
+- Root `97:3522`, field `97:3730`: `account` → Client / [Client].
+- Root `97:3522`, field `97:3755`: `account` → Client / [Client].
+- Root `97:3787`, field `97:3802`: `account` → Client / [Client].
+- Root `97:3787`, field `97:3818`: `account` → Client / [Client].
+- Root `97:3787`, field `97:3834`: `account` → Client / [Client].
+- Root `97:3846`, field `97:3995`: `account` → Client / [Client].
+- Root `97:4107`, field `97:4259`: `account` → Client / [Client].
+- Root `97:4371`, field `97:4388`: `account` → Client / [Client].
+- Root `97:4515`, field `97:4535`: `account` → Client / [Client].
+- Root `97:4837`, field `97:5022`: `account` → Client / [Client].
+- Root `97:4837`, field `97:5044`: `account` → Client / [Client].
+- Root `97:4837`, field `97:5066`: `account` → Client / [Client].
+- Root `97:5089`, field `97:5110`: `account` → Client / [Client].
+- Root `97:5089`, field `97:5126`: `account` → Client / [Client].
+- Root `97:5089`, field `97:5142`: `account` → Client / [Client].
+- Root `97:5148`, field `97:5304`: `account` → Client / [Client].
+- Root `97:5416`, field `97:5575`: `account` → Client / [Client].
+- Root `97:5687`, field `97:5712`: `account` → Client / [Client].
+- Root `97:5839`, field `97:5867`: `account` → Client / [Client].
+- Root `97:6165`, field `97:6352`: `account` → Client / [Client].
+- Root `97:6165`, field `97:6371`: `account` → Client / [Client].
+- Root `97:6165`, field `97:6390`: `account` → Client / [Client].
+- Root `97:6404`, field `208:8125`: `account` → Client / [Client].
+- Root `97:6404`, field `208:8135`: `account` → Client / [Client].
+- Root `97:6404`, field `208:8145`: `account` → Client / [Client].
+- Root `97:6463`, field `97:6626`: `account` → Client / [Client].
+- Root `97:6671`, field `97:6837`: `account` → Client / [Client].
+- Root `97:6882`, field `97:6915`: `account` → Client / [Client].
+- Root `97:6966`, field `97:7002`: `account` → Client / [Client].
+- Root `97:7276`, field `97:7509`: `account` → Client / [Client].
+- Root `97:7276`, field `97:7567`: `account` → Client / [Client].
+- Root `97:7276`, field `97:7625`: `account` → Client / [Client].
+- Root `97:7684`, field `97:7705`: `account` → Client / [Client].
+- Root `97:7684`, field `97:7721`: `account` → Client / [Client].
+- Root `97:7684`, field `97:7737`: `account` → Client / [Client].
+- Root `97:7743`, field `97:7899`: `account` → Client / [Client].
+- Root `97:8098`, field `97:8265`: `account` → Client / [Client].
+- Root `97:8464`, field `97:8489`: `account` → Client / [Client].
+- Root `97:8716`, field `97:8752`: `account` → Client / [Client].
+- Root `97:9218`, field `97:9467`: `account` → Client / [Client].
+- Root `97:9218`, field `97:9537`: `account` → Client / [Client].
+- Root `97:9218`, field `97:9607`: `account` → Client / [Client].
+- Root `97:9678`, field `97:9699`: `account` → Client / [Client].
+- Root `97:9678`, field `97:9715`: `account` → Client / [Client].
+- Root `97:9678`, field `97:9731`: `account` → Client / [Client].
+- Root `97:9737`, field `97:9893`: `account` → Client / [Client].
+- Root `97:10064`, field `97:10227`: `account` → Client / [Client].
+- Root `97:10398`, field `97:10423`: `account` → Client / [Client].
+- Root `97:10618`, field `97:10650`: `account` → Client / [Client].
+
+Hidden redundant Contacts fields:
+
+- Root `97:2543`, field `97:2790`: account_detail hidden; existing node retained.
+- Root `97:2800`, field `97:3050`: account_detail hidden; existing node retained.
+- Root `97:3060`, field `97:3189`: account_detail hidden; existing node retained.
+- Root `97:3200`, field `97:3332`: account_detail hidden; existing node retained.
+
+Changed table header nodes (includes retained hidden source columns; only the selected Client column is visible):
+
+- Root `97:3343`, header `97:3494`: Client.
+- Root `97:3522`, header `97:3673`: Client.
+- Root `97:4662`, header `97:4821`: Client.
+- Root `97:4837`, header `97:4996`: Client.
+- Root `97:5994`, header `97:6161`: Client.
+- Root `97:6165`, header `97:6332`: Client.
+- Root `97:7053`, header `97:7216`: Client.
+- Root `97:7053`, header `97:7232`: Client.
+- Root `97:7053`, header `97:7212`: Client.
+- Root `97:7276`, header `97:7439`: Client.
+- Root `97:7276`, header `97:7455`: Client.
+- Root `97:7276`, header `97:7435`: Client.
+- Root `97:8979`, header `97:9142`: Client.
+- Root `97:8979`, header `97:9162`: Client.
+- Root `97:8979`, header `97:9138`: Client.
+- Root `97:9218`, header `97:9381`: Client.
+- Root `97:9218`, header `97:9401`: Client.
+- Root `97:9218`, header `97:9377`: Client.
+
+### New scrolled review frame register
+
+- `310:15307` · source `94:741` · Leads / Detail / Desktop / Zero / Scrolled fields 1 · vertical offset 854px.
+- `310:15589` · source `94:741` · Leads / Detail / Desktop / Zero / Scrolled fields 2 · vertical offset 1314px.
+- `310:15871` · source `94:1061` · Leads / Detail / Desktop / Filled / Scrolled fields 1 · vertical offset 841px.
+- `310:16156` · source `94:1061` · Leads / Detail / Desktop / Filled / Scrolled fields 2 · vertical offset 1382px.
+- `310:16441` · source `94:1384` · Leads / Detail / Mobile / Zero / Scrolled fields 1 · vertical offset 676px.
+- `310:16652` · source `94:1384` · Leads / Detail / Mobile / Zero / Scrolled fields 2 · vertical offset 1324px.
+- `310:16863` · source `94:1384` · Leads / Detail / Mobile / Zero / Scrolled fields 3 · vertical offset 1972px.
+- `310:17074` · source `94:1384` · Leads / Detail / Mobile / Zero / Scrolled fields 4 · vertical offset 2620px.
+- `310:17285` · source `94:1384` · Leads / Detail / Mobile / Zero / Scrolled fields 5 · vertical offset 3268px.
+- `310:17496` · source `94:1384` · Leads / Detail / Mobile / Zero / Scrolled fields 6 · vertical offset 3297px.
+- `310:17707` · source `94:1596` · Leads / Detail / Mobile / Filled / Scrolled fields 1 · vertical offset 663px.
+- `310:17921` · source `94:1596` · Leads / Detail / Mobile / Filled / Scrolled fields 2 · vertical offset 1311px.
+- `310:18135` · source `94:1596` · Leads / Detail / Mobile / Filled / Scrolled fields 3 · vertical offset 1959px.
+- `310:18349` · source `94:1596` · Leads / Detail / Mobile / Filled / Scrolled fields 4 · vertical offset 2607px.
+- `310:18563` · source `94:1596` · Leads / Detail / Mobile / Filled / Scrolled fields 5 · vertical offset 3255px.
+- `310:18777` · source `94:1596` · Leads / Detail / Mobile / Filled / Scrolled fields 6 · vertical offset 3365px.
+- `310:18991` · source `94:2263` · Clients / Detail / Desktop / Zero / Scrolled fields 1 · vertical offset 504px.
+- `310:19200` · source `94:2510` · Clients / Detail / Desktop / Filled / Scrolled fields 1 · vertical offset 572px.
+- `310:19412` · source `94:2760` · Clients / Detail / Mobile / Zero / Scrolled fields 1 · vertical offset 676px.
+- `310:19539` · source `94:2760` · Clients / Detail / Mobile / Zero / Scrolled fields 2 · vertical offset 1324px.
+- `310:19666` · source `94:2760` · Clients / Detail / Mobile / Zero / Scrolled fields 3 · vertical offset 1515px.
+- `310:19793` · source `94:2888` · Clients / Detail / Mobile / Filled / Scrolled fields 1 · vertical offset 663px.
+- `310:19923` · source `94:2888` · Clients / Detail / Mobile / Filled / Scrolled fields 2 · vertical offset 1311px.
+- `310:20053` · source `94:2888` · Clients / Detail / Mobile / Filled / Scrolled fields 3 · vertical offset 1583px.
+- `310:20183` · source `97:2543` · Contacts / Detail / Desktop / Zero / Scrolled fields 1 · vertical offset 585px.
+- `310:20402` · source `97:2800` · Contacts / Detail / Desktop / Filled / Scrolled fields 1 · vertical offset 653px.
+- `310:20624` · source `97:3060` · Contacts / Detail / Mobile / Zero / Scrolled fields 1 · vertical offset 676px.
+- `310:20763` · source `97:3060` · Contacts / Detail / Mobile / Zero / Scrolled fields 2 · vertical offset 1324px.
+- `310:20902` · source `97:3060` · Contacts / Detail / Mobile / Zero / Scrolled fields 3 · vertical offset 1839px.
+- `310:21041` · source `97:3200` · Contacts / Detail / Mobile / Filled / Scrolled fields 1 · vertical offset 663px.
+- `310:21183` · source `97:3200` · Contacts / Detail / Mobile / Filled / Scrolled fields 2 · vertical offset 1311px.
+- `310:21325` · source `97:3200` · Contacts / Detail / Mobile / Filled / Scrolled fields 3 · vertical offset 1907px.
+- `310:21467` · source `97:3846` · Opportunities / Detail / Desktop / Zero / Scrolled fields 1 · vertical offset 666px.
+- `310:21690` · source `97:4107` · Opportunities / Detail / Desktop / Filled / Scrolled fields 1 · vertical offset 734px.
+- `310:21916` · source `97:4371` · Opportunities / Detail / Mobile / Zero / Scrolled fields 1 · vertical offset 676px.
+- `310:22059` · source `97:4371` · Opportunities / Detail / Mobile / Zero / Scrolled fields 2 · vertical offset 1324px.
+- `310:22202` · source `97:4371` · Opportunities / Detail / Mobile / Zero / Scrolled fields 3 · vertical offset 1758px.
+- `310:22345` · source `97:4515` · Opportunities / Detail / Mobile / Filled / Scrolled fields 1 · vertical offset 663px.
+- `310:22491` · source `97:4515` · Opportunities / Detail / Mobile / Filled / Scrolled fields 2 · vertical offset 1311px.
+- `310:22637` · source `97:4515` · Opportunities / Detail / Mobile / Filled / Scrolled fields 3 · vertical offset 1826px.
+- `310:22783` · source `97:5148` · Cases / Detail / Desktop / Zero / Scrolled fields 1 · vertical offset 747px.
+- `310:23013` · source `97:5416` · Cases / Detail / Desktop / Filled / Scrolled fields 1 · vertical offset 815px.
+- `310:23246` · source `97:5687` · Cases / Detail / Mobile / Zero / Scrolled fields 1 · vertical offset 676px.
+- `310:23397` · source `97:5687` · Cases / Detail / Mobile / Zero / Scrolled fields 2 · vertical offset 1324px.
+- `310:23548` · source `97:5687` · Cases / Detail / Mobile / Zero / Scrolled fields 3 · vertical offset 1972px.
+- `310:23699` · source `97:5687` · Cases / Detail / Mobile / Zero / Scrolled fields 4 · vertical offset 2082px.
+- `310:23850` · source `97:5839` · Cases / Detail / Mobile / Filled / Scrolled fields 1 · vertical offset 663px.
+- `310:24004` · source `97:5839` · Cases / Detail / Mobile / Filled / Scrolled fields 2 · vertical offset 1311px.
+- `310:24158` · source `97:5839` · Cases / Detail / Mobile / Filled / Scrolled fields 3 · vertical offset 1959px.
+- `310:24312` · source `97:5839` · Cases / Detail / Mobile / Filled / Scrolled fields 4 · vertical offset 2150px.
+- `310:24466` · source `97:6671` · Tasks / Detail / Desktop / Filled / Scrolled fields 1 · vertical offset 86px.
+- `310:24639` · source `97:6882` · Tasks / Detail / Mobile / Zero / Scrolled fields 1 · vertical offset 676px.
+- `310:24722` · source `97:6882` · Tasks / Detail / Mobile / Zero / Scrolled fields 2 · vertical offset 786px.
+- `310:24805` · source `97:6966` · Tasks / Detail / Mobile / Filled / Scrolled fields 1 · vertical offset 663px.
+- `310:24891` · source `97:6966` · Tasks / Detail / Mobile / Filled / Scrolled fields 2 · vertical offset 854px.
+- `310:24977` · source `97:7743` · Invoices / Detail / Desktop / Zero / Scrolled fields 1 · vertical offset 854px.
+- `310:25348` · source `97:7743` · Invoices / Detail / Desktop / Zero / Scrolled fields 2 · vertical offset 1664px.
+- `310:25719` · source `97:7743` · Invoices / Detail / Desktop / Zero / Scrolled fields 3 · vertical offset 2127px.
+- `310:26090` · source `97:8098` · Invoices / Detail / Desktop / Filled / Scrolled fields 1 · vertical offset 841px.
+- `310:26470` · source `97:8098` · Invoices / Detail / Desktop / Filled / Scrolled fields 2 · vertical offset 1651px.
+- `310:26850` · source `97:8098` · Invoices / Detail / Desktop / Filled / Scrolled fields 3 · vertical offset 2161px.
+- `310:27230` · source `97:8464` · Invoices / Detail / Mobile / Zero / Scrolled fields 1 · vertical offset 676px.
+- `310:27535` · source `97:8464` · Invoices / Detail / Mobile / Zero / Scrolled fields 2 · vertical offset 1324px.
+- `310:27840` · source `97:8464` · Invoices / Detail / Mobile / Zero / Scrolled fields 3 · vertical offset 1972px.
+- `310:28145` · source `97:8464` · Invoices / Detail / Mobile / Zero / Scrolled fields 4 · vertical offset 2620px.
+- `310:28450` · source `97:8464` · Invoices / Detail / Mobile / Zero / Scrolled fields 5 · vertical offset 3268px.
+- `310:28755` · source `97:8464` · Invoices / Detail / Mobile / Zero / Scrolled fields 6 · vertical offset 3916px.
+- `310:29060` · source `97:8464` · Invoices / Detail / Mobile / Zero / Scrolled fields 7 · vertical offset 4515px.
+- `310:29365` · source `97:8716` · Invoices / Detail / Mobile / Filled / Scrolled fields 1 · vertical offset 702px.
+- `310:29679` · source `97:8716` · Invoices / Detail / Mobile / Filled / Scrolled fields 2 · vertical offset 1350px.
+- `310:29993` · source `97:8716` · Invoices / Detail / Mobile / Filled / Scrolled fields 3 · vertical offset 1998px.
+- `310:30307` · source `97:8716` · Invoices / Detail / Mobile / Filled / Scrolled fields 4 · vertical offset 2646px.
+- `310:30621` · source `97:8716` · Invoices / Detail / Mobile / Filled / Scrolled fields 5 · vertical offset 3294px.
+- `310:30935` · source `97:8716` · Invoices / Detail / Mobile / Filled / Scrolled fields 6 · vertical offset 3942px.
+- `310:31249` · source `97:8716` · Invoices / Detail / Mobile / Filled / Scrolled fields 7 · vertical offset 4669px.
+- `310:31563` · source `97:9737` · Quotes / Detail / Desktop / Zero / Scrolled fields 1 · vertical offset 854px.
+- `310:31852` · source `97:9737` · Quotes / Detail / Desktop / Zero / Scrolled fields 2 · vertical offset 1395px.
+- `310:32141` · source `97:10064` · Quotes / Detail / Desktop / Filled / Scrolled fields 1 · vertical offset 841px.
+- `310:32437` · source `97:10064` · Quotes / Detail / Desktop / Filled / Scrolled fields 2 · vertical offset 1463px.
+- `310:32733` · source `97:10398` · Quotes / Detail / Mobile / Zero / Scrolled fields 1 · vertical offset 676px.
+- `310:32952` · source `97:10398` · Quotes / Detail / Mobile / Zero / Scrolled fields 2 · vertical offset 1324px.
+- `310:33171` · source `97:10398` · Quotes / Detail / Mobile / Zero / Scrolled fields 3 · vertical offset 1972px.
+- `310:33390` · source `97:10398` · Quotes / Detail / Mobile / Zero / Scrolled fields 4 · vertical offset 2620px.
+- `310:33609` · source `97:10398` · Quotes / Detail / Mobile / Zero / Scrolled fields 5 · vertical offset 3268px.
+- `310:33828` · source `97:10398` · Quotes / Detail / Mobile / Zero / Scrolled fields 6 · vertical offset 3378px.
+- `310:34047` · source `97:10618` · Quotes / Detail / Mobile / Filled / Scrolled fields 1 · vertical offset 702px.
+- `310:34273` · source `97:10618` · Quotes / Detail / Mobile / Filled / Scrolled fields 2 · vertical offset 1350px.
+- `310:34499` · source `97:10618` · Quotes / Detail / Mobile / Filled / Scrolled fields 3 · vertical offset 1998px.
+- `310:34725` · source `97:10618` · Quotes / Detail / Mobile / Filled / Scrolled fields 4 · vertical offset 2646px.
+- `310:34951` · source `97:10618` · Quotes / Detail / Mobile / Filled / Scrolled fields 5 · vertical offset 3294px.
+- `310:35177` · source `97:10618` · Quotes / Detail / Mobile / Filled / Scrolled fields 6 · vertical offset 3566px.
+- `310:35403` · source `98:8819` · Invoices / Confirm Mark paid / Desktop / Scrolled fields 1 · vertical offset 115px.
+- `310:35542` · source `98:8856` · Invoices / Confirm Mark paid / Mobile / Scrolled fields 1 · vertical offset 371px.
+- `310:35584` · source `98:9013` · Invoices / Confirm Record payment / Desktop / Scrolled fields 1 · vertical offset 115px.
+- `310:35723` · source `98:9050` · Invoices / Confirm Record payment / Mobile / Scrolled fields 1 · vertical offset 371px.
+- `310:35765` · source `97:7743` · Invoices / Detail / Desktop / Zero / Scrolled to Items and Payments · vertical offset 2579px.
+- `310:36136` · source `97:8098` · Invoices / Detail / Desktop / Filled / Scrolled to Items and Payments · vertical offset 2647px.
+- `310:36516` · source `97:8464` · Invoices / Detail / Mobile / Zero / Scrolled to Items and Payments · vertical offset 4831px.
+- `310:36821` · source `97:8716` · Invoices / Detail / Mobile / Filled / Scrolled to Items and Payments · vertical offset 5019px.
+
+### Drawer end states
+
+- `310:39581` · source `98:9181` · Scrolled to end; Inbox and Settings visible above the pinned account block.
+- `310:39786` · source `98:9227` · Scrolled to end; Inbox and Settings visible above the pinned account block.
+
+### Round 2 wording
+
+Client / [Client] replaces singular relationship fields labelled Clients / [Clients]. Item / [Item] replaces Name / [Name] in Delete line item confirms. Existing Linked clients is retained. Mark paid removes required asterisks; no new payment wording is introduced. Scrolled fields 1–7, Scrolled to Items and Payments and Scrolled to end are frame review metadata, outside the product screen. Existing approval metadata remains Changed after approval, awaiting founder.
+
+### Round 2 verification
+
+Source download command: curl -fsSL https://raw.githubusercontent.com/Django-CRM/Django-CRM/cd7c12a607df1719518fcdaf289864f6ba7d0bcd/backend/invoices/api_views.py -o .git/bottlecrm-api-views.py (passed); nl -ba .git/bottlecrm-api-views.py | sed -n '758,814p' (passed). An optional serializers.py lookup returned HTTP404; the verified endpoint source above is sufficient to establish accepted request fields and defaults.
+
+git fetch origin codex/crm-design passed. Figma authoring screenshots inspected filled/zero table review states at both sizes, Contacts lower fields, navy primary confirms, Mark paid context order and drawer end state. No founder-browser acceptance screenshot or live API test is claimed.
 
 ## API register
 
