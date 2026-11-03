@@ -366,6 +366,17 @@ class Store:
               ORDER BY created_at DESC,id DESC LIMIT 1""", tenant, target, artifact)
         return gate_result(row, tenant, target, artifact)
 
+    async def report(self,tenant: UUID,ident: UUID) -> dict:
+        async with self.pool.acquire() as conn:
+            row=await conn.fetchrow("""SELECT target,status,checks,active FROM agent_radix.passive_scans
+              WHERE tenant_id=$1 AND id=$2""",tenant,ident)
+        if row is None:
+            raise LookupError('scan not found')
+        return {'tenant_id':str(tenant),'scan_id':str(ident),'target':row['target'],
+            'status':'failed' if row['status']=='error' else row['status'], 'active':row['active'],
+            'checks':json.loads(row['checks']) if isinstance(row['checks'],str) else row['checks'],
+            'findings':await self.findings(tenant,ident)}
+
     async def active_state(self, tenant: UUID, ident: UUID) -> dict:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow("""SELECT status,checks FROM agent_radix.passive_scans

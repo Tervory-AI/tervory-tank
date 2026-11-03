@@ -44,7 +44,7 @@ TOOLS = {
     "market_lab": ["market_lab.research", "market_lab.warnings", "market_lab.predictions", "market_lab.calibration", "market_lab.feeds", "market_lab.alerts.email", "market_lab.alerts.webhook", "market_lab.alerts.off"],
     "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment"],
     "tisan": ["tisan.scaffold"],
-    "radix": ["radix.deploy.override", "radix.active.scan", "radix.scan", "radix.repo.scan", "radix.repo.findings", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"],
+    "radix": ["radix.report", "radix.deploy.override", "radix.active.scan", "radix.scan", "radix.repo.scan", "radix.repo.findings", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"],
     "zenas": ["zenas.ask", "zenas.matters", "zenas.draft", "zenas.review", "zenas.playbook.add", "zenas.playbooks", "zenas.watch.add", "zenas.watch.list", "zenas.watch.enable", "zenas.watch.disable"],
 }
 TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
@@ -1387,6 +1387,7 @@ ADAPTERS = {
     "rig.ask": Adapter("POST", "/v1/rig/ask", RigAskArgs, "Ask about a product", True, "paid_run"),
     "rig.quote.confirm_payment": Adapter("POST", "/v1/access/rig/admin/confirm-store-payment", RigConfirmPaymentArgs, "rig.quote.confirm_payment"),
     "tisan.scaffold": Adapter("POST", "/v1/skala/tisan.scaffold/run", ScaffoldArgs, "Create a site scaffold", False, "other", "tisan.scaffold"),
+    "radix.report": Adapter("GET", "/v1/command/radix/reports", RadixFindingsArgs, "radix.findings"),
     "radix.deploy.override": Adapter("POST", "/v1/command/radix/deploy/override", RadixDeployOverrideArgs, "radix.changes"),
     "radix.active.scan": Adapter("POST", "/v1/radix/passive/active", RadixActiveArgs, "radix.passive.scan"),
     "radix.watch": Adapter("POST", "/v1/radix/passive/watch", RadixWatchArgs, "radix.watch"),
@@ -2306,3 +2307,6 @@ router.include_router(radix_repo_router())
 
 from radix_deploy import build_router as radix_deploy_router
 router.include_router(radix_deploy_router())
+
+from radix_report import build_router as radix_report_router
+router.include_router(radix_report_router())

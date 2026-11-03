@@ -77,6 +77,8 @@ async def findings(actor, scan_id: UUID):
             raise HTTPException(503, "Radix results are unavailable.")
         public.update({key: result.get(key) for key in
                        ("summary", "critical", "tools", "tool_status", "scan_complete")})
+        if result.get('repository')=='Tervory-AI/tervory-tank' and result.get('commit'):
+            public.update(repository=result['repository'],commit=result['commit'])
         public["findings"] = [
             {**{key: row[key] for key in ("rule", "severity", "tool", "file", "line") if key in row},
              **({"explanation": row["explanation"]} if row.get("explanation") else {}),

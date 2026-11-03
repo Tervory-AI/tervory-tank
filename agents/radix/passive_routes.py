@@ -141,6 +141,14 @@ def attach(app):
                 **await store.active_state(tenant_id, scan_id)}
 
 
+    @router.get('/scans/{scan_id}/report')
+    async def report(scan_id: UUID,tenant_id: UUID,request: Request):
+        identity(request,tenant_id)
+        try:
+            return await Store(app.state.pool).report(tenant_id,scan_id)
+        except LookupError:
+            raise HTTPException(404,'scan not found') from None
+
     @router.post('/active')
     async def active_scan(body: Active, request: Request):
         identity(request, body.tenant_id)
