@@ -191,3 +191,14 @@ Conflicts preserve both ML3 and main additions. A faulty conflict-resolution
 script truncated command.py in 27520b62; 809e5e6f restores it completely.
 Python compilation and diff checks pass. No model calls or production actions
 were used. Tank CI for the corrected head is pending; no acceptance is claimed.
+
+Current CI blocker: after the single permitted integration, remote main advanced
+to dc270ec75be61f2cafa783937f57114614526ffb (61 commits beyond the
+integrated base, per GitHub compare). The PR API's base SHA remained stale,
+but git ls-remote and GitHub compare confirm the newer main. GitHub reports
+merge conflicts and has started no Tank job for the corrected head.
+Superseded 27520b62 Tank result: **failure**,
+https://github.com/Tervory-AI/tervory-tank/actions/runs/41678119104/job/126064829489 .
+This is not evidence for the corrected head. Current-head Tank result remains
+**blocked / not run**. A second main integration requires a founder exception
+to the explicit one-pull limit; requested in the fresh thread.
