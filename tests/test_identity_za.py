@@ -1,4 +1,5 @@
 """Synthetic local OIDC provider, real JWT verification and disposable Tank DB."""
+import asyncio
 import base64
 import json
 import time
@@ -84,6 +85,10 @@ async def test_verified_claims_and_key_cache_rotation(provider):
     assert provider.calls.count(('GET', '/keys')) == 1
     provider.kid = 'rotated-key'
     provider.keys = [provider.jwk()]
+    with pytest.raises(oidc.IdentityError):
+        await oidc.verify(provider.token())
+    assert provider.calls.count(('GET', '/keys')) == 1
+    oidc._cache['keys_refresh_after'] = time.monotonic() - 1
     await oidc.verify(provider.token())
     assert provider.calls.count(('GET', '/keys')) == 2
 
@@ -132,7 +137,7 @@ async def test_issuer_unset_and_boston_keep_existing_device_flow(device, monkeyp
     client, _, runtime = device
     monkeypatch.delenv('IDENTITY_ISSUER', raising=False)
     monkeypatch.setattr(oidc, 'http_client', lambda: pytest.fail('OIDC was called with issuer unset'))
-    result = await client.post('/v1/command/device/code', json={'device_name': 'synthetic'})
+    result = await client.post('/v1/command/device/code', json={'device_name': 'synthetic', 'approval': 'zitadel'})
     assert result.status_code == 200 and result.json()['device_code'].startswith('tvd1.us-east.')
     monkeypatch.setenv('IDENTITY_ISSUER', oidc.ISSUER)
     assert not oidc.configured()  # Even a misplaced setting cannot change Boston.
@@ -142,7 +147,7 @@ async def test_issuer_unset_and_boston_keep_existing_device_flow(device, monkeyp
 async def test_za_oidc_issue_refresh_revoke_and_verified_roles(device, provider, monkeypatch):
     client, pool, runtime = device
     runtime.box_region = lambda: 'za'
-    result = await client.post('/v1/command/device/code', json={'device_name': 'synthetic'})
+    result = await client.post('/v1/command/device/code', json={'device_name': 'synthetic', 'approval': 'zitadel'})
     assert result.status_code == 200
     start = result.json()
     assert start['identity_provider'] == 'zitadel' and start['user_code'] == '1234-5678'
@@ -184,11 +189,12 @@ async def test_za_oidc_issue_refresh_revoke_and_verified_roles(device, provider,
 
 
 @pytest.mark.asyncio
-async def test_boston_approval_key_still_works_while_zitadel_is_enabled(device, provider, monkeypatch):
+@pytest.mark.parametrize('selection', [{}, {'approval': 'workspace'}])
+async def test_boston_approval_key_still_works_while_zitadel_is_enabled(device, provider, monkeypatch, selection):
     client, pool, runtime = device
     runtime.box_region = lambda: 'za'
     monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', 'dummy-za-approval-key')
-    started = await client.post('/v1/command/device/code', json={'device_name': 'legacy-synthetic', 'approval': 'workspace'})
+    started = await client.post('/v1/command/device/code', json={'device_name': 'legacy-synthetic', **selection})
     assert started.status_code == 200
     data = started.json()
     assert data['device_code'].startswith('tvd1.za.') and provider.calls == []
@@ -198,7 +204,7 @@ async def test_boston_approval_key_still_works_while_zitadel_is_enabled(device, 
     assert approved.status_code == 200
     grant = await client.post('/v1/command/device/token', json={'device_code': data['device_code']})
     assert grant.status_code == 200 and grant.json()['access_token'].startswith('tv1.za.')
-    next_code = await client.post('/v1/command/device/code', json={'device_name': 'identity-synthetic'})
+    next_code = await client.post('/v1/command/device/code', json={'device_name': 'identity-synthetic', 'approval': 'zitadel'})
     assert next_code.json()['identity_provider'] == 'zitadel'
 
 
@@ -207,8 +213,107 @@ async def test_signed_but_unmapped_org_mints_no_tank_credential(device, provider
     client, pool, runtime = device
     runtime.box_region = lambda: 'za'
     provider.claims[oidc.ORG_CLAIM] = '99999'
-    code = (await client.post('/v1/command/device/code', json={'device_name': 'synthetic'})).json()['device_code']
+    code = (await client.post('/v1/command/device/code', json={'device_name': 'synthetic', 'approval': 'zitadel'})).json()['device_code']
     response = await client.post('/v1/command/device/token', json={'device_code': code})
     assert response.status_code == 400 and response.json() == {'error': 'invalid_grant'}
     async with pool.acquire() as conn:
         assert await conn.fetchval('SELECT count(*) FROM tank.personal_tokens') == 0
+
+
+@pytest.mark.asyncio
+async def test_slow_provider_releases_pool_and_overlapping_polls_issue_once(device, provider, monkeypatch):
+    client, pool, runtime = device
+    runtime.box_region = lambda: 'za'
+    wrapped = (await client.post('/v1/command/device/code', json={
+        'device_name': 'concurrent-synthetic', 'approval': 'zitadel'})).json()['device_code']
+    entered = [asyncio.Event(), asyncio.Event()]
+    release_poll, release_verify = asyncio.Event(), asyncio.Event()
+    verifying = asyncio.Event()
+    calls = 0
+    original_verify = oidc.verify
+
+    async def slow_poll(code):
+        nonlocal calls
+        assert pool.get_idle_size() == pool.get_size()
+        slot = calls
+        calls += 1
+        entered[slot].set()
+        await release_poll.wait()
+        return {'id_token': provider.token()}
+
+    async def slow_verify(token):
+        assert pool.get_idle_size() == pool.get_size()
+        verifying.set()
+        await release_verify.wait()
+        return await original_verify(token)
+
+    monkeypatch.setattr(oidc, 'poll', slow_poll)
+    monkeypatch.setattr(oidc, 'verify', slow_verify)
+    async def request():
+        return await client.post('/v1/command/device/token', json={'device_code': wrapped})
+    first = asyncio.create_task(request())
+    second = None
+    try:
+        await asyncio.wait_for(entered[0].wait(), 2)
+        # Simulate the next allowed interval while the first provider call is stalled.
+        async with pool.acquire() as conn:
+            await conn.execute("UPDATE tank.device_authorizations SET last_polled_at=now()-interval '5 seconds'")
+        second = asyncio.create_task(request())
+        await asyncio.wait_for(entered[1].wait(), 2)
+        assert pool.get_idle_size() == pool.get_size()
+        async with pool.acquire(timeout=1) as conn:
+            assert await conn.fetchval('SELECT 1') == 1
+        release_poll.set()
+        await asyncio.wait_for(verifying.wait(), 2)
+        assert pool.get_idle_size() == pool.get_size()
+        release_verify.set()
+        responses = await asyncio.wait_for(asyncio.gather(first, second), 5)
+        assert sorted(r.status_code for r in responses) == [200, 400]
+        assert [r.json()['error'] for r in responses if r.status_code == 400] == ['invalid_grant']
+        async with pool.acquire() as conn:
+            assert await conn.fetchval('SELECT count(*) FROM tank.personal_tokens') == 1
+            assert await conn.fetchval("SELECT status FROM tank.device_authorizations") == 'consumed'
+    finally:
+        release_poll.set()
+        release_verify.set()
+        await asyncio.gather(*(t for t in [first, second] if t), return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_unknown_kid_refresh_is_bounded_and_does_not_lock_known_keys(provider, monkeypatch):
+    from types import SimpleNamespace
+    clock = [100.0]
+    monkeypatch.setattr(oidc, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    known = provider.token()
+    await oidc.verify(known)
+    for i in range(20):
+        provider.kid = f'unknown-{i}'
+        with pytest.raises(oidc.IdentityError):
+            await oidc.verify(provider.token())
+    assert provider.calls.count(('GET', '/keys')) == 1
+    clock[0] = 160.0
+    original_fetch = oidc.fetch
+    fetching, release = asyncio.Event(), asyncio.Event()
+    async def slow_fetch(method, url, **kwargs):
+        if url.endswith('/keys'):
+            assert not oidc._lock.locked()
+            fetching.set()
+            await release.wait()
+        return await original_fetch(method, url, **kwargs)
+    monkeypatch.setattr(oidc, 'fetch', slow_fetch)
+    async def unknown():
+        with pytest.raises(oidc.IdentityError):
+            await oidc.verify(provider.token())
+    pending = asyncio.create_task(unknown())
+    try:
+        await asyncio.wait_for(fetching.wait(), 2)
+        assert (await asyncio.wait_for(oidc.verify(known), 1))['sub'] == SUB
+        release.set()
+        await pending
+    finally:
+        release.set()
+        await asyncio.gather(pending, return_exceptions=True)
+    assert provider.calls.count(('GET', '/keys')) == 2
+    with pytest.raises(oidc.IdentityError):
+        await oidc.verify(provider.token())
+    assert provider.calls.count(('GET', '/keys')) == 2
