@@ -47,10 +47,13 @@ async def feedback(actor, write_id: UUID, status: str, changes: str, operation_i
             WHERE l.tenant_id=$1 AND l.region=$2 AND l.task_type='trigger.write'
             AND EXISTS (SELECT 1 FROM tank.command_threads t
                 CROSS JOIN LATERAL jsonb_each(t.state->'cards') c
-                WHERE t.tenant_id=l.tenant_id AND c.value->>'tool'='trigger.write'
+                CROSS JOIN LATERAL jsonb_array_elements(CASE
+                    WHEN c.value->>'tool'='trigger.write.batch' THEN c.value->'result'->'items'
+                    ELSE jsonb_build_array(c.value->'result') END) item
+                WHERE t.tenant_id=l.tenant_id AND c.value->>'tool' IN ('trigger.write','trigger.revise','trigger.write.batch')
                 AND c.value->>'status'='confirmed'
-                AND c.value->'result'->>'write_id'=$3
-                AND c.value->'result'->>'ledger_id'=l.id::text)""",
+                AND item->>'write_id'=$3
+                AND item->>'ledger_id'=l.id::text)""",
             actor.tenant_id, box_region(), str(write_id), status, changes, actor.user_id)
 
         await conn.execute("""UPDATE tank.training_pairs SET output=jsonb_set(output,'{feedback}',$4::jsonb),
@@ -91,6 +94,14 @@ async def revision(actor, write_id: UUID) -> tuple[dict, UUID]:
     if row is None or row['feedback_status'] != 'changes_requested' or not note:
         raise HTTPException(404, 'Writing record unavailable')
     context = obj(row['write_context'])
+    ids = [UUID(e['write_id']) for e in context.get('accepted_examples', [])]
+    if ids:
+        async with pool().acquire() as conn:
+            valid = await conn.fetchval("""SELECT count(*) FROM tank.trigger_writes
+                WHERE tenant_id=$1 AND id=ANY($2::uuid[]) AND feedback_status='accepted'
+                AND format IS NOT DISTINCT FROM $3""", actor.tenant_id, ids, row['format'])
+        if valid != len(ids):
+            raise HTTPException(409, 'Writing record unavailable')
     # Preserve the original snapshot; never silently learn from newer examples.
     body = {k: v for k, v in context.items() if k != 'voice_revision'}
     body.update(text=row['brief'], format=row['format'], revision_context={
