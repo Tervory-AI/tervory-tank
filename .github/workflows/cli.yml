@@ -136,3 +136,32 @@ jobs:
           docker run --rm node:22-slim sh -c 'echo "image: $(tar --version | head -1); $(gzip --version | head -1); npm $(npm -v)"'
           test "$bad" = 0
           test -s "$RUNNER_TEMP/cli-image/install.sh" && test -s "$RUNNER_TEMP/cli-image/latest.json"
+
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+      - name: Prepare the existing release tests and macOS sandbox
+        run: |
+          brew list gnu-tar >/dev/null 2>&1 || brew install gnu-tar
+          brew list coreutils >/dev/null 2>&1 || brew install coreutils
+          echo "$(brew --prefix gnu-tar)/libexec/gnubin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
+          test -x /usr/bin/sandbox-exec
+          mkdir -p "$RUNNER_TEMP/cli-w3-tests"
+          echo "TMPDIR=$RUNNER_TEMP/cli-w3-tests" >> "$GITHUB_ENV"
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: cli
+      - name: CLI tests including outside-write, secret-read and network confinement
+        # The same code-mode suite runs in the Ubuntu job. It requires echo's
+        # exit 0 and uses a reachable host listener as the network control.
+        run: |
+          export PATH="$(brew --prefix gnu-tar)/libexec/gnubin:$(brew --prefix coreutils)/libexec/gnubin:/usr/bin:/bin:$PATH"
+          npm test
+        working-directory: cli
