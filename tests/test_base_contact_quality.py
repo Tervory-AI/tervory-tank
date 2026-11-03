@@ -32,6 +32,12 @@ def load(relative):
 
 
 CONTACTS = load("tank/skills/base.contacts/1.2.0/run.py")
+@pytest.fixture(autouse=True, params=["1.2.0", "1.3.0"])
+def contacts_version(request, monkeypatch):
+    monkeypatch.setitem(globals(), "CONTACTS", load(f"tank/skills/base.contacts/{request.param}/run.py"))
+    return request.param
+
+
 VERIFY = load("tank/skills/base.verify/1.2.0/run.py")
 
 
@@ -65,7 +71,7 @@ def test_phone_types_are_library_metadata_and_country_not_guessed():
 
 
 @pytest.mark.asyncio
-async def test_each_email_gets_own_mx_and_disposable_status_without_smtp():
+async def test_each_email_gets_own_mx_and_disposable_status_without_smtp(contacts_version):
     requests = []
 
     async def get(url, **kwargs):
@@ -82,11 +88,12 @@ async def test_each_email_gets_own_mx_and_disposable_status_without_smtp():
     quality = {item["email"]: item for item in output["email_quality"]}
     assert len(quality) == 4  # off-domain addresses and invalid syntax are not dropped
     assert quality["info@quality.example"]["email_kind"]["value"] == "role"
-    assert quality["invented@no-mail.example"]["email_mx_ok"]["value"] is False
+    assert quality["invented@no-mail.example"]["email_mx_ok"]["value"] is (False if contacts_version == "1.2.0" else None)
     assert quality["invented@mailinator.com"]["email_disposable"]["value"] is True
     assert quality["bad-address"]["email_syntax_ok"]["value"] is False
     assert quality["bad-address"]["email_mx_ok"]["value"] is None
-    assert sorted(requests) == ["mailinator.com", "no-mail.example", "quality.example"]
+    assert sorted(requests) == (["mailinator.com", "no-mail.example", "quality.example"]
+                                if contacts_version == "1.2.0" else ["mailinator.com"])
     assert CONTACTS.disposable("sub.mailinator.com")
     assert not CONTACTS.disposable("mailinator.com.quality.example")
 
@@ -268,3 +275,74 @@ def legacy_export_records(rows: list[dict[str, Any]]) -> str:
         exported.append(record)
     return csv_text(exported, columns)
 
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("domain", ["placeholder.example", "placeholder.invalid", "placeholder.localhost",
+                                    "placeholder.test", "TEST", "Sub.Placeholder.Example."])
+async def test_reserved_mx_never_requests_and_discovery_agrees(domain):
+    contacts = load("tank/skills/base.contacts/1.3.0/run.py")
+    requests = []
+
+    async def get(url, **kwargs):
+        requests.append((url, kwargs))
+        return SimpleNamespace(status_code=200, json=lambda: {"Answer": [{"type": 15}]})
+
+    ctx = SimpleNamespace(http=SimpleNamespace(get=get))
+    assert await contacts.mx_ok(ctx, domain) is None
+    result = await contacts.run({"website": "https://" + domain,
+                                 "emails": ["info@" + domain.lower().rstrip(".")]}, ctx)
+    assert result["email_quality"][0]["email_mx_ok"]["value"] is None
+    discovered = await contacts._discover({"website": "https://" + domain}, ctx)
+    assert discovered["domain_accepts_mail"] is None
+    assert requests == []
+    result = await contacts.run({"emails": ["info@placeholder.test"]}, None)
+    assert result["email_quality"][0]["email_mx_ok"]["value"] is None
+
+
+@pytest.mark.asyncio
+async def test_normal_domain_still_makes_exactly_one_mx_request():
+    contacts = load("tank/skills/base.contacts/1.3.0/run.py")
+    requests = []
+
+    async def get(url, **kwargs):
+        requests.append((url, kwargs))
+        return SimpleNamespace(status_code=200, json=lambda: {"Answer": [{"type": 15}]})
+
+    assert await contacts.mx_ok(SimpleNamespace(http=SimpleNamespace(get=get)), "placeholder.org") is True
+    assert len(requests) == 1
+    assert requests[0] == ("https://cloudflare-dns.com/dns-query", {
+        "params": {"name": "placeholder.org", "type": "MX"},
+        "headers": {"accept": "application/dns-json"}, "timeout": 6})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("skill,version,total", [("base.contacts", "1.3.0", 20),
+                                                 ("base.site_signals", "1.0.1", 8)])
+async def test_b6_offline_evals_are_eligible(skill, version, total):
+    import skala
+    import httpx
+    packages = skala.load_packages()
+    pkg = packages[(skill, version)]
+    requested = []
+
+    def no_network(request):
+        requested.append(request)
+        raise AssertionError("Offline eval: no network")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(no_network)) as http:
+        result = await skala.run_evals(pkg, lambda: SimpleNamespace(http=http, cost_usd=0, calls=0))
+    assert result["passed"] == result["total"] == total, [
+        (d["name"], d["why"]) for d in result["details"] if not d["passed"]]
+    assert result["eligible"] is True
+    assert result["cost_usd"] == 0
+    assert not any(r.url.params.get("name", "").endswith(".test") for r in requested)
+    if skill == "base.contacts":
+        baseline = (ROOT / "tank/skills/base.contacts/1.2.0/evals/cases.jsonl").read_bytes()
+        assert (pkg.path / "evals/cases.jsonl").read_bytes().startswith(baseline)
+    else:
+        from skala_patch import changed_code
+        assert changed_code(pkg.path.parent / "1.0.0", pkg.path) == set()
+        previous = packages[(skill, "1.0.0")].cases
+        for old, new in zip(previous, pkg.cases, strict=True):
+            assert new == (dict(old, must_refuse=True) if old["name"] in {"future", "archived"} else old)
