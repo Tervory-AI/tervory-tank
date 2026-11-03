@@ -263,6 +263,7 @@ class ThreatPayload(Strict):
     rule_id: str | None = Field(default=None, max_length=64, pattern=r"^[0-9A-Fa-f]*$")
     prior_receipt_id: str | None = Field(default=None, max_length=80)
     tenant_id: str | None = Field(default=None, max_length=80)
+    source_data: dict[Literal["autumbra.shared_blocks"], int] = Field(default_factory=dict)
     advisory_url: str | None = Field(default=None, max_length=500)
     queued_at: str | None = Field(default=None, max_length=40)
 
