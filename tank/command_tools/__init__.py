@@ -44,3 +44,14 @@ def build_adapters(namespace, products=PRODUCTS):
     command = SimpleNamespace(**namespace)
     groups = {module.__name__.rsplit(".", 1)[-1]: list(module.adapters(command).items()) for module in product_modules(products)}
     return dict(_ordered(groups, ADAPTER_ORDER))
+
+
+async def plan_products(actor, messages, task_id, products=PRODUCTS):
+    """Optional code planners live with their product declarations."""
+    for module in product_modules(products):
+        planner = getattr(module, "code_plan", None)
+        if planner is not None:
+            result = await planner(actor, messages, task_id)
+            if result is not None:
+                return result
+    return None
