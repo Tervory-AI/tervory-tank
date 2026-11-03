@@ -332,6 +332,22 @@ async def _room_read(request: Request, kind: str) -> JSONResponse:
         return _room_error(exc.status, exc.code, exc.message)
     if not isinstance(result, dict):
         return _room_error(502, "unavailable", "Rig did not answer.")
+    if request.query_params.get("source_record") == "1" and kind in {"search", "product"}:
+        # Bot citations use the exact stored URL/SKU and current facts, never a synthesized link.
+        records = await service.store.products(tenant_id)
+        indexed = {str(row.get("id") or row.get("sku")): row for row in records
+                   if str(row.get("tenant_id", tenant_id)) == tenant_id and row.get("active", True)
+                   and not (row.get("attributes") or {}).get("demo_item")}
+        def enrich(item):
+            row = indexed.get(str(item.get("id"))) if isinstance(item, dict) else None
+            if row is None:
+                return item
+            return {**item, "source_record": {k: str(row[k]) if k == "price" and row[k] is not None else row[k] for k in
+                    ("id", "sku", "url", "name", "brand", "price", "currency") if k in row}}
+        if kind == "search":
+            result = {**result, "results": [enrich(item) for item in result.get("results", [])]}
+        else:
+            result = enrich(result)
     return JSONResponse(_public_body(result))
 
 
@@ -379,7 +395,7 @@ async def _lifespan(app: FastAPI):
         service = QuoteService(store, _TankModels(app.state.tank), RetailerHandoff(app.state.http),
                                PgQuotes(app.state.pool))
         # Locate confirm re-reads offers live: approved-source API or Tiger
-        # check-now. No payment provider is wired: Locate checkout refuses.
+        # check-now. Accept only hands the quote to the store.
         from rigbox.locate_live import product_checkers
 
         service.locate_checker = product_checkers(app.state.http)
@@ -425,3 +441,30 @@ def _public_report(report: dict) -> dict:
         "keys": report.get("keys", 0),
         "keys_rejected": report.get("keys_rejected", []),
     }
+
+
+@app.post("/internal/trigger/bot-quote")
+async def trigger_bot_quote(request: Request):
+    """Tank's confirmed bot draft uses the existing quote engine unchanged."""
+    if not _room_key_ok(request):
+        return _room_error(401, "unauthorized", "room key required")
+    body, error = await _json_object(request)
+    if error is not None or body is None:
+        return error
+    tenant, error = _room_tenant(_query_tenants(request) + [str(body.get("tenant_id", ""))])
+    if error is not None:
+        return error
+    if body.get("home_region") != os.environ.get("TANK_REGION", "us-east"):
+        return _room_error(403, "region", "region mismatch")
+    try:
+        from rigbox.api import QuoteIn
+        from pydantic import ValidationError
+        data = QuoteIn.model_validate(body.get("data"))
+    except (ValidationError, ValueError, TypeError):
+        return _room_error(422, "invalid", "The request is not valid.")
+    activate_tenant(tenant)
+    try:
+        result = await _rig_service(request).quote(tenant, data.model_dump(exclude_none=True))
+        return JSONResponse(_public_body(result))
+    except RigError as exc:
+        return _room_error(exc.status, exc.code, exc.message)

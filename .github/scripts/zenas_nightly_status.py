@@ -53,6 +53,13 @@ def region_status(get, target):
     matches = [row for row in tasks if row.get("uuid") == task]
     if len(matches) != 1 or matches[0].get("name") != TASK_NAME:
         raise MetadataError
+    enabled = matches[0].get("enabled")
+    frequency = matches[0].get("frequency")
+    if type(enabled) is not bool or not isinstance(frequency, str) or not frequency or len(frequency) > 100:
+        raise MetadataError
+    if any(char not in "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ*/,- @" for char in frequency):
+        raise MetadataError
+    result.update(enabled=enabled, frequency=frequency)
     executions = get(f"/applications/{app}/scheduled-tasks/{task}/executions")
     if not isinstance(executions, list):
         raise MetadataError
@@ -71,7 +78,8 @@ def region_status(get, target):
         if finished is not None and datetime.fromisoformat(finished) < datetime.fromisoformat(order):
             raise MetadataError
         safe.append((datetime.fromisoformat(order), item))
-    result["last_execution"] = max(safe, key=lambda item: item[0])[1] if safe else None
+    result["executions"] = [item for _, item in sorted(safe, key=lambda pair: pair[0], reverse=True)[:10]]
+    result["last_execution"] = result["executions"][0] if safe else None
     result["metadata_status"] = "verified" if safe else "no_executions"
     return result
 

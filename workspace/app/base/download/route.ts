@@ -24,12 +24,13 @@ export async function GET(request: Request): Promise<Response> {
   const listId = new URL(request.url).searchParams.get("list_id");
   if (listId !== null) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(listId)) return new Response(null, { status: 400 });
-    const upstream = await commandRequest(tenant, `base/lists/csv?${new URLSearchParams({ list_id: listId })}`, {}, { passThroughErrors: true });
+    const products = new URL(request.url).searchParams.get("kind") === "products";
+    const upstream = await commandRequest(tenant, `base/lists/${products ? "products.csv" : "csv"}?${new URLSearchParams({ list_id: listId })}`, {}, { passThroughErrors: true });
     if (!upstream.ok) return new Response(upstream.body, { status: upstream.status, headers: {
       "Content-Type": upstream.headers.get("content-type") || "application/json", "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff" } });
     return new Response(upstream.body, { status: upstream.status, headers: { "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": 'attachment; filename="base-list.csv"', "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
+      "Content-Disposition": products ? 'attachment; filename="base-products.csv"' : 'attachment; filename="base-list.csv"', "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
   }
   const batch = new URL(request.url).searchParams.get("batch")?.trim();
   if (!batch || batch.length > 120) return new Response("Choose a batch from your list.", { status: 400 });

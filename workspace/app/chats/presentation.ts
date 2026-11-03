@@ -37,7 +37,7 @@ export function presentCard(card: Card, founder: boolean, models: string[] = [])
   }
   if (typeof args.text === "string") targets.push({ label: "Document", value: `${args.text.length.toLocaleString("en-US")} characters` });
   const resultFields = { ok: "Success", success: "Success", status: "Status", message: "Message", answer_md: "Answer", summary: "Summary", answer: "Answer", text: "Response", title: "Title", name: "Name", url: "Result", pr_url: "Review", link: "Result", count: "Count", total: "Total", n: "Count", queued: "Queued", batch: "Batch", job_id: "Job", build_id: "Build", matter_id: "Matter", watch_id: "Watch", task_type: "Task", calls: "Calls", actual_usd: "Cost", cost_usd: "Cost", baseline_usd: "Would have cost", baseline_cost_usd: "Would have cost", saved_usd: "Saved", receipt_status: "Cost status", ...(founder ? { model: "Model", ledger_id: "Ledger entry" } : {}) };
-  const results = details(card.result, resultFields);
+  const results = card.tool?.startsWith("radix.repo.") ? [] : details(card.result, resultFields);
   const collection = (label: string, list: unknown[]) => {
     results.push({ label, value: `${list.length} items${list.length > 5 ? " (first 5 shown)" : ""}` });
     list.slice(0, 5).forEach((item, index) => results.push(...details(item, resultFields).map(detail => ({ ...detail, label: `${label} ${index + 1} · ${detail.label}` }))));
