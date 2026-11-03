@@ -25,6 +25,7 @@ try {
   });
   assert.equal(await page.locator("h1").count(), 1);
   assert.equal(await page.locator(".squad-row").count(), 10);
+  assert.equal(await page.getByRole("link", { name:"Rig", exact:true }).getAttribute("href"), "/rig");
   const assets = await page.locator("img").evaluateAll(images => images.map(image => {
     const box = image.getBoundingClientRect();
     return { src: image.getAttribute("src"), loaded: image.complete && image.naturalWidth > 0, width: box.width, height: box.height };
@@ -79,7 +80,7 @@ try {
   await page.pdf({ path: `${output}/receipt.pdf`, printBackground: true, preferCSSPageSize: true });
   assert((await stat(`${output}/receipt.pdf`)).size > 1000);
   await receipts.getByRole("tab", { name: "What you saved", exact: true }).click();
-  for (const width of [320, 375, 390, 430, 768, 1440]) {
+  for (const width of [320, 375, 390, 430, 431, 600, 767, 768, 1000, 1199, 1200, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     assert.equal(await page.evaluate(() => document.body.scrollWidth <= innerWidth), true, `Page overflow at ${width}`);
     const badgeFits = await page.locator(".receipt-tabs").evaluate(tabs => {
@@ -90,7 +91,7 @@ try {
       });
     });
     assert(badgeFits, `Receipt tab or Example badge clips at ${width}`);
-    if ([320, 375, 430].includes(width)) {
+    {
       const toggleOverflow = await rig.evaluate(section => {
         const right = section.getBoundingClientRect().right - parseFloat(getComputedStyle(section).paddingRight);
         return [...section.querySelectorAll('.rig-switches [role="switch"]')].flatMap(row =>
@@ -214,7 +215,7 @@ try {
   assert.match(await autoPage.locator(".rig-caption").textContent(), /pairing the accessories/);
   await autoPage.close();
   assert.equal(errors.length, 0, errors.join("\n"));
-  console.log(JSON.stringify({ result: "PASS", widths: [320, 375, 390, 430, 768, 1440], images: assets.length, engineStages: 5, rigStates: 4, switches: 4, receiptRows: 4, csv: "PASS", pdf: "PASS", forms: "saved + failed", javascriptErrors: errors, screenshotDirectory: output }, null, 2));
+  console.log(JSON.stringify({ result: "PASS", widths: [320, 375, 390, 430, 431, 600, 767, 768, 1000, 1199, 1200, 1440], images: assets.length, engineStages: 5, rigStates: 4, switches: 4, receiptRows: 4, csv: "PASS", pdf: "PASS", forms: "saved + failed", javascriptErrors: errors, screenshotDirectory: output }, null, 2));
 } finally {
   await browser.close();
 }

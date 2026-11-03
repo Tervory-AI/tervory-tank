@@ -96,7 +96,9 @@ try {
         await page.screenshot({path:`${output}/${name}-${width}.png`,fullPage:true});
       }
     }
-    results.push({route,widths:{from:320,to:1440,step:1,count:1121},result:"pass"});
+    const result={route,widths:{from:320,to:1440,step:1,count:1121},result:"pass"};
+    results.push(result);
+    await writeFile(`${output}/${name}-width-sweep.json`,JSON.stringify(result,null,2)+"\n");
     console.log(`${name}: all 1,121 widths passed (320–1440)`);
   }
   assert.deepEqual(errors,[]);

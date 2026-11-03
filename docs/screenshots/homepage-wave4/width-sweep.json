@@ -1,6 +1,16 @@
 {
   "results": [
     {
+      "route": "/",
+      "widths": {
+        "from": 320,
+        "to": 1440,
+        "step": 1,
+        "count": 1121
+      },
+      "result": "pass"
+    },
+    {
       "route": "/rig",
       "widths": {
         "from": 320,

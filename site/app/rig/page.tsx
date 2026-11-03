@@ -14,7 +14,7 @@ function Brand() {
 }
 
 export default function RigPage() {
-  return <div className="rig-product" data-node-id="56:127" data-mobile-node-id="56:798">
+  return <div className="rig-product-page" data-node-id="56:127" data-mobile-node-id="56:798">
     <a className="skip" href="#main">Skip to content</a>
     <div className="rp-dark">
       <header className="rp-nav"><div className="rp-brand-group"><Brand /><span className="rp-product-name">Rig</span></div><nav aria-label="Page"><a href="#how" className="rp-desktop-link">{copy["56:150"]}</a><a href="/" className="rp-desktop-link">{copy["56:151"]}</a><a href="https://app.tervory.com/sign-in">{copy["56:152"]}</a></nav></header>
