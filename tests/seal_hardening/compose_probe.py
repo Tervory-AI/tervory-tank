@@ -119,6 +119,9 @@ def run():
             print(f"Tank /ocr: {len(rows)} existing PNG cases produce identical items ({count} with prices)", flush=True)
             peak = call(*cmd, "exec", "-T", "tiger-ocr", "python", "-c", "from pathlib import Path; print(Path('/sys/fs/cgroup/memory.peak').read_text().strip())")
             print(f"tiger-ocr memory.peak={peak} bytes; mem_limit=1g; shm_size=256m", flush=True)
+        except BaseException:
+            subprocess.run([*cmd, "logs", "--no-color", "--tail", "80", "tiger-ocr", "baseline"], check=False)
+            raise
         finally:
             subprocess.run([*cmd, "down", "--volumes", "--remove-orphans"], check=True)
 
