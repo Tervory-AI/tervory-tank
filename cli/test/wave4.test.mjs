@@ -101,3 +101,38 @@ test('offline ZA OIDC device approval to keychain to ZA code, plugin Confirm and
     if (process.env.CLI_W4_TRANSCRIPT) await writeFile(process.env.CLI_W4_TRANSCRIPT, output);
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); await rm(root, { recursive: true, force: true }); }
 });
+
+test('offline exact output for US login and plugin commands', async () => {
+  let saved; let output = ''; let tool = ''; let action = '';
+  const store = { get: async () => saved, set: async value => { saved = value; }, remove: async () => { saved = null; } };
+  const io = { interactive: true, deviceName: () => 'placeholder-worker', write: value => { output += value; }, sleep: async () => {},
+    prompt: async label => { output += label + 'y\n'; return 'y'; }, open: url => { assert.equal(new URL(url).origin, 'https://app.tervory.com'); } };
+  const transport = async (url, init) => {
+    assert.equal(new URL(url).origin, 'https://app.tervory.com');
+    if (url.endsWith('/device/code')) return Response.json({ user_code: 'BCDF-GHJK', device_code: 'tvd1.us-east.placeholder', interval: 1 });
+    if (url.endsWith('/device/token')) return Response.json(grant('us-east'));
+    if (url.endsWith('/device/revoke')) return Response.json({ revoked: true });
+    assert.equal(init.headers.Authorization, `Bearer ${grant('us-east').access_token}`);
+    if (url.endsWith('/threads')) return Response.json({ thread_id: 'placeholder-thread' });
+    if (url.endsWith('/tools')) return Response.json(['plugins.list', 'plugins.install', 'plugins.remove']);
+    if (url.endsWith('/actions')) {
+      const body = JSON.parse(init.body); tool = body.tool;
+      assert.deepEqual(body.arguments, tool === 'plugins.list' ? {} : { name: 'github', version: '1.0.0' });
+      return Response.json({ card_id: 'placeholder-card', status: 'pending', summary: tool });
+    }
+    if (url.endsWith('/cards/placeholder-card')) {
+      action = JSON.parse(init.body).action;
+      return Response.json({ card_id: 'placeholder-card', status: action === 'confirm' ? 'confirmed' : 'cancelled' });
+    }
+    assert(url.endsWith('/placeholder-thread')); assert.equal(action, 'confirm');
+    return Response.json({ steps: [{ step_id: 'placeholder-card', status: 'done', actor: 'Tank', label: tool }], receipts: [] });
+  };
+  const command = async argv => { output += '$ tervory ' + argv.map(value => value.startsWith('{') ? `"${value.replaceAll('"', '\"')}"` : value).join(' ') + '\n'; await run(argv, { store, transport, io }); };
+  await command(['login', '--region', 'us-east']);
+  await command(['run', 'plugins', 'list']);
+  await command(['run', 'plugins', 'install', '--args', '{"name":"github","version":"1.0.0"}']);
+  await command(['run', 'plugins', 'remove', '--args', '{"name":"github","version":"1.0.0"}']);
+  await command(['logout']);
+  assert(!output.includes(suffix)); assert(!saved);
+  if (process.env.CLI_W4_COMMAND_TRANSCRIPT) await writeFile(process.env.CLI_W4_COMMAND_TRANSCRIPT, output);
+});
