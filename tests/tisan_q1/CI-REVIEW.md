@@ -56,4 +56,6 @@ raise SystemExit(subprocess.call([sys.executable,'.github/scripts/offline_suite.
 .git/venv/bin/python .git/q1-ci-run.py > .git/q1-full-tank-suite-final-low.log 2>&1
 ```
 
-The lower-concurrency full run is in progress; the final summary will follow. Test-generated dashboard HTML artifacts will be restored, not included in the PR.
+The lower-concurrency full run is in progress; the final summary will follow. Its cases were collected after merging `origin/main` at `fb55cd35`. Main advanced to `cf95a07e` during a required push checkpoint; its new/changed test files will also receive a separate post-merge run. Test-generated dashboard HTML artifacts will be restored, not included in the PR.
+
+The host is concurrently running another full suite. Inspection found only this run's three active workers and their current subprocess, with no leftover workers from the stopped attempt. The lower-concurrency run has reported no failures through 44%; this progress observation is not a passing full-suite claim.
