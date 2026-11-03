@@ -1,0 +1,128 @@
+#605 review follow-up — offline proof
+Reviewed builder head: aa96c046fd273b2f5d36e2b880088f82bccc29a1
+Review changes at: 2c174a05d93e43374776caea277afc03c40db53f
+Merged origin/main first, preserving Radix and incoming Zenas tools.
+Full Tank result is CI's job, recorded separately in PR.md after completion.
+Founder skala.evals, upload test and screenshots follow after merge.
+
+$ git fetch origin && git merge origin/main
+RESULT: fetch succeeded; command.py tool-list conflict resolved retaining both lists.
+$ git add tank/command.py && git commit --no-edit && git fetch origin main && git merge origin/main && git push origin HEAD:codex/radix-r5-repo-scan
+RESULT: exit 0, merge commit 91b2eb91 pushed; all subsequent pushes serialized.
+
+$ docker run --rm -d --name radix-r5-review-pg -e POSTGRES_HOST_AUTH_METHOD=trust -p 127.0.0.1:55435:5432 postgres:16
+$ docker exec radix-r5-review-pg createdb -U postgres pooltest
+RESULT: exit 0 each; owned disposable local database only.
+
+$ POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55435/pooltest PYTHONPATH=agents/_chassis .git/r5-venv/bin/python -m pytest -q tests/test_command_radix_repo.py --disable-socket --allow-hosts=127.0.0.1,localhost,::1 > .git/r5-review/ownership-tests.log 2>&1
+RESULT: exit 0
+......................                                                   [100%]
+=============================== warnings summary ===============================
+.git/r5-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r5/.git/r5-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.git/r5-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r5/.git/r5-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.git/r5-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r5/.git/r5-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-r5/tank/main.py:752: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/test_command_radix_repo.py: 105 warnings
+  /workspace/codex-radix-r5/.git/r5-venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-r5/tank/main.py:806: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-r5/tank/agent_skills.py:531: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-r5/tank/skala_intake.py:71: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-r5/tank/skala_intake.py:77: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-r5/tank/skala_revalidation.py:192: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+22 passed, 234 warnings in 105.62s (0:01:45)
+
+$ node tests/radix_chat_presentation.cjs > .git/r5-review/projection.log 2>&1
+RESULT: exit 0
+PASS Radix allowlist, eight findings, no invented status, non-Radix compatibility, malformed/hostile data
+PASS repo tools reuse approved states, unknown severity, nine findings and hidden operational fields
+PASS empty incomplete scans use failed state; complete empty scans and partial findings retain their approved states
+
+$ ./workspace/node_modules/.bin/tsc --project workspace/tsconfig.json --noEmit > .git/r5-review/typescript.log 2>&1
+RESULT: exit 0
+
+$ node tests/radix_chat_browser.cjs > .git/r5-review/browser.log 2>&1
+RESULT: exit 0
+PASS browser clipboard, eighth finding, escaped hostile text, real statuses, unsent draft, four responsive widths
+
+$ docker run --rm -i --network none -e TANK_KEY=placeholder-room-key --mount type=bind,src=/workspace/codex-radix-r5/tank,dst=/repo/tank,readonly radix-r5:final python < tests/radix_r5/room_eval_proof.py > .git/r5-review/room-evals.json 2> .git/r5-review/room-evals.stderr
+RESULT: exit 0
+{"skill": "scan.iac@1.0.0", "passed": 5, "total": 5, "score": 1.0, "threshold": 1.0, "eligible": true, "evidence_reason": "ok", "cost_usd": 0.0, "details": [{"case": 0, "name": "terraform", "passed": true, "why": "ok", "goal": {"status": "run", "rules": ["CKV2_AWS_5", "CKV_AWS_23", "CKV_AWS_24", "CKV_AWS_25", "CKV_AWS_260"], "critical": 0, "severity": "unknown"}, "result": {"status": "run", "findings": [{"tool": "scan.iac", "severity": "unknown", "file": "open.tf", "line": 1, "rule": "CKV2_AWS_5", "fix": "Ensure that Security Groups are attached to another resource"}, {"tool": "scan.iac", "severity": "unknown", "file": "open.tf", "line": 1, "rule": "CKV_AWS_23", "fix": "Ensure every security group and rule has a description"}, {"tool": "scan.iac", "severity": "unknown", "file": "open.tf", "line": 1, "rule": "CKV_AWS_24", "fix": "Ensure no security groups allow ingress from 0.0.0.0:0 to port 22"}, {"tool": "scan.iac", "severity": "unknown", "file": "open.tf", "line": 1, "rule": "CKV_AWS_25", "fix": "Ensure no security groups allow ingress from 0.0.0.0:0 to port 3389"}, {"tool": "scan.iac", "severity": "unknown", "file": "open.tf", "line": 1, "rule": "CKV_AWS_260", "fix": "Ensure no security groups allow ingress from 0.0.0.0:0 to port 80"}], "rules": ["CKV2_AWS_5", "CKV_AWS_23", "CKV_AWS_24", "CKV_AWS_25", "CKV_AWS_260"], "file": "open.tf", "line": 1, "rule": "CKV2_AWS_5", "severity": "unknown", "critical": 0}, "case_hash": "d274e45e380465adf520709114dd554339e9635352260e3a9659eff59a291372", "package_hash": "54ec85ad109677d29b80cb549b151876396e7729f4221ccab19ab277c270991d", "used_model": false}, {"case": 1, "name": "kubernetes", "passed": true, "why": "ok", "goal": {"status": "run", "rules": ["CKV2_K8S_6", "CKV_K8S_10", "CKV_K8S_11", "CKV_K8S_12", "CKV_K8S_13", "CKV_K8S_15", "CKV_K8S_16", "CKV_K8S_20", "CKV_K8S_21", "CKV_K8S_22", "CKV_K8S_23", "CKV_K8S_28", "CKV_K8S_29", "CKV_K8S_31", "CKV_K8S_37", "CKV_K8S_38", "CKV_K8S_40", "CKV_K8S_43", "CKV_K8S_8", "CKV_K8S_9"], "critical": 0, "severity": "unknown"}, "result": {"status": "run", "findings": [{"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV2_K8S_6", "fix": "Minimize the admission of pods which lack an associated NetworkPolicy"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_10", "fix": "CPU requests should be set"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_11", "fix": "CPU limits should be set"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_12", "fix": "Memory requests should be set"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_13", "fix": "Memory limits should be set"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_15", "fix": "Image Pull Policy should be Always"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_16", "fix": "Container should not be privileged"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_20", "fix": "Containers should not run with allowPrivilegeEscalation"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_21", "fix": "The default namespace should not be used"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_22", "fix": "Use read-only filesystem for containers where possible"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_23", "fix": "Minimize the admission of root containers"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_28", "fix": "Minimize the admission of containers with the NET_RAW capability"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_29", "fix": "Apply security context to your pods and containers"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_31", "fix": "Ensure that the seccomp profile is set to docker/default or runtime/default"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_37", "fix": "Minimize the admission of containers with capabilities assigned"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_38", "fix": "Ensure that Service Account Tokens are only mounted where necessary"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_40", "fix": "Containers should run as a high UID to avoid host conflict"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_43", "fix": "Image should use digest"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_8", "fix": "Liveness Probe Should be Configured"}, {"tool": "scan.iac", "severity": "unknown", "file": "privileged.yaml", "line": 1, "rule": "CKV_K8S_9", "fix": "Readiness Probe Should be Configured"}], "rules": ["CKV2_K8S_6", "CKV_K8S_10", "CKV_K8S_11", "CKV_K8S_12", "CKV_K8S_13", "CKV_K8S_15", "CKV_K8S_16", "CKV_K8S_20", "CKV_K8S_21", "CKV_K8S_22", "CKV_K8S_23", "CKV_K8S_28", "CKV_K8S_29", "CKV_K8S_31", "CKV_K8S_37", "CKV_K8S_38", "CKV_K8S_40", "CKV_K8S_43", "CKV_K8S_8", "CKV_K8S_9"], "file": "privileged.yaml", "line": 1, "rule": "CKV2_K8S_6", "severity": "unknown", "critical": 0}, "case_hash": "821113bf695b1191b940aadf73d8b46130f6bff3ec036c3120f5fceffc8fc370", "package_hash": "54ec85ad109677d29b80cb549b151876396e7729f4221ccab19ab277c270991d", "used_model": false}, {"case": 2, "name": "docker", "passed": true, "why": "ok", "goal": {"status": "run", "rules": ["CKV_DOCKER_2", "CKV_DOCKER_8"], "critical": 0, "severity": "unknown"}, "result": {"status": "run", "findings": [{"tool": "scan.iac", "severity": "unknown", "file": "Dockerfile", "line": 1, "rule": "CKV_DOCKER_2", "fix": "Ensure that HEALTHCHECK instructions have been added to container images"}, {"tool": "scan.iac", "severity": "unknown", "file": "Dockerfile", "line": 2, "rule": "CKV_DOCKER_8", "fix": "Ensure the last USER is not root"}], "rules": ["CKV_DOCKER_2", "CKV_DOCKER_8"], "file": "Dockerfile", "line": 1, "rule": "CKV_DOCKER_2", "severity": "unknown", "critical": 0}, "case_hash": "b845245ce0bef6f8ef8e3b804fce42b676e43743796e329e3882009c518bc390", "package_hash": "54ec85ad109677d29b80cb549b151876396e7729f4221ccab19ab277c270991d", "used_model": false}, {"case": 3, "name": "clean", "passed": true, "why": "ok", "goal": {"status": "run", "rules": [], "critical": 0}, "result": {"status": "run", "findings": [], "rules": [], "file": "", "line": 0, "rule": "", "severity": "", "critical": 0}, "case_hash": "1836b74cb7e67f6a7f373188f84525ab03a5078a822bf7f40c25113e3cb266c1", "package_hash": "54ec85ad109677d29b80cb549b151876396e7729f4221ccab19ab277c270991d", "used_model": false}, {"case": 4, "name": "refuse", "passed": true, "why": "ok", "goal": {"status": "not run", "critical": 0, "refused": true}, "result": {"refused": true, "status": "not run", "findings": [], "critical": 0}, "case_hash": "e6fda38486aec6dc74dd89c6e04e9204962d32078fbcb41b022fd3289ddad386", "package_hash": "54ec85ad109677d29b80cb549b151876396e7729f4221ccab19ab277c270991d", "used_model": false}]}
+
+$ .git/r5-venv/bin/python -m pytest -q tests/test_radix_iac.py tests/test_secrets.py tests/test_radix_chat_presentation.py --disable-socket --allow-hosts=127.0.0.1,localhost,::1 > .git/r5-review/guards.log 2>&1
+RESULT: exit 0
+................                                                         [100%]
+16 passed in 20.69s
+
+$ .git/r5-venv/bin/ruff check tank/radix_repo.py tests/test_command_radix_repo.py --select E9,F
+RESULT: exit 0; All checks passed!
+
+The older aa96c046 security job flagged newly introduced intentionally unsafe
+fixture configurations as source. Existing security rules were not changed or
+suppressed. Stored sample filenames are now root-container.fixture and
+privileged-pod.fixture; eval inputs still use Dockerfile and privileged.yaml with
+the exact same bytes. Fixture equality tests and real room evals pass.
