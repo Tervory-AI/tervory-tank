@@ -6,14 +6,14 @@ Branch: `codex/mcp-server`. Review baseline: `968de1f5b5d9053e844ce86168775aba49
 
 | Review | Current file and line | Change and proof |
 | --- | --- | --- |
-| 1 | `tank/device_login.py:212`, `tank/mcp_oauth.py:187`, `tank/mcp_oauth.py:272`, `tank/mcp_oauth.py:315`, `tank/mcp_oauth.py:362`, `tank/personal_tokens.py:142` | Literal SQL with positional parameters throughout these authentication modules. AST regression checks every execute/fetch query (`tests/test_mcp_review_587.py:150`). No security rule suppression. |
+| 1 | `tank/device_login.py:212`, `tank/mcp_oauth.py:187`, `tank/mcp_oauth.py:272`, `tank/mcp_oauth.py:319`, `tank/mcp_oauth.py:363`, `tank/personal_tokens.py:142` | Literal SQL with positional parameters throughout these authentication modules. Expiry calculations are computed before the calls, removing the audit rule's matches on arithmetic in bound values as well. AST regression checks every execute/fetch query (`tests/test_mcp_review_587.py:150`). No security rule suppression. |
 | 2 | `workspace/lib/mcp.ts:64`, `tank/mcp_oauth.py:205`, `docs/mcp/README.md:65` | Registration alone authenticates Workspace's validated Traefik `X-Real-IP` assertion using existing service authentication. Incoming private headers/authentication are overwritten. Tank ignores untrusted forwarding assertions and uses its socket peer. Independent 50/hour source buckets and spoof refusal tested (`tests/test_mcp_review_587.py:64`, `tests/mcp_proxy.cjs:24`). |
 | 3 | `tank/mcp_oauth.py:214`, `tank/mcp_oauth.py:244` | Ignore unknown authorization parameters; refuse duplicates. Tests include scope, prompt and nonce (`tests/test_mcp_review_587.py:19`). |
 | 4 | `tank/mcp_server.py:188` | tools/list accepts and ignores cursor and _meta (`tests/test_mcp_review_587.py:34`). |
 | 5 | `tank/mcp_oauth.py:169`, `tank/mcp_oauth.py:200` | Validate requested grant/response types as supported sets; order and duplicates do not matter. Authorization-code-only passes; unsupported/malformed lists fail (`tests/test_mcp_review_587.py:48`). |
-| 6 | `tank/mcp_oauth.py:283`, `tank/mcp_oauth.py:333` | Token exchanges look up stored code/refresh rows and compare client_id. No metadata resolution/fetch at token time; tests forbid both resolver and network fetch even after clearing CIMD cache (`tests/test_mcp_review_587.py:98`). |
+| 6 | `tank/mcp_oauth.py:283`, `tank/mcp_oauth.py:334` | Token exchanges look up stored code/refresh rows and compare client_id. No metadata resolution/fetch at token time; tests forbid both resolver and network fetch even after clearing CIMD cache (`tests/test_mcp_review_587.py:98`). |
 | 7 | `tank/mcp_oauth.py:229` | Metadata HTTP errors, recursive JSON, value/OS errors become invalid_client. Failure cases are tested (`tests/test_mcp_review_587.py:88`). |
-| 8 | `tank/schema.sql:2317`, `tank/mcp_oauth.py:317` | Code row retains issued token_id. Correctly bound replay revokes that grant, including access/refresh after rotation; unrelated client/verifier cannot revoke it (`tests/test_mcp_review_587.py:120`). |
+| 8 | `tank/schema.sql:2317`, `tank/mcp_oauth.py:318` | Code row retains issued token_id. Correctly bound replay revokes that grant, including access/refresh after rotation; unrelated client/verifier cannot revoke it (`tests/test_mcp_review_587.py:120`). |
 | 9 | `workspace/lib/mcp.ts:19`, `tests/mcp_proxy.cjs:70` | 90-second proxy deadline gives Tank's 60-second wait 30 seconds of slack. Virtual-time 70-second read returns its running thread link. |
 | 10 | `docs/mcp/README.md:41`, `tests/test_mcp_review_587.py:159` | [Official Cursor docs](https://cursor.com/docs/mcp) currently specify HTTPS Web/Agents and localhost desktop callbacks. Both existing rules accept them. No private-use scheme is specified, so the conditional scheme expansion does not apply. Unsafe redirect schemes remain refused. |
 | 11 | `docs/mcp/README.md:60`, `tests/test_mcp_review_587.py:143` | Retain claude.ai, chatgpt.com and cursor.com Origins for browser connector requests; document that Origin never replaces bearer authentication. |
@@ -73,6 +73,8 @@ git push
 All fetches, merges and pushes succeeded. The PR's current checks provide the remote CI results; local output is recorded below. No founder browser screenshots exist. Approved Figma page “7 · MCP”, frame 1 and founder connector/browser acceptance remain outstanding from G1; this review adds no UI or page wording.
 
 ## Recorded local output
+
+This recorded run precedes the final expiry-calculation cleanup. Run `41603260531` passed security but still annotated two WARNINGs for datetime additions in bound values; those calculations now happen before SQL calls. The PR body records the follow-up local run and final-head CI, without rewriting this earlier output.
 
 ### Python regressions
 
