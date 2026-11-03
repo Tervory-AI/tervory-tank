@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 async def code_plan(actor, messages, task_id=None):
     last = messages[-1] if messages else {}
-    if last.get('role') != 'user' or not re.match(r'\s*radix\.(?:report|deploy\.override|active\.scan|watch|unwatch|watches|changes)\b', last.get('content', ''), re.I):
+    if last.get('role') != 'user' or not re.match(r'\s*radix\.(?:report|deploy\.override|active\.(?:scan|consent(?:\.withdraw)?)|watch|unwatch|watches|changes)\b', last.get('content', ''), re.I):
         return None
     # Import only for Radix commands, so other turns never load main through this planner.
     from command import db, require_tool, unpack, validate_action, PlannedAction
@@ -19,13 +19,18 @@ async def code_plan(actor, messages, task_id=None):
               WHERE tenant_id=$1 AND user_id=$2 AND state->>'active_turn'=$3''',
               actor.tenant_id, actor.user_id, str(task_id))
         source = next((m for m in reversed(unpack(raw or {}).get('messages', [])) if m.get('role') == 'user'), last)
-    match = re.fullmatch(r'\s*(radix\.(?:report|deploy\.override|active\.scan|watch|unwatch|watches|changes))\s*:?\s*(.*?)\s*', source.get('content', ''), re.I)
+    match = re.fullmatch(r'\s*(radix\.(?:report|deploy\.override|active\.(?:scan|consent(?:\.withdraw)?)|watch|unwatch|watches|changes))\s*:?\s*(.*?)\s*', source.get('content', ''), re.I | re.S)
     if not match:
         raise HTTPException(422, 'The action arguments are invalid')
     tool, tail = match[1].lower(), match[2]
     require_tool(actor, tool)
     parts = tail.split()
-    if tool == 'radix.report' and len(parts)==1:
+    if tool=='radix.active.consent' and len(parts)>=2:
+        domain, text=tail.split(None,1)
+        args={'domain':domain,'consent_text':text}
+    elif tool=='radix.active.consent.withdraw' and len(parts)==1:
+        args={'domain':parts[0]}
+    elif tool == 'radix.report' and len(parts)==1:
         args={'scan_id':parts[0]}
     elif tool == 'radix.deploy.override' and len(parts) == 2:
         args = {'app':parts[0], 'finding_id':parts[1]}

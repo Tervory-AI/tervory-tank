@@ -6,7 +6,8 @@ from pathlib import Path
 
 import yaml
 
-from active_policy import SCAN_SECONDS, active_target
+from active_policy import SCAN_SECONDS
+from passive_store import target_url
 from passive_r6 import command
 from passive_tools import zap_command as passive_command, zap_findings
 
@@ -15,7 +16,7 @@ RULES = (40003, 40012, 40018)  # CRLF, reflected XSS, SQL injection.
 
 
 def zap_plan(target, directory):
-    active_target(target)
+    target_url(target)
     return {'env': {'contexts': [{'name': 'verified-active', 'urls': [target],
                 'includePaths': ['^' + re.escape(target) + '.*$']}],
             'parameters': {'failOnError': True, 'failOnWarning': True}}, 'jobs': [
@@ -44,7 +45,7 @@ def zap_command(plan, home):
 
 
 async def collect(target, directory, *, run=command):
-    _, domain = active_target(target)
+    _, domain = target_url(target)
     directory = Path(directory)
     script = Path(__file__).with_name('active_guard.js').read_text()
     (directory/'guard.js').write_text(script.replace('__HOST__', json.dumps(domain))

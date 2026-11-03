@@ -15,13 +15,13 @@ TOOL='radix.active.scan'
 ARGS={'url':'https://tervory.com/'}
 
 
-def test_founder_only_single_url_and_existing_presentation(runtime):
+def test_admin_or_founder_single_url_and_existing_presentation(runtime):
     assert TOOL in command.TOOLS['radix'] and TOOL in command.ADAPTERS
     for founder,admin in [(False,False),(False,True),(True,False)]:
         actor=command.Actor(TENANT,'founder' if founder else 'placeholder-client',founder,frozenset({'radix'}),admin)
-        assert (TOOL in command.allowed_tools(actor))==founder
+        assert (TOOL in command.allowed_tools(actor))==(founder or admin)
         action=command.PlannedAction(tool=TOOL,arguments=ARGS)
-        if not founder:
+        if not (founder or admin):
             with pytest.raises(HTTPException): command.adapter_request(action,actor)
         else:
             _,_,_,body=command.adapter_request(action,actor)

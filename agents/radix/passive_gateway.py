@@ -50,12 +50,14 @@ class Lease:
         self.store, self.check, self.server, self.now = store, check, server, now
         self.lock = asyncio.Lock()
         self.run = None
+        self.consent = None
         self.until = 0.0
         self.proxy_server = None
 
     def close(self):
         self.until = 0
         self.run = None
+        self.consent = None
         if self.proxy_server:
             self.proxy_server.close()
             self.proxy_server = None
@@ -71,7 +73,10 @@ class Lease:
                 raise HTTPException(403, 'domain proof required')
             if bool(row.get('active', False)) != active:
                 raise HTTPException(403, 'scan not authorized')
-            if active:
+            if active and row.get('active_consent_id') is not None:
+                if not await self.store.consent_valid(tenant,row['domain'],row['active_consent_id']):
+                    raise HTTPException(403,'scan not authorized')
+            elif active:
                 from active_policy import active_target
                 try:
                     active_target('https://' + row['domain'] + '/')
@@ -92,6 +97,7 @@ class Lease:
                 raise HTTPException(409, 'scan busy') from None
             if not started:
                 raise HTTPException(409, 'scan unavailable')
+            self.consent = (row['domain'],row.get('active_consent_id')) if row.get('active_consent_id') else None
             self.run, self.until = (tenant, ident), self.now() + (1800 if active else 420)
             domain = row['domain']
             # Capture this lease's deadline, so a later tenant cannot revive an old tunnel.
@@ -108,6 +114,15 @@ class Lease:
                 await self.store.fail(tenant, ident)
                 raise HTTPException(503, 'scan egress unavailable') from None
             return {'ready': True}
+
+    @tenant_path("tenant")
+    async def revoke_withdrawn(self,tenant):
+        async with self.lock:
+            if self.run and self.run[0]==tenant and self.consent:
+                if not await self.store.consent_valid(tenant,*self.consent):
+                    prior=self.run
+                    self.close()
+                    await self.store.fail(*prior)
 
     @tenant_path("tenant")
     async def release(self, tenant: UUID, ident: UUID):
@@ -150,6 +165,8 @@ async def lifespan(app):
             # Explicit gateway administration, separate from any caller's tenant.
             try:
                 await app.state.lease.store.reap_expired()
+                if app.state.lease.run:
+                    await app.state.lease.revoke_withdrawn(app.state.lease.run[0])
             except (asyncpg.PostgresError, OSError):
                 logging.getLogger(__name__).warning('Passive lease maintenance unavailable; will retry')
             await asyncio.sleep(15)
@@ -182,6 +199,13 @@ async def lease(body: Run):
 @app.post('/active/lease')
 async def active_lease(body: Run):
     return await app.state.lease.start(body.tenant_id, body.scan_id, active=True)
+
+
+@app.post('/active/revoke')
+async def revoke(body: Run):
+    # Caller cannot grant authority here; only persisted withdrawal can close a lease.
+    await app.state.lease.revoke_withdrawn(body.tenant_id)
+    return {'released':True}
 
 
 @app.post('/release')

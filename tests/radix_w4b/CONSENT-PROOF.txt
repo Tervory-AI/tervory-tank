@@ -1,0 +1,38 @@
+Wave 4b consent: offline, disposable loopback DB, fake DNS/pages. All fixture text contains placeholder.
+
+Regression selection:
+pytest -q --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 tests/test_radix_active_consent.py tests/test_command_radix_active.py tests/radix_i2/test_active.py tests/test_radix_passive.py
+....................................................................     [100%]
+=============================== warnings summary ===============================
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+68 passed, 3 warnings in 7.45s
+
+Final focused tests after adding runtime TXT cases:
+.....                                                                    [100%]
+=============================== warnings summary ===============================
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+5 passed, 3 warnings in 5.59s

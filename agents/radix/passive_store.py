@@ -71,6 +71,32 @@ CREATE TABLE IF NOT EXISTS agent_radix.page_hashes (
  url text NOT NULL, sha256 text NOT NULL CHECK (sha256 ~ '^[a-f0-9]{64}$'),
  PRIMARY KEY (tenant_id,scan_id,url)
 );
+
+CREATE TABLE IF NOT EXISTS agent_radix.active_consents (
+ tenant_id uuid NOT NULL, id uuid NOT NULL, domain text NOT NULL,
+ consent_text text NOT NULL CHECK(length(consent_text) BETWEEN 1 AND 16000),
+ granted_by text NOT NULL, granted_at timestamptz NOT NULL DEFAULT now(),
+ withdrawn_by text, withdrawn_at timestamptz,
+ PRIMARY KEY(tenant_id,id)
+);
+ALTER TABLE IF EXISTS agent_radix.passive_scans ADD COLUMN IF NOT EXISTS active_consent_id uuid;
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+  ALTER TABLE agent_radix.active_consents ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE agent_radix.active_consents FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.active_consents'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON agent_radix.active_consents FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.active_consents'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON agent_radix.active_consents AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS passive_one_running
  ON agent_radix.passive_scans ((true)) WHERE status='running';
 """
@@ -173,28 +199,58 @@ class Store:
         return {'tenant_id': str(tenant), 'domain': domain, 'name': '_tervory-verify.' + domain,
                 'value': row['challenge'], 'expires_at': row['expires_at'].isoformat()}
 
-    async def create(self, tenant: UUID, target: str, artifact: str, *, watched: bool = False, active: bool = False) -> UUID:
+    async def consent(self, tenant, domain, user, text):
+        domain=domain_name(domain)
+        if not user or not isinstance(text,str) or not text.strip() or len(text)>16000:
+            raise ValueError('scan not authorized')
+        async with self.pool.acquire() as conn:
+            row=await conn.fetchrow("""INSERT INTO agent_radix.active_consents(tenant_id,id,domain,granted_by,consent_text)
+              VALUES($1,$2,$3,$4,$5) RETURNING id,domain,granted_by,granted_at""",tenant,uuid4(),domain,user,text)
+        return {**dict(row),'id':str(row['id']),'granted_at':row['granted_at'].isoformat()}
+
+    async def withdraw_consent(self, tenant, domain, user):
+        domain=domain_name(domain)
+        async with self.pool.acquire() as conn:
+            await conn.execute("""UPDATE agent_radix.active_consents SET withdrawn_by=$3,withdrawn_at=now()
+              WHERE tenant_id=$1 AND domain=$2 AND withdrawn_at IS NULL""",tenant,domain,user)
+        return {'domain':domain,'withdrawn':True}
+
+    async def consent_id(self, tenant, domain):
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval("""SELECT id FROM agent_radix.active_consents
+              WHERE tenant_id=$1 AND domain=$2 AND withdrawn_at IS NULL
+              ORDER BY granted_at DESC,id DESC LIMIT 1""",tenant,domain)
+
+    async def consent_valid(self, tenant, domain, ident):
+        async with self.pool.acquire() as conn:
+            return bool(await conn.fetchval("""SELECT 1 FROM agent_radix.active_consents
+              WHERE tenant_id=$1 AND domain=$2 AND id=$3 AND withdrawn_at IS NULL""",tenant,domain,ident))
+
+    async def create(self, tenant: UUID, target: str, artifact: str, *, watched: bool = False, active: bool = False, consent_id: UUID | None = None) -> UUID:
         target, domain = target_url(target)
         artifact = artifact_id(artifact)
-        if active:
+        if active and consent_id is None:
             from active_policy import active_target
             active_target(target)
         ident = uuid4()
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow("""INSERT INTO agent_radix.passive_scans(tenant_id,id,domain,target,artifact,watched,active)
-              SELECT d.tenant_id,$2,d.domain,$3,$4,$6,$7 FROM agent_radix.passive_domains d
+            if consent_id is not None and not await conn.fetchval("""SELECT 1 FROM agent_radix.active_consents
+              WHERE tenant_id=$1 AND domain=$2 AND id=$3 AND withdrawn_at IS NULL""",tenant,domain,consent_id):
+                raise PermissionError('scan not authorized')
+            row = await conn.fetchrow("""INSERT INTO agent_radix.passive_scans(tenant_id,id,domain,target,artifact,watched,active,active_consent_id)
+              SELECT d.tenant_id,$2,d.domain,$3,$4,$6,$7,$8 FROM agent_radix.passive_domains d
               WHERE d.tenant_id=$1 AND d.domain=$5 AND
               (($6=false AND d.expires_at>now()) OR (($6=true OR $7=true) AND EXISTS (
                 SELECT 1 FROM agent_radix.passive_watches w WHERE w.tenant_id=d.tenant_id
                 AND w.domain=d.domain AND w.status='active' AND w.challenge=d.challenge))) RETURNING id""",
-              tenant, ident, target, artifact, domain, watched, active)
+              tenant, ident, target, artifact, domain, watched, active, consent_id)
         if row is None:
             raise PermissionError('domain proof required')
         return ident
 
     async def pending(self, tenant: UUID, ident: UUID):
         async with self.pool.acquire() as conn:
-            return await conn.fetchrow("""SELECT s.domain,d.challenge,s.active FROM agent_radix.passive_scans s
+            return await conn.fetchrow("""SELECT s.domain,d.challenge,s.active,s.active_consent_id FROM agent_radix.passive_scans s
               JOIN agent_radix.passive_domains d ON d.tenant_id=s.tenant_id AND d.domain=s.domain
               WHERE s.tenant_id=$1 AND s.id=$2 AND s.status='pending' AND
               ((s.watched=false AND d.expires_at>now()) OR ((s.watched=true OR s.active=true) AND EXISTS (

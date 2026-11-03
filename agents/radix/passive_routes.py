@@ -54,6 +54,10 @@ class Active(BaseModel):
     url: str
 
 
+class Consent(Domain):
+    consent_text: str
+
+
 class Watch(Domain):
     interval: Literal['daily', 'weekly']
     run_now: bool = True
@@ -149,6 +153,25 @@ def attach(app):
         except LookupError:
             raise HTTPException(404,'scan not found') from None
 
+    @router.post('/consent')
+    async def consent(body: Consent, request: Request):
+        identity(request,body.tenant_id)
+        if request.headers.get('x-tervory-active-authorized')!='true' or not request.headers.get('x-tervory-user'):
+            raise HTTPException(403,'scan not authorized')
+        return await Store(app.state.pool).consent(body.tenant_id,body.domain,request.headers['x-tervory-user'],body.consent_text)
+
+    @router.post('/consent-withdraw')
+    async def withdraw(body: Domain, request: Request):
+        identity(request,body.tenant_id)
+        if request.headers.get('x-tervory-active-authorized')!='true' or not request.headers.get('x-tervory-user'):
+            raise HTTPException(403,'scan not authorized')
+        result=await Store(app.state.pool).withdraw_consent(body.tenant_id,body.domain,request.headers['x-tervory-user'])
+        async with httpx.AsyncClient(trust_env=False,timeout=15) as client:
+            # scan_id is not used to select authority: the gateway reads its own current lease.
+            response=await client.post(GATEWAY+'/active/revoke',json={'tenant_id':str(body.tenant_id),'scan_id':str(UUID(int=0))})
+            response.raise_for_status()
+        return result
+
     @router.post('/active')
     async def active_scan(body: Active, request: Request):
         identity(request, body.tenant_id)
@@ -156,7 +179,7 @@ def attach(app):
             raise HTTPException(403, 'scan not authorized')
         from active_routes import execute as execute_active
         try:
-            return await execute_active(Store(app.state.pool), body.tenant_id, body.url)
+            return await execute_active(Store(app.state.pool), body.tenant_id, body.url, client=request.headers.get('x-tervory-active-client') == 'true')
         except (PermissionError, ValueError):
             raise HTTPException(403, 'scan not authorized') from None
         except HTTPException:

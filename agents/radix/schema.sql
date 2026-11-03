@@ -79,6 +79,33 @@ END $$;
 -- I2: mode is persisted beside runs and shares their existing tenant policies.
 ALTER TABLE IF EXISTS agent_radix.passive_scans ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT false;
 
+
+CREATE TABLE IF NOT EXISTS agent_radix.active_consents (
+ tenant_id uuid NOT NULL, id uuid NOT NULL, domain text NOT NULL,
+ consent_text text NOT NULL CHECK(length(consent_text) BETWEEN 1 AND 16000),
+ granted_by text NOT NULL, granted_at timestamptz NOT NULL DEFAULT now(),
+ withdrawn_by text, withdrawn_at timestamptz,
+ PRIMARY KEY(tenant_id,id)
+);
+ALTER TABLE IF EXISTS agent_radix.passive_scans ADD COLUMN IF NOT EXISTS active_consent_id uuid;
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+  ALTER TABLE agent_radix.active_consents ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE agent_radix.active_consents FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.active_consents'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON agent_radix.active_consents FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.active_consents'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON agent_radix.active_consents AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE TABLE IF NOT EXISTS agent_radix.memory_records (
     id uuid PRIMARY KEY,

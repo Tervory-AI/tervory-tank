@@ -9,12 +9,15 @@ from fastapi import HTTPException
 from active_policy import SCAN_SECONDS, active_target
 from active_tools import collect
 from passive_routes import GATEWAY
-from passive_store import watch_artifact
+from passive_store import watch_artifact, target_url
 
 
-async def execute(store, tenant, url, *, scanner=collect, http=None):
-    target, domain = active_target(url)  # Before DB, gateway, DNS or scanner requests.
-    ident = await store.create(tenant, target, watch_artifact(domain), active=True)
+async def execute(store, tenant, url, *, scanner=collect, http=None, client=False):
+    target, domain = target_url(url) if client else active_target(url)  # Before DB, gateway, DNS or scanner requests.
+    consent = await store.consent_id(tenant,domain) if client else None
+    if client and consent is None:
+        raise PermissionError('scan not authorized')
+    ident = await store.create(tenant, target, watch_artifact(domain), active=True, **({'consent_id':consent} if client else {}))
     lease = {'tenant_id': str(tenant), 'scan_id': str(ident)}
     async with httpx.AsyncClient(trust_env=False, timeout=15) if http is None else http as client:
         try:
