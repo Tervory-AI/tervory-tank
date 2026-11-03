@@ -362,7 +362,6 @@ def test_seal_check_never_passes_when_only_the_hub_is_running(tmp_path: Path) ->
         "agent-tiger: NOT FOUND",
         "agent-rig: NOT FOUND",
         "agent-ghost: NOT FOUND",
-        "autumbra-enforce: NOT FOUND",
     ]
 
 
@@ -472,7 +471,7 @@ def test_trigger_radix_samples_match_the_declared_compose_networks():
             declared = {compose["networks"][key].get("name", row["project"] + "_" + key)
                         for key in compose["services"][service]["networks"]}
             assert set(row["networks"]) == declared
-    assert "EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig agent-ghost autumbra-enforce)" in SEAL_CHECK.read_text()
+    assert "EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig agent-ghost)" in SEAL_CHECK.read_text()
 
 
 def test_trigger_radix_exact_placements_pass(tmp_path):
@@ -577,7 +576,7 @@ def test_autumbra_required_rooms_cannot_be_absent(tmp_path):
     result = run_seal_check(tmp_path, 'sealed.json', include_autumbra=False)
     assert result.returncode == 1
     assert 'agent-ghost: NOT FOUND' in result.stdout
-    assert 'autumbra-enforce: NOT FOUND' in result.stdout
+    assert 'autumbra-enforce: NOT FOUND' not in result.stdout
 
 
 @pytest.mark.parametrize('service', ['agent-ghost', 'ghost-browser', 'placeholder-enforce'])
@@ -590,6 +589,8 @@ def test_autumbra_extra_network_always_fails(tmp_path, service, internal):
     path.write_text(json.dumps(data))
     result = run_seal_check(tmp_path, str(path), include_autumbra=False)
     assert result.returncode == 1 and 'LEAK:' in result.stdout
+    if service == 'placeholder-enforce':
+        assert 'must have exactly one internal network' in result.stdout
 
 
 def test_autumbra_enforce_without_internal_network_fails(tmp_path):
@@ -599,3 +600,34 @@ def test_autumbra_enforce_without_internal_network_fails(tmp_path):
     path.write_text(json.dumps(data))
     result = run_seal_check(tmp_path, str(path), include_autumbra=False)
     assert result.returncode == 1 and 'LEAK:' in result.stdout
+
+
+def test_watch_host_without_enforce_passes(tmp_path):
+    data = add_autumbra_placements(json.loads((FIXTURES / 'sealed.json').read_text()))
+    data['containers'] = {key: row for key, row in data['containers'].items()
+                          if row['uuid'] != 'placeholder-enforce'}
+    path = tmp_path / 'placeholder-watch-only.json'
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path), include_autumbra=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'agent-ghost (placeholder-watch): sealed' in result.stdout
+    assert 'autumbra-enforce: NOT FOUND' not in result.stdout
+
+
+@pytest.mark.parametrize('resource', ['autumbra-enforce-placeholder', 'agent-placeholder-custom'])
+@pytest.mark.parametrize('missing', [None, 'egress-proxy', 'health-observer', 'health-egress-proxy'])
+def test_every_enforce_app_requires_all_services_regardless_of_name(tmp_path, resource, missing):
+    data = add_autumbra_placements(json.loads((FIXTURES / 'sealed.json').read_text()))
+    for row in data['containers'].values():
+        if row['uuid'] == 'placeholder-enforce':
+            row['resource'] = resource
+    if missing:
+        del data['containers']['placeholder-' + missing]
+    path = tmp_path / 'placeholder-enforce-services.json'
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path), include_autumbra=False)
+    assert result.returncode == (1 if missing else 0), result.stdout + result.stderr
+    if missing:
+        assert 'NOT FOUND: ' + missing in result.stdout
+    else:
+        assert 'autumbra-enforce: NOT FOUND' not in result.stdout
