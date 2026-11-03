@@ -323,7 +323,7 @@ def write_project(brief: dict[str, Any], dest: Path) -> None:
                 source = file.read_text(encoding="utf-8")
                 body = '<p className="mt-3">' + _jsx_text(copy) + '</p>'
                 if re.search(r'<p className="mt-3">.*?</p>', source, re.DOTALL):
-                    source = re.sub(r'<p className="mt-3">.*?</p>', lambda _: body, source, count=1, flags=re.DOTALL)
+                    source = re.sub(r'<p className="mt-3">.*?</p>', lambda _, body=body: body, source, count=1, flags=re.DOTALL)
                 else:
                     source = source.replace('</h1>', '</h1>\n      ' + body, 1)
                 file.write_text(source, encoding="utf-8")
@@ -432,7 +432,7 @@ async def _run(args: list[str], cwd: Path, env: dict[str, str], timeout: int) ->
         return 127, f"{args[0]} is not installed"
     try:
         out, _ = await asyncio.wait_for(proc.communicate(), timeout)
-    except (asyncio.TimeoutError, asyncio.CancelledError) as exc:
+    except (TimeoutError, asyncio.CancelledError) as exc:
         try:
             os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:
@@ -503,7 +503,7 @@ async def _secret_check(project: Path, tenant_id: str | None, tank: Any = None) 
         async with httpx.AsyncClient(timeout=60, trust_env=False, follow_redirects=False) as http:
             client = TankClient(os.environ.get("TANK_URL", "http://tank:8000"), os.environ.get("TANK_KEY", ""), "tisan", http)
             return await scan(client)
-    except Exception:
+    except Exception:  # noqa: BLE001 - Fail closed without exposing upstream scanner values.
         return {**check, "summary": "scan.secrets is unavailable or is not shared with Tisan; no clean result was recorded"}
 
 
