@@ -302,9 +302,20 @@ def build_router() -> APIRouter:
             raise HTTPException(404, "Not found")
         # Serialize our sends for a tenant so simultaneous confirmed cards see
         # each other's completed leads when they check for duplicates.
-        async with db().acquire() as conn, conn.transaction():
-            await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", str(actor.tenant_id))
-            sent = await send(actor, [row for row in saved["records"] if row["record_id"] in set(ids)])
+        from asyncio import timeout
+        from contextlib import AsyncExitStack
+        selected = set(ids)
+        ordered = [row for row in saved["records"] if row["record_id"] in selected]
+        try:
+            async with AsyncExitStack() as stack:
+                # The 60s card margin includes 30s for pool/tenant-lock waits.
+                async with timeout(30):
+                    conn = await stack.enter_async_context(db().acquire())
+                    await stack.enter_async_context(conn.transaction())
+                    await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", str(actor.tenant_id))
+                sent = await send(actor, ordered)
+        except TimeoutError:
+            sent = [{"record_id": row["record_id"], "name": row.get("name"), "status": "failed"} for row in ordered]
         return await result(actor, "base.list.to_crm", {"records": sent})
 
     return router
