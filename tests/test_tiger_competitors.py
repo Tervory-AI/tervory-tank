@@ -159,6 +159,7 @@ async def corridor(database, monkeypatch):
     monkeypatch.setattr(access, 'tiger_catalogue', catalogue)
     monkeypatch.setattr(access, 'require_tiger', lambda request: None)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://tank') as client:
+        agent.app.state.http = client
         yield SimpleNamespace(pool=database, client=client, agent=agent, actor=actor)
 
 
@@ -313,17 +314,19 @@ async def test_discovery_search_uses_gtin_and_existing_get_form():
 @pytest.mark.asyncio
 async def test_real_gate_enforces_rate_page_cap_failure_accounting_and_reset(database, monkeypatch):
     monkeypatch.setattr(socket, 'getaddrinfo', lambda *args, **kwargs: [(2,1,6,'',('8.8.8.8',443))])
-    gate = DiscoveryGate(database)
+    from chassis.tenant_db import TenantPool
+    gate = DiscoveryGate(TenantPool(database))
     times = []
     async def read():
         times.append(asyncio.get_running_loop().time())
         return {'ok':True}
-    await asyncio.gather(gate.call(PAGE,read),gate.call(PAGE,read))
+    await asyncio.gather(gate.call(PAGE,read),DiscoveryGate(database).call(PAGE,read))
     assert times[1] - times[0] >= 2.95
-    await database.execute('UPDATE agent_tiger.discovery_limits SET requests=500 WHERE site=$1', SITE)
+    await database.execute("UPDATE agent_tiger.discovery_limits SET requests=499,last_at=clock_timestamp()-interval '3 seconds' WHERE site=$1", SITE)
+    await gate.call(PAGE,read)
     with pytest.raises(DiscoveryStopped, match='page_limit'):
         await gate.call(PAGE,read)
-    assert len(times) == 2
+    assert len(times) == 3
     await database.execute("UPDATE agent_tiger.discovery_limits SET day=current_date-1, human_check=true WHERE site=$1", SITE)
     async def fail(): raise OSError('offline failure')
     with pytest.raises(OSError):
@@ -349,6 +352,7 @@ async def test_schema_rollout_is_idempotent_legacy_safe_and_enforces_tenant_rls(
         await conn.execute('CREATE ROLE tiger_t1_reader NOLOGIN NOSUPERUSER NOBYPASSRLS')
         await conn.execute('GRANT USAGE ON SCHEMA agent_tiger TO tiger_t1_reader')
         await conn.execute('GRANT SELECT,INSERT ON agent_tiger.matches TO tiger_t1_reader')
+        await conn.execute('CREATE POLICY extra_allow ON agent_tiger.matches USING (true) WITH CHECK (true)')
         try:
             async with conn.transaction():
                 await conn.execute('SET LOCAL ROLE tiger_t1_reader')
@@ -378,3 +382,149 @@ async def test_explicit_planning_requires_tiger_squad_and_never_uses_a_model(mon
     assert exc.value.status_code == 403
     assert command.ADAPTERS['tiger.position'].method == 'GET'
     assert all(not command.ADAPTERS[t].paid for t in ('tiger.match','tiger.position','tiger.match.confirm','tiger.match.reject'))
+
+
+@pytest.mark.asyncio
+async def test_start_durable_job_returns_matches_to_existing_card_and_denies_other_tenant(corridor, monkeypatch):
+    args, operation = {}, uuid4()
+    token = CONFIRMED.set((TENANT,'offline-user',operation,'tiger.match',args))
+    try:
+        response = await corridor.client.post('/v1/access/tiger/match',json=args)
+    finally:
+        CONFIRMED.reset(token)
+    assert response.status_code == 200, response.text
+    result = response.json()
+    job = await corridor.pool.fetchrow('SELECT * FROM agent_tiger.jobs WHERE tenant_id=$1 AND id=$2', TENANT,UUID(result['job_id']))
+    assert job['kind'] == 'competitor_match' and job['timeout_s'] == 86400
+    assert result['cost_usd'] == 0 and result['model_calls'] == 0
+    gate = OfflineGate()
+    async def fetch(url, **kwargs):
+        assert kwargs == {'catalogue':True}
+        if url.endswith('robots.txt'):
+            return {'status':200,'text':'User-agent: *\nAllow: /'}
+        return {'status':200,'text':'<urlset><url><loc>'+PAGE+'</loc></url></urlset>'}
+    async def render(url, session, agent, tenant, task, **kwargs):
+        assert kwargs == {'catalogue_match':True} and tenant == str(TENANT)
+        return {'ok':True,'url':url,'html':markup() if url == PAGE else ''}
+    monkeypatch.setattr(corridor.agent,'_fetch_text',fetch)
+    monkeypatch.setattr(corridor.agent,'_render',render)
+    monkeypatch.setattr(corridor.agent,'DiscoveryGate',lambda pool:gate)
+    monkeypatch.setattr(corridor.agent.app.state,'http',corridor.client,raising=False)
+    monkeypatch.delenv('TANK_KEY',raising=False)
+    data = await corridor.agent.competitor_match(SimpleNamespace(tenant_id=str(TENANT),job_id=result['job_id'],input=json.loads(job['input'])))
+    await corridor.pool.execute("UPDATE agent_tiger.jobs SET status='completed',result=$3::jsonb WHERE tenant_id=$1 AND id=$2",TENANT,job['id'],json.dumps(data))
+    card = await access.tiger_card_result(TENANT,result)
+    assert card['status'] == 'completed'
+    assert card['matches'][0]['url'] == PAGE and card['matches'][0]['identifiers']['seen']['gtins'] == [GTIN]
+    assert (await access.tiger_card_result(OTHER,{'job_id':result['job_id'],'matches':[]}))['matches'] == []
+    assert await corridor.pool.fetchval('SELECT count(*) FROM agent_tiger.watchlist WHERE tenant_id=$1',TENANT) == 1
+
+
+@pytest.mark.asyncio
+async def test_no_squad_grant_cannot_run_position_or_spend_a_receipt(corridor):
+    await corridor.pool.execute('DELETE FROM tank.tenant_squad WHERE tenant_id=$1',TENANT)
+    response = await corridor.client.get('/v1/access/tiger/position')
+    assert response.status_code == 403
+    assert await corridor.pool.fetchval('SELECT count(*) FROM tank.ledger') == 0
+
+
+@pytest.mark.asyncio
+async def test_human_check_records_tenant_queue_without_match_or_watch(corridor):
+    assert (await publish(corridor,'',human=True))['human_check'] is True
+    assert await corridor.pool.fetchval("SELECT reason FROM tank.access_queue WHERE tenant_id=$1 AND site=$2",TENANT,SITE) == 'captcha'
+    assert await corridor.pool.fetchval('SELECT count(*) FROM agent_tiger.matches') == 0
+    assert await corridor.pool.fetchval('SELECT count(*) FROM agent_tiger.watchlist') == 0
+
+
+@pytest.mark.asyncio
+async def test_subsequent_catalogue_checks_use_structured_only_even_when_unreadable(corridor, monkeypatch):
+    await publish(corridor,markup())
+    calls = []
+    async def extract(tenant,name,body):
+        calls.append(name)
+        assert name == 'tiger.price_structured'
+        return {'items': [],'method':None}
+    async def render(*args,**kwargs):
+        return {'ok':True,'url':PAGE,'html':'<p>No structured price</p>','png_base64':'offline'}
+    async def feed(*args): return {'found':False}
+    async def approved(*args):
+        return {'decision':'read','reason':'offline'}
+    # The existing check runner owns observation/alert persistence. Capture its
+    # injected readers to exercise both paths without any external/model call.
+    async def run(store,tenant,watch,agent,render_fn,extract_fn,ocr_fn,*args,**kwargs):
+        await extract_fn('<p>Offline</p>',PAGE)
+        assert await ocr_fn('offline',PAGE) == {'items':[]}
+        return {'status':'unread'}
+    monkeypatch.setattr(corridor.agent,'run_check',run)
+    monkeypatch.setattr(corridor.agent,'_render',render)
+    monkeypatch.setattr(corridor.agent,'official_feed',feed)
+    ctx = SimpleNamespace(tenant_id=str(TENANT),input={'url':PAGE},job_id=uuid4(),agent='tiger',files=None,
+                          tank=SimpleNamespace(run_skill=extract,approved_skill=approved))
+    assert await corridor.agent.check(ctx) == {'status':'unread'}
+    assert calls == ['tiger.price_structured']
+
+
+from test_agent1_browser import visitor  # noqa: E402,F401 — reuse offline browser transport
+from test_agent1_isolation import browser as public_browser
+
+
+@pytest.mark.asyncio
+async def test_discovery_browser_only_admits_one_anonymous_get_and_never_clicks(visitor, monkeypatch):
+    visitor.gate.set()
+    monkeypatch.setenv('ACCESS_ROOM','tiger')
+    monkeypatch.setattr(public_browser,'access_configured',lambda:False)
+    monkeypatch.setattr(public_browser,'held',{})
+    clicks = AsyncMock(side_effect=AssertionError('Discovery must never click'))
+    monkeypatch.setattr(public_browser,'confirm_age',clicks)
+    result = await public_browser.visit(public_browser.Page(url=PAGE,catalogue_match=True,price_reader=True),
+        str(TENANT),str(uuid4()),SITE)
+    assert result['ok'] and visitor.context_options['storage_state'] is None
+    actions = []
+    async def abort(): actions.append('abort')
+    async def proceed(): actions.append('continue')
+    for url,kind,method in [(PAGE,'document','GET'),(PAGE,'document','GET'),
+            (SITE+'/script.js','script','GET'),(SITE+'/other','document','GET'),
+            ('https://other.example/item','document','GET'),(PAGE,'document','POST')]:
+        request = SimpleNamespace(url=url,resource_type=kind,method=method,is_navigation_request=lambda:True)
+        await visitor.request_handler(SimpleNamespace(request=request,abort=abort,continue_=proceed))
+    assert actions == ['continue','abort','abort','abort','abort','abort']
+    clicks.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_discovery_browser_uses_existing_human_check_detection(visitor, monkeypatch):
+    visitor.gate.set()
+    visitor.html = '<div class="g-recaptcha">Verify you are human</div>'
+    monkeypatch.setenv('ACCESS_ROOM','tiger')
+    monkeypatch.setattr(public_browser,'access_configured',lambda:False)
+    result = await public_browser.visit(public_browser.Page(url=PAGE,catalogue_match=True,price_reader=True),
+        str(TENANT),str(uuid4()),SITE)
+    assert result['challenge'] and not result['ok'] and not result.get('html')
+
+
+def test_relative_product_urls_are_resolved_before_accepting_evidence():
+    assert access.tiger_product_evidence(markup(url='/products/item'),PAGE)
+    assert access.tiger_product_evidence(markup(url='/different-product'),PAGE) == []
+
+
+@pytest.mark.asyncio
+async def test_two_own_skus_on_one_competitor_page_are_not_arbitrarily_linked(corridor,monkeypatch):
+    async def catalogue(tenant):
+        return [OWN,{**OWN,'sku':'second','gtin':'036000291452'}]
+    monkeypatch.setattr(access,'tiger_catalogue',catalogue)
+    result = await publish(corridor,markup()+markup(gtin13=None,gtin12='036000291452'))
+    assert result['matches'] == []
+    assert await corridor.pool.fetchval('SELECT count(*) FROM tank.access_feed_links') == 0
+    assert await corridor.pool.fetchval('SELECT count(*) FROM agent_tiger.watchlist') == 0
+
+
+@pytest.mark.asyncio
+async def test_failed_watch_creation_cannot_commit_a_feed_link(corridor,monkeypatch):
+    async def unavailable(*args):
+        return httpx.Response(503,json={})
+    monkeypatch.setattr(sys.modules['main'],'_tiger_call',unavailable)
+    response = await corridor.client.post('/v1/access/rig/tiger/match-page',json={
+        'tenant_id':str(TENANT),'site':SITE,'url':PAGE,'html':markup()})
+    assert response.status_code == 503
+    assert await corridor.pool.fetchval('SELECT count(*) FROM tank.access_feed_links') == 0
+    assert await corridor.pool.fetchval('SELECT state FROM agent_tiger.matches WHERE tenant_id=$1',TENANT) == 'suggested'
