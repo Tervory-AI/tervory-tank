@@ -24,6 +24,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 import command_repo
+from trigger_bot_contract import TOOLS as BOT_TOOLS
 from tenant_db import tenant_path
 from command_stream import AnswerText, TokenSink
 
@@ -1137,7 +1138,6 @@ class Adapter:
     skill: str | None = None
 
 
-from trigger_bot_api import TOOLS as BOT_TOOLS
 TOOLS["trigger"] += ["trigger.bot." + name for name in BOT_TOOLS]
 
 ADAPTERS = {
