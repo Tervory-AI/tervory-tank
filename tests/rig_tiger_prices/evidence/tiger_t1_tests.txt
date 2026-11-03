@@ -122,7 +122,7 @@ E     # cancelled 0
 E     # skipped 0
 E     # todo 0
 E     # duration_ms 52.121642
-E     
+E
 E   assert 1 == 0
 E    +  where 1 = CompletedProcess(args=['node', '--test', 'tests/tiger_works/workspace.test.cjs'], returncode=1, stdout="TAP version 13...# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 52.121642\n", stderr='').returncode
 _________ test_real_chromium_markup_stores_history_and_one_price_alert _________
@@ -159,12 +159,12 @@ E   playwright._impl._errors.TargetClosedError: Page.evaluate: Target page, cont
     warnings.warn(
 
 tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
-  /workspace/codex-tiger-t1/tank/main.py:752: DeprecationWarning: 
+  /workspace/codex-tiger-t1/tank/main.py:752: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
@@ -172,57 +172,57 @@ tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
 tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
 tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
 tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
-  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
-  /workspace/codex-tiger-t1/tank/main.py:806: DeprecationWarning: 
+  /workspace/codex-tiger-t1/tank/main.py:806: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
-  /workspace/codex-tiger-t1/tank/agent_skills.py:531: DeprecationWarning: 
+  /workspace/codex-tiger-t1/tank/agent_skills.py:531: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
-  /workspace/codex-tiger-t1/tank/skala_intake.py:71: DeprecationWarning: 
+  /workspace/codex-tiger-t1/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
-  /workspace/codex-tiger-t1/tank/skala_intake.py:77: DeprecationWarning: 
+  /workspace/codex-tiger-t1/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
-  /workspace/codex-tiger-t1/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /workspace/codex-tiger-t1/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
