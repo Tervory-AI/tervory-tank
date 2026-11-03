@@ -137,6 +137,8 @@ async def test_signature_before_parsing_challenge_unknown_and_caps(b3, monkeypat
     assert await b3.pool.fetchval('SELECT count(*) FROM tank.trigger_bot_conversations') == 0
     assert (await post(b3, payload(incoming=message(text='placeholder' * 200)))).status_code == 200
     assert await b3.pool.fetchval('SELECT count(*) FROM tank.trigger_bot_conversations') == 0
+    assert (await post(b3, payload(incoming=message(text='placeholder' + ' ' * 2001)))).status_code == 200
+    assert await b3.pool.fetchval('SELECT count(*) FROM tank.trigger_bot_conversations') == 0
     assert (await post(b3, payload(), raw=b'x' * 262145)).status_code == 413
     assert not b3.cloud.calls
 
