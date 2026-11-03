@@ -161,8 +161,12 @@ class QuoteData(BaseModel):
 
 def _public(row) -> dict:
     # Additive nullable columns must not fabricate fields on legacy requests.
-    return {key: value for key, value in dict(row).items()
-            if key not in _QUOTE_FIELDS or value is not None}
+    result = {key: value for key, value in dict(row).items()
+              if key not in _QUOTE_FIELDS or value is not None}
+    if isinstance(result.get('quote_amount'), Decimal):
+        # Preserve the exact stored decimal through FastAPI's JSON boundary.
+        result['quote_amount'] = str(result['quote_amount'])
+    return result
 
 
 def transition(before: str, after: str) -> None:
