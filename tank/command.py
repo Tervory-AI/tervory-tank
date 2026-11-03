@@ -469,6 +469,10 @@ async def events(thread_id: uuid.UUID, after: int = Query(default=0, ge=0), acto
 async def route_turn(actor: Actor, messages: list[dict], model: str | None = None,
                      *, task_id: uuid.UUID | None = None, on_token: TokenSink | None = None,
                      priority: str | None = None) -> Any:
+    from market_lab_ml3 import code_plan as market_lab_code_plan
+    planned = await market_lab_code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     from main import Message, RouteRequest, box_region, run_route
     from memory_routes import remember_turn
     remembered = await remember_turn(actor, messages, task_id)
