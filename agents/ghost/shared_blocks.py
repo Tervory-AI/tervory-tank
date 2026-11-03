@@ -1,6 +1,7 @@
 """Standing address evidence only. No blocking decision, inference or raw-log retention."""
 import asyncio
 import json
+import math
 import time
 import uuid
 from datetime import datetime, timezone
@@ -15,6 +16,8 @@ SHARE_SECONDS = 7 * 24 * 3600
 
 
 def epoch(value):
+    if type(value) in (int, float):
+        return float(value) if math.isfinite(value) else None
     try:
         parsed = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
         return parsed.timestamp() if parsed.tzinfo else None
@@ -112,7 +115,7 @@ class StandingBlocks:
                     return False
             public = sorted(url for url in urls if url and public_url(url))
             fact = {'kind': 'blocked_address', 'address': address, 'receipt_id': rid,
-                    'applied_at': when, 'public_sources': public}
+                    'applied_at': datetime.fromtimestamp(started, timezone.utc).isoformat(), 'public_sources': public}
             row = await self.memory.remember(tenant, json.dumps(fact, sort_keys=True), 'blocked_address',
                 'urn:autumbra:receipt:' + rid, evidence=public, row_id=identity,
                 last_verified=datetime.fromtimestamp(now, timezone.utc).isoformat(),
