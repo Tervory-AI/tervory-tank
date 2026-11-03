@@ -51,14 +51,15 @@ in the repo. The identity compose references the existing `https` entrypoint and
    environment values, private-key files or ACME storage contents.
 3. Confirm the current `za.tervory.com` certificate is valid and how Coolify
    issues and renews it while that record stays proxied. Use that **same existing
-   issuance/renewal path** for `auth-za.tervory.com`; confirm its certificate covers
-   the identity hostname too. Keep the ZA proxy configuration unchanged. The
+   issuance/renewal path** for `auth-za.tervory.com`. Establish how that existing
+   path will issue the identity hostname certificate on deployment, then verify
+   its hostname coverage during step 4. Keep the ZA proxy configuration unchanged. The
    checked-in identity labels require `https`/`letsencrypt`; if the existing names
    or mechanism differ, record that mismatch for an identity-resource label
    review rather than changing the shared proxy.
 
-**Stop at this step until the existing issuance/renewal mechanism and matching
-identity origin certificate are established.** Missing evidence is the live ZA
+**Stop at this step until the existing issuance/renewal mechanism and compatible
+identity router settings are established.** Missing evidence is the live ZA
 resource's TLS router/resolver and the existing proxy's certificate issuance and
 renewal method; this cannot be established from the repository. Do not deploy
 identity-za, enter the issuer on Tank or continue sign-in acceptance until that
