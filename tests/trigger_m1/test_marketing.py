@@ -132,8 +132,9 @@ async def test_crash_after_durable_claim_never_replays_uncertain_post(m1):
     row = await m1.store.post(TENANT, ident)
     assert row['state'] == 'failed' and row['delivery'] == 'uncertain' and not row['retryable']
     m1.google.request.assert_not_awaited()
-    with pytest.raises(HTTPException):
-        await m1.store.transition(TENANT, 'post.retry', Post(post_id=ident, expected_revision=1), uuid4())
+    result = await m1.store.transition(TENANT, 'post.retry', Post(post_id=ident, expected_revision=1), uuid4())
+    assert result['state'] == 'scheduled'
+    assert m1.google.request.await_args.args[1] == 'GET'
 
 
 @pytest.mark.asyncio
@@ -153,10 +154,11 @@ async def test_google_too_long_is_failed_with_exact_message_no_auto_retry_edit_d
 
 
 @pytest.mark.asyncio
-async def test_backoff_fixed_limit_and_confirmed_retry(m1):
+@pytest.mark.parametrize('status', [429, 503])
+async def test_backoff_fixed_limit_and_confirmed_retry(m1, status):
     ident = await post(m1)
     await scheduled(m1, ident)
-    m1.google.request.side_effect = GoogleFailure(429, 'placeholder quota message')
+    m1.google.request.side_effect = GoogleFailure(status, 'placeholder retryable message')
     for attempt in range(1, 4):
         await Publisher(m1.store).once(TENANT)
         row = await m1.store.post(TENANT, ident)
