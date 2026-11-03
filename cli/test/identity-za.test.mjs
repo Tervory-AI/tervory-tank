@@ -90,3 +90,12 @@ test('Zitadel flag is accepted only for ZA login', async () => {
     }), /Login accepts|Invalid command option/);
   }
 });
+
+
+test('ZA rejects a legacy approval response even when the ZA issuer is unavailable', async () => {
+  await assert.rejects(run(['login', '--region', 'za'], {
+    store: { set() { assert.fail('No credential may be saved'); } },
+    io: { write() {}, open() { assert.fail('Boston must not be opened'); } },
+    transport: async () => Response.json({ device_code: 'tvd1.za.placeholder', user_code: 'BCDF-GHJK' }),
+  }), /Login refused/);
+});
