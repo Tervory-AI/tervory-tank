@@ -2283,6 +2283,12 @@ INSERT INTO tank.policy(task_type,rung,model,cache_scope,max_tokens_out,eval_thr
 VALUES ('tisan.plan',1,'luna','tenant',3000,0.99,200,false)
 ON CONFLICT DO NOTHING;
 
+-- IDENTITY-ZA: existing token format/lifetimes remain unchanged. Trusted role
+-- snapshot is set only by verified OIDC issuance; refresh/revoke preserve the row.
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS identity_tenant_admin boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.device_authorizations ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT 'workspace'
+    CHECK (provider IN ('workspace', 'zitadel'));
+
 -- B4 saved Base lists: immutable tenant-owned record/evidence snapshots.
 CREATE TABLE IF NOT EXISTS tank.base_saved_lists (
     list_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
