@@ -117,7 +117,8 @@ services:
       health_egress: {}
 
 volumes:
-  health_results: {}
+  health_results:
+    name: autumbra-health-${TENANT_ID}
   enforce_data:
     name: ${ENFORCE_DATA_VOLUME}
   threat_queue:
