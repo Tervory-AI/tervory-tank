@@ -21,7 +21,8 @@ from playwright.async_api import async_playwright, expect
 import uvicorn
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path[:0] = [str(ROOT / "agents/rig"), str(ROOT / "agents/_chassis")]
+sys.path[:0] = [str(ROOT / "tests"), str(ROOT / "agents/rig"), str(ROOT / "agents/_chassis")]
+from rig_fixture_loader import load_catalogue  # noqa: E402
 from rigbox.api import mount  # noqa: E402
 from rigbox.page_route import mount_page  # noqa: E402
 from rigbox.service import Service  # noqa: E402
@@ -35,9 +36,9 @@ async def main():
     output.mkdir(parents=True, exist_ok=True)
     service = Service(MemoryStore())
     # Existing saved catalogue, explicitly loaded only by this offline harness.
-    await service.load_folder(ROOT / "agents/rig/catalogues/customnation")
+    await load_catalogue(service, ROOT / "tests/fixtures/rig_catalogues/lumaworks")
     config = json.loads(
-        (ROOT / "agents/rig/catalogues/customnation/publish.json").read_text()
+        (ROOT / "tests/fixtures/rig_catalogues/lumaworks/publish.json").read_text()
     )
     tenant = config["tenant_id"]
     app = FastAPI()
@@ -175,7 +176,7 @@ async def main():
                 assert await page.locator(".build-wrap").count() == 0
                 await expect(
                     page.get_by_placeholder(
-                        "Search a brand, model or part, like Staccato"
+                        "Search a brand, model or part, like LumaWorks"
                     )
                 ).to_have_value("")
                 for width in [1440, 390]:
@@ -206,7 +207,7 @@ async def main():
                             "stand-in",
                             "sample",
                             "saved 17 oct",
-                            "staccato",
+                            "lumaworks",
                             "holosun",
                         ]
                     )
@@ -228,17 +229,17 @@ async def main():
                 await page.evaluate("window.renderRig(18, 9)")
                 assert requests == []
                 await page.get_by_placeholder(
-                    "Search a brand, model or part, like Staccato"
-                ).fill("Staccato")
+                    "Search a brand, model or part, like LumaWorks"
+                ).fill("LumaWorks")
                 await page.locator("form.search-bar button").click()
-                await expect(page.locator(".pistols")).to_contain_text("Staccato C2")
+                await expect(page.locator(".pistols")).to_contain_text("LumaWorks C2")
                 await expect(page.locator(".upgrades")).to_be_visible()
                 assert await page.locator(".pill-btn").count() == 0
                 assert [row["op"] for row in requests] == ["search", "graph"]
                 # The recorded graph must have been fetched, not filled from C2_PARTS.
                 assert requests[1]["id"] == "STI-C2-9"
                 await page.get_by_placeholder(
-                    "Search a brand, model or part, like Staccato"
+                    "Search a brand, model or part, like LumaWorks"
                 ).fill("nothing matches zzz")
                 await page.locator("form.search-bar button").click()
                 await expect(page.locator(".pistols")).to_have_count(0)

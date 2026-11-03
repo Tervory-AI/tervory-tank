@@ -159,7 +159,7 @@ class Bus:
         return event_id
 
     async def receive(self, scope: Scope, event: str, consumer: str) -> list[dict]:
-        if scope.agent != "rig" or event != "tiger.price.changed":
+        if (scope.agent, event) not in {("rig", "tiger.price.changed"), ("radix", "zenas.regulation.changed")}:
             raise PermissionError
         key = scope.stream(event)
         try:
@@ -190,7 +190,7 @@ class Bus:
         return messages
 
     async def settle(self, scope: Scope, event: str, consumer: str, message_id: str, action: str) -> int:
-        if scope.agent != "rig" or event != "tiger.price.changed" or action not in {"ack", "fail"}:
+        if (scope.agent, event) not in {("rig", "tiger.price.changed"), ("radix", "zenas.regulation.changed")} or action not in {"ack", "fail"}:
             raise PermissionError
         key = scope.stream(event)
         return await self.redis.eval(SETTLE, 2, key, key + ":dead", scope.agent,

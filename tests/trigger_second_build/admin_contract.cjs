@@ -3,7 +3,7 @@ const root=path.resolve(__dirname,'../..'),ts=require(path.join(root,'workspace/
 require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,f);
 let session={};
 const load=Module._load;
-Module._load=function(name,...rest){if(name==='@clerk/nextjs/server')return {auth:async()=>session};return load.call(this,name,...rest);};
+Module._load=function(name,...rest){if(name==='@/app/api/zenas/tank')return require(path.join(root,'workspace/app/api/zenas/tank.ts'));if(name==='@clerk/nextjs/server')return {auth:async()=>session};return load.call(this,name,...rest);};
 process.env.TANK_API_KEY='dummy-workspace-key';process.env.TANK_URL='http://tank.invalid';
 const {triggerIdentity}=require(path.join(root,'workspace/lib/trigger.ts'));
 const {tenantIdFor}=require(path.join(root,'workspace/lib/tenant.ts'));

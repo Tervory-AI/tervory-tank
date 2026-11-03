@@ -80,7 +80,8 @@ class Retailer:
             "settings": {"name": retailer.get("name", ""), "email": retailer.get("email") or "",
                          "theme": retailer.get("theme", "neutral"),
                          "locate_enabled": retailer.get("locate_enabled") is True,
-                         "blind_ship": retailer.get("blind_ship") is True},
+                         "blind_ship": retailer.get("blind_ship") is True,
+                         "auto_order": retailer.get("auto_order") is True},
             "price_configured": bool(settings),
             "currency": (settings or {}).get("shop_currency", "ZAR"),
             "templates": await self.store.templates_for(tenant),
@@ -129,11 +130,16 @@ class Retailer:
         blind_ship = data.get("blind_ship", previous.get("blind_ship", False))
         if type(blind_ship) is not bool:
             raise ValueError("The request is not valid.")
+        # Auto-order is its own explicit opt-in, off by default, sandbox only.
+        auto_order = data.get("auto_order", previous.get("auto_order", False))
+        if type(auto_order) is not bool:
+            raise ValueError("The request is not valid.")
         await self.store.put_retailer(tenant, previous.get("slug") or tenant, email,
                                       previous.get("webhook"), name.strip(), theme=theme,
                                       quote_notice={key: validated_notice[key] for key in ("text", "url")}
                                       if validated_notice else None,
-                                      locate_enabled=locate_enabled, blind_ship=blind_ship)
+                                      locate_enabled=locate_enabled, blind_ship=blind_ship,
+                                      auto_order=auto_order)
         return {"saved": True}
 
     async def embed_key(self, tenant: str, data: dict[str, Any]) -> dict:

@@ -11,8 +11,9 @@ export const metadata: Metadata = {
 };
 
 /** Public Moot index on zenas.tervory.com (product host). */
-export default async function MootIndexPage() {
-  const result = await listPublishedMatches();
+export default async function MootIndexPage({ searchParams }: { searchParams?: Promise<{ region?: string }> }) {
+  const region = (await searchParams)?.region === "za" ? "za" : "us-east";
+  const result = await listPublishedMatches(undefined, region);
   return (
     <main className="moot-watch" aria-label="Moot Court">
       <h1>Moot Court</h1>
@@ -33,7 +34,7 @@ export default async function MootIndexPage() {
           <ul>
             {result.matches.map((row) => (
               <li key={row.matchId}>
-                <Link href={`/moot/${row.matchId}`}>{row.title}</Link>
+                <Link href={`/moot/${row.matchId}${region === "za" ? "?region=za" : ""}`}>{row.title}</Link>
               </li>
             ))}
           </ul>

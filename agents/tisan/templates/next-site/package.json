@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/content-check.cjs && next build",
     "deploy": "node scripts/deploy-gate.cjs",
     "start": "next start",
     "lint": "eslint . && prettier --check .",

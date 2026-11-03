@@ -5,6 +5,8 @@ Uses the in-memory store, the same way tests/test_rig.py does. No database and n
 
 from __future__ import annotations
 
+from rig_fixture_loader import load_catalogue
+
 import sys
 from pathlib import Path
 
@@ -20,8 +22,8 @@ from rigbox.api import mount  # noqa: E402
 from rigbox.service import Service  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
-EXAMPLE = ROOT / "agents" / "rig" / "catalogues" / "example"
-SECOND = ROOT / "agents" / "rig" / "catalogues" / "second"
+EXAMPLE = ROOT / "tests" / "fixtures" / "rig_catalogues" / "example"
+SECOND = ROOT / "tests" / "fixtures" / "rig_catalogues" / "second"
 EXAMPLE_TENANT = "11111111-1111-4111-8111-111111111111"
 SECOND_TENANT = "22222222-2222-4222-8222-222222222222"
 EXAMPLE_KEY = "rk_pub_examplebrand"
@@ -45,8 +47,8 @@ def _headers(key: str, origin: str) -> dict[str, str]:
 
 async def _loaded() -> Service:
     service = Service(MemoryStore())
-    example = await service.load_folder(EXAMPLE)
-    second = await service.load_folder(SECOND)
+    example = await load_catalogue(service, EXAMPLE)
+    second = await load_catalogue(service, SECOND)
     assert example["tenant_id"] == EXAMPLE_TENANT
     assert example["products"] == {"added": 3, "updated": 0, "rejected": []}
     assert example["keys"] == 1

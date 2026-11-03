@@ -58,11 +58,32 @@ async def base(conn, tenant, region, start, end, figures):
         ORDER BY r.licence_key,i.imported_at DESC,i.id DESC""", tenant, start, end)
     comparison = compare(records, [dict(row) for row in apollo])
     counts = Counter()
+    fields = {"website", "phone", "email"}
+    outcomes = ("matches", "base_only", "apollo_only", "disagreements", "neither")
     for state in comparison["states"]:
-        for field in ("website", "phone", "email"):
-            for outcome, count in state[field].items():
-                counts[f"{field}.{outcome}"] += count
+        # Follow the comparison's fields, including additions from other Base work.
+        for field, buckets in state.items():
+            if not isinstance(buckets, dict):
+                continue
+            fields.add(field)
+            for outcome in outcomes:
+                counts[f"{field}.{outcome}"] += buckets.get(outcome, 0)
     histogram(figures, "base.comparison_vs_apollo", counts, "base_metrics.compare")
+    compared = len(comparison["rows"])
+
+    def comparison_figure(name, value, **metadata):
+        # Data only: presentation requires an approved Figma frame.
+        figures[name] = {**figures["base.records_verified"], "id": name}
+        put(figures, name, value, "base_metrics.compare", **metadata)
+
+    for field in sorted(fields):
+        for outcome in outcomes:
+            comparison_figure(f"base.vs_apollo.{field}.{outcome}", counts[f"{field}.{outcome}"])
+        comparison_figure(f"base.vs_apollo.{field}.records_compared", compared)
+    verified_compared = sum(flags({"fields": row["base"]})["verified"] for row in comparison["rows"])
+    comparison_figure("base.vs_apollo.coverage", verified_compared / compared if compared else 0,
+                      unit="ratio", base_verified=verified_compared, apollo_returned=compared,
+                      records_compared=compared)
     # #390 is independent: use its saved verdicts and arithmetic when installed.
     if importlib.util.find_spec("base_audit") and await exists(conn, "tank.base_audits"):
         from base_audit import measure

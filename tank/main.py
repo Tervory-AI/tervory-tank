@@ -481,9 +481,21 @@ async def _homes_founder_feed(request: Request, path: str) -> bool:
     Returns False when the path is not one of those routes. A matching route
     with the wrong home, a body, or extra fields is refused here. Allowed
     bodies are the fields those routes already take (source, review). They
-    carry no document, matter, or client text.
+    carry no document, matter, or client text. The public Moot read is GET-only,
+    with no body and only home_region=za and an optional match_id query.
     """
     method = request.method
+    if path == "/v1/zenas/moot/published":
+        params = request.query_params
+        if (
+            method != "GET"
+            or await request.body()
+            or set(params) - {"home_region", "match_id"}
+            or params.getlist("home_region") != [ZA_REGION]
+            or len(params.getlist("match_id")) > 1
+        ):
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+        return True
     load = _HOMES_LOAD.fullmatch(path)
     allowed = (
         (method == "GET" and path == "/v1/zenas/pool/status")
@@ -529,8 +541,11 @@ async def _homes_key_scope(request: Request) -> None:
     It may set a za tenant's home. It may also read pool status, load one
     source, read or run the self-test, read or set the review switch, and read
     or run case conversion, each only with home_region=za. Those routes return names, counts, dates,
-    errors and scores. Documents, matters and client data stay refused.
+    errors and scores. It may read explicitly published ZA Moot hearings only;
+    drafts, matters, unpublished hearings and client data stay refused.
     The Boston Workspace holds this key. It never holds the ZA TANK_API_KEY.
+    It cannot approve CLI device sign-ins: those use the separate
+    TANK_DEVICE_APPROVAL_KEY (personal_tokens.device_approval_actor).
     """
     if box_region() != ZA_REGION:
         raise HTTPException(status_code=403, detail=_HOMES_DENIED)
@@ -3246,7 +3261,7 @@ class EvalRun(BaseModel):
 
 async def run_room_eval(pkg: skala.SkillPackage, payload: dict[str, Any], ctx: skala.SkillContext) -> dict[str, Any]:
     key = os.environ.get("TANK_KEY_TISAN", "")
-    if pkg.id not in {"tisan.figma", "tisan.scaffold"} or not key or _http is None:
+    if pkg.id not in {"tisan.figma", "tisan.scaffold", "tisan.build"} or not key or _http is None:
         raise RuntimeError("eval room is unavailable")
     response = await _http.post(
         "http://agent-tisan:8000/evals/run",
@@ -3273,7 +3288,7 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
         pkg, lambda: __import__("skala_revalidation").eval_context(
             __import__("sys").modules[__name__], pkg,
             make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here)),
-        execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold"} else None,
+        execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold", "tisan.build"} else None,
     )
     if __import__("skala_revalidation").ACTIVE.get() is not None:
         return await __import__("skala_revalidation").record(
@@ -4176,6 +4191,7 @@ app.include_router(__import__("case_studies").router)
 app.include_router(__import__("event_bus").router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("base_lists").build_router())
 app.include_router(__import__("rig_brain_routes").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("moa").router)
 
@@ -4186,6 +4202,143 @@ async def training_graduation(actor=Depends(__import__("gold").require_reviewer)
         raise HTTPException(404, "not found")
     async with pool().acquire() as conn:
         return await graduate.training_table(conn, actor.tenant, box_region())
+
+
+async def _tisan_publish_git_commit(http: httpx.AsyncClient, payload: dict) -> dict:
+    """Fixed private repository only; no provider bodies or credentials escape."""
+    import base64
+    from pathlib import PurePosixPath
+    from urllib.parse import quote
+
+    repo = os.environ.get('TISAN_SITES_REPO', '')
+    token = os.environ.get('TISAN_GITHUB_TOKEN', '')
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo) or not token:
+        raise ValueError('publish settings unavailable')
+    tenant = str(uuid.UUID(payload['tenant_id']))
+    slug = payload['slug']
+    if not re.fullmatch(r'[a-z0-9-]{1,100}', slug):
+        raise ValueError('invalid site')
+    sources = {repo, 'https://github.com/' + repo, 'https://github.com/' + repo + '.git',
+               'git@github.com:' + repo + '.git'}
+    if payload.get('repository') not in sources:
+        raise ValueError('staging repository differs')
+    manifest, files = payload['manifest'], payload['files']
+    if (not isinstance(files, dict) or not 1 <= len(files) <= 5000
+            or manifest.get('ok') is not True or manifest.get('slug') != slug
+            or sorted(manifest['files']) != sorted(files)):
+        raise ValueError('invalid build')
+    validated, size = [], 0
+    for name, entry in files.items():
+        path = PurePosixPath(name)
+        if (path.is_absolute() or '..' in path.parts or '.git' in path.parts or str(path) != name
+                or '\\' in name or not name or entry['mode'] not in ('100644', '100755')):
+            raise ValueError('invalid file')
+        data = base64.b64decode(entry['content'], validate=True)
+        size += len(data)
+        if size > 24 * 1024 * 1024:
+            raise ValueError('build too large')
+        validated.append((name, entry, data))
+    branch = f'site/{tenant}/{slug}'
+
+    async def github(method, path, *, missing=False, **kwargs):
+        response = await http.request(method, f'https://api.github.com/repos/{repo}' + path,
+            headers={'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json',
+                     'X-GitHub-Api-Version': '2022-11-28'},
+            timeout=30, follow_redirects=False, **kwargs)
+        if missing and response.status_code == 404:
+            return None
+        if response.status_code not in (200, 201):
+            raise ValueError('GitHub request unavailable')
+        result = response.json()
+        if not isinstance(result, dict):
+            raise ValueError('GitHub response unavailable')
+        return result
+
+    def sha(value):
+        if not isinstance(value, str) or not re.fullmatch(r'[0-9a-f]{40}', value):
+            raise ValueError('full Git commit unavailable')
+        return value
+
+    info = await github('GET', '')
+    if info.get('private') is not True or info.get('full_name', '').lower() != repo.lower():
+        raise ValueError('private sites repository required')
+    ref_path = '/git/ref/heads/' + quote(branch, safe='/')
+    current = await github('GET', ref_path, missing=True)
+    if current is None:
+        initial = await github('GET', '/git/ref/heads/' + quote(info['default_branch'], safe=''))
+        parent = sha(initial['object']['sha'])
+    else:
+        if current.get('ref') != 'refs/heads/' + branch:
+            raise ValueError('site branch differs')
+        parent = sha(current['object']['sha'])
+    tree = []
+    for name, entry, data in validated:
+        blob = await github('POST', '/git/blobs', json={'content': entry['content'], 'encoding': 'base64'})
+        blob_sha = sha(blob['sha'])
+        expected = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+        if blob_sha != expected:
+            raise ValueError('Git blob differs from stored file')
+        tree.append({'path': name, 'mode': entry['mode'], 'type': 'blob', 'sha': blob_sha})
+    # No base_tree: a build replaces the entire site, deleting stale files.
+    created_tree = await github('POST', '/git/trees', json={'tree': tree})
+    created = await github('POST', '/git/commits', json={
+        'message': 'Tisan stored build\n\n' + json.dumps(manifest, sort_keys=True, separators=(',', ':')),
+        'tree': sha(created_tree['sha']), 'parents': [parent]})
+    target = sha(created['sha'])
+    if current is None:
+        await github('POST', '/git/refs', json={'ref': 'refs/heads/' + branch, 'sha': target})
+    else:
+        await github('PATCH', '/git/refs/heads/' + quote(branch, safe='/'), json={'sha': target, 'force': False})
+    confirmed = await github('GET', ref_path)
+    if confirmed.get('ref') != 'refs/heads/' + branch or confirmed['object']['sha'] != target:
+        raise ValueError('site commit not confirmed')
+    return {'commit': target, 'repository': repo, 'branch': branch}
+
+
+@app.post('/v1/tisan/publish/git')
+async def tisan_publish_git(request: Request) -> dict:
+    """Only Tisan's room key plus founder identity may submit build files."""
+    import hmac
+    expected = os.environ.get('TANK_KEY_TISAN', '')
+    key, actor = request.headers.get('x-tank-key', ''), request.headers.get('x-tervory-admin', '')
+    founders = {p.strip() for p in os.environ.get('TERVORY_ADMIN_USER_IDS', '').split(',') if p.strip()}
+    if not expected or not key or not hmac.compare_digest(key.encode(), expected.encode()) or actor not in founders:
+        raise HTTPException(404, 'not found')
+    raw = bytearray()
+    async for chunk in request.stream():
+        raw.extend(chunk)
+        if len(raw) > 36 * 1024 * 1024:
+            raise HTTPException(413, 'request too large')
+    try:
+        payload = json.loads(raw)
+        tenant = str(uuid.UUID(payload['tenant_id']))
+        if tenant != request.headers.get('x-tervory-tenant'):
+            raise ValueError('tenant differs')
+        async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as http:
+            return await _tisan_publish_git_commit(http, payload)
+    except (ValueError, TypeError, KeyError, AttributeError, httpx.HTTPError):
+        raise HTTPException(503, 'Site commit could not be confirmed; inspect the publish operation before retrying.') from None
+
+
+@app.post('/v1/tisan/publish/{action}', dependencies=[Depends(__import__('admin').require_admin)])
+async def tisan_publish_proxy(action: str, request: Request) -> Response:
+    if action not in ('build', 'status'):
+        raise HTTPException(404, 'not found')
+    key = os.environ.get('TANK_KEY_TISAN', '')
+    if _http is None or not key:
+        raise HTTPException(503, 'Tisan room is unavailable')
+    raw = bytearray()
+    async for chunk in request.stream():
+        raw.extend(chunk)
+        if len(raw) > 8192:
+            raise HTTPException(413, 'request too large')
+    try:
+        response = await _http.request('POST', 'http://agent-tisan:8000/publish/' + action,
+            content=bytes(raw), headers={'X-Tank-Key': key,
+                'X-Tervory-Admin': request.headers.get('x-tervory-admin', ''), 'Content-Type': 'application/json'}, timeout=900)
+    except httpx.HTTPError:
+        raise HTTPException(503, 'Publish unavailable; inspect its operation status before retrying') from None
+    return Response(content=response.content, status_code=response.status_code, media_type='application/json')
 
 
 @app.api_route("/v1/tisan/promotion/{action}", methods=["GET", "POST"],
@@ -4523,7 +4676,10 @@ __import__("research").register(app, globals())
 
 # COMMAND-1A: conversation routes live in their own module.
 app.include_router(__import__("command").router)
+__import__("personal_tokens").register(app)
+__import__("mcp_server").register(app)
 app.include_router(__import__("trigger_routes").router)
+app.include_router(__import__("trigger_crm").router)
 
 # ACCESS-1: scoped connections and browser-only credential handoff.
 app.include_router(__import__("access").router)
@@ -4544,6 +4700,7 @@ app.include_router(semantic_cache.build_router(__import__("sys").modules[__name_
 __import__("skala_intake").install(app, __import__("sys").modules[__name__])
 
 app.include_router(__import__("vault_routes").build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("mcp_client_oauth").router)
 
 # D1-D3 memory: founder-only record/publication corridor.
 from memory_routes import router as memory_router

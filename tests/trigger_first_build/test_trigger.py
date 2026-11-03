@@ -202,13 +202,21 @@ async def test_adapter_http_tenant_ownership_and_zero_receipt(monkeypatch):
     monkeypatch.setattr(trigger_routes, 'code_receipt', receipt)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://tank') as http:
         response = await http.post('/v1/trigger/check', json={'text': 'This are a test.'})
+        assert response.status_code == 409
+        room.assert_not_called()
+        from trigger_commands import CONFIRMED
+        token = CONFIRMED.set((TENANT, 'founder', uuid4(), 'trigger.check', {'text': 'This are a test.'}))
+        try:
+            response = await http.post('/v1/trigger/check', json={'text': 'This are a test.'})
+        finally:
+            CONFIRMED.reset(token)
         assert response.status_code == 200
         assert response.json()['cost_usd'] == response.json()['model_calls'] == 0
         assert room.call_args.args[1]['tenant_id'] == str(TENANT)
         assert receipt.call_args.args == (TENANT, 'trigger.check')
         for payload, status in [({'text': 'text', 'tenant_id': str(OTHER)}, 403),
                                 ({'text': 'text', 'url': 'https://example.com'}, 422),
-                                ({'text': 'x' * 20001}, 422)]:
+                                ({'text': 'x' * 32001}, 422)]:
             response = await http.post('/v1/trigger/check', json=payload)
             assert response.status_code == status
         actor = command.Actor(TENANT, 'client', False)
