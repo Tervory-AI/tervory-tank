@@ -29,6 +29,79 @@ from test_rig_optional_blind_ship import HandoffDouble
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("inserted", [False, True])
+async def test_transient_placement_retries_once_without_duplicate_orders(monkeypatch, tmp_path, inserted):
+    store, service, _, _, body = await auto_shop(monkeypatch, tmp_path)
+    quote_id = (await service.locate_accept(TENANT, body))["request_id"]
+    original = service.fulfilment.place_located_order
+    calls = 0
+
+    async def transient(**kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            if inserted:
+                await original(**kwargs)
+            raise ConnectionError("placeholder-transient")
+        return await original(**kwargs)
+
+    monkeypatch.setattr(service.fulfilment, "place_located_order", transient)
+    first = await service.confirm_store_payment(TENANT, quote_id)
+    state = (await store.quote_for(TENANT, quote_id))["payload"]["locate_state"]
+    assert first["state"] == "store_confirmed" and state["attempted_at"] is None
+    assert state["attempt_id"] is None and not list(tmp_path.glob("*.eml"))
+    second = await service.confirm_store_payment(TENANT, quote_id)
+    assert second["state"] == "supplier_ordered" and calls == 2
+    await service.confirm_store_payment(TENANT, quote_id)
+    assert calls == 2 and len(store.locate_orders) == 1 and len(list(tmp_path.glob("*.eml"))) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", ["order_mismatch", "order_rejected"])
+async def test_permanent_placement_error_needs_person(monkeypatch, tmp_path, error):
+    from unittest.mock import AsyncMock
+    store, service, _, _, body = await auto_shop(monkeypatch, tmp_path)
+    quote_id = (await service.locate_accept(TENANT, body))["request_id"]
+    place = AsyncMock(side_effect=DeliveryError(error))
+    monkeypatch.setattr(service.fulfilment, "place_located_order", place)
+    assert (await service.confirm_store_payment(TENANT, quote_id))["state"] == "needs_person"
+    assert (await service.confirm_store_payment(TENANT, quote_id))["state"] == "needs_person"
+    assert place.await_count == 1 and not store.locate_orders
+    assert not list(tmp_path.glob("*.eml"))
+
+
+@pytest.mark.asyncio
+async def test_lost_lease_http_returns_current_tenant_quote_state(monkeypatch, tmp_path):
+    store, service, _, _, body = await auto_shop(monkeypatch, tmp_path)
+    quote_id = (await service.locate_accept(TENANT, body))["request_id"]
+    original = service.fulfilment.place_located_order
+
+    async def takeover(**kwargs):
+        order = await original(**kwargs)
+        state = (await store.quote_for(TENANT, quote_id))["payload"]["locate_state"]
+        await store.locate_state(TENANT, quote_id, {**state, "attempt_id": "placeholder-new-owner",
+                                                 "state": "ordered"})
+        return order
+
+    monkeypatch.setattr(service.fulfilment, "place_located_order", takeover)
+    monkeypatch.setenv("RIG_RETAILER_KEY", KEY)
+    app = FastAPI()
+    app.state.rig = service
+    mount(app)
+    app.include_router(retailer_router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://placeholder.invalid") as client:
+        headers = {"x-rig-retailer-key": KEY}
+        path = "/internal/retailer/confirm-store-payment"
+        response = await client.post(path, json={"tenant_id": TENANT, "data": {"quote_id": quote_id}}, headers=headers)
+        assert response.status_code == 200
+        assert response.json() == {"request_id": quote_id, "confirmed": True, "state": "ordered",
+                                   "items": [shopper_body((await store.quote_for(TENANT, quote_id))["payload"]["product"])]}
+        denied = await client.post(path, json={"tenant_id": OTHER, "data": {"quote_id": quote_id}}, headers=headers)
+        assert denied.status_code == 404
+    assert len(store.locate_orders) == 1
+
+
 def test_no_provider_module_route_setting_or_call_remains():
     assert not (ROOT / "agents/rig/rigbox/payments.py").exists()
     forbidden = re.compile(
@@ -117,21 +190,21 @@ async def test_stale_confirmation_lease_recovers_same_saved_order_and_outbox(mon
 @pytest.mark.parametrize("legacy_state", ["payment_pending", "payment_failed", "payment_refused", "captured", "refunded", "ordered"])
 async def test_historical_provider_state_is_preserved_and_cannot_place_an_order(monkeypatch, tmp_path, legacy_state):
     store, service, _, _, _ = await auto_shop(monkeypatch, tmp_path)
-    historical = {"state": legacy_state, "payment": {"reference": "old-audit-reference"}}
-    await store.add_quote(TENANT, "historical", {"locate_state": historical}, {})
+    historical = {"state": legacy_state, "payment": {"reference": "placeholder-audit-reference"}}
+    await store.add_quote(TENANT, "placeholder-historical", {"locate_state": historical}, {})
     with pytest.raises(RigError):
-        await service.confirm_store_payment(TENANT, "historical")
-    assert (await store.quote_for(TENANT, "historical"))["payload"]["locate_state"] == historical
+        await service.confirm_store_payment(TENANT, "placeholder-historical")
+    assert (await store.quote_for(TENANT, "placeholder-historical"))["payload"]["locate_state"] == historical
     assert not store.locate_orders
 
 
 @pytest.mark.asyncio
 async def test_quote_items_expose_store_time_offer_time_or_back_order_without_provenance():
     store = await rate_stub(await shop())
-    await store.put_retailer(TENANT, "shop", "shop@example.com", None, "Shop",
+    await store.put_retailer(TENANT, "placeholder-store", "placeholder-store@example.invalid", None, "placeholder-store",
                              delivery={"min_days": 2, "max_days": 3})
     service = QuoteService(store, None, HandoffDouble(), MemoryQuotes(store))
-    body = {"product_id": "part-1", "contact": {"name": "Shopper", "email": "shopper@example.com"}}
+    body = {"product_id": "part-1", "contact": {"name": "placeholder-shopper", "email": "placeholder-shopper@example.invalid"}}
     located = await service.quote(TENANT, body)
     assert located["items"][0]["delivery"] == {"ship_days": 10, "eta": "2026-11-12", "back_order": False}
     store.supply_state[TENANT]["offers"] = []
@@ -153,14 +226,14 @@ async def test_every_setup_item_carries_delivery_metadata():
     from rigbox.store import MemoryStore
     store = MemoryStore()
     await seed(store, TENANT)
-    await store.put_retailer(TENANT, "shop", "shop@example.com", None, "Shop",
+    await store.put_retailer(TENANT, "placeholder-store", "placeholder-store@example.invalid", None, "placeholder-store",
                              delivery={"min_days": 2, "max_days": 3})
     service = QuoteService(store, None, HandoffDouble(), MemoryQuotes(store))
     setup = (await service.setups(TENANT, "CORE-1"))["setups"][0]
     unavailable = setup["parts"][-1]["product"]["id"]
     row = next(row for row in await store.products(TENANT) if row["sku"] == unavailable)
     await store.upsert_product(TENANT, {**row, "attributes": {"stock": {"status": "out_of_stock"}}})
-    quote = await service.quote(TENANT, {"setup": setup, "contact": {"name": "Shopper", "email": "shopper@example.com"}})
+    quote = await service.quote(TENANT, {"setup": setup, "contact": {"name": "placeholder-shopper", "email": "placeholder-shopper@example.invalid"}})
     assert len(quote["items"]) == len(setup["parts"])
     assert all("delivery" in item for item in quote["items"])
     assert quote["items"][-1]["delivery"]["back_order"] is True
@@ -171,7 +244,7 @@ async def test_every_setup_item_carries_delivery_metadata():
 async def test_store_delivery_range_is_validated_and_preserved():
     store = await rate_stub(await shop())
     retailer = Retailer(QuoteService(store, None, HandoffDouble(), MemoryQuotes(store)))
-    base = {"name": "Shop", "email": "shop@example.com"}
+    base = {"name": "placeholder-store", "email": "placeholder-store@example.invalid"}
     for bad in (None, {"min_days": 2}, {"min_days": True, "max_days": 3},
                 {"min_days": 4, "max_days": 2}, {"min_days": 0, "max_days": 366}):
         with pytest.raises(ValueError):
@@ -191,11 +264,11 @@ async def test_retailer_http_confirmation_requires_existing_control_auth_and_onl
     mount(app)
     app.include_router(retailer_router)
     request = {"tenant_id": TENANT, "data": {"quote_id": accepted["request_id"]}}
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://rig.local") as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://rig-placeholder.invalid") as client:
         url = "/internal/retailer/confirm-store-payment"
         assert (await client.post(url, json=request)).status_code == 401
         headers = {"x-rig-retailer-key": KEY}
-        invalid = await client.post(url, json={**request, "data": {**request["data"], "bank_details": "refused"}}, headers=headers)
+        invalid = await client.post(url, json={**request, "data": {**request["data"], "bank_details": "placeholder-refused"}}, headers=headers)
         assert invalid.status_code == 422 and not store.locate_orders
         other = await client.post(url, json={**request, "tenant_id": OTHER}, headers=headers)
         assert other.status_code == 404 and not store.locate_orders
@@ -213,7 +286,7 @@ async def test_postgres_store_confirmation_schema_twice_and_tenant_isolation(mon
     from test_rig_optional_auto_order import env
 
     env(monkeypatch, tmp_path)
-    admin, database = _admin_url(), "rig_nopay_" + uuid4().hex[:12]
+    admin, database = _admin_url(), "rig_nopay_placeholder_" + uuid4().hex[:12]
     await _create_database(admin, database)
     pool = None
     try:
@@ -224,7 +297,7 @@ async def test_postgres_store_confirmation_schema_twice_and_tenant_isolation(mon
         fixture = await shop()
         await store.upsert_product(TENANT, (await fixture.products(TENANT))[0])
         await store.save_rule(TENANT, {"freight": "5", "duty_percent": "0", "margin_percent": "20"})
-        await store.put_retailer(TENANT, "shop", "shop@example.com", None, "Shop", locate_enabled=True,
+        await store.put_retailer(TENANT, "placeholder-store", "placeholder-store@example.invalid", None, "placeholder-store", locate_enabled=True,
                                  auto_order=True, delivery={"min_days": 2, "max_days": 3})
         await store.save_rate(TENANT, "USD", "18", "ZAR")
         supply = SupplyStore(store)
@@ -238,7 +311,7 @@ async def test_postgres_store_confirmation_schema_twice_and_tenant_isolation(mon
         service.locate_checker = Live(available("45.00"))
         held = await service.locate_confirm(TENANT, "part-1")
         accepted = await service.locate_accept(TENANT, {"product_id": "part-1", "hold": held["hold"],
-            "contact": {"name": "Shopper", "email": "shopper@example.com"}})
+            "contact": {"name": "placeholder-shopper", "email": "placeholder-shopper@example.invalid"}})
         assert await pool.fetchval("SELECT count(*) FROM agent_rig.locate_orders") == 0
         with pytest.raises(RigError):
             await service.confirm_store_payment(OTHER, accepted["request_id"])
