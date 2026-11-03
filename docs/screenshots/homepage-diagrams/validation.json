@@ -1,0 +1,21 @@
+{
+  "result": "PASS",
+  "widths": [
+    320,
+    375,
+    390,
+    430,
+    768,
+    1440
+  ],
+  "images": 22,
+  "engineStages": 5,
+  "rigStates": 4,
+  "switches": 4,
+  "receiptRows": 4,
+  "csv": "PASS",
+  "pdf": "PASS",
+  "forms": "saved + failed",
+  "javascriptErrors": [],
+  "screenshotDirectory": "/workspace/codex-homepage-diagrams/docs/screenshots/homepage-diagrams/browser"
+}
