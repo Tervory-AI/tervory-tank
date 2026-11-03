@@ -1,6 +1,8 @@
 """Offline Enforce API contract: MockTransport only, no Docker or provider calls."""
 import json
 import re
+import sys
+from types import SimpleNamespace
 import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -183,6 +185,7 @@ def test_unset_settings_fixture_routes_unchanged(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('tool', ['list', 'create', 'destroy'])
 async def test_founder_only_tools_propose_confirm_without_model(tool, monkeypatch):
+    monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(box_region=lambda: 'us-east'))
     actor = command.Actor(uuid.UUID(A), 'placeholder-founder', True)
     monkeypatch.setattr(command, 'authorized_actor', AsyncMock(side_effect=lambda a: a))
     monkeypatch.setattr(trigger_routes, 'code_receipt', AsyncMock(return_value=uuid.UUID(B)))
