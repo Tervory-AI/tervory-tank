@@ -56,7 +56,7 @@ def observe_once(client: httpx.Client, site: str) -> dict:
     try:
         # Streaming discards the body; redirects and cookie persistence are disabled.
         client.cookies.clear()
-        with client.stream("GET", url, headers={"Cookie": ""}) as response:
+        with client.stream("GET", url) as response:
             status = response.status_code
     except httpx.HTTPError:
         pass
