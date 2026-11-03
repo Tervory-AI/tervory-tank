@@ -156,10 +156,10 @@ async def bearer_identity(request: Request, *, audience: str) -> tuple[command.A
     with tenant_scope(tenant):
         async with command.db().acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT token_id,user_id,client_id,name,last_used_at < now() - interval '1 minute' AS stale FROM tank.personal_tokens "
-                "WHERE tenant_id=$1 AND region=$2 AND token_hash=$3 AND revoked_at IS NULL "
-                f"AND audience='{audience}' AND (expires_at IS NULL OR expires_at > now())",
-                tenant, region, digest(token),
+                """SELECT token_id,user_id,client_id,name,last_used_at < now() - interval '1 minute' AS stale FROM tank.personal_tokens
+                WHERE tenant_id=$1 AND region=$2 AND token_hash=$3 AND revoked_at IS NULL
+                AND audience=$4 AND (expires_at IS NULL OR expires_at > now())""",
+                tenant, region, digest(token), audience,
             )
             if row is not None and row.get("stale") is not False:
                 # At most one write a minute per credential; NULL means never used.
