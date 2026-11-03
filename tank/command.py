@@ -487,6 +487,9 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
                      *, task_id: uuid.UUID | None = None, on_token: TokenSink | None = None,
                      priority: str | None = None) -> Any:
     from main import Message, RouteRequest, box_region, run_route
+    planned = await autumbra_enforce_code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     from tisan_requests import code_plan as tisan_code_plan
     planned = await tisan_code_plan(actor, messages, task_id)
     if planned is not None:
@@ -1838,6 +1841,28 @@ async def repeat_messages(conn: Any, state: dict, actor: Actor, messages: list[d
             or [m for m in original if m["role"] == "system"] != [m for m in messages if m["role"] == "system"]):
         return messages
     return original
+
+
+async def autumbra_enforce_code_plan(actor: Actor, messages: list[dict], task_id):
+    """Explicit lifecycle commands propose existing Confirm cards for zero model cost."""
+    from types import SimpleNamespace
+    from trigger_routes import code_receipt
+    last = messages[-1] if messages else {}
+    text = last.get("content", "").strip()
+    if last.get("role") != "user" or not text.startswith("autumbra.enforce."):
+        return None
+    parts = text.split()
+    tool = parts[0]
+    actor = await authorized_actor(actor)
+    require_tool(actor, tool)
+    if tool not in {"autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy"}:
+        return None
+    if len(parts) != (1 if tool.endswith(".list") else 2):
+        raise HTTPException(422, "Action arguments are too large")
+    arguments = {} if tool.endswith(".list") else {"tenant_id": parts[1]}
+    action = validate_action(PlannedAction(tool=tool, arguments=arguments), actor)
+    ledger = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent="ghost")
+    return SimpleNamespace(content=dump({"text": tool, "actions": [action.model_dump(mode="json")]}), ledger_id=ledger)
 
 
 async def tiger_code_plan(actor: Actor, messages: list[dict], task_id):
