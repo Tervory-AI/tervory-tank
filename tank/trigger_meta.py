@@ -60,7 +60,8 @@ def scrub(message, redactions):
 class MetaFailure(GoogleFailure):
     def __init__(self, status=503, message=None, *, uncertain=False, code=None):
         super().__init__(status, message, uncertain=uncertain)
-        self.retryable = (status == 429 or 500 <= status < 600 or code in {1, 2, 4, 17, 32, 613}) and not uncertain and not self.too_long
+        transient_code = type(code) is int and code in {1, 2, 4, 17, 32, 613}
+        self.retryable = (status == 429 or 500 <= status < 600 or transient_code) and not uncertain and not self.too_long
 
 
 class Meta(Google):
@@ -117,7 +118,10 @@ class Meta(Google):
         response = await self.http('POST', TOKEN, data={**config, 'grant_type': 'fb_exchange_token', 'fb_exchange_token': short})
         token = credential(self.result(response, (code, short, config['client_secret'])).get('access_token'))
         permissions = await self._call(token, 'GET', 'me/permissions')
-        granted = {p.get('permission') for p in permissions.get('data', []) if isinstance(p, dict) and p.get('status') == 'granted'}
+        grants = permissions.get('data')
+        if not isinstance(grants, list):
+            raise MetaFailure(502)
+        granted = {p.get('permission') for p in grants if isinstance(p, dict) and isinstance(p.get('permission'), str) and p.get('status') == 'granted'}
         if not set(PERMISSIONS) <= granted:
             raise HTTPException(409)
         encrypted = seal({'user_token': token}, context(actor.tenant_id, str(row['generation'])))
@@ -132,10 +136,10 @@ class Meta(Google):
             await conn.execute('DELETE FROM tank.trigger_meta_states WHERE tenant_id=$1', actor.tenant_id)
         return {'status': 'connected'}
 
-    async def _call(self, token, method, path, *, may_have_sent=False, **kwargs):
+    async def _call(self, token, method, path, *, may_have_sent=False, redactions=(), **kwargs):
         response = await self.http(method, GRAPH + path, may_have_sent=may_have_sent,
                                    headers={'Authorization': 'Bearer ' + token}, **kwargs)
-        return self.result(response, (token, settings()['client_secret']), may_have_sent=may_have_sent)
+        return self.result(response, (token, settings()['client_secret'], *redactions), may_have_sent=may_have_sent)
 
     async def bundle(self, tenant, *, conn=None):
         row = await (conn or self.pool).fetchrow('SELECT * FROM tank.trigger_meta_connections WHERE tenant_id=$1', tenant)
@@ -157,7 +161,10 @@ class Meta(Google):
             for item in batch:
                 if not isinstance(item, dict) or not re.fullmatch(r'[0-9]{1,50}', str(item.get('id', ''))):
                     raise MetaFailure(502)
-                if 'CREATE_CONTENT' not in item.get('tasks', []):
+                tasks = item.get('tasks')
+                if not isinstance(tasks, list):
+                    raise MetaFailure(502)
+                if 'CREATE_CONTENT' not in tasks:
                     continue
                 name = scrub(item.get('name'), (token, settings()['client_secret']))
                 rows.append({'page_id': item['id'], 'name': name,
@@ -167,7 +174,8 @@ class Meta(Google):
                 raise MetaFailure(502)
             if not paging.get('next'):
                 return rows
-            cursor = paging.get('cursors', {}).get('after')
+            cursors = paging.get('cursors')
+            cursor = cursors.get('after') if isinstance(cursors, dict) else None
             if not isinstance(cursor, str) or not cursor or len(cursor) > 2048 or cursor in seen:
                 raise MetaFailure(502)
             seen.add(cursor)  # Never follow Meta's token-bearing pagination URLs.
@@ -203,12 +211,15 @@ class Meta(Google):
                                      or re.fullmatch(re.escape(row['page_id']) + r'_[0-9]+', path)):
             raise HTTPException(409)
         return await self._call(credential(bundle.get('page_token')), method, path,
-                                may_have_sent=method == 'POST', **kwargs)
+                                may_have_sent=method == 'POST', redactions=tuple(bundle.values()), **kwargs)
 
     async def permalink(self, tenant, post_id, *, conn=None):
         data = await self.request(tenant, 'GET', post_id, conn=conn, params={'fields': 'permalink_url'})
         url = data.get('permalink_url')
         if not isinstance(url, str) or len(url) > 2048:
+            raise MetaFailure(502)
+        _, bundle = await self.bundle(tenant, conn=conn)
+        if any(value in url for value in (*bundle.values(), settings()['client_secret']) if isinstance(value, str) and value):
             raise MetaFailure(502)
         parsed = urlsplit(url)
         if (parsed.scheme != 'https' or parsed.netloc not in {'www.facebook.com', 'facebook.com', 'm.facebook.com'}
@@ -238,7 +249,7 @@ class Meta(Google):
                 raise MetaFailure(502)
             for item in batch:
                 try:
-                    created = datetime.fromisoformat(item['created_time'].replace('Z', '+00:00'))
+                    created = datetime.fromisoformat(item['created_time'])
                     if created.utcoffset() is None or not re.fullmatch(re.escape(page_id) + r'_[0-9]+', item['id']):
                         raise ValueError()
                     rows.append({'name': item['id'], 'summary': item.get('message'), 'created': created})
@@ -249,7 +260,8 @@ class Meta(Google):
                 raise MetaFailure(502)
             if not paging.get('next'):
                 return rows
-            cursor = paging.get('cursors', {}).get('after')
+            cursors = paging.get('cursors')
+            cursor = cursors.get('after') if isinstance(cursors, dict) else None
             if not isinstance(cursor, str) or not cursor or len(cursor) > 2048 or cursor in seen:
                 raise MetaFailure(502)
             seen.add(cursor)
@@ -257,7 +269,12 @@ class Meta(Google):
 
     async def revoke(self, tenant, generation, sealed):
         bundle = open_seal(sealed, context(tenant, str(generation)))
-        result = await self._call(credential(bundle.get('user_token')), 'DELETE', 'me/permissions')
+        token = credential(bundle.get('user_token'))
+        response = await self.http('DELETE', GRAPH + 'me/permissions', headers={'Authorization': 'Bearer ' + token})
+        # Meta documents a successful boolean response; Graph also wraps it in success.
+        if response.is_success and response.content.strip() == b'true':
+            return
+        result = self.result(response, (*bundle.values(), settings()['client_secret']))
         if result.get('success') is not True:
             raise MetaFailure(502)
 
