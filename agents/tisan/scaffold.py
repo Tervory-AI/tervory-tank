@@ -33,7 +33,7 @@ _CORE_COLOURS = ("ink", "paper", "accent", "line")
 _CORE_FONTS = ("heading", "body")
 _STANDARD_PAGES = ("home", "about", "contact", "privacy")
 _IGNORED_PAGES = {"404", "not-found"}
-_SKIP_DIRS = {"node_modules", ".next", "playwright-report", "test-results", ".lighthouseci", "out"}
+_SKIP_DIRS = {"node_modules", ".next", "playwright-report", "test-results", ".lighthouseci", "out", ".quality-checks.json"}
 _LABELS = {"home": "Home", "about": "About", "contact": "Contact", "privacy": "Privacy"}
 _CHECKS = (
     ("npm ci", 240),
@@ -294,6 +294,7 @@ def write_project(brief: dict[str, Any], dest: Path) -> None:
             "out",
             "tsconfig.tsbuildinfo",
             "quality-secrets.fixture",
+            ".quality-checks.json",
         ),
     )
     (dest / "lib" / "site.ts").write_text(render_site(brief), encoding="utf-8")
