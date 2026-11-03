@@ -54,6 +54,7 @@ FOUNDER_TOOLS = ["base.audit.start", "base.audit.csv", "base.audit.review", "tri
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
 FOUNDER_TOOLS += TISAN_CLIENT_TOOLS
+FOUNDER_TOOLS += ["autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy"]
 
 
 def db() -> Any:
@@ -931,6 +932,10 @@ MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 MAX_THREAD_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 
+class EnforceTenantArgs(Body):
+    tenant_id: uuid.UUID
+
+
 class EmptyArgs(Body):
     pass
 
@@ -1234,6 +1239,9 @@ from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServ
 
 
 ADAPTERS = {
+    "autumbra.enforce.list": Adapter("GET", "/v1/ghost/autumbra/enforce/list", EmptyArgs, "autumbra.enforce.list"),
+    "autumbra.enforce.create": Adapter("POST", "/v1/ghost/autumbra/enforce/create", EnforceTenantArgs, "autumbra.enforce.create"),
+    "autumbra.enforce.destroy": Adapter("POST", "/v1/ghost/autumbra/enforce/destroy", EnforceTenantArgs, "autumbra.enforce.destroy"),
     "tisan.request": Adapter("POST", "/v1/command/tisan/request", TisanRequestArgs, "tisan.request"),
     "tisan.preview": Adapter("GET", "/v1/command/tisan/preview", TisanRequestIdArgs, "tisan.preview"),
     "tisan.feedback": Adapter("POST", "/v1/command/tisan/feedback", TisanFeedbackArgs, "tisan.feedback"),
@@ -1473,7 +1481,7 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, scope, None
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
-    if action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", *TISAN_CLIENT_TOOLS}:
+    if action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy", *TISAN_CLIENT_TOOLS}:
         if adapter.method == 'GET':
             return adapter.method, path, args, None
         return adapter.method, path, {}, args  # Actor headers supply identity, never body fields.
@@ -1667,7 +1675,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if action.tool.startswith("mcp."):
                 from mcp_connections import dispatch
                 status, result = await dispatch(action, actor)
-            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan", "autumbra.enforce.create", "autumbra.enforce.destroy"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
