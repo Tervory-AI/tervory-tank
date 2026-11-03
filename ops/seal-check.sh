@@ -219,6 +219,15 @@ is_expected() {
 
 for uuid in "${ROOMS[@]}"; do
   room="${ROOM_NAME[$uuid]}"
+  if [[ "$room" == "agent-ghost" || "$room" == "autumbra-enforce" ]]; then
+    required_services="enforce"
+    [[ "$room" == "agent-ghost" ]] && required_services="agent-ghost ghost-browser"
+    for required in $required_services; do
+      if [[ -z "${APP_SERVICES[$uuid/$required]+set}" ]]; then
+        APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }NOT FOUND: $required"
+      fi
+    done
+  fi
   if [[ "$room" == "agent-rig" ]]; then
     for required in agent-rig rig-brain rig-sandbox rig-browser rig-browser-gateway rig-forge rig-forge-egress; do
       if [[ -z "${APP_SERVICES[$uuid/$required]+set}" ]]; then
