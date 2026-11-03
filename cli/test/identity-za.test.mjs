@@ -4,17 +4,17 @@ import { identityApprovalUrl, run, safe, StreamSanitizer } from '../src/client.m
 
 const start = {
   identity_provider: 'zitadel', device_code: 'tzd1.synthetic-offline', user_code: '1234-5678',
-  verification_uri: 'https://auth.za.tervory.com/ui/v2/login/device',
-  verification_uri_complete: 'https://auth.za.tervory.com/ui/v2/login/device?user_code=1234-5678',
+  verification_uri: 'https://auth-za.tervory.com/ui/v2/login/device',
+  verification_uri_complete: 'https://auth-za.tervory.com/ui/v2/login/device?user_code=1234-5678',
   interval: 1, expires_in: 600,
 };
 
 test('ZA accepts only the fixed Zitadel origin for both verification URLs', () => {
   assert.equal(identityApprovalUrl(start, 'za'), start.verification_uri_complete);
   for (const field of ['verification_uri', 'verification_uri_complete']) {
-    for (const url of ['https://evil.example/device', 'http://auth.za.tervory.com/device',
-      'https://auth.za.tervory.com.evil.example/device', 'https://user@auth.za.tervory.com/device',
-      'https://auth.za.tervory.com:444/device', 'https://auth.za.tervory.com/device#fragment']) {
+    for (const url of ['https://evil.example/device', 'http://auth-za.tervory.com/device',
+      'https://auth-za.tervory.com.evil.example/device', 'https://user@auth-za.tervory.com/device',
+      'https://auth-za.tervory.com:444/device', 'https://auth-za.tervory.com/device#fragment']) {
       assert.throws(() => identityApprovalUrl({ ...start, [field]: url }, 'za'), /Login refused by Tank/);
     }
   }
