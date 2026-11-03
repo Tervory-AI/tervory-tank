@@ -30,8 +30,8 @@ def test_exact_decimal_totals_deduplicate_ledger_ids_across_links():
     rows = [one, deepcopy(one), two, {**one, "record_id": str(uuid4())}]
     assert metrics.list_costs(rows) == {"actual_usd": Decimal("0.30000003"), "baseline_usd": Decimal("0.70000007"),
                                       "saved_usd": Decimal("0.40000004"), "calls": 2, "receipt_status": "priced"}
-    assert metrics.list_costs([]) == {"actual_usd": Decimal(0), "baseline_usd": Decimal(0),
-                                    "saved_usd": Decimal(0), "calls": 0, "receipt_status": "priced"}
+    assert metrics.list_costs([]) == {"actual_usd": None, "baseline_usd": None,
+                                    "saved_usd": None, "calls": 0, "receipt_status": "price not set"}
 
 
 @pytest.mark.parametrize("changes", [{"cost_status": "not_set"}, {"cost_usd": None}])
@@ -63,15 +63,18 @@ def test_only_list_csv_appends_costs_and_keeps_all_existing_columns_and_cells():
     assert new[1][-2:] == ["0.10000001", "0.30000003"]
     assert new[2][-2:] == ["", ""]
     empty = list(csv.reader(io.StringIO(metrics.export_records([first], ledger=[]).lstrip("\ufeff"))))
-    assert empty[1][-2:] == ["0", "0"]
+    assert empty[1][-2:] == ["", ""]
     assert next(csv.reader(io.StringIO(metrics.export_records([first]).lstrip("\ufeff")))) == old[0]
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("unknown", [False, True])
+@pytest.mark.parametrize("unknown", [False, True, "missing"])
 async def test_show_export_and_csv_share_ledger_totals_and_tenant_scope(monkeypatch, unknown):
     own, foreign = uuid4(), uuid4()
-    one = entry(**({"cost_status": "not_set"} if unknown else {}))
+    one = entry(**({"cost_status": "not_set"} if unknown is True else {}))
+    records = [record()]
+    if unknown == "missing":
+        records.append({**record(), "record_id": str(uuid4())})
     class LedgerPool(Pool):
         def __init__(self):
             super().__init__()
@@ -79,12 +82,12 @@ async def test_show_export_and_csv_share_ledger_totals_and_tenant_scope(monkeypa
         async def fetch(self, sql, tenant, ids):
             assert "JOIN tank.base_ledger_links b ON b.tenant_id=$1 AND b.ledger_id=l.id" in sql
             assert "WHERE l.tenant_id=$1 AND l.agent='base' AND b.record_id=ANY($2::uuid[])" in sql
-            assert tenant == TENANT and ids == [RECORD]
+            assert tenant == TENANT and list(map(str, ids)) == [row["record_id"] for row in records]
             self.reads.append((tenant, ids))
             return [one, deepcopy(one)]
     pool = LedgerPool()
     for tenant, key in ((TENANT, own), (OTHER, foreign)):
-        pool.saved[tenant, key] = {"name": "placeholder list", "records": json.dumps([record()]), "filters": "{}"}
+        pool.saved[tenant, key] = {"name": "placeholder list", "records": json.dumps(records), "filters": "{}"}
     actor = command.Actor(TENANT, "placeholder-user", False, frozenset({"base"}))
     monkeypatch.setattr(command, "db", lambda: pool)
     receipts = []
@@ -102,7 +105,7 @@ async def test_show_export_and_csv_share_ledger_totals_and_tenant_scope(monkeypa
             assert response.status_code == 200
             data = response.json()
             assert data["actual_usd"] == (None if unknown else 0.10000001)
-            assert data["baseline_usd"] == 0.30000003
+            assert data["baseline_usd"] == (None if unknown == "missing" else 0.30000003)
             assert data["saved_usd"] == (None if unknown else 0.20000002)
             assert data["calls"] == 1
             assert data["receipt_status"] == ("price not set" if unknown else "priced")
@@ -111,7 +114,9 @@ async def test_show_export_and_csv_share_ledger_totals_and_tenant_scope(monkeypa
         response = await client.get("/v1/command/base/lists/csv", params={"list_id": str(own)})
         assert response.status_code == 200
         rows = list(csv.DictReader(io.StringIO(response.text.lstrip("\ufeff"))))
-        assert rows[0]["cost_usd"] == ("" if unknown else "0.10000001")
+        assert rows[0]["cost_usd"] == ("" if unknown is True else "0.10000001")
+        if unknown == "missing":
+            assert rows[1]["cost_usd"] == rows[1]["baseline_cost_usd"] == ""
         assert rows[0]["baseline_cost_usd"] == "0.30000003"
         assert len(pool.reads) == 3
         for path in ("show", "export", "csv"):
@@ -145,3 +150,34 @@ async def test_real_ledger_join_never_counts_foreign_tenant_links_or_rows(databa
 def test_list_receipt_uses_existing_card_labels_and_download_columns():
     result = subprocess.run(["node", "tests/base_list_costs.cjs"], cwd=ROOT, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+
+def test_any_record_without_ledger_evidence_makes_list_totals_unknown():
+    one = entry()
+    assert metrics.list_costs([one], record_ids=[RECORD])["actual_usd"] == Decimal("0.10000001")
+    costs = metrics.list_costs([one], record_ids=[RECORD, uuid4()])
+    assert costs == {"actual_usd": None, "baseline_usd": None, "saved_usd": None,
+                     "calls": 1, "receipt_status": "price not set"}
+
+
+def test_shared_ledger_rows_leave_both_cost_cells_blank_without_allocating_cost():
+    first, second = record(), {**record(), "record_id": str(uuid4())}
+    one = entry()
+    ledger = [one, deepcopy(one), {**one, "record_id": second["record_id"]}, entry()]
+    rows = list(csv.DictReader(io.StringIO(metrics.export_records([first, second], ledger=ledger).lstrip("\ufeff"))))
+    assert len(rows) == 2
+    assert all(row["cost_usd"] == row["baseline_cost_usd"] == "" for row in rows)
+    assert metrics.list_costs(ledger, record_ids=[first["record_id"], second["record_id"]])["calls"] == 2
+    own = list(csv.DictReader(io.StringIO(metrics.export_records([first], ledger=ledger).lstrip("\ufeff"))))
+    assert own[0]["cost_usd"] == "0.20000002"  # A link outside this list is not shared within it.
+
+
+def test_csv_costs_always_use_fixed_point_and_preserve_known_zeroes():
+    one = entry(cost_usd=Decimal("1E-8"), baseline_cost_usd=Decimal("2E-8"))
+    rows = list(csv.DictReader(io.StringIO(metrics.export_records([record()], ledger=[one]).lstrip("\ufeff"))))
+    assert rows[0]["cost_usd"] == "0.00000001"
+    assert rows[0]["baseline_cost_usd"] == "0.00000002"
+    one.update(cost_usd=Decimal("0E-8"), baseline_cost_usd=Decimal("0E-8"))
+    rows = list(csv.DictReader(io.StringIO(metrics.export_records([record()], ledger=[one]).lstrip("\ufeff"))))
+    assert rows[0]["cost_usd"] == rows[0]["baseline_cost_usd"] == "0.00000000"
