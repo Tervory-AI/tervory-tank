@@ -2673,7 +2673,7 @@ BEGIN
             updated_at=requested.updated_at,
             candidate_model=requested.candidate_model,
             shadow_rate=requested.shadow_rate,
-            previous_model=requested.previous_model,
+            previous_model=serving.model,
             min_shadow_samples=requested.min_shadow_samples,
             max_reject_rate=requested.max_reject_rate,
             auto_promote=requested.auto_promote,
