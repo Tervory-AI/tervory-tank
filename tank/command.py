@@ -24,6 +24,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 import command_repo
+from base_lists import FindArgs, SaveArgs, ListArgs, SendArgs
 from tenant_db import tenant_path
 from command_stream import AnswerText, TokenSink
 
@@ -33,7 +34,7 @@ _background: set[asyncio.Task] = set()
 SQUADS = frozenset({"base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"})
 TOOLS = {
     "trigger": ["trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
-    "base": ["base.batch", "base.search"],
+    "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.to_crm"],
     "tiger": ["tiger.watch", "tiger.read"],
     "market_lab": ["market_lab.research"],
     "rig": ["rig.search", "rig.ask"],
@@ -884,6 +885,8 @@ ACTION_TIMEOUT = 180
 
 
 def action_timeout(tool: str | None) -> int:
+    if tool == "base.list.to_crm":
+        return 4200  # At most 100 corridor writes, each with its existing 20s HTTP bound.
     return 390 if tool == "radix.passive.scan" else ACTION_TIMEOUT
 
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
@@ -1146,6 +1149,12 @@ ADAPTERS = {
     "repo.file": Adapter("GET", "/v1/command/repo/file", RepoFileArgs, "read one file from main"),
     "base.batch": Adapter("POST", "/v1/base/run", BaseBatchArgs, "Start a Base batch", True, "paid_run"),
     "base.search": Adapter("GET", "/v1/base/records", BaseSearchArgs, "Read Base records"),
+    "base.find": Adapter("GET", "/v1/command/base/lists/find", FindArgs, "base.find"),
+    "base.list.save": Adapter("POST", "/v1/command/base/lists/save", SaveArgs, "base.list.save"),
+    "base.lists": Adapter("GET", "/v1/command/base/lists", Body, "base.lists"),
+    "base.list.show": Adapter("GET", "/v1/command/base/lists/show", ListArgs, "base.list.show"),
+    "base.list.export": Adapter("GET", "/v1/command/base/lists/export", ListArgs, "base.list.export"),
+    "base.list.to_crm": Adapter("POST", "/v1/command/base/lists/to-crm", SendArgs, "base.list.to_crm"),
     "tiger.watch": Adapter("POST", "/v1/tiger/watchlist", WatchArgs, "Start a price watch", True, "paid_run"),
     "tiger.read": Adapter("GET", "/v1/tiger/observations", UrlArgs, "Read price observations"),
     "market_lab.research": Adapter("POST", "/v1/research", QuestionArgs, "Research a market question", True, "paid_run"),
@@ -1302,6 +1311,8 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         args = {"start": (end - timedelta(days=args["days"])).isoformat(), "end": end.isoformat()}
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
+    if action.tool in {"base.list.save", "base.list.to_crm"}:
+        return adapter.method, path, {}, args  # Actor headers supply identity, never body fields.
     if adapter.method == "GET":
         return adapter.method, path, {**args, **scope}, None
     return adapter.method, path, scope, {**args, **scope}
@@ -1467,7 +1478,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
         require_tool(current_actor(actor), action.tool)
         attempted = True
         async with asyncio.timeout(action_timeout(action.tool)):
-            if action.tool.startswith("trigger."):
+            if action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
