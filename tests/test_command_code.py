@@ -92,6 +92,7 @@ async def test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_tr
     """Full run_route is exercised; only its HTTP upstream is a fake transport."""
     import personal_tokens as pat
     b = streaming
+    monkeypatch.setattr(b.tank, 'list_models', AsyncMock(return_value=[{'name': 'placeholder-pin'}]))
     monkeypatch.setenv('TANK_REGION', region)
     monkeypatch.setattr(b.tank, 'DEFAULT_REGION', region)
     b.policy['cache_scope'] = await b.pool.fetchval("SELECT cache_scope FROM tank.policy WHERE task_type='command.code' AND tenant_id IS NULL")
