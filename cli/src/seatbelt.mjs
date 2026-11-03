@@ -32,6 +32,10 @@ export async function seatbeltProfile(root, mounts = []) {
 (allow file-read-metadata (literal "/") (literal "/dev") (literal "/private") (literal "/private/var"))
 (allow file-read* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/random") (literal "/dev/urandom"))
 (allow file-read* file-write-data (subpath "/dev/fd"))
+; Apple's system git launcher resolves the selected Xcode toolchain here.
+(allow file-read* file-map-executable (regex #"^/Applications/Xcode[^/]*[.]app/Contents/(Developer/usr|SharedFrameworks)(/|$)"))
+(allow file-read-metadata (regex #"^/Applications/Xcode[^/]*[.]app(/Contents(/Developer)?)?$"))
+(allow file-read* (literal "/var/db/xcode_select_link") (literal "/private/var/db/xcode_select_link"))
 (allow file-write* (subpath ${quote(root)}))
 (deny file-read* file-write* file-map-executable (regex #${quote(secrets)}))
 (deny network*)
