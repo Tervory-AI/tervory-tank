@@ -1,5 +1,6 @@
 name: cli
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - 'cli/**'
@@ -21,7 +22,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: cli-${{ github.event.pull_request.number }}
+  group: cli-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   fake-tank:
@@ -40,7 +41,7 @@ jobs:
         # a CHANGELOG entry. A base branch without cli/ has nothing to compare against.
         # Inputs reach the script only as environment variables.
         env:
-          BASE_REF: ${{ github.base_ref }}
+          BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
           git fetch --no-tags --depth=1 origin "refs/heads/$BASE_REF"
           sh .github/scripts/cli_version_guard.sh FETCH_HEAD
