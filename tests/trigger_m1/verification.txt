@@ -1,0 +1,554 @@
+Trigger M1 verification — 3 November 2026
+
+Code/test head: ca8cc9477bf0d8ced78bb823f353515a3f155b1d (subsequent commits docs only).
+Included main: b2fa83bdfca6d5788d12e11ce5230da1463a3621
+Own branch: codex/trigger-m1-marketing
+Own checkout: /workspace/codex-trigger-m1
+No production SQL, live Google write or actual model call used.
+Founder-browser acceptance and screenshots: NOT PERFORMED / NOT AVAILABLE.
+
+Git workflow after each finished file (all fetches/pushes succeeded):
+git fetch origin main
+git merge origin/main
+git add -- <finished-file>
+git commit -m <recorded-file-change>
+git push origin codex/trigger-m1-marketing
+
+W1 b9d9b363 and later origin/main were merged preserving both sides. Focused
+X regressions during merges: 68 passed (0.47s, 0.74s, 0.43s). No branch reset.
+
+Test setup (disposable local SQL only):
+docker run --detach --rm --name codex-trigger-m1-pg-final-20261103 --publish 127.0.0.1:32835:5432 --memory 768m --cpus 1 --tmpfs /var/lib/postgresql/data:rw,size=512m -e POSTGRES_HOST_AUTH_METHOD=trust postgres:16.15
+docker exec codex-trigger-m1-pg-final-20261103 createdb -U postgres pooltest
+docker exec codex-trigger-m1-pg-final-20261103 createdb -U postgres market_test
+docker exec codex-trigger-m1-pg-final-20261103 createdb -U postgres radix_passive_test
+# PASS. The earlier disposable server on loopback port 32819 was stopped.
+# Initial replacement start briefly conflicted with that container's removal;
+# the distinct final test container above started successfully. No live store.
+
+Existing locked dependencies reused; missing locked test dependencies were
+installed into ignored .m1-tmp/site (jsonschema 4.26.0, PyJWT 2.15.1 and
+phonenumbers 9.0.42). Existing Workspace dependencies were linked; CLI used:
+npm ci --ignore-scripts --no-audit --no-fund --prefix cli
+# PASS. No lockfile/manifest changes.
+
+Current M1 native-Postgres / fake-Google tests:
+TMPDIR=$PWD/.m1-tmp/runtime PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank:.m1-tmp/site POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32835/pooltest /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest tests/trigger_m1 -q --disable-socket --allow-hosts=127.0.0.1,localhost --allow-unix-socket --timeout=180
+.........................                                                [100%]
+=============================== warnings summary ===============================
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "WriteIn" shadows an attribute in parent "CheckerIn"
+    warnings.warn(
+
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/main.py:753: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/main.py:810: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+25 passed, 15 warnings in 21.77s
+
+Other completed checks:
+COMMAND_TEST_TOOLS=/workspace/codex-trigger-m1/workspace/node_modules node tests/trigger_m1/callback_contract.cjs
+# PASS: actual authenticated server callback, bounded unique parameters,
+# trusted identity, no reflected exchange data or external fetch.
+workspace/node_modules/.bin/tsc --noEmit --incremental false -p workspace/tsconfig.json
+# PASS exit 0; no diagnostic output.
+/home/ammosync/trigger-crm-venv312/bin/ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+All checks passed!
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank:.m1-tmp/site /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest tests/test_secrets.py -q --disable-socket --allow-unix-socket
+..                                                                       [100%]
+2 passed in 20.08s
+
+FULL REPOSITORY RUN — completed; NOT GREEN:
+/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python .m1-tmp/run_full.py
+Exact environment wrapper used:
+import os
+import subprocess
+import sys
+from pathlib import Path
+root=Path.cwd()
+url='postgresql://postgres@127.0.0.1:32835/pooltest'
+for name in ('POOL_SCHEMA_DATABASE_URL','ZENAS_SCHEMA_DATABASE_URL','MEMORY_TEST_DATABASE_URL','BASE_TEST_DATABASE_URL','RLS_TEST_DATABASE_URL','SKALA_B3_TEST_DATABASE_URL','SKALA_INTAKE_TEST_DATABASE_URL','TIGER_MAIL_TEST_DATABASE_URL','RIG_TEST_DATABASE_URL','TRAINING_SCHEMA_DATABASE_URL'):
+ os.environ[name]=url
+os.environ.update(DATABASE_URL='postgresql://postgres@127.0.0.1:32835/market_test',
+ RADIX_PASSIVE_TEST_DATABASE_URL='postgresql://postgres@127.0.0.1:32835/radix_passive_test',
+ PYTHONPATH=str(root/'tank')+':'+str(root/'.m1-tmp/site'),
+ TMPDIR=str(root/'.m1-tmp/runtime'), PYTHONDONTWRITEBYTECODE='1',SUITE_WORKERS='4',SUITE_BUDGET_SCALE='2',GITHUB_ACTIONS='true',SUITE_JUNIT_DIR=str(root/'.m1-tmp/junit'),
+ READ1_CHROMIUM_EXECUTABLE='/home/ammosync/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell')
+raise SystemExit(subprocess.call([sys.executable,'.github/scripts/offline_suite.py']))
+
+Captured completion/failure summary:
+===== offline suite: main =====
+                f"{pkg.ref}: {passed} passed, {skipped} network-skipped, {failed} failed ({len(pkg.cases)} cases)"
+base.business_data@2.0.0: 15 passed, 0 network-skipped, 0 failed (15 cases)
+base.business_data@2.0.1: 17 passed, 0 network-skipped, 0 failed (17 cases)
+base.contacts@1.0.0: 4 passed, 0 network-skipped, 0 failed (4 cases)
+base.contacts@1.1.0: 6 passed, 0 network-skipped, 0 failed (6 cases)
+base.contacts@1.1.1: 8 passed, 0 network-skipped, 0 failed (8 cases)
+base.contacts@1.2.0: 19 passed, 0 network-skipped, 0 failed (19 cases)
+base.extract@2.0.0: 16 passed, 0 network-skipped, 0 failed (16 cases)
+base.extract@2.0.1: 18 passed, 0 network-skipped, 0 failed (18 cases)
+base.find_site@1.0.0: 2 passed, 1 network-skipped, 0 failed (3 cases)
+base.find_site@1.1.0: 2 passed, 3 network-skipped, 0 failed (5 cases)
+base.find_site@1.2.0: 2 passed, 3 network-skipped, 0 failed (5 cases)
+base.find_site@1.3.0: 2 passed, 3 network-skipped, 0 failed (5 cases)
+base.find_site@1.4.0: 2 passed, 3 network-skipped, 0 failed (5 cases)
+base.find_site@1.5.0: 8 passed, 3 network-skipped, 0 failed (11 cases)
+base.find_site@1.6.0: 8 passed, 3 network-skipped, 0 failed (11 cases)
+base.find_site@1.7.0: 9 passed, 5 network-skipped, 0 failed (14 cases)
+base.find_site@1.7.1: 11 passed, 5 network-skipped, 0 failed (16 cases)
+base.normalize@1.0.0: 5 passed, 0 network-skipped, 0 failed (5 cases)
+base.normalize@1.0.1: 7 passed, 0 network-skipped, 0 failed (7 cases)
+base.resolve@1.0.0: 5 passed, 0 network-skipped, 0 failed (5 cases)
+base.resolve@1.0.1: 8 passed, 0 network-skipped, 0 failed (8 cases)
+base.scrape_site@1.0.0: 2 passed, 1 network-skipped, 0 failed (3 cases)
+base.scrape_site@1.1.0: 2 passed, 1 network-skipped, 0 failed (3 cases)
+base.scrape_site@1.2.0: 4 passed, 2 network-skipped, 0 failed (6 cases)
+base.scrape_site@1.2.1: 6 passed, 2 network-skipped, 0 failed (8 cases)
+base.scrape_site@1.3.0: 6 passed, 2 network-skipped, 0 failed (8 cases)
+base.site_signals@1.0.0: 8 passed, 0 network-skipped, 0 failed (8 cases)
+base.socials@1.0.0: 3 passed, 0 network-skipped, 0 failed (3 cases)
+base.socials@1.0.1: 5 passed, 0 network-skipped, 0 failed (5 cases)
+base.verify@1.0.0: 4 passed, 0 network-skipped, 0 failed (4 cases)
+base.verify@1.0.1: 5 passed, 0 network-skipped, 0 failed (5 cases)
+base.verify@1.1.0: 8 passed, 0 network-skipped, 0 failed (8 cases)
+base.verify@1.2.0: 13 passed, 0 network-skipped, 0 failed (13 cases)
+ffl.ingest@1.0.0: 3 passed, 0 network-skipped, 0 failed (3 cases)
+ffl.ingest@1.0.1: 5 passed, 0 network-skipped, 0 failed (5 cases)
+ffl.profile@1.0.0: 5 passed, 0 network-skipped, 0 failed (5 cases)
+ffl.profile@1.1.0: 5 passed, 0 network-skipped, 0 failed (5 cases)
+ffl.profile@1.1.1: 7 passed, 0 network-skipped, 0 failed (7 cases)
+market.gap_score@1.0.0: 1 passed, 0 network-skipped, 0 failed (1 cases)
+market.gap_score@1.1.0: 9 passed, 0 network-skipped, 0 failed (9 cases)
+market.gap_score@1.1.1: 13 passed, 0 network-skipped, 0 failed (13 cases)
+market.research@1.0.0: 1 passed, 0 network-skipped, 0 failed (1 cases)
+market.research@1.1.0: 13 passed, 0 network-skipped, 0 failed (13 cases)
+market.series_fetch@1.0.0: 3 passed, 0 network-skipped, 0 failed (3 cases)
+market.series_fetch@1.1.0: 3 passed, 0 network-skipped, 0 failed (3 cases)
+market.series_fetch@1.1.1: 5 passed, 0 network-skipped, 0 failed (5 cases)
+market.series_fetch@1.2.0: 7 passed, 0 network-skipped, 0 failed (7 cases)
+market.series_fetch@1.2.1: 10 passed, 0 network-skipped, 0 failed (10 cases)
+market.series_fetch@1.3.0: 10 passed, 0 network-skipped, 0 failed (10 cases)
+market.shift_detect@1.0.0: 1 passed, 0 network-skipped, 0 failed (1 cases)
+market.shift_detect@1.0.1: 5 passed, 0 network-skipped, 0 failed (5 cases)
+market.shift_detect@1.0.2: 6 passed, 0 network-skipped, 0 failed (6 cases)
+market.surge_detect@1.0.0: 2 passed, 0 network-skipped, 0 failed (2 cases)
+market.surge_detect@1.0.1: 6 passed, 0 network-skipped, 0 failed (6 cases)
+market.surge_detect@1.0.2: 7 passed, 0 network-skipped, 0 failed (7 cases)
+radix.account_links@1.0.0: 7 passed, 0 network-skipped, 0 failed (7 cases)
+radix.account_links@1.0.1: 12 passed, 0 network-skipped, 0 failed (12 cases)
+radix.business_risk@1.0.0: 7 passed, 0 network-skipped, 0 failed (7 cases)
+radix.business_risk@1.0.1: 12 passed, 0 network-skipped, 0 failed (12 cases)
+radix.entity_links@1.0.0: 7 passed, 0 network-skipped, 0 failed (7 cases)
+radix.entity_links@1.0.1: 12 passed, 0 network-skipped, 0 failed (12 cases)
+radix.site_risk@1.0.0: 7 passed, 0 network-skipped, 0 failed (7 cases)
+radix.site_risk@1.0.1: 12 passed, 0 network-skipped, 0 failed (12 cases)
+radix.verify_business@1.0.0: 7 passed, 0 network-skipped, 0 failed (7 cases)
+radix.verify_business@1.0.1: 12 passed, 0 network-skipped, 0 failed (12 cases)
+rig.fit_suggest@1.1.0: 7 passed, 0 network-skipped, 0 failed (7 cases)
+rig.search@1.0.0: 4 passed, 0 network-skipped, 0 failed (4 cases)
+rig.search@1.0.1: 5 passed, 0 network-skipped, 0 failed (5 cases)
+rig.search@1.1.0: 6 passed, 0 network-skipped, 0 failed (6 cases)
+rig.setups@1.0.0: 1 passed, 0 network-skipped, 0 failed (1 cases)
+rig.setups@1.0.1: 5 passed, 0 network-skipped, 0 failed (5 cases)
+rig.setups@1.1.0: 5 passed, 0 network-skipped, 0 failed (5 cases)
+scan.dependencies@1.0.0: 4 passed, 0 network-skipped, 0 failed (4 cases)
+scan.dependencies@1.0.1: 5 passed, 0 network-skipped, 0 failed (5 cases)
+scan.dependencies@1.1.0: 5 passed, 0 network-skipped, 0 failed (5 cases)
+scan.secrets@1.0.0: 2 passed, 0 network-skipped, 0 failed (2 cases)
+scan.secrets@1.0.1: 5 passed, 0 network-skipped, 0 failed (5 cases)
+scan.static@1.0.0: 2 passed, 0 network-skipped, 0 failed (2 cases)
+scan.static@1.0.1: 5 passed, 0 network-skipped, 0 failed (5 cases)
+tiger.playbook@1.0.0: 26 passed, 0 network-skipped, 0 failed (26 cases)
+tiger.price_extract@1.0.0: 10 passed, 0 network-skipped, 0 failed (10 cases)
+tiger.price_extract@1.1.0: 12 passed, 0 network-skipped, 0 failed (12 cases)
+tiger.price_extract@1.1.1: 14 passed, 0 network-skipped, 0 failed (14 cases)
+tiger.price_ocr@1.0.0: 4 passed, 0 network-skipped, 0 failed (4 cases)
+tiger.price_ocr@1.0.1: 5 passed, 0 network-skipped, 0 failed (5 cases)
+tiger.price_structured@1.0.0: 19 passed, 0 network-skipped, 0 failed (19 cases)
+tiger.price_structured@1.0.1: 21 passed, 0 network-skipped, 0 failed (21 cases)
+trigger.agent_style@1.0.0: 21 passed, 0 network-skipped, 0 failed (21 cases)
+trigger.house_style@1.0.0: 22 passed, 0 network-skipped, 0 failed (22 cases)
+trigger.languagetool@1.0.0: 2 passed, 20 network-skipped, 0 failed (22 cases)
+trigger.languagetool@1.1.0: 5 passed, 20 network-skipped, 0 failed (25 cases)
+trigger.proselint@1.0.0: 23 passed, 0 network-skipped, 0 failed (23 cases)
+trigger.readability@1.0.0: 22 passed, 0 network-skipped, 0 failed (22 cases)
+trigger.voice_check@1.0.0: 20 passed, 0 network-skipped, 1 failed (21 cases)
+zenas.cite_check@1.0.0: 4 passed, 0 network-skipped, 0 failed (4 cases)
+zenas.cite_check@1.0.1: 5 passed, 0 network-skipped, 0 failed (5 cases)
+zenas.cite_check@1.0.2: 10 passed, 0 network-skipped, 0 failed (10 cases)
+zenas.deadlines@1.0.0: 10 passed, 0 network-skipped, 0 failed (10 cases)
+zenas.deadlines@1.1.0: 6 passed, 0 network-skipped, 0 failed (6 cases)
+zenas.deadlines@1.2.0: 12 passed, 0 network-skipped, 0 failed (12 cases)
+zenas.deadlines@1.2.1: 22 passed, 0 network-skipped, 0 failed (22 cases)
+zenas.draft@1.0.0: 2 passed, 0 network-skipped, 0 failed (2 cases)
+zenas.draft@1.0.1: 5 passed, 0 network-skipped, 0 failed (5 cases)
+zenas.match@1.0.0: 2 passed, 0 network-skipped, 0 failed (2 cases)
+zenas.match@1.0.1: 5 passed, 0 network-skipped, 0 failed (5 cases)
+zenas.pii@1.0.0: 15 passed, 0 network-skipped, 0 failed (15 cases)
+zenas.pii@1.1.0: 5 passed, 0 network-skipped, 0 failed (5 cases)
+zenas.pii@1.1.1: 10 passed, 0 network-skipped, 0 failed (10 cases)
+zenas.pii@1.1.2: 16 passed, 0 network-skipped, 0 failed (16 cases)
+zenas.pii@1.2.0: 16 passed, 0 network-skipped, 0 failed (16 cases)
+zenas.pii@1.3.0: 34 passed, 0 network-skipped, 0 failed (34 cases)
+zenas.retrieve@1.0.0: 5 passed, 0 network-skipped, 0 failed (5 cases)
+zenas.retrieve@1.0.1: 14 passed, 0 network-skipped, 0 failed (14 cases)
+zenas.review@1.0.0: 2 passed, 0 network-skipped, 0 failed (2 cases)
+zenas.review@1.0.1: 5 passed, 0 network-skipped, 0 failed (5 cases)
+zenas.scope@1.0.0: 38 passed, 0 network-skipped, 0 failed (38 cases)
+zenas.scope@1.1.0: 41 passed, 0 network-skipped, 0 failed (41 cases)
+zenas.scope@1.2.0: 61 passed, 0 network-skipped, 0 failed (61 cases)
+zenas.scope@1.2.1: 61 passed, 0 network-skipped, 0 failed (61 cases)
+FAILED tests/test_base_engine_terms_approved.py::test_flat_app_layout_without_skills_dir_boots_empty
+FAILED tests/test_workers_command.py::test_task_runner_reuses_local_branch_and_pr_for_followup
+FAILED tests/test_rig_schema_lock_timeout.py::test_apply_schema_times_out_retries_and_fails_cleanly_under_a_held_lock[True]
+FAILED tests/test_market_lab_documents_real_tank.py::test_uploaded_documents_on_real_tank
+FAILED tests/test_market_lab_real_tank.py::test_real_tank_routes_to_real_room_and_postgres
+FAILED tests/test_moot_published_states.py::test_moot_published_states - subp...
+FAILED tests/test_market_lab_warning_real_tank.py::test_warning_job_on_real_tank
+FAILED tests/test_mcp_proxy.py::test_public_mcp_proxy - subprocess.TimeoutExp...
+FAILED tests/test_skills_offline.py::test_rung3_offline_cases - AssertionErro...
+FAILED tests/test_agent1_public_render.py::test_example_com_through_render_with_internal_browser
+10 failed, 6612 passed, 42 skipped, 223 warnings, 1799 subtests passed in 1444.94s (0:24:04)
+===== main: exit 1 in 1449s =====
+===== offline suite: tests/tiger_g5 =====
+46 passed, 56 warnings in 25.41s
+===== tests/tiger_g5: exit 0 in 32s =====
+===== offline suite: tests/zenas_regulation_alerts =====
+40 passed, 14 warnings in 21.70s
+===== tests/zenas_regulation_alerts: exit 0 in 24s =====
+Offline suite finished in 1505s; failed: main
+
+Earlier failed/incomplete runs (not presented as passes):
+- First full run interrupted at 54%: 22 failed, 3626 passed, 8 skipped,
+  1 collection error; shared /tmp quota, missing test dependencies and Chromium
+  setup were corrected. It is not a full-suite proof.
+- Second full main run timed out at 2161s (exit 124); its separate Tiger and
+  Zenas runs passed 46 and 40. Not green. A case-study regression in M1 was
+  identified (unregistered new metric IDs) and fixed by retaining only metadata
+  on the existing draft figure. The new metadata boundary test passes.
+- Early M1 test setup/assertion failures were corrected: existing fixture auth,
+  isolated dependency availability, explicit fixture re-exports, review data
+  separated from trusted task text, exact Confirm refusal, and native RLS DDL.
+- A private /tmp namespace initially lacked a dev bind; pytest could not open
+  /dev/null. Corrected with --dev-bind /dev /dev, without product changes.
+
+Confirmed setup causes in the full run:
+- Worker test writes /tmp/worker-message.txt directly: shared quota exceeded.
+- Flat-app no-skills test finds repository skills when scratch is inside checkout.
+Both pass using external scratch and a private /tmp (exact command below):
+bwrap --bind / / --dev-bind /dev /dev --bind /workspace/codex-trigger-m1-test-scratch /tmp -- env TMPDIR=/workspace/codex-trigger-m1-test-scratch PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank:.m1-tmp/site GIT_AUTHOR_NAME=Codex GIT_AUTHOR_EMAIL=codex@users.noreply.github.com GIT_COMMITTER_NAME=Codex GIT_COMMITTER_EMAIL=codex@users.noreply.github.com /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python -m pytest tests/test_workers_command.py::test_task_runner_reuses_local_branch_and_pr_for_followup tests/test_base_engine_terms_approved.py::test_flat_app_layout_without_skills_dir_boots_empty -q --disable-socket --allow-hosts=127.0.0.1,localhost --allow-unix-socket --timeout=180
+..                                                                       [100%]
+=============================== warnings summary ===============================
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2 passed, 3 warnings in 6.29s
+
+The remaining failed full-suite cases are being rerun with a private scratch
+namespace and an isolated interpreter reusing the pinned dependencies. This
+record does not claim those cases pass or that full-suite exit 1 is green.
+
+Follow-up verification: all ten original full-suite failures pass in focused retries.
+The original full command remains recorded as exit 1; it is not relabelled green.
+
+Isolated test interpreter (existing dependencies reused through .pth, no package changes):
+/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python -m venv --without-pip .m1-tmp/venv
+Dependency search paths in reused-test-dependencies.pth:
+/workspace/codex-trigger-m1/.m1-tmp/site
+/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages
+
+Retry wrapper, exact contents:
+import os
+import subprocess
+import sys
+from pathlib import Path
+root=Path.cwd()
+url='postgresql://postgres@127.0.0.1:32835/pooltest'
+for name in ('POOL_SCHEMA_DATABASE_URL','ZENAS_SCHEMA_DATABASE_URL','MEMORY_TEST_DATABASE_URL','BASE_TEST_DATABASE_URL','RLS_TEST_DATABASE_URL','SKALA_B3_TEST_DATABASE_URL','SKALA_INTAKE_TEST_DATABASE_URL','TIGER_MAIL_TEST_DATABASE_URL','RIG_TEST_DATABASE_URL','TRAINING_SCHEMA_DATABASE_URL'):
+ os.environ[name]=url
+os.environ.update(DATABASE_URL='postgresql://postgres@127.0.0.1:32835/market_test',
+ RADIX_PASSIVE_TEST_DATABASE_URL='postgresql://postgres@127.0.0.1:32835/radix_passive_test',
+ PYTHONPATH=str(root/'tank')+':'+str(root/'.m1-tmp/site'),
+ TMPDIR=str(root/'.m1-tmp/runtime'), PYTHONDONTWRITEBYTECODE='1',SUITE_WORKERS='4',SUITE_BUDGET_SCALE='2',GITHUB_ACTIONS='true',SUITE_JUNIT_DIR=str(root/'.m1-tmp/junit'),
+ READ1_CHROMIUM_EXECUTABLE='/home/ammosync/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell')
+
+import importlib.util
+spec=importlib.util.spec_from_file_location('offline',root/'.github/scripts/offline_suite.py')
+module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+os.environ.update(TMPDIR='/workspace/codex-trigger-m1-test-scratch',GIT_AUTHOR_NAME='Codex',GIT_AUTHOR_EMAIL='codex@users.noreply.github.com',GIT_COMMITTER_NAME='Codex',GIT_COMMITTER_EMAIL='codex@users.noreply.github.com')
+selected=['tests/test_base_engine_terms_approved.py::test_flat_app_layout_without_skills_dir_boots_empty','tests/test_workers_command.py::test_task_runner_reuses_local_branch_and_pr_for_followup','tests/test_rig_schema_lock_timeout.py','tests/test_market_lab_documents_real_tank.py','tests/test_market_lab_real_tank.py','tests/test_moot_published_states.py','tests/test_market_lab_warning_real_tank.py','tests/test_mcp_proxy.py','tests/test_skills_offline.py','tests/test_agent1_public_render.py']
+raise SystemExit(subprocess.call([sys.executable,'-m','pytest','-q','--disable-socket','--allow-hosts=127.0.0.1,localhost','--allow-unix-socket','--timeout=300','--durations=10',*selected],env=module.clean_env()))
+
+bwrap --bind / / --dev-bind /dev /dev --bind /workspace/codex-trigger-m1-test-scratch /tmp --ro-bind /tmp/tervory-command-workspace-20261031 /tmp/tervory-command-workspace-20261031 -- .m1-tmp/venv/bin/python .m1-tmp/run_selected.py
+
+Captured completion (two Node cases lack the second dependency symlink target in that namespace):
+FAILED tests/test_moot_published_states.py::test_moot_published_states - Asse...
+FAILED tests/test_mcp_proxy.py::test_public_mcp_proxy - AssertionError: node:...
+2 failed, 10 passed, 3 warnings in 259.10s (0:04:19)
+
+Both remaining Node cases after exposing the existing second dependency target read-only:
+bwrap --bind / / --dev-bind /dev /dev --bind /workspace/codex-trigger-m1-test-scratch /tmp --ro-bind /tmp/tervory-command-workspace-20261031 /tmp/tervory-command-workspace-20261031 --ro-bind /tmp/tervory-base-437-origin /tmp/tervory-base-437-origin -- env TMPDIR=/workspace/codex-trigger-m1-test-scratch PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank:.m1-tmp/site .m1-tmp/venv/bin/python -m pytest tests/test_moot_published_states.py tests/test_mcp_proxy.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --allow-unix-socket --timeout=180
+..                                                                       [100%]
+2 passed in 16.59s
+
+Repeated exact callback/TypeScript/Ruff/secret commands above after the final test additions:
+PASS actual GBP callback: trusted active tenant, bounded unique parameters, private POST exchange, no reflected code/token, fixed chats redirect
+TypeScript: exit 0, empty diagnostic output.
+All checks passed!
+..                                                                       [100%]
+2 passed in 16.94s
+
+Current-head Trigger/Command/M1 complete selection:
+rg --files tests | rg '(^tests/test_(trigger|command|workers_command)[^/]*\.py$|^tests/(trigger_|command_acceptance)[^/]*/test[^/]*\.py$)' > .m1-tmp/selected-trigger-command.txt
+bwrap --bind / / --dev-bind /dev /dev --bind /workspace/codex-trigger-m1-test-scratch /tmp --ro-bind /tmp/tervory-command-workspace-20261031 /tmp/tervory-command-workspace-20261031 --ro-bind /tmp/tervory-base-437-origin /tmp/tervory-base-437-origin -- env TMPDIR=/workspace/codex-trigger-m1-test-scratch CRM_ASSEMBLED_ROOT=$PWD COMMAND_ACCEPTANCE_CLIENTS=1 COMMAND_TEST_TOOLS=$PWD/workspace/node_modules PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank:tests:.m1-tmp/site POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32835/pooltest RLS_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32835/pooltest GIT_AUTHOR_NAME=Codex GIT_AUTHOR_EMAIL=codex@users.noreply.github.com GIT_COMMITTER_NAME=Codex GIT_COMMITTER_EMAIL=codex@users.noreply.github.com .m1-tmp/venv/bin/python -m pytest $(cat .m1-tmp/selected-trigger-command.txt) -q -n 4 --dist loadfile --disable-socket --allow-hosts=127.0.0.1,localhost --allow-unix-socket --timeout=180 -rs
+
+Selected files:
+tests/test_trigger_x_length.py
+tests/test_command_1b_workspace.py
+tests/test_command_radix.py
+tests/test_command.py
+tests/test_trigger_crm_wsgi.py
+tests/trigger_first_build/test_trigger.py
+tests/test_trigger_crm.py
+tests/test_command_squads_ui.py
+tests/test_workers_command.py
+tests/trigger_crm_acceptance_20261031/test_combined.py
+tests/command_acceptance_20261031/test_cross_lane.py
+tests/test_command_repo_tools.py
+tests/trigger_m1/test_m1_metrics.py
+tests/trigger_m1/test_m1_queue.py
+tests/trigger_m1/test_m1_storage.py
+tests/trigger_m1/test_marketing.py
+tests/test_command_streaming.py
+tests/test_trigger_w1.py
+tests/trigger_second_build/test_second.py
+tests/trigger_gate2/test_gate2.py
+tests/test_command_code.py
+
+Captured completion:
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [ 14%]
+........................................................................ [ 29%]
+...........................................s............................ [ 44%]
+........................................................................ [ 58%]
+........................................................................ [ 73%]
+........................................................................ [ 88%]
+..........................................................               [100%]
+=============================== warnings summary ===============================
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "WriteIn" shadows an attribute in parent "CheckerIn"
+    warnings.warn(
+
+tests/test_command_streaming.py::test_tokens_arrive_before_finish_then_exact_message_and_receipt
+tests/test_command_code.py::test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_transcript[auto-us-east]
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/main.py:753: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_command_streaming.py: 5 warnings
+tests/test_command_code.py: 5 warnings
+tests/test_command.py: 5 warnings
+tests/trigger_m1/test_m1_storage.py: 5 warnings
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_command_streaming.py::test_tokens_arrive_before_finish_then_exact_message_and_receipt
+tests/test_command_code.py::test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_transcript[auto-us-east]
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/main.py:810: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_command_streaming.py::test_tokens_arrive_before_finish_then_exact_message_and_receipt
+tests/test_command_code.py::test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_transcript[auto-us-east]
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/test_command_streaming.py::test_tokens_arrive_before_finish_then_exact_message_and_receipt
+tests/test_command_code.py::test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_transcript[auto-us-east]
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_command_streaming.py::test_tokens_arrive_before_finish_then_exact_message_and_receipt
+tests/test_command_code.py::test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_transcript[auto-us-east]
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_command_streaming.py::test_tokens_arrive_before_finish_then_exact_message_and_receipt
+tests/test_command_code.py::test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_transcript[auto-us-east]
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_trigger_crm_wsgi.py:14: Run with the pinned CRM Django runtime for WSGI smoke
+SKIPPED [1] tests/trigger_first_build/test_trigger.py:337: Requires isolated room and LanguageTool containers
+489 passed, 2 skipped, 60 warnings in 110.95s (0:01:50)
+
+No founder-browser acceptance or screenshots. The real Trigger/LanguageTool integration remains unrun in this isolated setup; a fake checker is not presented as that test.
+
+Separate pinned CRM WSGI runtime on this checkout:
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank /home/ammosync/trigger-crm-venv312/bin/python -m pytest tests/test_trigger_crm_wsgi.py -q
+....                                                                     [100%]
+4 passed in 2.27s
+
+Disposable test service cleanup after all checks:
+docker stop --time 5 codex-trigger-m1-pg-final-20261103
+# PASS: codex-trigger-m1-pg-final-20261103 stopped. Docker warns that --time is deprecated in favor of --timeout. No production container changed.
