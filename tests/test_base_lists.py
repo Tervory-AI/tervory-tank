@@ -1,0 +1,236 @@
+"""B4 offline contract tests. No provider, external network, database or real CRM."""
+from copy import deepcopy
+from datetime import date
+import json
+from types import SimpleNamespace
+from uuid import UUID, uuid4
+
+import httpx
+import pytest
+from fastapi import FastAPI, HTTPException
+
+import base_list_crm as crm
+import base_lists as lists
+from base_metrics import export_records
+from command import Actor, PlannedAction, ADAPTERS, allowed_tools, validate_action, adapter_request
+from trigger_commands import CONFIRMED
+
+TENANT, OTHER, RECORD = uuid4(), uuid4(), uuid4()
+STAMP = "2026-11-02T12:00:00+00:00"
+URL = "https://invented.example/contact"
+
+
+def evidence(value):
+    return {"value": value, "verified": True, "source_url": URL, "checked_at": STAMP, "confidence": 90}
+
+
+def record():
+    return {"record_id": str(RECORD), "name": "Invented Company", "licence_key": "invented",
+            "state": "DC", "licence_type": "01", "checked_at": STAMP,
+            "fields": {key: evidence(value) for key, value in {
+                "name": "Invented Company", "city": "Washington", "state": "DC", "licence_type": "01",
+                "engine_category": ["dealer"], "website": "https://invented.example/", "phone": "+12025550123",
+                "email": ["invented@quality.example"], "socials": [], "email_syntax_ok": True,
+                "email_disposable": False, "phone_valid": True, "technologies": ["Shopify"],
+                "sells_online": True, "site_newest_year": 2026, "confidence_tier": "ready"}.items()}}
+
+
+@pytest.mark.parametrize("filters", [
+    {"state": "dc"}, {"city": "washington"}, {"licence_type": "01"}, {"engine_category": "dealer"},
+    {"has_website": True}, {"has_phone": True}, {"has_email": True}, {"email_syntax_ok": True},
+    {"email_disposable": False}, {"phone_valid": True}, {"technologies_contain": "shopify"},
+    {"sells_online": True}, {"site_newest_year_at_least": 2026}, {"confidence_tier": "ready"},
+    {"checked_on_or_after": "2026-11-02"},
+])
+def test_every_filter_accepts_verified_values(filters):
+    assert lists.matches(record(), lists.FindArgs(**filters))
+
+
+@pytest.mark.parametrize("filters", [
+    {"state": "CA"}, {"city": "elsewhere"}, {"licence_type": "02"}, {"engine_category": "other"},
+    {"has_website": False}, {"has_phone": False}, {"has_email": False}, {"email_syntax_ok": False},
+    {"email_disposable": True}, {"phone_valid": False}, {"technologies_contain": "other"},
+    {"sells_online": False}, {"site_newest_year_at_least": 2027}, {"confidence_tier": "review"},
+    {"checked_on_or_after": "2026-11-03"},
+])
+def test_every_filter_rejects_nonmatching_values(filters):
+    assert not lists.matches(record(), lists.FindArgs(**filters))
+
+
+@pytest.mark.parametrize("key,filters", [
+    ("state", {"state": "DC"}), ("city", {"city": "Washington"}), ("licence_type", {"licence_type": "01"}),
+    ("engine_category", {"engine_category": "dealer"}), ("website", {"has_website": True}),
+    ("phone", {"has_phone": True}), ("email", {"has_email": True}),
+    ("email_syntax_ok", {"email_syntax_ok": True}), ("email_disposable", {"email_disposable": False}),
+    ("phone_valid", {"phone_valid": True}), ("technologies", {"technologies_contain": "Shopify"}),
+    ("sells_online", {"sells_online": True}), ("site_newest_year", {"site_newest_year_at_least": 2020}),
+    ("confidence_tier", {"confidence_tier": "ready"}),
+])
+def test_unverified_or_missing_date_cannot_satisfy_filter(key, filters):
+    for patch in ({"verified": False}, {"source_url": None}, {"checked_at": None}):
+        row = record()
+        row["fields"][key].update(patch)
+        assert not lists.matches(row, lists.FindArgs(**filters))
+
+
+def test_date_uses_original_checks_not_new_record_timestamp():
+    row = record()
+    row["fields"]["email"]["checked_at"] = "2020-01-01"
+    assert not lists.matches(row, lists.FindArgs(checked_on_or_after=date(2026, 1, 1)))
+
+
+def test_projection_never_promotes_unverified_uploaded_identity():
+    row = {"id": RECORD, "raw": {"name": "uploaded", "city": "Washington", "state": "DC"},
+           "profile": {"name": {"value": "uploaded", "confidence": 100}}, "passes": {}, "status": "done", "updated_at": STAMP}
+    assert "name" not in lists.project(row)["fields"]
+    assert not lists.matches(lists.project(row), lists.FindArgs(state="DC"))
+    row["raw"]["_base_reference"] = {"source_url": URL, "checked_at": STAMP, "name": "official", "state": "DC",
+                                        "licence_type": "01", "address": {"city": "Washington"}}
+    projected = lists.project(row)
+    assert projected["fields"]["name"]["value"] == "official"
+    assert lists.matches(projected, lists.FindArgs(state="DC", city="Washington", licence_type="01"))
+
+
+def test_base_only_and_no_paid_adapters_or_identity_arguments(monkeypatch):
+    import main
+    monkeypatch.setattr(main, "box_region", lambda: "us-east")
+    base = Actor(TENANT, "invented", False, frozenset({"base"}))
+    tiger = Actor(TENANT, "invented", False, frozenset({"tiger"}))
+    for name in ("base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.to_crm"):
+        assert name in allowed_tools(base)
+        assert name not in allowed_tools(tiger)
+        assert not ADAPTERS[name].paid
+    action = validate_action(PlannedAction(tool="base.find", arguments={"state": "DC"}), base)
+    method, _, _, body = adapter_request(action, base)
+    assert method == "GET" and body is None
+    for foreign in ("tenant_id", "user_id", "region"):
+        with pytest.raises(HTTPException):
+            validate_action(PlannedAction(tool="base.find", arguments={foreign: str(OTHER)}), base)
+    with pytest.raises(HTTPException):
+        validate_action(action, tiger)
+
+
+class Pool:
+    """A SQL boundary double that enforces the same explicit tenant predicates."""
+    def __init__(self):
+        self.saved = {}
+        self.seen = []
+    def acquire(self):
+        return self
+    async def __aenter__(self):
+        return self
+    async def __aexit__(self, *args):
+        pass
+    async def fetchrow(self, sql, *args):
+        self.seen.append((sql, args))
+        if sql.startswith("INSERT"):
+            tenant, name, filters, ids, records = args
+            key = uuid4()
+            self.saved[tenant, key] = {"list_id": key, "name": name, "filters": filters, "record_ids": ids,
+                                       "records": records, "created_at": STAMP}
+            return {k: self.saved[tenant, key][k] for k in ("list_id", "name", "created_at")}
+        assert "WHERE tenant_id=$1 AND list_id=$2" in sql
+        return deepcopy(self.saved.get(tuple(args)))
+
+
+@pytest.mark.asyncio
+async def test_saved_list_is_fixed_tenant_snapshot_and_csv_identical():
+    pool = Pool()
+    store = lists.Store(pool)
+    rows = [record()]
+    async def find(tenant, filters):
+        assert tenant == TENANT
+        return deepcopy(rows)
+    store.find = find
+    saved = await store.save(TENANT, "Invented list", lists.FindArgs(state="DC"))
+    rows.clear()
+    snapshot = await store.show(TENANT, saved["list_id"])
+    assert snapshot["record_ids"] == [RECORD]
+    assert snapshot["records"] == [record()]
+    assert export_records(snapshot["records"]).encode() == export_records([record()]).encode()
+    with pytest.raises(HTTPException) as error:
+        await store.show(OTHER, saved["list_id"])
+    assert error.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_find_query_always_scopes_record_reads_to_tenant():
+    class ReadPool(Pool):
+        async def fetch(self, sql, tenant):
+            assert "FROM agent_base.records" in sql and "WHERE tenant_id=$1" in sql
+            assert tenant == TENANT
+            return []
+    assert await lists.Store(ReadPool()).find(TENANT, lists.FindArgs()) == []
+
+
+@pytest.mark.asyncio
+async def test_no_binding_sends_nothing_and_returns_each_record(monkeypatch):
+    import trigger_crm
+    def absent(actor):
+        raise HTTPException(503, "CRM is not configured for this tenant")
+    async def forbidden(*args, **kwargs):
+        pytest.fail("No request may reach CRM without a binding")
+    monkeypatch.setattr(trigger_crm, "binding", absent)
+    monkeypatch.setattr(trigger_crm, "upstream", forbidden)
+    result = await crm.send(SimpleNamespace(tenant_id=TENANT), [record(), record()])
+    assert len(result) == 2 and all(row["message"] == "CRM is not configured for this tenant" for row in result)
+
+
+@pytest.mark.asyncio
+async def test_duplicates_by_email_or_website_and_within_card_are_skipped(monkeypatch):
+    import trigger_crm
+    sent = []
+    monkeypatch.setattr(trigger_crm, "binding", lambda actor: None)
+    async def upstream(actor, resource, method="GET", **kwargs):
+        assert actor.tenant_id == TENANT and resource == "leads"
+        if method == "GET":
+            return {"open_leads": {"open_leads": [{"email": "existing@quality.example", "website": "https://duplicate.example"}], "leads_count": 1},
+                    "close_leads": {"close_leads": [], "leads_count": 0}}
+        sent.append(kwargs["data"])
+        return {"lead_obj": {"id": str(uuid4())}}
+    monkeypatch.setattr(trigger_crm, "upstream", upstream)
+    first, second, fresh, repeated = [record() for _ in range(4)]
+    first["fields"]["email"] = evidence(["existing@quality.example"])
+    second["fields"]["website"] = evidence("https://www.duplicate.example/")
+    fresh["fields"]["phone"]["verified"] = False
+    repeated = deepcopy(fresh)
+    result = await crm.send(SimpleNamespace(tenant_id=TENANT), [first, second, fresh, repeated])
+    assert [row["status"] for row in result] == ["skipped", "skipped", "created", "skipped"]
+    assert len(sent) == 1 and "phone" not in sent[0]
+    assert sent[0]["source"] == "Base" and sent[0]["company_name"] == "Invented Company"
+    assert URL in sent[0]["description"] and STAMP in sent[0]["description"]
+    assert "phone:" not in sent[0]["description"]
+
+
+@pytest.mark.asyncio
+async def test_confirmation_tenant_binding_and_list_download_endpoint(monkeypatch):
+    import command
+    actor = Actor(TENANT, "invented", False, frozenset({"base"}))
+    app = FastAPI()
+    app.include_router(lists.build_router())
+    app.dependency_overrides[command.identity] = lambda: actor
+    async def show(self, tenant, list_id):
+        assert tenant == TENANT
+        return {"name": "Invented list", "records": [record()]}
+    monkeypatch.setattr(lists.Store, "show", show)
+    monkeypatch.setattr(command, "db", lambda: None)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://fixture") as client:
+        response = await client.get("/v1/command/base/lists/csv", params={"list_id": str(uuid4())})
+        assert response.status_code == 200
+        assert response.content == export_records([record()]).encode()
+        response = await client.post("/v1/command/base/lists/to-crm", json={"list_id": str(uuid4()), "record_ids": [str(RECORD)]})
+        assert response.status_code == 409
+        response = await client.post("/v1/command/base/lists/to-crm", json={"list_id": str(uuid4()), "record_ids": [str(uuid4()) for _ in range(101)]})
+        assert response.status_code == 422
+        response = await client.post("/v1/command/base/lists/save", json={"name": "invented"})
+        assert response.status_code == 409
+
+
+def test_rls_follows_personal_tokens_without_starting_rollout():
+    from pathlib import Path
+    schema = (Path(__file__).resolve().parents[1] / "tank/schema.sql").read_text()
+    addition = schema[schema.index("-- B4 saved Base lists"):]
+    assert "'tank.command_threads'::regclass AND relrowsecurity" in addition
+    assert "ENABLE ROW LEVEL SECURITY" in addition and "FORCE ROW LEVEL SECURITY" in addition
+    assert "AS RESTRICTIVE FOR ALL TO PUBLIC" in addition
+    assert "WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)" in addition
