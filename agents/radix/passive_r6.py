@@ -350,5 +350,5 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
             'page_hashes': hashes if checks.get('pages',{}).get('status') == 'complete' else None}
 
 
-async def collect_notices(target, directory):
-    return await collect(target, directory, notice_only=True, budget=Budget(350))
+async def collect_notices(target, directory, *, run=command, transport=None):
+    return await collect(target, directory, notice_only=True, budget=Budget(350), run=run, transport=transport)
