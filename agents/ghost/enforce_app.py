@@ -215,9 +215,12 @@ def drain_once_for_enforce(
         edge = getattr(target.state, "control", None)
     if edge is None:
         edge = DEFAULT_CONTROL
-    edge = select_control(site=edge.site or cfg.site_name, settings=cfg, control=edge)
-    if target is not None:
-        target.state.control = edge
+    # Empty queue polls must not consume the approved proxy's tunnel budget.
+    # A fixture can be promoted once work arrives after the proxy started.
+    if getattr(edge, "control_name", "fixture_edge") != "cloudflare" and any((q.root / "inbox").glob("*.json")):
+        edge = select_control(site=edge.site or cfg.site_name, settings=cfg, control=edge)
+        if target is not None:
+            target.state.control = edge
     cap = action_cap
     if cap is None and target is not None:
         cap = getattr(target.state, "action_cap", None)
