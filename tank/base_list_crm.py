@@ -1,9 +1,8 @@
 """Confirmed Base list -> existing BottleCRM corridor; no credential handling here."""
 from urllib.parse import urlsplit
 
-from fastapi import HTTPException
-
 from base_lists import verified
+from fastapi import HTTPException
 
 
 def website_key(value):
@@ -56,6 +55,8 @@ async def existing(actor, upstream):
             total = group.get("leads_count")
             if not isinstance(rows, list) or type(total) is not int or total < 0:
                 raise HTTPException(502, "Invalid CRM response")
+            if len(rows) != min(100, max(0, total - offset)):
+                raise HTTPException(502, "Invalid CRM response")
             count += total
             seen += len(rows)
             for row in rows:
@@ -83,7 +84,10 @@ async def send(actor, rows):
             raise
         return [{"record_id": row["record_id"], "name": row.get("name"), "status": "skipped",
                  "message": "CRM is not configured for this tenant"} for row in rows]
-    emails, websites = await existing(actor, upstream)
+    try:
+        emails, websites = await existing(actor, upstream)
+    except HTTPException:
+        return [{"record_id": row["record_id"], "name": row.get("name"), "status": "failed"} for row in rows]
     results = []
     for row in rows:
         result = {"record_id": row["record_id"], "name": row.get("name")}
