@@ -4088,6 +4088,9 @@ async def tiger_alerts(request: Request) -> Response:
     url = _tiger_query(request, "url")
     if url:
         params.append(("url", url.strip()))
+    kind = _tiger_query(request, "kind")
+    if kind is not None:
+        params.append(("kind", kind))
     resp = await _tiger_call("GET", "/alerts", params, None)
     return _tiger_response(resp, tenant_id)
 
@@ -4207,6 +4210,8 @@ app.include_router(__import__("event_bus").router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_lists").build_router())
+app.include_router(__import__("tiger_alerts").build_router())
+app.include_router(__import__("tisan_requests").build_router())
 app.include_router(__import__("base_audit_commands").build_router())
 app.include_router(__import__("rig_brain_routes").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("moa").router)

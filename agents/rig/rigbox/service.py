@@ -243,8 +243,6 @@ class Service:
         # Locate confirm reads offers live. The app wires the product checkers,
         # tests inject doubles. None means confirm is not available.
         self.locate_checker: Any | None = None
-        # No concrete payment provider is chosen. None refuses Locate checkout.
-        self.payments: Any | None = None
         self.limiter = RateLimiter(limit=rate_limit)
         self.failed_keys = FailedKeyLimits()
         pool = getattr(store, "pool", None)
@@ -660,6 +658,21 @@ class Service:
                 private.append({"product_id": row["sku"], **result})
         if private:
             payload["locate"] = private
+        retailer = await self.store.retailer(tenant_id) or {}
+        own_delivery = retailer.get("delivery") or {}
+        catalogue_rows = {str(row["sku"]): row for row in await self.store.products(tenant_id)}
+        located = {str(line["product_id"]): line["public"] for line in private}
+        items = ([part["product"] for part in payload["setup"]["parts"]]
+                 if payload["kind"] == "setup" else [payload["product"]])
+        for item in items:
+            row = catalogue_rows.get(str(item["id"]), {})
+            if needs_supply(row):
+                offer = located.get(str(item["id"]), {})
+                item["delivery"] = {"ship_days": offer.get("ship_days"), "eta": offer.get("eta"),
+                                    "back_order": offer.get("status") != "available_to_order"}
+            else:
+                item["delivery"] = {"min_days": own_delivery.get("min_days"),
+                                    "max_days": own_delivery.get("max_days"), "back_order": False}
         return payload, contact
 
     async def _locate_row(self, tenant_id: str, product_id: str) -> dict[str, Any]:
