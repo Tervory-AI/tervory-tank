@@ -112,3 +112,18 @@ control/retry, exact opt-in SNI, project-only idle observer, and post-apply
 signed health with a virtual 60-second deadline are covered. Commands/results
 for each independently pushed fix are recorded in PR.md. CI tank on the final
 review-fix head is recorded in the GitHub PR body after completion.
+
+Free-plan review (2026-11-03):
+Command: /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python .proof/run_review.py tests/test_autumbra_cloudflare_hand.py
+Exit: 0
+Summary: 45 passed in 2.21s (initial plan regression run).
+Command: /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python .proof/run_review.py tests/test_autumbra_a3_review.py tests/test_autumbra_cloudflare_hand.py tests/test_autumbra_cloudflare_live.py tests/test_bucket1_radix.py tests/test_radix_passive.py
+Exit: 0
+Summary: 192 passed, 6 skipped in 39.55s.
+Command: /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python -m ruff check agents/ghost/cloudflare_edge.py agents/ghost/enforce_apply.py tests/test_autumbra_cloudflare_hand.py --select E9,F
+Exit: 0
+Summary: All checks passed!
+Command: git diff --check
+Exit: 0
+Summary: no whitespace errors.
+Final-head CI tank result and run link: recorded in PR #566 after completion.
