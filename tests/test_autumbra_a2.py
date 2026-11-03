@@ -336,3 +336,31 @@ async def test_google_replay_refused_for_entire_valid_token_lifetime(signing, mo
     clock[0] += 601
     with pytest.raises(WebhookRejected):
         await verify_google_push(push_body(), bearer, PlaceholderTank())
+
+
+@pytest.mark.asyncio
+async def test_act_mail_uses_watch_receipts_once_without_enforce_network(monkeypatch, tmp_path):
+    from datetime import datetime, timezone
+    from agents.ghost import app as watch_app
+    from agents.ghost.client_settings import ClientAutumbraSettings, save_settings
+    from agents.rig.rigbox.reserve import SmtpMailer
+    monkeypatch.setenv('AUTUMBRA_SMTP_HOST', 'placeholder-smtp.example.test')
+    monkeypatch.setenv('AUTUMBRA_SMTP_FROM', 'placeholder-sender@example.test')
+    letters = []
+    async def send(self, letter):
+        letters.append(letter)
+    monkeypatch.setattr(SmtpMailer, 'send', send)
+    receipt = {'id': 'placeholder-act', 'tenant_id': 'placeholder-tenant', 'applied': True,
+               'timestamp': datetime.now(timezone.utc).isoformat()}
+    monkeypatch.setattr(watch_app, '_receipts_for_tenant', lambda tenant: [receipt])
+    store = Store(tmp_path / 'placeholder-act.sqlite3')
+    try:
+        save_settings(store, ClientAutumbraSettings(tenant_id='placeholder-tenant', site_name='placeholder-site',
+                                                  owner_email='placeholder-owner@example.test'))
+        app = SimpleNamespace(state=SimpleNamespace(store=store))
+        await watch_app.deliver_act_owner_updates(app)
+        await watch_app.deliver_act_owner_updates(app)
+        assert len(letters) == 1
+        assert letters[0]['to'] == 'placeholder-owner@example.test'
+    finally:
+        store.close()
