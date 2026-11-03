@@ -9,7 +9,7 @@ Base skills use their own authenticated browser for every execution context, inc
 - `agents/tiger/docker-compose.yml:93`: OCR service, 1 GiB memory limit, 256 MiB shm, 64 MiB `/data` tmpfs; external OCR corridor declaration at 127. Its only explicit setting is `TIGER_MAX_PAGES`.
 - `docker-compose.yml:211`: remove old main-stack browser; `:279` OCR URL; `:290` Tank attachment; `:531` one-time internal-network declaration. Main and its regional copy redeploy because the root compose and Tank change; Tiger redeploys because its room compose changes.
 - `tank/agent_skills.py:502`: one browser-binding helper; `guard_base_run` rebinds after task/free-pass processing without nesting HTTP adapters.
-- `tank/main.py`: bind all Base contexts in `make_ctx` and the separate model-free candidate path. No routing, queue or cache policy changes.
+- `tank/main.py:3194,1770`: bind all Base contexts in `make_ctx` and the separate model-free candidate path. No routing, queue or cache policy changes.
 - `ops/seal-check.sh:171`: exact OCR attachment and internal flag enforced. `EXPECTED_SEALED`, including `agent-tiger`, is unchanged. Existing Autumbra logic is preserved.
 - `agents/check_isolation.sh:76,111`: old `tiger` DNS allowances removed; OCR allowed only on its dedicated corridor. The obsolete Base network inventory allowance is removed.
 - `.github/scripts/deploy_changed.py:42,87`: `tiger/` changes deploy `agent-tiger`, rather than the main stack.
@@ -21,9 +21,9 @@ Base skills use their own authenticated browser for every execution context, inc
 | Reader / execution path | Result |
 | --- | --- |
 | `tank/main.py:112-115` SKILL_ENV; copied by `make_ctx` | Defaults to `http://tiger-ocr:3000`; Base ownership immediately overrides it through the shared helper. |
-| `tank/main.py` `_run_code_candidate` context | Base candidates also bind the Base browser; other skills keep the OCR URL. No model is invoked. |
-| `tank/main.py` `_run_one_skill` founder preview and regular run | Uses `make_ctx`; all Base versions use the Base browser, regardless of caller. Existing gates retained. |
-| `tank/main.py` `run_skill_evals` | Uses `make_ctx`; both Base skills use the Base browser, including revalidation contexts. |
+| `tank/main.py:1767-1770` `_run_code_candidate` context | Base candidates also bind the Base browser; other skills keep the OCR URL. No model is invoked. |
+| `tank/main.py:3468` `_run_one_skill` founder preview and regular run | Uses `make_ctx`; all Base versions use the Base browser, regardless of caller. Existing gates retained. |
+| `tank/main.py:3310` `run_skill_evals` | Uses `make_ctx`; both Base skills use the Base browser, including revalidation contexts. |
 | `tank/agent_skills.py:502-508,529` Base room runs | Same Base gateway, authenticated headers and HTTP policy as before; task headers are refreshed after task extraction. |
 | `tank/skills/tiger.price_ocr/1.0.0/run.py:59`, `1.0.1/run.py:59-66` | `/ocr` on `tiger-ocr`. |
 | `tank/skills/base.find_site/{1.2.0,1.3.0,1.4.0}/run.py` (`61,68,68`), `{1.5.0,1.6.0}/run.py` (`91,95`), `{1.7.0,1.7.1}/run.py:101-105` | Every Base context points to `base-browser-gateway/render`; no approved version is edited. |
@@ -40,7 +40,7 @@ Base skills use their own authenticated browser for every execution context, inc
 - `tests/test_room_seal.py`: OCR is a sealed raw-mode service. Fixture passes with its one internal network and returns `LEAK` for either extra internal or extra outbound attachment.
 - `tests/test_deploy_changed.py`: all four Tiger image-source paths deploy the Tiger room, with combined Tank changes still deploying main.
 - `tests/test_agent_chassis.py:574-576`: remove one further obsolete indexing of the removed main service and assert its absence.
-- `tests/test_base_public_http.py:206`: give the existing context fixture its real tenant field so the shared browser helper has the same contract as production.
+- `tests/test_base_public_http.py:198`: give the existing context fixture its real tenant field so the shared browser helper has the same contract as production.
 - `tests/test_seal_hardening_routes.py`: both specified Base versions actually execute a render-required preview, eval and Base-room run against mocked HTTP, with Base headers; no render goes to OCR. The OCR skill reaches its new `/ocr` URL.
 
 ## Verification status — not acceptance
