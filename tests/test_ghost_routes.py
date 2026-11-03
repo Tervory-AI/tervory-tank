@@ -166,8 +166,8 @@ def test_compose_isolation_and_no_production_control_credentials():
     joined = {name for name, service in main["services"].items() if "tervory-gw-ghost" in service.get("networks", [])}
     assert joined == {"tank", "postgres"}
     room = yaml.safe_load((ROOT / "agents/ghost/docker-compose.yml").read_text())
-    for service in room["services"].values():
-        assert service["networks"] == ["gw"]
+    for name, service in room["services"].items():
+        assert service["networks"] == (["enforce_control"] if name == "enforce-lifecycle" else ["gw"])
         assert service["cap_drop"] == ["ALL"]
         assert not any(key in service.get("environment", {}) for key in ("DATABASE_URL", "COOLIFY_TOKEN", "GITHUB_TOKEN", "LITELLM_MASTER_KEY", "TANK_API_KEY"))
         assert not any("docker.sock" in str(v) for v in service.get("volumes", []))
