@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from tenant_db import tenant_scope
 from trigger_bot_contract import TOOLS, PublicMessage
-from trigger_bot_grounding import exact_origin
+from trigger_bot_grounding import exact_origin, normalized_origin
 from trigger_bot_shared import FailedKeyLimits, PgRateLimits, hash_key, issue_embed_key, client_address, proxy_configured
 
 router = APIRouter()
@@ -99,16 +99,27 @@ async def prepare(action, actor, state, conn=None):
     return command.validate_action(command.PlannedAction(tool=action.tool, arguments=values), actor)
 
 
-async def key_for_site(bot, tenant, url):
-    origin = '{0.scheme}://{0.netloc}'.format(urlsplit(url))
-    await bot.pool.execute('''INSERT INTO tank.trigger_bot_config(tenant_id,enabled,origins)
-        VALUES($1,true,$2::jsonb) ON CONFLICT(tenant_id) DO UPDATE SET enabled=true''', tenant, json.dumps([origin]))
+async def key_for_site(bot, tenant, url, source_id):
+    parsed = urlsplit(url)
+    origin = normalized_origin(f'{parsed.scheme}://{parsed.netloc}')
+    async with bot.pool.acquire() as conn, conn.transaction():
+        await conn.execute('''INSERT INTO tank.trigger_bot_config(tenant_id,enabled)
+            VALUES($1,true) ON CONFLICT(tenant_id) DO UPDATE SET enabled=true''', tenant)
+        # Lock config serializes key rotation for a tenant, including repeated source.add.
+        await conn.fetchval('SELECT enabled FROM tank.trigger_bot_config WHERE tenant_id=$1 FOR UPDATE', tenant)
+        await conn.execute('''UPDATE tank.trigger_bot_embed_keys SET revoked=true
+            WHERE tenant_id=$1 AND (source_id=$2 OR origins @> $3::jsonb)''',
+            tenant, source_id, json.dumps([origin]))
 
-    class KeyStore:
-        async def put_key(self, owner, key_hash, kind, origins):
-            await bot.pool.execute('''INSERT INTO tank.trigger_bot_embed_keys(tenant_id,key_hash,region,origins)
-                VALUES($1,$2,$3,$4::jsonb)''', UUID(str(owner)), key_hash, bot.rt.box_region(), json.dumps(origins))
-    value = await issue_embed_key(KeyStore(), str(tenant), [origin])
+        class KeyStore:
+            async def put_key(self, owner, key_hash, kind, origins):
+                await conn.execute('''INSERT INTO tank.trigger_bot_embed_keys(tenant_id,key_hash,region,origins,source_id)
+                    VALUES($1,$2,$3,$4::jsonb,$5)''', UUID(str(owner)), key_hash, bot.rt.box_region(), json.dumps(origins), source_id)
+        value = await issue_embed_key(KeyStore(), str(tenant), [origin])
+        await conn.execute('''UPDATE tank.trigger_bot_config SET origins=(
+            SELECT COALESCE(jsonb_agg(DISTINCT o.value),'[]'::jsonb)
+            FROM tank.trigger_bot_embed_keys k CROSS JOIN LATERAL jsonb_array_elements(k.origins) o
+            WHERE k.tenant_id=$1 AND NOT k.revoked) WHERE tenant_id=$1''', tenant)
     return 'tb1.' + bot.rt.box_region() + '.' + tenant.hex + '.' + value['publishable_key']
 
 
@@ -135,12 +146,27 @@ async def execute(operation, args, actor, operation_id):
             return {'source_id': str(source), 'status': 'unavailable'}
         result = {'source_id': str(source), 'status': 'ready'}
         if args.kind == 'website':
-            result['embed_key'] = await key_for_site(bot, tenant, args.url)
+            result['embed_key'] = await key_for_site(bot, tenant, args.url, source)
         return result
     if operation == 'source.remove':
-        removed = await pool.fetchval("UPDATE tank.trigger_bot_sources SET status='removed' WHERE tenant_id=$1 AND id=$2 RETURNING id", tenant, args.source_id)
-        if removed is None:
-            raise HTTPException(404)
+        async with pool.acquire() as conn, conn.transaction():
+            await conn.fetchval('SELECT enabled FROM tank.trigger_bot_config WHERE tenant_id=$1 FOR UPDATE', tenant)
+            removed = await conn.fetchrow("UPDATE tank.trigger_bot_sources SET status='removed' WHERE tenant_id=$1 AND id=$2 RETURNING url,kind", tenant, args.source_id)
+            if removed is None:
+                raise HTTPException(404)
+            origins = []
+            if removed['kind'] == 'website':
+                parsed = urlsplit(removed['url'])
+                origins = [normalized_origin(f'{parsed.scheme}://{parsed.netloc}')]
+            await conn.execute('''UPDATE tank.trigger_bot_embed_keys SET revoked=true
+                WHERE tenant_id=$1 AND (source_id=$2 OR (source_id IS NULL AND origins @> $3::jsonb AND $3::jsonb<>'[]'::jsonb))''',
+                tenant, args.source_id, json.dumps(origins))
+            await conn.execute('''UPDATE tank.trigger_bot_config SET origins=(
+                SELECT COALESCE(jsonb_agg(DISTINCT o.value),'[]'::jsonb)
+                FROM tank.trigger_bot_embed_keys k CROSS JOIN LATERAL jsonb_array_elements(k.origins) o
+                WHERE k.tenant_id=$1 AND NOT k.revoked),
+                enabled=EXISTS(SELECT 1 FROM tank.trigger_bot_sources s WHERE s.tenant_id=$1 AND s.status<>'removed')
+                WHERE tenant_id=$1''', tenant)
         return {'source_id': str(args.source_id), 'status': 'removed'}
     if operation == 'sources':
         rows = await pool.fetch('''SELECT id,kind,title,url,status,checked_at FROM tank.trigger_bot_sources
@@ -272,6 +298,7 @@ async def authenticate(request):
     origin = request.headers.get('origin', '')
     if not match or match[1] != runtime().box_region() or not exact_origin(origin):
         raise HTTPException(403)
+    origin = normalized_origin(origin)
     tenant = UUID(hex=match[2])
     try:
         with tenant_scope(tenant):

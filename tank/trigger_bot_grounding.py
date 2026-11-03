@@ -109,6 +109,17 @@ def exact_origin(value: str) -> bool:
         return False
 
 
+
+def normalized_origin(value: str) -> str:
+    if not exact_origin(value):
+        raise ValueError('https_origin_required')
+    parsed = urlsplit(value)
+    host = parsed.hostname.lower()
+    if ':' in host:
+        host = '[' + host + ']'
+    return 'https://' + host + (':' + str(parsed.port) if parsed.port not in (None, 443) else '')
+
+
 def grounded(output: Any, passages: list[Passage]) -> tuple[str, list[Passage]] | None:
     """Validate structured output in code; unknown citations or novel numbers refuse."""
     try:
