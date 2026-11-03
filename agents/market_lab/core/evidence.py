@@ -227,6 +227,12 @@ async def gated_facts(ledger: Any, tenant_id: str, facts: list[dict], *, fixture
         doc_id = match.group(1) if match else None
         if doc_id not in documents:
             documents[doc_id] = await document(ledger, tenant_id, doc_id, fixtures=fixtures) if doc_id else None
+        if doc_id and documents[doc_id] is None:
+            from core.documents import records
+            uploads = await records(ledger, tenant_id, doc_id)
+            documents[doc_id] = uploads[0] if uploads else None
+        if doc_id and documents[doc_id] is None:
+            continue  # Missing, deleted or foreign tenant source cannot be cited.
         doc = documents[doc_id] or {}
         predictive = (doc.get("kind") in {"warning_evidence", "prediction", "warning"}
                       or fact.get("kind") in {"prediction", "warning"}
