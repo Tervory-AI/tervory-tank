@@ -427,3 +427,15 @@ def test_isolated_service_seal():
     with TestClient(create_control()) as client:
         assert client.get('/ghost/autumbra/enforce/list').status_code == 404
         assert client.get('/ghost/autumbra/settings').status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('repository', ['Tervory-AI/tervory-tank', 'https://github.com/Tervory-AI/tervory-tank', 'https://github.com/Tervory-AI/tervory-tank.git'])
+async def test_same_repository_forms_and_canonical_names(repository):
+    api = FakeAPI()
+    api.rows = [{**owned(A, 'placeholder-owned'), 'git_repository': repository},
+                {'name': lifecycle.PROJECT_PREFIX + '-' + 'a' * 36, 'uuid': 'placeholder-invalid-name'}]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(api)) as http:
+        service = backend(http)
+        assert len(await service.list()) == 1
+        assert (await service.destroy(lifecycle.plan_destroy(A)))['outcome'] == 'destroyed'
