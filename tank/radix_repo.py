@@ -74,7 +74,7 @@ async def with_receipt(actor, tool, operation):
     except HTTPException as exc:
         status, result = exc.status_code, {"detail": exc.detail}
     # Existing code receipt writer; no uploaded source or finding text is stored here.
-    receipt = await _record_local(RouteRequest(tenant_id=actor.tenant_id, agent="radix", task_type=tool, messages=[]),
+    receipt = await _record_local(RouteRequest(tenant_id=actor.tenant_id, agent="radix", task_type=tool, messages=[{"role": "user", "content": tool}]),
                                   {}, model="code", rung=3, content="",
                                   outcome="delivered" if status < 300 else "failed")
     from fastapi.responses import JSONResponse
@@ -136,5 +136,5 @@ async def code_plan(actor, messages, task_id):
         raise HTTPException(422, "The action arguments are invalid") from None
     proposed = {"text": "", "actions": [{"tool": tool, "arguments": {
         "attachment_id" if tool == "radix.repo.scan" else "scan_id": identifier}}]}
-    return await _record_local(RouteRequest(tenant_id=actor.tenant_id, agent="radix", task_type="command.turn", messages=[]),
+    return await _record_local(RouteRequest(tenant_id=actor.tenant_id, agent="radix", task_type="command.turn", messages=[{"role": "user", "content": tool}]),
                                {}, model="code", rung=3, content=json.dumps(proposed), task_id=task_id)
