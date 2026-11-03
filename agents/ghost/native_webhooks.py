@@ -15,7 +15,7 @@ from .durable_state import locked_state
 from .webhooks import WebhookRejected
 
 
-def replay_once(identity: str, bucket: str) -> None:
+def replay_once(identity: str, bucket: str, *, expires_at: float = 0) -> None:
     key = hashlib.sha256(identity.encode()).hexdigest()
     now = time.time()
     try:
@@ -25,7 +25,7 @@ def replay_once(identity: str, bucket: str) -> None:
                 del state[stale]
             if key in state or len(state) >= 10000:
                 raise ValueError
-            state[key] = now + 600
+            state[key] = max(now + 600, expires_at)
     except (OSError, ValueError, TypeError):
         raise WebhookRejected('replayed or unavailable webhook state') from None
 
@@ -74,7 +74,8 @@ async def verify_google_push(body: bytes, authorization: str | None, tank) -> No
         if (not isinstance(message, str) or not 1 <= len(message) <= 200
                 or not isinstance(subscription, str) or not 1 <= len(subscription) <= 1000):
             raise ValueError
-        replay_once('google:' + audience + ':' + account + ':' + subscription + ':' + message, 'mailbox')
+        replay_once('google:' + audience + ':' + account + ':' + subscription + ':' + message,
+                    'mailbox', expires_at=float(claims['exp']))
     except Exception:
         # Provider bodies, token claims and transport errors never reach output.
         raise WebhookRejected('invalid webhook authentication') from None
