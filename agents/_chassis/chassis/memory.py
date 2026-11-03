@@ -30,7 +30,9 @@ class MemoryClient:
         return f"MemoryClient(agent={self._agent!r})"
 
     async def remember(self, tenant_id: str, text: str, kind: str, source: str, *,
-                       evidence: list[str] | None = None, confidence: float = .5) -> dict[str, Any]:
+                       evidence: list[str] | None = None, confidence: float = .5,
+                       row_id: str | None = None, last_verified: str | None = None,
+                       meta: dict | None = None, index: bool = True) -> dict[str, Any]:
         data = await self._send(
             "POST",
             "/memories",
@@ -41,6 +43,10 @@ class MemoryClient:
                 "source": source,
                 "evidence": evidence or [],
                 "confidence": confidence,
+                **({"id": row_id} if row_id else {}),
+                **({"last_verified": last_verified} if last_verified else {}),
+                **({"meta": meta} if meta is not None else {}),
+                **({"index": False} if not index else {}),
             },
         )
         if not isinstance(data, dict):
@@ -74,6 +80,15 @@ class MemoryClient:
                 raise RuntimeError("hermes answer was not an object")
             memories.append(item)
         return memories
+
+    async def records(self, tenant_id: str, *, tier: str = "client") -> list[dict[str, Any]]:
+        from uuid import UUID
+        if tier not in {"client", "platform"}:
+            raise ValueError("Invalid memory tier")
+        result = await self._send("GET", "/records?tenant_id=" + str(UUID(tenant_id)) + "&tier=" + tier)
+        if not isinstance(result, dict) or not isinstance(result.get("memories"), list):
+            raise RuntimeError("hermes answer was not an object")
+        return result["memories"]
 
     async def forget(self, memory_id: str, tenant_id: str) -> None:
         from uuid import UUID
