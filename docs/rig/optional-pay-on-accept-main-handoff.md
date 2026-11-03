@@ -108,6 +108,31 @@ git diff --check
 
 Full-suite test output and intermediate command logs remain under `.git/rig-nopay/` as local orchestration evidence. They are not live data or a shipped fixture.
 
+Additional exact validation commands (the first is the 76-pass focused run):
+
+```sh
+RIG_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32844/rig_nopay_test PYTHONPATH=agents/_chassis:agents/rig /workspace/codex-tiger-t1/.venv/bin/python -m pytest tests/test_rig_no_payments.py tests/test_rig_optional_auto_order.py tests/test_rig_optional_blind_ship.py tests/test_rig_locate_checkout.py -q --tb=short --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+python3 - <<'AST_CHECK'
+import ast, subprocess
+from pathlib import Path
+old = ast.parse(subprocess.check_output(['git', 'show', 'origin/main:agents/rig/rigbox/fulfilment.py'], text=True))
+new = ast.parse(Path('agents/rig/rigbox/fulfilment.py').read_text())
+for tree in (old, new):
+    for node in ast.walk(tree):
+        if (isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.body and isinstance(node.body[0], ast.Expr)
+                and isinstance(node.body[0].value, ast.Constant)
+                and isinstance(node.body[0].value.value, str)):
+            node.body = node.body[1:]
+assert ast.dump(old, include_attributes=False) == ast.dump(new, include_attributes=False)
+print('PASS: executable fulfilment AST unchanged from main; #578 safety implementation retained')
+AST_CHECK
+```
+
+Both commands passed. The first broad invocation, before local dependency/temp setup, used the same Postgres/PYTHONPATH prefix with `python -m pytest tests/test_rig* -q --tb=short`; its 19 failures and final replacement result are recorded above. An exploratory unrestricted Ruff check also reported 34 style findings; this is not claimed as a passing check. The repository's required `E9,F` lint selection passed.
+
+After validation, only this job's disposable database container was removed with `docker rm -f -v codex-rig-nopay-pg`. The final Git verification uses `git diff --check origin/main...HEAD`, `git rev-parse HEAD`, `git ls-remote origin refs/heads/codex/rig-no-payments` and `git status --short --branch`; final remote head and clean-state evidence are reported in the task.
+
 ## Every removed or changed test
 
 Names containing the old word “refund” are historical test identifiers; remaining supplier-safety cases now run through store confirmation without a provider or financial operation. The two renamed order-failure tests replace refund assertions with `needs_person` / supplier-failure review assertions. Existing direct fulfilment/collision/unknown-send tests remain intact, including `test_known_unsent_po_cancel_record_failure_still_reports_unrecorded`.
