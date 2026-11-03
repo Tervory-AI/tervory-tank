@@ -188,6 +188,7 @@ async def test_full_request_preview_revision_signoff_and_tenant_isolation(client
     journal_row(journal, 2, sha='b' * 40)
     newer = (await http.get('/v1/command/tisan/preview', params=body)).json()
     assert newer['build'] == 2 and newer['commit'] == 'b' * 40
+    assert (await confirmed(http, 'tisan.feedback', feedback)).status_code == 409
     accepted = await confirmed(http, 'tisan.handover', body)
     assert accepted.status_code == 200 and accepted.json()['status'] == 'accepted'
     assert accepted.json()['commit'] == 'b' * 40
