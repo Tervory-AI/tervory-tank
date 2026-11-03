@@ -49,7 +49,7 @@ def build_router(*, key_ok, ledger_context, engine):
                 return gate(await ledger.predictions_for(tenant), tenant)
             if operation == "predictions":
                 return {"predictions": await ledger.predictions_for(tenant)}
-            if operation == "calibration":
+            if operation in {"calibration", "calibration.curve"}:
                 rows = await ledger.predictions_for(tenant)
                 return {**(await ledger.calibration_for(tenant)),
                         "hits": sum(r.get("outcome") == "hit" for r in rows),
