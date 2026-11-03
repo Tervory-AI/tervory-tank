@@ -152,7 +152,8 @@ async def test_faq_zero_cost_private_identity_dedupe_and_stats(b3, caplog):
     assert b3.cloud.calls[0]['text']['body'] == 'placeholder answer\nhttps://placeholder.invalid/source'
     b3.bot.route.assert_not_awaited()
     row = await b3.pool.fetchrow('SELECT * FROM tank.trigger_bot_conversations WHERE tenant_id=$1', A)
-    assert row['channel'] == 'whatsapp' and str(row['visitor_id']) != incoming['from']
+    assert row['channel'] == 'web' and row['transport'] == 'whatsapp'
+    assert str(row['visitor_id']) != incoming['from']
     assert open_seal(row['whatsapp_sealed'], wa.context(A, row['id'])) == {'sender': incoming['from']}
     stored = repr(row) + repr(await b3.pool.fetch('SELECT * FROM tank.trigger_whatsapp_events'))
     assert incoming['from'] not in stored and incoming['id'] not in stored
@@ -365,3 +366,27 @@ async def test_rebinding_timezone_change_abuse_and_window_closing_fail_closed(b3
     await b3.service.receive(PHONE, b3.binding, message(sender=sender, stamp=clock))
     assert await b3.pool.fetchval('SELECT count(*) FROM tank.trigger_whatsapp_events WHERE tenant_id=$1', A) == before
     assert len(b3.cloud.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_additive_transport_preserves_legacy_web_constraint(database):
+    legacy = await database.fetchval("""SELECT pg_get_constraintdef(oid) FROM pg_constraint
+        WHERE conrelid='tank.trigger_bot_conversations'::regclass
+        AND conname='trigger_bot_conversations_channel_check'""")
+    assert "'web'" in legacy and 'whatsapp' not in legacy
+    web, whatsapp = uuid4(), uuid4()
+    await database.execute('''INSERT INTO tank.trigger_bot_conversations(tenant_id,id,visitor_id)
+        VALUES($1,$2,$3)''', A, web, uuid4())
+    await database.execute('''INSERT INTO tank.trigger_bot_conversations
+        (tenant_id,id,visitor_id,transport,whatsapp_sealed) VALUES($1,$2,$3,'whatsapp','placeholder-sealed')''', A, whatsapp, uuid4())
+    await database.execute(DDL)
+    rows = await database.fetch('SELECT id,channel,transport FROM tank.trigger_bot_conversations WHERE tenant_id=$1', A)
+    assert {r['id']: (r['channel'], r['transport']) for r in rows} == {
+        web: ('web', 'web'), whatsapp: ('web', 'whatsapp')}
+    with pytest.raises(asyncpg.CheckViolationError):
+        await database.execute('''INSERT INTO tank.trigger_bot_conversations(tenant_id,id,visitor_id,channel)
+            VALUES($1,$2,$3,'whatsapp')''', A, uuid4(), uuid4())
+    with pytest.raises(asyncpg.CheckViolationError):
+        await database.execute('''INSERT INTO tank.trigger_bot_conversations(tenant_id,id,visitor_id,transport)
+            VALUES($1,$2,$3,'placeholder-invalid')''', A, uuid4(), uuid4())
+    assert 'DROP ' not in DDL.upper()
