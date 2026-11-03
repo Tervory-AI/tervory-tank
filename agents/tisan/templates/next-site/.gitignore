@@ -5,3 +5,5 @@ playwright-report
 test-results
 .lighthouseci
 tsconfig.tsbuildinfo
+
+.quality-checks.json
