@@ -1505,7 +1505,7 @@ async def tiger_match_start(request: Request, actor: Actor = Depends(identity)):
 async def tiger_match_decide(decision: str, request: Request, actor: Actor = Depends(identity)):
     from trigger_commands import confirmation
     from trigger_routes import code_receipt
-    if decision not in {'confirm','reject'}:
+    if decision not in {'confirm','reject','undo'}:
         raise HTTPException(404, 'Not found')
     tool = 'tiger.match.' + decision
     actor = await tiger_actor(actor, tool)
@@ -1518,7 +1518,8 @@ async def tiger_match_decide(decision: str, request: Request, actor: Actor = Dep
         row = await conn.fetchrow('SELECT * FROM agent_tiger.matches WHERE tenant_id=$1 AND id=$2', actor.tenant_id, body.match_id)
     if row is None:
         raise HTTPException(404, 'Not found')
-    if row['state'] != 'suggested':
+    expected = 'rejected' if decision == 'undo' else 'suggested'
+    if row['state'] != expected:
         raise HTTPException(409, 'Confirmed action required')
     if decision == 'confirm':
         # Current catalogue identifiers and Source entitlement remain authoritative.
@@ -1533,11 +1534,29 @@ async def tiger_match_decide(decision: str, request: Request, actor: Actor = Dep
             raise HTTPException(409, 'Confirmed action required')
     else:
         async with db().acquire() as conn:
-            await conn.execute("UPDATE agent_tiger.matches SET state='rejected' WHERE tenant_id=$1 AND id=$2 AND state='suggested'", actor.tenant_id, body.match_id)
+            changed = await conn.fetchrow("""UPDATE agent_tiger.matches SET state=$3
+                WHERE tenant_id=$1 AND id=$2 AND state=$4 RETURNING *""",
+                actor.tenant_id, body.match_id, 'suggested' if decision == 'undo' else 'rejected', expected)
+        if changed is None:
+            raise HTTPException(409, 'Confirmed action required')
     async with db().acquire() as conn:
         current = await conn.fetchrow('SELECT * FROM agent_tiger.matches WHERE tenant_id=$1 AND id=$2', actor.tenant_id, body.match_id)
     result = {'match': tiger_match_out(current), 'ledger_id': str(ledger), 'cost_usd': 0, 'model_calls': 0}
     return {**result, 'text': json.dumps(result, ensure_ascii=False)}
+
+
+@router.get('/tiger/matches')
+async def tiger_matches(actor: Actor = Depends(identity)):
+    from trigger_routes import code_receipt
+    actor = await tiger_actor(actor, 'tiger.matches')
+    ledger = await code_receipt(actor.tenant_id, 'tiger.matches', agent='tiger')
+    async with db().acquire() as conn:
+        rows = await conn.fetch("""SELECT * FROM agent_tiger.matches
+            WHERE tenant_id=$1 AND state IN ('suggested','rejected')
+            ORDER BY checked_at DESC,id DESC LIMIT 100""", actor.tenant_id)
+    result = {'tenant_id': str(actor.tenant_id), 'matches': [tiger_match_out(row) for row in rows],
+              'ledger_id': str(ledger), 'cost_usd': 0, 'model_calls': 0}
+    return tiger_bounded_card(result, 'matches')
 
 
 def tiger_positions(products: list[dict], matches: list[dict], observations: dict[str, dict]) -> list[dict]:

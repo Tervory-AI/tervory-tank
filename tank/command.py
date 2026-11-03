@@ -40,7 +40,7 @@ from trigger_marketing_contract import TOOLS as MARKETING_TOOLS
 TOOLS = {
     "trigger": ["trigger.revise", "trigger.voice.learn", "trigger.write.batch", "trigger.scorecard", "trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
     "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.products", "base.list.to_crm"],
-    "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.position", "tiger.alerts", "tiger.watches", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk"],
+    "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.match.undo", "tiger.position", "tiger.matches", "tiger.alerts", "tiger.watches", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk"],
     "market_lab": ["market_lab.research", "market_lab.warnings", "market_lab.predictions", "market_lab.calibration", "market_lab.feeds", "market_lab.alerts.email", "market_lab.alerts.webhook", "market_lab.alerts.off"],
     "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment"],
     "tisan": ["tisan.scaffold"],
@@ -1459,6 +1459,8 @@ ADAPTERS = {
     "tiger.match": Adapter("POST", "/v1/access/tiger/match", EmptyArgs, "tiger.match"),
     "tiger.match.confirm": Adapter("POST", "/v1/access/tiger/match/confirm", TigerMatchArgs, "tiger.match.confirm"),
     "tiger.match.reject": Adapter("POST", "/v1/access/tiger/match/reject", TigerMatchArgs, "tiger.match.reject"),
+    "tiger.match.undo": Adapter("POST", "/v1/access/tiger/match/undo", TigerMatchArgs, "tiger.match.undo"),
+    "tiger.matches": Adapter("GET", "/v1/access/tiger/matches", EmptyArgs, "tiger.matches"),
     "tiger.position": Adapter("GET", "/v1/access/tiger/position", EmptyArgs, "tiger.position"),
     "base.find": Adapter("GET", "/v1/command/base/lists/find", FindArgs, "base.find"),
     "base.list.save": Adapter("POST", "/v1/command/base/lists/save", SaveArgs, "base.list.save"),
@@ -1960,7 +1962,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 from market_lab_ml3 import confirmed
                 status, result = 200, await confirmed(action, actor, thread_id, card_id)
                 once = result.pop("_once", None)
-            elif action.tool.startswith("trigger.") or action.tool in {"zenas.draft", "zenas.playbook.add", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"zenas.draft", "zenas.playbook.add", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.match.undo", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
@@ -2146,7 +2148,7 @@ async def tiger_code_plan(actor: Actor, messages: list[dict], task_id):
         action = validate_action(PlannedAction(tool=tool, arguments=args), actor)
         ledger = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent='tiger')
         return SimpleNamespace(content=dump({'text': tool, 'actions': [action.model_dump(mode='json')]}), ledger_id=ledger)
-    match = re.fullmatch(r'(tiger\.match(?:\.(?:confirm|reject))?|tiger\.position|tiger\.alerts)(?:\s+([0-9a-fA-F-]{36}))?', text)
+    match = re.fullmatch(r'(tiger\.match(?:\.(?:confirm|reject|undo))?|tiger\.matches|tiger\.position|tiger\.alerts)(?:\s+([0-9a-fA-F-]{36}))?', text)
     if not match:
         return None
     tool, identifier = match.groups()
