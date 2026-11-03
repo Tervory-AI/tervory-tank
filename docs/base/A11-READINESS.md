@@ -66,13 +66,36 @@ and checked_at item. SOT/compliance flags stay empty.
 
 ## Review locations
 
-- tank/base_campaign_commands.py: campaign argument contracts, confirmed existing execution path, tenant-scoped consistent read, $0 command receipts, sourced report CSV.
-- tank/base_audit_commands.py: optional explicit per-field verdict columns in an owned uploaded CSV; original evidence validation retained.
-- tank/command.py: founder campaign catalogue, adapters, and confirmed-dispatch binding for campaign start.
-- tank/main.py: campaign router registration only.
-- workspace/app/base/download/route.ts: campaign report download; existing audit/list/product/batch branches retained.
-- tank/base_evidence.py: Pinterest/Yelp profile recognition and share-link guard.
-- tank/base_metrics.py: conditional complete social export with individual source/date alignment.
-- tests/test_base_readiness.py: both DC populations, confirmed start, collection, records JSON, audit/review, actual source aggregation, report metadata and tenant isolation; malformed field-column refusals.
-- tests/base_campaign_download.cjs: download path, private response headers and upstream errors.
-- docs/base/WAVE4.md: founder-confirmed F5 completion.
+- tank/base_campaign_commands.py:21 (arguments), :34 (CSV), :57 (snapshot), :82 (start): campaign argument contracts, confirmed existing execution path, tenant-scoped consistent read, $0 command receipts, sourced report CSV.
+- tank/base_audit_commands.py:34 and :110: optional explicit per-field verdict columns in an owned uploaded CSV; original evidence validation retained.
+- tank/command.py:52, :1434, :1747 and :1967: founder campaign catalogue, adapters, and confirmed-dispatch binding for campaign start.
+- tank/main.py:4246: campaign router registration only.
+- workspace/app/base/download/route.ts:35: campaign report download; existing audit/list/product/batch branches retained.
+- tank/base_evidence.py:29 and :168: Pinterest/Yelp profile recognition and share-link guard.
+- tank/base_metrics.py:226 and :257: conditional complete social export with individual source/date alignment.
+- tests/test_base_readiness.py:1: both DC populations, confirmed start, collection, records JSON, audit/review, actual source aggregation, report metadata and tenant isolation; malformed field-column refusals.
+- tests/base_campaign_download.cjs:1: download path, private response headers and upstream errors.
+- docs/base/WAVE4.md:9: founder-confirmed F5 completion.
+
+## Verification commands
+
+Python 3.12.16. Base and command integration checks run with
+BASE_TEST_DATABASE_URL and POOL_SCHEMA_DATABASE_URL set ONLY to disposable
+loopback PostgreSQL; four isolated worker databases, network blocked except
+loopback/unix sockets. No live keys, services, database or model calls.
+
+    python -m pytest -q tests/test_base*.py tests/test_command.py tests/test_command_code.py tests/test_personal_tokens.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --timeout=300 --timeout-method=thread -n 4 --dist loadfile --max-worker-restart=0 -rs
+
+Readiness-only: same options selecting tests/test_base_readiness.py: **8 passed**,
+12 warnings, 16.44s. Includes both the three-record and 200-record DC populations.
+The existing audit review form remains unchanged; optional field verdict columns
+are accepted only from the owned upload and never change the evidence snapshot.
+
+Static unused-import/local checks:
+
+    python -m ruff check --select F401,F841 tank/base_campaign_commands.py tests/test_base_readiness.py tank/base_audit_commands.py
+
+Result: all checks passed. Existing Base download fixtures are unchanged and run
+as part of the Base regression. Earlier readiness attempts exposed fixture-only
+construction errors (a missing raw mapping and an incorrect command_threads
+insert); those runs failed and are superseded by the passing corrected fixtures.

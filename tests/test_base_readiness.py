@@ -141,7 +141,7 @@ async def test_dc_campaign_through_confirmed_cards_collection_audit_and_download
                 reviewed = output.getvalue()
                 async with pool.acquire() as conn:
                     thread = uuid4()
-                    await conn.execute("INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,region) VALUES($1,$2,$3,'us-east')", thread, TENANT, actor.user_id)
+                    await conn.execute("INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,title,state) VALUES($1,$2,$3,'Placeholder','{}'::jsonb)", thread, TENANT, actor.user_id)
                     await conn.execute("INSERT INTO tank.command_attachments(attachment_id,thread_id,tenant_id,user_id,name,sha256,content) VALUES($1,$2,$3,$4,'placeholder.csv','placeholder',$5)", upload, thread, TENANT, actor.user_id, reviewed.encode())
                 response = await post(client, 'base.audit.review', '/v1/command/base/audits/review', {**query, 'attachment_id': str(upload)})
                 assert response.status_code == 200, response.text
