@@ -10,6 +10,16 @@ control only through the fixed API proxy, for the code-allowlisted zone, with
 signed site health configured. An absent token, disallowed zone, unavailable
 proxy or unconfigured observer keeps the fixture. There is no direct fallback.
 
+## Egress proposal — approved and implemented
+
+The approved path reuses Radix Proxy/Server and its image, storage disabled,
+fixed to `api.cloudflare.com:443`, on Enforce's internal network plus its own
+outbound network. The second proxy is fixed to `tervory.com:443` on the separate
+observer network and a separate outbound network. Neither publishes a port;
+both bind only their private NIC. The proposal's HTTPS_PROXY/NO_PROXY settings
+are retained, while Cloudflare always uses its explicit transport with
+trust_env=False. Radix limits are unchanged.
+
 ## Changed files and source locations
 
 - `agents/ghost/cloudflare_edge.py:21`: fixed explicit
@@ -28,10 +38,10 @@ proxy or unconfigured observer keeps the fixture. There is no direct fallback.
   redirects. Line 70 writes one atomic signed result every 15 seconds from the
   separate observer. No queue/data mount, no Enforce input.
 - `agents/ghost/docker-compose.enforce.yml:10`: Enforce settings and read-only
-  health mount. Line 48 API proxy, line 74 observer, line 92 health proxy.
+  health mount. Line 50 API proxy, line 76 observer, line 94 health proxy.
   Radix's existing Proxy/Server/image are reused with storage disabled and the
   approved default limits unchanged. Separate outbound/private networks; proxies
-  bind their private NIC and publish no ports. Line 120 gives the health volume
+  bind their private NIC and publish no ports. Line 122 gives the health volume
   a stable tenant-bound name.
 - `ops/seal-check.sh:91`: collect project identity from read-only inspection;
   line 133 verifies exact logical networks, project ownership and Internal flags
@@ -78,10 +88,17 @@ The initial full Tank diagnostic was **not green**: its main pytest group
 reported **218 failed, 4992 passed, 638 skipped, 97 errors** in 965.09 seconds;
 its wrapper exited 143. This started before two A3 test/config fixes and used an
 incomplete local environment. The two isolated groups failed collection for
-missing `aiosmtpd`. All initial output is retained. A second full run uses the
-existing complete CI environment; its result will be appended when available.
-Neither missing dependencies nor earlier failures are represented as passing
-final-code proof.
+missing `aiosmtpd`. All initial output is retained. A second full run using the existing CI environment completed with exit 1 in
+1176 seconds: main **27 failed, 3887 passed, 398 skipped, 69 errors**; Tiger G5
+**1 failed, 19 passed, 21 skipped, 1 error**; Zenas alerts **exit 124** after 180
+seconds. That older environment also lacked newly required `jsonschema`, `jwt`
+and `phonenumbers`, and browser failures/timeouts were recorded. All outputs
+are retained. These results are not passing full-suite proof.
+
+After retaining the approved HTTPS_PROXY/NO_PROXY settings, the two Compose
+contract checks passed (46.34 seconds), and the [network CI proof on
+8b628518](https://github.com/Tervory-AI/tervory-tank/actions/runs/41628312785)
+passed. Final fetch confirmed origin/main is still 305b833b and A2 has not landed.
 
 Read-only `bash ops/seal-check.sh` exited 1: existing Trigger network leaks;
 no deployed Autumbra Watch/Enforce rooms were present. Passing Compose tests do
