@@ -1351,11 +1351,6 @@ export async function mootPublishedMatches(matchId?: string, signal?: AbortSigna
   return response.json();
 }
 
-/** MOOT-1a: list fixture problems via Tank → Zenas room (server-side only). */
-): Promise<Record<string, unknown>> {
-  return tank<Record<string, unknown>>("/v1/zenas/moot/matches/student", { method: "POST", body: JSON.stringify(body) });
-}
-
 // Market Lab: the server derives tenantId from Clerk before calling this corridor.
 export type MarketFeed = {
   id: string; name: string; kind: "copy" | "linked"; rows: number;
