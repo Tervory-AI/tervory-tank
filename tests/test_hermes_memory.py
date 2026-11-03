@@ -425,6 +425,7 @@ def test_hermes_key_checks_stay_environment_only() -> None:
 def test_hermes_joins_each_agent_corridor() -> None:
     data = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
     services = data["services"]
+    assert "tiger" not in services
     hermes = services["hermes"]
     assert set(hermes["networks"]) == {
         "default",
