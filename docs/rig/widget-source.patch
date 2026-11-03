@@ -271,10 +271,10 @@ index 9625631..573a4de 100644
 -  if (initial.sample) { const sample = node("p", "SAMPLE DATA"); sample.className = "sample"; root.append(sample); }
 diff --git a/widget/src/ui/cart-controller.ts b/widget/src/ui/cart-controller.ts
 new file mode 100644
-index 0000000..8bca0d4
+index 0000000..f10e610
 --- /dev/null
 +++ b/widget/src/ui/cart-controller.ts
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,89 @@
 +import { lineProjection, orderProjection, renderCart, type CartView } from "./cart";
 +type Request = (operation: string, data: Record<string, unknown>) => Promise<Record<string, unknown>>;
 +export class CartController {
@@ -332,9 +332,7 @@ index 0000000..8bca0d4
 +    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100 || this.view.busy) return;
 +    const line = this.view.lines.find(value => value.id === id); if (!line) return;
 +    await this.run(async () => {
-+      await this.call("remove", { line_id: id });
-+      try { this.lines(await this.call("add", { product_id: line.product_id, quantity, back_order: line.kind === "back_order" })); }
-+      catch (error) { this.lines(await this.call("add", { product_id: line.product_id, quantity: line.quantity, back_order: line.kind === "back_order" })); throw error; }
++      this.lines(await this.call("add", { line_id: id, product_id: line.product_id, quantity, back_order: line.kind === "back_order" }));
 +    });
 +  }
 +  private async run(work: () => Promise<void>): Promise<void> {
@@ -345,6 +343,8 @@ index 0000000..8bca0d4
 +  async action(action: string, id = ""): Promise<void> {
 +    if (!this.enabled) return;
 +    if (action === "shop" || action === "handoff" || action === "view") { this.view.screen = action === "shop" ? "search" : action === "handoff" ? "handoff" : "cart"; this.changed(); return; }
++    const popup = action === "checkout" && !this.view.busy ? window.open("about:blank", "_blank") : null;
++    if (popup) popup.opener = null;
 +    await this.run(async () => {
 +      if (action === "add" && this.view.product) {
 +        const product = this.view.product;
@@ -353,19 +353,20 @@ index 0000000..8bca0d4
 +      } else if (action === "remove") { this.lines(await this.call("remove", { line_id: id })); this.view.screen = "cart"; }
 +      else if (action === "backorder") {
 +        const line = this.view.lines.find(value => value.id === id); if (!line) return;
-+        await this.call("remove", { line_id: id }); this.lines(await this.call("add", { product_id: line.product_id, quantity: line.quantity, back_order: true }));
++        this.lines(await this.call("add", { line_id: id, product_id: line.product_id, quantity: line.quantity, back_order: true }));
 +        this.view.screen = this.view.lines.some(value => value.unavailable) ? "unavailable" : "cart";
 +      } else if (action === "checkout") {
 +        const result = orderProjection(await this.call("checkout")); this.view.order = { ...result, lines: this.view.lines };
-+        if (!result.checkout_url || result.state !== "pending") { this.view.screen = "error"; return; }
-+        this.view.screen = "return"; window.open(result.checkout_url, "_blank", "noopener,noreferrer");
++        if (!result.checkout_url || result.state !== "pending") { this.view.screen = "error"; popup?.close(); return; }
++        this.view.screen = "return"; if (popup) popup.location.replace(result.checkout_url); else window.location.assign(result.checkout_url);
 +      }
 +    });
++    if (this.view.screen === "error") popup?.close();
 +  }
 +}
 diff --git a/widget/src/ui/cart.ts b/widget/src/ui/cart.ts
 new file mode 100644
-index 0000000..0d59bcf
+index 0000000..5ae5c69
 --- /dev/null
 +++ b/widget/src/ui/cart.ts
 @@ -0,0 +1,75 @@
@@ -413,7 +414,7 @@ index 0000000..0d59bcf
 +  if (line.previous) body += `<div class="cart-change">${line.previous.price !== line.price ? `<p>Price changed: ${esc(price(line.previous.price, line.currency))} → ${esc(price(line.price, line.currency))}.</p>` : ""}${JSON.stringify(line.previous.delivery) !== JSON.stringify(line.delivery) ? `<p>Delivery changed: ${esc(deliveryRange(line.previous.delivery).replace("Delivery: ", "").replace(" business days", ""))} → ${esc(deliveryRange(line.delivery).replace("Delivery: ", ""))}.</p>` : ""}</div>`;
 +  if (paid) body += `<p>${line.quantity} × ${esc(price(line.price, line.currency))} each<br>Line total: ${esc(price(Number(line.price) * line.quantity, line.currency))}</p>`;
 +  body += `<p>${esc(deliveryText(line))}</p>`;
-+  if (editable) body += `<label class="cart-quantity">Quantity<input type="number" min="1" max="100" step="1" value="${line.quantity}" data-cart-quantity="${esc(line.id)}"${busy ? " disabled" : ""}></label><p>Line total: ${esc(price(Number(line.price) * line.quantity, line.currency))}</p><div class="cart-actions">${line.unavailable ? button("Back order", "backorder", false, busy, line.id) : ""}${button("Remove item", "remove", true, busy, line.id)}</div>`;
++  if (editable) body += `<label class="cart-quantity">Quantity<input type="number" min="1" max="100" step="1" value="${line.quantity}" id="cart-quantity-${esc(line.id)}" data-cart-quantity="${esc(line.id)}"${busy ? " disabled" : ""}></label><p>Line total: ${esc(price(Number(line.price) * line.quantity, line.currency))}</p><div class="cart-actions">${line.unavailable ? button("Back order", "backorder", false, busy, line.id) : ""}${button("Remove item", "remove", true, busy, line.id)}</div>`;
 +  return `<article class="cart-card${editable ? " cart-line" : ""}" data-line="${esc(line.id)}">${body}</article>`;
 +}
 +export function renderCart(view: CartView): string {
