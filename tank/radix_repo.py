@@ -22,24 +22,35 @@ async def scan(actor, body, *, attachment=None):
     from ghost_routes import call_room
     from trigger_commands import confirmation
 
-    confirmation(actor, "radix.repo.scan", body.model_dump(mode="json"))
+    confirmation(actor, "radix.repo.scan", body.model_dump(mode="json", exclude_none=True))
     row = attachment if attachment is not None else await owned_attachment(actor, body.attachment_id)
     raw = bytes(row["content"])
     if len(raw) > MAX_ATTACHMENT_BYTES:
         raise HTTPException(413, "Attachment exceeds 5 MiB")
+    own_commit=getattr(body,'commit',None)
+    if own_commit:
+        from command import require_founder
+        from radix_deploy import verify_main
+        require_founder(actor)
+        if not raw.startswith((b'# v2 git bundle',b'# v3 git bundle')):
+            raise HTTPException(422,'The action arguments are invalid')
+        await verify_main(own_commit)
     # Same signature check as ghost_routes; extraction remains in Radix.
-    if not (raw.startswith((b"PK\x03\x04", b"\x1f\x8b")) or raw[257:262] == b"ustar"):
+    if not (own_commit or raw.startswith((b"PK\x03\x04", b"\x1f\x8b")) or raw[257:262] == b"ustar"):
         raise HTTPException(422, "Hand over a tar or zip archive.")
     response = await call_room("POST", "radix", "/jobs", body={
         "tenant_id": str(actor.tenant_id), "kind": "scan",
         "input": {"tenant_id": str(actor.tenant_id), "source": "b64:" + base64.b64encode(raw).decode("ascii"),
-                  "ref": row["name"]},
+                  "ref": row["name"], **({"repository":"Tervory-AI/tervory-tank","commit":own_commit} if own_commit else {})},
     })
     if response.status_code != 201:
         raise HTTPException(503, "Radix did not accept the scan.")
     data = response.json()
     if data.get("tenant_id") != str(actor.tenant_id) or data.get("kind") != "scan":
         raise HTTPException(503, "Radix did not accept the scan.")
+    if own_commit:
+        from radix_deploy import register
+        await register(actor,data['id'],own_commit)
     return {"scan_id": str(UUID(data["id"])), "status": "pending"}
 
 
@@ -94,14 +105,14 @@ async def with_receipt(actor, tool, operation):
 
 
 def build_router():
-    from command import Actor, UploadRef, identity, require_tool
+    from command import Actor, RadixRepoArgs, identity, require_tool
     router = APIRouter(prefix="/radix/repo")
 
     @router.post("/scan")
-    async def start(body: UploadRef, actor: Actor = Depends(identity)):
+    async def start(body: RadixRepoArgs, actor: Actor = Depends(identity)):
         require_tool(actor, "radix.repo.scan")
         from trigger_commands import confirmation
-        confirmation(actor, "radix.repo.scan", body.model_dump(mode="json"))
+        confirmation(actor, "radix.repo.scan", body.model_dump(mode="json", exclude_none=True))
         attachment = await owned_attachment(actor, body.attachment_id)
         return await with_receipt(actor, "radix.repo.scan", lambda: scan(actor, body, attachment=attachment))
 
@@ -131,7 +142,7 @@ async def code_plan(actor, messages, task_id):
                 "SELECT state FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND state->>'active_turn'=$3",
                 actor.tenant_id, actor.user_id, str(task_id))
         source = next((m for m in reversed(unpack(raw or {}).get("messages", [])) if m.get("role") == "user"), last)
-    match = re.fullmatch(r"\s*radix\.repo\.(scan|findings)\s*:?\s*([0-9a-f-]*)\s*", source.get("content", ""), re.I)
+    match = re.fullmatch(r"\s*radix\.repo\.(scan|findings)\s*:?\s*([0-9a-f-]*)(?:\s+([0-9a-f]{40}))?\s*", source.get("content", ""), re.I)
     if not match:
         raise HTTPException(422, "The action arguments are invalid")
     tool = "radix.repo." + match[1].lower()
@@ -148,5 +159,11 @@ async def code_plan(actor, messages, task_id):
         raise HTTPException(422, "The action arguments are invalid") from None
     proposed = {"text": "", "actions": [{"tool": tool, "arguments": {
         "attachment_id" if tool == "radix.repo.scan" else "scan_id": identifier}}]}
+    if match[3]:
+        from command import require_founder
+        require_founder(actor)
+        if tool!='radix.repo.scan':
+            raise HTTPException(422,"The action arguments are invalid")
+        proposed['actions'][0]['arguments']['commit']=match[3]
     return await _record_local(RouteRequest(tenant_id=actor.tenant_id, agent="radix", task_type="command.turn", messages=[{"role": "user", "content": tool}]),
                                {}, model="code", rung=3, content=json.dumps(proposed), task_id=task_id)
