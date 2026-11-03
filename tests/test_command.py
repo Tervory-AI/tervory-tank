@@ -46,7 +46,7 @@ async def test_identity_roles_and_region(runtime, monkeypatch):
     headers = {'x-tank-key': runtime.TANK_API_KEY, 'x-tervory-tenant': str(TENANT),
                'x-tervory-user': 'client', 'x-tervory-squad': 'tiger'}
     actor = await command.identity(request(**headers))
-    assert command.allowed_tools(actor) == ['tiger.alerts', 'tiger.match', 'tiger.match.confirm', 'tiger.match.reject', 'tiger.position', 'tiger.read', 'tiger.watch']
+    assert command.allowed_tools(actor) == ['plugins.list', 'tiger.alerts', 'tiger.match', 'tiger.match.confirm', 'tiger.match.reject', 'tiger.position', 'tiger.read', 'tiger.watch']
     with pytest.raises(HTTPException) as refused:
         command.require_tool(actor, 'worker.build')
     assert refused.value.status_code == 403
