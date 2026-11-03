@@ -2759,6 +2759,51 @@ BEGIN
 END
 $$;
 
+-- Trigger M2: tenant-private Facebook connection and one-use consent states.
+CREATE TABLE IF NOT EXISTS tank.trigger_meta_connections (
+ tenant_id uuid PRIMARY KEY, generation uuid NOT NULL, sealed text,
+ status text NOT NULL CHECK(status IN ('connected','disconnecting','disconnected')),
+ page_id text, page_name text, user_id text NOT NULL,
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_meta_states (
+ tenant_id uuid NOT NULL, state_hash text NOT NULL, user_id text NOT NULL,
+ generation uuid NOT NULL, sealed text NOT NULL, expires_at timestamptz NOT NULL,
+ consumed_at timestamptz, PRIMARY KEY(tenant_id,state_hash)
+);
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER trigger_meta_connections tank.trigger_meta_connections ENABLE ROW LEVEL SECURITY;
+  ALTER trigger_meta_connections tank.trigger_meta_connections FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_meta_connections'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.trigger_meta_connections FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_meta_connections'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.trigger_meta_connections AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER trigger_meta_states tank.trigger_meta_states ENABLE ROW LEVEL SECURITY;
+  ALTER trigger_meta_states tank.trigger_meta_states FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_meta_states'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.trigger_meta_states FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_meta_states'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.trigger_meta_states AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
