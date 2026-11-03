@@ -24,11 +24,10 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 RAW_MARKER = "# coolify: raw compose"
 COOLIFY_APP_NETWORK = "<coolify app network>"
-# Autumbra Watch/Enforce are optional until dogfood; seal-check reports
-# absence without failing. Tests expect that status line so Autumbra coverage stays honest.
-AUTUMBRA_ABSENT_LINE = (
-    "autumbra: no Watch/Enforce rooms running "
-    "(ok until dogfood; pin EXPECTED_SEALED after first clean run)"
+# Required A2 rooms are included in the historical samples by the fixture helper.
+AUTUMBRA_SEALED_LINES = (
+    "agent-ghost (placeholder-watch): sealed",
+    "autumbra-enforce (placeholder-enforce): sealed",
 )
 ROOM_FILES = sorted((ROOT / "agents").glob("*/docker-compose*.yml"))
 SEAL_CHECK = ROOT / "ops" / "seal-check.sh"
@@ -217,11 +216,17 @@ async def test_browser_accepts_work_only_from_its_gateway(monkeypatch: pytest.Mo
         assert (await client.post("/missing", json={})).status_code == 503
 
 
-def run_seal_check(tmp_path: Path, fixture: str) -> subprocess.CompletedProcess:
+def run_seal_check(tmp_path: Path, fixture: str, *, include_autumbra=True) -> subprocess.CompletedProcess:
     fake = tmp_path / "docker"
     fake.write_text(f"#!{sys.executable}\n" + FAKE_DOCKER, encoding="utf-8")
     fake.chmod(0o755)
-    env = dict(os.environ, DOCKER=str(fake), SEAL_FIXTURE=str(FIXTURES / fixture))
+    path = FIXTURES / fixture
+    data = json.loads(path.read_text())
+    if include_autumbra and data["containers"] and path.name != "no_rooms.json":
+        add_autumbra_placements(data)
+        path = tmp_path / "placeholder-all-required.json"
+        path.write_text(json.dumps(data))
+    env = dict(os.environ, DOCKER=str(fake), SEAL_FIXTURE=str(path))
     return subprocess.run(["bash", str(SEAL_CHECK)], capture_output=True, text=True, env=env, timeout=30)
 
 
@@ -254,7 +259,7 @@ def test_seal_check_reports_sealed_rooms(tmp_path: Path) -> None:
         "agent-radix (radixuuid): sealed",
         "agent-tiger (tigeruuid): sealed",
         "agent-rig (riguuid): sealed",
-        AUTUMBRA_ABSENT_LINE,
+        *AUTUMBRA_SEALED_LINES,
     ]
 
 
@@ -267,8 +272,8 @@ def test_seal_check_names_each_leaking_container_and_network(tmp_path: Path) -> 
         " LEAK: base-brain-baseuuid on baseuuid",
         "agent-radix (radixuuid): LEAK: agent-radix-radixuuid on radixuuid",
         "agent-rig (riguuid): sealed",
+        *AUTUMBRA_SEALED_LINES,
         "agent-tiger: NOT FOUND",
-        AUTUMBRA_ABSENT_LINE,
     ]
 
 
@@ -291,7 +296,7 @@ def test_seal_check_finds_raw_compose_rooms_by_label_not_container_name(tmp_path
         "agent-radix (radixuuid): sealed",
         "agent-tiger (tigeruuid): NOT SEALED: no container on an internal network",
         "agent-rig (riguuid): sealed",
-        AUTUMBRA_ABSENT_LINE,
+        *AUTUMBRA_SEALED_LINES,
     ]
 
 
@@ -324,8 +329,8 @@ def test_seal_check_reports_leaks_in_raw_compose_rooms(tmp_path: Path) -> None:
         "agent-base (baseuuid): LEAK: baseuuid-base-sandbox-1 on baseuuid",
         "agent-radix (radixuuid): sealed",
         "agent-rig (riguuid): sealed",
+        *AUTUMBRA_SEALED_LINES,
         "agent-tiger: NOT FOUND",
-        AUTUMBRA_ABSENT_LINE,
     ]
 
 
@@ -338,8 +343,8 @@ def test_seal_check_fails_when_an_expected_room_is_missing(tmp_path: Path) -> No
         "agent-base (baseuuid): sealed",
         "agent-tiger (tigeruuid): NOT SEALED: no container on an internal network",
         "agent-rig (riguuid): sealed",
+        *AUTUMBRA_SEALED_LINES,
         "agent-radix: NOT FOUND",
-        AUTUMBRA_ABSENT_LINE,
     ]
 
 
@@ -353,7 +358,8 @@ def test_seal_check_never_passes_when_only_the_hub_is_running(tmp_path: Path) ->
         "agent-radix: NOT FOUND",
         "agent-tiger: NOT FOUND",
         "agent-rig: NOT FOUND",
-        AUTUMBRA_ABSENT_LINE,
+        "agent-ghost: NOT FOUND",
+        "autumbra-enforce: NOT FOUND",
     ]
 
 
@@ -463,7 +469,7 @@ def test_trigger_radix_samples_match_the_declared_compose_networks():
             declared = {compose["networks"][key].get("name", row["project"] + "_" + key)
                         for key in compose["services"][service]["networks"]}
             assert set(row["networks"]) == declared
-    assert "EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig)" in SEAL_CHECK.read_text()
+    assert "EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig agent-ghost autumbra-enforce)" in SEAL_CHECK.read_text()
 
 
 def test_trigger_radix_exact_placements_pass(tmp_path):
@@ -527,3 +533,48 @@ def test_languagetool_cannot_join_the_trigger_corridor(tmp_path):
     result = run_seal_check(tmp_path, str(path))
     assert result.returncode == 1, result.stdout + result.stderr
     assert "LEAK: triggerproject-trigger-languagetool-1 on tervory-gw-trigger" in result.stdout
+
+
+
+def add_autumbra_placements(data):
+    data['networks'].update({'tervory-gw-ghost': False, 'placeholder-enforce-private': True})
+    for service in ('agent-ghost', 'ghost-browser'):
+        data['containers'][service] = {
+            'uuid': 'placeholder-watch', 'resource': 'agent-ghost', 'service': service,
+            'project': 'placeholder-watch', 'name': 'placeholder-' + service,
+            'networks': ['tervory-gw-ghost'],
+        }
+    data['containers']['placeholder-enforce'] = {
+        'uuid': 'placeholder-enforce', 'resource': 'autumbra-enforce-placeholder', 'service': 'enforce',
+        'project': 'placeholder-enforce', 'name': 'placeholder-enforce',
+        'networks': ['placeholder-enforce-private'],
+    }
+    return data
+
+
+def test_autumbra_required_rooms_cannot_be_absent(tmp_path):
+    result = run_seal_check(tmp_path, 'sealed.json', include_autumbra=False)
+    assert result.returncode == 1
+    assert 'agent-ghost: NOT FOUND' in result.stdout
+    assert 'autumbra-enforce: NOT FOUND' in result.stdout
+
+
+@pytest.mark.parametrize('service', ['agent-ghost', 'ghost-browser', 'placeholder-enforce'])
+@pytest.mark.parametrize('internal', [False, True])
+def test_autumbra_extra_network_always_fails(tmp_path, service, internal):
+    data = add_autumbra_placements(json.loads((FIXTURES / 'sealed.json').read_text()))
+    data['networks']['placeholder-extra'] = internal
+    data['containers'][service]['networks'].append('placeholder-extra')
+    path = tmp_path / 'placeholder-extra-network.json'
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path), include_autumbra=False)
+    assert result.returncode == 1 and 'LEAK:' in result.stdout
+
+
+def test_autumbra_enforce_without_internal_network_fails(tmp_path):
+    data = add_autumbra_placements(json.loads((FIXTURES / 'sealed.json').read_text()))
+    data['networks']['placeholder-enforce-private'] = False
+    path = tmp_path / 'placeholder-public-enforce.json'
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path), include_autumbra=False)
+    assert result.returncode == 1 and 'NOT SEALED' in result.stdout
