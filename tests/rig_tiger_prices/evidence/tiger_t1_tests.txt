@@ -1,12 +1,18 @@
-Implementation tested: 556809f8 (merged origin/main d6004c8d)
-Command: .venv/bin/python tests/rig_tiger_prices/run_t1_offline.py
-Exit status: 1 (the six failures reproduced on clean origin/main)
-Runner: postgres:16 disposable container; only loopback and Unix sockets allowed during pytest.
+Final full validation on implementation 5b6625f9 (main cf95a07e merged).
+The subsequent 406fe08e public-policy compilation change is covered by all 66 focused T1 tests and the policy benchmark; see tiger_t1_focused_and_static.txt.
 
-..............................................F......................... [ 28%]
-........................................................................ [ 57%]
-.........................................FFF...........................F [ 86%]
-F..................................                                      [100%]
+Command:
+.venv/bin/python tests/rig_tiger_prices/run_t1_offline.py
+Includes every tests/test_tiger*.py case, tests/rig_tiger_prices, tests/test_command.py and tests/test_personal_tokens.py.
+Final test timeout: 300 seconds (normal CI limit); discovery job timeout: 45 seconds.
+Exit status: 1; exactly six failures also reproduced on clean origin/main.
+
+..............................................F......................... [ 19%]
+........................................................................ [ 38%]
+......................................................................FF [ 58%]
+F...........................FF.......................................... [ 77%]
+........................................................................ [ 97%]
+...........                                                              [100%]
 =================================== FAILURES ===================================
 ______________ test_email_copy_matches_actual_workspace_formatter ______________
 tests/test_tiger_alert_email.py:399: in test_email_copy_matches_actual_workspace_formatter
@@ -20,7 +26,7 @@ tests/test_tiger_public_policy.py:282: in test_real_browser_document_and_asset_r
 agents/_brain/browser.py:361: in visit
     result = await _visit(body, tenant, task, origin, run, directory)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-agents/_brain/browser.py:573: in _visit
+agents/_brain/browser.py:590: in _visit
     await cleanup_visit(context, browser, manager, storage,
 agents/_brain/browser.py:82: in cleanup_visit
     await step(lambda: context.storage_state(path=str(storage)))
@@ -41,7 +47,7 @@ tests/test_tiger_public_policy.py:282: in test_real_browser_document_and_asset_r
 agents/_brain/browser.py:361: in visit
     result = await _visit(body, tenant, task, origin, run, directory)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-agents/_brain/browser.py:573: in _visit
+agents/_brain/browser.py:590: in _visit
     await cleanup_visit(context, browser, manager, storage,
 agents/_brain/browser.py:82: in cleanup_visit
     await step(lambda: context.storage_state(path=str(storage)))
@@ -62,7 +68,7 @@ tests/test_tiger_public_policy.py:282: in test_real_browser_document_and_asset_r
 agents/_brain/browser.py:361: in visit
     result = await _visit(body, tenant, task, origin, run, directory)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-agents/_brain/browser.py:573: in _visit
+agents/_brain/browser.py:590: in _visit
     await cleanup_visit(context, browser, manager, storage,
 agents/_brain/browser.py:82: in cleanup_visit
     await step(lambda: context.storage_state(path=str(storage)))
@@ -104,7 +110,7 @@ E     # Node.js v22.23.4
 E     # Subtest: tests/tiger_works/workspace.test.cjs
 E     not ok 1 - tests/tiger_works/workspace.test.cjs
 E       ---
-E       duration_ms: 41.502677
+E       duration_ms: 89.619788
 E       type: 'test'
 E       location: '/workspace/codex-tiger-t1/tests/tiger_works/workspace.test.cjs:1:1'
 E       failureType: 'testCodeFailure'
@@ -121,30 +127,27 @@ E     # fail 1
 E     # cancelled 0
 E     # skipped 0
 E     # todo 0
-E     # duration_ms 52.121642
+E     # duration_ms 100.551835
 E
 E   assert 1 == 0
-E    +  where 1 = CompletedProcess(args=['node', '--test', 'tests/tiger_works/workspace.test.cjs'], returncode=1, stdout="TAP version 13...# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 52.121642\n", stderr='').returncode
+E    +  where 1 = CompletedProcess(args=['node', '--test', 'tests/tiger_works/workspace.test.cjs'], returncode=1, stdout="TAP version 13... tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 100.551835\n", stderr='').returncode
 _________ test_real_chromium_markup_stores_history_and_one_price_alert _________
-tests/test_tiger_works.py:237: in test_real_chromium_markup_stores_history_and_one_price_alert
-    result = await browser.public_result(page, {"ok": True, "url": URL}, html, tmp_path,
-agents/_brain/browser.py:588: in public_result
-    source = await rendered_source(page)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-agents/_brain/browser.py:188: in rendered_source
-    return await page.evaluate(r"""() => {
-.venv/lib/python3.12/site-packages/playwright/async_api/_generated.py:16684: in evaluate
-    await self._impl_obj.evaluate(
-.venv/lib/python3.12/site-packages/playwright/_impl/_page.py:476: in evaluate
-    return await self._main_frame.evaluate(expression, arg)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-.venv/lib/python3.12/site-packages/playwright/_impl/_frame.py:346: in evaluate
+tests/test_tiger_works.py:236: in test_real_chromium_markup_stores_history_and_one_price_alert
+    await page.set_content(html)
+.venv/lib/python3.12/site-packages/playwright/async_api/_generated.py:20365: in set_content
+    await self._impl_obj.set_content(
+.venv/lib/python3.12/site-packages/playwright/_impl/_page.py:555: in set_content
+    return await self._main_frame.set_content(**locals_to_params(locals()))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/playwright/_impl/_frame.py:509: in set_content
     await self._channel.send(
 .venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:78: in send
     return await self._connection.wrap_api_call(
 .venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:636: in wrap_api_call
     raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
-E   playwright._impl._errors.TargetClosedError: Page.evaluate: Target page, context or browser has been closed
+E   playwright._impl._errors.TargetClosedError: Page.set_content: Target page, context or browser has been closed
+E   Call log:
+E     - setting frame content, waiting until "load"
 =============================== warnings summary ===============================
 .venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
   /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
@@ -233,4 +236,28 @@ FAILED tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_r
 FAILED tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[429]
 FAILED tests/test_tiger_works.py::test_workspace_actions_and_safe_unread_display
 FAILED tests/test_tiger_works.py::test_real_chromium_markup_stores_history_and_one_price_alert
-6 failed, 245 passed, 14 warnings in 144.53s (0:02:24)
+6 failed, 365 passed, 14 warnings in 595.78s (0:09:55)
+
+Earlier 90-second full-run attempt (superseded):
+7 failed, 363 passed; the extra failure was a fixture-inclusive 90-second timeout in test_command.py::test_pinned_turn_receipt_uses_actual_model_and_pending_auto.
+
+Targeted rerun command:
+.venv/bin/python tests/rig_tiger_prices/run_t1_offline.py tests/test_command.py::test_pinned_turn_receipt_uses_actual_model_and_pending_auto
+Exit status: 0
+
+.                                                                        [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 3 warnings in 12.29s
