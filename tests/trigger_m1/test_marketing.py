@@ -23,6 +23,7 @@ import trigger_marketing_api as api
 from test_gate2 import card_for
 from test_gate2 import env as env  # noqa: PLC0414 -- pytest fixture re-export
 from test_second import OTHER, TENANT, confirm
+from test_second import headers as fixture_headers
 from trigger_google import Google, GoogleFailure
 from trigger_marketing import Marketing
 from trigger_marketing_contract import (
@@ -211,8 +212,7 @@ async def test_cancelled_claim_is_not_sent(m1):
 async def test_unconfirmed_and_member_actions_never_execute(m1, monkeypatch):
     calls = AsyncMock()
     monkeypatch.setattr(api, 'execute', calls)
-    response = await m1.env.client.post('/v1/trigger/marketing/gbp.reply.send', json={'reply_id': str(uuid4())}, headers={
-        'x-tank-key': 'dummy-workspace-key', 'x-tervory-user': 'founder', 'x-tervory-tenant': str(TENANT)})
+    response = await m1.env.client.post('/v1/trigger/marketing/gbp.reply.send', json={'reply_id': str(uuid4())}, headers=fixture_headers())
     assert response.status_code in {401,409}
     calls.assert_not_awaited()
     with pytest.raises(HTTPException):
