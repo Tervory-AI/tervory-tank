@@ -10,4 +10,4 @@ export type RetailerPanel = {
 };
 export type MappingPreview = { preview_id?: string; fields: string[]; columns: Record<string, string>; required: string[] };
 export type AdminResult = { ok: boolean; message: string; deleted?: number; panel?: RetailerPanel; mapping?: MappingPreview; embed?: { publishable_key: string; snippet: string; origins: string[] } };
-export type AdminOperation = "connect" | "import" | "delete-products" | "refresh" | "mapping" | "confirm-mapping" | "settings" | "embed-keys" | "price-rule" | "exchange-rate" | "templates" | "approve" | "reject" | "suggest";
+export type AdminOperation = "commerce-connect" | "commerce-orders" | "store-delivery" | "connect" | "import" | "delete-products" | "refresh" | "mapping" | "confirm-mapping" | "settings" | "embed-keys" | "price-rule" | "exchange-rate" | "templates" | "approve" | "reject" | "suggest";
