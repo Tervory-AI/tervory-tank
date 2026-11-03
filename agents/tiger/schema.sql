@@ -60,11 +60,19 @@ BEGIN
     FOREACH tab IN ARRAY ARRAY['matches','match_runs','match_sightings'] LOOP
         IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
                    WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
-            EXECUTE format('ALTER TABLE agent_tiger.%I ENABLE ROW LEVEL SECURITY',tab);
-            EXECUTE format('ALTER TABLE agent_tiger.%I FORCE ROW LEVEL SECURITY',tab);
+            IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid=('agent_tiger.'||tab)::regclass) THEN
+                EXECUTE format('ALTER TABLE agent_tiger.%I ENABLE ROW LEVEL SECURITY',tab);
+            END IF;
+            IF NOT (SELECT relforcerowsecurity FROM pg_class WHERE oid=('agent_tiger.'||tab)::regclass) THEN
+                EXECUTE format('ALTER TABLE agent_tiger.%I FORCE ROW LEVEL SECURITY',tab);
+            END IF;
         ELSE
-            EXECUTE format('ALTER TABLE agent_tiger.%I NO FORCE ROW LEVEL SECURITY',tab);
-            EXECUTE format('ALTER TABLE agent_tiger.%I DISABLE ROW LEVEL SECURITY',tab);
+            IF (SELECT relforcerowsecurity FROM pg_class WHERE oid=('agent_tiger.'||tab)::regclass) THEN
+                EXECUTE format('ALTER TABLE agent_tiger.%I NO FORCE ROW LEVEL SECURITY',tab);
+            END IF;
+            IF (SELECT relrowsecurity FROM pg_class WHERE oid=('agent_tiger.'||tab)::regclass) THEN
+                EXECUTE format('ALTER TABLE agent_tiger.%I DISABLE ROW LEVEL SECURITY',tab);
+            END IF;
         END IF;
         IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='agent_tiger'
                        AND tablename=tab AND policyname='tenant_access') THEN
