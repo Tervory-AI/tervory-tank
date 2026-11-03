@@ -1,20 +1,16 @@
 # Tisan sections — SECTIONS-SPEC
 
-> Craft revision, founder brief 1 November 17:33. The short specimens were refined in place after studying the approved homepage desktop `59:164` and mobile `63:197` in `bOSFzo7qMhHjJ6T5brXG1Y`. The homepage supplied craft references only; client variables, brace slots, content counts and existing frame IDs remain. Maximum-length frames are untouched.
+## Approval and scope — 3 November 2026
 
-Status: founder approval pending. This is a client-website design proposal, not Tervory UI and not authorization to implement unapproved frames.
+The founder approved the short designs on **3 Nov**. Unchanged specimens say **Approved 3 Nov**. The 3 Nov limit changes, redrawn max masters, absent-slot examples, annotation changes and unused-state labels say **Changed after approval, awaiting founder**. This revision supersedes the 1 Nov hold on max redraws; it does not extend the earlier approval to today's changes.
 
-**Maximum-length frames are on hold (founder, 1 November, 17:20 PT).** Keep every existing “max” master and review frame unchanged. Claude is tightening the section limits in the shared contract; wait for the new maximums before redrawing those frames. The limits and max specimens described below record the earlier contract and are not the new maximums or approval to implement them.
+File: [Tisan sections](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=197-9), page **6 · Tisan sections** (`197:9`). SPEC frame: `205:5479`. Short review: `202:5473`. New optional-slot / realistic-navigation board: `276:5827`.
 
-[Open page 6 · Tisan sections](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=197-9). SPEC frame: `205:5479`. Short review board: `202:5473`.
+Work stays on `codex/tisan-sections-design`, PR #591, in `/workspace/codex-tisan-sections-design`. The shared source is `agents/tisan/templates/next-site/sections/manifest.json`; sections, builder and publish all consume that contract. This task changes its specified bounds, its boundary tests, CONTRACT.md, this design specification and Figma evidence. Website component implementation is separate.
 
-Source branch: `tisan/sections-contract` at `6cf65168a6a16ddf622c3e78ff4468e209f317ae`. Sources: `agents/tisan/templates/next-site/sections/manifest.json`, `sections/CONTRACT.md`, `app/tokens.css` and the existing `app/contact/page.tsx`. The manifest remains unchanged.
+## Frame index
 
-## Inventory and frame index
-
-Fourteen state/layout families cover header closed/open, footer, hero, feature-grid, product-grid, image-text left/right, steps, FAQ closed/open, CTA band, contact and gallery. Each has three widths, two lengths and two client token sets: 84 linked masters, 168 review instances, plus 24 reusable array-item masters. Main component sets sit to the right of review content.
-
-Each cell below is `short A / short B` ; `max A / max B`. IDs identify individual review instances in the same Figma file. Short rows live in the compact review board; maximum-length rows sit in the adjacent column. Inspect frames at 100% for typography.
+All 42 original max section-master root IDs are retained: fourteen families at 390, 768 and 1440. Their 84 A/B max review instances remain linked. The twelve reusable max item masters were also brought to the same limits and type. The following existing review-instance index remains valid; each cell is **short A / short B ; max A / max B**.
 
 | Family / state | 390 | 768 | 1440 |
 | --- | --- | --- | --- |
@@ -33,112 +29,109 @@ Each cell below is `short A / short B` ; `max A / max B`. IDs identify individua
 | contact | `202:6104 / 202:6105` ; `201:4616 / 201:4629` | `202:6107 / 202:6108` ; `201:4643 / 201:4656` | `202:6110 / 202:6111` ; `201:4670 / 201:4683` |
 | gallery | `202:6192 / 202:6193` ; `201:5126 / 201:5248` | `202:6195 / 202:6196` ; `201:5371 / 201:5481` | `202:6198 / 202:6199` ; `201:5592 / 201:5696` |
 
-## Color and type variables
+The 1440 header-open masters `199:143` and `199:144` and their review instances `199:523` / `199:556` are explicitly **UNUSED — desktop navigation is always expanded**. They remain as labeled reference states and must not be implemented as desktop open-menu variants.
 
-Collection: `Tisan sections / Client tokens` (`VariableCollectionId:197:11`). Modes: A · Light (`197:1`) and B · Inverse (`197:2`). All section text/fills/strokes bind to these variables, with source-palette primitives in a separate collection. No Tervory logo, Tervory colors, unrelated font or generated image is used.
-
-| Variable / CSS name | A · Light | B · Inverse |
-| --- | --- | --- |
-| ink / --colour-ink | #1a1a1a | #ffffff |
-| paper / --colour-paper | #ffffff | #1a1a1a |
-| accent / --colour-accent | #1d4ed8 | #d4d4d8 |
-| line / --colour-line | #1a1a1a | #d4d4d8 |
-| heading / --font-heading | Literata Regular | Literata Regular |
-| body / --font-body | Atkinson Hyperlegible Regular | Atkinson Hyperlegible Regular |
-
-The two specimens remap only values already present in tokens.css. A maps line to source ink so border-line controls meet AA without changing the existing form. B swaps source ink/paper and maps source line to accent/line. The unmodified source default #d4d4d8 border against white is not claimed to meet 3:1; these contrast-ready specimens are deliberate client token sets, not a change to tokens.css.
-
-Calculated sRGB contrast: ink/paper 17.40:1; A accent/paper 6.70:1; B accent/paper 11.78:1. CTA headings use paper on accent in A and ink on accent in B. CTA buttons use paper fill/ink text in A and ink fill/paper text in B. Standard focus uses accent against paper; CTA focus uses paper against accent. These pairs exceed 4.5:1 text and 3:1 control/focus contrast. Fonts are variable-bound to the two source families.
-
-## Breakpoints, geometry and wrapping — revised short specimens
-
-The reference homepage uses 100px/98% desktop hero type, 56px/106% section headings, 20px-radius quiet cards, generous split-section spacing and 50px/100% mobile hero type. Its native component transitions include 300ms ease-out Smart Animate and longer 450ms hover examples. These principles are adapted to Literata and Atkinson Hyperlegible, without importing its palette, fonts, images or words.
-
-| Rule | 390 / below 768 | 768 / 768–1023 | 1440 / 1024 and above |
+| Added specimen / Changed after approval, awaiting founder | 390 master | 768 master | 1440 master |
 | --- | --- | --- | --- |
-| Side padding | 24px | 32px | centered 1200px content; 120px at 1440 |
-| Section vertical padding | 80px | 104px | 144px |
-| Section gap | 32px | 32px | 48px |
-| Hero/image-text column gap | 32px | 32px | 80px |
+| Text-only hero | `276:5579` | `276:5593` | `276:5607` |
+| Header without logo, nav only | `276:5621` | `276:5657` | `276:5693` |
+| Eight realistic navigation labels | `276:5724` | `276:5760` | `276:5796` |
+
+These nine additional masters have eighteen A/B review instances in `276:5827`. No empty image column, logo box, site-name fallback or replacement wording is added when the optional content is absent.
+
+## Contract limits
+
+| Slot | Maximum characters |
+| --- | ---: |
+| `nav[].label`, `footer.links[].label` | 40 |
+| `footer.text` | 600 |
+| Every section `heading`, including hero and CTA | 80 |
+| Section `body` / intro | 600 |
+| Item `title`, product `name` | 80 |
+| Item `body` | 400 |
+| FAQ `answer` | 800 |
+
+Maximum counts: **nav 8; footer links 12; features 12; products 12; steps 8; FAQ 20; gallery 12**. All other schema rules remain: required/optional properties, enums, URL patterns, page/section identity and minimum counts. In particular, FAQ questions, CTA labels, UI labels and alt attributes remain 200; media sources remain 1000 and hrefs 500. Steps still require at least two items. No site-name slot is invented.
+
+Max content uses repeated complete brace-slot tokens, padded only where a token will not fit the exact character count. Array indexes identify the actual item, including media-source annotations. Header navigation uses eight realistic labels of **exactly 40 characters** rather than brace tokens:
+
+- Explore our studio and creative approach
+- Discover our services and design process
+- Selected projects and recent client work
+- Meet the people behind our design studio
+- Learn how we work with your organisation
+- Read client stories and project outcomes
+- Browse design resources and useful tools
+- Contact our team to discuss your project
+
+These are design specimens, not runtime copy. Every live text slot still requires accepted Trigger copy. Supplied media remains the only source of image URLs. The existing content checker reads `manifest.json` directly, so the new limits are enforced without a second limit table in executable code. Tests accept each revised limit and reject one character or item over; existing constraints stay covered.
+
+## Type, spacing and reflow
+
+Max masters reuse the approved short layouts and client-token bindings. Their fixed widths are 390, 768 and 1440; heights hug the actual content. No text clamp, ellipsis, text crop, fixed card-height cap or horizontal page overflow is used. A maximum-content page can be tall and scroll normally.
+
+| Max-master rule | 390 | 768 | 1440 |
+| --- | --- | --- | --- |
 | Hero heading | 46px / 108% | 60px / 108% | 88px / 108% |
-| Section heading | 36px / 114% | 44px / 114% | 56px / 114% |
-| Closing CTA heading | 44px / 108% | 60px / 108% | 88px / 108% |
-| Feature/product columns | 1 | 2 | 3 |
-| Gallery/steps columns | 1 | 2 | 4 |
-| Hero/image-text order | image then text | two columns | two columns |
+| Section / CTA heading | 36px / 114% | 44px / 114% | 56px / 114% |
+| Body / intro / item body / answer | 18px / 155% | 18px / 155% | 18px / 155% |
+| Card title | Literata Medium 24px / 130% | same | same |
+| Side padding | 24px | 32px | 120px; centered 1200px content |
+| Section vertical padding | 80px | 104px | 144px |
+| Main gap | 32px | 32px | 48px |
+| Split-section column gap | 32px | 32px | 80px |
+| Feature / product columns | 1 | 2 | 3 |
+| Gallery / steps columns | 1 | 2 | 4 |
 
-Headings use Literata Regular with -2.5% tracking; card titles use Literata Medium 24px/130% with -1% tracking. Body is Atkinson Hyperlegible Regular 18px/155%; desktop hero lead is 22px/155%. FAQ questions use body Bold 18px mobile and 20px tablet/desktop, line-height 140%. Controls retain 16px/24px type. Existing font-family variable bindings remain attached, including on Medium card titles.
+Header vertical padding remains 20px; footer vertical padding remains 64px. Controls keep 16px/24px type and at least 48px targets. The existing contact form keeps its own approved geometry and labels. Approved short exceptions, including its larger desktop hero lead and closing-CTA treatment, have not been silently rescaled.
 
-Cards use 24px radius and padding, 16px internal gap and a quiet ink surface at 3.5% node opacity over paper. Image crops use 20px radii: hero 4:5 at 768/1440 and 4:3 at 390; image-text 5:4; products 4:5; gallery 3:4. Images remain neutral editable crop compositions labelled with the original src/alt brace slots. The tonal field, off-center cropped circle and angled cropped plane indicate composition only; they are not client assets or runtime illustrations. Replace with founder-supplied media using cover cropping and retain the generous crop area. No raster assets from the homepage were imported.
+Heading family remains Literata, with -2.5% tracking on large headings; card titles use Medium and -1% tracking. Body remains Atkinson Hyperlegible. The local **Tisan sections / Client tokens** collection (`VariableCollectionId:197:11`) retains A · Light (`197:1`) and B · Inverse (`197:2`). All cloned text retains its existing font-family/fill bindings; Medium card titles were checked with their family binding intact.
 
-Steps and FAQ use restrained 1px separators at 18% ink/line opacity instead of heavy boxes. These separators and tonal fills are decorative; full-contrast text, form borders and focus outlines provide the accessible information. Buttons have 8px radii, 12px vertical and 20px horizontal padding; desktop/tablet hero action width is 220px and mobile fills its text column. Closing CTA is centered with a 240px action. No resting product-card stroke is present.
+A uses ink #1a1a1a, paper #ffffff, accent #1d4ed8 and ink-colored line. B uses ink #ffffff, paper #1a1a1a, accent/line #d4d4d8. No Tervory logo, palette or new raster client asset is introduced. Cards keep their approved 24px padding/radius, 16px internal gap and quiet tonal surface. Image compositions keep their approved crops and rounded corners. Geometry inside a media crop is decorative clipping; text never clips.
 
-Header vertical padding is 20px, with a quiet boundary rule. Desktop closed header is a single horizontal masthead/nav row; existing root ID and the 1440px width remain. Open header keeps its skip-link and expanded nav state. Footer has 64px vertical padding, a boundary rule, and desktop text/links side by side. Mobile footer stacks. Existing contact form geometry and wording remain unchanged; its surrounding heading, body and section spacing follow the revised scale.
+## Navigation and absent slots
 
-Containers hug content height. No text clamp, ellipsis or text cropping. Links/buttons wrap and grow; targets remain at least 48px high. At arbitrary widths preserve max-width and column counts without horizontal page overflow. Both image-text variants stack image first at 390. The original maximum-length geometry remains historical and must not inherit these revisions before new limits are approved.
+**One wrapping rule:** whenever navigation is visible, its container wraps links inside the available content width. Below 1024 the existing closed/open menu states remain. At 1024 and above the navigation is always expanded, within the centered 1200px content area. In the 1440 header the existing 160px logo area and 48px gap leave 992px for wrapping navigation. The eight maximum-length labels wrap to rows instead of extending beyond the frame. The realistic-label board demonstrates the responsive rule at all three widths.
 
-## Content slots and limits
+**No logo:** remove the logo area entirely. Show only nav, aligned to the leading content edge, including left-aligned labels. This explicit no-logo specimen has no menu-button or site-name fallback at any review width. Labels wrap within 342, 704 and 1200px respectively.
 
-Every visible content placeholder is the exact manifest slot path in braces, e.g. `{heading}`, `{items[0].title}`. Short specimens use one whole token. Maximum specimens repeat whole tokens with spaces to exactly 200 characters, or 2000 for body/answer/footer-text slots; any remaining characters are trailing spaces, never invented words. Indexes use the actual item position. URL/src limits are metadata, not visible URL strings.
+**No hero image:** remove the complete media column. Heading and body fill the available 342, 704 or 1200px content width. The action retains its approved target geometry. No blank image container, duplicate caption or empty state remains.
 
-Site slots: `{logo.alt}`, `{nav[i].label}`, `{footer.text}`, `{footer.links[i].label}`, `{ui.menu_open}`, `{ui.menu_close}`, `{ui.skip_link}`. Logo source box: `{logo.src}`. Nav and footer labels, logo alt and UI labels max 200; footer text max 2000.
+## Images, states and accessibility
 
-Hero: `{heading}`, `{body}`, `{image.alt}`, `{cta.label}`; image box `{image.src}`. Feature-grid and steps: `{heading}`, `{items[i].title}`, `{items[i].body}`. Product-grid: `{heading}`, `{items[i].name}`, `{items[i].body}`, `{items[i].image.alt}`; image box `{items[i].image.src}`. Image-text: `{heading}`, `{body}`, `{image.alt}`; image box `{image.src}`. FAQ: `{heading}`, `{items[i].question}`, `{items[i].answer}`. CTA band: `{heading}`, `{cta.label}`. Contact: `{heading}`, `{body}`, followed by the existing form labels. Gallery: `{heading}`, `{images[i].alt}`; image box `{images[i].src}`.
+Alt values are accessibility metadata. Their Figma text nodes are named **ANNOTATION ONLY · alt attribute · never rendered as page text** and are hidden from the visible specimens. They are not captions. Source brace annotations inside the neutral media boxes are review metadata, not visible runtime page copy. Image arrays use their real indexes.
 
-All headings/titles/names/questions/CTA labels/alt slots max 200. Body/answer slots max 2000. Media src max 1000; link href max 500 and remain destination metadata. Page titles are document-title metadata under the contract; no new visible title section is invented. Optional fields are shown when present; no missing-content or error wording is added.
+There are **no focus outlines at rest** on the redrawn max masters. Separate approved hover/focus/pressed control and product examples remain on the page. Keyboard focus keeps its approved contrast and outline in those dedicated states. Existing menu, skip-link, FAQ disclosure and contact interactions are preserved; no extra field, error, success, loading or empty-state copy is added.
 
-Long specimens use maximum counts: nav 8; footer links 12; features 12; products 24; steps 8; FAQ 30; gallery 24. Short specimens show one item except steps, which shows its required minimum of two. Empty/omitted optional arrays do not acquire made-up empty states.
+Contact stays Name, Email, Message, Send, with required name/email/message fields, existing autocomplete, five-row textarea and POST `/api/contact`. No new submission behavior is introduced.
 
-## States and keyboard behavior
+## Evidence and checks
 
-Below 1024, menu closed hides navigation; menu open displays the same nav slots inline and pushes content down. The button label switches between the existing manifest UI slots. Enter/Space toggles; Escape closes and returns focus to the opening button. Inline navigation is not a modal and does not trap focus. Skip-link is hidden until focus and moves focus to main content. Desktop navigation remains expanded.
+Structural readback after the final edits checked **42 max masters and nine additional masters**, including **662 visible text nodes**, and found **zero text-containment or max-length errors**. The preceding type/count check also passed all heading scales, body-18 values, Medium card titles and requested item counts. Root master IDs and both client token modes remain. `nov3-audit.json` records IDs, sizes and results.
 
-FAQ closed hides answers; FAQ open shows answers, including all maximum-length answers in the stress specimen. Use native details/summary disclosure behavior and keyboard interaction. Open/closed frames are state references, not a wired Figma prototype.
+Figma captures (design evidence, not founder live-browser acceptance):
 
-Resting short specimens no longer show persistent selection/focus outlines. Dedicated interaction boards show Default, Hover and Focus in A/B. Product board `219:5750` has the three card widths; product state component set `219:5746` has nine variants. Control board `222:5815` shows the existing CTA slot, nav slot and empty existing input, without added UI words. Sets: button `222:5826`, link `222:5865`, existing input `222:5901`.
-
-Product hover deepens the tonal surface from 3.5% to 7.5% and subtly changes the crop-plane angle; it never adds a full-card accent border. Button hover uses ink fill with paper text; link hover underlines. Inputs retain the existing border and geometry on hover. Focus alone adds a 2px accent outline with 2px outside offset, matched to the control/card radius and without layout shift. On accent-backed CTA sections, use the existing contrasting paper/ink focus treatment. Links/cards use their existing href slot; no uncontracted button or label is added.
-
-Native ON_HOVER → CHANGE_TO reactions are stored for the three product Default variants and the button/link Default variants, using SMART_ANIMATE, EASE_OUT, 0.3 seconds. Focus is an explicit visual reference, not a simulated browser keyboard test. Menu/FAQ state specimens remain static state references. Apply the same hover/focus language to nav, footer, menu, summary and CTA controls. In implementation, suppress decorative motion with prefers-reduced-motion, preserve immediate focus, and never animate layout or delay activation. Prototype reaction data and resting-state screenshots were checked; animated playback and founder browser approval are not claimed.
-
-## Existing contact form — unchanged
-
-Preserve source field order and words: Name, Email, Message, Send. Required name input (type text, autocomplete name), required email input (type email, autocomplete email), required five-row textarea, POST /api/contact. Keep max-width 448px, 12px form gaps, 48px minimum controls, square 1px border-line fields, source paper fills and accent submit button. Send stays left aligned with 16px horizontal padding; its visible focus outline is outside flow. The five-row textarea is 138px including source padding/border at 16px/24px body type. No placeholder, success/error copy, new input, consent field or submission behavior is proposed.
-
-## Evidence and implementation boundary
-
-This pass changes the short masters, their linked A/B review instances, and SPEC in place; it adds neutral crop layers and separate interaction reference components. Existing section/review frame IDs and the original brace-slot text are retained. The 42 short masters retain widths 390, 768 and 1440 (14 of each). A descendant bounds check returned zero horizontal overflows; minimum measured interactive height is 48px. Representative heading, Medium card title and body nodes retain their font-family variable bindings.
-
-Before and after fingerprints use deterministic FNV-1a over serialized node IDs, names, geometry, fills/strokes, text/font metrics, visibility, opacity, auto-layout properties and variable bindings. All 68 protected maximum roots (42 section masters, 14 review rows and 12 array-item masters, including resolved descendants) match `973f44b6`. Original brace-slot IDs/text match `c7827ea0`. New state-example slots are excluded from that original-slot comparison. No shared variable values or old text-style definitions were modified. The old `hero-max-390.png` remains unchanged.
-
-Designer review captures from Figma, visually checked after the final relevant fixes:
-
-| File | Rendered size | Frame |
+| Capture | Figma review node | File |
 | --- | --- | --- |
-| `sections-overview.png` | 5452 × 9556 | `202:5473` |
-| `product-interactions.png` | 2800 × 1867 | `219:5750` |
-| `control-interactions.png` | 2072 × 432 | `222:5815` |
+| Header max, 1440 | `198:171` | `nov3-header-max-1440.png` |
+| Hero max, 390 | `199:1142` | `nov3-hero-max-390.png` |
+| Hero max, 768 | `199:1165` | `nov3-hero-max-768.png` |
+| Hero max, 1440 | `199:1188` | `nov3-hero-max-1440.png` |
+| CTA max, 390 | `201:4415` | `nov3-cta-max-390.png` |
+| Product max, 1440 | `199:2963` | `nov3-product-max-1440.png` |
+| FAQ max, 390 | `200:4418` | `nov3-faq-max-390.png` |
+| Optional slots / nav, both modes | `276:5827` | `nov3-optional-and-nav.png` |
 
-These are designer Figma screenshots, not founder browser screenshots or live website data. One intermediate individual product screenshot request timed out; the full overview and dedicated interaction captures succeeded. No runtime tests or model/image-generation calls were used. This is a design-only change; the template, manifest, contract, tokens and contact source remain unchanged.
-
-Commands executed from `/workspace/codex-tisan-sections-design`, with results:
+Executed in `agents/tisan/templates/next-site`:
 
 ```sh
-git status --short --branch
-# clean, codex/tisan-sections-design tracks origin/codex/tisan-sections-design
-git diff --check
-# exit 0, no whitespace errors
-git diff --exit-code origin/tisan/sections-contract -- agents/tisan/templates/next-site/sections/manifest.json agents/tisan/templates/next-site/sections/CONTRACT.md agents/tisan/templates/next-site/app/tokens.css agents/tisan/templates/next-site/app/contact/page.tsx
-# exit 0, source files unchanged
-cp /home/ammosync/.codex/tisan-sections-design-evidence/product-interactions.png docs/figma/tisan/product-interactions.png
-git add docs/figma/tisan/product-interactions.png && git commit -m 'docs(figma): capture Tisan product hover and focus craft' && git push origin codex/tisan-sections-design
-# exit 0, commit 1428f827 pushed
-cp /home/ammosync/.codex/tisan-sections-design-evidence/sections-craft-final.png docs/figma/tisan/sections-overview.png && git add docs/figma/tisan/sections-overview.png && git commit -m 'docs(figma): refresh short Tisan section craft specimens' && git push origin codex/tisan-sections-design
-# exit 0, commit cc87af32 pushed
-cp /home/ammosync/.codex/tisan-sections-design-evidence/control-interactions.png docs/figma/tisan/control-interactions.png && git add docs/figma/tisan/control-interactions.png && git commit -m 'docs(figma): capture separate control interaction states' && git push origin codex/tisan-sections-design
-# exit 0, commit 6b347e79 pushed
+npm ci --no-audit --no-fund
+TMPDIR=/workspace/codex-tisan-sections-design/.git/tisan-test-tmp npm test -- --run tests/content-check.test.ts
+TMPDIR=/workspace/codex-tisan-sections-design/.git/tisan-test-tmp npm run lint
+TMPDIR=/workspace/codex-tisan-sections-design/.git/tisan-test-tmp npm run build
+TMPDIR=/workspace/codex-tisan-sections-design/.git/tisan-test-tmp npm test
 ```
 
-Figma create_session/use_figma/get_screenshot supplied the reference measurements, in-place mutations, IDs, binding/geometry audits, stored reactions and captures. Screenshot URLs were downloaded with `curl -f -L -o <local capture> <tool-returned URL>` and viewed locally; transient URLs are not retained in this shared spec. The local Markdown was updated with Python 3 and synchronized into the existing SPEC frame text, preserving its IDs.
+Results: install exit 0 (654 packages); boundary suite **43 passed**; ESLint/Prettier passed; production content check, build and type check passed; complete suite **82 passed across six files**. Existing module-format warnings remain. An initial boundary-test attempt failed writing to `/tmp` with errno -122; the branch-local TMPDIR resolved that environment failure. CONTRACT.md was formatted after the first lint check reported it. No model/image-generation calls, paid checks, production SQL or live content mutations were used.
 
-Figma items pending: founder review and explicit approval of the refined short frames; tightened limits and subsequent maximum-length redesign. Website implementation and founder browser screenshots follow approved frames. Claude opens the PR; founder merges. Nothing in this document claims founder acceptance or authorizes the sections thread to implement unapproved frames.
+Figma create_session/use_figma/get_screenshot supplied measurements, editable node changes, readback and captures. `git diff --check` passed. Runtime changes under `agents/tisan/` deploy the room and regional copies on merge. The founder merges; today's changed designs still await founder approval. Unchanged 3 Nov-approved frames retain that approval.
