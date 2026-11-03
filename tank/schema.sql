@@ -2289,6 +2289,37 @@ ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS identity_tenant_admin 
 ALTER TABLE tank.device_authorizations ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT 'workspace'
     CHECK (provider IN ('workspace', 'zitadel'));
 
+-- B4 saved Base lists: immutable tenant-owned record/evidence snapshots.
+CREATE TABLE IF NOT EXISTS tank.base_saved_lists (
+    list_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    name text NOT NULL CHECK (length(name) BETWEEN 1 AND 120),
+    filters jsonb NOT NULL,
+    record_ids uuid[] NOT NULL,
+    records jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS base_saved_lists_tenant ON tank.base_saved_lists(tenant_id,created_at DESC);
+-- Follow personal_tokens: join an existing RLS rollout, never start one.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        ALTER TABLE tank.base_saved_lists ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE tank.base_saved_lists FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.base_saved_lists'::regclass AND polname='tenant_access') THEN
+            CREATE POLICY tenant_access ON tank.base_saved_lists FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.base_saved_lists'::regclass AND polname='tenant_boundary') THEN
+            CREATE POLICY tenant_boundary ON tank.base_saved_lists AS RESTRICTIVE FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+    END IF;
+END
+$$;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
