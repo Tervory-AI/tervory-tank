@@ -1872,7 +1872,7 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
 _POLICY_MOVE = """
     SELECT task_type, model, candidate_model, previous_model, rung, eval_threshold,
            min_shadow_samples, max_reject_rate, auto_promote, field_floors,
-           semantic_cache, promoted_at, number_tolerance, shadow_rate, held_swap_id
+           semantic_cache, promoted_at, number_tolerance, shadow_rate, held_swap_id, fallbacks
     FROM tank.policy
     WHERE task_type=$1 AND tenant_id IS NULL
 """
@@ -1973,6 +1973,8 @@ async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by
         log.warning("graduation %s: build-only model not promoted", task_type)
         return
     if move.action == "promote":
+        await __import__("routing_data").validate_fallbacks(
+            __import__("sys").modules[__name__], move.policy["model"], before.get("fallbacks"))
         updated = await conn.execute(
             """
             UPDATE tank.policy
@@ -2028,8 +2030,6 @@ async def _move_task(task_type: str, *, by: str = "tank", automatic: bool = True
             if row is None:
                 return None
             policy = dict(row)
-            if policy.get("held_swap_id"):
-                return graduate.Move("hold", policy)
             if graduate.is_skill(policy.get("candidate_model")):
                 problem = await _check_code_candidate(conn, policy["candidate_model"])
                 if problem:
@@ -2044,6 +2044,8 @@ async def _move_task(task_type: str, *, by: str = "tank", automatic: bool = True
                 move = graduate.apply(policy, evidence, now)
             else:
                 move = graduate.promote_if_proven(policy, evidence, now, automatic=False)
+            if automatic and policy.get("held_swap_id") and move.action == "promote":
+                return graduate.Move("hold", policy)
             if move.action != "hold":
                 await _apply_move(conn, move, policy, by)
                 if move.action == "promote":
