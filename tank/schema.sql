@@ -2364,6 +2364,8 @@ CREATE TABLE IF NOT EXISTS tank.oauth_codes (
     consumed_at timestamptz
 );
 CREATE INDEX IF NOT EXISTS oauth_codes_tenant ON tank.oauth_codes(tenant_id,expires_at);
+-- Retain the issued grant reference so an authorization-code replay revokes it.
+ALTER TABLE tank.oauth_codes ADD COLUMN IF NOT EXISTS token_id uuid REFERENCES tank.personal_tokens(token_id);
 
 CREATE TABLE IF NOT EXISTS tank.mcp_sessions (
     session_hash text PRIMARY KEY CHECK (session_hash ~ '^[0-9a-f]{64}$'),
