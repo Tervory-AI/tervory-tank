@@ -11,7 +11,34 @@ const AxeBuilder = require('@axe-core/playwright').default;
   ]});
   try {
     const context = await browser.newContext({serviceWorkers:'block', ignoreHTTPSErrors:true});
+    const observed = [];
+    const firstParty = domain => target.hostname === domain.replace(/^\./,'') || target.hostname.endsWith('.'+domain.replace(/^\./,''));
+    const metadata = (raw, url) => {
+      const parts=raw.split(';').map(p=>p.trim()), u=new URL(url), attrs={};
+      for (const p of parts.slice(1)) {const at=p.indexOf('='); attrs[(at<0?p:p.slice(0,at)).toLowerCase()]=at<0?'':p.slice(at+1);}
+      const domain=attrs.domain || u.hostname;
+      return {name:parts[0].split('=',1)[0],domain,path:attrs.path || u.pathname.slice(0,u.pathname.lastIndexOf('/')+1) || '/',
+        expiry:attrs['max-age'] ? Date.now()/1000+Number(attrs['max-age']) : attrs.expires ? Date.parse(attrs.expires)/1000 : -1,
+        Secure:'secure' in attrs,HttpOnly:'httponly' in attrs,SameSite:attrs.samesite || 'Lax',first_party:firstParty(domain)};
+    };
+    await context.addInitScript(() => {
+      const original=Object.getOwnPropertyDescriptor(Document.prototype,'cookie'), events=[];
+      Object.defineProperty(window,'__radix_cookie_metadata',{value:events});
+      Object.defineProperty(document,'cookie',{get(){return original.get.call(this);},set(raw){
+        original.set.call(this,raw);
+        const parts=String(raw).split(';').map(p=>p.trim()),attrs={};
+        for(const p of parts.slice(1)){const at=p.indexOf('=');attrs[(at<0?p:p.slice(0,at)).toLowerCase()]=at<0?'':p.slice(at+1);}
+        events.push({name:parts[0].split('=',1)[0],domain:attrs.domain||location.hostname,
+          path:attrs.path||location.pathname.slice(0,location.pathname.lastIndexOf('/')+1)||'/',
+          expiry:attrs['max-age']?Date.now()/1000+Number(attrs['max-age']):attrs.expires?Date.parse(attrs.expires)/1000:-1,
+          Secure:'secure' in attrs,HttpOnly:false,SameSite:attrs.samesite||'Lax'});
+      }});
+    });
     const page = await context.newPage();
+    const responses=[];
+    page.on('response', response=>responses.push((async()=>{
+      for(const h of await response.headersArray()) if(h.name.toLowerCase()==='set-cookie') observed.push(metadata(h.value,response.url()));
+    })()));
     let refused = 0, clientRefused = 0;
     await context.route('**/*', async route => {
       const u = new URL(route.request().url());
@@ -28,9 +55,12 @@ const AxeBuilder = require('@axe-core/playwright').default;
     if (!response || response.status() !== 200 || new URL(page.url()).hostname !== target.hostname) throw Error('page incomplete');
     await page.waitForTimeout(1000);
     const result = process.argv[3] === 'notice-only' ? {violations:[]} : await new AxeBuilder({page}).analyze();
-    const cookies = (await context.cookies()).map(c => ({name:c.name, domain:c.domain, path:c.path,
+    await Promise.all(responses);
+    const scriptCookies=await page.evaluate(()=>window.__radix_cookie_metadata || []);
+    observed.push(...scriptCookies.map(c=>({...c,first_party:firstParty(c.domain)})));
+    const cookies = [...observed,...(await context.cookies()).map(c => ({name:c.name, domain:c.domain, path:c.path,
       expiry:c.expires, Secure:c.secure, HttpOnly:c.httpOnly, SameSite:c.sameSite,
-      first_party:target.hostname === c.domain.replace(/^\./,'') || target.hostname.endsWith('.'+c.domain.replace(/^\./,''))}));
+      first_party:target.hostname === c.domain.replace(/^\./,'') || target.hostname.endsWith('.'+c.domain.replace(/^\./,''))}))];
     const findings = result.violations.filter(v=>['serious','critical'].includes(v.impact)).flatMap(v=>v.nodes.map(n=>({
       tool:'axe-core',rule:v.id,severity:v.impact,item:JSON.stringify(n.target),file:target.href,line:0,
       explanation:v.help,remediation:v.helpUrl,facts:{page:target.href,rule:v.id,element:n.target,help:v.help,helpUrl:v.helpUrl}
