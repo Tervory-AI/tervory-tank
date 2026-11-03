@@ -33,6 +33,7 @@ async def runtime(request, database, monkeypatch):
     monkeypatch.setenv('DATABASE_URL', 'postgresql://placeholder@127.0.0.1/placeholder')
     monkeypatch.setenv('LITELLM_MASTER_KEY', 'placeholder-litellm-key')
     monkeypatch.setenv('TANK_API_KEY', 'placeholder-tank-key')
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
     import main
     spec = importlib.util.spec_from_file_location('placeholder_tiger_alerts_room', ROOT/'agents/tiger/app.py')
     room = importlib.util.module_from_spec(spec)
@@ -72,6 +73,7 @@ async def runtime(request, database, monkeypatch):
         monkeypatch.setattr(main, 'TANK_API_KEY', 'placeholder-tank-key')
         app = FastAPI()
         app.include_router(tiger_alerts.build_router())
+        app.include_router(command.router)
         async def identity(): return rt.actor
         app.dependency_overrides[command.identity] = identity
         monkeypatch.setattr(main, 'app', app)
@@ -192,13 +194,45 @@ async def test_without_tiger_squad_is_403_without_relay_or_receipt(runtime):
 
 
 @pytest.mark.asyncio
-async def test_get_adapter_reads_without_confirmation(runtime):
-    action = command.validate_action(command.PlannedAction(tool='tiger.alerts',arguments={'kind':'below_cost'}),runtime.actor)
+async def test_pending_card_confirms_through_ordinary_dispatch_with_zero_receipt(runtime,monkeypatch):
+    import trigger_commands
+    side_effect_dispatch = AsyncMock(side_effect=AssertionError('placeholder: not a confirmed-dispatch tool'))
+    ordinary_dispatch = AsyncMock(wraps=command.dispatch_action)
+    monkeypatch.setattr(trigger_commands,'dispatch_confirmed',side_effect_dispatch)
+    monkeypatch.setattr(command,'dispatch_action',ordinary_dispatch)
     assert command.ADAPTERS['tiger.alerts'].method == 'GET'
-    before = len(await receipts(runtime))
-    status,data = await command.dispatch_action(action,runtime.actor)
-    assert status == 200 and data['counts']['below_cost'] == 1
-    assert len(await receipts(runtime)) == before+1
+    assert not command.ADAPTERS['tiger.alerts'].paid
+    saved_alerts = await runtime.store.list_alerts(str(TENANT),None)
+    thread_reply = await runtime.client.post('/v1/command/threads',json={'title':'placeholder alerts read'})
+    assert thread_reply.status_code == 200
+    thread = thread_reply.json()['thread_id']
+    proposal = await runtime.client.post(f'/v1/command/threads/{thread}/actions',
+        json={'tool':'tiger.alerts','arguments':{'kind':'below_cost'}})
+    assert proposal.status_code == 200,proposal.text
+    card = proposal.json()
+    assert card['tool'] == 'tiger.alerts' and card['status'] == 'pending'
+    assert runtime.calls == [] and await receipts(runtime) == []
+    ordinary_dispatch.assert_not_awaited()
+    route = '/v1/command/cards/'+card['card_id']
+    response = await runtime.client.post(route,json={'action':'confirm'})
+    assert response.status_code == 200,response.text
+    confirmed = response.json()
+    assert confirmed['status'] == 'confirmed' and confirmed['receipt_status'] == 'recorded'
+    assert confirmed['result']['counts']['below_cost'] == 1 and confirmed['result']['cost_usd'] == 0
+    ordinary_dispatch.assert_awaited_once()
+    side_effect_dispatch.assert_not_awaited()
+    rows = await receipts(runtime)
+    assert len(rows) == 1 and rows[0]['agent'] == 'tiger' and rows[0]['task_type'] == 'tiger.alerts'
+    assert rows[0]['rung'] == 3 and rows[0]['model'] == 'code' and rows[0]['cost_usd'] == 0
+    snapshot = (await runtime.client.get('/v1/command/threads/'+thread)).json()
+    assert snapshot['cards'][0]['status'] == 'confirmed'
+    assert len(snapshot['receipts']) == 1 and snapshot['receipts'][0]['cost_usd'] == 0
+    assert snapshot['receipts'][0]['ledger_id'] == confirmed['result']['ledger_id']
+    # Ordinary Confirm retries return the saved result, never another read/receipt.
+    assert (await runtime.client.post(route,json={'action':'confirm'})).json()['status'] == 'confirmed'
+    assert len(runtime.calls) == 1 and len(await receipts(runtime)) == 1
+    ordinary_dispatch.assert_awaited_once()
+    assert await runtime.store.list_alerts(str(TENANT),None) == saved_alerts
 
 
 @pytest.mark.asyncio
