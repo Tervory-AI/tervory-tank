@@ -267,14 +267,16 @@ async def execute(payload: dict, tenant_id: str, *, tank: Any = None, http: Any 
 
 
 async def handle(ctx: Any) -> dict:
+    failure = None
     try:
         result = await execute(ctx.input, str(ctx.tenant_id), tank=ctx.tank)
     except Exception as exc:
         # An execution failure is measured too; never persist exception messages.
+        failure = exc
         result = {"ok": False, "detail": type(exc).__name__}
-    claim = {"slug": result.get("slug", ctx.input.get("slug")), "build": result.get("build"),
+    claim = {"build": result.get("build"),
              "ok": result.get("ok") is True, "checks": result.get("checks", [])}
-    for key in ("detail", "refused"):
+    for key in ("slug", "detail", "refused"):
         if key in result:
             claim[key] = result[key]
     evidence = [str(ctx.job_id)]
@@ -286,6 +288,8 @@ async def handle(ctx: Any) -> dict:
         result["memory_id"] = saved["id"]
     except Exception as exc:
         logging.getLogger("agent").warning("build memory failed (%s)", type(exc).__name__)
+    if failure is not None:
+        raise failure
     if result.get("ok") is True:
         import hashlib
         from chassis.events import publish
