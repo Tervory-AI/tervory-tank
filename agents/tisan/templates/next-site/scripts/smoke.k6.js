@@ -37,7 +37,7 @@ export const options = {
   thresholds,
   summaryTrendStats: ["p(95)"],
 };
-export default function () {
+export default function smokePages() {
   for (const path of paths) {
     const response = http.get(origin + path, { redirects: 0, timeout: "2s", tags: { page: path } });
     pageOk.add(response.status === 200, { page: path });
