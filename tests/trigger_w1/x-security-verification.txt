@@ -1,0 +1,199 @@
+Official conformance and edge tests (includes python -S proof)
+
+....................................................................     [100%]
+68 passed in 0.46s
+
+Final post-merge Trigger, Command and Base tests at 80656f02
+
+.......................s................................................ [ 20%]
+........................................................................ [ 40%]
+........................................................................ [ 60%]
+........................................................................ [ 80%]
+......................................................................   [100%]
+=============================== warnings summary ===============================
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "WriteIn" shadows an attribute in parent "CheckerIn"
+    warnings.warn(
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-trigger-w1/tank/main.py:752: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-trigger-w1/tank/main.py:806: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-trigger-w1/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-trigger-w1/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-trigger-w1/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-trigger-w1/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_trigger_crm_wsgi.py:14: Run with the pinned CRM Django runtime for WSGI smoke
+SKIPPED [1] tests/trigger_first_build/test_trigger.py:337: Requires isolated room and LanguageTool containers
+357 passed, 2 skipped, 15 warnings in 203.78s (0:03:23)
+
+Security gate policy tests with pinned CI tools
+
+test_allowed_coolify_requests_use_literal_https_base (test_security.FixedHTTPSBaseTests.test_allowed_coolify_requests_use_literal_https_base) ... ok
+test_coolify_rejects_nonfixed_origins_before_network (test_security.FixedHTTPSBaseTests.test_coolify_rejects_nonfixed_origins_before_network) ... ok
+test_changed_ending_with_same_clerk_prefix_still_blocks (test_security.GitleaksAllowlistTests.test_changed_ending_with_same_clerk_prefix_still_blocks) ... ok
+test_new_copy_of_exact_ci_dummy_is_allowed (test_security.GitleaksAllowlistTests.test_new_copy_of_exact_ci_dummy_is_allowed) ... ok
+test_other_value_with_same_clerk_prefix_still_blocks (test_security.GitleaksAllowlistTests.test_other_value_with_same_clerk_prefix_still_blocks) ... ok
+test_download_recovers_on_third_retry (test_security.SecurityDownloadTests.test_download_recovers_on_third_retry) ... ok
+test_download_stops_after_third_retry (test_security.SecurityDownloadTests.test_download_stops_after_third_retry) ... ok
+test_different_vulnerable_version_blocks_same_advisory (test_security.SecurityPolicyTests.test_different_vulnerable_version_blocks_same_advisory) ... ok
+test_empty_summaries_do_not_emit_errors (test_security.SecurityPolicyTests.test_empty_summaries_do_not_emit_errors) ... ok
+test_existing_vulnerability_is_not_new (test_security.SecurityPolicyTests.test_existing_vulnerability_is_not_new) ... ok
+test_fixed_version_passes (test_security.SecurityPolicyTests.test_fixed_version_passes) ... ok
+test_gitleaks_summary_deduplicates_history_without_values (test_security.SecurityPolicyTests.test_gitleaks_summary_deduplicates_history_without_values) ... ok
+test_gitleaks_uses_commits_and_keeps_no_secret_material (test_security.SecurityPolicyTests.test_gitleaks_uses_commits_and_keeps_no_secret_material) ... ok
+test_lock_discovery_includes_nested_and_nonstandard_requirements (test_security.SecurityPolicyTests.test_lock_discovery_includes_nested_and_nonstandard_requirements) ... ok
+test_missing_locks_fail_closed (test_security.SecurityPolicyTests.test_missing_locks_fail_closed) ... ok
+test_missing_report_fails (test_security.SecurityPolicyTests.test_missing_report_fails) ... ok
+test_new_low_vulnerability_blocks_pull_request (test_security.SecurityPolicyTests.test_new_low_vulnerability_blocks_pull_request) ... ok
+test_npm_pin_location_matches_version_nested_scope_and_alias (test_security.SecurityPolicyTests.test_npm_pin_location_matches_version_nested_scope_and_alias) ... ok
+test_osv_advisory_metadata_cannot_inject_workflow_commands (test_security.SecurityPolicyTests.test_osv_advisory_metadata_cannot_inject_workflow_commands) ... ok
+test_osv_annotation_has_only_pin_and_advisory_metadata (test_security.SecurityPolicyTests.test_osv_annotation_has_only_pin_and_advisory_metadata) ... ok
+test_osv_errors_do_not_become_empty_clean_reports (test_security.SecurityPolicyTests.test_osv_errors_do_not_become_empty_clean_reports) ... ok
+test_osv_fixes_are_scoped_to_package_and_ecosystem (test_security.SecurityPolicyTests.test_osv_fixes_are_scoped_to_package_and_ecosystem) ... ok
+test_osv_summary_counts_distinct_advisories_and_keeps_each_lock (test_security.SecurityPolicyTests.test_osv_summary_counts_distinct_advisories_and_keeps_each_lock) ... ok
+test_osv_unfixed_advisory_still_fails (test_security.SecurityPolicyTests.test_osv_unfixed_advisory_still_fails) ... ok
+test_python_pin_location_handles_extras_hashes_and_canonical_names (test_security.SecurityPolicyTests.test_python_pin_location_handles_extras_hashes_and_canonical_names) ... ok
+test_semgrep_annotation_metadata_is_escaped (test_security.SecurityPolicyTests.test_semgrep_annotation_metadata_is_escaped) ... ok
+test_semgrep_artifact_has_no_source_or_messages (test_security.SecurityPolicyTests.test_semgrep_artifact_has_no_source_or_messages) ... ok
+test_semgrep_fatal_errors_still_block_and_annotate_findings (test_security.SecurityPolicyTests.test_semgrep_fatal_errors_still_block_and_annotate_findings) ... ok
+test_semgrep_missing_launcher_identifies_executable (test_security.SecurityPolicyTests.test_semgrep_missing_launcher_identifies_executable) ... ok
+test_semgrep_missing_report_blocks_with_safe_notice (test_security.SecurityPolicyTests.test_semgrep_missing_report_blocks_with_safe_notice) ... ok
+test_semgrep_native_fatal_error_type_blocks (test_security.SecurityPolicyTests.test_semgrep_native_fatal_error_type_blocks) ... ok
+test_semgrep_nonfatal_errors_are_counted_not_failed (test_security.SecurityPolicyTests.test_semgrep_nonfatal_errors_are_counted_not_failed) ... ok
+test_semgrep_nonfatal_notices_do_not_hide_high_findings (test_security.SecurityPolicyTests.test_semgrep_nonfatal_notices_do_not_hide_high_findings) ... ok
+test_semgrep_only_high_findings_block (test_security.SecurityPolicyTests.test_semgrep_only_high_findings_block) ... ok
+test_semgrep_rule_download_failure_blocks_without_printing_message (test_security.SecurityPolicyTests.test_semgrep_rule_download_failure_blocks_without_printing_message) ... ok
+test_semgrep_summary_keeps_all_locations_beyond_ten_and_deduplicates (test_security.SecurityPolicyTests.test_semgrep_summary_keeps_all_locations_beyond_ten_and_deduplicates) ... ok
+test_semgrep_unexplained_fatal_exit_cannot_pass (test_security.SecurityPolicyTests.test_semgrep_unexplained_fatal_exit_cannot_pass) ... ok
+test_summary_metadata_is_escaped_as_one_annotation (test_security.SecurityPolicyTests.test_summary_metadata_is_escaped_as_one_annotation) ... ok
+test_weekly_blocks_high_but_not_low (test_security.SecurityPolicyTests.test_weekly_blocks_high_but_not_low) ... ok
+test_weekly_gitleaks_covers_history (test_security.SecurityPolicyTests.test_weekly_gitleaks_covers_history) ... ok
+test_weekly_unknown_severity_requires_review (test_security.SecurityPolicyTests.test_weekly_unknown_severity_requires_review) ... ok
+
+----------------------------------------------------------------------
+Ran 41 tests in 15.935s
+
+OK
+
+OSV gate stdout
+
+osv: clean
+
+OSV gate report against origin/main
+
+{
+  "lockfiles": [
+    "agents/_chassis/requirements.txt",
+    "agents/market_lab/feeds/requirements.txt",
+    "agents/market_lab/fixture_proof/requirements.txt",
+    "agents/rig/forge/gpu/meshroom-requirements.lock",
+    "agents/rig/forge/gpu/requirements.lock",
+    "agents/rig/forge/package-lock.json",
+    "agents/rig/forge/requirements-test.lock",
+    "agents/rig/forge/requirements.lock",
+    "agents/tisan/templates/next-site/package-lock.json",
+    "agents/trigger/requirements.txt",
+    "agents/zenas/requirements.txt",
+    "cli/package-lock.json",
+    "hermes/requirements.txt",
+    "jobs/train/requirements.txt",
+    "mcp/requirements.txt",
+    "researcher/requirements.txt",
+    "site/package-lock.json",
+    "tank/requirements-dev.txt",
+    "tank/requirements-routellm-wheel.txt",
+    "tank/requirements-routellm.txt",
+    "tank/requirements.txt",
+    "tests/market_lab_gpt_researcher/requirements.txt",
+    "tiger/requirements.txt",
+    "workers/requirements.txt",
+    "workers/task/requirements.txt",
+    "workspace/package-lock.json"
+  ],
+  "findings": [],
+  "total_findings": 202,
+  "baseline": "3fc94027a86d3c337d6bc01c8715fca037e3c959"
+}
+
+Gitleaks gate stdout
+
+gitleaks: clean
+
+Pinned CI tool checksum verification
+
+/workspace/codex-trigger-w1/.w1-tmp/security-bin/gitleaks.tar.gz: OK
+/workspace/codex-trigger-w1/.w1-tmp/security-bin/osv-scanner: OK
