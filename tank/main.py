@@ -103,6 +103,7 @@ _pool: Any = None
 _admin_pool: asyncpg.Pool | None = None
 _background: set[asyncio.Task[None]] = set()
 _batch_task: asyncio.Task[None] | None = None
+_bot_task: asyncio.Task[None] | None = None
 _http: httpx.AsyncClient | None = None
 _redis: aioredis.Redis | None = None
 REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
@@ -801,10 +802,16 @@ async def _startup() -> None:
     await _warn_unapproved_policy_pins()
     global _batch_task
     _batch_task = asyncio.create_task(_batch_loop())
+    global _bot_task
+    from trigger_bot import refresh_loop
+    _bot_task = asyncio.create_task(refresh_loop(__import__("sys").modules[__name__]))
 
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
+    if _bot_task:
+        _bot_task.cancel()
+        await asyncio.gather(_bot_task, return_exceptions=True)
     if _batch_task:
         _batch_task.cancel()
         await asyncio.gather(_batch_task, return_exceptions=True)
@@ -4678,6 +4685,7 @@ app.include_router(__import__("command").router)
 __import__("personal_tokens").register(app)
 app.include_router(__import__("trigger_routes").router)
 app.include_router(__import__("trigger_crm").router)
+app.include_router(__import__("trigger_bot_api").router)
 
 # ACCESS-1: scoped connections and browser-only credential handoff.
 app.include_router(__import__("access").router)
