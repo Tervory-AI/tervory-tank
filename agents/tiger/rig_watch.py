@@ -496,6 +496,8 @@ class CatalogueDiscovery:
                 matched = await self.publish(site, url, action['html'], False)
                 active['confirmed'] = list(set(active['confirmed']) | {m['sku'] for m in matched.get('matches', []) if m.get('state') == 'confirmed'})
                 return state, False
+            if kind == 'home':
+                active['home_finished'] = True
             response = await self.gate.call(url, lambda: self.fetch(url) if kind in {'robots', 'map'} else self.render(url))
             if response.get('challenge') or response.get('status') in {401, 403, 429}:
                 await self.gate.block(site)
@@ -518,7 +520,7 @@ class CatalogueDiscovery:
                 if response.get('status') != 200:
                     active['warnings'].append({'url': url, 'reason': 'sitemap_unavailable'})
                     return state, False
-                if re.search(r'<(?:!doctype\s+html|html|form)\b', source, re.I):
+                if re.search(r'<(?:!doctype\s+html|html|form)\b|captcha|turnstile|verify.{0,20}human|checking your browser|security check|cf-error-details', source, re.I):
                     if re.search(r'captcha|turnstile|verify.{0,20}human|checking your browser|security check|cf-error-details', source, re.I):
                         enqueue('probe', [url])
                     else:
