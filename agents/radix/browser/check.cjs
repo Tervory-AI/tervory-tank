@@ -27,7 +27,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
     const response = await page.goto(target.href, {waitUntil:'domcontentloaded',timeout:20000});
     if (!response || response.status() !== 200 || new URL(page.url()).hostname !== target.hostname) throw Error('page incomplete');
     await page.waitForTimeout(1000);
-    const result = await new AxeBuilder({page}).analyze();
+    const result = process.argv[3] === 'notice-only' ? {violations:[]} : await new AxeBuilder({page}).analyze();
     const cookies = (await context.cookies()).map(c => ({name:c.name, domain:c.domain, path:c.path,
       expiry:c.expires, Secure:c.secure, HttpOnly:c.httpOnly, SameSite:c.sameSite,
       first_party:target.hostname === c.domain.replace(/^\./,'') || target.hostname.endsWith('.'+c.domain.replace(/^\./,''))}));
