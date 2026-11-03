@@ -26,7 +26,7 @@ services:
       AUTUMBRA_UNDO_TOKEN_SECRET: ${AUTUMBRA_UNDO_TOKEN_SECRET:-}
       THREAT_PAYLOAD_QUEUE: /queue
       DATA_DIR: /data
-      SITE_NAME: tervory.com
+      SITE_NAME: ${SITE_NAME:-}
       CLOUDFLARE_API_TOKEN_ENFORCE: ${CLOUDFLARE_API_TOKEN_ENFORCE:-}
       HTTPS_PROXY: http://egress-proxy:8080
       NO_PROXY: localhost,127.0.0.1

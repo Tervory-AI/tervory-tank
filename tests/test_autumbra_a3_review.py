@@ -169,3 +169,12 @@ def test_radix_sni_default_off_preserves_plaintext_relay():
     # Existing Radix contract allows opaque bytes; opt-in must not alter it.
     original = Proxy()
     assert original._require_sni is False
+
+
+def test_project_site_is_a_founder_setting():
+    from pathlib import Path
+    import yaml
+    root = Path(__file__).resolve().parents[1]
+    compose = yaml.safe_load((root/'agents/ghost/docker-compose.enforce.yml').read_text())
+    assert compose['services']['enforce']['environment']['SITE_NAME'] == '${SITE_NAME:-}'
+    assert '`SITE_NAME`' in (root/'docs/ops/AUTUMBRA-CLOUDFLARE-LIVE.md').read_text()

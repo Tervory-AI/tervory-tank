@@ -17,7 +17,7 @@ tokens, page changes, model calls, or changes to the existing safety rules.
    account-wide scope, other zones, or global API key. The founder alone handles
    the value, directly in Coolify; never paste it into chat, logs or a command.
 3. In the existing per-client **Enforce** Coolify project, set these names:
-   `CLOUDFLARE_API_TOKEN_ENFORCE` and `AUTUMBRA_HEALTH_SECRET`.
+   `CLOUDFLARE_API_TOKEN_ENFORCE`, `AUTUMBRA_HEALTH_SECRET`, and `SITE_NAME`.
    Compose gives the latter to Enforce and its observer only. Neither proxy
    receives either value. Watch never receives either value.
 4. Retain this client's existing `TENANT_ID`, `ENFORCE_NETWORK_NAME`,

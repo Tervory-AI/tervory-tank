@@ -154,3 +154,10 @@ Exit 0: **17 passed in 7.50s**.
 Command: `/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python .proof/run_review.py tests/test_bucket1_radix.py tests/test_radix_passive.py`
 Exit 0: **48 passed, 6 skipped in 2.23s**, including existing opaque relay and
 pinned-destination behavior with SNI admission disabled.
+
+## Review fix 3 — project site setting
+
+Enforce now reads `SITE_NAME: ${SITE_NAME:-}`. The operations guide lists
+`SITE_NAME` among the founder's Coolify setting names without supplying a value.
+Command: `/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python .proof/run_review.py tests/test_autumbra_a3_review.py::test_project_site_is_a_founder_setting`
+Exit 0: **1 passed**.
