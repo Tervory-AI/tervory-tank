@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2 — 2026-11-01
+
+- ZA can opt in to the self-hosted Zitadel device sign-in with `tervory login --region za --sign-in zitadel`, including founders. Both verification URLs must use https://auth-za.tervory.com.
+- Existing us-east and default ZA Boston/Workspace approval (including older CLIs) are unchanged even when the ZA issuer is set. Tank access/refresh credentials and logout/revoke are unchanged.
+
 ## 0.1.1 — 2026-10-31
 
 - Every CLI network call has a hard deadline that covers the body (device calls 10 s, JSON 300 s, request headers 30 s, live events 120 s per read, update 15 s JSON / 180 s tarball); a stream that stops early (stall, cancel, bad event, or the caller leaving) closes its connection to Tank; redirects are refused, never followed.
