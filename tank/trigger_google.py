@@ -95,7 +95,13 @@ class Google:
         async with self.pool.acquire() as conn, conn.transaction():
             await conn.execute('''INSERT INTO tank.trigger_gbp_connections(tenant_id,generation,status,user_id)
                 VALUES($1,$2,'disconnected',$3) ON CONFLICT DO NOTHING''', actor.tenant_id, generation, actor.user_id)
-            await conn.fetchrow('SELECT tenant_id FROM tank.trigger_gbp_connections WHERE tenant_id=$1 FOR UPDATE', actor.tenant_id)
+            current = await conn.fetchrow('SELECT * FROM tank.trigger_gbp_connections WHERE tenant_id=$1 FOR UPDATE', actor.tenant_id)
+            if current['sealed']:
+                # Revoke at confirmed connect, before issuing the consent URL.
+                # Revoking after exchange could also invalidate the new grant.
+                await self.revoke(actor.tenant_id, current['generation'], current['sealed'])
+                await conn.execute("""UPDATE tank.trigger_gbp_connections SET sealed=NULL,status='disconnected',
+                    location=NULL,location_title=NULL,reviews_checked_at=NULL,updated_at=now() WHERE tenant_id=$1""", actor.tenant_id)
             await conn.execute('DELETE FROM tank.trigger_gbp_states WHERE tenant_id=$1', actor.tenant_id)
             await conn.execute('''INSERT INTO tank.trigger_gbp_states(tenant_id,state_hash,user_id,generation,sealed,expires_at)
                 VALUES($1,$2,$3,$4,$5,$6)''', actor.tenant_id, digest, actor.user_id, generation, encrypted, utc_now()+timedelta(minutes=10))
@@ -123,9 +129,9 @@ class Google:
             raise HTTPException(409)
         encrypted = seal({'refresh_token': refresh}, context(actor.tenant_id, str(row['generation'])))
         async with self.pool.acquire() as conn, conn.transaction():
-            await conn.fetchrow('SELECT tenant_id FROM tank.trigger_gbp_connections WHERE tenant_id=$1 FOR UPDATE', actor.tenant_id)
+            current = await conn.fetchrow('SELECT * FROM tank.trigger_gbp_connections WHERE tenant_id=$1 FOR UPDATE', actor.tenant_id)
             valid = await conn.fetchval('SELECT 1 FROM tank.trigger_gbp_states WHERE tenant_id=$1 AND state_hash=$2 AND consumed_at IS NOT NULL', actor.tenant_id, digest)
-            if not valid:
+            if not valid or not current or current['sealed']:
                 raise HTTPException(409)
             await conn.execute('''UPDATE tank.trigger_gbp_connections SET generation=$2,sealed=$3,status='connected',
                 user_id=$4,location=NULL,location_title=NULL,reviews_checked_at=NULL,updated_at=now() WHERE tenant_id=$1''',
