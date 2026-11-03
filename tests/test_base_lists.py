@@ -399,3 +399,15 @@ def test_new_sql_is_literal_with_bound_runtime_arguments():
                     assert "$1" in node.args[0].value, filename
                 count += 1
     assert count >= 15
+
+
+def test_oversized_list_failure_only_exposes_count_on_existing_error_path():
+    from command import list_refusal_result
+    assert list_refusal_result("base.list.save", 422, {"detail": {"total": 50000, "private": "ignored"}}) == {"total": 50000}
+    for tool, status, result in (
+        ("base.find", 422, {"detail": {"total": 50000}}),
+        ("base.list.save", 500, {"detail": {"total": 50000}}),
+        ("base.list.save", 422, {"detail": {"total": "50000"}}),
+        ("base.list.save", 422, {"detail": {"total": True}}),
+    ):
+        assert list_refusal_result(tool, status, result) is None
