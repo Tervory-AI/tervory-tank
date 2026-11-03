@@ -38,6 +38,13 @@ export async function seatbeltProfile(root, mounts = []) {
 (allow file-read* (literal "/var/db/xcode_select_link") (literal "/private/var/db/xcode_select_link"))
 (allow file-write* (subpath ${quote(root)}))
 (deny file-read* file-write* file-map-executable (regex #${quote(secrets)}))
+(deny file-read* file-write* file-map-executable (subpath "/usr/local/etc") (subpath "/usr/local/var"))
 (deny network*)
+; Match the executable trees/files exposed by Bubblewrap and the Apple git launcher.
+(deny process-exec)
+(allow process-exec ${[...new Set([root, '/bin', '/usr', '/Library/Developer/CommandLineTools/usr', ...runtime])].map(path => `(subpath ${quote(path)})`).join(' ')}
+  (regex #"^/Applications/Xcode[^/]*[.]app/Contents/Developer/usr(/|$)"))
+; Secret and local configuration denies also apply to executable lookup.
+(deny process-exec (regex #${quote(secrets)}) (subpath "/usr/local/etc") (subpath "/usr/local/var"))
 `;
 }
