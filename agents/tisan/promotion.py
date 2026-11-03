@@ -151,7 +151,7 @@ class Coolify:
         self.http, self.base, self._token = http, base.rstrip('/').removesuffix('/api/v1'), token
 
     async def call(self, method: str, path: str, *, allow_list: bool = False,
-                   mutation: bool = False, **kwargs: Any) -> dict | list:
+                   mutation: bool = False, discard_response: bool = False, **kwargs: Any) -> dict | list:
         try:
             r = await self.http.request(method, self.base + '/api/v1' + path,
                 headers={'Authorization': 'Bearer ' + self._token}, follow_redirects=False, timeout=30, **kwargs)
@@ -159,6 +159,8 @@ class Coolify:
                 raise CoolifyUnknown("Coolify mutation outcome unknown")
             if r.status_code >= 300:
                 raise Refused('Coolify request failed')
+            if discard_response:
+                return {}
             data = r.json()
             if not isinstance(data, (dict, list) if allow_list else dict):
                 raise Refused('Coolify response shape unavailable')
