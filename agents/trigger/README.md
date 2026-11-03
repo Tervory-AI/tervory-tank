@@ -61,8 +61,12 @@ reference does not publish a post length, so that limit remains unset. Instagram
 captions are checked at 2,200 characters, from Meta's official error-code reference
 (HTTP 400, code 36004, subcode 2207010), checked 2026-11-03. Separate hashtag and
 mention limits are not enforced. LinkedIn is checked at
-3,000 Unicode code points; standard X posts use the reused twitter-text weighted
-counter at 280. `over_limit` includes the exact count and limit, without losing
+3,000 Unicode code points; standard X posts use local code at 280 weighted
+characters: NFC normalization, official weight ranges, URLs at 23 and emoji
+sequences at two. Pinned official configuration/TLD/emoji matching data and all
+42 official weighted-length conformance cases retain their licences in
+[ATTRIBUTION.md](ATTRIBUTION.md). No twitter-text-parser or setuptools pin is
+required. `over_limit` includes the exact count and limit, without losing
 the existing total finding count or truncation marker.
 
 Before writing, Tank selects the tenant's five newest accepted same-format
