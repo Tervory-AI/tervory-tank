@@ -269,8 +269,8 @@ async def decide(body: Decision, actor: command.Actor = Depends(pat.workspace_ac
         code = f'tvo1.us-east.{actor.tenant_id.hex}.{secrets.token_urlsafe(32)}'
         with tenant_scope(actor.tenant_id):
             async with command.db().acquire() as conn:
-                await conn.execute('INSERT INTO tank.oauth_codes(code_hash,tenant_id,user_id,region,client_id,client_name,redirect_uri,challenge,resource,expires_at) '
-                    'VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now()+$10::interval)', pat.digest(code), actor.tenant_id,
+                await conn.execute("""INSERT INTO tank.oauth_codes(code_hash,tenant_id,user_id,region,client_id,client_name,redirect_uri,challenge,resource,expires_at)
+                    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now()+$10::interval)""", pat.digest(code), actor.tenant_id,
                     actor.user_id, 'us-east', client.client_id, client.name, body.redirect_uri, body.code_challenge,
                     body.resource, timedelta(minutes=10))
         query['code'] = code
