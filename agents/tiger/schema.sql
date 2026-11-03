@@ -68,11 +68,11 @@ BEGIN
         END IF;
         IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='agent_tiger'
                        AND tablename=tab AND policyname='tenant_access') THEN
-            EXECUTE format('CREATE POLICY tenant_access ON agent_tiger.%I USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),)::uuid) WITH CHECK (tenant_id=NULLIF(current_setting(app.tenant_id,true),)::uuid)',tab);
+            EXECUTE format('CREATE POLICY tenant_access ON agent_tiger.%I USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid) WITH CHECK (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)',tab);
         END IF;
         IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='agent_tiger'
                        AND tablename=tab AND policyname='tenant_boundary') THEN
-            EXECUTE format('CREATE POLICY tenant_boundary ON agent_tiger.%I AS RESTRICTIVE USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),)::uuid) WITH CHECK (tenant_id=NULLIF(current_setting(app.tenant_id,true),)::uuid)',tab);
+            EXECUTE format('CREATE POLICY tenant_boundary ON agent_tiger.%I AS RESTRICTIVE USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid) WITH CHECK (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)',tab);
         END IF;
     END LOOP;
 END
