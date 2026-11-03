@@ -14,7 +14,7 @@ from rigbox.retailer import Retailer
 from rigbox.service import RigError
 
 router = APIRouter()
-OPERATIONS = {"panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger", "watch-tenants", "watch-products", "watch-context"}
+OPERATIONS = {"confirm-store-payment", "panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger", "watch-tenants", "watch-products", "watch-context"}
 
 
 @router.post("/internal/retailer/{operation}")
@@ -51,6 +51,12 @@ async def retailer_operation(operation: str, request: Request) -> JSONResponse:
             result = {"tenant_id": tenant, "products": await service.store.watch_products(tenant, **({"catalogue": True} if data.get("catalogue") is True else {}))}
         elif operation == "watch-context":
             result = {"tenant_id": tenant, "product": await service.store.watch_context(tenant, str(data["sku"]))}
+        elif operation == "confirm-store-payment":
+            if (set(data) != {"quote_id"} or not isinstance(data["quote_id"], str)
+                    or not 1 <= len(data["quote_id"]) <= 200):
+                raise ValueError()
+            from rigbox.quotes.privacy import shopper_body
+            result = shopper_body(await service.confirm_store_payment(tenant, data["quote_id"]))
         elif operation == "panel":
             result = await retailer.panel(tenant)
         elif operation == "settings":
