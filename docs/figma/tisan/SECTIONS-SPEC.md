@@ -6,7 +6,13 @@ The founder approved the short designs on **3 Nov**. Unchanged specimens say **A
 
 File: [Tisan sections](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=197-9), page **6 · Tisan sections** (`197:9`). SPEC frame: `205:5479`. Short review: `202:5473`. New optional-slot / realistic-navigation board: `276:5827`.
 
-Work stays on `codex/tisan-sections-design`, PR #591, in `/workspace/codex-tisan-sections-design`. The shared source is `agents/tisan/templates/next-site/sections/manifest.json`; sections, builder and publish all consume that contract. This task changes its specified bounds, its boundary tests, CONTRACT.md, this design specification and Figma evidence. Website component implementation is separate.
+Work stays on `codex/tisan-sections-design`, PR #591, in `/workspace/codex-tisan-sections-design`. The shared source is `agents/tisan/templates/next-site/sections/manifest.json`; sections, builder and publish all consume that contract. Round 1 changed its specified bounds, boundary tests, CONTRACT.md and design evidence. This re-check changes Figma, this specification and design evidence only; the manifest, CONTRACT.md and content-check implementation/tests remain unchanged from round 1. Website component implementation is separate.
+
+### Re-check after fix round 1 — 3 November
+
+Footer max labels now contain exactly 40 non-padding characters and wrap inside their targets; at 390 and 768 their labels align left with the footer text. Desktop logo-header nav blocks align to the right edge of the 1200px content area while retaining wrapping. Every nav/footer target and slot uses its own array index. All 132 item instances in max feature, product, steps and gallery masters now reference the corresponding max item component and carry **Changed after approval, awaiting founder**.
+
+The existing no-logo 390/768 masters now show the closed menu control with no logo space; separate open masters show left-aligned links. Desktop remains expanded nav only, left-aligned. Skip links are visually hidden at rest in every header. Dedicated keyboard-focus specimens at 390 and 1440 show the skip link and its focus outline. Existing master and review root IDs are retained. These corrections await founder approval; they do not inherit the short designs' **Approved 3 Nov** status.
 
 ## Frame index
 
@@ -34,10 +40,12 @@ The 1440 header-open masters `199:143` and `199:144` and their review instances 
 | Added specimen / Changed after approval, awaiting founder | 390 master | 768 master | 1440 master |
 | --- | --- | --- | --- |
 | Text-only hero | `276:5579` | `276:5593` | `276:5607` |
-| Header without logo, nav only | `276:5621` | `276:5657` | `276:5693` |
+| Header without logo, closed below 1024 / expanded desktop | `276:5621` | `276:5657` | `276:5693` |
 | Eight realistic navigation labels | `276:5724` | `276:5760` | `276:5796` |
+| Header without logo, open | `310:37135` | `310:37170` | unused |
+| Skip link focused | `310:37328` | — | `310:37340` |
 
-These nine additional masters have eighteen A/B review instances in `276:5827`. No empty image column, logo box, site-name fallback or replacement wording is added when the optional content is absent.
+These thirteen additional masters have twenty-six A/B review instances in `276:5827`. No empty image column, logo box or site-name fallback is added when the optional content is absent. The new no-logo open review row is `310:37205` (390 A/B `310:37207` / `310:37237`, 768 A/B `310:37268` / `310:37298`). The skip-link-focused row is `310:37354` (390 A/B `310:37356` / `310:37368`, 1440 A/B `310:37381` / `310:37395`). Existing no-logo review instances now show the closed state below 1024.
 
 ## Contract limits
 
@@ -53,7 +61,7 @@ These nine additional masters have eighteen A/B review instances in `276:5827`. 
 
 Maximum counts: **nav 8; footer links 12; features 12; products 12; steps 8; FAQ 20; gallery 12**. All other schema rules remain: required/optional properties, enums, URL patterns, page/section identity and minimum counts. In particular, FAQ questions, CTA labels, UI labels and alt attributes remain 200; media sources remain 1000 and hrefs 500. Steps still require at least two items. No site-name slot is invented.
 
-Max content uses repeated complete brace-slot tokens, padded only where a token will not fit the exact character count. Array indexes identify the actual item, including media-source annotations. Header navigation uses eight realistic labels of **exactly 40 characters** rather than brace tokens:
+Max content uses repeated complete brace-slot tokens, padded only where a token will not fit the exact character count. Array indexes identify the actual item, including media-source annotations. Header navigation uses eight realistic labels of **exactly 40 characters** rather than brace tokens. Footer max masters use the same eight 40-character specimens followed by the first four again, filling all twelve link slots without padding:
 
 - Explore our studio and creative approach
 - Discover our services and design process
@@ -64,7 +72,18 @@ Max content uses repeated complete brace-slot tokens, padded only where a token 
 - Browse design resources and useful tools
 - Contact our team to discuss your project
 
-These are design specimens, not runtime copy. Every live text slot still requires accepted Trigger copy. Supplied media remains the only source of image URLs. The existing content checker reads `manifest.json` directly, so the new limits are enforced without a second limit table in executable code. Tests accept each revised limit and reject one character or item over; existing constraints stay covered.
+The short navigation labels shown on board `276:5827`, including its no-logo examples, are:
+
+- Home
+- About our studio
+- Design services
+- Selected projects
+- Our process
+- Client stories
+- Resources
+- Contact the team
+
+Both label sets are **design specimens, not runtime copy**. Every live text slot still requires accepted Trigger copy. Supplied media remains the only source of image URLs. The existing content checker reads `manifest.json` directly, so the new limits are enforced without a second limit table in executable code. Tests accept each revised limit and reject one character or item over; existing constraints stay covered.
 
 ## Type, spacing and reflow
 
@@ -91,9 +110,9 @@ A uses ink #1a1a1a, paper #ffffff, accent #1d4ed8 and ink-colored line. B uses i
 
 ## Navigation and absent slots
 
-**One wrapping rule:** whenever navigation is visible, its container wraps links inside the available content width. Below 1024 the existing closed/open menu states remain. At 1024 and above the navigation is always expanded, within the centered 1200px content area. In the 1440 header the existing 160px logo area and 48px gap leave 992px for wrapping navigation. The eight maximum-length labels wrap to rows instead of extending beyond the frame. The realistic-label board demonstrates the responsive rule at all three widths.
+**One wrapping rule:** whenever navigation is visible, its container wraps links inside the available content width. Below 1024 the existing closed/open menu states remain. At 1024 and above the navigation is always expanded, within the centered 1200px content area. In the 1440 header the existing 160px logo area and 48px gap leave 992px for wrapping navigation. Both `198:14` and many-links master `276:5796` right-align their wrapped nav targets within that 992px area, reaching the right content edge. The eight maximum-length labels wrap to rows instead of extending beyond the frame. The realistic-label board demonstrates the responsive rule at all three widths.
 
-**No logo:** remove the logo area entirely. Show only nav, aligned to the leading content edge, including left-aligned labels. This explicit no-logo specimen has no menu-button or site-name fallback at any review width. Labels wrap within 342, 704 and 1200px respectively.
+**No logo:** remove the logo area entirely, with no reserved logo space or site-name fallback. Below 1024, the closed state shows the existing menu-open control; the open state shows the existing menu-close control and left-aligned links wrapping within 342px at 390 and 704px at 768. At 1440, show expanded nav only, aligned to the leading edge of the 1200px content area, including left-aligned labels. There is no desktop menu button.
 
 **No hero image:** remove the complete media column. Heading and body fill the available 342, 704 or 1200px content width. The action retains its approved target geometry. No blank image container, duplicate caption or empty state remains.
 
@@ -101,15 +120,15 @@ A uses ink #1a1a1a, paper #ffffff, accent #1d4ed8 and ink-colored line. B uses i
 
 Alt values are accessibility metadata. Their Figma text nodes are named **ANNOTATION ONLY · alt attribute · never rendered as page text** and are hidden from the visible specimens. They are not captions. Source brace annotations inside the neutral media boxes are review metadata, not visible runtime page copy. Image arrays use their real indexes.
 
-There are **no focus outlines at rest** on the redrawn max masters. Separate approved hover/focus/pressed control and product examples remain on the page. Keyboard focus keeps its approved contrast and outline in those dedicated states. Existing menu, skip-link, FAQ disclosure and contact interactions are preserved; no extra field, error, success, loading or empty-state copy is added.
+There are **no focus outlines at rest** on the redrawn max masters. The skip link is visually hidden until it receives keyboard focus in every header, including the open states `199:140` / `199:142`. It remains keyboard reachable; Figma visibility represents its resting appearance, not removal from the runtime accessibility tree. Separate **skip link focused** specimens at 390 and 1440 show `{ui.skip_link}` with a 2px token-bound focus outline; activation moves focus to the main content. Separate approved hover/focus/pressed control and product examples remain on the page. Keyboard focus keeps its approved contrast and outline in those dedicated states. Existing menu, FAQ disclosure and contact interactions are preserved; no extra field, error, success, loading or empty-state copy is added.
 
 Contact stays Name, Email, Message, Send, with required name/email/message fields, existing autocomplete, five-row textarea and POST `/api/contact`. No new submission behavior is introduced.
 
 ## Evidence and checks
 
-Structural readback after the final edits checked **42 max masters and nine additional masters**, including **662 visible text nodes**, and found **zero text-containment or max-length errors**. The preceding type/count check also passed all heading scales, body-18 values, Medium card titles and requested item counts. Root master IDs and both client token modes remain. `nov3-audit.json` records IDs, sizes and results.
+Round 1 structural readback checked 42 max masters and nine additional masters, including 662 visible text nodes; `nov3-audit.json` records that check. Round 2 readback checked **42 max masters and thirteen additional masters**, including **669 visible text nodes**, and found **zero text-containment, truncation, target-index, footer-length, footer-alignment, nav-edge, item-reference or resting-skip-link errors**. All 132 max item instances reference max masters. The preceding round 1 type/count check passed heading scales, body-18 values, Medium card titles and requested item counts; round 2 preserves those styles and counts. Root master IDs and both client token modes remain. `nov3-r2-audit.json` records the re-check.
 
-Figma captures (design evidence, not founder live-browser acceptance):
+Round 1 Figma captures below record the first fix round. Header and optional-state captures are superseded by the round 2 evidence; they are retained as history. These are design evidence, not founder live-browser acceptance:
 
 | Capture | Figma review node | File |
 | --- | --- | --- |
@@ -122,7 +141,22 @@ Figma captures (design evidence, not founder live-browser acceptance):
 | FAQ max, 390 | `200:4418` | `nov3-faq-max-390.png` |
 | Optional slots / nav, both modes | `276:5827` | `nov3-optional-and-nav.png` |
 
-Executed in `agents/tisan/templates/next-site`:
+Round 2 captures:
+
+| Capture | Figma review node | File |
+| --- | --- | --- |
+| Footer max, 390 | `199:767` | `nov3-r2-footer-390.png` |
+| Footer max, 768 | `199:846` | `nov3-r2-footer-768.png` |
+| Footer max, 1440 | `199:925` | `nov3-r2-footer-1440.png` |
+| Right-aligned max nav, 1440 | `198:171` | `nov3-r2-nav-1440.png` |
+| Optional slots, no-logo closed/open, many links and focused skip links, A/B | `276:5827` | `nov3-r2-optional-states.png` |
+| Skip link focused, 390 | `310:37356` | `nov3-r2-skip-focus-390.png` |
+| Skip link focused, 1440 | `310:37381` | `nov3-r2-skip-focus-1440.png` |
+| Steps max items, 1440 | `200:3053` | `nov3-r2-steps-1440.png` |
+
+Round 2 used structural readback and visual inspection at all three review widths, including the corrected footer wrapping, desktop nav, no-logo closed/open states and focused/hidden skip-link states. Manifest, CONTRACT.md and content-check files have no round 2 diff. No executable source changed, so the following round 1 checks were not rerun for this design-only re-check.
+
+Executed in round 1 in `agents/tisan/templates/next-site`:
 
 ```sh
 npm ci --no-audit --no-fund
