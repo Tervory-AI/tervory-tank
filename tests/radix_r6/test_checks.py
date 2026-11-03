@@ -151,3 +151,64 @@ async def test_snapshot_atomic_complete_and_tenant_scoped(pool,tmp_path):
     assert delta['checks']['browser']['third_party_refused']==1
     assert any(f.get('facts',{}).get('database_date') for f in delta['findings'])
     assert await store.changes(B,DOMAIN)=={'status':'pending'}
+
+
+@pytest.mark.asyncio
+async def test_new_tables_force_rls_in_existing_rollout(pool):
+    from chassis.tenant_db import TenantPool, tenant_scope
+    from uuid import uuid4
+    import asyncpg
+    await watched(pool)
+    async with pool.acquire() as conn:
+        await conn.execute('CREATE SCHEMA IF NOT EXISTS tank')
+        await conn.execute('CREATE TABLE IF NOT EXISTS tank.command_threads(id integer)')
+        await conn.execute('ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY')
+        await conn.execute((ROOT/'agents/radix/schema.sql').read_text())
+        await conn.execute("""DO $$ BEGIN CREATE ROLE radix_placeholder_r6 NOLOGIN;
+          EXCEPTION WHEN duplicate_object THEN NULL; END $$""")
+        await conn.execute('GRANT USAGE ON SCHEMA agent_radix TO radix_placeholder_r6')
+        await conn.execute('GRANT SELECT,INSERT,UPDATE ON ALL TABLES IN SCHEMA agent_radix TO radix_placeholder_r6')
+        ident = uuid4()
+        await conn.execute("""INSERT INTO agent_radix.page_hashes(tenant_id,scan_id,domain,url,sha256)
+          VALUES($1,$2,$3,$4,$5)""", A,ident,DOMAIN,TARGET,'a'*64)
+        await conn.execute("""INSERT INTO agent_radix.regulation_runs(tenant_id,domain,event_id,scan_id,facts)
+          VALUES($1,$2,$3,$4,'{}')""", A,DOMAIN,uuid4(),ident)
+        rows=await conn.fetch("""SELECT relrowsecurity,relforcerowsecurity FROM pg_class
+          WHERE oid IN ('agent_radix.page_hashes'::regclass,'agent_radix.regulation_runs'::regclass)""")
+        assert len(rows)==2 and all(r['relrowsecurity'] and r['relforcerowsecurity'] for r in rows)
+    async def setup(conn): await conn.execute('SET ROLE radix_placeholder_r6')
+    raw=await asyncpg.create_pool(__import__('os').environ['RADIX_I8_TEST_DATABASE_URL'],setup=setup,min_size=1,max_size=2)
+    scoped=TenantPool(raw,pool)
+    try:
+        with tenant_scope(B):
+            async with scoped.acquire() as conn:
+                assert await conn.fetch('SELECT tenant_id FROM agent_radix.page_hashes') == []
+                assert await conn.fetch('SELECT tenant_id FROM agent_radix.regulation_runs') == []
+                with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                    await conn.execute("""INSERT INTO agent_radix.page_hashes(tenant_id,scan_id,domain,url,sha256)
+                      VALUES($1,$2,$3,$4,$5)""", A,uuid4(),DOMAIN,TARGET,'a'*64)
+        with tenant_scope(A):
+            async with scoped.acquire() as conn:
+                assert len(await conn.fetch('SELECT tenant_id FROM agent_radix.page_hashes')) == 1
+                assert len(await conn.fetch('SELECT tenant_id FROM agent_radix.regulation_runs')) == 1
+    finally:
+        await raw.close()
+
+
+@pytest.mark.asyncio
+async def test_skipped_check_cannot_fix_or_replace_complete_baseline(pool):
+    store=await watched(pool)
+    finding=r6.measured('scan.tls','tls-expiring',TARGET,{'placeholder':True},severity='medium')
+    async def complete(findings,checks):
+        ident=await store.create(A,TARGET,passive_store.watch_artifact(DOMAIN),watched=True)
+        assert await store.running(A,ident)
+        await store.complete(A,ident,findings,measurements={'checks':checks})
+        return ident
+    first=await complete([finding],{'certificate':{'status':'complete'}})
+    await complete([r6.measured('scan.tls','skipped',TARGET,{'reason':'lease_budget'})],
+        {'certificate':{'status':'skipped','reason':'lease_budget'}})
+    assert (await store.changes(A,DOMAIN))['fixed']==[]
+    await complete([finding],{'certificate':{'status':'complete'}})
+    result=await store.changes(A,DOMAIN)
+    assert result['previous_scan_id']==str(first)
+    assert len(result['unchanged'])==1 and result['fixed']==result['new']==[]
