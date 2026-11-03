@@ -53,24 +53,14 @@ def kev_indicators(body: dict) -> list[dict]:
 
 def locked_packages(name: str, raw: bytes) -> list[dict]:
     """Only exact pins; do not infer an installed version from a range."""
-    rows = set()
-    if name.endswith("package-lock.json"):
-        lock = checked_json(raw)
-        if lock.get("lockfileVersion") not in {2, 3} or not isinstance(lock.get("packages"), dict):
-            raise ValueError("unsupported npm lockfile")
-        for path, entry in lock["packages"].items():
-            if "node_modules/" not in path or entry.get("link"):
-                continue
-            package = entry.get("name") or path.rsplit("node_modules/", 1)[1]
-            version = entry.get("version")
-            if package and isinstance(version, str) and re.fullmatch(r"\d+\.\d+\.\d+[^\s]*", version):
-                rows.add(("npm", package, version))
-    else:
-        for line in raw.decode().splitlines():
-            match = re.match(r"^([A-Za-z0-9_.-]+)(?:\[[^]]+\])?==([A-Za-z0-9_.+!-]+)(?:\s|;|$)", line.strip())
-            if match:
-                rows.add(("PyPI", match[1].lower().replace("_", "-"), match[2]))
-    return [{"ecosystem": eco, "name": package, "version": version} for eco, package, version in sorted(rows)]
+    from agents.radix.scanlib.dependencies import _packages_from_lock, _packages_from_requirements, normalize
+    if len(raw) > MAX_BYTES:
+        raise ValueError("feed limit")
+    ecosystem = "npm" if name.endswith("package-lock.json") else "PyPI"
+    parser = _packages_from_lock if ecosystem == "npm" else _packages_from_requirements
+    rows = {(normalize(ecosystem, package), version) for package, version, _line in parser(raw.decode())
+            if re.fullmatch(r"[0-9][A-Za-z0-9_.+!-]*", version)}
+    return [{"ecosystem": ecosystem, "name": package, "version": version} for package, version in sorted(rows)]
 
 
 def dependency_inventory(http: EvidenceClient) -> tuple[list[dict], str]:
@@ -80,7 +70,8 @@ def dependency_inventory(http: EvidenceClient) -> tuple[list[dict], str]:
     revision = tree.get("sha", "")
     if tree.get("truncated") or not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("incomplete repository tree")
-    paths = [r["path"] for r in tree["tree"] if r["type"] == "blob" and
+    paths = [r["path"] for r in tree["tree"] if r["type"] == "blob"
+             and not r["path"].startswith(("tests/", "docs/")) and "fixture" not in r["path"] and
              (r["path"].endswith("package-lock.json") or re.search(r"requirements[^/]*\.(?:txt|lock)$", r["path"]))]
     if not paths or len(paths) > 200:
         raise ValueError("lockfile inventory limit")
@@ -96,7 +87,7 @@ def dependency_inventory(http: EvidenceClient) -> tuple[list[dict], str]:
 
 
 def osv_indicators(http: EvidenceClient, packages: list[dict]) -> list[dict]:
-    result = {}
+    result, details = {}, {}
     for offset in range(0, len(packages), 50):
         chunk = packages[offset:offset + 50]
         queries = [{"package": {"ecosystem": p["ecosystem"], "name": p["name"]}, "version": p["version"]} for p in chunk]
@@ -119,7 +110,9 @@ def osv_indicators(http: EvidenceClient, packages: list[dict]) -> list[dict]:
                     key = (ident, chunk[index]["ecosystem"], chunk[index]["name"], chunk[index]["version"])
                     if key in result:
                         continue
-                    detail = checked_json(http.get("https://api.osv.dev/v1/vulns/" + ident))
+                    if ident not in details:
+                        details[ident] = checked_json(http.get("https://api.osv.dev/v1/vulns/" + ident))
+                    detail = details[ident]
                     if detail.get("id") != ident or detail.get("withdrawn"):
                         continue
                     severity = str((detail.get("database_specific") or {}).get("severity") or "").lower()
