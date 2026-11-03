@@ -328,6 +328,18 @@ test('session history is bounded, redacted and transient; continuation rounds sh
   assert(history.some(h => h.kind === 'assistant' && h.content === 'earlier answer'));
   assert(history.some(h => h.kind === 'tool' && h.content.includes('read_file') && h.content.includes('file.txt')));
   assert.equal(received[3].text, '[redacted]');
+  let next = 0; let lastHistory;
+  await run(['code', f.root], { store: { get: async () => token }, io: {
+    interactive: true, prompt: async () => next < 60 ? `turn${next++}` : '/exit', write() {},
+  }, transport: async (url, init) => {
+    if (url.endsWith('/threads')) return Response.json({ thread_id: 'bounded-thread' });
+    const body = JSON.parse(init.body); lastHistory = body.history;
+    assert(body.history.length <= 40);
+    assert(body.history.reduce((n, item) => n + Buffer.byteLength(item.content), 0) <= 200000);
+    return Response.json({ answer: 'a'.repeat(39000), requests: [] });
+  } });
+  assert(!lastHistory.some(item => item.content === 'turn0'));
+  assert(lastHistory.some(item => item.content === 'turn58'));
 });
 
 
