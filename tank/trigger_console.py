@@ -4,7 +4,9 @@ from __future__ import annotations
 import hashlib
 import json
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, NAMESPACE_URL, uuid5
+from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import command
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -54,11 +56,13 @@ async def propose(body: Proposal, actor: Annotated[command.Actor, Depends(comman
     if body.tool not in MUTATIONS or len(json.dumps(body.arguments)) > 25000:
         raise HTTPException(422)
     actor = await authority(actor, body.tool)
+    if body.tool == 'trigger.post.schedule' and 'local_date' in body.arguments:
+        body.arguments = local_schedule(body.arguments)
     action = command.validate_action(command.PlannedAction(tool=body.tool, arguments=body.arguments), actor)
     thread = await command.create_thread(command.NewThread(title='Trigger'), actor)
     async with command.editing(UUID(str(thread['thread_id'])), actor) as (conn, row, state):
         card = await command.propose_action(conn, row, state, action, actor)
-    return {'thread_id': thread['thread_id'], 'card': card}
+    return {'thread_id': thread['thread_id'], 'card': command.public_card(card)}
 
 
 @router.get('/crm/{resource}')
@@ -88,13 +92,16 @@ async def marketing(area: str, actor: Annotated[command.Actor, Depends(command.i
         result = await store.posts(tenant, Posts())
         if record_id:
             result['post'] = public(await store.post(tenant, record_id))
+            result['post']['events'] = [dict(r) for r in await pool.fetch('''SELECT state,revision,created_at FROM tank.trigger_post_events
+                WHERE tenant_id=$1 AND post_id=$2 ORDER BY created_at,id''', tenant, record_id)]
         result['voice'] = await bot().voice(tenant)
     elif area == 'reviews':
         reviews = await pool.fetch('''SELECT location,review_id,rating,text,updated_at FROM tank.trigger_gbp_reviews
             WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 100''', tenant)
         replies = await pool.fetch('''SELECT id,review_id,location,text,state,revision,report FROM tank.trigger_gbp_replies
             WHERE tenant_id=$1 ORDER BY id LIMIT 100''', tenant)
-        result = {'reviews': [dict(r) for r in reviews], 'replies': [dict(r) for r in replies]}
+        result = {'reviews': [{**dict(r), 'id': str(uuid5(NAMESPACE_URL, r['location']+'/'+r['review_id']))} for r in reviews],
+                  'replies': [{**dict(r), 'report': obj(r['report'])} for r in replies], 'voice': await bot().voice(tenant)}
     elif area == 'channels':
         google = await pool.fetchrow('''SELECT status,location,location_title,generation FROM tank.trigger_gbp_connections
             WHERE tenant_id=$1''', tenant)
@@ -103,6 +110,18 @@ async def marketing(area: str, actor: Annotated[command.Actor, Depends(command.i
             meta = await pool.fetchrow('''SELECT status,page_id,page_name,generation FROM tank.trigger_meta_connections
                 WHERE tenant_id=$1''', tenant)
         result = {'gbp': dict(google) if google else None, 'facebook': dict(meta) if meta else None}
+        if google and google['status'] == 'connected':
+            from trigger_google import GoogleFailure
+            try:
+                result['gbp']['choices'] = await store.google.locations(tenant)
+            except GoogleFailure:
+                result['gbp']['choices'] = []
+        if meta and meta['status'] == 'connected':
+            from trigger_meta import Meta, MetaFailure
+            try:
+                result['facebook']['choices'] = await Meta(pool).pages(tenant)
+            except MetaFailure:
+                result['facebook']['choices'] = []
     else:
         raise HTTPException(404)
     result['ledger_id'] = str(await code_receipt(tenant, 'trigger.posts'))
@@ -194,3 +213,22 @@ async def execute(op, args: Settings | ConversationAction, actor, operation_id):
         recipient = await pool.fetchval('SELECT handover_email FROM tank.trigger_bot_config WHERE tenant_id=$1', tenant)
         await bot().notify(tenant, args.conversation_id, recipient, args.text, address='console')
     return {'status': 'confirmed', 'conversation_id': str(args.conversation_id) if op != 'settings' else None}
+
+
+def local_schedule(arguments):
+    """Resolve only an unambiguous IANA wall time; never guess a DST offset."""
+    values = dict(arguments)
+    try:
+        date, time = values.pop('local_date'), values.pop('local_time')
+        wall = datetime.fromisoformat(date+'T'+time)
+        if wall.tzinfo is not None:
+            raise ValueError()
+        zone = ZoneInfo(values['time_zone'])
+        choices = {candidate.isoformat() for fold in (0, 1)
+                   if (candidate := wall.replace(tzinfo=zone, fold=fold)).astimezone(ZoneInfo('UTC')).astimezone(zone).replace(tzinfo=None) == wall}
+        if len(choices) != 1:
+            raise ValueError()
+        values['planned_at'] = choices.pop()
+    except (ValueError, KeyError, TypeError, ZoneInfoNotFoundError):
+        raise HTTPException(422) from None
+    return values
