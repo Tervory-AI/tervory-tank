@@ -2384,8 +2384,8 @@ CREATE TABLE IF NOT EXISTS tank.trigger_bot_embed_keys (
  PRIMARY KEY(tenant_id,key_hash)
 );
 CREATE TABLE IF NOT EXISTS tank.trigger_bot_limits (
- tenant_id uuid NOT NULL, window_id bigint NOT NULL, bucket text NOT NULL,
- client_hash bytea NOT NULL, hits integer NOT NULL, PRIMARY KEY(tenant_id,window_id,bucket,client_hash)
+ tenant_id uuid NOT NULL, window_id bigint NOT NULL, route text NOT NULL,
+ client_hash bytea NOT NULL, hits integer NOT NULL, PRIMARY KEY(tenant_id,window_id,route,client_hash)
 );
 CREATE TABLE IF NOT EXISTS tank.trigger_bot_windows (
  tenant_id uuid NOT NULL, window_id bigint NOT NULL, salt bytea NOT NULL,
