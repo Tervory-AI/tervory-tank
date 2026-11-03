@@ -96,6 +96,28 @@ def page_changes(current, previous):
             for url in sorted(current.keys() | previous.keys()) if current.get(url) != previous.get(url)]
 
 
+def tls_rows(text):
+    """Keep only complete JSON objects if a bounded testssl process was cut off."""
+    decoder, rows = json.JSONDecoder(), []
+    text = text.lstrip()
+    if not text.startswith('['):
+        raise ValueError('tls_report_incomplete')
+    offset = 1
+    while offset < len(text):
+        while offset < len(text) and text[offset] in ' \r\n\t,':
+            offset += 1
+        if offset < len(text) and text[offset] == ']':
+            return rows, True
+        try:
+            row, offset = decoder.raw_decode(text, offset)
+        except ValueError:
+            break
+        if not isinstance(row, dict) or 'id' not in row:
+            raise ValueError('tls_report_incomplete')
+        rows.append(row)
+    return rows, False
+
+
 def testssl_command(target, report):
     return ['/opt/testssl/testssl.sh', '--warnings', 'batch', '--color', '0',
             '--ip=proxy', '--nodns=none', '--proxy', 'radix-passive-proxy:8082',
@@ -218,11 +240,15 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
 
             async def tls_work():
                 report = directory / 'testssl.json'
-                rc, _, _ = await run(testssl_command(target, report), directory, min(90, budget.remaining()))
+                timed_out = False
+                try:
+                    rc, _, _ = await run(testssl_command(target, report), directory, min(90, budget.remaining()))
+                except TimeoutError:
+                    rc, timed_out = -1, True
                 if not report.exists():
                     raise ValueError('tls_report_unavailable')
-                rows = json.loads(report.read_text())
-                if not isinstance(rows, list) or not rows:
+                rows, complete = tls_rows(report.read_text())
+                if not rows:
                     raise ValueError('tls_report_incomplete')
                 for row in rows:
                     level = str(row.get('severity', 'unknown')).lower()
@@ -230,7 +256,9 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
                         continue
                     findings.append(measured('testssl.sh', str(row['id']), target,
                         {'finding': row.get('finding')}, severity=level, text=row.get('finding')))
-                if rc:
+                if timed_out:
+                    raise TimeoutError('lease_budget')
+                if rc or not complete:
                     raise ValueError('tls_run_incomplete')
                 return {'scope': ['protocols','certificate'], 'full_scan': 'skipped', 'reason': 'proxy_limits'}
             await step('tls', tls_work)
