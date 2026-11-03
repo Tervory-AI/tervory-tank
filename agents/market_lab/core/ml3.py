@@ -60,8 +60,12 @@ def build_router(*, key_ok, ledger_context, engine):
                 return {"feeds": feeds}
             if operation == "alerts":
                 from chassis.db import ensure_schedules
-                await ensure_schedules(ledger.conn, "agent_market_lab", [
-                    {"tenant_id": tenant, "cron": "* * * * *", "kind": "alerts", "input": {}}])
+                from core.jobs import load_engine
+                # Confirm also enables the existing tenant refresh/resolution jobs;
+                # an account using only chats must not depend on visiting a page.
+                schedules = [{**schedule, "tenant_id": tenant} for schedule in load_engine(engine).schedules()]
+                schedules.append({"tenant_id": tenant, "cron": "* * * * *", "kind": "alerts", "input": {}})
+                await ensure_schedules(ledger.conn, "agent_market_lab", schedules)
                 return {"status": "queued"}
         raise HTTPException(404, "Not found")
     return router
