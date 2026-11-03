@@ -1,5 +1,5 @@
 Rig cart gate 1 — offline verification, 3 November 2026
-Code under test: f08033f6 (later commits change documentation only).
+Code under test: f08033f6; see handoff for later evidence and schema EOF whitespace cleanup.
 No UI, model, live database, founder browser or deployment acceptance is claimed.
 67 test_rig*.py files; every subprocess exit 0; 766 passed, 19 skipped.
 Environment for every command below:
