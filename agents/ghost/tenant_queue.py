@@ -79,6 +79,8 @@ def load_mirrored_settings(
         return None
     if not isinstance(raw, dict):
         return None
+    if raw.get("fix_mode") == "Apply automatically when checks pass":
+        raw = {**raw, "fix_mode": "I approve each one"}
     try:
         return ClientAutumbraSettings.model_validate(
             {**raw, "tenant_id": raw.get("tenant_id") or fallback_tenant_id}
