@@ -41,7 +41,7 @@ class Publisher:
                 await conn.execute("UPDATE tank.trigger_posts SET state='failed',retryable=false WHERE tenant_id=$1 AND id=$2", tenant, row['id'])
                 return None
             return await conn.fetchrow("""UPDATE tank.trigger_posts SET delivery='inflight',attempt_id=$3,
-                attempts=attempts+1,lease_until=now()+interval '5 minutes',updated_at=now()
+                attempts=attempts+1,claimed_at=now(),lease_until=now()+interval '5 minutes',updated_at=now()
                 WHERE tenant_id=$1 AND id=$2 RETURNING *""", tenant, row['id'], uuid4())
 
     async def once(self, tenant):
