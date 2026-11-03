@@ -32,6 +32,8 @@ router = APIRouter(prefix="/v1/command", tags=["command"])
 logger = logging.getLogger(__name__)
 _background: set[asyncio.Task] = set()
 SQUADS = frozenset({"base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"})
+from trigger_marketing_contract import TOOLS as MARKETING_TOOLS
+
 TOOLS = {
     "trigger": ["trigger.revise", "trigger.voice.learn", "trigger.write.batch", "trigger.scorecard", "trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
     "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.to_crm"],
@@ -42,6 +44,8 @@ TOOLS = {
     "radix": ["radix.scan"],
     "zenas": ["zenas.ask", "zenas.matters", "zenas.review"],
 }
+TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
+
 FOUNDER_TOOLS = ["trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
                  "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
@@ -1229,6 +1233,10 @@ ADAPTERS = {
 }
 
 
+ADAPTERS.update({"trigger." + name: Adapter("POST", "/v1/trigger/marketing/" + name, schema, "trigger." + name)
+                 for name, schema in MARKETING_TOOLS.items()})
+
+
 class PlannedAction(Body):
     tool: str = Field(min_length=1, max_length=80)
     arguments: dict[str, Any] = Field(default_factory=dict)
@@ -1309,7 +1317,10 @@ async def propose_tool(thread_id: uuid.UUID, body: PlannedAction, actor: Actor =
 
 
 async def propose_action(conn: Any, row: dict, state: dict, action: PlannedAction, actor: Actor | None = None) -> dict:
-    if action.tool.startswith("trigger."):
+    if action.tool.removeprefix("trigger.") in MARKETING_TOOLS:
+        from trigger_marketing_api import prepare as marketing_prepare
+        action = await marketing_prepare(action, await authorized_actor(actor or Actor(row["tenant_id"], row["user_id"], False), conn), conn)
+    elif action.tool.startswith("trigger."):
         from trigger_commands import prepare
         action = await prepare(action, await authorized_actor(actor or Actor(row["tenant_id"], row["user_id"], False), conn), state)
     card_id = str(uuid.uuid4())
