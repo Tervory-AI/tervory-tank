@@ -1804,19 +1804,27 @@ def code_plan(content: str) -> CodeAnswer:
     candidate = content.strip()
     if candidate.startswith('```') and candidate.endswith('```'):
         candidate = candidate.split('\n', 1)[-1].rsplit('```', 1)[0].strip()
+    tool_name = '|'.join(re.escape(name) for name in CODE_TOOLS)
+    proposal_text = re.search(r'"requests"\s*:|"name"\s*:\s*"(?:' + tool_name + r')"', candidate)
     try:
         decoded = json.loads(candidate)
     except ValueError:
-        # Prose is a successful answer, never an executable tool proposal. A
-        # malformed tool envelope must still fail validation, not become a plan.
-        if re.search(r'"(?:requests|arguments|name)"\s*:', candidate):
+        # Ordinary prose/JSON examples can discuss package names and arguments.
+        # Only an actual tool envelope/name retains strict proposal validation.
+        if proposal_text:
             raise ValueError('Invalid local tool proposal') from None
         return CodeAnswer(answer=content[:40000])
-    if not isinstance(decoded, dict) or not ({'answer', 'requests'} & decoded.keys()):
-        if re.search(r'"(?:requests|arguments|name)"\s*:', candidate):
-            raise ValueError('Invalid local tool proposal')
+    def proposes_tools(value):
+        if isinstance(value, dict):
+            return ('requests' in value or isinstance(value.get('name'), str) and value['name'] in CODE_TOOLS
+                    or any(proposes_tools(item) for item in value.values()))
+        return isinstance(value, list) and any(proposes_tools(item) for item in value)
+    if proposes_tools(decoded):
+        plan = CodeAnswer.model_validate(decoded)
+    elif isinstance(decoded, dict) and set(decoded) == {'answer'}:
+        plan = CodeAnswer.model_validate(decoded)
+    else:
         return CodeAnswer(answer=content[:40000])
-    plan = CodeAnswer.model_validate(decoded)
     for request in plan.requests:
         schema = CODE_TOOLS.get(request.name)
         if schema is None:
