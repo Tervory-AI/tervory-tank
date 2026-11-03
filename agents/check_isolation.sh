@@ -239,9 +239,6 @@ for net in $nets; do
         if [ "$net" = "tervory-gw-tiger" ] && has_part "$short" tiger; then
           continue
         fi
-        if [ "$net" = "tervory-gw-base" ] && has_part "$short" tiger; then
-          continue
-        fi
         if [ "$net" = "tervory-gw-base" ] && has_part "$short" searxng; then
           continue
         fi
