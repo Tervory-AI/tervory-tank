@@ -79,7 +79,7 @@ async def execute(store, body: Scan, *, scanner=collect, http=None, watched=Fals
                     await store.complete(body.tenant_id, ident, findings)
                 else:
                     await store.complete(body.tenant_id, ident, findings, measurements=measurements)
-                if queued:
+                if queued or watched:
                     # Other events may already have later pending rows. A queued
                     # run reports its own completion, not the latest origin gate.
                     return {'scan_id': str(ident), 'status': 'complete', 'findings': findings}
