@@ -158,7 +158,7 @@ export class CodeFolder {
       await this.path(name);
       return { bytes: raw, text };
     } catch (error) {
-      if (error.code === 'ENOENT') return null;
+      if (error.code === 'ENOENT' && !handle) return null;
       throw refused();
     } finally { await handle?.close(); }
   }
