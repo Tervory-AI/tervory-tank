@@ -83,7 +83,9 @@ async def code_plan(actor, messages: list[dict], task_id=None):
         source = original.get("content", "").strip()
     parts = source.split(maxsplit=1)
     if not parts or parts[0] not in allowed:
-        return None
+        # Once an exact command selected this code path, absent or mismatched
+        # authoritative turn data must not fall through to the model planner.
+        raise HTTPException(422, "The action arguments are invalid")
     try:
         arguments = json.loads(parts[1]) if len(parts) == 2 else {}
         action = command.validate_action(command.PlannedAction(tool=parts[0], arguments=arguments), await command.authorized_actor(actor))
