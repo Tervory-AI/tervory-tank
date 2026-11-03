@@ -170,7 +170,7 @@ class WhatsApp:
             return
         async with self.pool.acquire() as conn, conn.transaction():
             await conn.execute('''INSERT INTO tank.trigger_bot_conversations
-                (tenant_id,id,visitor_id,channel,whatsapp_sealed) VALUES($1,$2,$3,'whatsapp',$4)
+                (tenant_id,id,visitor_id,transport,whatsapp_sealed) VALUES($1,$2,$3,'whatsapp',$4)
                 ON CONFLICT DO NOTHING''', tenant, conversation, visitor, seal({'sender': sender}, context(tenant, conversation)))
             claimed = await conn.fetchval('''INSERT INTO tank.trigger_whatsapp_events
                 (tenant_id,event_hash,conversation_id) VALUES($1,$2,$3)
@@ -200,7 +200,7 @@ class WhatsApp:
             await self.state(tenant, event, 'handed_over')
             return
         sealed = await self.pool.fetchval('''SELECT whatsapp_sealed FROM tank.trigger_bot_conversations
-            WHERE tenant_id=$1 AND id=$2 AND channel='whatsapp' ''', tenant, conversation)
+            WHERE tenant_id=$1 AND id=$2 AND transport='whatsapp' ''', tenant, conversation)
         if sealed is None:
             return  # Retention/deletion wins; the committed attempt remains spent.
         try:
