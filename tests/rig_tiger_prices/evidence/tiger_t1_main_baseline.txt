@@ -1,0 +1,157 @@
+Clean origin/main checkout: /workspace/codex-tiger-t1-main-baseline
+Commit: cf95a07e (origin/main, fetched 2026-11-03)
+Tracked and untracked working-tree changes: none
+Exit status: 1
+
+Command:
+/workspace/codex-tiger-t1/.venv/bin/python -m pytest tests/test_tiger_alert_email.py::test_email_copy_matches_actual_workspace_formatter tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals tests/test_tiger_works.py::test_workspace_actions_and_safe_unread_display tests/test_tiger_works.py::test_real_chromium_markup_stores_history_and_one_price_alert -q --tb=short --timeout=90 --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1
+
+FFFFFF                                                                   [100%]
+=================================== FAILURES ===================================
+______________ test_email_copy_matches_actual_workspace_formatter ______________
+tests/test_tiger_alert_email.py:399: in test_email_copy_matches_actual_workspace_formatter
+    result = subprocess.run(
+/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/subprocess.py:571: in run
+    raise CalledProcessError(retcode, process.args,
+E   subprocess.CalledProcessError: Command '['node', 'tests/tiger_alert_email/page_copy.cjs']' returned non-zero exit status 1.
+______________ test_real_browser_document_and_asset_refusals[200] ______________
+tests/test_tiger_public_policy.py:282: in test_real_browser_document_and_asset_refusals
+    result = await browser.visit(browser.Page(url=url, price_reader=True, settle_ms=500),
+agents/_brain/browser.py:360: in visit
+    result = await _visit(body, tenant, task, origin, run, directory)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agents/_brain/browser.py:560: in _visit
+    await cleanup_visit(context, browser, manager, storage,
+agents/_brain/browser.py:82: in cleanup_visit
+    await step(lambda: context.storage_state(path=str(storage)))
+agents/_brain/browser.py:71: in step
+    await action()
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/async_api/_generated.py:3630: in storage_state
+    await self._impl_obj.storage_state(
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/_impl/_browser_context.py:584: in storage_state
+    result = await self._channel.send_return_as_dict(
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:105: in send_return_as_dict
+    return await self._connection.wrap_api_call(
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:636: in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E   playwright._impl._errors.TargetClosedError: BrowserContext.storage_state: Target page, context or browser has been closed
+______________ test_real_browser_document_and_asset_refusals[403] ______________
+tests/test_tiger_public_policy.py:282: in test_real_browser_document_and_asset_refusals
+    result = await browser.visit(browser.Page(url=url, price_reader=True, settle_ms=500),
+agents/_brain/browser.py:360: in visit
+    result = await _visit(body, tenant, task, origin, run, directory)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agents/_brain/browser.py:560: in _visit
+    await cleanup_visit(context, browser, manager, storage,
+agents/_brain/browser.py:82: in cleanup_visit
+    await step(lambda: context.storage_state(path=str(storage)))
+agents/_brain/browser.py:71: in step
+    await action()
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/async_api/_generated.py:3630: in storage_state
+    await self._impl_obj.storage_state(
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/_impl/_browser_context.py:584: in storage_state
+    result = await self._channel.send_return_as_dict(
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:105: in send_return_as_dict
+    return await self._connection.wrap_api_call(
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:636: in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E   playwright._impl._errors.TargetClosedError: BrowserContext.storage_state: Target page, context or browser has been closed
+______________ test_real_browser_document_and_asset_refusals[429] ______________
+tests/test_tiger_public_policy.py:282: in test_real_browser_document_and_asset_refusals
+    result = await browser.visit(browser.Page(url=url, price_reader=True, settle_ms=500),
+agents/_brain/browser.py:360: in visit
+    result = await _visit(body, tenant, task, origin, run, directory)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agents/_brain/browser.py:560: in _visit
+    await cleanup_visit(context, browser, manager, storage,
+agents/_brain/browser.py:82: in cleanup_visit
+    await step(lambda: context.storage_state(path=str(storage)))
+agents/_brain/browser.py:71: in step
+    await action()
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/async_api/_generated.py:3630: in storage_state
+    await self._impl_obj.storage_state(
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/_impl/_browser_context.py:584: in storage_state
+    result = await self._channel.send_return_as_dict(
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:105: in send_return_as_dict
+    return await self._connection.wrap_api_call(
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:636: in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E   playwright._impl._errors.TargetClosedError: BrowserContext.storage_state: Target page, context or browser has been closed
+________________ test_workspace_actions_and_safe_unread_display ________________
+tests/test_tiger_works.py:222: in test_workspace_actions_and_safe_unread_display
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: TAP version 13
+E     # node:internal/modules/cjs/loader:1433
+E     #   throw err;
+E     #   ^
+E     # Error: Cannot find module '/workspace/codex-tiger-t1-main-baseline/workspace/node_modules/typescript'
+E     # Require stack:
+E     # - /workspace/codex-tiger-t1-main-baseline/tests/tiger_works/workspace.test.cjs
+E     #     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+E     #     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)
+E     #     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)
+E     #     at Function._load (node:internal/modules/cjs/loader:1216:25)
+E     #     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+E     #     at Module.require (node:internal/modules/cjs/loader:1527:12)
+E     #     at require (node:internal/modules/helpers:147:16)
+E     #     at Object.<anonymous> (/workspace/codex-tiger-t1-main-baseline/tests/tiger_works/workspace.test.cjs:6:12)
+E     #     at Module._compile (node:internal/modules/cjs/loader:1781:14)
+E     #     at Object..js (node:internal/modules/cjs/loader:1913:10) {
+E     #   code: 'MODULE_NOT_FOUND',
+E     #   requireStack: [
+E     #     '/workspace/codex-tiger-t1-main-baseline/tests/tiger_works/workspace.test.cjs'
+E     #   ]
+E     # }
+E     # Node.js v22.23.4
+E     # Subtest: tests/tiger_works/workspace.test.cjs
+E     not ok 1 - tests/tiger_works/workspace.test.cjs
+E       ---
+E       duration_ms: 67.976525
+E       type: 'test'
+E       location: '/workspace/codex-tiger-t1-main-baseline/tests/tiger_works/workspace.test.cjs:1:1'
+E       failureType: 'testCodeFailure'
+E       exitCode: 1
+E       signal: ~
+E       error: 'test failed'
+E       code: 'ERR_TEST_FAILURE'
+E       ...
+E     1..1
+E     # tests 1
+E     # suites 0
+E     # pass 0
+E     # fail 1
+E     # cancelled 0
+E     # skipped 0
+E     # todo 0
+E     # duration_ms 78.329788
+E
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['node', '--test', 'tests/tiger_works/workspace.test.cjs'], returncode=1, stdout="TAP version 13...# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 78.329788\n", stderr='').returncode
+_________ test_real_chromium_markup_stores_history_and_one_price_alert _________
+tests/test_tiger_works.py:237: in test_real_chromium_markup_stores_history_and_one_price_alert
+    result = await browser.public_result(page, {"ok": True, "url": URL}, html, tmp_path,
+agents/_brain/browser.py:575: in public_result
+    source = await rendered_source(page)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agents/_brain/browser.py:187: in rendered_source
+    return await page.evaluate(r"""() => {
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/async_api/_generated.py:16684: in evaluate
+    await self._impl_obj.evaluate(
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/_impl/_page.py:476: in evaluate
+    return await self._main_frame.evaluate(expression, arg)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/_impl/_frame.py:346: in evaluate
+    await self._channel.send(
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:78: in send
+    return await self._connection.wrap_api_call(
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:636: in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E   playwright._impl._errors.TargetClosedError: Page.evaluate: Target page, context or browser has been closed
+=========================== short test summary info ============================
+FAILED tests/test_tiger_alert_email.py::test_email_copy_matches_actual_workspace_formatter
+FAILED tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[200]
+FAILED tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[403]
+FAILED tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[429]
+FAILED tests/test_tiger_works.py::test_workspace_actions_and_safe_unread_display
+FAILED tests/test_tiger_works.py::test_real_chromium_markup_stores_history_and_one_price_alert
+6 failed in 14.21s
