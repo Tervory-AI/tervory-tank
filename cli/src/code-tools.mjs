@@ -1,6 +1,6 @@
 import { constants } from 'node:fs';
 import { lstat, realpath, open, readdir, readFile, writeFile, rename, unlink, mkdtemp, rm } from 'node:fs/promises';
-import { resolve, relative, isAbsolute, sep, dirname } from 'node:path';
+import { resolve, relative, isAbsolute, sep, dirname, basename } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { Worker } from 'node:worker_threads';
@@ -25,12 +25,12 @@ const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const refused = () => new Error('Code tool refused.');
 const inside = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel); };
 export function secretPath(path) {
-  return path.split(/[\\/]/).some(part => part === '.git' || /^\.env/i.test(part) || /^id_/i.test(part) || /\.(pem|key)$/i.test(part));
+  return path.split(/[\\/]/).some(part => part.toLowerCase() === '.git' || /^\.env/i.test(part) || /^id_/i.test(part) || /\.(pem|key)$/i.test(part));
 }
 
 // The process output is collected, not streamed: redaction must see complete lines
 // even when a secret arrives split across stdout/stderr chunks.
-export async function processOutput(command, args, { cwd, shell = false, timeoutMs = LIMITS.commandMs, signal, input, outputBytes = LIMITS.outputBytes, delimiter = '\n' } = {}) {
+export async function processOutput(command, args, { cwd, gitDirectory, gitWorkTree, timeoutMs = LIMITS.commandMs, signal, input, outputBytes = LIMITS.outputBytes, delimiter = '\n' } = {}) {
   return new Promise((resolveResult, reject) => {
     let child; let timer; let killed = false; let size = 0; let total = 0; const chunks = [];
     const stop = () => {
@@ -39,8 +39,9 @@ export async function processOutput(command, args, { cwd, shell = false, timeout
     };
     if (signal?.aborted) return reject(refused());
     try {
-      child = spawn(command, args, { cwd, shell, detached: process.platform !== 'win32', windowsHide: true,
-        env: { PATH: process.env.PATH, LANG: 'C.UTF-8', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' },
+      child = spawn(command, args, { cwd, shell: false, detached: process.platform !== 'win32', windowsHide: true,
+        env: { PATH: process.env.PATH, LANG: 'C.UTF-8', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_LITERAL_PATHSPECS: '1',
+          ...(gitDirectory ? { GIT_DIR: gitDirectory, GIT_WORK_TREE: gitWorkTree } : {}) },
         stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
     } catch { return reject(refused()); }
     if (input !== undefined) { child.stdin.on('error', () => {}); child.stdin.end(input); }
@@ -65,25 +66,30 @@ export class CodeFolder {
     const root = await realpath(resolve(folder));
     if (!(await lstat(root)).isDirectory()) throw refused();
     const tool = new CodeFolder(root);
-    const check = await tool.git(['rev-parse', '--show-toplevel']);
+    const check = await tool.git(['rev-parse', '--absolute-git-dir']);
     if (check.code !== 0) throw new Error('Code mode requires a git repository.');
+    const tree = await tool.git(['rev-parse', '--show-toplevel']);
+    if (tree.code !== 0) throw new Error('Code mode requires a git repository.');
+    tool.gitDirectory = await realpath(check.output.trim());
+    tool.gitWorkTree = await realpath(tree.output.trim());
     return tool;
   }
   constructor(root) { this.root = root; }
   async git(args, input) {
-    const options = ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-c', 'core.attributesFile=/dev/null', '--no-pager'];
+    const environment = { cwd: this.root, gitDirectory: this.gitDirectory, gitWorkTree: this.gitWorkTree ?? this.root };
+    const options = ['--literal-pathspecs', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-c', 'core.attributesFile=/dev/null', '--no-pager'];
     if (['status', 'diff'].includes(args[0])) {
       // Git can invoke clean/process filters even with --no-ext-diff and
       // --no-textconv. Disable driver execution: read tools do not approve a
       // repository-configured shell command. Ask for names only, never values.
-      const drivers = await processOutput('git', [...options, 'config', '--name-only', '--get-regexp', '^filter\\..*\\.(clean|process|required)$'], { cwd: this.root });
+      const drivers = await processOutput('git', [...options, 'config', '--name-only', '--get-regexp', '^filter\\..*\\.(clean|process|required)$'], environment);
       if (drivers.truncated || ![0, 1].includes(drivers.code)) throw refused();
       for (const key of drivers.output.trim().split('\n').filter(Boolean)) {
         if (!/^filter\.[A-Za-z0-9_.-]+\.(clean|process|required)$/.test(key)) throw refused();
         options.push('-c', key + (key.endsWith('.required') ? '=false' : '='));
       }
     }
-    return processOutput('git', [...options, ...args], { cwd: this.root, input, outputBytes: ['ls-files', 'check-ignore'].includes(args[0]) ? 8_388_608 : LIMITS.outputBytes, delimiter: args.includes('-z') ? '\0' : '\n' });
+    return processOutput('git', [...options, ...args], { ...environment, input, outputBytes: ['ls-files', 'check-ignore'].includes(args[0]) ? 8_388_608 : LIMITS.outputBytes, delimiter: args.includes('-z') ? '\0' : '\n' });
   }
   async path(name, { missing = false } = {}) {
     if (typeof name !== 'string' || !name || /[\x00-\x1f\x7f]/.test(name) || name.includes('\\')) throw refused();
@@ -91,7 +97,7 @@ export class CodeFolder {
     if (!inside(this.root, path) || secretPath(relative(this.root, path))) throw refused();
     // Follow every ancestor, even when the final file does not exist yet.
     const parent = await realpath(dirname(path));
-    if (!inside(this.root, parent)) throw refused();
+    if (!inside(this.root, parent) || secretPath(relative(this.root, resolve(parent, basename(path))))) throw refused();
     try {
       const canonical = await realpath(path);
       if (!inside(this.root, canonical) || secretPath(relative(this.root, canonical))) throw refused();
@@ -127,7 +133,10 @@ export class CodeFolder {
       if (!stat.isFile() || stat.size > LIMITS.fileBytes) throw refused();
       // On Linux verify the opened descriptor before reading, closing ancestor
       // symlink-swap races; other platforms recheck the canonical path below.
-      if (process.platform === 'linux' && !inside(this.root, await realpath(`/proc/self/fd/${handle.fd}`))) throw refused();
+      if (process.platform === 'linux') {
+        const canonical = await realpath(`/proc/self/fd/${handle.fd}`);
+        if (!inside(this.root, canonical) || secretPath(relative(this.root, canonical))) throw refused();
+      }
       const bytes = Buffer.alloc(LIMITS.fileBytes + 1); const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
       if (bytesRead > LIMITS.fileBytes) throw refused();
       const raw = bytes.subarray(0, bytesRead); const text = new TextDecoder('utf-8', { fatal: true }).decode(raw);
@@ -184,6 +193,8 @@ export class CodeFolder {
     const expected = this.#reads.get(path);
     const check = async () => {
       await this.path(name, { missing: true });
+      const canonical = resolve(await realpath(dirname(path)), basename(path));
+      if (!inside(this.root, canonical) || secretPath(relative(this.root, canonical))) throw refused();
       const value = await this.raw(name);
       if (value === null && expected === null) return '';
       if (value === null || expected === null || digest(value.bytes) !== expected || redactSecrets(value.text) !== value.text) throw refused();
@@ -202,7 +213,51 @@ export class CodeFolder {
     this.#reads.set(path, digest(Buffer.from(after)));
     return { applied: true };
   }
-  async command(command, io, timeoutMs) {
+  async prepareCommand(command) {
+    const match = /^(?:'([^']+)'|"([^"]+)"|([^\s;|&<>]+))(?=\s|$)/.exec(command);
+    if (!match) return { command, mounts: [] };
+    const executable = match[1] ?? match[2] ?? match[3];
+    let candidate;
+    if (isAbsolute(executable)) candidate = executable;
+    else if (!executable.includes('/')) {
+      for (const directory of (process.env.PATH ?? '').split(':').filter(isAbsolute)) {
+        try {
+          const path = resolve(directory, executable);
+          if ((await lstat(path)).isFile() || (await lstat(path)).isSymbolicLink()) { candidate = path; break; }
+        } catch { /* not on this PATH entry */ }
+      }
+    }
+    if (!candidate || inside('/usr', candidate) || inside(this.root, candidate)) return { command, mounts: [] };
+    // Only recognized language runtimes may expose an external installation.
+    // Their bin + library directory is the runtime's own root, never its parent
+    // HOME, .config, .ssh or a keychain. Both a venv and its base interpreter may
+    // be needed; no other host directories or environment are inherited.
+    if (!/^(node|python(?:3(?:\.\d+)?)?|pytest)$/.test(basename(candidate))) throw refused();
+    const resolved = await realpath(candidate);
+    const roots = [...new Set([candidate, resolved].map(path => basename(dirname(path)) === 'bin' ? dirname(dirname(path)) : dirname(path)))];
+    const mounts = [];
+    for (const root of roots) {
+      if (inside('/usr', root) || inside(this.root, root)) continue;
+      if (root === '/' || root === process.env.HOME || inside(root, process.env.HOME ?? '/') || secretPath(root)
+          || root.split(sep).some(part => ['.config', '.ssh', '.local/share/keyrings', 'keychains'].includes(part.toLowerCase()))) throw refused();
+      // Refuse an installation containing credential stores instead of mounting
+      // and masking it: only the runner's own directory can be read-only bound.
+      const scan = async directory => {
+        for (const entry of await readdir(directory, { withFileTypes: true })) {
+          if (secretPath(entry.name) || ['.config', '.ssh', 'keychains', 'keyrings'].includes(entry.name.toLowerCase())) {
+            const path = resolve(directory, entry.name);
+            mounts.push(...(entry.isDirectory() ? ['--tmpfs', path] : ['--ro-bind', '/dev/null', path]));
+          } else
+          if (entry.isDirectory()) await scan(resolve(directory, entry.name));
+        }
+      };
+      mounts.push('--ro-bind', root, root);
+      await scan(root);
+    }
+    const quoted = "'" + candidate.replaceAll("'", "'\"'\"'") + "'";
+    return { command: quoted + command.slice(match[0].length), mounts };
+  }
+  async command(command, io, timeoutMs, mounts = []) {
     if (process.platform !== 'linux') throw refused();
     // A confirmed command must not bypass the folder/secret-file boundary by
     // reading an absolute host path, a symlink, .env or the user's environment.
@@ -220,7 +275,7 @@ export class CodeFolder {
     return processOutput('bwrap', ['--unshare-all', '--die-with-parent', '--new-session',
       '--ro-bind', '/usr', '/usr', '--symlink', 'usr/bin', '/bin', '--symlink', 'usr/lib', '/lib',
       '--symlink', 'usr/lib64', '/lib64', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
-      '--bind', this.root, '/work', ...masks, '--chdir', '/work', '/bin/sh', '-c', command],
+      ...mounts, '--bind', this.root, '/work', ...masks, '--chdir', '/work', '/bin/sh', '-c', command],
       { cwd: this.root, timeoutMs, signal: io.signal });
   }
   async tool(request, io, { timeoutMs = LIMITS.commandMs } = {}) {
@@ -229,13 +284,14 @@ export class CodeFolder {
       case 'list_files': return this.files();
       case 'read_file': return this.read(args.path);
       case 'search': return this.search(args.pattern, args.regex === true);
-      case 'git': return args.action === 'status' ? this.git(['status', '--short', '--', '.']) : args.action === 'diff' ? this.diff() : Promise.reject(refused());
+      case 'git': return args.action === 'status' ? this.git(['status', '--short', '--ignore-submodules=all', '--', '.']) : args.action === 'diff' ? this.diff() : Promise.reject(refused());
       case 'propose_edit': return this.edit(args.path, args.diff, io);
       case 'run_command': {
         if (typeof args.command !== 'string' || !args.command || args.command.length > 8000 || /[\x00-\x1f\x7f]/.test(args.command) || redactSecrets(args.command) !== args.command) throw refused();
-        io.write(args.command + '\n');
+        const prepared = await this.prepareCommand(args.command);
+        io.write(prepared.command + '\n');
         if (io.interactive !== true || (await io.prompt('Run [y/N] '))?.trim().toLowerCase() !== 'y') return { ran: false };
-        const result = await this.command(args.command, io, timeoutMs);
+        const result = await this.command(prepared.command, io, timeoutMs, prepared.mounts);
         io.write(result.output);
         return { ran: true, ...result };
       }
@@ -253,8 +309,8 @@ export async function applyDiff(before, patch, name, creating = false, root = pr
   lines[0] = `--- ${creating ? '/dev/null' : 'a/target'}`; lines[1] = '+++ b/target';
   const input = lines.join('\n');
   const scratch = await mkdtemp(resolve(root, '.tervory-edit-'));
-  const git = args => processOutput('git', ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null',
-    '-c', 'core.attributesFile=/dev/null', ...args], { cwd: scratch, input });
+  const git = args => processOutput('git', ['--literal-pathspecs', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null',
+    '-c', 'core.attributesFile=/dev/null', ...args], { cwd: scratch, gitDirectory: resolve(scratch, '.git'), gitWorkTree: scratch, input });
   try {
     if ((await git(['init', '--quiet'])).code !== 0) throw refused();
     if (!creating) await writeFile(resolve(scratch, 'target'), before, { flag: 'wx', mode: 0o600 });
