@@ -27,7 +27,7 @@
 # Prints one line per room: "<room> (<uuid>): sealed" or
 # "<room> (<uuid>): LEAK: <container> on <network>" (several leaks are joined by "; ").
 # A room with no container on an internal network prints "no sealed containers".
-# The rooms that must be sealed (agent-base, agent-radix, agent-tiger, agent-rig) can never be skipped:
+# The four existing sealed rooms plus Autumbra Watch and Enforce can never be skipped:
 # if one is missing it prints "<room>: NOT FOUND", and if one has no container on
 # an internal network it prints "<room> (<uuid>): NOT SEALED: no container on an
 # internal network". Both fail.
@@ -38,9 +38,8 @@ set -uo pipefail
 DOCKER="${DOCKER:-docker}"
 
 # Rooms whose compose files declare sealed services; each must be found and sealed.
-EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig)
-# Autumbra rooms: checked when present (pin into EXPECTED_SEALED after first clean dogfood).
-AUTUMBRA_SEALED_PREFIXES=(agent-ghost autumbra-watch autumbra-enforce)
+EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig agent-ghost autumbra-enforce)
+# Watch is confined to its declared corridor; each Enforce has exactly one internal network.
 
 # service name -> the one non-internal network it may also join
 declare -A CORRIDOR=(
@@ -108,6 +107,9 @@ for id in $ids; do
   if [[ "$service" == agent-* && -z "${APP_ROOM[$uuid]}" ]]; then
     APP_ROOM[$uuid]="$service"
   fi
+  if [[ "$service" == "enforce" ]]; then
+    APP_ROOM[$uuid]="autumbra-enforce"
+  fi
   on_internal=0
   outward=()
   for net in $networks; do
@@ -123,6 +125,7 @@ for id in $ids; do
   # corridor/checkers, and Radix passive-egress gets only gw/proxy-link/egress.
   expected_nets=""
   case "$service" in
+    agent-ghost|ghost-browser) expected_nets="tervory-gw-ghost" ;;
     agent-trigger) expected_nets="tervory-gw-trigger ${project}_checkers" ;;
     trigger-languagetool) expected_nets="${project}_checkers" ;;
     passive-egress) expected_nets="tervory-gw-radix ${project}_proxy-link ${project}_egress" ;;
@@ -143,6 +146,8 @@ for id in $ids; do
     for net in $expected_nets; do
       if [[ " $networks " != *" $net "* ]]; then
         APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }NOT SEALED: $name missing $net"
+      elif [[ "$service" == "agent-ghost" || "$service" == "ghost-browser" ]]; then
+        continue
       elif [[ "$service" == "agent-trigger" && "$net" == "tervory-gw-trigger" ]] ||
            [[ "$service" == "passive-egress" && "$net" == "${project}_egress" ]]; then
         continue
@@ -154,10 +159,16 @@ for id in $ids; do
       fi
     done
     # The exact-network check above already accounts for each attachment.
-    if (( on_internal )); then
+    if (( on_internal )) || [[ "$service" == "agent-ghost" || "$service" == "ghost-browser" ]]; then
       APP_SEALED[$uuid]=$(( APP_SEALED[$uuid] + 1 ))
     fi
     continue
+  fi
+  if [[ "$service" == "enforce" ]]; then
+    read -ra attached <<<"$networks"
+    if [[ "${#attached[@]}" -ne 1 ]]; then
+      APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }LEAK: $name must have exactly one internal network"
+    fi
   fi
   (( on_internal )) || continue
   APP_SEALED[$uuid]=$(( APP_SEALED[$uuid] + 1 ))
@@ -183,6 +194,11 @@ for uuid in "${APPS[@]}"; do
     room="$resource"
   else
     room="${APP_ROOM[$uuid]}"
+  fi
+  if [[ "$resource" == autumbra-enforce* || "$room" == autumbra-enforce* ]]; then
+    room="autumbra-enforce"
+  elif [[ "$resource" == autumbra-watch* || "$room" == agent-ghost* ]]; then
+    room="agent-ghost"
   fi
   if [[ -z "$room" ]]; then
     echo "${resource:-$uuid} ($uuid): not a room, skipped"
@@ -228,40 +244,5 @@ for room in "${EXPECTED_SEALED[@]}"; do
     status=1
   fi
 done
-
-# --- Autumbra rooms (Watch + per-client Enforce): fail if present and leaky; missing is OK until dogfood. ---
-autumbra_checked=0
-autumbra_leaks=0
-for uuid in "${APPS[@]+"${APPS[@]}"}"; do
-  [[ -z "${uuid:-}" ]] && continue
-  room="${APP_RESOURCE[$uuid]:-}"
-  if [[ -z "$room" ]]; then
-    room="${APP_ROOM[$uuid]:-}"
-  fi
-  [[ -z "$room" ]] && continue
-  for prefix in "${AUTUMBRA_SEALED_PREFIXES[@]}"; do
-    if [[ "$room" == "$prefix" || "$room" == "$prefix"-* ]]; then
-      autumbra_checked=$((autumbra_checked + 1))
-      if [[ -n "${APP_LEAKS[$uuid]:-}" ]]; then
-        echo "autumbra ($room / $uuid): LEAK: ${APP_LEAKS[$uuid]}"
-        autumbra_leaks=$((autumbra_leaks + 1))
-      elif [[ "${APP_SEALED[$uuid]:-0}" -gt 0 ]]; then
-        echo "autumbra ($room / $uuid): sealed"
-      else
-        echo "autumbra ($room / $uuid): NOT SEALED: no container on an internal network"
-        autumbra_leaks=$((autumbra_leaks + 1))
-      fi
-      break
-    fi
-  done
-done
-if [[ "$autumbra_checked" -eq 0 ]]; then
-  echo "autumbra: no Watch/Enforce rooms running (ok until dogfood; pin EXPECTED_SEALED after first clean run)"
-elif [[ "$autumbra_leaks" -gt 0 ]]; then
-  echo "autumbra: $autumbra_leaks leak(s) in $autumbra_checked room(s)" >&2
-  status=1
-else
-  echo "autumbra: $autumbra_checked room(s) sealed"
-fi
 
 exit "$status"
