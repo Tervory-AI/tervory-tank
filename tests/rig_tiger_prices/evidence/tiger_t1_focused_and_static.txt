@@ -1,7 +1,9 @@
-Focused command (exit 0):
-.venv/bin/python -m pytest tests/test_tiger_competitors.py -q --tb=short --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1
+Final focused T1 validation after position arithmetic correction (025be758; test committed as 6aedcee8).
 
-.....................................                                    [100%]
+.venv/bin/python -m pytest tests/test_tiger_competitors.py -q --tb=short --timeout=90 --disable-socket --allow-unix-socket
+Exit status: 0
+
+..................................................................       [100%]
 =============================== warnings summary ===============================
 .venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
   /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
@@ -16,11 +18,13 @@ Focused command (exit 0):
     warnings.warn(
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-37 passed, 3 warnings in 37.46s
+66 passed, 3 warnings in 225.75s (0:03:45)
 
-Static commands (exit 0):
+Static commands, all exit 0:
+.venv/bin/ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+.venv/bin/ruff check agents/tiger/app.py agents/tiger/rig_watch.py agents/_brain/browser.py --select E9,F
 git diff --check
 git diff origin/main --check
-.venv/bin/ruff check --select F821,F822,F823 tank/access.py tank/command.py tank/trigger_routes.py agents/rig/rigbox/retailer_api.py agents/rig/rigbox/retailer_store.py agents/tiger/app.py agents/tiger/rig_watch.py agents/_brain/browser.py tests/test_tiger_competitors.py tests/rig_tiger_prices/run_t1_offline.py
 
+All checks passed!
 All checks passed!
