@@ -948,3 +948,112 @@ async def test_room_startup_installs_matching_schema_before_serving(corridor,mon
     monkeypatch.setattr(corridor.agent.app.state,'pool',SimpleNamespace(raw=corridor.pool))
     async with corridor.agent.app.router.lifespan_context(corridor.agent.app):
         assert await corridor.pool.fetchval("SELECT to_regclass('agent_tiger.match_runs') IS NOT NULL")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('enforced',[False,True])
+async def test_room_schema_concurrently_repeats_without_catalog_writes(database,postgres,enforced):
+    from chassis.roles import _ownership
+    from urllib.parse import urlsplit,urlunsplit
+    async with database.acquire() as conn:
+        await conn.execute('CREATE ROLE agent_tiger NOLOGIN NOSUPERUSER NOBYPASSRLS')
+        try:
+            await conn.execute('GRANT USAGE,CREATE ON SCHEMA agent_tiger TO agent_tiger')
+            await conn.execute(_ownership('agent_tiger'))
+            if enforced:
+                await conn.execute('ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY')
+            async with conn.transaction():
+                await conn.execute('SET LOCAL ROLE agent_tiger')
+                await ensure_tables(conn,'agent_tiger')
+            tables = ['agent_tiger.'+name for name in ('matches','match_runs','match_sightings','discovery_limits')]
+            before = await conn.fetch('SELECT oid,xmin::text FROM pg_class WHERE oid=ANY($1::regclass[]) ORDER BY oid',tables)
+            policies = await conn.fetch("SELECT oid,xmin::text FROM pg_policy WHERE polrelid=ANY($1::regclass[]) ORDER BY oid",tables)
+            name = await conn.fetchval('SELECT current_database()')
+            uri = urlunsplit(urlsplit(postgres.get_uri())._replace(path='/'+name))
+            async def repeat():
+                session = await asyncpg.connect(uri)
+                try:
+                    await session.execute('SET ROLE agent_tiger')
+                    assert not await session.fetchval('SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname=current_user')
+                    for _ in range(20):
+                        await ensure_tables(session,'agent_tiger')
+                finally:
+                    await session.close()
+            # Eight real sessions, beyond the fixture pool's five-connection cap.
+            await asyncio.gather(*(repeat() for _ in range(8)))
+            assert await conn.fetch('SELECT oid,xmin::text FROM pg_class WHERE oid=ANY($1::regclass[]) ORDER BY oid',tables) == before
+            assert await conn.fetch('SELECT oid,xmin::text FROM pg_policy WHERE polrelid=ANY($1::regclass[]) ORDER BY oid',tables) == policies
+        finally:
+            await conn.execute('REASSIGN OWNED BY agent_tiger TO postgres')
+            await conn.execute('DROP OWNED BY agent_tiger')
+            await conn.execute('DROP ROLE agent_tiger')
+
+
+@pytest.mark.asyncio
+async def test_room_schema_repairs_only_missing_table_privileges(database):
+    async with database.acquire() as conn:
+        await conn.execute('CREATE ROLE agent_tiger NOLOGIN NOSUPERUSER NOBYPASSRLS')
+        try:
+            await ensure_tables(conn,'agent_tiger')
+            await conn.execute('REVOKE UPDATE ON agent_tiger.matches FROM agent_tiger')
+            tables = ['agent_tiger.'+name for name in ('match_runs','match_sightings','discovery_limits')]
+            before = await conn.fetch('SELECT oid,xmin::text FROM pg_class WHERE oid=ANY($1::regclass[]) ORDER BY oid',tables)
+            assert not await conn.fetchval("SELECT has_table_privilege('agent_tiger','agent_tiger.matches','UPDATE')")
+            await ensure_tables(conn,'agent_tiger')
+            assert await conn.fetchval("SELECT has_table_privilege('agent_tiger','agent_tiger.matches','UPDATE')")
+            assert await conn.fetch('SELECT oid,xmin::text FROM pg_class WHERE oid=ANY($1::regclass[]) ORDER BY oid',tables) == before
+        finally:
+            await conn.execute('DROP OWNED BY agent_tiger')
+            await conn.execute('DROP ROLE agent_tiger')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('bad',['4006381333932','0000000000000','1234567',5012345678900,None])
+async def test_search_skips_invalid_gtins_before_reserving(bad):
+    assert access.tiger_gtin(bad) is None
+    gate, visits = OfflineGate(), []
+    async def render(url):
+        visits.append(url)
+        return {'ok':True,'url':url,'html':''}
+    active = {'robots':'','queue':[],'visited':[],'confirmed':[],'forms':[],
+              'pages':0,'warnings':[],'home_finished':True}
+    state,done = await CatalogueDiscovery(AsyncMock(),render,gate,AsyncMock()).step(
+        [SITE],[{**OWN,'sku':str(i),'gtin':bad} for i in range(200)]+[OWN],
+        {'site_index':0,'sites':[],'active':active})
+    assert not done and active['search_index'] == 201
+    assert visits == [SITE+'/search?q='+GTIN]
+    assert gate.calls == visits
+    assert state['active'] is active
+
+
+@pytest.mark.asyncio
+async def test_slice_results_bound_warnings_and_keep_details_once_per_run(corridor,monkeypatch):
+    ctx = await seeded_run(corridor,[OWN])
+    root = UUID(ctx.job_id)
+    step_number = 0
+    warnings = [{'url':SITE+'/products/'+str(i)+'x'*160,'reason':'transport_error'} for i in range(200)]
+    async def step(self,sites,products,cursor=None):
+        nonlocal step_number
+        cursor = cursor or {'site_index':0,'sites':[],'active':None}
+        assert all('warnings' not in site for site in cursor['sites'])
+        if step_number in (0,10,20):
+            cursor['sites'].append({'site':SITE+'/'+str(step_number),'status':'completed','pages':200,'warnings':warnings})
+        step_number += 1
+        return cursor,step_number == 40
+    monkeypatch.setattr(CatalogueDiscovery,'step',step)
+    for _ in range(40):
+        result = await corridor.agent.competitor_match(ctx)
+        assert len(json.dumps(result).encode()) < 2048
+        assert all(site['warning_count'] == 200 and 'warnings' not in site for site in result['sites'])
+        if not result['continuation_id']:
+            break
+        row = await corridor.pool.fetchrow('SELECT id,input FROM agent_tiger.jobs WHERE id=$1',UUID(result['continuation_id']))
+        ctx = SimpleNamespace(tenant_id=str(TENANT),job_id=str(row['id']),input=json.loads(row['input']))
+    assert step_number == 40 and result['status'] == 'completed'
+    run = await corridor.pool.fetchrow('SELECT progress,cursor FROM agent_tiger.match_runs WHERE job_id=$1',root)
+    progress = json.loads(run['progress'])
+    assert len(progress['sites']) == 3 and all(site['warnings'] == warnings for site in progress['sites'])
+    assert run['cursor'] is None
+    assert await corridor.pool.fetchval("SELECT count(*) FROM agent_tiger.jobs WHERE tenant_id=$1",TENANT) == 40
+    assert await corridor.pool.fetchval("SELECT max(pg_column_size(result)) FROM agent_tiger.jobs WHERE tenant_id=$1",TENANT) < 2048
+    assert await corridor.pool.fetchval("SELECT sum(pg_column_size(result)) FROM agent_tiger.jobs WHERE tenant_id=$1",TENANT) < 40*2048
