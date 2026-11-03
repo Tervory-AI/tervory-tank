@@ -4,7 +4,7 @@ Validated code commit: 24f35f10e72428bc917a0fb235067d1224fb0e2e
 
 Command: TMPDIR=/workspace/codex-cli-w3/.tmp PYTHONPATH=.tmp/deps:tank:tests POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55473/pooltest /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -n 4 -q tests/test_command*.py tests/test_mcp*.py tests/test_personal_tokens.py tests/test_pat_route_corridor.py tests/test_plugins.py tests/test_schema.py tests/test_secrets.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
 Exit status: 0
-Captured stdout/stderr:
+Captured stdout/stderr (trailing whitespace normalized):
 bringing up nodes...
 bringing up nodes...
 
@@ -38,72 +38,72 @@ bringing up nodes...
 
 tank/main.py:754: 8 warnings
 tests/test_command_radix_repo.py: 21 warnings
-  /workspace/codex-cli-w3/tank/main.py:754: DeprecationWarning: 
+  /workspace/codex-cli-w3/tank/main.py:754: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 ../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/fastapi/applications.py:4723: 40 warnings
 tests/test_command_radix_repo.py: 105 warnings
-  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tank/main.py:814: 8 warnings
 tests/test_command_radix_repo.py: 21 warnings
-  /workspace/codex-cli-w3/tank/main.py:814: DeprecationWarning: 
+  /workspace/codex-cli-w3/tank/main.py:814: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tank/agent_skills.py:531: 8 warnings
 tests/test_command_radix_repo.py: 21 warnings
-  /workspace/codex-cli-w3/tank/agent_skills.py:531: DeprecationWarning: 
+  /workspace/codex-cli-w3/tank/agent_skills.py:531: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tank/skala_intake.py:71: 8 warnings
 tests/test_command_radix_repo.py: 21 warnings
-  /workspace/codex-cli-w3/tank/skala_intake.py:71: DeprecationWarning: 
+  /workspace/codex-cli-w3/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tank/skala_intake.py:77: 8 warnings
 tests/test_command_radix_repo.py: 21 warnings
-  /workspace/codex-cli-w3/tank/skala_intake.py:77: DeprecationWarning: 
+  /workspace/codex-cli-w3/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tank/skala_revalidation.py:192: 8 warnings
 tests/test_command_radix_repo.py: 21 warnings
-  /workspace/codex-cli-w3/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /workspace/codex-cli-w3/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -111,7 +111,7 @@ tests/test_command_radix_repo.py: 21 warnings
 
 Command: TMPDIR=/workspace/codex-cli-w3/.tmp npm test --prefix cli
 Exit status: 0
-Captured stdout/stderr:
+Captured stdout/stderr (trailing whitespace normalized):
 
 > @tervory/cli@0.4.0 test
 > node --expose-gc --test test/*.test.mjs
@@ -741,12 +741,12 @@ ok 102 - this checkout: package.json, package-lock.json and CHANGELOG agree on t
 
 Command: TMPDIR=/workspace/codex-cli-w3/.tmp /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/ruff check tank/command.py tank/plugins.py tests/test_plugins.py tests/test_command_code.py tests/test_command.py tests/test_personal_tokens.py --select E9,F
 Exit status: 0
-Captured stdout/stderr:
+Captured stdout/stderr (trailing whitespace normalized):
 All checks passed!
 
 Command: TMPDIR=/workspace/codex-cli-w3/.tmp sh .github/scripts/cli_version_guard.sh origin/main
 Exit status: 0
-Captured stdout/stderr:
+Captured stdout/stderr (trailing whitespace normalized):
 CLI changed and the version moved 0.2.0 -> 0.4.0 with a CHANGELOG entry.
 
 Command: git diff --check origin/main
