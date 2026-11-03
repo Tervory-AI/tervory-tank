@@ -236,6 +236,21 @@ async def test_teachers_sources_counts_receipt_and_tenant_isolation(serving, mon
         receipt = await conn.fetchrow('SELECT * FROM tank.ledger WHERE id=$1', uuid.UUID(result['ledger_id']))
     assert receipt['tenant_id'] == tenant and receipt['rung'] == 3 and receipt['model'] == 'code'
     assert receipt['cost_usd'] == 0 and receipt['task_type'] == 'skala.teachers'
+    async with real.pool.acquire() as conn:
+        await conn.execute("INSERT INTO tank.skills(id,version,agent,task_type) VALUES($1,'3.0.0','placeholder',$2)",
+                           'placeholder.skill', TASK)
+        for version, owner, region in [('2.0.0', foreign, 'us-east'), ('3.0.0', tenant, 'za')]:
+            await conn.execute("""INSERT INTO tank.agent_skill_submissions
+                (skill_id,version,tenant_id,region,submitted_by_room,package,sha256)
+                VALUES($1,$2,$3,$4,'placeholder','{}'::jsonb,'placeholder-sha')""",
+                'placeholder.skill', version, owner, region)
+    scoped = await real.client.get('/v1/training/teachers', headers=headers, params={'skill_id': 'placeholder.skill'})
+    assert scoped.status_code == 200
+    assert {row['name'] for row in scoped.json()['items']} == {'1.0.0'}
+    other = await real.client.get('/v1/training/teachers', params={'skill_id': 'placeholder.skill'},
+        headers={**headers, 'X-Tervory-Tenant': str(foreign)})
+    assert other.status_code == 200 and {row['name'] for row in other.json()['items']} == {'1.0.0', '2.0.0'}
+    assert 'placeholder-teacher-1' not in other.text and 'placeholder-teacher-2' not in other.text
     denied = await real.client.get('/v1/training/teachers', params={'skill_id': 'placeholder.skill'},
         headers={'X-Tervory-User': 'placeholder-reviewer', 'X-Tervory-Tenant': str(tenant), 'X-Tervory-Role': 'reviewer'})
     assert denied.status_code == 404
