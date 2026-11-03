@@ -2889,3 +2889,31 @@ CREATE TABLE IF NOT EXISTS agent_tank.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
+
+-- D6: durable daily mail claim. Never automatically replay an uncertain SMTP send.
+CREATE TABLE IF NOT EXISTS tank.morning_reports (
+    tenant_id uuid NOT NULL CHECK (tenant_id='00000000-0000-0000-0000-000000000001'::uuid),
+    region text NOT NULL,
+    report_date date NOT NULL,
+    status text NOT NULL CHECK(status IN ('preparing','sending','sent','failed','uncertain')),
+    payload jsonb,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    finished_at timestamptz,
+    PRIMARY KEY(tenant_id,region,report_date)
+);
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        ALTER TABLE tank.morning_reports ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE tank.morning_reports FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.morning_reports'::regclass AND polname='tenant_access') THEN
+            CREATE POLICY tenant_access ON tank.morning_reports FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.morning_reports'::regclass AND polname='tenant_boundary') THEN
+            CREATE POLICY tenant_boundary ON tank.morning_reports AS RESTRICTIVE FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+    END IF;
+END $$;
