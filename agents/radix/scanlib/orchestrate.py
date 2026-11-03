@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import tempfile
@@ -107,7 +108,7 @@ async def _connect():
 
 
 async def scan_job(ctx, *, connect=None, schema: str | None = None) -> dict:
-    result = build_result(ctx)
+    result = await asyncio.to_thread(build_result, ctx)
     schema_name = store.validate_schema(schema or f"agent_{ctx.agent}")
     opener = connect or _connect
     conn = await opener()
