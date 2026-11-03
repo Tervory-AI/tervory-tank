@@ -304,3 +304,45 @@ async def test_failed_multi_domain_enqueue_rolls_back_all_runs(pool, monkeypatch
     async with pool.acquire() as conn:
         assert await conn.fetchval('SELECT count(*) FROM agent_radix.regulation_runs') == 0
         assert await conn.fetchval('SELECT count(*) FROM agent_radix.passive_scans') == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('proof_reason', ['txt_missing', 'txt_changed'])
+async def test_r4_missing_or_changed_txt_stops_without_scan(pool, monkeypatch, proof_reason):
+    import passive_gateway as gateway
+    store = await watched(pool)
+    async def proof(*args): return proof_reason
+    monkeypatch.setattr(gateway, 'proof_status', proof)
+    monkeypatch.setattr(gateway.app.state, 'lease', gateway.Lease(store), raising=False)
+    async def forbidden(*args): raise AssertionError('placeholder: scan ran after lost TXT')
+    async def execute_scan(s, body, **kwargs):
+        return await routes.execute(s, body, scanner=forbidden, watched=True,
+            http=httpx.AsyncClient(transport=httpx.ASGITransport(app=gateway.app)))
+    assert await passive_watch.tick(pool, execute_scan=execute_scan) == {'count': 0}
+    rows = await store.watches(A)
+    assert rows[0]['status'] == 'stopped' and rows[0]['stop_reason'] == proof_reason
+    assert await store.watches(B) == []
+
+
+@pytest.mark.asyncio
+async def test_r4_due_watch_runs_one_and_compares_then_unwatches(pool):
+    store = await watched(pool)
+    await watched(pool, B, 'other-placeholder.example')
+    finding = {'tool': 'placeholder', 'rule': 'placeholder', 'file': TARGET, 'line': 0, 'severity': 'low'}
+    async def execute_scan(s, body, **kwargs):
+        ident = await s.create(body.tenant_id, body.target, body.artifact, watched=True)
+        assert await s.running(body.tenant_id, ident)
+        await s.complete(body.tenant_id, ident, [finding])
+        return {'scan_id': str(ident)}
+    assert (await passive_watch.tick(pool, execute_scan=execute_scan))['count'] == 1
+    async with pool.acquire() as conn:
+        assert await conn.fetchval('SELECT count(*) FROM agent_radix.passive_scans') == 1
+    delta = await store.changes(A, DOMAIN)
+    assert len(delta['new']) == 1 and delta['fixed'] == delta['unchanged'] == []
+    from passive_store import compare_findings
+    changed = {**finding, 'severity': 'high'}
+    assert compare_findings([finding], [finding])['unchanged'] == [finding]
+    assert compare_findings([], [finding])['fixed'] == [finding]
+    assert compare_findings([changed], [finding]) == {'new': [changed], 'fixed': [finding], 'unchanged': []}
+    await store.unwatch(A, DOMAIN)
+    assert (await store.watches(A))[0]['status'] == 'stopped'
