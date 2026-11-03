@@ -128,20 +128,83 @@ class Store:
     def __init__(self, pool):
         self.pool = pool
 
-    async def find(self, tenant: UUID, filters: FindArgs) -> list[dict]:
-        async with self.pool.acquire() as conn:
-            rows = await conn.fetch("SELECT id,raw,profile,passes,status,updated_at FROM agent_base.records "
-                                    "WHERE tenant_id=$1 AND status IN ('done','failed') ORDER BY updated_at DESC,id", tenant)
-        projected = [project(dict(row)) for row in rows]
-        return [row for row in projected if matches(row, filters)]
+    async def scan(self, conn, tenant, filters, ids=None):
+        # SQL is a conservative prefilter over precisely the profile/reference
+        # paths project() reads. Python still checks verification and precedence.
+        async for row in conn.cursor("""
+            SELECT id,raw,profile,passes,status,updated_at FROM agent_base.records
+            WHERE tenant_id=$1 AND status IN ('done','failed')
+              AND ($7::uuid[] IS NULL OR id=ANY($7::uuid[]))
+              AND NOT EXISTS (
+                SELECT 1 FROM (VALUES
+                  ('state',$2::text),('city',$3::text),
+                  ('licence_type',$4::text),('engine_category',$5::text)
+                ) AS requested(key,wanted)
+                WHERE wanted IS NOT NULL AND NOT EXISTS (
+                  SELECT 1 FROM jsonb_array_elements(
+                    jsonb_build_array(profile->requested.key->'value',
+                      CASE WHEN requested.key='city' THEN raw#>'{_base_reference,address,city}'
+                           ELSE raw->'_base_reference'->requested.key END,
+                      CASE WHEN requested.key='engine_category' THEN profile#>'{categories,value}' END)
+                  ) AS candidate(value)
+                  CROSS JOIN LATERAL jsonb_array_elements(
+                    CASE WHEN jsonb_typeof(candidate.value)='array' THEN candidate.value
+                         ELSE jsonb_build_array(candidate.value) END
+                  ) AS option(value)
+                  WHERE lower(btrim(option.value#>>'{}'))=lower(btrim(wanted))
+                     OR octet_length(option.value#>>'{}')<>length(option.value#>>'{}')
+                     OR octet_length(wanted)<>length(wanted)
+                )
+              )
+              AND ($6::date IS NULL OR EXISTS (
+                SELECT 1 FROM (
+                  SELECT jsonb_path_query(jsonb_build_array(raw,profile,passes),'$.**.checked_at') AS value
+                  UNION ALL
+                  SELECT jsonb_path_query(passes,'$.**.observed_on')
+                ) AS dates
+                WHERE left(value#>>'{}',10)>=to_char($6::date,'YYYY-MM-DD')
+              ))
+            ORDER BY updated_at DESC,id
+            """, tenant, filters.state, filters.city, filters.licence_type,
+                filters.engine_category, filters.checked_on_or_after, ids, prefetch=200):
+            candidate = project(dict(row))
+            if matches(candidate, filters):
+                yield candidate
+
+    async def find(self, tenant: UUID, filters: FindArgs) -> dict:
+        count, rows = 0, []
+        async with self.pool.acquire() as conn, conn.transaction(isolation="repeatable_read", readonly=True):
+            async for row in self.scan(conn, tenant, filters):
+                count += 1
+                if len(rows) < 20:
+                    rows.append(row)
+        return {**preview(rows), "total": count}
 
     async def save(self, tenant: UUID, name: str, filters: FindArgs) -> dict:
-        rows = await self.find(tenant, filters)
-        async with self.pool.acquire() as conn:
+        # One stable transaction, two bounded cursor passes: count/IDs first,
+        # then stream immutable snapshot chunks directly into the saved list.
+        ids, count = [], 0
+        async with self.pool.acquire() as conn, conn.transaction(isolation="repeatable_read"):
+            async for row in self.scan(conn, tenant, filters):
+                count += 1
+                if len(ids) < 10000:
+                    ids.append(UUID(row["record_id"]))
+            if count > 10000:
+                raise HTTPException(422, {"total": count})
             saved = await conn.fetchrow("INSERT INTO tank.base_saved_lists(tenant_id,name,filters,record_ids,records) "
-                                       "VALUES($1,$2,$3::jsonb,$4,$5::jsonb) RETURNING list_id,name,created_at",
-                                       tenant, name, filters.model_dump_json(), [UUID(row["record_id"]) for row in rows], json.dumps(rows))
-        return {**dict(saved), "total": len(rows)}
+                                       "VALUES($1,$2,$3::jsonb,$4,'[]'::jsonb) RETURNING list_id,name,created_at",
+                                       tenant, name, filters.model_dump_json(), ids)
+            chunk = []
+            async for row in self.scan(conn, tenant, filters, ids):
+                chunk.append(row)
+                if len(chunk) == 200:
+                    await conn.execute("UPDATE tank.base_saved_lists SET records=records || $3::jsonb "
+                                       "WHERE tenant_id=$1 AND list_id=$2", tenant, saved["list_id"], json.dumps(chunk))
+                    chunk.clear()
+            if chunk:
+                await conn.execute("UPDATE tank.base_saved_lists SET records=records || $3::jsonb "
+                                   "WHERE tenant_id=$1 AND list_id=$2", tenant, saved["list_id"], json.dumps(chunk))
+        return {**dict(saved), "total": count}
 
     async def show(self, tenant: UUID, list_id: UUID) -> dict:
         async with self.pool.acquire() as conn:
@@ -192,7 +255,7 @@ def build_router() -> APIRouter:
     @router.get("/find")
     async def find(args: Annotated[FindArgs, Depends()], actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.find")
-        return await result(actor, "base.find", preview(await store().find(actor.tenant_id, args)))
+        return await result(actor, "base.find", await store().find(actor.tenant_id, args))
 
     @router.post("/save")
     async def save(args: SaveArgs, actor: Annotated[Actor, Depends(identity)]):
@@ -241,7 +304,7 @@ def build_router() -> APIRouter:
         # each other's completed leads when they check for duplicates.
         async with db().acquire() as conn, conn.transaction():
             await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", str(actor.tenant_id))
-            sent = await send(actor, [rows[value] for value in ids])
+            sent = await send(actor, [row for row in saved["records"] if row["record_id"] in set(ids)])
         return await result(actor, "base.list.to_crm", {"records": sent})
 
     return router
