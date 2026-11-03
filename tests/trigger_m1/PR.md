@@ -14,11 +14,11 @@ write or production SQL ran.
 ## Heads and dependency
 
 - Branch: `codex/trigger-m1-marketing`; own folder `/workspace/codex-trigger-m1`.
-- Final implementation/test head: `7c898d034078389d147bcd8f4efccada7542c979`.
-  Subsequent commits update documentation/evidence only. The exact final PR head
-  and its CI `tank` result are recorded in the PR description after the last push.
-  [Current branch head](https://github.com/Tervory-AI/tervory-tank/commits/codex/trigger-m1-marketing).
-- Included main: `b2fa83bdfca6d5788d12e11ce5230da1463a3621`.
+- Final head: [current #604 branch head](https://github.com/Tervory-AI/tervory-tank/commits/codex/trigger-m1-marketing).
+  The exact final SHA and its CI `tank` result are pinned in the PR description
+  after the last push, so recording the result does not change the tested head.
+- Latest merged main: `ecef216bc16d17c6337242971d117b3fbd8db854`.
+- Locally validated merged head: `0b1e3d6a4d4e8dec96893b8f471d9da33ab831aa`.
 - Refreshed W1 head `b9d9b363` was merged without resetting either side; W1
   subsequently landed on main in #595. Main was merged again, keeping its
   additions and one copy of the identical W1 provenance schema block.
@@ -57,7 +57,7 @@ in `agents/trigger/formats.py:26`:
 | `tank/trigger_marketing_api.py:25` | Verified founder/admin authority and existing Confirm dispatch; no caller tenant override. |
 | `tank/command.py:35` | Register M1 tools/adapters and prepare exact owned previews; existing SQUADS and permission logic unchanged. |
 | `tank/trigger_routes.py:48` | Code parses explicit M1 commands before existing W1 planning. |
-| `tank/main.py:106`, `:805`, `:4689` | Publisher starts after startup guards, cancels before pool shutdown; mount API. |
+| `tank/main.py:106`, `:805`, `:4684` | Publisher starts after startup guards, cancels before pool shutdown; mount API. |
 | `tank/case_study_sources.py:179` | Actual publication/reply counts as metadata on the existing draft figure; tenant, receipt region and date scoped. No new report labels. |
 | `workspace/app/oauth/trigger-gbp/callback/route.ts:1` | Existing authenticated server transport completes OAuth, then returns to `/chats`; no new page or reflected exchange data. |
 | `.env.example:505`, `docker-compose.yml:240`, `docker-compose.za.yml:137` | Names-only OAuth forwarding; exact setting locations listed in ops instructions. No values. |
@@ -75,7 +75,7 @@ in `agents/trigger/formats.py:26`:
 | 1 | `tank/trigger_google.py:43`, `:55`, `:142`; `tests/trigger_m1/test_m1_delivery.py:1` | Refresh failures and POST ConnectError/ConnectTimeout are unsent/retryable; only possibly sent publishing failures are uncertain. 20-case HTTP phase matrix; existing three-attempt/backoff test now covers 503 and 429. |
 | 2 | `tank/schema.sql:2464`, `tank/trigger_publisher.py:44`, `tank/trigger_marketing.py:95`, `:146`; `tests/trigger_m1/test_m1_reconcile.py:1` | Persist claim time. Uncertain cancellation works. Confirmed retry paginates location posts: same summary created after claim adopts name/searchUrl without a POST; no match permits one retry. Failed/incomplete reads retain uncertainty. Six actual-Confirm recovery tests pass. |
 | 3 | `tank/trigger_google.py:190`; `tests/trigger_m1/test_m1_oauth_review.py:1` | Revocation accepts 200 or explicit 400 invalid_token; other responses retain the sealed token and raise. |
-| 4 | `tank/command.py:1236`; `tests/trigger_m1/test_m1_paid.py:1` | The two model-capable routes are paid_run and execute the existing paid guard before dispatch; code-only tools keep defaults. Three tests pass. |
+| 4 | `tank/command.py:1250`; `tests/trigger_m1/test_m1_paid.py:1` | The two model-capable routes are paid_run and execute the existing paid guard before dispatch; code-only tools keep defaults. Three tests pass. |
 | 5 | `tank/trigger_google.py:98`, `:134`; `tests/trigger_m1/test_m1_oauth_review.py:36` | Confirmed reconnect revokes the previous grant before new consent and clears the old ciphertext. Callback refuses to overwrite an installed token. Reconnect and revocation tests: eight passed. |
 | 6 | `tests/trigger_m1/test_m1_dst.py:1` | Both 2026-11-01 01:30 offsets (-07:00 and -08:00) are on November 1 in the actual SQL calendar and date filter. Two tests pass. |
 | 7 | This file; `review-verification.txt`; PR description | Current implementation head, exact commands/results, final-head CI record, and after-merge acceptance. |
@@ -102,7 +102,10 @@ All **65 M1 tests passed** with external sockets blocked. The current broader
 Trigger/Command selection passed **529 tests, with 2 skips** (separate CRM WSGI
 runtime and the after-merge Trigger/LanguageTool check). Ruff passed. Exact
 results are recorded in the review evidence.
-No actual model call was used to test or check this work.
+Main advanced during the final required fetch and merged cleanly. The merged
+head was checked with the full M1 selection and the new Zenas Command tests;
+its captured result is in `review-verification.txt`. No actual model call was
+used to test or check this work.
 
 **After merge:** the founder runs Custom Nation in his own browser, connects its
 actual profile, approves/schedules three real posts, sees one appear on Google,
