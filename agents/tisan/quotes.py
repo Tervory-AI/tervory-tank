@@ -128,6 +128,13 @@ class QuoteData(BaseModel):
     valid_until: AwareDatetime
     quote_message: str = Field(strict=True, min_length=1, max_length=2000)
 
+    @field_validator('quote_amount')
+    @classmethod
+    def decimal_places(cls, value: Decimal) -> Decimal:
+        if value.as_tuple().exponent < -2:
+            raise ValueError('invalid_transition')
+        return value
+
     @field_validator('quote_currency')
     @classmethod
     def currency(cls, value: str) -> str:
