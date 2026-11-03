@@ -210,7 +210,8 @@ async def test_accepted_copy_resolves_tenant_reference_and_escapes_generated_bod
         return cls(*args, **kwargs)
     monkeypatch.setattr(httpx, 'AsyncClient', local_client)
     scaffold = scaffold_module()
-    async def checked(*args):
+    async def checked(*args, tenant_id):
+        assert tenant_id == str(TENANT)
         return [{'name': name, 'ok': True} for name in ('npm ci', 'npm run lint', 'npm run build', 'npm test')], ''
     monkeypatch.setattr(scaffold, 'run_checks', checked)
     payload = brief(['home', 'about', {'name': 'products', 'copy': result['write_id']}])
