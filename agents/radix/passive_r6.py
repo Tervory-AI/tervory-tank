@@ -166,12 +166,17 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
         pages, files = {}, {}
         cert, protocol = None, None
 
-        async def fetch(url):
+        async def fetch(url, *, missing_ok=False, file_only=False):
             nonlocal cert, protocol
             budget.require(2)
             async with client.stream('GET', url, headers={'Accept-Encoding': 'identity'}) as response:
+                mime = response.headers.get('content-type', '')
+                if missing_ok and response.status_code == 404:
+                    return None, mime
                 if response.status_code != 200:
                     raise ValueError('incomplete_response')
+                if file_only and 'text/html' in mime.lower():
+                    return None, mime
                 data = bytearray()
                 async for chunk in response.aiter_bytes():
                     data.extend(chunk)
@@ -196,10 +201,14 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
             parser = Links(target)
             parser.feed(pages[target])
             # Bound both page count and file discoveries. Every fetch remains proxied.
-            linked = parser.links[:30]
+            eligible = [u for u in parser.links if u != target]
+            ordered = [u for u in eligible if u in previous] + [u for u in eligible if u not in previous]
+            linked = ordered[:30]
             for url in linked:
                 budget.require(5)
-                data, mime = await fetch(url)
+                data, mime = await fetch(url, missing_ok=True)
+                if data is None:
+                    continue
                 if 'text/html' in mime.lower() and len(pages) < 11:
                     pages[url] = data.decode('utf-8', errors='replace')
                     hashes[url] = hashlib.sha256(data).hexdigest()
@@ -208,7 +217,7 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
                 if len(pages) >= 11:
                     break
             findings.extend(page_changes(hashes, previous))
-            return {'pages': len(hashes), 'discovery_truncated': len(parser.links) > len(linked)}
+            return {'pages': len(hashes), 'discovery_truncated': len(eligible) > len(linked)}
 
         if not notice_only:
             await step('pages', pages_work)
@@ -285,8 +294,8 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
                 for number, url in enumerate(urls[:20]):
                     budget.require(5)
                     if url not in files:
-                        data, mime = await fetch(url)
-                        if 'text/html' in mime.lower():
+                        data, mime = await fetch(url, file_only=True)
+                        if data is None:
                             continue
                         files[url] = data
                     path = directory / ('download-' + str(number))
