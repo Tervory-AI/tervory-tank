@@ -502,7 +502,8 @@ async def guard_submission_owner(tank: Any, pkg: Any, tenant_id: uuid.UUID) -> N
 def bind_base_browser(ctx: Any) -> None:
     """Use Base's authenticated room browser for every Base execution context."""
     ctx.env["TIGER_URL"] = "http://base-browser-gateway:3000"
-    ctx.http = BaseSkillHTTP(ctx.http, ctx.tenant_id, ctx.task_id, (
+    client = ctx.http.client if isinstance(ctx.http, BaseSkillHTTP) else ctx.http
+    ctx.http = BaseSkillHTTP(client, ctx.tenant_id, ctx.task_id, (
         ctx.env.get("SEARXNG_URL", ""), "https://api.search.brave.com/res/v1/web/search",
     ))
 
