@@ -12,10 +12,9 @@ import socket
 import subprocess
 import sys
 import tempfile
-import time
 import urllib.request
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path("/source") if len(sys.argv) > 1 and sys.argv[1] == "inside" else Path(__file__).resolve().parents[2]
 
 
 def call(*args, **kwargs):
@@ -34,25 +33,32 @@ def inside():
     mode = sys.argv[2]
     if mode == "deny":
         for host in sys.argv[3:]:
-            assert not reachable(host), f"unexpected reachability: {host}"
+            for port in (3000, 443, 5432, 6379, 6333, 8000):
+                assert not reachable(host, port), f"unexpected reachability: {host}:{port}"
         print("denied", *sys.argv[3:])
         return
     if mode == "gold":
         import asyncio
         from types import SimpleNamespace
-        import httpx
         spec = importlib.util.spec_from_file_location("price_ocr", "/source/tank/skills/tiger.price_ocr/1.0.1/run.py")
         skill = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(skill)
+        class Client:
+            async def post(self, url, json, timeout):
+                request = urllib.request.Request(url, data=__import__("json").dumps(json).encode(), headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    data = response.read()
+                return SimpleNamespace(status_code=200, json=lambda: __import__("json").loads(data))
+
         async def run():
             cases = sorted(Path("/source/tests/tiger_price_read/gold/shots").glob("*.png"))
             assert cases
-            async with httpx.AsyncClient(trust_env=False) as client:
-                for png in cases:
-                    payload = {"png_base64": base64.b64encode(png.read_bytes()).decode(), "url": "https://example.test/" + png.stem}
-                    before = await skill.run(payload, SimpleNamespace(env={"TIGER_URL": "http://baseline:3000"}, http=client))
-                    after = await skill.run(payload, SimpleNamespace(env={"TIGER_URL": "http://tiger-ocr:3000"}, http=client))
-                    assert before == after, png.name
+            client = Client()
+            for png in cases:
+                payload = {"png_base64": base64.b64encode(png.read_bytes()).decode(), "url": "https://example.test/" + png.stem}
+                before = await skill.run(payload, SimpleNamespace(env={"TIGER_URL": "http://baseline:3000"}, http=client))
+                after = await skill.run(payload, SimpleNamespace(env={"TIGER_URL": "http://tiger-ocr:3000"}, http=client))
+                assert before == after, png.name
             print(f"Tank /ocr: {len(cases)} existing PNG cases produce identical items")
         asyncio.run(run())
 
