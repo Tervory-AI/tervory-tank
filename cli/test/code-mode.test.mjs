@@ -246,6 +246,11 @@ test('git read tools cannot execute repository clean/process filters without app
   execFileSync('git', ['config', 'filter.subguard.clean', 'sh -c "printf wrong > sub-filter-marker; cat"'], { cwd: sub });
   await writeFile(join(sub, '.gitattributes'), 'file.txt filter=subguard\n');
   await writeFile(join(sub, 'file.txt'), 'sub modified\n');
+  // Positive control: a normal status must execute this exact fixture's
+  // submodule filter. Size changes alone can skip it and give false assurance.
+  execFileSync('git', ['--literal-pathspecs', 'status', '--short', '--', '.'], { cwd: f.root });
+  assert.equal(await readFile(join(sub, 'sub-filter-marker'), 'utf8'), 'wrong');
+  await rm(join(sub, 'sub-filter-marker'));
   execFileSync('git', ['add', 'file.txt'], { cwd: f.root });
   execFileSync('git', ['config', 'filter.guard.clean', 'sh -c "printf wrong > filter-marker; cat"'], { cwd: f.root });
   await writeFile(join(f.root, '.gitattributes'), 'file.txt filter=guard\n');
