@@ -46,7 +46,12 @@ async def run(
                 await store.import_series(ledger, tenant, engine, item, clock)
                 active.add(item["source"] + ":" + item["ref"])
         series = await store.series(ledger, tenant, clock)
+        from core.event_signals import series as event_series
+        from feeds.keys import key_is_set
+        series.update(await event_series(ledger, tenant, plan, series, clock))
         for config in plan["pairs"]:
+            if config.get("key_name") and not key_is_set(config["key_name"]):
+                continue
             upstream = next(
                 (
                     s
@@ -362,7 +367,8 @@ async def listing(ledger: PostgresLedger, tenant: str) -> dict:
                 "href": href,
             },
             {
-                "text": f"{data['upstream_name']} {direction} {change:.1f}% in {period}."
+                "text": current["point"]["event_title"] if data["config"].get("trigger") == "event"
+                else f"{data['upstream_name']} {direction} {change:.1f}% in {period}."
                 if change is not None
                 else f"{data['upstream_name']} changed in {period}.",
                 "href": source_link(str(row["document_id"]), "upstream"),
