@@ -35,7 +35,7 @@ No main merge, force push, PR creation, label change or merge was performed.
 | `tank/skills/base.contacts/1.4.0/data/disposable_email_blocklist.conf:1` | Existing pinned disposable-email data copied unchanged. |
 | `tank/base_evidence.py:214` | Region follows the same exact observed-contact source/date guard as phone quality. |
 | `tank/base_compare.py:16` | Saved-list and attachment arguments; bounded UTF-8 Apollo CSV parsing, exact unique matching, both unmatched groups and field agreement. Owned tenant/user upload and tenant list checks precede the $0 receipt. |
-| `tank/command.py:42` | Expose `base.compare.apollo` to Base; GET adapter at line 1468, outside confirmed-dispatch mutation sets. |
+| `tank/command.py:42` | Expose `base.compare.apollo` to Base; GET adapter at line 1468, outside confirmed-dispatch mutation sets. At line 2102, stored-upload IDs reach the internal planner without file bytes. |
 | `tank/main.py:4245` | Register the comparison read router. No routing/model/queue/cache behavior changed. |
 | `agents/base/engines/ffl/__init__.py:1` | Explicit FFL package boundary. |
 | `agents/base/engines/ffl/manifest.json:1` | Existing entrypoints, versioned Skala assets and byte hashes; existing code/data remains in place. Empty SOT/compliance flags. |
@@ -62,3 +62,11 @@ copies; no production database or credentials are accessed.
 CI tank/workspace results are pending Claude opening the new branch's PR. No PR
 exists for this branch at handoff. No founder `/chats` session or live browser proof
 is claimed. The phone candidate still requires the existing Skala approval flow.
+
+Apollo matching uses an exact licence key when supplied, otherwise a unique
+normalized website hostname. Duplicate/ambiguous identities stay unmatched.
+Website, phone and email agreement uses the existing `base_metrics.normal`
+normalization and verified Base fields only; absent observations stay absent.
+The read takes `list_id` and the owned uploaded CSV's `attachment_id`. No Apollo
+API, account, vendor lookup, upload-content model call or comparison write occurs.
+The existing card shows counts/agreement in Summary and row statuses in Records.

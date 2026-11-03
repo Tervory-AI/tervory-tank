@@ -2100,6 +2100,9 @@ def message_context(messages: list[dict]) -> list[dict]:
                 content += "\nAttachment " + attachment["name"] + ":\n" + attachment["text"]
             else:
                 content += "\nStored binary attachment " + attachment["name"] + ": content unavailable to the text router."
+                # The planner may hand an owned upload to a code reader without inspecting its bytes.
+                if attachment.get("attachment_id"):
+                    content += " " + dump({"attachment_id": attachment["attachment_id"]})
         result.append({"role": message["role"], "content": content})
     if len(dump(result).encode()) > 128000:
         raise HTTPException(413, "Conversation context is too large; start another thread or use shorter text attachments")

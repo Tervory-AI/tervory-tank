@@ -177,3 +177,13 @@ def test_apollo_card_labels_and_read_adapter(monkeypatch):
     assert all('base.compare.apollo' not in [item.value for item in node.elts if isinstance(item, ast.Constant)] for node in sets)
     result = subprocess.run(['node', 'tests/base_compare_apollo.cjs'], cwd=ROOT, capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_uploaded_csv_reference_reaches_planner_without_file_contents():
+    attachment = str(uuid4())
+    messages = command.message_context([{'role': 'user', 'content': 'Compare my Apollo upload',
+        'attachments': [{'attachment_id': attachment, 'name': 'placeholder-apollo.csv', 'size': 123,
+                         'model_readable': False}]}])
+    assert attachment in messages[0]['content']
+    assert 'placeholder-apollo.csv' in messages[0]['content']
+    assert 'content unavailable to the text router' in messages[0]['content']
