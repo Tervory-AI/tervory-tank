@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
 from test_marketing import env as env  # noqa: PLC0414 -- pytest fixture re-export
 from test_marketing import m1 as m1  # noqa: PLC0414 -- pytest fixture re-export
 from test_marketing import post, scheduled
@@ -29,7 +28,7 @@ async def test_terminal_stores_do_not_fill_the_due_tenant_window(m1, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_known_failure_allows_explicit_retry_but_uncertain_state_cannot_be_cancelled(m1):
+async def test_known_failure_allows_explicit_retry_and_uncertain_state_can_be_cancelled(m1):
     ident = await post(m1)
     await scheduled(m1, ident)
     m1.google.request.side_effect = GoogleFailure(403, 'placeholder permission rejected')
@@ -43,8 +42,8 @@ async def test_known_failure_allows_explicit_retry_but_uncertain_state_cannot_be
     assert claimed
     await m1.env.pool.execute("UPDATE tank.trigger_posts SET lease_until=now()-interval '1 minute' WHERE tenant_id=$1 AND id=$2", TENANT, ident)
     assert await Publisher(m1.store).once(TENANT) is None
-    with pytest.raises(HTTPException):
-        await m1.store.transition(TENANT, 'post.cancel', Post(post_id=ident, expected_revision=1), uuid4())
+    cancelled = await m1.store.transition(TENANT, 'post.cancel', Post(post_id=ident, expected_revision=1), uuid4())
+    assert cancelled['state'] == 'cancelled'
 
 
 def test_unknown_iana_zone_has_normal_validation_refusal():
