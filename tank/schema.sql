@@ -2283,6 +2283,14 @@ INSERT INTO tank.policy(task_type,rung,model,cache_scope,max_tokens_out,eval_thr
 VALUES ('tisan.plan',1,'luna','tenant',3000,0.99,200,false)
 ON CONFLICT DO NOTHING;
 
+-- Code mode starts with the existing chat policy, including tenant-specific rows.
+-- A new task name, not a new provider choice. Code input must never enter the route cache.
+INSERT INTO tank.policy
+SELECT (jsonb_populate_record(NULL::tank.policy,
+        to_jsonb(p) || '{"task_type":"command.code","cache_scope":"none"}'::jsonb)).*
+FROM tank.policy p WHERE p.task_type='command.turn'
+ON CONFLICT (task_type, (COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid)))
+DO UPDATE SET cache_scope='none' WHERE tank.policy.cache_scope IS DISTINCT FROM 'none';
 -- IDENTITY-ZA: existing token format/lifetimes remain unchanged. Trusted role
 -- snapshot is set only by verified OIDC issuance; refresh/revoke preserve the row.
 ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS identity_tenant_admin boolean NOT NULL DEFAULT false;

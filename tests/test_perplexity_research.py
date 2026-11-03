@@ -400,6 +400,9 @@ async def test_schema_applies_twice_and_preserves_policy(harness):
         before = await conn.fetch("SELECT * FROM tank.policy ORDER BY task_type,tenant_id")
         await conn.execute(schema)
         migrated = await conn.fetch("SELECT * FROM tank.policy ORDER BY task_type,tenant_id")
+        # A previous code-mode revision copied tenant caching. Reapplication
+        # must turn only that field off without replacing the rest of the row.
+        await conn.execute("UPDATE tank.policy SET cache_scope='tenant' WHERE task_type='command.code'")
         await conn.execute(schema)
         after = await conn.fetch("SELECT * FROM tank.policy ORDER BY task_type,tenant_id")
         # CORE-2 clears old baselines; ONE-DOOR seeds the authorized Base/Zenas
@@ -411,7 +414,7 @@ async def test_schema_applies_twice_and_preserves_policy(harness):
         current = {(row["task_type"], row["tenant_id"]): row for row in after}
         # Later additive seeds: base.normalize, Trigger's first build (trigger.write, trigger.check),
         # and the Tisan builder's plan step (tisan.plan, #571).
-        added = {("base.normalize", None), ("trigger.write", None), ("trigger.check", None), ("tisan.plan", None)}
+        added = {("base.normalize", None), ("trigger.write", None), ("trigger.check", None), ("tisan.plan", None), ("command.code", None)}
         assert set(current) == {(r["task_type"], r["tenant_id"]) for r in before} | added
         for old in before:
             new = current[old["task_type"], old["tenant_id"]]
@@ -428,6 +431,9 @@ async def test_schema_applies_twice_and_preserves_policy(harness):
             assert new["baseline_model"] is None
             assert {k: old[k] for k in old.keys() if k not in changed} == {
                 k: new[k] for k in old.keys() if k not in changed}
+        copied = dict(current['command.code', None])
+        source = dict(current['command.turn', None])
+        assert copied == {**source, 'task_type': 'command.code', 'cache_scope': 'none'}
         assert migrated == after
         assert all(row["moa_enabled"] is False and json.loads(row["moa_config"]) == {} for row in after)
         rows = await conn.fetch("SELECT outcome_type,unit_price FROM tank.price_book WHERE tenant_id=$1 AND outcome_type LIKE 'perplexity.%'", main.PLATFORM_TENANT)
