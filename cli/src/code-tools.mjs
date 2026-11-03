@@ -219,11 +219,14 @@ export class CodeFolder {
       case 'search': return this.search(args.pattern, args.regex === true);
       case 'git': return args.action === 'status' ? this.git(['status', '--short', '--', '.']) : args.action === 'diff' ? this.diff() : Promise.reject(refused());
       case 'propose_edit': return this.edit(args.path, args.diff, io);
-      case 'run_command':
+      case 'run_command': {
         if (typeof args.command !== 'string' || !args.command || args.command.length > 8000 || /[\x00-\x1f\x7f]/.test(args.command) || redactSecrets(args.command) !== args.command) throw refused();
         io.write(args.command + '\n');
         if (io.interactive !== true || (await io.prompt('Run [y/N] '))?.trim().toLowerCase() !== 'y') return { ran: false };
-        return { ran: true, ...await this.command(args.command, io, timeoutMs) };
+        const result = await this.command(args.command, io, timeoutMs);
+        io.write(result.output);
+        return { ran: true, ...result };
+      }
       default: throw refused();
     }
   }
