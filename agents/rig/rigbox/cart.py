@@ -198,7 +198,7 @@ class Cart:
                 moment + timedelta(seconds=WINDOW))
         return line
 
-    async def add(self, tenant, token, sku, quantity, *, back_order=False):
+    async def add(self, tenant, token, sku, quantity, *, back_order=False, line_id=None):
         config = await self.config(tenant)
         identity = session_id(token)
         async with self.rows.lock(tenant, identity) as rows:
@@ -207,13 +207,21 @@ class Cart:
                 prior = await self.rows.get(tenant, row['checkout'])
                 if prior and prior.get('paid_order_id') and prior['state'] in {'placed', 'needs_person'}:
                     row = {'lines': [], 'checkout': None}
-            if row.get('checkout') or len(row['lines']) >= 50:
+            existing = next((line for line in row['lines'] if line['product_id'] == sku), None)
+            if row.get('checkout') or (len(row['lines']) >= 50 and existing is None):
                 raise CommerceError('cart_locked')
-            # One line per SKU prevents split quantities bypassing available stock.
-            if any(line['product_id'] == sku for line in row['lines']):
+            if existing and existing['id'] != line_id:
                 raise CommerceError('duplicate_product')
+            if line_id is not None and (existing is None or existing['id'] != line_id):
+                raise CommerceError('not_found')
             line = await self._line(tenant, config, await self.platform(tenant, config), sku, quantity, back_order)
-            row['lines'].append(line)
+            if existing:
+                await self.rows.release(tenant, [existing], self.clock())
+                line['id'] = existing['id']
+                row['lines'] = [line if value['id'] == line_id else value for value in row['lines']]
+            else:
+                row['lines'].append(line)
+            row['recheck_state'] = 'unavailable' if any(value.get('unavailable') for value in row['lines']) else None
             await rows.put(tenant, identity, row)
         return await self.view(tenant, token)
 
