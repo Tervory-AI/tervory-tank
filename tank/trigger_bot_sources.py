@@ -161,7 +161,11 @@ class Sources:
     async def search(self, tenant: UUID, question: str) -> list[Passage]:
         sql = '''SELECT p.* FROM tank.trigger_bot_passages p JOIN tank.trigger_bot_sources s
                  ON s.tenant_id=p.tenant_id AND s.id=p.source_id WHERE p.tenant_id=$1
-                 AND s.status='ready' AND s.checked_at>now()-interval '7 days' '''
+                 AND s.status='ready' AND s.checked_at>now()-interval '7 days'
+                 AND (p.kind<>'faq' OR NOT EXISTS(SELECT 1 FROM tank.trigger_bot_sources newer
+                   WHERE newer.tenant_id=p.tenant_id AND newer.kind='faq' AND newer.status<>'removed'
+                   AND lower(trim(newer.content::jsonb->>'question'))=lower(trim(p.question))
+                   AND (newer.created_at,newer.id)>(s.created_at,s.id))) '''
         rows = await self.pool.fetch(sql + '''AND p.search @@ plainto_tsquery('english',$2)
             ORDER BY ts_rank_cd(p.search,plainto_tsquery('english',$2)) DESC LIMIT 24''', tenant, question)
         terms = set(re.findall(r'\w+', question.casefold()))
