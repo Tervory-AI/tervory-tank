@@ -40,14 +40,14 @@ def _config(region: str) -> dict:
 def _prices(region: str) -> dict[str, float]:
     return {
         m["model_name"]: m["model_info"]["input_cost_per_token"] + m["model_info"]["output_cost_per_token"]
-        for m in _config(region)["model_list"]
+        for m in reversed(_config(region)["model_list"])
     }
 
 
 @pytest.mark.parametrize("region", sorted(ROSTERS))
 def test_both_rosters_list_deepseek_and_kimi_with_sourced_prices(region: str) -> None:
     raw = ROSTERS[region].read_text(encoding="utf-8")
-    by_name = {m["model_name"]: m for m in _config(region)["model_list"]}
+    by_name = {m["model_name"]: m for m in reversed(_config(region)["model_list"])}
     assert NEW <= set(by_name)
     assert by_name["deepseek-flash"]["litellm_params"]["model"] == "deepseek/deepseek-flash"
     assert by_name["deepseek-pro"]["litellm_params"]["model"] == "deepseek/deepseek-v4-pro"
