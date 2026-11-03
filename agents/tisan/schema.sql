@@ -42,6 +42,11 @@ ALTER TABLE agent_tisan.quote_requests
         CHECK (length(quote_message) BETWEEN 1 AND 2000 AND quote_message ~ '[^[:space:]]');
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint
+        WHERE conrelid='agent_tisan.quote_requests'::regclass AND conname='quote_amount_bounded') THEN
+        ALTER TABLE agent_tisan.quote_requests ADD CONSTRAINT quote_amount_bounded
+            CHECK (quote_amount < 1e16);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
         WHERE conrelid='agent_tisan.quote_requests'::regclass AND conname='quote_snapshot_complete') THEN
         ALTER TABLE agent_tisan.quote_requests ADD CONSTRAINT quote_snapshot_complete CHECK (
             (quote_amount IS NULL AND quote_currency IS NULL AND valid_until IS NULL AND quote_message IS NULL)
@@ -61,6 +66,9 @@ LANGUAGE plpgsql AS $body$ BEGIN
             RAISE EXCEPTION 'invalid_transition' USING ERRCODE='23514';
         END IF;
         RETURN NEW;
+    END IF;
+    IF OLD.state IN ('accepted','declined') AND NEW.state IS DISTINCT FROM OLD.state THEN
+        RAISE EXCEPTION 'invalid_transition' USING ERRCODE='23514';
     END IF;
     IF ROW(NEW.quote_amount,NEW.quote_currency,NEW.valid_until,NEW.quote_message)
         IS DISTINCT FROM ROW(OLD.quote_amount,OLD.quote_currency,OLD.valid_until,OLD.quote_message) THEN
