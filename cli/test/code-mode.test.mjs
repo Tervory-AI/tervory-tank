@@ -158,7 +158,7 @@ test('approved command cannot read secret paths, outside symlinks or inherited h
   await writeFile(join(work, 'host-private.txt'), 'outside-file-canary');
   await symlink(join(work, 'host-private.txt'), join(f.root, 'outside-link'));
   const result = await f.tool({ name: 'run_command', arguments: {
-    command: `cat .env; cat outside-link; cat ${join(work, 'host-private.txt')}; printenv; echo sandbox-ok`,
+    command: `/bin/cat .env; /bin/cat outside-link; /bin/cat ${join(work, 'host-private.txt')}; /usr/bin/printenv; echo sandbox-ok`,
   } }, io());
   assert.equal(result.code, 0, result.output);
   assert(result.output.includes('sandbox-ok'), result.output);
