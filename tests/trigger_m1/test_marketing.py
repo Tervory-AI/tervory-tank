@@ -213,7 +213,7 @@ async def test_unconfirmed_and_member_actions_never_execute(m1, monkeypatch):
     calls = AsyncMock()
     monkeypatch.setattr(api, 'execute', calls)
     response = await m1.env.client.post('/v1/trigger/marketing/gbp.reply.send', json={'reply_id': str(uuid4())}, headers=fixture_headers())
-    assert response.status_code in {401,409}
+    assert response.status_code == 409
     calls.assert_not_awaited()
     with pytest.raises(HTTPException):
         await api.authority(command.Actor(TENANT, 'placeholder-member', False, frozenset({'trigger'})), 'trigger.posts')
