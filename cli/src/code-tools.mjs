@@ -1,6 +1,6 @@
 import { constants } from 'node:fs';
-import { lstat, realpath, open, readFile, writeFile, rename, unlink } from 'node:fs/promises';
-import { resolve, relative, isAbsolute, basename, sep, dirname } from 'node:path';
+import { lstat, realpath, open, readdir, readFile, writeFile, rename, unlink } from 'node:fs/promises';
+import { resolve, relative, isAbsolute, sep, dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { Worker } from 'node:worker_threads';
@@ -12,7 +12,7 @@ const LIVE = [
   /-----BEGIN (?:RSA |OPENSSH |EC |DSA |PGP )?PRIVATE KEY-----/,
   /\bAKIA[0-9A-Z]{16}\b/, /\bghp_[A-Za-z0-9]{20,}\b/, /\bgithub_pat_[A-Za-z0-9_]{20,}\b/,
   /\bxox[baprs]-[A-Za-z0-9-]{10,}/, /\bsk-ant-[A-Za-z0-9_\-]{10,}/,
-  /(?<![A-Za-z0-9_])sk-[A-Za-z0-9]{20,}/, /\b[ spr]k_live_[A-Za-z0-9]{8,}/,
+  /(?<![A-Za-z0-9_])sk-[A-Za-z0-9]{20,}/,
   /\b(?:sk|pk|rk)_live_[A-Za-z0-9]{8,}/, /\bAIza[0-9A-Za-z0-9_\-]{30,}/,
   /\beyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}/,
   /(?:^|[^A-Za-z0-9])(?:api[_-]?key|secret[_-]?key|client[_-]?secret|password|passwd|access[_-]?token|auth[_-]?token)\s*[:=]\s*['"]?[^\s'"#]{12,}/i,
@@ -96,7 +96,7 @@ export class CodeFolder {
     for (const name of names) {
       try {
         const path = await this.path(name);
-        if ((await lstat(path)).isFile()) files.push(name);
+        if ((await lstat(path)).isFile() && (await this.git(['check-ignore', '--quiet', '--no-index', '--', name])).code === 1) files.push(name);
       } catch { /* ignored, secret, symlink or vanished */ }
       if (files.length === LIMITS.files) break;
     }
@@ -181,6 +181,27 @@ export class CodeFolder {
     this.#reads.set(path, digest(Buffer.from(after)));
     return { applied: true };
   }
+  async command(command, io, timeoutMs) {
+    if (process.platform !== 'linux') throw refused();
+    // A confirmed command must not bypass the folder/secret-file boundary by
+    // reading an absolute host path, a symlink, .env or the user's environment.
+    // Use the worker's existing Bubblewrap; no unsandboxed fallback.
+    const masks = [];
+    const scan = async (directory, prefix = '') => {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const name = prefix + entry.name;
+        if (secretPath(name)) {
+          masks.push(...(entry.isDirectory() ? ['--tmpfs', '/work/' + name] : ['--ro-bind', '/dev/null', '/work/' + name]));
+        } else if (entry.isDirectory()) await scan(resolve(directory, entry.name), name + '/');
+      }
+    };
+    await scan(this.root);
+    return processOutput('bwrap', ['--unshare-all', '--die-with-parent', '--new-session',
+      '--ro-bind', '/usr', '/usr', '--symlink', 'usr/bin', '/bin', '--symlink', 'usr/lib', '/lib',
+      '--symlink', 'usr/lib64', '/lib64', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
+      '--bind', this.root, '/work', ...masks, '--chdir', '/work', '/bin/sh', '-c', command],
+      { cwd: this.root, timeoutMs, signal: io.signal });
+  }
   async tool(request, io, { timeoutMs = LIMITS.commandMs } = {}) {
     const args = request.arguments ?? {};
     switch (request.name) {
@@ -193,7 +214,7 @@ export class CodeFolder {
         if (typeof args.command !== 'string' || !args.command || args.command.length > 8000 || /[\x00-\x1f\x7f]/.test(args.command) || redactSecrets(args.command) !== args.command) throw refused();
         io.write(args.command + '\n');
         if (io.interactive !== true || (await io.prompt('Run [y/N] '))?.trim().toLowerCase() !== 'y') return { ran: false };
-        return { ran: true, ...await processOutput(args.command, [], { shell: true, cwd: this.root, timeoutMs, signal: io.signal }) };
+        return { ran: true, ...await this.command(args.command, io, timeoutMs) };
       default: throw refused();
     }
   }
