@@ -13,7 +13,7 @@ from tenant_db import tenant_path, tenant_transaction
 
 TOOLS = ['tisan.request', 'tisan.preview', 'tisan.feedback', 'tisan.handover']
 MOVES = {'requested': {'changes_requested', 'accepted'},
-         'changes_requested': {'changes_requested', 'accepted'}, 'accepted': set()}
+         'changes_requested': {'accepted'}, 'accepted': set()}
 
 
 class RequestIdArgs(BaseModel):
@@ -32,8 +32,8 @@ def refused(code: str, status: int = 409):
 def transition(row: dict, target: str, published: dict) -> None:
     if target not in MOVES.get(row['state'], set()):
         refused('invalid_transition')
-    # A revision advances the build as well as the state. A repeated change
-    # request or acceptance of the build already sent back is not sign-off.
+    # Acceptance after feedback must advance the build as well as the state;
+    # the build already sent back cannot be signed off unchanged.
     if row['build'] is not None and (published['build'] <= row['build'] or published['commit'] == row['commit']):
         refused('new_build_required')
 
