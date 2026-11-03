@@ -57,3 +57,25 @@ async def test_product_tasks_start_and_cancel_in_original_order(monkeypatch):
         ('stop', 'trigger_bot'), ('stop', 'trigger_publisher')]
     assert all(owner is tank for _, _, owner in events)
     assert all(getattr(tank, hook.slot).cancelled() for hook in registry.PRODUCT_HOOKS)
+
+
+@pytest.mark.asyncio
+async def test_product_code_planner_registration_needs_no_shared_branch(tmp_path, monkeypatch):
+    import command_tools as registry
+    package = tmp_path / 'placeholder_planner_pkg'
+    package.mkdir()
+    (package / '__init__.py').write_text('')
+    (package / 'placeholder_product.py').write_text('''
+from types import SimpleNamespace
+async def code_plan(actor, messages, task_id):
+    if messages and messages[-1].get('content') == 'placeholder-plan':
+        return SimpleNamespace(content='placeholder-plan', ledger_id=task_id)
+    return None
+''')
+    monkeypatch.syspath_prepend(str(tmp_path))
+    product = import_module('placeholder_planner_pkg.placeholder_product')
+    products = (*registry.PRODUCTS, product)
+    result = await registry.plan_products(None, [{'role': 'user', 'content': 'placeholder-plan'}],
+                                         'placeholder-task', products)
+    assert result.content == 'placeholder-plan' and result.ledger_id == 'placeholder-task'
+    assert await registry.plan_products(None, [{'role': 'user', 'content': 'placeholder-unmatched'}], None, products) is None
