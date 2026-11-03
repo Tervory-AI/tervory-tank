@@ -144,7 +144,6 @@ async def corridor(database, monkeypatch):
     spec.loader.exec_module(agent)
     agent.app.state.pool = database
     # Test DNS never queries the outside network.
-    monkeypatch.setattr(socket, 'getaddrinfo', lambda *args, **kwargs: [(2,1,6,'',('8.8.8.8',443))])
     monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', '')
     for tenant in (TENANT, OTHER):
         await database.execute("INSERT INTO tank.tenant_squad(tenant_id,agent,enabled_by) VALUES($1,'tiger','offline')", tenant)
@@ -316,7 +315,6 @@ async def test_discovery_search_uses_gtin_and_existing_get_form():
 
 @pytest.mark.asyncio
 async def test_real_gate_enforces_rate_page_cap_failure_accounting_and_reset(database, monkeypatch):
-    monkeypatch.setattr(socket, 'getaddrinfo', lambda *args, **kwargs: [(2,1,6,'',('8.8.8.8',443))])
     from chassis.tenant_db import TenantPool
     gate = DiscoveryGate(TenantPool(database))
     times = []
