@@ -393,3 +393,20 @@ Nodes: `289:13946`, `289:13948`, `I291:8073;289:13946`, `I291:8095;289:13946`, `
 The larger text line boxes require height-only extensions: `291:8182` → 375 × 880; `291:8405` → 1440 × 906; `291:8464` → 375 × 1018; `321:6304` → 1440 × 906; `321:6343` → 375 × 1042. Other root dimensions stay unchanged. Desktop Shopify credentials (`291:8097`) and mobile late Orders (`321:6343`) screenshots were inspected: no cropped text or overlapping rows. These are design verification screenshots, not founder acceptance.
 
 Commands: `git fetch origin && git merge origin/main` completed successfully with a clean merge; `git diff --check` passed. The register was committed and pushed with `git add docs/figma/RIG-CART-FRAMES.md`, `git commit -m 'docs(figma): record final seven Rig cart corrections'`, `git fetch origin && git merge origin/main`, and `git push origin codex/rig-cart-figma`. No runtime tests apply to this documentation/design-only change. Founder approval remains outstanding.
+
+## Final geometry corrections and CRM reference stop — 3 November 2026
+
+**Proposed, not approved.** Node IDs are preserved. This section supersedes the previous open-chevron coordinate interpretation.
+
+| Item | Nodes | Result |
+| --- | --- | --- |
+| 1 | `321:6400` | Rotation remains 180°. Pivot x/y = **1096/143**; rendered 16×16 bounds start at **1080/127**, centre y = **135**. |
+| 2 | `321:6428` | Rotation remains 180°. Pivot x/y = **311/135**; rendered 16×16 bounds start at **295/119**, centre y = **127**. |
+| 3 | `441:737`, `441:805` | Both navy sidebars are **240×906**, matching their enclosing frames `291:8405` and `321:6304`. |
+| 4 | `441:511`, `441:545`, `441:579`, `441:613`, `441:647`, `441:681`, `441:715`, `441:749`, `441:780`, `441:817`, `441:851` | **Blocked; unchanged.** The specified CRM reference does not currently supply the requested colour on navy. |
+
+For rotated open chevrons, Figma x/y denotes the pivot position, not the rendered top-left. Desktop and mobile open-select screenshots were inspected after correcting these pivots.
+
+Item 4 source inspection: frame `94:1061` is currently named **Leads / Detail / Desktop / Filled · Changed after approval, awaiting founder**. Its `182:9119` navigation instance has a **white** fill, bound to `VariableID:42:13`. Its CRM section label `I182:9119;180:8405` (and Writing, Sales, Marketing, Chat bot section labels) uses `VariableID:42:15`, **#3d4a66**, at opacity 1. The ancestor chain has no navy background. That reference therefore cannot supply a matching CRM section-label colour meeting 4.5:1 on #001840. Rule 9 stop: the missing input is a CRM navy-sidebar section-label colour/reference meeting the specified contrast. No replacement colour was invented. Rig section labels retain 12/20 Semi Bold; light-background kickers remain unchanged.
+
+Verification: Figma returned all four mutated node IDs and their new geometry; desktop/mobile open-select screenshots were inspected. `git fetch origin && git merge origin/main` was run before the documentation commit/push. `git diff --check` verifies the register. No runtime code or production data changed. No founder acceptance is claimed.
