@@ -231,6 +231,60 @@ async def fix_approve(body: FixMatch, request: Request):
             "ledger_id": str(await code_receipt(actor.tenant_id, tool, agent="ghost"))}
 
 
+# ---------- Standing blocks: founder reads and policy-checked publication ----------
+class BlockTenant(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: uuid.UUID
+
+
+class BlockShare(BlockTenant):
+    record_ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
+
+
+@router.get("/autumbra/blocks", dependencies=[Depends(admin.require_admin)])
+async def blocks_list(request: Request, tenant_id: uuid.UUID):
+    from command import identity, require_tool
+    from trigger_routes import code_receipt
+    actor = await identity(request)
+    require_tool(actor, "autumbra.blocks")
+    response = await call_room("GET", "ghost", "/ghost/autumbra/blocks", params={"tenant_id": str(tenant_id)})
+    if response.status_code != 200:
+        return Response(response.content, status_code=response.status_code, media_type="application/json")
+    return {**response.json(), "cost_usd": 0,
+            "ledger_id": str(await code_receipt(actor.tenant_id, "autumbra.blocks", agent="ghost"))}
+
+
+@router.post("/autumbra/blocks/share", dependencies=[Depends(admin.require_admin)])
+async def blocks_share(body: BlockShare, request: Request):
+    from command import identity, require_tool
+    from trigger_commands import confirmation
+    from trigger_routes import code_receipt
+    actor = await identity(request)
+    tool = "autumbra.blocks.share"
+    require_tool(actor, tool)
+    confirmation(actor, tool, body.model_dump(mode="json"))
+    response = await call_room("GET", "ghost", "/ghost/autumbra/blocks", params={"tenant_id": str(body.tenant_id)})
+    if response.status_code != 200:
+        return Response(response.content, status_code=response.status_code, media_type="application/json")
+    available = {str(row["id"]) for row in response.json()["items"]}
+    if any(str(identity) not in available for identity in body.record_ids):
+        raise HTTPException(422, "Invalid Autumbra Watch request.")
+    core = runtime()
+    items = []
+    status = 200
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=core.app), base_url="http://tank.internal", trust_env=False) as client:
+        for source in dict.fromkeys(body.record_ids):
+            result = await client.post("/v1/memory/publish", json={"tenant_id": str(body.tenant_id), "agent": "ghost", "source_row": str(source)},
+                headers={"X-Tank-Key": core.TANK_API_KEY, "X-Tervory-Admin": actor.user_id})
+            data = result.json()
+            if result.status_code != 200:
+                status = result.status_code
+                data = data.get("detail") or {"result": "refused"}
+            items.append({"id": str(source), **(data if isinstance(data, dict) else {"result": "refused"})})
+    ledger = str(await code_receipt(actor.tenant_id, tool, agent="ghost"))
+    return Response(json.dumps({"items": items, "ledger_id": ledger, "cost_usd": 0}), status_code=status, media_type="application/json")
+
+
 # Ghost's existing memory client reaches Hermes only through this same-box corridor.
 async def ghost_memory(method, path, *, body=None, params=None):
     core = runtime()
