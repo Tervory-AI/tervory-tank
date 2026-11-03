@@ -395,6 +395,7 @@ def test_room_reaches_only_figma_through_the_locked_proxy_and_copies_the_reader(
     command = proxy["command"][-1]
     assert "allowed = 'api.figma.com'" in command
     assert "allow_storage=False, require_sni=True" in command
+    assert "max_response_bytes=5_000_000" in proxy["command"][-1]
     assert "system_resolve(host, verified_host=allowed)" in command
     assert "Server(proxy, host=private_bind_address(), port=8080)" in command
     assert "name: tervory-gw-tisan" in compose
