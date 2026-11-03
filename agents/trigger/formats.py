@@ -23,6 +23,15 @@ class Format:
 
 FORMATS = {
     'product description': Format(None, None, note='No platform specified; no universal limit.'),
+    # Founder-approved M1 scheduling rule, checked 2026-11-03:
+    # No official summary, event-title or offer-terms numeric limit is published
+    # at the three references below. Keep the limit unset (never infer 1500).
+    # An approved no-limit draft may be scheduled; Google's response checks
+    # length. A too-long rejection fails with Google's message, without an
+    # automatic retry. Editing returns it to draft. Existing fields show None.
+    # https://support.google.com/business/answer/7342169
+    # https://support.google.com/business/answer/7390603
+    # https://developers.google.com/my-business/reference/rest/v4/accounts.locations.localPosts
     'Google Business Profile post': Format(None,
         'https://developers.google.com/my-business/reference/rest/v4/accounts.locations.localPosts',
         note='Official summary field has no published length limit; do not infer 1500.'),
