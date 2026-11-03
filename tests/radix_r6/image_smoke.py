@@ -29,8 +29,14 @@ class Page(BaseHTTPRequestHandler):
     def do_GET(self):
         body=(b'<html lang="en"><title>placeholder</title><a href="/placeholder-file">placeholder</a>'
               b'<img src="/placeholder-image"><script>document.cookie="placeholder_js=placeholder; Secure; SameSite=Lax";fetch("https://127.0.0.1/placeholder").catch(()=>{});new WebSocket("wss://placeholder.example/placeholder-ws")</script>'
-              b'<script src="https://other-placeholder.example/placeholder.js"></script></html>')
+              b'<iframe src="/placeholder-frame"></iframe><script src="https://other-placeholder.example/placeholder.js"></script></html>')
         kind='text/html'
+        if self.path=='/placeholder-frame':
+            body=(b'<html><script>document.cookie="placeholder_frame=placeholder; Domain=PLACEHOLDER.EXAMPLE; Secure; SameSite=Lax";'
+                b'document.cookie="placeholder_transient=placeholder; Secure; Path=/";document.cookie="placeholder_transient=; Max-Age=0; Secure; Path=/";'
+                b'document.cookie="placeholder_injected=placeholder; Secure; Path=/";'
+                b'window.__radix_cookie_set({name:"placeholder_injected",domain:"placeholder.example",path:"/",expiry:-1,Secure:true,SameSite:"Lax",value:"placeholder-never-export"});'
+                b'if(window.cookieStore) cookieStore.set({name:"placeholder_store",value:"placeholder",secure:true,sameSite:"lax",path:"/"});</script></html>')
         if self.path=='/placeholder-file': body,kind=EICAR,'application/octet-stream'
         if self.path=='/placeholder-image': body,kind=b'placeholder','image/png'
         self.send_response(200)
@@ -76,7 +82,9 @@ async def main():
             assert rc==0, 'browser check failed'
             browser=json.loads(out)
             assert any(f['rule']=='image-alt' for f in browser['findings'])
-            assert {'placeholder_js','placeholder_http'} <= {c['name'] for c in browser['cookies']}
+            assert {'placeholder_js','placeholder_http','placeholder_frame','placeholder_transient','placeholder_store'} <= {c['name'] for c in browser['cookies']}
+            assert all(c['first_party'] for c in browser['cookies'] if c['name']=='placeholder_frame')
+            assert b'placeholder-never-export' not in out
             assert browser['third_party_refused']>=1
             assert browser['client_refused']>=1 and loopback_proxied
             assert all('value' not in c for c in browser['cookies'])
