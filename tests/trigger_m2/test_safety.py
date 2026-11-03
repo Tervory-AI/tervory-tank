@@ -2,7 +2,6 @@
 import asyncio
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import asyncpg
@@ -10,10 +9,12 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
-from test_meta import PAGE, PAGE_OTHER, TENANT, OTHER, connected, facebook, m2  # noqa: F401 -- pytest fixture
+from test_meta import PAGE, PAGE_OTHER, TENANT, OTHER, facebook
+from test_meta import m2 as m2  # noqa: PLC0414 -- shared fixture
+from test_marketing import env as env  # noqa: PLC0414 -- shared fixture
+from test_marketing import m1 as m1  # noqa: PLC0414 -- shared fixture
 from test_marketing import card_for
 from test_second import confirm
-from trigger_marketing_contract import Post
 from trigger_meta import GRAPH, Meta, MetaFailure
 from trigger_publisher import Publisher
 
