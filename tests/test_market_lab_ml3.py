@@ -281,3 +281,19 @@ async def test_room_prediction_read_is_the_existing_ledger(database):
         foreign = (await client.post('/market/ml3/predictions', json={'tenant_id':str(OTHER)}, headers={'x-tank-key':'placeholder-room-key'})).json()['predictions']
         assert own[0]['confidence'] == .75 and own[0]['horizon_seconds'] == 86400
         assert foreign == []
+
+
+@pytest.mark.asyncio
+async def test_exact_chat_commands_never_reach_a_model(database):
+    for name in ('warnings', 'predictions', 'calibration', 'feeds'):
+        # The runtime deliberately has no Message/RouteRequest/run_route: a
+        # fall-through to the model planner fails instead of making a call.
+        answer = await command.route_turn(database.actor, [{'role':'user', 'content':'market_lab.' + name}])
+        plan = json.loads(answer.content)
+        assert plan['actions'] == [{'tool':'market_lab.' + name, 'arguments':{'limit':20, 'page':0}}]
+        row = await database.pool.fetchrow('SELECT rung,model,cost_usd FROM tank.ledger WHERE id=$1', answer.ledger_id)
+        assert row['rung'] == 3 and row['model'] == 'code' and row['cost_usd'] == 0
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as error:
+        await command.route_turn(database.actor, [{'role':'user', 'content':'market_lab.feeds {"tenant_id":"placeholder"}'}])
+    assert error.value.status_code == 422
