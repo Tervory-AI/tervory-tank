@@ -292,3 +292,57 @@ TMPDIR=/workspace/codex-tisan-t3/.git/t3-runtime-tmp /home/ammosync/.codex/tervo
 
 The clean main result is still pending at this checkpoint. Its final outcome
 will be appended; neither earlier main attempt is being represented as green.
+
+
+## Final full-suite result
+
+The clean main run completed: **22 failed, 6886 passed, 39 skipped, 174 warnings, 12 errors, 1827 subtests passed in 1413.82s**. It is not green. Separate runner groups completed with **46 passed** (tiger_g5) and **40 passed** (zenas_regulation_alerts), as recorded above. No failure is waived.
+
+The external temporary-directory diagnostic ran the complete RX1 and base-engine files: **33 passed in 1.62s**. The worker diagnostic still failed because `workers/task/__main__.py:159` writes `/tmp/worker-message.txt`, which returns `[Errno 122] Disk quota exceeded`. No shared temporary files were removed and no unrelated worker code was changed. Other final errors include missing `manifold3d`, browser/pytest worker crashes, local service startup failures, Moot setup assertions, and a Node timeout; these remain unresolved.
+
+Exact diagnostic commands:
+
+```sh
+TMPDIR=/workspace/codex-tisan-t3-runtime PYTHONPATH=/workspace/codex-tisan-t3/tank:/workspace/codex-tisan-t3/.git/t3-deps /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q tests/test_base_engine_terms_approved.py tests/test_rx1_scans.py --disable-socket --allow-hosts=127.0.0.1,localhost --tb=short --basetemp=/workspace/codex-tisan-t3-runtime/pytest-proof
+```
+
+Final main JUnit failures/errors (each entry is an observed result, not an attribution to T3):
+
+- failure: `tests.test_rx1_scans::test_planted_key_vulnerable_dependency_and_injection_are_found` — `assert False is True`
+- failure: `tests.test_rx1_scans::test_scan_makes_no_network_call` — `assert 0 >= 1`
+- failure: `tests.test_rx1_scans::test_file_source_stays_inside_the_tenant` — `assert False is True`
+- failure: `tests.test_rx1_scans::test_rows_and_logs_do_not_contain_the_secret` — `assert []`
+- failure: `tests.test_rx1_scans::test_failing_gitleaks_falls_back_without_leaking_stderr` — `IndexError: list index out of range`
+- failure: `tests.test_rx1_scans::test_git_bundle_is_scanned_without_fetching` — `assert False + where False = any(<generator object test_git_bundle_is_scanned_without_fetching.<locals>.<genexpr> at 0x77fc7a7b2e90>)`
+- failure: `tests.test_base_engine_terms_approved::test_flat_app_layout_without_skills_dir_boots_empty` — `AssertionError: assert {'a': {'gener..._locals': []}} == {'a': {'gener..._locals': []}} Omitting 2 identical items, use -vv to show Differing items: {'b': {'generic_words': ['firearms', 'firearm', 'guns', 'gun', 'arms', `
+- failure: `tests.test_workers_command::test_task_runner_reuses_local_branch_and_pr_for_followup` — `AssertionError: assert 1 == 0 + where 1 = <function main at 0x77fc6a10ed40>() + where <function main at 0x77fc6a10ed40> = <module 'workers.task.__main__' from '/workspace/codex-tisan-t3/workers/task/__main__.py'>.main`
+- error: `tests.moot_hearing.test_store::test_duplicate_human_turn_survives_restart_and_only_one_event` — `failed on setup with "assert False"`
+- error: `tests.moot_hearing.test_store::test_handover_and_turn_compete_one_revision_wins` — `failed on setup with "assert False"`
+- error: `tests.moot_hearing.test_store::test_replay_projects_current_roles_never_old_judge_authority` — `failed on setup with "assert False"`
+- error: `tests.moot_hearing.test_store::test_founder_publish_roundtrip_uses_existing_public_reader_without_private_state` — `failed on setup with "assert False"`
+- error: `tests.moot_hearing.test_store::test_closed_reasoning_becomes_pending_review_never_automatic_gold` — `failed on setup with "assert False"`
+- error: `tests.moot_hearing.test_store::test_pair_creation_is_atomic_retryable_and_region_tenant_private` — `failed on setup with "assert False"`
+- error: `tests.moot_hearing.test_store::test_paired_publish_is_atomic_and_opposite_requests_do_not_deadlock` — `failed on setup with "assert False"`
+- failure: `tests.test_radix_osv_real::test_dockerfiles_are_collected_from_a_tree` — `AssertionError: assert [] == ['svc/Dockerf...b.dockerfile'] Right contains 2 more items, first extra item: 'svc/Dockerfile' Use -v to get more diff`
+- error: `tests.moot_hearing.test_api::test_room_identity_is_key_bound_tenant_scoped_and_never_json_asserted` — `failed on setup with "assert False"`
+- error: `tests.moot_hearing.test_api::test_actual_room_turn_retry_is_idempotent_and_privacy_is_projected` — `failed on setup with "assert False"`
+- error: `tests.moot_hearing.test_api::test_ai_counsel_start_creates_swapped_pair_atomically` — `failed on setup with "assert False"`
+- error: `tests.moot_hearing.test_api::test_actual_workspace_transport_accepts_create_commands_and_preserves_region_guard` — `failed on setup with "assert False"`
+- error: `tests.moot_hearing.test_api::test_paired_human_judge_reveal_waits_for_both_durable_closures_on_reads_and_retries` — `failed on setup with "assert False"`
+- failure: `tests.test_rig_forge_geometry::test_scan_roundtrip_glb_is_draft_and_uses_metres` — `ModuleNotFoundError: No module named 'manifold3d'`
+- failure: `tests.test_rig_forge_geometry::test_bad_scans_are_rejected_with_a_reason[inside_out-outward]` — `ModuleNotFoundError: No module named 'manifold3d'`
+- failure: `tests.test_rig_forge_geometry::test_bad_scans_are_rejected_with_a_reason[hole-watertight]` — `ModuleNotFoundError: No module named 'manifold3d'`
+- failure: `tests.test_rig_forge_geometry::test_bad_scans_are_rejected_with_a_reason[small_inverted_part-outward]` — `ModuleNotFoundError: No module named 'manifold3d'`
+- failure: `tests.test_rig_forge_geometry::test_scale_and_size_budget_are_enforced` — `ModuleNotFoundError: No module named 'manifold3d'`
+- failure: `tests.test_skills_offline::test_rung3_offline_cases` — `AssertionError: base.business_data@2.0.0: 15 passed, 0 network-skipped, 0 failed (15 cases) base.business_data@2.0.1: 17 passed, 0 network-skipped, 0 failed (17 cases) base.contacts@1.0.0: 4 passed, 0 network-skipped, 0 `
+- failure: `tests.autumbra_public_bugs.test_page::test_public_host_and_direct_page_have_no_shell_admin_keeps_gate` — `AssertionError: Locator expected to be visible Actual value: None Error: Target crashed Call log: - Expect "to_be_visible" locator(".autumbra-public") with timeout 5000ms - waiting for locator(".autumbra-public")`
+- error: `tests.test_agent1_public_render::test_example_com_through_render_with_internal_browser` — `failed on setup with "worker 'gw2' crashed while running 'tests/test_agent1_public_render.py::test_example_com_through_render_with_internal_browser'"`
+- failure: `tests.test_market_lab_documents_real_tank::test_uploaded_documents_on_real_tank` — `RuntimeError: A local service exited during startup; inspect its local log`
+- failure: `tests.test_market_lab_real_tank::test_real_tank_routes_to_real_room_and_postgres` — `RuntimeError: A local service exited during startup; inspect its local log`
+- failure: `tests.test_market_lab_warning_real_tank::test_warning_job_on_real_tank` — `RuntimeError: A local service exited during startup; inspect its local log`
+- failure: `tests.test_moot_published_states::test_moot_published_states` — `subprocess.TimeoutExpired: Command '['node', '--test', 'tests/live_page_sources.test.cjs']' timed out after 45 seconds`
+- error: `tests.test_rig_3d_deployment::test_docker_cmd_preserves_public_api_health_and_private_brain` — `failed on setup with "worker 'gw0' crashed while running 'tests/test_rig_3d_deployment.py::test_docker_cmd_preserves_public_api_health_and_private_brain'"`
+
+The final Tisan/Command regression result remains **333 passed, 11 skipped**; the opt-in disposable Postgres quote checks separately passed **6 tests**. Q1 checks were absent from main, so item 3 (k6) was skipped as instructed. No Docker image-size change is claimed.
+
+Founder `/chats` acceptance and its screenshots are pending. No live test tenant data was created, no staging publish was performed, and no browser acceptance is claimed. Claude opens the PR; the founder merges. This branch is ready for review with the full-suite and acceptance blockers explicitly outstanding.
