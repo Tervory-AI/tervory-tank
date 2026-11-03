@@ -132,9 +132,12 @@ async def accepted_copy(write_id: UUID, tenant_id: UUID, request: Request):
             WHERE w.id=$1 AND w.tenant_id=$2 AND w.feedback_status='accepted'
             AND EXISTS (SELECT 1 FROM tank.command_threads t
                 CROSS JOIN LATERAL jsonb_each(t.state->'cards') c
-                WHERE t.tenant_id=w.tenant_id AND c.value->>'tool'='trigger.write'
+                CROSS JOIN LATERAL jsonb_array_elements(CASE
+                    WHEN c.value->>'tool'='trigger.write.batch' THEN c.value->'result'->'items'
+                    ELSE jsonb_build_array(c.value->'result') END) item
+                WHERE t.tenant_id=w.tenant_id AND c.value->>'tool' IN ('trigger.write','trigger.revise','trigger.write.batch')
                 AND c.value->>'status'='confirmed'
-                AND c.value->'result'->>'write_id'=w.id::text)""", write_id, tenant_id)
+                AND item->>'write_id'=w.id::text)""", write_id, tenant_id)
     if row is None:
         raise HTTPException(404, "Writing record unavailable")
     return JSONResponse({"write_id": str(write_id), "tenant_id": str(tenant_id), "text": row["draft"]},
@@ -220,7 +223,7 @@ async def invoke(operation: str, request: Request, actor: Annotated[Actor, Depen
             if not isinstance(result, dict):
                 return result
             items.append(result)
-        return {'items': items, 'text': json.dumps(items, ensure_ascii=False),
+        return {'items': items, 'text': '\n\n'.join(i['text'] for i in items),
                 'item_count': len(items), 'cost_usd': sum(float(i.get('cost_usd') or 0) for i in items),
                 'ledger_ids': [i.get('ledger_id') for i in items]}
     data = await room(operation, {**body, 'tenant_id': str(actor.tenant_id)})
