@@ -36,5 +36,12 @@ const request = query => new Request('https://app.tervory.com/oauth/trigger-meta
   assert.equal(failure.status, 409);
   assert.equal(await failure.text(), '');
   assert.equal(failure.headers.get('location'), null);
+  const { presentCard } = load('app/chats/presentation.ts');
+  const card = presentCard({ card_id: 'placeholder-card', tool: 'trigger.posts', kind: 'other', status: 'confirmed',
+    summary: 'trigger.posts', result: { items: [{ channel: 'facebook', status: 'published',
+      url: 'https://www.facebook.com/123456/posts/9001' }] } }, false);
+  assert(card.results.some(item => item.label.endsWith('Status') && item.value === 'published'));
+  assert(card.results.some(item => item.label.endsWith('Result') && item.href === 'https://www.facebook.com/123456/posts/9001'));
+  assert(!card.results.some(item => /page_id|generation|token/.test(item.label)));
   console.log('PASS actual Meta callback: trusted active tenant, bounded unique parameters, private POST exchange, no reflected code/token, fixed chats redirect');
 })().catch(error => { console.error(error); process.exitCode = 1; });
