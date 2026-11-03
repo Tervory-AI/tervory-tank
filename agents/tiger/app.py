@@ -62,7 +62,16 @@ async def ping(ctx: JobContext) -> dict:
     return result
 
 
+CATALOGUE_FETCH_BUDGET_S = 12
+CATALOGUE_RENDER_BUDGET_S = 15
+
+
 async def _render(url: str, session: str, agent: str, tenant: str, task: str = "", *, catalogue_match: bool = False) -> dict[str, Any]:
+    async with asyncio.timeout(CATALOGUE_RENDER_BUDGET_S if catalogue_match else None):
+        return await _render_request(url, session, agent, tenant, task, catalogue_match=catalogue_match)
+
+
+async def _render_request(url: str, session: str, agent: str, tenant: str, task: str = "", *, catalogue_match: bool = False) -> dict[str, Any]:
     response = await app.state.http.post(
         f"{TIGER_URL.rstrip('/')}/render",
         json={"url": url, "catalogue_match": catalogue_match, "screenshot": not catalogue_match, "settle_ms": 0 if catalogue_match else 10000, "max_ms": 10000 if catalogue_match else 25000,
@@ -71,8 +80,8 @@ async def _render(url: str, session: str, agent: str, tenant: str, task: str = "
                  "X-Home-Region": os.environ.get("TANK_REGION", "us-east"), "X-Task-ID": task},
         timeout=20 if catalogue_match else 50,
     )
-    if response.status_code >= 400:
-        return {"ok": False, "url": url, "challenge": response.status_code in {401, 403, 429},
+    if response.status_code >= 400 or (catalogue_match and not 200 <= response.status_code < 300):
+        return {"ok": False, "url": url, "challenge": not catalogue_match and response.status_code in {401, 403, 429},
                 "error": f"browser answered {response.status_code}"}
     data = response.json()
     if not isinstance(data, dict):
@@ -89,6 +98,11 @@ async def _render(url: str, session: str, agent: str, tenant: str, task: str = "
 
 
 async def _fetch_text(url: str, *, catalogue: bool = False):
+    async with asyncio.timeout(CATALOGUE_FETCH_BUDGET_S if catalogue else None):
+        return await _fetch_text_request(url, catalogue=catalogue)
+
+
+async def _fetch_text_request(url: str, *, catalogue: bool = False):
     from urllib.parse import urlsplit
     if catalogue:
         await asyncio.to_thread(check_url, url)
@@ -198,14 +212,50 @@ async def rig_discover(ctx: JobContext) -> dict:
 
 
 async def competitor_match(ctx: JobContext) -> dict:
-    from uuid import uuid5, NAMESPACE_URL
     root = str(ctx.input.get('root_job_id') or ctx.job_id)
+    try:
+        return await _competitor_match_slice(ctx, root)
+    except (Exception, asyncio.CancelledError):
+        try:
+            await asyncio.shield(_record_match_failure(ctx, root))
+        except Exception:
+            log.warning('Could not record Tiger match failure; card loading will reconcile job status.')
+        raise
+
+
+async def _record_match_failure(ctx, root):
+    # This includes cancellation by the chassis timeout. Do not mark retries
+    # failed; the card also reconciles a worker crash/reclaim from jobs.status.
+    async with asyncio.timeout(3):
+        async with app.state.pool.acquire() as conn:
+            last = await conn.fetchval('SELECT attempts>=max_attempts FROM agent_tiger.jobs WHERE tenant_id=$1 AND id=$2',
+                                       UUID(str(ctx.tenant_id)), UUID(str(ctx.job_id)))
+            if last:
+                await conn.execute("""UPDATE agent_tiger.match_runs SET progress=COALESCE(progress,'{}'::jsonb)||$3::jsonb
+                    WHERE tenant_id=$1 AND (job_id=$2 OR operation_id=(
+                        SELECT (input->>'operation_id')::uuid FROM agent_tiger.jobs WHERE tenant_id=$1 AND id=$2))""",
+                    UUID(str(ctx.tenant_id)), UUID(root), json.dumps({'status':'failed','failed_job_id':str(ctx.job_id)}))
+
+
+async def _competitor_match_slice(ctx, root):
+    from uuid import uuid5, NAMESPACE_URL
+    tenant, current_id, root_id = UUID(str(ctx.tenant_id)), UUID(str(ctx.job_id)), UUID(root)
     async with app.state.pool.acquire() as conn:
-        previous = await conn.fetchval('SELECT result FROM agent_tiger.jobs WHERE tenant_id=$1 AND id=$2', UUID(str(ctx.tenant_id)), UUID(str(ctx.job_id)))
-    if isinstance(previous, str):
-        previous = json.loads(previous)
-    if previous and previous.get('slice_saved'):
-        return previous
+        previous = await conn.fetchval('SELECT result FROM agent_tiger.jobs WHERE tenant_id=$1 AND id=$2', tenant, current_id)
+        if isinstance(previous, str):
+            previous = json.loads(previous)
+        if previous and previous.get('slice_saved'):
+            return previous
+        # The immutable catalogue/sites live once in the original job input.
+        original = await conn.fetchval("SELECT input FROM agent_tiger.jobs WHERE tenant_id=$1 AND id=$2 AND kind='competitor_match'", tenant, root_id)
+        original = json.loads(original) if isinstance(original, str) else original
+        if original is None:
+            raise ValueError('Missing matching run')
+        operation = UUID(original['operation_id']) if original.get('operation_id') else None
+        run = await conn.fetchrow('SELECT cursor FROM agent_tiger.match_runs WHERE tenant_id=$1 AND (job_id=$2 OR operation_id=$3)', tenant, root_id, operation)
+        if run is None:
+            raise ValueError('Missing matching run')
+        cursor = json.loads(run['cursor']) if isinstance(run['cursor'], str) else run['cursor']
     corridor = TankRig(app.state.http)
     async def fetch(url):
         return await _fetch_text(url, catalogue=True)
@@ -217,19 +267,20 @@ async def competitor_match(ctx: JobContext) -> dict:
             'job_id': str(ctx.job_id), 'root_job_id': root,
             'html': html, 'human_check': human_check})
     cursor, done = await CatalogueDiscovery(fetch, render, DiscoveryGate(app.state.pool), publish).step(
-        ctx.input.get('sites', []), ctx.input.get('products', []), ctx.input.get('cursor'))
+        original.get('sites', []), original.get('products', []), cursor)
     continuation = None if done else uuid5(NAMESPACE_URL, str(ctx.job_id) + ':continuation')
     result = {'slice_saved': True, 'status': 'completed' if done else 'running',
               'sites': cursor['sites'], 'model_calls': 0, 'continuation_id': str(continuation) if continuation else None}
     async with app.state.pool.acquire() as conn:
         async with conn.transaction():
             if continuation:
-                payload = {**ctx.input, 'root_job_id': root, 'cursor': cursor}
                 await conn.execute("""INSERT INTO agent_tiger.jobs(id,tenant_id,kind,input,timeout_s,run_at)
                     VALUES($1,$2,'competitor_match',$3::jsonb,45,now()+interval '1 second') ON CONFLICT(id) DO NOTHING""",
-                    continuation, UUID(str(ctx.tenant_id)), json.dumps(payload))
-            await conn.execute('UPDATE agent_tiger.jobs SET result=$3::jsonb WHERE tenant_id=$1 AND id=$2', UUID(str(ctx.tenant_id)), UUID(str(ctx.job_id)), json.dumps(result))
-            await conn.execute('UPDATE agent_tiger.match_runs SET progress=$3::jsonb WHERE tenant_id=$1 AND job_id=$2', UUID(str(ctx.tenant_id)), UUID(root), json.dumps(result))
+                    continuation, tenant, json.dumps({'root_job_id':root}))
+            await conn.execute('UPDATE agent_tiger.jobs SET result=$3::jsonb WHERE tenant_id=$1 AND id=$2', tenant, current_id, json.dumps(result))
+            await conn.execute("""UPDATE agent_tiger.match_runs SET job_id=COALESCE(job_id,$2),progress=$3::jsonb,cursor=$4::jsonb
+                WHERE tenant_id=$1 AND (job_id=$2 OR operation_id=$5)""",
+                tenant, root_id, json.dumps(result), None if done else json.dumps(cursor), operation)
     return result
 
 
