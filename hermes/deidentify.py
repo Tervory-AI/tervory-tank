@@ -5,6 +5,7 @@ the founder's reviewed identity inventory; absent/incomplete inventory refuses.
 Metadata is never published. Unknown identity forms require inventory updates.
 """
 
+import ipaddress
 import importlib.util
 import re
 import unicodedata
@@ -74,10 +75,18 @@ def identity_inventory(identifiers: dict) -> tuple[set[str], list[str]]:
 
 
 def deidentify(
-    claim: str, evidence: list[str], tenant: str, identifiers: dict
+    claim: str, evidence: list[str], tenant: str, identifiers: dict, *, public_addresses: list[str] | None = None
 ) -> tuple[str, list[str]]:
     values, domains = identity_inventory(identifiers)
     values.add(tenant)
+    public = []
+    for candidate in public_addresses or []:
+        try:
+            address = ipaddress.ip_address(candidate)
+        except ValueError:
+            continue
+        if address.is_global:
+            public.append(str(address))
 
     def client_url(value: str) -> bool:
         parsed = urlsplit(value if "://" in value else "https://" + value)
@@ -106,12 +115,22 @@ def deidentify(
             )
         for item in sorted(values, key=len, reverse=True):
             value = re.sub(re.escape(normalized(item)), "[IDENTITY]", value, flags=re.I)
+        protected = {}
+        for offset, address in enumerate(public):
+            token = "PUBLICADDRESSPLACEHOLDER" + chr(65 + offset)
+            # Identity-inventory replacement above wins over public-fact hints.
+            value, count = re.subn(r"(?<![0-9a-fA-F:.])" + re.escape(address) + r"(?![0-9a-fA-F:.])", token, value)
+            if count:
+                protected[token] = address
         value = EMAIL.sub("[EMAIL]", value)
         value = UUID.sub("[TENANT]", value)
         value = PHONE.sub("[PHONE]", value)
         value = _pii.detect(value)["text"]
         value = NAME_LABEL.sub("[NAME]", value)
-        return PROPER_NAMES.sub("[NAME]", value)
+        value = PROPER_NAMES.sub("[NAME]", value)
+        for token, address in protected.items():
+            value = value.replace(token, address)
+        return value
 
     clean_claim = scrub(claim)
     # Only unchanged public HTTP(S) evidence survives. Internal URNs and opaque
