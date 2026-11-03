@@ -18,16 +18,22 @@ const AxeBuilder = require('@axe-core/playwright').default;
       for (const p of parts.slice(1)) {const at=p.indexOf('='); attrs[(at<0?p:p.slice(0,at)).toLowerCase()]=at<0?'':p.slice(at+1);}
       const domain=attrs.domain || u.hostname;
       return {name:parts[0].split('=',1)[0],domain,path:attrs.path || u.pathname.slice(0,u.pathname.lastIndexOf('/')+1) || '/',
-        expiry:attrs['max-age'] ? Date.now()/1000+Number(attrs['max-age']) : attrs.expires ? Date.parse(attrs.expires)/1000 : -1,
+        origin:'response_header',accepted:null,expiry:attrs['max-age'] ? Date.now()/1000+Number(attrs['max-age']) : attrs.expires ? Date.parse(attrs.expires)/1000 : -1,
         Secure:'secure' in attrs,HttpOnly:'httponly' in attrs,SameSite:attrs.samesite || 'Lax',first_party:firstParty(domain)};
     };
     await context.exposeBinding('__radix_cookie_set', (_source,c) => {
       if (!c || typeof c.name!=='string' || typeof c.domain!=='string' || typeof c.path!=='string') return;
       observed.push({name:c.name,domain:c.domain,path:c.path,expiry:Number.isFinite(c.expiry)?c.expiry:-1,
-        Secure:c.Secure===true,HttpOnly:false,SameSite:typeof c.SameSite==='string'?c.SameSite:'Lax',first_party:firstParty(c.domain)});
+        origin:'script_observation',accepted:null,Secure:c.Secure===true,HttpOnly:false,SameSite:typeof c.SameSite==='string'?c.SameSite:'Lax',first_party:firstParty(c.domain)});
     });
     await context.addInitScript(() => {
       const original=Object.getOwnPropertyDescriptor(Document.prototype,'cookie');
+      if (window.cookieStore) window.cookieStore.addEventListener('change', event => {
+        for (const c of [...event.changed,...event.deleted]) window.__radix_cookie_set({
+          name:c.name,domain:c.domain||location.hostname,path:c.path||'/',
+          expiry:Number.isFinite(c.expires)?c.expires/1000:-1,Secure:c.secure,HttpOnly:false,SameSite:c.sameSite||'Lax'
+        }).catch(()=>{});
+      });
       Object.defineProperty(document,'cookie',{get(){return original.get.call(this);},set(raw){
         original.set.call(this,raw);
         const parts=String(raw).split(';').map(p=>p.trim()),attrs={};
@@ -62,7 +68,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
     const result = process.argv[3] === 'notice-only' ? {violations:[]} : await new AxeBuilder({page}).analyze();
     await Promise.all(responses);
     const cookies = [...observed,...(await context.cookies()).map(c => ({name:c.name, domain:c.domain, path:c.path,
-      expiry:c.expires, Secure:c.secure, HttpOnly:c.httpOnly, SameSite:c.sameSite,
+      origin:'browser_store',accepted:true,expiry:c.expires, Secure:c.secure, HttpOnly:c.httpOnly, SameSite:c.sameSite,
       first_party:target.hostname === c.domain.replace(/^\./,'') || target.hostname.endsWith('.'+c.domain.replace(/^\./,''))}))];
     const findings = result.violations.filter(v=>['serious','critical'].includes(v.impact)).flatMap(v=>v.nodes.map(n=>({
       tool:'axe-core',rule:v.id,severity:v.impact,item:JSON.stringify(n.target),file:target.href,line:0,
