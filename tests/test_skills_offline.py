@@ -85,8 +85,10 @@ async def test_rung3_offline_cases(monkeypatch: pytest.MonkeyPatch) -> None:
     # Room-backed checkers (trigger.languagetool) need a room key before they call the
     # room; a placeholder lets them reach the stub http, so their cases count as network-bound.
     monkeypatch.setenv("TANK_KEY_TRIGGER", "offline-placeholder")
+    # Checkov lives only in Radix, like Tisan's room-only executors. Its real
+    # threshold-1.0 eval proof uses /evals/run in tests/radix_r5/room_eval_proof.py.
     packages = [pkg for pkg in skala.load_packages(SKILLS).values()
-                if pkg.rung == 3 and pkg.id not in {"tisan.figma", "tisan.scaffold", "tisan.build"}]
+                if pkg.rung == 3 and pkg.id not in {"tisan.figma", "tisan.scaffold", "tisan.build", "scan.iac"}]
     assert packages, "no rung-3 skills found"
     lines: list[str] = []
     failures: list[str] = []

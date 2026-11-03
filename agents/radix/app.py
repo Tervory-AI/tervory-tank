@@ -58,6 +58,7 @@ async def scan(ctx: JobContext) -> dict:
 app = create_app(
     agent=AGENT,
     handlers={"ping": ping, "scan": scan},
+    job_timeouts={"scan": 360},
     schedules=[
         {
             "tenant_id": HEARTBEAT_TENANT,
@@ -73,3 +74,31 @@ attach_gold(app)
 
 from passive_routes import attach as attach_passive
 attach_passive(app)
+
+
+# Room-key-only execution of the candidate IaC engine; no skill approval here.
+from fastapi import Header, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
+from uuid import UUID
+import hmac
+from scanlib import iac
+
+
+class EvalCase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    skill_id: str
+    version: str = Field(pattern=r"^\d+\.\d+\.\d+$")
+    tenant_id: UUID
+    input: dict
+
+
+@app.post("/evals/run")
+async def eval_case(body: EvalCase, x_tank_key: str = Header(default="")) -> dict:
+    key = os.environ.get("TANK_KEY", "")
+    if not key or not hmac.compare_digest(key, x_tank_key):
+        raise HTTPException(401, "room key required")
+    if (body.skill_id, body.version) != ("scan.iac", "1.0.0"):
+        raise HTTPException(404, "unknown eval skill")
+    # Checkov is a bounded subprocess; keep the room's event loop responsive.
+    from starlette.concurrency import run_in_threadpool
+    return await run_in_threadpool(iac.run_skill, body.input)
