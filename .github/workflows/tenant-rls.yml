@@ -1,7 +1,7 @@
 name: Tenant RLS and nonroot services
 on:
   push:
-    branches: [codex/tenant-rls, codex/autumbra-a2-hardening]
+    branches: [codex/tenant-rls]
     paths:
       - "**/*.py"
       - "**/*.sql"
