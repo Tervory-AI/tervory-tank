@@ -155,7 +155,11 @@ class QuoteService(Service):
         ship_to = ship_address(body.get("delivery")) if retailer.get("blind_ship") is True else None
         now = datetime.now(timezone.utc)
         try:
-            hold_id = read_token(hold_secret(), tenant_id, str(body.get("hold") or ""), now)
+            secret = hold_secret()
+        except LocateRefused:
+            raise RigError("unavailable", "Ordering from other stores is not available.", 503) from None
+        try:
+            hold_id = read_token(secret, tenant_id, str(body.get("hold") or ""), now)
         except LocateRefused as exc:
             raise RigError("hold", "That price has expired. Check availability again.",
                            410 if str(exc) == "hold_expired" else 422) from None
@@ -192,13 +196,14 @@ class QuoteService(Service):
         from rigbox import supplier_orders
 
         quote = await self.store.quote_for(tenant_id, quote_id)
-        if quote is None or quote["payload"].get("locate_state", {}).get("state") not in {
+        old = quote["payload"].get("locate_state") if quote else None
+        if not isinstance(old, dict) or not old.get("accepted_at") or old.get("state") not in {
             "accepted", "store_confirmed", "ordered", "supplier_ordered", "supplier_order_unconfirmed",
             "supplier_order_failed", "needs_person"
         }:
             raise RigError("not_found", "The request is not valid.", 404)
         payload = quote["payload"]
-        old = payload["locate_state"]
+
         def response(state: dict[str, Any]) -> dict[str, Any]:
             return {"request_id": quote_id, "confirmed": True, "state": state["state"],
                     "items": [payload["product"]]}
