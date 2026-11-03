@@ -1,7 +1,8 @@
 # Trigger W3 gate 3: WhatsApp through the shared bot engine
 
 Branch `codex/trigger-w3`, same [PR #624](https://github.com/Tervory-AI/tervory-tank/pull/624).
-Final code/test head: `d5b888773a4f8b180beedc1df8ca246f58ae06a1`.
+Initial gate 3 code/test head: `d5b888773a4f8b180beedc1df8ca246f58ae06a1`.
+The additive-storage CI correction is recorded under Decisions I made below.
 The combined run began at `b329e0eaa7499b2627586842c2f6c8dd9d1de149`;
 the final B3 run also covers the subsequent strict raw-character-cap fix.
 The evidence commit follows that head. Gate 1 remains reviewed/passed. No main
@@ -13,6 +14,49 @@ Each binding has `tenant_id`, `token_env`, and `timezone`; Python `zoneinfo`
 validates the IANA name. There is no timezone default. Missing/invalid zones,
 missing tokens, exhausted budgets and closed/invalid service windows hand over
 through the existing email, without a WhatsApp response or answer-model call.
+
+## Decisions I made
+
+**CI correction, 3 November 2026:** use a new checked `transport` column rather
+than modify the existing `channel` check. Its additive/idempotent declaration is
+`ADD COLUMN IF NOT EXISTS transport text NOT NULL DEFAULT 'web'
+CHECK(transport IN ('web','whatsapp'))`. Existing web rows default to transport
+web; new WhatsApp rows explicitly write transport whatsapp and retain legacy
+channel web. The reply lookup uses transport whatsapp too.
+
+The inspected pg_constraint blocks in this checkout/main add foreign-key and
+positive-hit constraints. Adding another check, including a NOT VALID check,
+cannot relax the original web-only check. The new-column option explicitly
+permitted by the review therefore preserves that check and all existing data.
+No system catalogs are edited directly, and no existing constraint is changed. No UI changes.
+
+The first schema push was rejected because the same remote feature branch had
+advanced to `a4438968`, which already contained a main merge made elsewhere.
+Fetched only `codex/trigger-w3` and rebased this builder's single schema commit
+onto that feature-branch head with autostash, preserving the incoming work and
+the adapter edit. The normal retry and subsequent pushes succeeded. No new
+main merge or force push was performed.
+
+The three exact reported schema guards initially passed (3 passed, 2.39s).
+After the feature-branch update, ran all affected checks together against a
+fresh disposable database using the current schema:
+
+```sh
+POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:40737/postgres PYTHONPATH=.gate2-deps:tank .venv/bin/python -m pytest -q -n 4 tests/trigger_bot_b3 tests/test_founder_console.py::test_schema_additions_are_idempotent tests/test_batch_guard.py::test_schema_adds_lineage_without_dropping tests/test_device_login.py::test_device_schema_is_additive_and_hash_only --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --timeout=120 --tb=short
+/home/ammosync/trigger-crm-venv312/bin/ruff check tank/trigger_whatsapp.py tests/trigger_bot_b3/test_whatsapp.py --select E9,F --output-format concise
+git diff --check
+```
+
+**15 passed**, 12 warnings, 11.07 seconds. Ruff and whitespace checks passed.
+This includes schema replay with both transport types, preservation of the
+original channel check, refusal of channel whatsapp and invalid transport,
+actual fake-Meta sends, the free-reply cap/timezones, tenant RLS and retention.
+The schema text contains no `DROP ` token. Tests use no outside network.
+
+The owned Postgres had been stopped after the initial gate. Its local pgserver
+package was restored with `.venv/bin/pip install --disable-pip-version-check
+pgserver`, then only this checkout's disposable cluster was started on a free
+loopback port. It is stopped after validation. No production SQL or live sends.
 
 ## Official sources checked 3 November 2026
 
@@ -39,7 +83,7 @@ Full operational instructions and source findings are in `docs/ops/TRIGGER-META.
 | `tank/trigger_whatsapp.py:256`, `:268` | Constant-time GET challenge; raw signature check before parsing; unknown numbers store nothing; explicit tenant scope from the binding only. |
 | `tank/trigger_bot.py:156`, `:186` | Optional forced hand-over and transactional reply gate; web callers retain their defaults and the same grounding, receipt, lead-draft and email behavior. |
 | `tank/trigger_bot_api.py:206`, `:338` | Monthly reply total under the existing `count` label; mount the signature-authenticated public router. Weekly stats include WhatsApp messages. |
-| `tank/schema.sql:2807`, `:2818`, `:2826`, `:2832` | Widen the web-only channel CHECK to web/whatsapp; add a sealed sender column, monthly budget and cascading event claims above generated memory; conditional ENABLE/FORCE RLS, permissive tenant_access plus restrictive tenant_boundary exactly as personal_tokens. Unique phone/month budget prevents replenishment by tenant rebinding. |
+| `tank/schema.sql:2858`, `:2860`, `:2863`, `:2871`, `:2877` | Add a checked transport column, sealed sender column, monthly budget and cascading event claims above generated memory; preserve the legacy web-only channel CHECK; conditional ENABLE/FORCE RLS, permissive tenant_access plus restrictive tenant_boundary exactly as personal_tokens. Unique phone/month budget prevents replenishment by tenant rebinding. |
 | `workspace/app/v1/bot/whatsapp/route.ts:1` | Explicit regional target with no fallback, raw bounded POST forwarding, private GET verification transport, empty failure/POST responses and no identity forwarding. No page. |
 | `workspace/middleware.ts:23` | Public-path registration for this independently signature-authenticated webhook, following the existing public bot door. |
 | `.env.example:531`, `:538` | Names-only app secret, verify token, binding map and connector token slot, documenting the timezone key. |
@@ -50,8 +94,9 @@ Full operational instructions and source findings are in `docs/ops/TRIGGER-META.
 | `tests/trigger_bot_b3/test_whatsapp_workspace.py:1` | Run that actual TypeScript transport/card contract under the offline CI test suite. |
 | `tests/trigger_w3/GATE3.md:1` | This gate's implementation, source, file/line and verification evidence. |
 
-The schema **widens the existing channel constraint and removes no table,
-column or row**. Its idempotent block replaces only the old web-only CHECK.
+The schema **preserves the existing web-only channel constraint** and records
+WhatsApp in a new checked `transport` column. It removes or relaxes no existing
+constraint, table, column or row. The schema contains no `DROP ` token.
 The generated memory block remains last. `tank/main.py:_startup` at lines
 755–810 was read before schema pushes: guards and schema application precede
 the bot retention and publisher loops. Existing 12-calendar-month retention
@@ -157,7 +202,9 @@ The repaired combined run and isolated follow-up above supersede those setup
 failures; the original attempt is not claimed as a passing run.
 
 Every completed file was committed and pushed to `origin codex/trigger-w3`.
-Every push succeeded. No main merge or force push.
+Every initial gate 3 push succeeded. The later CI-correction push rejection
+and recovery are recorded below. No main merge or force push was performed
+by this builder.
 
 ## Hosted CI and real-device acceptance
 
