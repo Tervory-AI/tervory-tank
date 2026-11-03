@@ -11,12 +11,12 @@ The founder's ordered deployment/acceptance steps are in
 
 With the issuer unset, the existing device approval and credential lifecycle
 remain unchanged. Boston ignores the optional identity settings. With the ZA
-issuer configured, default code requests use the fixed Zitadel origin; verified
-ID tokens map reserved organisation IDs to existing tenant UUIDs and mint the
-same Tank access/refresh credentials. An explicit `approval: "workspace"` code
-request preserves the limited Boston approval path alongside the new default;
-its dedicated key still cannot approve founders. No new browser controls or
-CLI option were added for that fallback.
+issuer configured, **only** an explicit `approval: "zitadel"` request uses the fixed
+Zitadel origin. `tervory login --region za --sign-in zitadel` sends that selection.
+Plain/old CLI requests and explicit `approval: "workspace"` retain the Boston
+approval path; its dedicated key still cannot approve founders. Verified ID tokens
+map reserved organisation IDs to existing tenant UUIDs and mint the same Tank
+access/refresh credentials.
 
 Identity is only `zitadel:<sub>`. Founder rights are re-read from the explicit
 ZA admin list; tenant_admin is captured only from the requesting app's reserved
@@ -33,17 +33,17 @@ lifetimes. The existing revoke ends both access and refresh.
   default branding, forced first password change, signup off and backup worker.
 - `ops/identity/Dockerfile.setup:1`: digest-pinned configuration and existing
   encrypted-backup source build targets. Zitadel source is never patched/copied.
-- `ops/identity/setup.py:36`: API-only idempotent project/app/role/policy setup;
+- `ops/identity/setup.py:37`: API-only idempotent project/app/role/policy setup;
   owner verification, preserved policy lifetimes, omitted protobuf defaults,
   explicit second factors/passkeys. Successful stdout is only the public client ID.
 - `tank/identity_oidc.py:29`: optional ZA-only configuration gate.
 - `tank/identity_oidc.py:72`: same-origin discovery cache and JWKS key refresh.
-- `tank/identity_oidc.py:86`: RS256 signature, issuer, audience/azp, expiry/iat checks.
-- `tank/identity_oidc.py:125`: reserved sub/organisation/current-project role mapping.
+- `tank/identity_oidc.py:89`: RS256 signature, issuer, audience/azp, expiry/iat checks.
+- `tank/identity_oidc.py:131`: reserved sub/organisation/current-project role mapping.
 - `tank/identity_device.py:17`: provider device grant to hash-only local pending state.
 - `tank/identity_device.py:45`: serialized single-use grant exchange into existing
   personal_tokens rows; no upstream token or raw device code is persisted.
-- `tank/device_login.py:59`: optional explicit legacy approval selector.
+- `tank/device_login.py:59`: optional explicit Zitadel approval selector.
 - `tank/device_login.py:131`: optional identity start; token polling branches by
   the new wrapped provider code, leaving the old code/approval routes working.
 - `tank/personal_tokens.py:150`: verified role snapshot read only after token-hash
@@ -95,12 +95,13 @@ Observed: **v4.20.0**, published **2026-10-22T10:18:58Z**.
 | postgres:16.15 | sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a |
 | python:3.12-slim | sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a72aeb34f30d159 |
 
-The guide selects **DNS-only for auth.za**, leaving the existing proxied ZA
-record and zone-wide settings alone. Cloudflare proxying is supported when gRPC
-is on with TLS/HTTP2/ALPN to origin, but is not required for this DNS-only record.
-Coolify's existing proxy terminates TLS and forwards API traffic with h2c; no
-second Traefik is deployed. See the guide for official Cloudflare/Zitadel sources
-and the stop condition if the ZA proxy uses different entrypoint/resolver names.
+The guide now selects **Proxied auth.za** with Network gRPC On, HTTP/2 to Origin
+On, Full (strict), TLS/ALPN h2 on origin 443, and the existing Coolify API h2c
+route. Coolify's existing letsencrypt resolver must issue/renew through DNS-01;
+the guide links official Cloudflare and Coolify requirements. Edge certificate
+coverage for this deeper hostname must be verified before deployment. No DNS,
+proxy setting, credential or server firewall is changed here. There is no
+DNS-only fallback, second Traefik, paid-service purchase or TLS-check bypass.
 
 ## Commands and results
 
@@ -265,7 +266,7 @@ _________________________ test_command_window_contract _________________________
 E       AssertionError: node:internal/modules/cjs/loader:1433
 E           throw err;
 E           ^
-E         
+E
 E         Error: Cannot find module '/workspace/codex-identity-za/workspace/node_modules/typescript'
 E         Require stack:
 E         - /workspace/codex-identity-za/tests/command_1b_contract.cjs
@@ -282,9 +283,9 @@ E             at Object..js (node:internal/modules/cjs/loader:1913:10) {
 E           code: 'MODULE_NOT_FOUND',
 E           requireStack: [ '/workspace/codex-identity-za/tests/command_1b_contract.cjs' ]
 E         }
-E         
+E
 E         Node.js v22.23.4
-E         
+E
 E       assert 1 == 0
 E        +  where 1 = CompletedProcess(args=['node', '/workspace/codex-identity-za/tests/command_1b_contract.cjs'], returncode=1, stdout='',...OT_FOUND',\n  requireStack: [ '/workspace/codex-identity-za/tests/command_1b_contract.cjs' ]\n}\n\nNode.js v22.23.4\n").returncode
 
@@ -300,7 +301,7 @@ _________________________ test_command_page_boundaries _________________________
 E       AssertionError: node:internal/modules/cjs/loader:1433
 E           throw err;
 E           ^
-E         
+E
 E         Error: Cannot find module '/workspace/codex-identity-za/workspace/node_modules/typescript'
 E         Require stack:
 E         - /workspace/codex-identity-za/tests/command_1b_pages.cjs
@@ -317,9 +318,9 @@ E             at Object..js (node:internal/modules/cjs/loader:1913:10) {
 E           code: 'MODULE_NOT_FOUND',
 E           requireStack: [ '/workspace/codex-identity-za/tests/command_1b_pages.cjs' ]
 E         }
-E         
+E
 E         Node.js v22.23.4
-E         
+E
 E       assert 1 == 0
 E        +  where 1 = CompletedProcess(args=['node', '/workspace/codex-identity-za/tests/command_1b_pages.cjs'], returncode=1, stdout='', st...E_NOT_FOUND',\n  requireStack: [ '/workspace/codex-identity-za/tests/command_1b_pages.cjs' ]\n}\n\nNode.js v22.23.4\n").returncode
 
@@ -335,7 +336,7 @@ _______ test_command_window_header_hides_totals_without_a_selected_chat ________
 E       AssertionError: node:internal/modules/cjs/loader:1433
 E           throw err;
 E           ^
-E         
+E
 E         Error: Cannot find module '/workspace/codex-identity-za/workspace/node_modules/typescript'
 E         Require stack:
 E         - /workspace/codex-identity-za/tests/command_window_header.cjs
@@ -352,9 +353,9 @@ E             at Object..js (node:internal/modules/cjs/loader:1913:10) {
 E           code: 'MODULE_NOT_FOUND',
 E           requireStack: [ '/workspace/codex-identity-za/tests/command_window_header.cjs' ]
 E         }
-E         
+E
 E         Node.js v22.23.4
-E         
+E
 E       assert 1 == 0
 E        +  where 1 = CompletedProcess(args=['node', '/workspace/codex-identity-za/tests/command_window_header.cjs'], returncode=1, stdout='..._FOUND',\n  requireStack: [ '/workspace/codex-identity-za/tests/command_window_header.cjs' ]\n}\n\nNode.js v22.23.4\n").returncode
 
@@ -373,12 +374,12 @@ tests/test_command_1b_workspace.py:29: AssertionError
     warnings.warn(
 
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
-  /workspace/codex-identity-za/tank/main.py:752: DeprecationWarning: 
+  /workspace/codex-identity-za/tank/main.py:752: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
@@ -386,57 +387,57 @@ tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_le
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
-  /tmp/base-reliability-venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /tmp/base-reliability-venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
-  /workspace/codex-identity-za/tank/main.py:806: DeprecationWarning: 
+  /workspace/codex-identity-za/tank/main.py:806: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
-  /workspace/codex-identity-za/tank/agent_skills.py:531: DeprecationWarning: 
+  /workspace/codex-identity-za/tank/agent_skills.py:531: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
-  /workspace/codex-identity-za/tank/skala_intake.py:71: DeprecationWarning: 
+  /workspace/codex-identity-za/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
-  /workspace/codex-identity-za/tank/skala_intake.py:77: DeprecationWarning: 
+  /workspace/codex-identity-za/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
-  /workspace/codex-identity-za/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /workspace/codex-identity-za/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -553,3 +554,230 @@ All checks passed!
 #10 DONE 4.1s
 ```
 
+
+
+## PR #589 rule-10 review fixes (3 Nov 2026)
+
+These replace the earlier default-Zitadel and DNS-only instructions. Token
+signature/issuer/audience/expiry checks, principal rules, image digests and the
+`Configure.run` API setup contract remain intact. `origin/main` was merged at
+`33c7b87c` (main `9313fd6e`); its phone-validation dependency and this branch's
+PyJWT dependency were both kept. The five setup/backup tests passed before the
+merge commit. Every finished file was committed and pushed on `codex/identity-za`;
+each push used `git fetch origin main && git merge origin/main && git push origin
+codex/identity-za`. Founder still merges the PR.
+
+### Changed lines and review coverage
+
+1. `tank/identity_device.py:56`: short row-lock transaction reserves
+   `last_polled_at`, releases the connection, then calls provider poll/verify.
+   `tank/identity_device.py:77`: second short transaction conditionally consumes
+   the pending/unexpired row with its verified tenant/user and `RETURNING *`;
+   inserts exactly one credential only for the winner, in that transaction.
+   The original consumed-row identity check remains satisfied; insertion failure
+   rolls the consumption back. `tests/test_identity_za.py:224` stalls both provider
+   calls/verification with events, asserts **all** pool connections are idle,
+   successfully executes an independent database read, then lets two overlapping
+   polls finish and proves one credential/one consumed row.
+2. `tank/device_login.py:59`, `tank/device_login.py:134`: Zitadel requires explicit
+   `approval: "zitadel"`. `cli/src/client.mjs:181`, `cli/src/client.mjs:473`:
+   ZA-only `--sign-in zitadel`; default request body still has only device_name.
+   `tests/test_identity_za.py:193` tests both an old request and explicit Workspace
+   approval end-to-end while the issuer is set, followed by explicit Zitadel start.
+   `cli/test/identity-za.test.mjs:28`, `:66`, `:85` test the opt-in request, old
+   default/Workspace origin and rejected wrong-region/command/selection flags.
+   `cli/README.md:24` and `cli/CHANGELOG.md:5` describe the actual selection.
+3. `ops/identity/docker-compose.yml:157` passes the expiry name to setup;
+   `ops/identity/docker-compose.yml:185` gates backups on healthy Postgres only.
+   `ops/identity/setup.py:108` checks the public completion record after expiry,
+   exits 0 with a clear stderr line and prints the saved public client ID without
+   reading/signing the machine key or contacting the API. A partial/missing record
+   fails. This trusts the previous completed setup, not a live drift audit.
+   `tests/test_identity_stack.py:122` proves both outcomes without a machine key.
+4. `docs/ops/IDENTITY-ZA.md:10`: proxied-gRPC, DNS-01 certificate instructions,
+   edge-hostname coverage prerequisite, official source links and firewall
+   requirements; no origin address published by this PR.
+5. `tank/identity_oidc.py:100`: an unknown-kid refresh is reserved under the short
+   cache lock at most once per 60 seconds, including failed refreshes. Discovery
+   and JWKS HTTP fetches occur outside the shared lock. Existing known keys remain
+   usable during a slow refresh. `tests/test_identity_za.py:283` tests a burst of
+   unknown IDs, the 60-second boundary and concurrent known-key verification.
+6. `docs/ops/IDENTITY-ZA.md:163`: Tervory is the organisation Zitadel creates at
+   first start. `docs/ops/IDENTITY-ZA.md:188`: map that org to the exact existing
+   Tervory tenant UUID returned by the already implemented authenticated
+   `https://app.tervory.com/api/case-studies` GET (no tenant query), after positively
+   selecting the existing Tervory Clerk organisation. No SQL, fabricated UUID or
+   new UI. The guide explicitly stops this deployment step if that verified
+   tenant UUID cannot be obtained. Its live value is not asserted here.
+   `docs/ops/IDENTITY-ZA.md:250`: removed Zitadel roles persist in an existing Tank
+   sign-in through refresh until revoke/expiry; `tervory logout` on every affected
+   CLI revokes its Tank credential and refresh token before a fresh login. The
+   Clerk sign-in list does not list the separate `zitadel:<sub>` identities.
+7. `docs/ops/IDENTITY-ZA.md:275`: the existing `r2-backup-za` worker is only on
+   `tervory-za` (`docker-compose.za.yml:230`), while identity Postgres is private
+   to this separate resource, with no published port. It cannot reach identity
+   Postgres as configured. Keeping the identity worker avoids broadening database
+   network access. It reuses the existing backup code, same ZA-only R2 setting
+   names/bucket/public age recipient, and its own database credential. Coolify
+   resources do not inherit environment values; founder enters the existing R2
+   values in the second resource. No new storage credentials/account/bucket were
+   created or inspected. `tests/test_identity_stack.py:112` checks network isolation
+   and the backup's independent Postgres health dependency.
+
+### Exact review validation commands and results
+
+All data/identities are synthetic. Docker Postgres uses loopback and disposable
+random per-test databases; no production data or provider is reached.
+
+```sh
+docker run --rm -d --name tervory-identity-za-review-pg --label tervory.test=identity-za-review --memory=1g --cpus=1 -e POSTGRES_HOST_AUTH_METHOD=trust -p127.0.0.1::5432 postgres:16.15
+docker port tervory-identity-za-review-pg 5432
+```
+
+Result: container started; `127.0.0.1:32797`.
+
+The first new identity run (`TMPDIR=/workspace/codex-identity-za/.proof/tmp
+PYTHONPATH=.proof/python:tank
+POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32797/postgres
+/tmp/base-reliability-venv/bin/python -m pytest tests/test_identity_za.py -q`)
+reported `2 failed, 13 passed, 3 warnings in 12.00s`: the atomic consumed UPDATE
+needed tenant_id/user_id to satisfy the unchanged row constraint. Corrected the
+UPDATE to include the verified identity; rerunning that exact command passed
+`15 passed, 3 warnings in 8.24s`.
+
+```sh
+TMPDIR=/workspace/codex-identity-za/.proof/tmp PYTHONPATH=.proof/python:tank /tmp/base-reliability-venv/bin/python -m pytest tests/test_identity_stack.py tests/test_identity_backup.py -q
+```
+
+Result: `6 passed in 0.40s`.
+
+```sh
+TMPDIR=/workspace/codex-identity-za/.proof/tmp PYTHONPATH=.proof/python:tank POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32797/postgres /tmp/base-reliability-venv/bin/python -m pytest tests/test_identity_za.py tests/test_identity_stack.py tests/test_identity_backup.py tests/test_device_login.py tests/test_personal_tokens.py tests/test_command.py --disable-socket --allow-hosts=127.0.0.1,localhost -q
+```
+
+Full final output (trailing whitespace removed):
+
+```text
+........................................................................ [ 57%]
+.....................................................                    [100%]
+=============================== warnings summary ===============================
+../../tmp/base-reliability-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /tmp/base-reliability-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../tmp/base-reliability-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /tmp/base-reliability-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../tmp/base-reliability-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /tmp/base-reliability-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-identity-za/tank/main.py:752: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /tmp/base-reliability-venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-identity-za/tank/main.py:806: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-identity-za/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-identity-za/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-identity-za/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-identity-za/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+125 passed, 14 warnings in 101.00s (0:01:40)
+```
+
+The initial `npm test --prefix cli` reported 52 passed / 15 failed: one old
+region-refusal wording assertion, a `/tmp` quota error and 13 release-hook
+failures from that temporary-directory issue. Kept the old refusal wording while
+adding the new flag guidance; the final run uses the task's own temp/cache paths:
+
+```sh
+TMPDIR=/workspace/codex-identity-za/.proof/tmp npm_config_cache=/workspace/codex-identity-za/.proof/npm-cache npm test --prefix cli
+```
+
+Final TAP summary:
+
+```text
+1..67
+# tests 67
+# suites 0
+# pass 67
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 23548.48591
+```
+
+```sh
+PYTHONPATH=.proof/python /tmp/base-reliability-venv/bin/python -m ruff check --select E9,F tank/identity_device.py tank/identity_oidc.py tank/device_login.py ops/identity/setup.py tests/test_identity_za.py tests/test_identity_stack.py
+docker compose -f ops/identity/docker-compose.yml config --no-interpolate --quiet
+git diff --check
+```
+
+Results: `All checks passed!`; compose exit 0 with no output; diff check exit 0.
+No environment values were rendered. CodeQL/restore GitHub checks were still
+running while this evidence was prepared; no green CI claim is made here.
+
+No founder browser screenshots, live sign-in, DNS/certificate changes, production
+deployment, live credential revocation or ZA restore result are claimed. Founder
+settings, exact tenant UUID from the existing read, valid edge/origin certificates
+and founder acceptance remain deployment prerequisites in the guide.
