@@ -438,4 +438,5 @@ async def test_same_repository_forms_and_canonical_names(repository):
     async with httpx.AsyncClient(transport=httpx.MockTransport(api)) as http:
         service = backend(http)
         assert len(await service.list()) == 1
+        assert (await service.create_plan(B))['cap']['current'] == 2
         assert (await service.destroy(lifecycle.plan_destroy(A)))['outcome'] == 'destroyed'
