@@ -66,7 +66,7 @@ COPY radix/net.py /app/net.py
 COPY radix/live.py /app/live.py
 COPY radix/egress.py /app/egress.py
 COPY radix/egress-policy.json /app/egress-policy.json
-COPY radix/passive_*.py /app/
+COPY radix/passive_*.py radix/regulation_events.py /app/
 COPY radix/verify /app/verify
 COPY radix/schema.sql /app/schema.sql
 COPY radix/scanlib /app/scanlib
