@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import re
 import secrets
@@ -19,6 +20,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -162,34 +164,55 @@ async def register(request: Request):
     east_only()
     try:
         value = json.loads(await bounded_body(request))
-        if (not isinstance(value, dict) or value.get('token_endpoint_auth_method', 'none') != 'none'
-                or value.get('grant_types', ['authorization_code', 'refresh_token']) != ['authorization_code', 'refresh_token']
-                or value.get('response_types', ['code']) != ['code']):
+        if not isinstance(value, dict):
+            return oauth_error('invalid_client_metadata')
+        grants = value.get('grant_types', ['authorization_code', 'refresh_token'])
+        responses = value.get('response_types', ['code'])
+        if (value.get('token_endpoint_auth_method', 'none') != 'none'
+                or not supported_values(grants, {'authorization_code', 'refresh_token'})
+                or not supported_values(responses, {'code'})):
             return oauth_error('invalid_client_metadata')
         client_id = 'tvc_' + uuid.uuid4().hex
         client = metadata_client(client_id, {**value, 'client_id': client_id})
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, RecursionError):
         return oauth_error('invalid_client_metadata')
-    # No trust in caller-supplied forwarding headers. With a reverse proxy this
-    # deliberately shares a bucket for the proxy's source address.
-    source = hashlib.sha256((request.client.host if request.client else 'unknown').encode()).hexdigest()
+    try:
+        address = registration_address(request)
+    except ValueError:
+        return oauth_error('invalid_request')
+    source = hashlib.sha256(address.encode()).hexdigest()
     with device.platform():
         async with command.db().acquire() as conn:
             async with conn.transaction():
-                await conn.execute('SELECT pg_advisory_xact_lock(hashtext($1))', 'oauth-register:' + source)
-                count = await conn.fetchval("SELECT count(*) FROM tank.oauth_clients WHERE source_address_hash=$1 AND created_at>now()-interval '1 hour'", source)
+                await conn.execute('SELECT pg_advisory_xact_lock(hashtext($1))', source)
+                count = await conn.fetchval("""SELECT count(*) FROM tank.oauth_clients
+                    WHERE source_address_hash=$1 AND created_at>now()-interval '1 hour'""", source)
                 if count >= 50:
                     return oauth_error('temporarily_unavailable', 429)
                 await conn.execute('INSERT INTO tank.oauth_clients(client_id,client_name,redirect_uris,source_address_hash) VALUES($1,$2,$3::jsonb,$4)',
                                    client.client_id, client.name, json.dumps(client.redirects), source)
     return JSONResponse({'client_id': client.client_id, 'client_name': client.name,
         'redirect_uris': list(client.redirects), 'token_endpoint_auth_method': 'none',
-        'grant_types': ['authorization_code', 'refresh_token'], 'response_types': ['code']},
+        'grant_types': sorted(set(grants)), 'response_types': sorted(set(responses))},
         status_code=201, headers=device.NO_STORE)
 
 
+def supported_values(values, supported: set[str]) -> bool:
+    return (isinstance(values, list) and bool(values)
+            and all(isinstance(value, str) for value in values) and set(values) <= supported)
+
+
+def registration_address(request: Request) -> str:
+    # Only Workspace's existing service authentication can assert a proxy-derived
+    # source. Public callers cannot select a bucket by spoofing any header.
+    from main import TANK_API_KEY
+    if command.key_matches(request.headers.get('x-tank-key', ''), TANK_API_KEY):
+        return str(ipaddress.ip_address(request.headers.get('x-tervory-oauth-source', '')))
+    return str(ipaddress.ip_address(request.client.host)) if request.client else 'unknown'
+
+
 class Authorization(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra='ignore')
     response_type: str
     client_id: str = Field(min_length=1, max_length=2048)
     redirect_uri: str = Field(min_length=1, max_length=2048)
@@ -210,7 +233,7 @@ async def validate_authorization(value: Authorization) -> Client:
         raise HTTPException(400, 'invalid_request')
     try:
         client = await client_metadata(value.client_id)
-    except (ValueError, OSError):
+    except (ValueError, OSError, httpx.HTTPError, RecursionError, HTTPException):
         raise HTTPException(400, 'invalid_client') from None
     if value.redirect_uri not in client.redirects:
         raise HTTPException(400, 'invalid_redirect_uri')
@@ -267,12 +290,11 @@ async def token(request: Request):
         return oauth_error('invalid_target')
     if request.headers.get('authorization') or value.get('client_secret'):
         return oauth_error('invalid_client')
-    try:
-        client = await client_metadata(value.get('client_id', ''))
-    except (ValueError, OSError):
+    client_id = value.get('client_id', '')
+    if not client_id or len(client_id) > 2048:
         return oauth_error('invalid_client')
     if value.get('grant_type') == 'refresh_token':
-        return await device.rotate_refresh(value.get('refresh_token', ''), audience='mcp', client_id=client.client_id)
+        return await refresh_grant(value.get('refresh_token', ''), client_id)
     if value.get('grant_type') != 'authorization_code':
         return oauth_error('unsupported_grant_type')
     code, verifier = value.get('code', ''), value.get('code_verifier', '')
@@ -286,17 +308,41 @@ async def token(request: Request):
     with tenant_scope(tenant):
         async with command.db().acquire() as conn:
             async with conn.transaction():
-                row = await conn.fetchrow('SELECT * FROM tank.oauth_codes WHERE tenant_id=$1 AND code_hash=$2 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE', tenant, pat.digest(code))
-                if (row is None or row['client_id'] != client.client_id or row['redirect_uri'] != value.get('redirect_uri')
+                row = await conn.fetchrow("""SELECT *,expires_at>now() AS unexpired FROM tank.oauth_codes
+                    WHERE tenant_id=$1 AND code_hash=$2 FOR UPDATE""", tenant, pat.digest(code))
+                if (row is None or row['client_id'] != client_id or row['redirect_uri'] != value.get('redirect_uri')
                         or row['resource'] != RESOURCE or row['region'] != 'us-east'
                         or not hmac.compare_digest(row['challenge'], challenge)):
                     return oauth_error('invalid_grant')
-                await conn.execute('UPDATE tank.oauth_codes SET consumed_at=now() WHERE tenant_id=$1 AND code_hash=$2', tenant, pat.digest(code))
-                ident = await conn.fetchval('INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,device_name,token_hash,expires_at,refresh_hash,refresh_expires_at,audience,client_id) '
-                    "VALUES($1,$2,'us-east',$3,$3,$4,$5,$6,$7,'mcp',$8) RETURNING token_id",
-                    tenant, row['user_id'], client.name, pat.digest(access_token), issued + device.ACCESS_TTL,
-                    pat.digest(refresh_token), issued + device.REFRESH_TTL, client.client_id)
+                if row['consumed_at'] is not None:
+                    await conn.execute("""UPDATE tank.personal_tokens SET revoked_at=COALESCE(revoked_at,now())
+                        WHERE tenant_id=$1 AND token_id=$2 AND client_id=$3 AND audience='mcp'""",
+                        tenant, row['token_id'], client_id)
+                    return oauth_error('invalid_grant')
+                if not row['unexpired']:
+                    return oauth_error('invalid_grant')
+                ident = await conn.fetchval("""INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,device_name,token_hash,expires_at,refresh_hash,refresh_expires_at,audience,client_id)
+                    VALUES($1,$2,'us-east',$3,$3,$4,$5,$6,$7,'mcp',$8) RETURNING token_id""",
+                    tenant, row['user_id'], row['client_name'], pat.digest(access_token), issued + device.ACCESS_TTL,
+                    pat.digest(refresh_token), issued + device.REFRESH_TTL, client_id)
+                await conn.execute("""UPDATE tank.oauth_codes SET consumed_at=now(),token_id=$3
+                    WHERE tenant_id=$1 AND code_hash=$2""", tenant, pat.digest(code), ident)
     return JSONResponse(device.grant(access_token, refresh_token, ident, 'us-east', issued), headers=device.NO_STORE)
+
+
+async def refresh_grant(presented: str, client_id: str):
+    match = device.REFRESH.fullmatch(presented)
+    if match is None or match[1] != 'us-east':
+        return oauth_error('invalid_grant')
+    tenant = uuid.UUID(hex=match[2])
+    with tenant_scope(tenant):
+        async with command.db().acquire() as conn:
+            row = await conn.fetchrow("""SELECT client_id FROM tank.personal_tokens
+                WHERE tenant_id=$1 AND region='us-east' AND audience='mcp' AND refresh_hash=$2
+                AND revoked_at IS NULL AND refresh_expires_at>now()""", tenant, pat.digest(presented))
+    if row is None or row['client_id'] != client_id:
+        return oauth_error('invalid_grant')
+    return await device.rotate_refresh(presented, audience='mcp', client_id=client_id)
 
 
 @router.post('/oauth/revoke')
@@ -313,6 +359,8 @@ async def revoke(request: Request):
         column = 'token_hash' if pat.TOKEN.fullmatch(token) else 'refresh_hash'
         with tenant_scope(tenant):
             async with command.db().acquire() as conn:
-                await conn.execute(f"UPDATE tank.personal_tokens SET revoked_at=COALESCE(revoked_at,now()) WHERE tenant_id=$1 AND region='us-east' AND audience='mcp' AND client_id=$2 AND {column}=$3",
-                                   tenant, value.get('client_id', ''), pat.digest(token))
+                await conn.execute("""UPDATE tank.personal_tokens SET revoked_at=COALESCE(revoked_at,now())
+                    WHERE tenant_id=$1 AND region='us-east' AND audience='mcp' AND client_id=$2
+                    AND (($4='token_hash' AND token_hash=$3) OR ($4='refresh_hash' AND refresh_hash=$3))""",
+                    tenant, value.get('client_id', ''), pat.digest(token), column)
     return Response(status_code=200, headers=device.NO_STORE)
