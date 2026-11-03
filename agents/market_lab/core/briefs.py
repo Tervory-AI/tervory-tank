@@ -28,12 +28,12 @@ def letter(report: dict) -> dict:
     # Only the saved report and citation values, with no greeting/footer/heading.
     lines = [report['answer']]
     for citation in report['citations']:
+        url = citation.get('url') or citation.get('href')
+        if isinstance(url, str) and url.startswith('/market-lab/sources/'):
+            url = 'https://app.tervory.com' + url
         lines.extend(str(value) for value in (
-            citation.get('claim') or citation.get('text'), citation.get('date'),
-            citation.get('url') or citation.get('href')) if value is not None)
-    text = '\n'.join(lines)
-    text = text.replace('/market-lab/sources/', 'https://app.tervory.com/market-lab/sources/') if '\n/market-lab/sources/' in text else text
-    return {'subject': report['question'], 'text': text}
+            citation.get('claim') or citation.get('text'), citation.get('date'), url) if value is not None)
+    return {'subject': report['question'], 'text': '\n'.join(lines)}
 
 
 class MailStore:
