@@ -21,6 +21,10 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
           python-version: '3.12'
+      # Production private NIC names require Engine >= 28.1.
+      - uses: docker/setup-docker-action@7ec28a010822b4626af4874f9448a4b05ac6f3e5 # v5
+        with:
+          version: v29.9.2
       - name: Prepare existing free runtime
         run: |
           pip install PyYAML==6.0.3
