@@ -302,3 +302,10 @@ def test_watched_subdomain_certificate_wildcards_use_standard_matching(host,expe
     cert['subjectAltName']=[('DNS','*.placeholder.example')]
     result=tls_findings(cert,'TLSv1.3','https://'+host+'/',host=host)
     assert [f['rule'] for f in result]==expected
+
+
+@pytest.mark.parametrize('label', ['CCPA notice','CPRA notice','California Consumer Privacy Act notice'])
+def test_ccpa_notice_uses_existing_checker_without_new_wording(label):
+    from scanlib.comply import scan_html
+    result=scan_html('<html><a href="/placeholder-ccpa">'+label+'</a></html>',name='placeholder.html',page_host=DOMAIN)
+    assert not any(f['rule']=='missing-privacy-notice' for f in result['findings'])
