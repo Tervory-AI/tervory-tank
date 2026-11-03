@@ -212,3 +212,25 @@ async def test_skipped_check_cannot_fix_or_replace_complete_baseline(pool):
     result=await store.changes(A,DOMAIN)
     assert result['previous_scan_id']==str(first)
     assert len(result['unchanged'])==1 and result['fixed']==result['new']==[]
+
+
+def test_partial_tls_json_retains_only_completed_objects():
+    row={'id':'placeholder-protocol','severity':'HIGH','finding':'placeholder'}
+    rows,complete=r6.tls_rows('['+json.dumps(row)+', {"id":')
+    assert rows==[row] and complete is False
+    assert r6.tls_rows(json.dumps([row]))==([row],True)
+
+
+@pytest.mark.asyncio
+async def test_tool_severity_preserved_but_bus_vocabulary_respected(pool,monkeypatch):
+    from chassis import events
+    from unittest.mock import AsyncMock
+    publish=AsyncMock(return_value=True)
+    monkeypatch.setattr(events,'publish',publish)
+    store=await watched(pool)
+    finding=r6.measured('axe-core','image-alt',TARGET,{'element':'placeholder'},severity='serious')
+    ident=await store.create(A,TARGET,passive_store.watch_artifact(DOMAIN),watched=True)
+    assert await store.running(A,ident)
+    await store.complete(A,ident,[finding])
+    assert (await store.findings(A,ident))[0]['severity']=='serious'
+    assert publish.call_args.args[3]['severity']=='unknown'
