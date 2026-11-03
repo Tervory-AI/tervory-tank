@@ -207,7 +207,8 @@ class Bot:
         if not contact or not contact.get('name') or not (contact.get('email') or contact.get('phone')):
             return None
         draft = uuid4()
-        values = {'first_name': contact['name'], 'email': contact.get('email'), 'phone': contact.get('phone'),
+        values = {'first_name': contact.get('first_name') or contact['name'], 'last_name': contact.get('last_name'),
+                  'email': contact.get('email'), 'phone': contact.get('phone'),
                   'description': text, 'source_ref': str(conversation), 'assigned_to': [], 'contacts': [], 'teams': []}
         await self.pool.execute('''INSERT INTO tank.trigger_bot_drafts(tenant_id,id,conversation_id,kind,data)
             VALUES($1,$2,$3,'lead',$4::jsonb)''', tenant, draft, conversation, json.dumps({k: v for k, v in values.items() if v is not None}))
