@@ -48,7 +48,7 @@ async def retailer_operation(operation: str, request: Request) -> JSONResponse:
             with tenant_scope(None, administrative=True):
                 result = {"tenants": await service.store.tenant_ids()}
         elif operation == "watch-products":
-            result = {"tenant_id": tenant, "products": await service.store.watch_products(tenant)}
+            result = {"tenant_id": tenant, "products": await service.store.watch_products(tenant, **({"catalogue": True} if data.get("catalogue") is True else {}))}
         elif operation == "watch-context":
             result = {"tenant_id": tenant, "product": await service.store.watch_context(tenant, str(data["sku"]))}
         elif operation == "panel":
