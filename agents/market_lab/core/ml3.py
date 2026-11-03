@@ -48,8 +48,15 @@ def build_router(*, key_ok, ledger_context, engine):
                 result = await overview(ledger, tenant, engine)
                 names = {s.id: s.key_name for s in sources(engine)}
                 # Bound-key URLs and configuration values never leave this read.
-                return {"feeds": [{**{k: f.get(k) for k in ("id", "name", "state", "rows", "checked_at", "document_id")},
-                                    "key_name": names.get(f["id"], "")} for f in result["feeds"]]}
+                feeds = [{**{k: f.get(k) for k in ("id", "name", "state", "rows", "checked_at", "document_id")},
+                          "key_name": names.get(f["id"], "")} for f in result["feeds"]]
+                from core.intel import SOURCES
+                bundle = await latest(ledger)
+                for source in SOURCES:
+                    feeds.append({"id": source.id, "name": source.name, "state": "on" if bundle else "off",
+                                  "rows": sum(source.id in i["source_ids"] for i in bundle["indicators"]) if bundle else 0,
+                                  "checked_at": bundle["published_at"] if bundle else None, "key_name": ""})
+                return {"feeds": feeds}
             if operation == "alerts":
                 from chassis.db import ensure_schedules
                 await ensure_schedules(ledger.conn, "agent_market_lab", [
