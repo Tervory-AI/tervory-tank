@@ -1,8 +1,3 @@
-# Pinned body of tank/main.py run_route for tests/test_tenant_rls.py.
-# Changed on purpose by the prompt-caching PR (cache read/write tokens on the receipt).
-# Changed on purpose by #500: urgent reads the tenant-sealed exact cache (#360 over #424).
-# Metadata-only execution receipt delta: dispatched settings are not resolved defaults.
-# Update this copy only together with a reviewed change to run_route.
 async def run_route(
     req: RouteRequest,
     task_id: uuid.UUID | None = None,
@@ -111,6 +106,10 @@ async def run_route(
     transcript_messages = await _preflight_mask(req, policy, messages, task_id)
     identity = _cache_identity(req, policy, messages, max_tokens, route_seat)
     cache_policy, cache_probe = dict(policy), None
+    # An exact repeat is served free at every priority: the tenant-sealed exact cache is a
+    # single indexed read, so urgent loses no time and pays no model call (#360). Urgent
+    # reads the exact match only (no semantic form) and still skips the encoder and every
+    # shadow (#424).
     if not _offpeak_dispatch and not holds_identifier and code_problem is None:
         exact_policy = policy if priority != "urgent" else {**policy, "semantic_cache": False}
         hit = await _cache_read(req, exact_policy, identity)
@@ -197,17 +196,26 @@ async def run_route(
                 WHERE id=$1 AND tenant_id=$2 AND offpeak_job_id=$1""", _receipt_id, req.tenant_id, sent_at)
     started = time.perf_counter()
     dispatched_settings = {"max_tokens": max_tokens, **generation}
+    routing = await __import__("routing_data").dispatch(
+        __import__("sys").modules[__name__], policy=policy, model=model,
+        generation=generation, offpeak=_offpeak_dispatch, text=sent,
+        refusal_args={"box": box, "tenant_id": str(req.tenant_id), "task_type": req.task_type,
+                      "caller": caller, "skill": req.skill, "pool_read": pool_read},
+    )
     try:
         if _on_token is not None and req.task_type == "command.turn":
             r = await stream_completion(LITELLM_URL, LITELLM_MASTER_KEY,
-                                        {"model": model, "messages": messages, **dispatched_settings}, _on_token)
+                                        {"model": model, "messages": messages, **dispatched_settings, **routing}, _on_token)
         else:
             async with httpx.AsyncClient(timeout=120) as client:
                 r = await client.post(
                     f"{LITELLM_URL}/v1/chat/completions",
                     headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-                    json={"model": model, "messages": messages, **dispatched_settings},
+                    json={"model": model, "messages": messages, **dispatched_settings, **routing},
                 )
+        answered_group = r.headers.get("x-litellm-model-group")
+        if answered_group in routing.aliases:
+            r.headers["x-litellm-model-group"] = routing.aliases[answered_group]
     except StreamFailure as exc:
         ledger_id = uuid.uuid4()
         async with pool().acquire() as conn:
