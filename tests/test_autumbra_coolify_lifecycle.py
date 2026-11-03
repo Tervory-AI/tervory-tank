@@ -353,3 +353,59 @@ async def test_redirect_is_not_followed():
         with pytest.raises(lifecycle.Refused):
             await backend(http).list()
     assert len(calls) == 1
+
+
+def test_watch_has_no_lifecycle_control_plane_settings():
+    compose = yaml.safe_load((ROOT / 'agents/ghost/docker-compose.yml').read_text())
+    for service in ('agent-ghost', 'ghost-browser'):
+        assert set(lifecycle.COOLIFY_SETTINGS).isdisjoint(compose['services'][service]['environment'])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('field', ['description', 'git_repository', 'build_pack', 'docker_compose_location'])
+async def test_missing_provenance_field_refuses_delete(field):
+    api = FakeAPI()
+    row = owned(A, 'placeholder-owned')
+    row.pop(field)
+    api.rows = [row]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(api)) as http:
+        with pytest.raises(lifecycle.Refused, match='not created by Autumbra'):
+            await backend(http).destroy(lifecycle.plan_destroy(A))
+    assert all(r.method == 'GET' for r in api.calls)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('verb', ['create', 'destroy'])
+async def test_mutation_dispatch_uses_confirmed_card_path(verb, monkeypatch):
+    from contextlib import asynccontextmanager
+    import trigger_commands
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
+    actor = command.Actor(uuid.UUID(A), 'placeholder-founder', True)
+    action = command.PlannedAction(tool='autumbra.enforce.' + verb, arguments={'tenant_id': B})
+    card_id = str(uuid.uuid4())
+    thread = uuid.uuid4()
+    card = {'card_id': card_id, 'summary': action.tool, 'status': 'executing', 'payload': action.model_dump()}
+    state = {'cards': {card_id: card}}
+
+    @asynccontextmanager
+    async def editing(*args):
+        yield None, {}, state
+
+    @asynccontextmanager
+    async def acquire():
+        yield None
+
+    monkeypatch.setattr(command, 'authorized_actor', AsyncMock(return_value=actor))
+    monkeypatch.setattr(command, 'editing', editing)
+    monkeypatch.setattr(command, 'db', lambda: SimpleNamespace(acquire=acquire))
+    monkeypatch.setattr(command, 'owned', AsyncMock(return_value={'state': state}))
+    for name in ('step', 'event', 'refresh_action_receipts'):
+        monkeypatch.setattr(command, name, AsyncMock())
+    confirmed = AsyncMock(return_value=(200, {'ledger_id': B, 'cost_usd': 0}))
+    direct = AsyncMock(side_effect=AssertionError('placeholder direct dispatch forbidden'))
+    monkeypatch.setattr(trigger_commands, 'dispatch_confirmed', confirmed)
+    monkeypatch.setattr(command, 'dispatch_action', direct)
+    result = await command.execute_card(thread, actor, card_id, action)
+    assert result['status'] == 'confirmed'
+    confirmed.assert_awaited_once_with(action, actor, thread, card_id)
+    direct.assert_not_called()
