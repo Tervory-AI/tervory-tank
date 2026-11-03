@@ -70,8 +70,13 @@ async def test_failed_handoff_retries_existing_quote_without_ordering(monkeypatc
     service.handoff.send = fail
     accepted = await service.locate_accept(TENANT, body)
     assert accepted["delivery"] == "pending" and not store.locate_orders
+    for _ in range(5):
+        await service.quote_store.retry_now(TENANT, accepted["request_id"])
+        await service.retry_pending(TENANT)
+    assert (await service.quote_store.status(TENANT, accepted["request_id"]))["status"] == "needs_person"
+    assert not store.locate_orders
     service.handoff = HandoffDouble()
-    await service.quote_store.retry_now(TENANT, accepted["request_id"])
+    await service.quote_store.retry_now(TENANT, accepted["request_id"], resume=True)
     await service.retry_pending(TENANT)
     assert len(service.handoff.sent) == 1 and len(store.quotes) == 1 and not store.locate_orders
 
@@ -139,6 +144,26 @@ async def test_quote_items_expose_store_time_offer_time_or_back_order_without_pr
     for result in (located, back_order, stocked):
         public = json.dumps(shopper_body(result))
         assert all(marker not in public for marker in ("other-store", "other.example", "source_id", "unit_cost", '"cost"'))
+
+
+@pytest.mark.asyncio
+async def test_every_setup_item_carries_delivery_metadata():
+    from fixtures.rig_quote_sample import seed
+    from rigbox.store import MemoryStore
+    store = MemoryStore()
+    await seed(store, TENANT)
+    await store.put_retailer(TENANT, "shop", "shop@example.com", None, "Shop",
+                             delivery={"min_days": 2, "max_days": 3})
+    service = QuoteService(store, None, HandoffDouble(), MemoryQuotes(store))
+    setup = (await service.setups(TENANT, "CORE-1"))["setups"][0]
+    unavailable = setup["parts"][-1]["product"]["id"]
+    row = next(row for row in await store.products(TENANT) if row["sku"] == unavailable)
+    await store.upsert_product(TENANT, {**row, "attributes": {"stock": {"status": "out_of_stock"}}})
+    quote = await service.quote(TENANT, {"setup": setup, "contact": {"name": "Shopper", "email": "shopper@example.com"}})
+    assert len(quote["items"]) == len(setup["parts"])
+    assert all("delivery" in item for item in quote["items"])
+    assert quote["items"][-1]["delivery"]["back_order"] is True
+    assert quote["items"][0]["delivery"] == {"min_days": 2, "max_days": 3, "back_order": False}
 
 
 @pytest.mark.asyncio
