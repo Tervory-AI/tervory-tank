@@ -17,6 +17,7 @@ vary with the selected build, home folder and PATH; the PATH line appears only
 when the launcher directory is missing from PATH:
 
 ```text
+Downloading Tervory CLI <version> (<platform>)
 SHA-256 verified: <sha256>
 Installed Tervory CLI <version> to <home>/.tervory/cli/<version>
 Launcher: <home>/.local/bin/tervory
