@@ -62,7 +62,8 @@ async def test_receiver_and_discovery_are_tiger_only_and_tenant_scoped(corridor)
     assert denied.status_code == 401
     assert set((await client.get('/v1/access/rig/tiger/tenants')).json()['tenants']) == {A, B}
     rows = (await client.get('/v1/access/rig/tiger/products', params={'tenant_id': A})).json()
-    assert rows == {'tenant_id': A, 'products': [{'sku': 'item', 'url': URL, 'name': 'Offline item'}]}
+    assert rows == {'tenant_id': A, 'products': [{'sku': 'item', 'url': URL, 'name': 'Offline item',
+        'gtin': None, 'mpn': None, 'brand': 'Offline', 'price': '10', 'currency': 'USD'}]}
     response = await client.post('/v1/access/rig/tiger', json=update())
     assert response.status_code == 200 and response.json() == {'updated': True}
     assert Decimal((await store.products(A))[0]['price']) == 12
@@ -98,3 +99,21 @@ async def test_repeated_and_out_of_order_delivery_cannot_regress_price(corridor)
     assert (await client.post('/v1/access/rig/tiger', json=update())).json()['updated']
     assert (await client.post('/v1/access/rig/tiger', json=newer)).json()['updated']
     assert Decimal((await store.products(A))[0]['price']) == 20
+
+
+@pytest.mark.asyncio
+async def test_watch_products_catalogue_is_opt_in_and_preserves_legacy_eligibility(corridor):
+    store, _, client = corridor
+    await store.upsert_product(A, dict(sku='feed-item', name='Offline feed item', brand='Offline',
+        category='test', price='17.25', currency='USD', url='', active=True,
+        gtin='4006381333931', mpn='ABC-1'))
+    await store.save_cost(A, {'sku':'feed-item'})
+    legacy = (await client.get('/v1/access/rig/tiger/products',params={'tenant_id':A})).json()['products']
+    assert [p['sku'] for p in legacy] == ['item']
+    catalogue = await store.watch_products(A,catalogue=True)
+    feed = next(p for p in catalogue if p['sku'] == 'feed-item')
+    assert feed['gtin'] == '4006381333931' and feed['mpn'] == 'ABC-1'
+    assert feed['price'] == '17.25' and feed['currency'] == 'USD' and feed['url'] == ''
+    assert [p['sku'] for p in await store.watch_products(B,catalogue=True)] == ['item']
+    await store.delete_products(A,['feed-item'])
+    assert [p['sku'] for p in await store.watch_products(A,catalogue=True)] == ['item']
