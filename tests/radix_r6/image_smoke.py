@@ -28,7 +28,7 @@ class Page(BaseHTTPRequestHandler):
     def log_message(self,*args): pass
     def do_GET(self):
         body=(b'<html lang="en"><title>placeholder</title><a href="/placeholder-file">placeholder</a>'
-              b'<img src="/placeholder-image"><script>document.cookie="placeholder_js=placeholder; Secure; SameSite=Lax"</script>'
+              b'<img src="/placeholder-image"><script>document.cookie="placeholder_js=placeholder; Secure; SameSite=Lax";fetch("https://127.0.0.1/placeholder").catch(()=>{});new WebSocket("wss://placeholder.example/placeholder-ws")</script>'
               b'<script src="https://other-placeholder.example/placeholder.js"></script></html>')
         kind='text/html'
         if self.path=='/placeholder-file': body,kind=EICAR,'application/octet-stream'
@@ -54,11 +54,18 @@ async def main():
         https.socket=context.wrap_socket(https.socket,server_side=True)
         threading.Thread(target=https.serve_forever,daemon=True).start()
         dials=[]
+        loopback_proxied=[]
+        class ObservedProxy(Proxy):
+            def handle(self,conn):
+                conn.settimeout(5)
+                if b'CONNECT 127.0.0.1:443 ' in conn.recv(4096,socket.MSG_PEEK):
+                    loopback_proxied.append(True)
+                return super().handle(conn)
         def dial(ip,port):
             assert ip=='93.184.216.34' and port==443
             dials.append((ip,port))
             return socket.create_connection(('127.0.0.1',https.server_port),timeout=5)
-        proxy=Server(Proxy(verified_host=DOMAIN,allow_storage=False,resolve=lambda _: '93.184.216.34',
+        proxy=Server(ObservedProxy(verified_host=DOMAIN,allow_storage=False,resolve=lambda _: '93.184.216.34',
                            connect=dial),port=8082).start()
         try:
             for destination in ('other-placeholder.example:443','placeholder.example:444'):
@@ -71,10 +78,16 @@ async def main():
             assert any(f['rule']=='image-alt' for f in browser['findings'])
             assert {'placeholder_js','placeholder_http'} <= {c['name'] for c in browser['cookies']}
             assert browser['third_party_refused']>=1
+            assert browser['client_refused']>=1 and loopback_proxied
             assert all('value' not in c for c in browser['cookies'])
+            if '--browser-only' in sys.argv:
+                print(json.dumps({'axe_image_alt':True,'cookies_before_interaction':len(browser['cookies']),
+                    'third_party_refused':browser['third_party_refused'],'loopback_used_proxy':True,
+                    'websocket_refused':True}))
+                return
             # Reset only the test lease between separate tool proofs. Bounds stay unchanged.
             proxy.close()
-            proxy=Server(Proxy(verified_host=DOMAIN,allow_storage=False,resolve=lambda _: '93.184.216.34',
+            proxy=Server(ObservedProxy(verified_host=DOMAIN,allow_storage=False,resolve=lambda _: '93.184.216.34',
                 connect=dial),port=8082).start()
             result=await r6.collect(TARGET,directory,budget=r6.Budget(110),notice_only=True)
             assert result['checks']['browser']['status']=='complete'
@@ -87,7 +100,7 @@ async def main():
             malware='skipped_budget' if rc==124 else 'found' if rc==1 and b' FOUND' in out else 'skipped_memory' if rc in {-9,137} or b'memory' in err.lower() or b'allocat' in err.lower() else 'error'
             assert malware!='error', (rc,err.decode(errors='replace')[:200])
             proxy.close()
-            proxy=Server(Proxy(verified_host=DOMAIN,allow_storage=False,resolve=lambda _: '93.184.216.34',
+            proxy=Server(ObservedProxy(verified_host=DOMAIN,allow_storage=False,resolve=lambda _: '93.184.216.34',
                 connect=dial),port=8082).start()
             full=await r6.collect(TARGET,directory,budget=r6.Budget(150))
             assert any(f['rule']=='tls-expiring' for f in full['findings'])
