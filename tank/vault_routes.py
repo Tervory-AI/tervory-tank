@@ -194,7 +194,7 @@ def build_router(tank):
         from command import Actor, current_actor
         from mcp_connections import discover
         actor = current_actor(Actor(owner, request.headers['x-tervory-user'], False, frozenset({VAULTS[vault]})))
-        await discover(actor, vault, ident, force=True)
+        await discover(actor, vault, ident, force=False)
         return reply({'ok': True})
 
     @router.post('/{vault}/connections/{ident}/discover')
@@ -203,7 +203,7 @@ def build_router(tank):
         owner, room, user = await authorize(request, vault, data.get('tenant_id'))
         from command import Actor, current_actor
         from mcp_connections import discover
-        tools = await discover(current_actor(Actor(owner, user, False, frozenset({room}))), vault, ident, force=True)
+        tools = await discover(current_actor(Actor(owner, user, False, frozenset({room}))), vault, ident, force=False)
         return reply({'tools': tools})
 
     @router.post('/{vault}/files')
