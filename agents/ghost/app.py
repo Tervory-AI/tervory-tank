@@ -274,6 +274,38 @@ async def _weekly_owner_email_loop(app: "FastAPI") -> None:
             pass
 
 
+async def refresh_market_lab_intel(app: FastAPI) -> dict:
+    """Fetch through Tank only; use the existing validator, catalog and receipts."""
+    from uuid import NAMESPACE_URL, uuid5
+    from .market_lab_intel import load_market_lab_advisories
+    raw = await app.state.tank.call("GET", "/v1/market-lab/intel")
+    bundle = accept_ioc_bundle(raw)
+    load_market_lab_advisories([])
+    register_advisories_from_ioc_bundle(bundle)
+    tenants = {PLATFORM_TENANT}
+    tenants.update(str(row[0]) for row in app.state.store.db.execute(
+        "SELECT DISTINCT tenant FROM ghost_state WHERE key=?", ("autumbra_client_settings",)).fetchall())
+    if watch_queue_configured():
+        for tenant in tenants:
+            queue = watch_threat_queue(tenant)
+            ident = str(uuid5(NAMESPACE_URL, "market_lab.ioc.v1:" + tenant + ":" + bundle["bundle_id"]))
+            if any(str(r.get("id")) == ident for r in queue.list_receipts()):
+                continue
+            receipt = receipt_for_bundle_consume(bundle, tenant_id=tenant)
+            receipt["id"] = ident
+            queue.write_receipt(receipt)
+    return {"bundle_id": bundle["bundle_id"], "indicator_count": len(bundle["indicators"])}
+
+
+async def _market_lab_intel_loop(app: FastAPI) -> None:
+    while True:
+        try:
+            await refresh_market_lab_intel(app)
+        except Exception:
+            pass  # Preserve current catalog; no request bodies or credentials in logs.
+        await asyncio.sleep(3600)
+
+
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -306,6 +338,7 @@ def create_app() -> FastAPI:
                 asyncio.create_task(nightly(app)),
                 asyncio.create_task(advisory_watch.watch(app)),
                 asyncio.create_task(_weekly_owner_email_loop(app)),
+                asyncio.create_task(_market_lab_intel_loop(app)),
             ]
             try:
                 yield
