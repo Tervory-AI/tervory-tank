@@ -30,7 +30,7 @@ export function secretPath(path) {
 
 // The process output is collected, not streamed: redaction must see complete lines
 // even when a secret arrives split across stdout/stderr chunks.
-export async function processOutput(command, args, { cwd, shell = false, timeoutMs = LIMITS.commandMs, signal, input } = {}) {
+export async function processOutput(command, args, { cwd, shell = false, timeoutMs = LIMITS.commandMs, signal, input, outputBytes = LIMITS.outputBytes, delimiter = '\n' } = {}) {
   return new Promise((resolveResult, reject) => {
     let child; let timer; let killed = false; let size = 0; let total = 0; const chunks = [];
     const stop = () => {
@@ -44,7 +44,7 @@ export async function processOutput(command, args, { cwd, shell = false, timeout
         stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
     } catch { return reject(refused()); }
     if (input !== undefined) { child.stdin.on('error', () => {}); child.stdin.end(input); }
-    const collect = chunk => { total += chunk.length; const keep = chunk.subarray(0, Math.max(0, LIMITS.outputBytes - size)); size += keep.length; chunks.push(keep); };
+    const collect = chunk => { total += chunk.length; const keep = chunk.subarray(0, Math.max(0, outputBytes - size)); size += keep.length; chunks.push(keep); };
     child.stdout.on('data', collect); child.stderr.on('data', collect);
     child.on('error', () => { clearTimeout(timer); signal?.removeEventListener('abort', stop); reject(refused()); });
     timer = setTimeout(stop, timeoutMs); signal?.addEventListener('abort', stop, { once: true });
@@ -53,7 +53,7 @@ export async function processOutput(command, args, { cwd, shell = false, timeout
       // An incomplete retained last line is omitted, so a secret whose suffix is
       // beyond the cap cannot leak its prefix.
       let output = Buffer.concat(chunks).toString('utf8');
-      if (total > size) output = output.slice(0, output.lastIndexOf('\n') + 1);
+      if (total > size) output = output.slice(0, output.lastIndexOf(delimiter) + 1);
       resolveResult({ code, timed_out: killed, truncated: total > size, output: redactSecrets(output) });
     });
   });
@@ -71,7 +71,7 @@ export class CodeFolder {
   }
   constructor(root) { this.root = root; }
   async git(args, input) {
-    return processOutput('git', ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '--no-pager', ...args], { cwd: this.root, input });
+    return processOutput('git', ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '--no-pager', ...args], { cwd: this.root, input, outputBytes: ['ls-files', 'check-ignore'].includes(args[0]) ? 8_388_608 : LIMITS.outputBytes, delimiter: args.includes('-z') ? '\0' : '\n' });
   }
   async path(name, { missing = false } = {}) {
     if (typeof name !== 'string' || !name || name.includes('\0') || name.includes('\\')) throw refused();
