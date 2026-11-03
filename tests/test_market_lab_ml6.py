@@ -1,15 +1,18 @@
 """ML6 offline delivery proof: disposable SQL, local SMTP and ASGI webhook receiver."""
 import asyncio
 import json
+import sys
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from types import SimpleNamespace
+from pathlib import Path
 from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
 from fastapi import FastAPI, Request
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'agents/market_lab'))
 
 import command
 import market_lab_ml3 as tank
@@ -123,7 +126,8 @@ async def test_closed_prediction_is_held_with_reason_and_open_is_queued(ledger, 
     states = (await ledger.briefs_for(str(OWNER)))[0]['deliveries']
     assert {state['status'] for state in states} == {expected}
     assert all(bool(state['reason']) == (expected == 'held') for state in states)
-    assert not await ledger.pending_briefs(str(OWNER), 'email') if expected == 'held' else True
+    if expected == 'held':
+        assert await ledger.pending_briefs(str(OWNER), 'email') == []
 
 
 @pytest.mark.asyncio
@@ -185,7 +189,23 @@ async def test_last_twelve_briefs_are_tenant_scoped_zero_cost_code_read(database
 @pytest.mark.asyncio
 async def test_recheck_gate_before_claim_and_atomic_claim_race():
     ledger = MemoryLedger()
-    saved = report([] if False else OWNER, [])
+    saved = report(citations=[])
     await briefs.save(ledger, saved, now=NOW)
     outcomes = await asyncio.gather(*(briefs.result(ledger.update_brief(str(OWNER), saved['id'], 'email', 'sending', expected='pending')) for _ in range(2)))
     assert outcomes == [True, False]
+
+
+@pytest.mark.asyncio
+async def test_gate_is_rechecked_when_a_queued_report_is_claimed():
+    ledger = MemoryLedger()
+    row, resolved = original()
+    ledger.save_prediction(row)
+    ledger.save_prediction(resolved)
+    saved = report(citations=[{'prediction_id': row['id'], 'claim': 'placeholder forecast',
+                              'url': 'https://placeholder.example/forecast'}])
+    await briefs.save(ledger, saved, now=NOW)
+    corridor = AsyncMock(side_effect=AssertionError('placeholder held report must not reach transport'))
+    store = briefs.MailStore(ledger, corridor, NOW - timedelta(days=1))
+    assert await store.pending(str(OWNER), 'email') == []
+    assert ledger.brief_deliveries[(str(OWNER), saved['id'], 'email')]['status'] == 'held'
+    corridor.assert_not_called()
