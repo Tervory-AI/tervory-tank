@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from base_evidence import field, public_url, row_fields
-from base_metrics import export_records, obj
+from base_metrics import csv_text, export_records, obj
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from tenant_db import tenant_transaction
@@ -19,6 +19,7 @@ class FindArgs(BaseModel):
     licence_type: str | None = Field(default=None, min_length=1, max_length=100)
     engine_category: str | None = Field(default=None, min_length=1, max_length=100)
     has_website: bool | None = None
+    has_products: bool | None = None
     has_phone: bool | None = None
     has_email: bool | None = None
     email_syntax_ok: bool | None = None
@@ -50,6 +51,31 @@ def verified(item: Any) -> bool:
             and bool(public_url(item.get("source_url")) and item.get("checked_at")))
 
 
+def sourced_products(value: Any) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    return [product for product in value if isinstance(product, dict)
+            and public_url(product.get("source_url"))
+            and isinstance(product.get("checked_at"), str) and product["checked_at"].strip()]
+
+
+PRODUCT_COLUMNS = ["record_id", "licence_key", "business_name", "name", "sku", "gtin", "mpn", "brand",
+                   "price", "currency", "availability", "url", "source_url", "checked_at"]
+
+
+def product_rows(records: list[dict]) -> list[dict]:
+    rows = []
+    for record in records:
+        products = obj(record["fields"]).get("products")
+        if not verified(products):
+            continue
+        for product in sourced_products(products.get("value")):
+            rows.append({**{key: product.get(key) for key in PRODUCT_COLUMNS[3:]},
+                         "record_id": record["record_id"], "licence_key": record.get("licence_key"),
+                         "business_name": record.get("name")})
+    return rows
+
+
 def project(row: dict) -> dict:
     profile, passes = obj(row.get("profile") or {}), obj(row.get("passes") or {})
     raw = obj(row.get("raw") or {})
@@ -69,6 +95,10 @@ def project(row: dict) -> dict:
     # Categories not explicitly verified stay unavailable to filters/exports.
     if "engine_category" not in fields and verified(profile.get("categories")):
         fields["engine_category"] = profile["categories"]
+    products = profile.get("products")
+    products = sourced_products(products.get("value") if isinstance(products, dict) else products)
+    if products:
+        fields["products"] = field(products, public_url(products[0]["source_url"]), products[0]["checked_at"])
     tier = profile.get("tier") or {}
     inputs = [item for item in fields.values() if verified(item)]
     if tier.get("source") == "verify" and passes.get("7") and inputs:
@@ -95,7 +125,7 @@ def matches(row: dict, filters: FindArgs) -> bool:
             options = actual if isinstance(actual, list) else [actual]
             if not any(str(item).strip().casefold() == wanted.strip().casefold() for item in options if item is not None):
                 return False
-    for key in ("website", "phone", "email"):
+    for key in ("website", "phone", "email", "products"):
         wanted = getattr(filters, "has_" + key)
         if wanted is not None and verified(fields.get(key)) is not wanted:
             return False
@@ -283,6 +313,20 @@ def build_router() -> APIRouter:
         saved = await store().show(actor.tenant_id, list_id)
         return await result(actor, "base.list.export", {"total": len(saved["records"]),
                             "url": "https://app.tervory.com/base/download?list_id=" + str(list_id)})
+
+    @router.get("/products")
+    async def products(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
+        require_tool(actor, "base.list.products")
+        saved = await store().show(actor.tenant_id, list_id)
+        return await result(actor, "base.list.products", {"total": len(product_rows(saved["records"])),
+                            "url": "https://app.tervory.com/base/download?list_id=" + str(list_id) + "&kind=products"})
+
+    @router.get("/products.csv")
+    async def products_csv(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
+        require_tool(actor, "base.list.products")
+        saved = await store().show(actor.tenant_id, list_id)
+        return Response(csv_text(product_rows(saved["records"]), PRODUCT_COLUMNS), media_type="text/csv; charset=utf-8",
+                        headers={"Content-Disposition": 'attachment; filename="base-products.csv"', "Cache-Control": "private, no-store"})
 
     @router.get("/csv")
     async def csv(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
