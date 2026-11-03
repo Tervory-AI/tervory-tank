@@ -13,7 +13,13 @@ from pathlib import Path
 from typing import Any
 
 from base_gold.gold_sources import PLATFORM_TENANT, _host, _phone, _text
-from base_gold.ffl.atf_gold import BLOCKED_HOSTS, expires, fetch_list, licence_id
+from engines import load_engine
+
+_ffl_gold = load_engine("ffl").module("atf_gold")
+BLOCKED_HOSTS = _ffl_gold.BLOCKED_HOSTS
+expires = _ffl_gold.expires
+fetch_list = _ffl_gold.fetch_list
+licence_id = _ffl_gold.licence_id
 
 # Mirrors base.find_site 1.7.0; a regression checks parity without importing skill code.
 NEUTRAL_SKIP_HOSTS = ('facebook.com', 'instagram.com', 'yelp.com', 'yellowpages.com', 'bbb.org', 'linkedin.com',
