@@ -16,6 +16,8 @@ _FIELDS = {'centre_category': str, 'carry_category': str, 'part_categories': lis
            'modifier_words': list, 'spec_words': list, 'loose_words': str,
            'model_words': dict, 'unsold': dict, 'sentences': dict}
 
+_SENTENCE_ARITY = {'and_list': 2, 'badges': 0, 'badges_2': 0, 'bare_colour': 1, 'bare_colour_2': 2, 'blocked_build': 1, 'brand_note': 0, 'build_block': 2, 'correction_gap': 0, 'count_gap': 2, 'cut_state': 1, 'cut_state_2': 1, 'expand_label': 3, 'expand_prices': 0, 'fit_answer': 1, 'fit_decision': 0, 'fit_decision_2': 3, 'fit_decision_3': 2, 'fit_decision_4': 2, 'fit_state': 0, 'fit_state_2': 1, 'fit_state_3': 1, 'honesty_gap': 1, 'kilo': 2, 'no_hits': 1, 'no_hits_2': 1, 'no_hits_3': 0, 'pack_note': 0, 'part_for_model': 2, 'prepare_reservation': 0, 'prepare_reservation_2': 1, 'prepare_reservation_3': 1, 'price_gap': 2, 'price_gap_2': 2, 'rand': 1, 'refusal_message': 2, 'refusal_message_2': 3, 'rewrite_fit_question': 2, 'shop_search': 1, 'shop_search_2': 1, 'shop_search_3': 0, 'shop_search_4': 1, 'shop_search_5': 0, 'size_gap': 2, 'size_gap_2': 2, 'size_gap_3': 3, 'size_miss': 0, 'size_miss_2': 0, 'unknown_choice': 2, 'unknown_choice_2': 2, 'unlink_message': 4, 'unlink_message_2': 1, 'unoffered_colour': 1, 'unoffered_colour_2': 2, 'unsold_note': 1, 'unsold_note_10': 1, 'unsold_note_11': 0, 'unsold_note_2': 1, 'unsold_note_3': 1, 'unsold_note_4': 1, 'unsold_note_5': 1, 'unsold_note_6': 1, 'unsold_note_7': 0, 'unsold_note_8': 0, 'unsold_note_9': 0, 'variant_miss': 0, 'variant_miss_2': 0}
+
 @lru_cache(maxsize=256)
 def _compile(text: str, flags: int = re.IGNORECASE) -> re.Pattern[str]:
     return re.compile(text, flags)
@@ -75,9 +77,11 @@ def validate(raw: Any) -> dict[str, Any]:
         # attribute/index traversal. Templates only substitute positional slots.
         reason = 'template'
         import string
-        for text in raw['sentences'].values():
+        for key, text in raw['sentences'].items():
+            if key not in _SENTENCE_ARITY:
+                raise ValueError
             for _, field, spec, conversion in string.Formatter().parse(text):
-                if field is not None and (not field.isdecimal() or int(field) > 15 or spec or conversion not in (None, 's', 'r', 'a')):
+                if field is not None and (not field.isdecimal() or int(field) >= _SENTENCE_ARITY[key] or spec or conversion not in (None, 's', 'r', 'a')):
                     raise ValueError
         return raw
     except (ValueError, TypeError, re.error, RecursionError, OverflowError):
