@@ -4,9 +4,9 @@ No network, model, client defaults or visitor-facing fallback wording lives here
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import re
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -16,7 +16,7 @@ from semantic_cache import NUMBER
 PASSAGE_THRESHOLD = 0.35
 FAQ_THRESHOLD = 0.92
 MAX_PASSAGES = 6
-PRICE_OR_STOCK = re.compile(r"\b(price|prices|cost|costs|stock|available|availability|inventory)\b|how much|[$£€]", re.I)
+PRICE_OR_STOCK = re.compile(r"\b(price|prices|cost|costs|stock|available|availability|inventory)\b|how much|[$£€]", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -77,7 +77,7 @@ def grounded(output: Any, passages: list[Passage]) -> tuple[str, list[Passage]] 
         supported = {v.casefold() for v in NUMBER.findall(" ".join(p.text for p in cited))}
         if any(v.casefold() not in supported for v in NUMBER.findall(answer)):
             return None
-        dates = re.compile(r"\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|today|tomorrow|yesterday|January|February|March|April|May|June|July|August|September|October|November|December)\b", re.I)
+        dates = re.compile(r"\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|today|tomorrow|yesterday|January|February|March|April|May|June|July|August|September|October|November|December)\b", re.IGNORECASE)
         source_text = ' '.join(p.text for p in cited).casefold()
         if any(token.casefold() not in source_text for token in dates.findall(answer)):
             return None
@@ -85,7 +85,7 @@ def grounded(output: Any, passages: list[Passage]) -> tuple[str, list[Passage]] 
         if any(token not in ' '.join(p.text for p in cited) for token in currencies.findall(answer)):
             return None
         # The engine owns links. A model cannot introduce a destination or a raw citation URL.
-        if re.search(r"https?://|\]\(", answer, re.I):
+        if re.search(r"https?://|\]\(", answer, re.IGNORECASE):
             return None
         return answer.strip(), cited
     except (ValueError, TypeError, KeyError):
