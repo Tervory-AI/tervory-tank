@@ -1,2 +1,4 @@
 proselint==0.16.0
 twitter-text-parser==3.0.0
+# twitter-text-parser uses pkg_resources; setuptools 81 removed it.
+setuptools==80.9.0
