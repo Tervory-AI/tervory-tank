@@ -22,6 +22,8 @@ def build_router(tank):
     router = APIRouter()
     _warning_routes(router, tank)
     _research_route(router, tank)
+    from market_lab_ml3 import build_router as ml3_router
+    router.include_router(ml3_router(tank))
 
     @router.post("/v1/market-lab/{operation}", dependencies=[Depends(tank.require_key)])
     async def call(operation: str, body: MarketRequest):
