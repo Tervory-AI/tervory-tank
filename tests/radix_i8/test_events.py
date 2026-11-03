@@ -14,7 +14,7 @@ import pytest_asyncio
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / 'agents/radix'), str(ROOT / 'agents/_chassis'), str(ROOT / 'tank')]
 import regulation_events as events
-import passive_notices as notices
+import passive_r6 as notices
 import passive_routes as routes
 from passive_store import DDL, Store, watch_artifact
 import passive_watch
@@ -71,6 +71,13 @@ async def test_consumer_ack_only_after_queue_and_fail_errors(monkeypatch):
     assert calls[-1][1]['action'] == 'fail'
 
 
+async def notice_browser(argv, directory, seconds):
+    assert argv[0] == '/usr/bin/node' and argv[-1] == 'notice-only'
+    return 0, json.dumps({'findings': [], 'cookies': [{'name':'placeholder', 'domain':DOMAIN,
+        'path':'/', 'expiry':-1, 'Secure':False, 'HttpOnly':False, 'SameSite':'Lax', 'first_party':True}],
+        'third_party_refused':0, 'client_refused':0}).encode(), b''
+
+
 @pytest.mark.asyncio
 async def test_notice_cookie_rules_use_fake_page_and_no_other_checks(tmp_path):
     seen = []
@@ -78,11 +85,18 @@ async def test_notice_cookie_rules_use_fake_page_and_no_other_checks(tmp_path):
         seen.append(str(request.url))
         return httpx.Response(200, headers={'content-type': 'text/html',
             'set-cookie': 'placeholder=placeholder; Path=/'}, text='<html><p>placeholder</p></html>')
-    findings = await notices.collect(TARGET, tmp_path, transport=httpx.MockTransport(page))
+    result = await notices.collect_notices(TARGET, tmp_path, run=notice_browser, transport=httpx.MockTransport(page))
+    findings = result['findings']
     assert seen == [TARGET]
-    assert {f['rule'] for f in findings} == {'missing-privacy-notice', 'cookie-missing-flags'}
+    assert {f['rule'] for f in findings} == {'missing-privacy-notice', 'cookie'}
     assert all(f['file'] == TARGET for f in findings)
-    assert all('explanation' in json.loads(f['fix'])[f['rule']] for f in findings)
+    assert set(result['checks']) == {'page_load','notices','browser'}
+    assert all(v['status']=='complete' for v in result['checks'].values())
+    cookie = next(f for f in findings if f['rule']=='cookie')
+    assert cookie['facts']['Secure'] is False and cookie['facts']['HttpOnly'] is False
+    assert cookie['facts']['SameSite']=='Lax' and 'value' not in cookie['facts']
+    notice = next(f for f in findings if f['rule']=='missing-privacy-notice')
+    assert 'explanation' in json.loads(notice['fix'])[notice['rule']]
     assert 'placeholder=placeholder' not in json.dumps(findings)
     assert list(tmp_path.iterdir()) == []
 
@@ -95,8 +109,10 @@ async def test_notice_cookie_rules_use_fake_page_and_no_other_checks(tmp_path):
 ])
 async def test_incomplete_not_passed(status, headers, body, tmp_path):
     async def page(request): return httpx.Response(status, headers=headers, text=body)
-    with pytest.raises((ValueError, httpx.HTTPStatusError)):
-        await notices.collect(TARGET, tmp_path, transport=httpx.MockTransport(page))
+    result = await notices.collect_notices(TARGET, tmp_path, run=notice_browser, transport=httpx.MockTransport(page))
+    assert result['checks']['page_load']['status']=='partial'
+    assert result['checks']['notices']['status']=='partial'
+    assert any(f['rule']=='partial' for f in result['findings'])
 
 
 @pytest.mark.asyncio
@@ -108,7 +124,7 @@ async def test_proxy_is_mandatory_for_production_client(monkeypatch, tmp_path):
             raise RuntimeError('placeholder-stop-before-network')
     monkeypatch.setattr(notices.httpx, 'AsyncClient', Client)
     with pytest.raises(RuntimeError):
-        await notices.collect(TARGET, tmp_path)
+        await notices.collect_notices(TARGET, tmp_path)
 
 
 @pytest.mark.asyncio
