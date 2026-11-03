@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 import re
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 NAME = re.compile(r"tervory-rig\.[a-f0-9]{64}\.umd\.js")
@@ -92,16 +92,25 @@ def mount(application: FastAPI) -> None:
         })
 
     @application.get("/widget/test", include_in_schema=False)
-    async def widget_test():
+    async def widget_test(request: Request):
         key = os.environ.get("RIG_WIDGET_PUBLISHABLE_KEY", "")
         if not key:
             raise HTTPException(503, "RIG_WIDGET_PUBLISHABLE_KEY is not configured")
+        rig = getattr(request.app.state, "rig", None)
+        retailer = None
+        if rig is not None:
+            from rigbox.service import hash_key
+            row = await rig.store.key(hash_key(key))
+            if row:
+                retailer = await rig.store.retailer(str(row["tenant_id"]))
+        theme = html.escape(str((retailer or {}).get("theme") or "neutral"), quote=True)
+        fonts = ' fonts="/widget/fonts/custom-nation.css"' if theme == "custom-nation" else ""
         file = html.escape(manifest()["file"], quote=True)
         public_key = html.escape(key, quote=True)
         return HTMLResponse(f'''<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rig · retailer test page</title><style>body{{margin:0}}tervory-rig{{display:block}}</style>
-</head><body><tervory-rig api-base="" rig-key="{public_key}" theme="custom-nation" fonts="/widget/fonts/custom-nation.css"></tervory-rig>
+</head><body><tervory-rig api-base="" rig-key="{public_key}" theme="{theme}"{fonts}></tervory-rig>
 <script src="/widget/assets/{file}"></script></body></html>''', headers={
             "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
             "X-Robots-Tag": "noindex, nofollow",

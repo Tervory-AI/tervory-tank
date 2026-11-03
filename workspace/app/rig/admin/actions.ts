@@ -4,7 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { activeTenant } from "@/lib/tenant";
 import { rigAdminAction, rigAdminPanel } from "@/lib/tank";
 import { isListedFounder } from "../../review/founder";
-import type { AdminOperation, AdminResult, RetailerPanel, MappingPreview } from "./types";
+import type { AdminOperation, AdminResult, RetailerPanel, MappingPreview, CommerceResult } from "./types";
 
 export async function retailerIdentity() {
   const { userId, orgRole } = await auth();
@@ -18,6 +18,10 @@ export async function retailerIdentity() {
 export async function changeRetailer(operation: AdminOperation, data: Record<string, unknown>): Promise<AdminResult> {
   try {
     const actor = await retailerIdentity();
+    if (["commerce-connect", "commerce-orders", "store-delivery"].includes(operation)) {
+      const commerce = await rigAdminAction<CommerceResult>(actor, operation, data);
+      return { ok: true, message: "", commerce };
+    }
     if (operation === "delete-products") {
       const result = await rigAdminAction<{ deleted: number }>(actor, operation, data);
       return { ok: true, message: `${result.deleted} deleted.`, deleted: result.deleted, panel: await rigAdminPanel<RetailerPanel>(actor) };

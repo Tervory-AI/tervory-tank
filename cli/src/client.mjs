@@ -357,7 +357,7 @@ export function receiptLines(receipt) {
 export async function confirmCard(tank, card, io) {
   io.write(`${safe(card.summary)}\n`);
   // Any response except an explicit yes cancels, including EOF.
-  const answer = await io.prompt('Confirm [y/N] ');
+  const answer = io.interactive !== true ? null : await io.prompt('Confirm [y/N] ');
   const action = /^(y|yes)$/i.test(answer?.trim() ?? '') ? 'confirm' : 'cancel';
   return tank.json(`/v1/command/cards/${encodeURIComponent(card.card_id)}`, { action });
 }

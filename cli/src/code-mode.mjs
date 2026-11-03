@@ -1,3 +1,4 @@
+import { confirmCard, followThread } from './client.mjs';
 import { randomUUID } from 'node:crypto';
 import { CodeFolder, redactSecrets } from './code-tools.mjs';
 
@@ -6,6 +7,11 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
   const local = await CodeFolder.create(folder);
   const thread = (await tank.json('/v1/command/threads', {})).thread_id;
   io.write(`Thread ${sanitize(thread)}\n`);
+  const notesFolder = await CodeFolder.create(local.gitWorkTree);
+  let notes = { exists: false };
+  try { notes = await notesFolder.read('AGENTS.md'); }
+  catch { io.write('AGENTS.md skipped: Code tool refused.\n'); }
+  const project = notes.exists ? { kind: 'project', content: notes.text } : null;
   const history = [];
   const remember = (kind, content) => {
     content = redactSecrets(content);
@@ -18,9 +24,17 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
     const input = await io.prompt('> ');
     if (input === null || input.trim() === '/exit') return;
     if (!input.trim()) continue;
+    if (input.trim() === '/undo') {
+      try { await local.undo(io); } catch { io.write('Code tool refused.\n'); }
+      continue;
+    }
     const text = redactSecrets(input);
     const promptId = randomUUID();
     const previous = history.slice();
+    if (project) {
+      while (previous.length && (previous.length >= 40 || previous.reduce((n, item) => n + Buffer.byteLength(item.content), 0) + Buffer.byteLength(project.content) > 200000)) previous.shift();
+      previous.unshift(project);
+    }
     remember('user', text);
     let results = [];
     for (let round = 0; ; round++) {
@@ -40,7 +54,23 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
         if (io.signal?.aborted) throw new Error('Command cancelled; no action was retried.');
         remember('tool', JSON.stringify({ name: request.name, arguments: request.arguments }));
         let result;
-        try { result = await local.tool(request, io); }
+        try {
+          if (request.name === 'tervory') {
+            const index = plan.requests.slice(0, plan.requests.indexOf(request)).filter(item => item.name === 'tervory').length;
+            const card = plan.cards?.[index];
+            if (!card || card.tool !== request.arguments.tool || card.status !== 'pending') throw new Error('Tank sent an invalid answer.');
+            io.write(sanitize(redactSecrets(JSON.stringify({ tool: card.tool, arguments: card.arguments ?? {} }))) + '\n');
+            const confirmed = await confirmCard(tank, card, io);
+            if (confirmed.status === 'cancelled') result = { tool: card.tool, status: 'cancelled' };
+            else {
+              await followThread(tank, thread, confirmed, io);
+              const snapshot = await tank.json(`/v1/command/threads/${encodeURIComponent(thread)}`);
+              const stored = snapshot.cards?.find(item => item.card_id === card.card_id);
+              if (!stored) throw new Error('Tank sent an invalid answer.');
+              result = { tool: stored.tool, status: stored.status, result: JSON.parse(JSON.stringify(stored.result ?? null, (key, value) => typeof value === 'string' ? redactSecrets(value) : value)) };
+            }
+          } else result = await local.tool(request, io);
+        }
         catch { result = { error: 'Code tool refused.' }; }
         // The tool's output has already been redacted line-by-line. Redact the
         // envelope too, so model-supplied argument strings cannot smuggle secrets.
