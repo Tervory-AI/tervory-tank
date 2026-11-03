@@ -224,7 +224,8 @@ async def invoke(operation: str, request: Request, actor: Annotated[Actor, Depen
                 return result
             items.append(result)
         return {'items': items, 'text': '\n\n'.join(i['text'] for i in items),
-                'item_count': len(items), 'cost_usd': sum(float(i.get('cost_usd') or 0) for i in items),
+                'item_count': len(items), 'cost_usd': (None if any(i.get('cost_usd') is None for i in items)
+                    else sum(float(i['cost_usd']) for i in items)),
                 'ledger_ids': [i.get('ledger_id') for i in items]}
     data = await room(operation, {**body, 'tenant_id': str(actor.tenant_id)})
     if operation == "check":
