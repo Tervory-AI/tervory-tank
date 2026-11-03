@@ -248,3 +248,82 @@ async def test_signed_second_tenant_still_needs_own_log_and_mode(tmp_path, monke
             assert receipt['applied'] is False and not edge.list_blocked()
     finally:
         store.close()
+
+
+@pytest.mark.asyncio
+async def test_withdrawal_retry_survives_deleted_client_source(standing):
+    s = standing
+    source = (await s.service.reconcile(A))[0]
+    target = published_id(A, source['id'])
+    s.memory.platform[target] = {**source, 'id': target}
+    retract = s.tank.call.side_effect
+    s.tank.call.side_effect = RuntimeError('placeholder unavailable')
+    mark_undo_used(s.queues[A], prior_receipt_id=RID, tenant_id=A)
+    with pytest.raises(RuntimeError):
+        await s.service.reconcile(A)
+    assert not s.memory.client[A]
+    assert s.store.get_state(A, 'block_withdrawals', {})
+    s.tank.call.side_effect = retract
+    await s.service.reconcile(A)
+    assert not s.memory.platform and s.store.get_state(A, 'block_withdrawals', {}) == {}
+
+
+@pytest.mark.asyncio
+async def test_code_only_records_never_call_encoder_or_index():
+    from hermes.records import Records
+    sql = SQL()
+    encoder = SimpleNamespace(validate=lambda claim: (_ for _ in ()).throw(AssertionError('placeholder encoder called')))
+    r = Records(sql, None, encoder, 'placeholder-model', ['ghost'])
+    r.lock = AsyncMock()
+    r.enqueue = AsyncMock()
+    r.process_one = AsyncMock()
+    r.get = AsyncMock(return_value={'id': B, 'claim': 'placeholder claim', 'evidence': [], 'embed_model': ''})
+    await r.save('ghost', A, 'placeholder claim', [], row_id=B, index=False)
+    r.enqueue.assert_not_called()
+    r.process_one.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_tank_share_uses_existing_publish_policy_and_requires_confirm(monkeypatch):
+    import command
+    import ghost_routes
+    import memory_routes
+    import trigger_routes
+    from trigger_commands import CONFIRMED
+    monkeypatch.setenv('TANK_API_KEY', 'placeholder-workspace-key')
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
+    actor = command.Actor(uuid.UUID(A), 'placeholder-founder', True)
+    monkeypatch.setattr(command, 'identity', AsyncMock(return_value=actor))
+    monkeypatch.setattr(trigger_routes, 'code_receipt', AsyncMock(return_value=uuid.UUID(RID)))
+    room = AsyncMock(return_value=httpx.Response(200, json={'items': [{'id': B, 'address': IP}]}))
+    monkeypatch.setattr(ghost_routes, 'call_room', room)
+    sql = SQL(policy=False)
+    publisher = Publisher(records(sql))
+    async def hermes(method, path, user, *, body=None, params=None):
+        assert path == '/founder/publish' and user == actor.user_id
+        result = await publisher.publish(body['agent'], body['tenant_id'], body['source_row'], user)
+        if result['result'] == 'disabled':
+            from fastapi import HTTPException
+            raise HTTPException(403, result)
+        return result
+    monkeypatch.setattr(memory_routes, 'hermes', hermes)
+    app = FastAPI()
+    app.include_router(memory_routes.router)
+    app.include_router(ghost_routes.router)
+    monkeypatch.setattr(ghost_routes, 'runtime', lambda: SimpleNamespace(app=app, TANK_API_KEY='placeholder-workspace-key'))
+    headers = {'X-Tank-Key': 'placeholder-workspace-key', 'X-Tervory-Admin': actor.user_id}
+    body = {'tenant_id': A, 'record_ids': [B]}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://placeholder') as client:
+        assert (await client.post('/v1/ghost/autumbra/blocks/share', json=body, headers=headers)).status_code == 409
+        assert not sql.log
+        token = CONFIRMED.set((actor.tenant_id, actor.user_id, uuid.UUID(RID), 'autumbra.blocks.share', body))
+        try:
+            denied = await client.post('/v1/ghost/autumbra/blocks/share', json=body, headers=headers)
+            assert denied.status_code == 403 and denied.json()['items'][0]['result'] == 'disabled'
+            assert sql.log == ['disabled']
+            sql.policy = True
+            accepted = await client.post('/v1/ghost/autumbra/blocks/share', json=body, headers=headers)
+            assert accepted.status_code == 200 and accepted.json()['items'][0]['result'] == 'published'
+            assert sql.log == ['disabled', 'published']
+        finally:
+            CONFIRMED.reset(token)
