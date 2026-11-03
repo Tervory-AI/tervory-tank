@@ -1,6 +1,7 @@
 """Configure unmodified Zitadel through its public API; success prints client ID only."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -104,9 +105,32 @@ class Configure:
         return {'client_id': client_id, 'project_id': project_id, 'owner_org_id': org}
 
 
-def main():
+def completed_setup(bootstrap: Path) -> dict | None:
+    expiry = datetime.fromisoformat(os.environ['IDENTITY_BOOTSTRAP_KEY_EXPIRATION'].replace('Z', '+00:00'))
+    if expiry.tzinfo is None:
+        raise SetupError('Bootstrap expiry must include timezone')
+    if expiry > datetime.now(timezone.utc):
+        return None
+    # Written only after every setup API operation succeeded. No partial run
+    # produces this completion record, and it contains only public identifiers.
+    try:
+        result = json.loads((bootstrap / 'tervory.json').read_text())
+    except (OSError, ValueError):
+        raise SetupError('Expired bootstrap key without completed setup') from None
+    if (not isinstance(result, dict) or set(result) != {'client_id', 'project_id', 'owner_org_id'}
+            or not all(isinstance(v, str) and v and len(v) <= 200 for v in result.values())):
+        raise SetupError('Completed setup record refused')
+    return result
+
+
+def main(bootstrap: Path = Path('/bootstrap')):
     os.umask(0o077)
-    key_path = Path('/bootstrap/machine-key.json')
+    completed = completed_setup(bootstrap)
+    if completed is not None:
+        print('Identity setup already completed; bootstrap key expired; no changes attempted', file=sys.stderr)
+        print(completed['client_id'])
+        return
+    key_path = bootstrap / 'machine-key.json'
     key_path.chmod(0o600)
     key = json.loads(key_path.read_text())
     now = int(time.time())
@@ -123,7 +147,7 @@ def main():
             raise SetupError('Bootstrap authentication refused')
         client.headers['Authorization'] = 'Bearer ' + response.json()['access_token']
         result = Configure(client).run()
-    Path('/bootstrap/tervory.json').write_text(json.dumps(result) + '\n')
+    (bootstrap / 'tervory.json').write_text(json.dumps(result) + '\n')
     print(result['client_id'])
 
 
