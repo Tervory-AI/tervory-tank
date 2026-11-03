@@ -12,6 +12,7 @@ The one authorized `git fetch origin && git merge origin/main` completed as `3aa
 - `agents/tisan/scaffold.py:36` and `:298`: exclude transient smoke reports from project files/archives. `:456` includes k6 in the existing card result rows. `:511` completes the tenant-scoped secret scan before the browser runner's final k6 stage, then returns Q1 rows followed by k6. Existing build failure and memory paths remain unchanged.
 - `tests/test_tisan_k6.py:85`: real k6 against isolated loopback fixtures: multiple pages, 200, 500, redirected response, nonlocal origins/paths, poisoned inherited proxy/output settings and per-page timings. `:109` feeds the actual failed smoke through `run_checks` and `builder.execute`, verifies the failed sidecar and no archive. `:140` verifies successful and failing memory claims retain the full check. `:156` verifies all Q1 checks precede the smoke.
 - `tests/test_tisan_quality.py:143`: the opt-in real clean-template build now requires all nine checks, both manifest pages at 200 with p95 values, and five existing presenter result rows.
+- `.github/workflows/ci.yml:192`: install the same Dockerfile-pinned, checksum-verified binary during CI setup, so all real k6 tests run in the offline Tank suite rather than skipping for a missing executable. No duplicate version/checksum constants.
 - `.gitleaksignore:58`: eight exact historical fingerprints for the copied 1.1.0 Figma eval identifiers. The current first six cases remain byte-identical to 1.0.1 as required by the review. These are the same already-reviewed file identifiers (which grant no access), not credentials. No rule, prefix or path-wide exception was added. The full branch scan is clean.
 - `tests/tisan_j5/results.json:1`: actual clean-template checks and existing presenter result rows.
 - `tests/tisan_j5/PR.md:1`: gate evidence and founder acceptance boundary.
@@ -54,6 +55,8 @@ git diff --check
 Initial attempts with the former shared Chromium cache failed because that cache was absent after host cleanup. The successful regression run uses Chromium copied from the existing Q1 image into this task's own directory. The initial security-policy run also required adding the local pinned gitleaks directory to PATH; the corrected run passes all 41 cases. Neither issue required weakening a check.
 
 The clean template returned 200 on all **84** k6 requests: `/contact` 42 requests, p95 **77.70 ms**; `/privacy` 42 requests, p95 **46.48 ms**. Both pages passed all existing Q1 budgets; secrets scanned 60 generated text files without findings. [results.json](results.json) records the complete checks and existing card result rows.
+
+The CI setup step was also executed directly from the parsed workflow. It downloaded the release archive, verified the Dockerfile's SHA-256, extracted only the named executable and returned `k6 v1.8.2`. CI setup may install dependencies; the smoke itself uses only loopback and disables usage reporting.
 
 ## Image measurement and CI
 
