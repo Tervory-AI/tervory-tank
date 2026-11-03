@@ -10,3 +10,11 @@
 CC BY adaptations retain attribution and identify changes here. The upstream works do not endorse Trigger. Content-dependent checks are advisory findings, not a certification of accuracy or legal correctness.
 
 The second build adapts a mechanical, industry-neutral house subset from the original MIT stylebooks; exact rule-to-book mapping and checker limitations are in [HOUSE_STYLE.md](HOUSE_STYLE.md). The house subset is fallback guidance, never tenant-authored brand content. No upstream vendored file was changed.
+
+W1 reuses **twitter-text-parser 3.0.0**, swen128's MIT Python port of Twitter's
+conformance-tested character parser: https://github.com/swen128/twitter-text-python.
+It counts X's weighted text, URLs and emoji in code without an API request.
+The distributed wheel retains its MIT licence. Its `pkg_resources` dependency
+requires **setuptools 80.9.0** (MIT); the pin keeps that existing parser working.
+Platform documentation links and verification dates live in [formats.py](formats.py).
+Documentation supplies limits only; no platform copy or examples are imported.
