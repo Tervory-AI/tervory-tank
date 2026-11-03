@@ -231,7 +231,8 @@ async def test_teachers_sources_counts_receipt_and_tenant_isolation(serving, mon
     assert 'placeholder-input' not in response.text and 'placeholder-sensitive-output' not in response.text
     assert 'placeholder-foreign' not in response.text
     assert all(row['task_type'] == TASK for row in result['items'])
-    assert all('model' not in row for row in result['items'])
+    assert all(('model' not in row if row['teacher_model'] is None else row['model'] == row['teacher_model'])
+               for row in result['items'])
     assert any(row['teacher_model'] is None for row in result['items'])
     async with real.pool.acquire() as conn:
         receipt = await conn.fetchrow('SELECT * FROM tank.ledger WHERE id=$1', uuid.UUID(result['ledger_id']))

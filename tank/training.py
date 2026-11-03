@@ -580,6 +580,7 @@ async def teachers(skill_id: str, actor: Reviewer = Depends(require_reviewer)) -
         ledger_id = await code_receipt(actor.tenant, "skala.teachers", agent="tank", conn=conn)
     return {"name": args.skill_id, "count": len(rows),
             "items": [{"name": row["version"], "task_type": row["task_type"],
+                       **({"model": row["teacher_model"]} if row["teacher_model"] is not None else {}),
                        "teacher_model": row["teacher_model"], "count": row["count"],
                        "newest_created_at": row["newest_created_at"].isoformat() if row["newest_created_at"] else None}
                       for row in rows], "ledger_id": str(ledger_id)}
