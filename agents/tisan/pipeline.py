@@ -25,7 +25,7 @@ class Start(BaseModel):
     model_config = ConfigDict(extra='forbid')
     tenant_id: UUID
     request_id: UUID
-    page_id: str = Field(pattern=r'^[a-z0-9-]{1,100}$')
+    page_id: str | None = Field(default=None, pattern=r'^[a-z0-9-]{1,100}$')
     brief: dict
 
 
@@ -220,6 +220,45 @@ async def refresh_staging(result, loader, root):
     return result
 
 
+async def refresh_production(result, loader, root):
+    """Link founder operations to their originating staged commit, never promote."""
+    if not result.get('commit') or not result.get('slug'):
+        return result
+    core = loader('tisan_promotion', 'promotion.py')
+    journal = core.Journal(root / 'promotion.sqlite3')
+    history = journal.history(result['tenant_id'], result['slug'])
+    promotion = next((row for row in history if row['action'] == 'promote'
+                      and row['details'].get('expected') == result['commit']), None)
+    if promotion is None:
+        return result
+    rollback = next((row for row in history[:history.index(promotion)] if row['action'] == 'rollback'
+                     and (row['details'].get('previous') == result['commit']
+                          or row['details'].get('recovery_of') == promotion['id'])), None)
+    row = rollback or promotion
+    if row['result'] == 'pending':
+        async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as http:
+            async def no_dispatch(*args):
+                raise ValueError('status cannot dispatch')
+            status = core.Promotion(journal, core.Coolify(http,
+                os.environ.get('TISAN_COOLIFY_URL', ''), os.environ.get('TISAN_COOLIFY_TOKEN', '')),
+                no_dispatch, no_dispatch)
+            row = await status.status(result['tenant_id'], result['slug'], row['id'])
+    if row['result'] == 'succeeded':
+        state = 'rolled_back' if row['action'] == 'rollback' else 'promoted'
+    elif row['result'] in {'failed', 'refused', 'unknown'}:
+        state = row['action'] + '_' + row['result']
+    else:
+        state = 'rollback_pending' if row['action'] == 'rollback' else 'promotion_pending'
+    previous = result.get('production', {})
+    if result.get('pipeline_status') == state and previous.get('id') == row['id']:
+        return result
+    result.update(pipeline_status=state, summary=state, ok=row['result'] == 'succeeded', status='done',
+                  production={key: row[key] for key in ('id', 'action', 'result', 'details')})
+    result['steps'].append({'state': state, 'at': datetime.now(timezone.utc).isoformat()})
+    Journal(root / 'promotion.sqlite3').save(result)
+    return result
+
+
 def mount(app, loader):
     gold = loader('tisan_gold_sources', 'gold_sources.py')
 
@@ -256,6 +295,7 @@ def mount(app, loader):
                     'status': 'done' if job['status'] == 'failed' else job['status'],
                     'ok': False, 'summary': 'blocked' if job['status'] == 'failed' else job['status']}
         try:
-            return await refresh_staging(result, loader, root)
+            result = await refresh_staging(result, loader, root)
+            return await refresh_production(result, loader, root)
         except (ValueError, KeyError, OSError, TimeoutError, httpx.HTTPError):
             return result

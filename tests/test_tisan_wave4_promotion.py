@@ -71,3 +71,38 @@ def test_room_has_no_docker_socket_mount():
     compose = yaml.safe_load((Path(__file__).resolve().parents[1] / 'agents/tisan/docker-compose.yml').read_text())
     for service in compose['services'].values():
         assert all('docker.sock' not in str(volume) for volume in service.get('volumes', []))
+
+
+@pytest.mark.asyncio
+async def test_original_pipeline_tracks_founder_promote_and_rollback_without_dispatching(rig, tmp_path, monkeypatch):
+    from agents.tisan import pipeline, promotion as core
+    from types import SimpleNamespace
+    fake, journal, promotion, _, _ = rig
+    ident = str(uuid4())
+    tracking = pipeline.Journal(tmp_path / 'promotion.sqlite3')
+    tracking.claim(TENANT, ident, {})
+    result = {'tenant_id': TENANT, 'request_id': ident, 'slug': 'site', 'commit': NEW,
+              'pipeline_status': 'awaiting_promote', 'steps': [], 'status': 'done', 'ok': True}
+    tracking.save(result)
+    monkeypatch.setenv('TISAN_COOLIFY_URL', 'https://coolify.test')
+    monkeypatch.setenv('TISAN_COOLIFY_TOKEN', 'test-only')
+    original = httpx.AsyncClient
+    monkeypatch.setattr(pipeline, 'httpx', SimpleNamespace(AsyncClient=lambda **kw:
+        original(transport=httpx.ASGITransport(app=fake.api), **kw)))
+    loader = lambda key, filename: core
+    # Merely reading the original request never starts a promotion.
+    unchanged = await pipeline.refresh_production(result, loader, tmp_path)
+    assert unchanged['pipeline_status'] == 'awaiting_promote' and not fake.writes
+    operation = str(uuid4())
+    assert (await promotion.run(TENANT, 'site', operation, 'promote', 'placeholder-founder', NEW))['result'] == 'pending'
+    measured = await pipeline.refresh_production(result, loader, tmp_path)
+    assert measured['pipeline_status'] == 'promoted' and len(fake.writes) == 2
+    assert tracking.get(TENANT, ident)['production']['id'] == operation
+    rollback = str(uuid4())
+    assert (await promotion.run(TENANT, 'site', rollback, 'rollback', 'placeholder-founder', OLD))['result'] == 'pending'
+    measured = await pipeline.refresh_production(measured, loader, tmp_path)
+    assert measured['pipeline_status'] == 'rolled_back' and len(fake.writes) == 4
+    assert measured['production']['id'] == rollback
+    before = len(measured['steps'])
+    assert await pipeline.refresh_production(measured, loader, tmp_path) == measured
+    assert len(measured['steps']) == before and len(fake.writes) == 4

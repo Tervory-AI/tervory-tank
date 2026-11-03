@@ -25,6 +25,8 @@ async def inspect(http, tenant, scan_id, digest):
         params={'tenant_id': tenant}, headers=headers(tenant), timeout=30, follow_redirects=False)
     response.raise_for_status()
     row = response.json()
+    if not isinstance(row, dict):
+        raise ValueError('scan result unavailable')
     if row.get('scan_id') != scan_id:
         raise ValueError('scan identity changed')
     if row.get('status') in {'pending', 'running'}:

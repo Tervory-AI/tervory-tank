@@ -113,7 +113,9 @@ async def test_actual_confirm_request_queues_one_durable_room_job_and_refreshes_
     async with pool.acquire() as conn:
         await ensure_schema(conn, 'tisan')
     room.state.pool = pool
-    pipeline.mount(room, lambda key, filename: gold_sources)
+    from agents.tisan import promotion, publish
+    modules = {'gold_sources.py': gold_sources, 'promotion.py': promotion, 'publish.py': publish}
+    pipeline.mount(room, lambda key, filename: modules[filename])
     # Role comes from the existing authenticated founder identity, not body authority.
     browser.headers['X-Tervory-User'] = 'placeholder-founder'
     app = __import__('fastapi').FastAPI()
@@ -233,3 +235,30 @@ async def test_real_approval_snapshot_and_live_reader_are_tenant_bound(client, t
     with pytest.raises(ValueError):
         await flow.approved_page(str(TENANT), 'placeholder-home')
     assert live.execute.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('source,allowed', [(None, True),
+    ({'file_key': 'placeholder-approved-file', 'node_id': '0:1'}, True),
+    ({'file_key': 'placeholder-other-file', 'node_id': '0:1'}, False), ('placeholder-invalid', False)])
+async def test_legacy_handler_cannot_substitute_an_unapproved_frame(monkeypatch, source, allowed):
+    from agents.tisan import app as room
+    module = room._load_beside(room._figma_cache(), 'tisan_pipeline_room', 'pipeline.py')
+    gate = SimpleNamespace(approved_page=AsyncMock(return_value={
+        'figma_file_id': 'placeholder-approved-file', 'figma_frame_id': '0:1'}))
+    monkeypatch.setattr(module, 'service', lambda *args: gate)
+    monkeypatch.setattr(room.app.state, 'pool', object(), raising=False)
+    data = {'page_id': 'placeholder-home'}
+    if source is not None:
+        data['figma'] = source
+    assert await room._approved_build(SimpleNamespace(tenant_id=str(TENANT), input=data)) is allowed
+
+
+@pytest.mark.asyncio
+async def test_missing_page_reference_is_tracked_without_starting_any_build(tmp_path):
+    flow, calls = service(tmp_path)
+    result = await flow.run(str(TENANT), str(uuid4()), {**payload(), 'page_id': None})
+    assert result['pipeline_status'] == 'blocked' and result['steps'][0]['state'] == 'requested'
+    calls.read.assert_not_called()
+    calls.build.assert_not_called()
+    calls.stage.assert_not_called()

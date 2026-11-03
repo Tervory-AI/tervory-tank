@@ -104,7 +104,12 @@ async def _approved_build(ctx: JobContext) -> bool:
     loader = lambda key, filename: _load_beside(_figma_cache(), key, filename)
     service = module.service(ctx, app.state.pool, loader, Path(os.environ.get('DATA_DIR', '/data')))
     try:
-        await service.approved_page(str(ctx.tenant_id), ctx.input.get('page_id'))
+        approval = await service.approved_page(str(ctx.tenant_id), ctx.input.get('page_id'))
+        source = ctx.input.get('figma')
+        if source is not None and (not isinstance(source, dict)
+                or source.get('file_key') != approval['figma_file_id']
+                or source.get('node_id') != approval['figma_frame_id']):
+            return False
         return True
     except (ValueError, OSError, HTTPException):
         return False

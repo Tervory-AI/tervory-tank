@@ -1060,6 +1060,7 @@ class ScaffoldPage(Body):
 
 
 class ScaffoldArgs(Body):
+    page_id: str | None = Field(default=None, pattern=r'^[a-z0-9-]{1,100}$')
     name: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9-]+$")
     pages: list[str | ScaffoldPage] | None = Field(default=None, min_length=1, max_length=20)

@@ -1,4 +1,4 @@
-"""Tenant-admin site requests, staging evidence and sign-off; no build or deploy."""
+"""Tenant-admin requests and sign-off; founder-confirmed requests reuse the room pipeline."""
 import json
 import os
 import re
@@ -172,7 +172,7 @@ async def queue_pipeline(actor, operation, data):
         refused('pipeline_unavailable', 503)
     try:
         dispatched = await _http.post('http://agent-tisan:8000/pipeline/start', json={
-            'tenant_id': str(actor.tenant_id), 'request_id': str(operation), 'page_id': data['page_id'],
+            'tenant_id': str(actor.tenant_id), 'request_id': str(operation), 'page_id': data.get('page_id'),
             'brief': {**{k: v for k, v in data.items() if k not in {'page_id', 'assembly'}},
                       **data.get('assembly', {})}},
             headers={'X-Tank-Key': key, 'X-Tervory-Tenant': str(actor.tenant_id),
@@ -211,7 +211,7 @@ def build_router():
             refused('founder_required', 403)
         operation = confirmation(actor, 'tisan.request', data)
         saved = await Store(db()).create(actor.tenant_id, actor.user_id, operation, data)
-        if actor.founder and data.get('page_id'):
+        if actor.founder:
             saved.update(await queue_pipeline(actor, operation, data))
         return await result(actor, 'tisan.request', saved)
 
@@ -240,7 +240,8 @@ def build_router():
 async def build_result(tenant: UUID, result: dict) -> dict:
     """Hydrate a long build's existing card through the existing room job read."""
     from main import _http
-    if result.get('kind') not in {'build', 'pipeline'} or result.get('status') not in ('queued', 'running'):
+    if result.get('kind') != 'pipeline' and (result.get('kind') != 'build'
+            or result.get('status') not in ('queued', 'running')):
         return result
     key = os.environ.get('TANK_KEY_TISAN', '')
     if _http is None or not key:
@@ -256,7 +257,7 @@ async def build_result(tenant: UUID, result: dict) -> dict:
             if measured.get('tenant_id') != str(tenant) or measured.get('request_id') != job_id:
                 return result
             return {**result, **{k: v for k, v in measured.items() if k in {
-                'status', 'pipeline_status', 'steps', 'checks', 'results', 'ok', 'slug', 'build',
+                'status', 'pipeline_status', 'steps', 'checks', 'results', 'production', 'ok', 'slug', 'build',
                 'memory_id', 'url', 'commit', 'detail', 'summary', 'copy_needed', 'media_needed'}}}
         response = await _http.get('http://agent-tisan:8000/jobs/' + job_id,
             params={'tenant_id': str(tenant)}, headers={'X-Tank-Key': key,
