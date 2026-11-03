@@ -30,9 +30,12 @@ class RetailerMemoryStore:
                 "cost": str(cost["cost"]) if cost.get("cost") is not None else None,
                 "cost_currency": cost.get("currency")}
 
-    async def watch_products(self, tenant_id: str) -> list[dict[str, str]]:
+    async def watch_products(self, tenant_id: str) -> list[dict[str, Any]]:
         deleted = await self.deleted_skus(tenant_id)
-        return [{"sku": row["sku"], "url": row["url"].strip(), "name": row["name"]}
+        return [{"sku": row["sku"], "url": row["url"].strip(), "name": row["name"],
+                 "gtin": row.get("gtin"), "mpn": row.get("mpn"), "brand": row.get("brand"),
+                 "price": str(row["price"]) if row.get("price") is not None else None,
+                 "currency": row.get("currency")}
                 for row in await self.products(tenant_id)
                 if (row.get("url") or "").strip() and row["sku"] not in deleted
                 and not await self.is_feed_product(tenant_id, row["sku"])]
@@ -132,9 +135,10 @@ class RetailerPgStore:
                 """, UUID(str(tenant_id)), sku)
         return dict(row) if row else None
 
-    async def watch_products(self, tenant_id: str) -> list[dict[str, str]]:
+    async def watch_products(self, tenant_id: str) -> list[dict[str, Any]]:
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch("""SELECT p.sku,btrim(p.url) AS url,p.name FROM agent_rig.products p
+            rows = await conn.fetch("""SELECT p.sku,btrim(p.url) AS url,p.name,p.gtin,p.mpn,p.brand,
+                p.price::text AS price,p.currency FROM agent_rig.products p
                 WHERE p.tenant_id=$1 AND btrim(coalesce(p.url,''))<>''
                 AND NOT EXISTS (SELECT 1 FROM agent_rig.supplier_costs s WHERE s.tenant_id=p.tenant_id AND s.sku=p.sku)
                 AND NOT EXISTS (SELECT 1 FROM agent_rig.feed_products f WHERE f.tenant_id=p.tenant_id AND f.sku=p.sku)
