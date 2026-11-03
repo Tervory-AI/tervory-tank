@@ -95,13 +95,14 @@ Observed: **v4.20.0**, published **2026-10-22T10:18:58Z**.
 | postgres:16.15 | sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a |
 | python:3.12-slim | sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a72aeb34f30d159 |
 
-The guide now selects **Proxied auth.za** with Network gRPC On, HTTP/2 to Origin
-On, Full (strict), TLS/ALPN h2 on origin 443, and the existing Coolify API h2c
-route. Coolify's existing letsencrypt resolver must issue/renew through DNS-01;
-the guide links official Cloudflare and Coolify requirements. Edge certificate
-coverage for this deeper hostname must be verified before deployment. No DNS,
-proxy setting, credential or server firewall is changed here. There is no
-DNS-only fallback, second Traefik, paid-service purchase or TLS-check bypass.
+The guide selects **Proxied auth-za.tervory.com**, covered by the free
+`*.tervory.com` Universal SSL certificate, with Network gRPC On, HTTP/2 to Origin
+On, Full (strict), origin443 TLS/ALPN h2 and the existing Coolify API h2c route.
+Origin certificates must use exactly the existing proxied ZA site's issuance and
+renewal path, without changing the shared proxy or introducing a Cloudflare token.
+The repo does not establish that live mechanism. The guide stops at explicit
+read-only Coolify resource/router/resolver checks until it is established.
+No DNS, proxy, credential or firewall changes were made by this PR.
 
 ## Commands and results
 
@@ -594,26 +595,27 @@ codex/identity-za`. Founder still merges the PR.
    reading/signing the machine key or contacting the API. A partial/missing record
    fails. This trusts the previous completed setup, not a live drift audit.
    `tests/test_identity_stack.py:122` proves both outcomes without a machine key.
-4. `docs/ops/IDENTITY-ZA.md:10`: proxied-gRPC, DNS-01 certificate instructions,
-   edge-hostname coverage prerequisite, official source links and firewall
-   requirements; no origin address published by this PR.
+4. `docs/ops/IDENTITY-ZA.md:10`: proxied gRPC on the corrected single-level
+   hostname with free wildcard coverage, existing ZA certificate issuance only,
+   read-only Coolify checks and a stop before deployment if that mechanism is
+   unverified; official source links retained. No shared proxy change or token.
 5. `tank/identity_oidc.py:100`: an unknown-kid refresh is reserved under the short
    cache lock at most once per 60 seconds, including failed refreshes. Discovery
    and JWKS HTTP fetches occur outside the shared lock. Existing known keys remain
    usable during a slow refresh. `tests/test_identity_za.py:283` tests a burst of
    unknown IDs, the 60-second boundary and concurrent known-key verification.
-6. `docs/ops/IDENTITY-ZA.md:163`: Tervory is the organisation Zitadel creates at
-   first start. `docs/ops/IDENTITY-ZA.md:188`: map that org to the exact existing
+6. `docs/ops/IDENTITY-ZA.md:181`: Tervory is the organisation Zitadel creates at
+   first start. `docs/ops/IDENTITY-ZA.md:206`: map that org to the exact existing
    Tervory tenant UUID returned by the already implemented authenticated
    `https://app.tervory.com/api/case-studies` GET (no tenant query), after positively
    selecting the existing Tervory Clerk organisation. No SQL, fabricated UUID or
    new UI. The guide explicitly stops this deployment step if that verified
    tenant UUID cannot be obtained. Its live value is not asserted here.
-   `docs/ops/IDENTITY-ZA.md:250`: removed Zitadel roles persist in an existing Tank
+   `docs/ops/IDENTITY-ZA.md:268`: removed Zitadel roles persist in an existing Tank
    sign-in through refresh until revoke/expiry; `tervory logout` on every affected
    CLI revokes its Tank credential and refresh token before a fresh login. The
    Clerk sign-in list does not list the separate `zitadel:<sub>` identities.
-7. `docs/ops/IDENTITY-ZA.md:275`: the existing `r2-backup-za` worker is only on
+7. `docs/ops/IDENTITY-ZA.md:293`: the existing `r2-backup-za` worker is only on
    `tervory-za` (`docker-compose.za.yml:230`), while identity Postgres is private
    to this separate resource, with no published port. It cannot reach identity
    Postgres as configured. Keeping the identity worker avoids broadening database
@@ -781,3 +783,79 @@ No founder browser screenshots, live sign-in, DNS/certificate changes, productio
 deployment, live credential revocation or ZA restore result are claimed. Founder
 settings, exact tenant UUID from the existing read, valid edge/origin certificates
 and founder acceptance remain deployment prerequisites in the guide.
+
+
+## PR #589 second review: fixed hostname and existing certificate path
+
+All fixed identity origins now use **https://auth-za.tervory.com**. Earlier
+rule-10 fixes (pool release/single issuance, opt-in selection, independent backups,
+expired completed setup, bounded JWKS refresh, principal/role rules and tenant
+mapping) are kept. No image pin or certificate-resolver label was changed.
+
+Changed file/line references:
+
+- `ops/identity/docker-compose.yml:21,33,34,35,36`: external domain and all Login URLs.
+  `:110,137,145`: all Traefik Host rules. `:127`: custom upstream Host header.
+- `ops/identity/setup.py:14,140`: fixed assertion audience/issuer and API Host header.
+- `tank/identity_oidc.py:15,46`: fixed issuer and same-origin endpoint guard.
+- `cli/src/client.mjs:117`: fixed verification origin for both URLs.
+- `cli/test/identity-za.test.mjs:7,8,15` and `tests/test_identity_za.py:47,129`:
+  fake provider/CLI verification URLs and negative origin tests use the corrected host.
+- `cli/README.md:24,26`, `cli/CHANGELOG.md:5`: new hostname in all instructions.
+- `docs/ops/IDENTITY-ZA.md:12`: proxied A record and Cloudflare settings.
+  `:26`: reuse existing ZA certificate issuance/renewal, no shared proxy changes
+  and no new Cloudflare token. The repo's ZA compose has only Coolify's domain
+  attachment comment and Tank port 8000; it contains no generated TLS labels or
+  proxy certificate challenge configuration. `:40` gives exact read-only Coolify
+  checks. `:61` stops deployment until the running resource's TLS router/resolver
+  and existing issuance/renewal method are established. No certificate method is
+  guessed. Certificates for the new hostname are verified during deployment.
+
+All files were committed and pushed individually; each push fetched and merged
+`origin/main`, which was already up to date. No shared proxy settings, DNS records,
+firewall rules, new token or live settings were changed.
+
+Exact validation commands:
+
+```sh
+docker run --rm -d --name tervory-identity-za-host-pg --label tervory.test=identity-za-host --memory=1g --cpus=1 -e POSTGRES_HOST_AUTH_METHOD=trust -p127.0.0.1::5432 postgres:16.15
+docker port tervory-identity-za-host-pg 5432
+TMPDIR=/workspace/codex-identity-za/.proof/tmp PYTHONPATH=.proof/python:tank POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32801/postgres /tmp/base-reliability-venv/bin/python -m pytest tests/test_identity_za.py tests/test_identity_stack.py tests/test_identity_backup.py tests/test_device_login.py tests/test_personal_tokens.py tests/test_command.py --disable-socket --allow-hosts=127.0.0.1,localhost -q
+TMPDIR=/workspace/codex-identity-za/.proof/tmp npm_config_cache=/workspace/codex-identity-za/.proof/npm-cache npm test --prefix cli
+docker compose -f ops/identity/docker-compose.yml config --no-interpolate --quiet
+PYTHONPATH=.proof/python /tmp/base-reliability-venv/bin/python -m ruff check --select E9,F tank/identity_oidc.py ops/identity/setup.py tests/test_identity_za.py tests/test_identity_stack.py
+git grep -n -E 'auth[.]za[.]tervory[.]com' -- .
+git grep -n -E 'DNS[-]01|CF_DNS_API[_]TOKEN|dnschallenge' -- docs/ops/IDENTITY-ZA.md
+git diff --check
+docker stop tervory-identity-za-host-pg
+```
+
+Results: disposable Postgres mapped to `127.0.0.1:32801`; compose exit 0/no output;
+Ruff `All checks passed!`; both grep searches exit 1/no matches (expected);
+diff check exit 0. The container was stopped and automatically removed. Python
+warnings are the same existing Pydantic/FastAPI warnings recorded above.
+
+Python final summary:
+
+```text
+125 passed, 14 warnings in 82.35s (0:01:22)
+```
+
+CLI final TAP summary:
+
+```text
+1..67
+# tests 67
+# suites 0
+# pass 67
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 19973.547646
+```
+
+No founder browser screenshots or deployment are claimed. The missing live
+certificate issuance/renewal evidence is explicitly a read-only founder prerequisite
+in step 1, along with the existing founder tenant/settings prerequisites later in
+the guide. Tests are synthetic/offline, with only loopback database access allowed.
