@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import time
+
+import httpx
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +40,7 @@ async def catalog(tank: Any) -> dict:
             data = _catalog(roster.json()["data"], values["fallbacks"] or [])
             _CACHE = (key, time.monotonic(), data)
             return data
-        except (KeyError, TypeError, ValueError, AttributeError, __import__("httpx").HTTPError):
+        except (KeyError, TypeError, ValueError, AttributeError, httpx.HTTPError):
             pass
     path = Path(tank._roster_path())
     if path.is_file():
@@ -68,17 +70,18 @@ async def validate_fallbacks(tank: Any, model: str, names: list[str] | None) -> 
         raise HTTPException(422)
 
 
-def _direct(tank: Any, data: dict, name: str, tenant: str) -> str | None:
+def _direct(tank: Any, data: dict, name: str, text: str, refusal_args: dict) -> str | None:
     """Restrictive model lists must explicitly include each secondary host too."""
-    allow = tank.tenant_allowlist(tenant)
+    allow = tank.tenant_allowlist(refusal_args["tenant_id"])
     deployments = data["groups"].get(name, [])
-    if allow is None or not any(row["host"] and row["host"] not in allow for row in deployments):
+    if not any(row["host"] and tank.model_call_refusal(text, row["host"], **refusal_args) for row in deployments):
         # Missing dual-deployment metadata fails closed for restricted tenants.
         if allow is not None and name in {"kimi", "kimi-lite"} and not deployments:
             raise HTTPException(503)
         return None
     direct = deployments[0]
-    if direct["host"] and direct["host"] not in allow or not direct["id"]:
+    if ((direct["host"] and tank.model_call_refusal(text, direct["host"], **refusal_args))
+            or not direct["id"]):
         raise HTTPException(503)
     return str(direct["id"])
 
@@ -86,12 +89,13 @@ def _direct(tank: Any, data: dict, name: str, tenant: str) -> str | None:
 async def dispatch(tank: Any, *, policy: dict, model: str, generation: dict,
                    offpeak: bool, text: str, refusal_args: dict) -> dict:
     data = await catalog(tank)
-    tenant = refusal_args["tenant_id"]
-    direct = _direct(tank, data, model, tenant)
+    direct = _direct(tank, data, model, text, refusal_args)
     if direct is not None:
         return {"model": direct, "disable_fallbacks": True}
-    if "disable_fallbacks" in generation or offpeak:
+    if "disable_fallbacks" in generation:
         return {}
+    if offpeak:
+        return {"disable_fallbacks": True}
     names = policy.get("fallbacks")
     if names is None:
         names = data["chains"].get(model, [])
@@ -99,7 +103,7 @@ async def dispatch(tank: Any, *, policy: dict, model: str, generation: dict,
     for name in names:
         if tank.model_call_refusal(text, name, **refusal_args):
             continue
-        deployment = _direct(tank, data, name, tenant)
+        deployment = _direct(tank, data, name, text, refusal_args)
         chain.append({"model": deployment, "disable_fallbacks": True} if deployment else name)
     # Override every configured exception chain too: they are not permission checked.
     return {"fallbacks": chain, "context_window_fallbacks": [], "content_policy_fallbacks": []}
