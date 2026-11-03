@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fsPromises from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { mkdtemp, writeFile, readFile, mkdir, symlink, rm, copyFile, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -591,10 +593,24 @@ test('sandbox confines outside writes, secret reads and network while echo succe
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
 
-test('Darwin never falls back when sandbox-exec is unavailable', { skip: process.platform !== 'linux' }, async () => {
+test('Darwin never falls back when sandbox-exec is unavailable', async () => {
   const f = await folder(); const descriptor = Object.getOwnPropertyDescriptor(process, 'platform');
+  const access = fsPromises.access;
   try {
     Object.defineProperty(process, 'platform', { value: 'darwin' });
-    await assert.rejects(f.command('echo wrong', io(), 1000));
-  } finally { Object.defineProperty(process, 'platform', descriptor); }
+    fsPromises.access = async path => { if (path === '/usr/bin/sandbox-exec') throw Error('placeholder unavailable'); return access(path); };
+    syncBuiltinESMExports();
+    await assert.rejects(f.command('printf wrong > placeholder-marker', io(), 1000));
+    await assert.rejects(readFile(join(f.root, 'placeholder-marker')));
+  } finally { fsPromises.access = access; syncBuiltinESMExports(); Object.defineProperty(process, 'platform', descriptor); }
+});
+
+test('Darwin refuses an invalid Seatbelt profile before running the command', { skip: process.platform !== 'darwin' }, async () => {
+  const f = await folder(); const read = fsPromises.readFile;
+  try {
+    fsPromises.readFile = async (path, ...args) => path instanceof URL && path.pathname.endsWith('/seatbelt-base.sbpl') ? '(version 1) (placeholder-invalid-operation)' : read(path, ...args);
+    syncBuiltinESMExports();
+    await assert.rejects(f.command('printf wrong > placeholder-marker', io(), 5000));
+    await assert.rejects(readFile(join(f.root, 'placeholder-marker')));
+  } finally { fsPromises.readFile = read; syncBuiltinESMExports(); }
 });
