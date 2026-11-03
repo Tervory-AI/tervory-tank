@@ -13,6 +13,7 @@ tree (one project dir per tenant) so tests prove isolation without Coolify/Docke
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -34,6 +35,7 @@ COOLIFY_SETTINGS = (
     "AUTUMBRA_COOLIFY_ENVIRONMENT", "AUTUMBRA_COOLIFY_GITHUB_APP_UUID",
 )
 COMPOSE_PATH = Path(__file__).with_name("docker-compose.enforce.yml")
+_LIFECYCLE_LOCK = asyncio.Lock()
 
 
 def coolify_configured() -> bool:
@@ -328,6 +330,11 @@ class CoolifyEnforceBackend:
         return sorted(names - cls.settings_for(plan).keys())
 
     async def create(self, plan: dict[str, Any]) -> dict[str, Any]:
+        # Watch runs one worker; serialize the count/check/write across requests.
+        async with _LIFECYCLE_LOCK:
+            return await self._create(plan)
+
+    async def _create(self, plan: dict[str, Any]) -> dict[str, Any]:
         # Re-plan at the write boundary: neither a body count nor a stale plan is authority.
         plan = await self.create_plan(plan["tenant_id"])
         receipt = receipt_for(plan)
@@ -358,6 +365,10 @@ class CoolifyEnforceBackend:
         return receipt
 
     async def destroy(self, plan: dict[str, Any]) -> dict[str, Any]:
+        async with _LIFECYCLE_LOCK:
+            return await self._destroy(plan)
+
+    async def _destroy(self, plan: dict[str, Any]) -> dict[str, Any]:
         plan = plan_destroy(plan["tenant_id"].lower())
         matches = [row for row in await self.list() if row["name"] == plan["project"]]
         if len(matches) > 1:
