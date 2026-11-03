@@ -34,7 +34,8 @@ button, empty state or new page wording was added. Existing “Preparing answer�
 “Answer ready” and “Answer failed” labels are reused. Assistant code replies are
 returned privately to the CLI; the saved assistant message is the existing
 “Answer ready” status, so model-quoted source or patch bodies cannot enter `/chats`.
-Tool requests and results retain only name and UTF-8 byte size there.
+Tool requests and results retain only name and UTF-8 byte size there. Cancelling
+at command approval stops execution and any subsequent code-model request.
 
 ## Storage clarification from the founder
 
@@ -89,8 +90,8 @@ docker run -d --name cli-code-mode-tests -e POSTGRES_HOST_AUTH_METHOD=trust -e P
 # disposable loopback test service only, no production connection
 
 TMPDIR="$PWD/.task-tmp" npm test --prefix cli
-# 75 passed, zero failed, zero skipped; 17.373 seconds
-# Includes all 62 pre-existing CLI tests and 13 new code-mode cases.
+# 76 passed, zero failed, zero skipped; 16.208 seconds
+# Includes all 62 pre-existing CLI tests and 14 new code-mode cases.
 
 TMPDIR="$PWD/.task-tmp" PYTHONPATH=.task-tmp/deps:tank:tests POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55468/pooltest /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q tests/test_command.py tests/test_command_streaming.py tests/test_command_repo_tools.py tests/test_personal_tokens.py tests/test_pat_route_corridor.py tests/test_command_code.py
 # 205 passed, zero skipped; 14 deprecation/field warnings; 140.01 seconds
