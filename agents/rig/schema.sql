@@ -589,3 +589,12 @@ CREATE TABLE IF NOT EXISTS agent_rig.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
+
+-- Store-owned US checkout. Existing retailers remain in quote mode.
+ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS commerce jsonb NOT NULL DEFAULT '{}';
+CREATE TABLE IF NOT EXISTS agent_rig.commerce_state (
+    tenant_id uuid NOT NULL,
+    id text NOT NULL,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (tenant_id, id)
+);
