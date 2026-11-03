@@ -1,95 +1,194 @@
-# Trigger CRM design
+# Trigger CRM · current specification · 3 November
 
-Status: design composed and checked; founder acceptance and accent approval are pending.
-Branch: `codex/crm-design`. Claude opens the PR. No application code or live data changed.
+This replaces all previous canvas and repository CRM design guidance. Page `93:2`; canvas SPEC `101:8244`; branch `codex/crm-design`; existing PR #436. Original screen roots remain. Changed screens say **Changed after approval, awaiting founder**; unchanged component specimens say **Approved 3 Nov**. Founder visual acceptance of these changes is outstanding. No application code, model call, production data or deployment is part of this work.
 
-Figma: https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=93-2
-Page: **2 · CRM** (`93:2`), founder only. CRM SPEC frame: **`101:8244`**. Existing Case studies page: `42:2`; revision 3 SPEC: `63:10450`.
+## Navigation and character
 
-## Contract and design rules
+CRM is Trigger. One 240px Trigger menu, approved Tervory logo and client switcher. Writing: Write, Voice. CRM: Leads, Clients, Contacts, Opportunities, Cases, Tasks. Sales: Quotes, Invoices. Marketing and Chat bot entries remain. Bottom: All products, Receipts, Billing, Account settings. Settings names the Chat bot area; it occurs once in the menu. Quotes is the display name for the existing Estimates API. Clients is the display name for the Accounts API. IDs, routes and API names stay internal.
 
-Sources: `ops/trigger-crm/openapi-cd7c12a.yml` (BottleCRM cd7c12a), `docs/figma/crm/INVOICES-ESTIMATES.md`, `docs/figma/case-studies/SPEC.md` and `workspace/app/product-nav.ts`.
+Desktop is 1440×900 with a 1200px work area and 1136px content width. Mobile is 375×812, one matching drawer, two-line record cards linked to full details. Drawer content scrolls independently above a pinned 240px-wide bottom block with a top divider and 16px end clearance. No design-index strip appears inside screens. Existing Jost Light headings, Inter text, Trigger controls and bound colour tokens are reused.
 
-The eight independent menu items are Leads, Accounts, Contacts, Opportunities, Cases, Tasks, Invoices, Estimates. Invoices and Estimates remain separate despite their shared API prefix. Case-study founder menus, typography, controls and variables are reused. CRM accent is `color/accent/crm` (`VariableID:72:9823`, #0369A1, 5.93:1 on white).
+## Fields, labels and record identity
 
-Desktop viewports are 1440 × 900. Mobile viewports are 375 × 812. Detail fields scroll vertically. Desktop lists scroll horizontally to retain exact schema labels. Mobile lists use the first five listed columns; the full record is available in detail. Zero lists have no rows or invented empty-state wording. Zero detail fields show the existing em-dash convention. Filled values such as `[first_name]` are schema-binding annotations in Figma, never sample client records or live data. They must be replaced with tenant-scoped API values at implementation time.
+One rendered field per idea. The linked account field is Clients; account name is its display value, not another field. Contact name resolves the linked Contact and is not duplicated. Invoice and quote client snapshots are distinct Bill-to name, Bill-to email, Bill-to phone and Bill-to address fields. Country is shown once; country_display formats country. Stage is shown once; stage_label formats stage. Created is shown once; created_on_arrow formats created_at. Fields omitted from lists remain on detail screens. Hidden redundant nodes preserve their IDs.
 
-No public client routes or links. `public_token` and `public_url` are not displayed. `public_link_enabled` stays false and is not an editable control. `is_sample` is not displayed. Record money uses its own `currency`, without conversion. API metadata is documented here, not added as product copy.
+Reference (id), Board order (kanban_order/board_order), Organisation (org), Acceptance IP address (accepted_ip) are hidden on user screens, including confirmations. UUIDs remain internal navigation/API arguments. They never identify a record in confirmation copy. No data or API field is removed.
 
-## Screen register
+Detail titles use [Full name], [Client name], [Opportunity name], [Case name], [Task title], [Invoice number] or [Quote number], with a back link to the matching list and size/state. Mobile Lead and Contact cards use one [Full name], derived by joining non-empty first_name and last_name with one space, not separate visible slots. The detail fields retain First name and Last name.
 
-64 screens are present (8 sections × list/detail × desktop/mobile × Zero/Filled).
+## Lists and tables
 
-| Section | View | Size | State | Node ID |
-|---|---|---|---|---|
-| Leads | List | Desktop | Zero | 94:172 |
-| Leads | List | Desktop | Filled | 94:417 |
-| Leads | List | Mobile | Zero | 94:671 |
-| Leads | List | Mobile | Filled | 94:682 |
-| Leads | Detail | Desktop | Zero | 94:741 |
-| Leads | Detail | Desktop | Filled | 94:1061 |
-| Leads | Detail | Mobile | Zero | 94:1384 |
-| Leads | Detail | Mobile | Filled | 94:1596 |
-| Accounts | List | Desktop | Zero | 94:1811 |
-| Accounts | List | Desktop | Filled | 94:1978 |
-| Accounts | List | Mobile | Zero | 94:2193 |
-| Accounts | List | Mobile | Filled | 94:2204 |
-| Accounts | Detail | Desktop | Zero | 94:2263 |
-| Accounts | Detail | Desktop | Filled | 94:2510 |
-| Accounts | Detail | Mobile | Zero | 94:2760 |
-| Accounts | Detail | Mobile | Filled | 94:2888 |
-| Contacts | List | Desktop | Zero | 97:2074 |
-| Contacts | List | Desktop | Filled | 97:2245 |
-| Contacts | List | Mobile | Zero | 97:2473 |
-| Contacts | List | Mobile | Filled | 97:2484 |
-| Contacts | Detail | Desktop | Zero | 97:2543 |
-| Contacts | Detail | Desktop | Filled | 97:2800 |
-| Contacts | Detail | Mobile | Zero | 97:3060 |
-| Contacts | Detail | Mobile | Filled | 97:3200 |
-| Opportunities | List | Desktop | Zero | 97:3343 |
-| Opportunities | List | Desktop | Filled | 97:3522 |
-| Opportunities | List | Mobile | Zero | 97:3776 |
-| Opportunities | List | Mobile | Filled | 97:3787 |
-| Opportunities | Detail | Desktop | Zero | 97:3846 |
-| Opportunities | Detail | Desktop | Filled | 97:4107 |
-| Opportunities | Detail | Mobile | Zero | 97:4371 |
-| Opportunities | Detail | Mobile | Filled | 97:4515 |
-| Cases | List | Desktop | Zero | 97:4662 |
-| Cases | List | Desktop | Filled | 97:4837 |
-| Cases | List | Mobile | Zero | 97:5078 |
-| Cases | List | Mobile | Filled | 97:5089 |
-| Cases | Detail | Desktop | Zero | 97:5148 |
-| Cases | Detail | Desktop | Filled | 97:5416 |
-| Cases | Detail | Mobile | Zero | 97:5687 |
-| Cases | Detail | Mobile | Filled | 97:5839 |
-| Tasks | List | Desktop | Zero | 97:5994 |
-| Tasks | List | Desktop | Filled | 97:6165 |
-| Tasks | List | Mobile | Zero | 97:6393 |
-| Tasks | List | Mobile | Filled | 97:6404 |
-| Tasks | Detail | Desktop | Zero | 97:6463 |
-| Tasks | Detail | Desktop | Filled | 97:6671 |
-| Tasks | Detail | Mobile | Zero | 97:6882 |
-| Tasks | Detail | Mobile | Filled | 97:6966 |
-| Invoices | List | Desktop | Zero | 97:7053 |
-| Invoices | List | Desktop | Filled | 97:7276 |
-| Invoices | List | Mobile | Zero | 97:7673 |
-| Invoices | List | Mobile | Filled | 97:7684 |
-| Invoices | Detail | Desktop | Zero | 97:7743 |
-| Invoices | Detail | Desktop | Filled | 97:8098 |
-| Invoices | Detail | Mobile | Zero | 97:8464 |
-| Invoices | Detail | Mobile | Filled | 97:8716 |
-| Estimates | List | Desktop | Zero | 97:8979 |
-| Estimates | List | Desktop | Filled | 97:9218 |
-| Estimates | List | Mobile | Zero | 97:9667 |
-| Estimates | List | Mobile | Filled | 97:9678 |
-| Estimates | Detail | Desktop | Zero | 97:9737 |
-| Estimates | Detail | Desktop | Filled | 97:10064 |
-| Estimates | Detail | Mobile | Zero | 97:10398 |
-| Estimates | Detail | Mobile | Filled | 97:10618 |
+Plain header row with a bottom border, no header card treatment, same cell padding and widths as data rows. Full-width row dividers. Invoice number is one line. Desktop column sets have at most eight columns; all other supported fields remain on detail. Filled brackets denote data slots, never sample records. Zero lists contain one proposed empty-state line.
 
-## Field and API register
+- Leads: First name, Last name, Company, Email, Status, Source, Next follow-up, Assigned to.
+- Clients: Name, Email, Phone, Industry, Assigned to.
+- Contacts: First name, Last name, Email, Company, Phone, Do not call.
+- Opportunities: Name, Clients, Stage, Amount, Currency, Probability, Closed, Assigned to.
+- Cases: Name, Status, Priority, Clients, Assigned to, First reply due, Resolution due.
+- Tasks: Title, Status, Priority, Due date, Assigned to, Clients.
+- Invoices: Invoice number, Title, Clients, Status, Due date, Total, Amount due, Currency.
+- Quotes: Quote number, Title, Clients, Status, Expiry date, Total, Currency.
 
-Every field below is an exact schema property. `[]` denotes an array element. Fields not selected as list columns remain available on the detail record where present. Envelope metadata and nested objects are retained as structured data; no inferred labels are substituted.
+Invoice Items and Payments are tables on detail screens. Items: Item, Quantity, Unit price, Subtotal, row Delete. Payments: Amount, Payment date, Payment method, Reference number, row Delete. At 375 these tables scroll horizontally within the detail viewport. Filled rows are bracketed field slots; Zero has No items yet. / No payments yet. Each row Delete opens the existing corresponding confirmation with invoice context and the selected row's identity and amounts. Delete payment and Delete line item are absent from the page-level action row. No invoice-record Delete endpoint is invented.
+
+## Actions and confirmations
+
+Action labels are centred. Confirm is primary. Delete actions are destructive and last after ordinary actions. Existing action order remains consistent within each record type; Invoice actions are Send, Mark paid, Record payment. All existing confirmation steps and frame IDs remain.
+
+Every confirmation shows a record name or number. Send includes Recipient email. Convert includes Quote number, Total and Currency. Delete payment includes Invoice number, Amount and Payment date; Delete line item includes Invoice number, Name, Quantity and Unit price. No internal Reference is shown.
+
+Record payment and Mark paid show Invoice number, Amount due and Currency at the top, then inputs. Amount *, Payment date * and Payment method * are required by PaymentCreateRequest in the pinned BottleCRM OpenAPI. Amount is a decimal input bounded by outstanding balance; Payment date is a date control; Payment method is a choice control from the existing enum. Reference number and Notes are optional inputs. The asterisk marks required inputs. The design shows outlined editable-control specimens, not submitted values or live payment records. Confirm and Cancel remain pinned on mobile; the scroll viewport stops above them and content has footer-height plus 24px clearance. A real payment requires the founder's final confirmation.
+
+No public client routes or links. Public-link fields are not exposed. Money uses its record currency without conversion. API operations and tenant scoping remain as specified below.
+
+## Changed screen node register
+
+- `94:172` · Leads / List / Desktop / Zero · Changed after approval, awaiting founder.
+- `94:417` · Leads / List / Desktop / Filled · Changed after approval, awaiting founder.
+- `94:671` · Leads / List / Mobile / Zero · Changed after approval, awaiting founder.
+- `94:682` · Leads / List / Mobile / Filled · Changed after approval, awaiting founder.
+- `94:741` · Leads / Detail / Desktop / Zero · Changed after approval, awaiting founder.
+- `94:1061` · Leads / Detail / Desktop / Filled · Changed after approval, awaiting founder.
+- `94:1384` · Leads / Detail / Mobile / Zero · Changed after approval, awaiting founder.
+- `94:1596` · Leads / Detail / Mobile / Filled · Changed after approval, awaiting founder.
+- `94:1811` · Clients / List / Desktop / Zero · Changed after approval, awaiting founder.
+- `94:1978` · Clients / List / Desktop / Filled · Changed after approval, awaiting founder.
+- `94:2193` · Clients / List / Mobile / Zero · Changed after approval, awaiting founder.
+- `94:2204` · Clients / List / Mobile / Filled · Changed after approval, awaiting founder.
+- `94:2263` · Clients / Detail / Desktop / Zero · Changed after approval, awaiting founder.
+- `94:2510` · Clients / Detail / Desktop / Filled · Changed after approval, awaiting founder.
+- `94:2760` · Clients / Detail / Mobile / Zero · Changed after approval, awaiting founder.
+- `94:2888` · Clients / Detail / Mobile / Filled · Changed after approval, awaiting founder.
+- `97:2074` · Contacts / List / Desktop / Zero · Changed after approval, awaiting founder.
+- `97:2245` · Contacts / List / Desktop / Filled · Changed after approval, awaiting founder.
+- `97:2473` · Contacts / List / Mobile / Zero · Changed after approval, awaiting founder.
+- `97:2484` · Contacts / List / Mobile / Filled · Changed after approval, awaiting founder.
+- `97:2543` · Contacts / Detail / Desktop / Zero · Changed after approval, awaiting founder.
+- `97:2800` · Contacts / Detail / Desktop / Filled · Changed after approval, awaiting founder.
+- `97:3060` · Contacts / Detail / Mobile / Zero · Changed after approval, awaiting founder.
+- `97:3200` · Contacts / Detail / Mobile / Filled · Changed after approval, awaiting founder.
+- `97:3343` · Opportunities / List / Desktop / Zero · Changed after approval, awaiting founder.
+- `97:3522` · Opportunities / List / Desktop / Filled · Changed after approval, awaiting founder.
+- `97:3776` · Opportunities / List / Mobile / Zero · Changed after approval, awaiting founder.
+- `97:3787` · Opportunities / List / Mobile / Filled · Changed after approval, awaiting founder.
+- `97:3846` · Opportunities / Detail / Desktop / Zero · Changed after approval, awaiting founder.
+- `97:4107` · Opportunities / Detail / Desktop / Filled · Changed after approval, awaiting founder.
+- `97:4371` · Opportunities / Detail / Mobile / Zero · Changed after approval, awaiting founder.
+- `97:4515` · Opportunities / Detail / Mobile / Filled · Changed after approval, awaiting founder.
+- `97:4662` · Cases / List / Desktop / Zero · Changed after approval, awaiting founder.
+- `97:4837` · Cases / List / Desktop / Filled · Changed after approval, awaiting founder.
+- `97:5078` · Cases / List / Mobile / Zero · Changed after approval, awaiting founder.
+- `97:5089` · Cases / List / Mobile / Filled · Changed after approval, awaiting founder.
+- `97:5148` · Cases / Detail / Desktop / Zero · Changed after approval, awaiting founder.
+- `97:5416` · Cases / Detail / Desktop / Filled · Changed after approval, awaiting founder.
+- `97:5687` · Cases / Detail / Mobile / Zero · Changed after approval, awaiting founder.
+- `97:5839` · Cases / Detail / Mobile / Filled · Changed after approval, awaiting founder.
+- `97:5994` · Tasks / List / Desktop / Zero · Changed after approval, awaiting founder.
+- `97:6165` · Tasks / List / Desktop / Filled · Changed after approval, awaiting founder.
+- `97:6393` · Tasks / List / Mobile / Zero · Changed after approval, awaiting founder.
+- `97:6404` · Tasks / List / Mobile / Filled · Changed after approval, awaiting founder.
+- `97:6463` · Tasks / Detail / Desktop / Zero · Changed after approval, awaiting founder.
+- `97:6671` · Tasks / Detail / Desktop / Filled · Changed after approval, awaiting founder.
+- `97:6882` · Tasks / Detail / Mobile / Zero · Changed after approval, awaiting founder.
+- `97:6966` · Tasks / Detail / Mobile / Filled · Changed after approval, awaiting founder.
+- `97:7053` · Invoices / List / Desktop / Zero · Changed after approval, awaiting founder.
+- `97:7276` · Invoices / List / Desktop / Filled · Changed after approval, awaiting founder.
+- `97:7673` · Invoices / List / Mobile / Zero · Changed after approval, awaiting founder.
+- `97:7684` · Invoices / List / Mobile / Filled · Changed after approval, awaiting founder.
+- `97:7743` · Invoices / Detail / Desktop / Zero · Changed after approval, awaiting founder.
+- `97:8098` · Invoices / Detail / Desktop / Filled · Changed after approval, awaiting founder.
+- `97:8464` · Invoices / Detail / Mobile / Zero · Changed after approval, awaiting founder.
+- `97:8716` · Invoices / Detail / Mobile / Filled · Changed after approval, awaiting founder.
+- `97:8979` · Quotes / List / Desktop / Zero · Changed after approval, awaiting founder.
+- `97:9218` · Quotes / List / Desktop / Filled · Changed after approval, awaiting founder.
+- `97:9667` · Quotes / List / Mobile / Zero · Changed after approval, awaiting founder.
+- `97:9678` · Quotes / List / Mobile / Filled · Changed after approval, awaiting founder.
+- `97:9737` · Quotes / Detail / Desktop / Zero · Changed after approval, awaiting founder.
+- `97:10064` · Quotes / Detail / Desktop / Filled · Changed after approval, awaiting founder.
+- `97:10398` · Quotes / Detail / Mobile / Zero · Changed after approval, awaiting founder.
+- `97:10618` · Quotes / Detail / Mobile / Filled · Changed after approval, awaiting founder.
+- `98:8589` · Leads / Confirm Delete / Desktop · Changed after approval, awaiting founder.
+- `98:8605` · Leads / Confirm Delete / Mobile · Changed after approval, awaiting founder.
+- `98:8621` · Clients / Confirm Delete / Desktop · Changed after approval, awaiting founder.
+- `98:8637` · Clients / Confirm Delete / Mobile · Changed after approval, awaiting founder.
+- `98:8653` · Contacts / Confirm Delete / Desktop · Changed after approval, awaiting founder.
+- `98:8669` · Contacts / Confirm Delete / Mobile · Changed after approval, awaiting founder.
+- `98:8685` · Opportunities / Confirm Delete / Desktop · Changed after approval, awaiting founder.
+- `98:8701` · Opportunities / Confirm Delete / Mobile · Changed after approval, awaiting founder.
+- `98:8717` · Cases / Confirm Delete / Desktop · Changed after approval, awaiting founder.
+- `98:8733` · Cases / Confirm Delete / Mobile · Changed after approval, awaiting founder.
+- `98:8749` · Tasks / Confirm Delete / Desktop · Changed after approval, awaiting founder.
+- `98:8765` · Tasks / Confirm Delete / Mobile · Changed after approval, awaiting founder.
+- `98:8781` · Invoices / Confirm Send / Desktop · Changed after approval, awaiting founder.
+- `98:8800` · Invoices / Confirm Send / Mobile · Changed after approval, awaiting founder.
+- `98:8819` · Invoices / Confirm Mark paid / Desktop · Changed after approval, awaiting founder.
+- `98:8856` · Invoices / Confirm Mark paid / Mobile · Changed after approval, awaiting founder.
+- `98:8893` · Quotes / Confirm Delete / Desktop · Changed after approval, awaiting founder.
+- `98:8909` · Quotes / Confirm Delete / Mobile · Changed after approval, awaiting founder.
+- `98:8925` · Quotes / Confirm Send / Desktop · Changed after approval, awaiting founder.
+- `98:8944` · Quotes / Confirm Send / Mobile · Changed after approval, awaiting founder.
+- `98:8963` · Quotes / Confirm Convert / Desktop · Changed after approval, awaiting founder.
+- `98:8988` · Quotes / Confirm Convert / Mobile · Changed after approval, awaiting founder.
+- `98:9013` · Invoices / Confirm Record payment / Desktop · Changed after approval, awaiting founder.
+- `98:9050` · Invoices / Confirm Record payment / Mobile · Changed after approval, awaiting founder.
+- `98:9087` · Invoices / Confirm Delete payment / Desktop · Changed after approval, awaiting founder.
+- `98:9109` · Invoices / Confirm Delete payment / Mobile · Changed after approval, awaiting founder.
+- `98:9131` · Invoices / Confirm Delete line item / Desktop · Changed after approval, awaiting founder.
+- `98:9156` · Invoices / Confirm Delete line item / Mobile · Changed after approval, awaiting founder.
+- `98:9181` · Trigger / Mobile drawer / Zero · Changed after approval, awaiting founder.
+- `98:9227` · Trigger / Mobile drawer / Filled · Changed after approval, awaiting founder.
+
+## New words and slots awaiting founder approval
+
+- Changed after approval, awaiting founder
+- Approved 3 Nov
+- Clients
+- Account settings
+- Bill-to name
+- Bill-to email
+- Bill-to phone
+- Bill-to address line
+- Bill-to city
+- Bill-to state or region
+- Bill-to postcode
+- Bill-to country
+- Full name
+- Client name
+- Opportunity name
+- Case name
+- Task title
+- Recipient email
+- Amount *
+- Payment date *
+- Payment method *
+- No leads yet.
+- No clients yet.
+- No contacts yet.
+- No opportunities yet.
+- No cases yet.
+- No tasks yet.
+- No invoices yet.
+- No quotes yet.
+- No items yet.
+- No payments yet.
+- ← Leads
+- ← Clients
+- ← Contacts
+- ← Opportunities
+- ← Cases
+- ← Tasks
+- ← Invoices
+- ← Quotes
+- Item
+
+Contextual bracket slots use the same plain labels, including [Full name], [Client name], [Opportunity name], [Case name], [Task title], [Invoice number], [Quote number], [Recipient email], [Clients] and each Bill-to field label. Amount, Payment date, Payment method, Reference number, Notes, Item, Quantity, Unit price and Subtotal use their existing words in bracketed table/input slots. The choice control uses the existing ⌄ glyph. These slots are annotations, not fake live records.
+
+## API register
+
+The existing pinned API names and response paths below are retained only as implementation mapping. Accounts and Estimates in API/schema names mean Clients and Quotes in the UI. The raw API register is not a display-label authority.
+
+
+Every field below is an exact schema property. [] denotes an array element. Plain labels above control display; the API register retains internal metadata and all supported fields.
 
 ### Leads
 
@@ -478,86 +577,12 @@ Detail: GET `/api/invoices/estimates/{id}/`, schema `Estimate`, record path `est
 | `public_token` | — | `estimate.public_token` (hidden; policy above) |
 | `public_link_enabled` | — | `estimate.public_link_enabled` (hidden; policy above) |
 
-## Founder confirmation
 
-The following operations require a confirmation screen before the connector may call BottleCRM. Reuse `Confirm`, `Cancel` and `Nothing runs until you confirm.` from `workspace/app/chats/window.tsx:244`. Action labels come from the founder brief. No new explanatory body copy is invented. Any action-specific warning, success, failure or empty-state wording requires founder approval before implementation.
 
-| Section | Action | Method | API path |
-|---|---|---|---|
-| Leads | Delete | DELETE | `/api/leads/{id}/` |
-| Accounts | Delete | DELETE | `/api/accounts/{id}/` |
-| Contacts | Delete | DELETE | `/api/contacts/{id}/` |
-| Opportunities | Delete | DELETE | `/api/opportunities/{id}/` |
-| Cases | Delete | DELETE | `/api/cases/{id}/` |
-| Tasks | Delete | DELETE | `/api/tasks/{id}/` |
-| Invoices | Send | POST | `/api/invoices/{id}/send/` |
-| Invoices | Mark paid | POST | `/api/invoices/{id}/mark-paid/` |
-| Estimates | Delete | DELETE | `/api/invoices/estimates/{id}/` |
-| Estimates | Send | POST | `/api/invoices/estimates/{id}/send/` |
-| Estimates | Convert | POST | `/api/invoices/estimates/{id}/convert/` |
-| Invoices | Record payment | POST | `/api/invoices/{invoice_id}/payments/` |
-| Invoices | Delete payment | DELETE | `/api/invoices/{invoice_id}/payments/{id}/` |
-| Invoices | Delete line item | DELETE | `/api/invoices/{invoice_id}/line-items/{id}/` |
+## Authoring verification and acceptance
 
-All other DELETE operations, including comments and attachments, inherit the same confirmation gate if exposed. There is no invoice-record DELETE endpoint; do not invent one. Converted estimates open the invoice through `converted_to_invoice`. Cases may return `CaseMergedRedirectResponse`; resolve the canonical case rather than rendering a fictitious record. Leads' closed lists use `close_leads.close_leads[]`; Accounts' closed lists use `closed_accounts.close_accounts[]` with the same record schema.
+The requested branch was cloned into /workspace/codex-crm-design. Fetch succeeded. The first merge attempt stopped because the local committer identity was absent; the requested local Codex name/email were configured, then git merge origin/main passed and the merge was pushed. Only docs/figma/crm/SPEC.md is edited for this design revision.
 
-## Evidence and remaining acceptance
+Commands: git clone https://github.com/Tervory-AI/tervory-tank.git /workspace/codex-crm-design; git fetch origin codex/crm-design; git checkout codex/crm-design; git config user.name Codex; git config user.email codex@users.noreply.github.com; git merge origin/main; git diff --check; git push origin codex/crm-design.
 
-- Fetch and checkout from `origin/main` succeeded; starting commit `35cb373`.
-- All 44 case-study screen IDs resolved after revision 3 edits.
-- Figma screenshot inspection: accent comparison `89:10434`, Tiger Filled `49:3211`, Leads list `94:417`, Leads mobile detail `94:1596`. Initial CRM inspection found submenu contrast and mobile header sizing issues; shared components were corrected. Final screenshots checked: Invoices desktop detail `97:8098`, Estimates mobile list `97:9678`, Leads desktop list `94:417`, mobile payment confirmation `98:9050`.
-- Founder browser test and approval screenshots are not supplied. They remain required for acceptance; no claim of founder approval is made.
-
-## Confirmation screen register
-
-These are Figma prototypes: Confirm and Cancel dismiss the overlay. No request is sent by Figma. Implementation must gate the recorded API operation behind Confirm, and must not treat opening an overlay as authorization. Missing action-specific warnings and result wording remain approval items; none is invented here.
-
-| Section | Action | Desktop | Mobile |
-|---|---|---|---|
-| Leads | Delete | 98:8589 | 98:8605 |
-| Accounts | Delete | 98:8621 | 98:8637 |
-| Contacts | Delete | 98:8653 | 98:8669 |
-| Opportunities | Delete | 98:8685 | 98:8701 |
-| Cases | Delete | 98:8717 | 98:8733 |
-| Tasks | Delete | 98:8749 | 98:8765 |
-| Invoices | Send | 98:8781 | 98:8800 |
-| Invoices | Mark paid | 98:8819 | 98:8856 |
-| Estimates | Delete | 98:8893 | 98:8909 |
-| Estimates | Send | 98:8925 | 98:8944 |
-| Estimates | Convert | 98:8963 | 98:8988 |
-| Invoices | Record payment | 98:9013 | 98:9050 |
-| Invoices | Delete payment | 98:9087 | 98:9109 |
-| Invoices | Delete line item | 98:9131 | 98:9156 |
-
-Confirmation data paths:
-
-- Record identity: the detail response's `id` field in the field register above; for line-item/payment deletion use `Invoice.line_items[].id` / `Invoice.payments[].id` instead of the invoice id.
-- Send recipient: `GET /api/invoices/{id}/ → invoice.client_email` or `GET /api/invoices/estimates/{id}/ → estimate.client_email`.
-- Mark paid: `POST /api/invoices/{id}/mark-paid/`, request `PatchedPaymentCreateRequest`: `amount`, `payment_date`, `payment_method`, `reference_number`, `notes`.
-- Record payment: `POST /api/invoices/{invoice_id}/payments/`, request `PaymentCreateRequest`: `amount`, `payment_date`, `payment_method`, `reference_number`, `notes`. The first three are required. Both payment paths use BottleCRM's existing status and outstanding-balance validation; no client-side substitute or price conversion is specified.
-- Payment confirmation context: `GET /api/invoices/{id}/ → invoice.currency`, `invoice.amount_due`.
-- Delete payment context: `GET /api/invoices/{id}/ → invoice.payments[].amount`, `.payment_date`, schema `Payment`.
-- Delete line item context: `GET /api/invoices/{id}/ → invoice.line_items[].name`, `.quantity`, `.unit_price`, schema `InvoiceLineItem`.
-- Convert context: `GET /api/invoices/estimates/{id}/ → estimate.estimate_number`, `.total_amount`, `.currency`; after conversion, `converted_to_invoice` opens the corresponding invoice detail.
-
-## Displayed list columns and mobile cards
-
-Every list column is a property of that section's list schema above. Desktop supports horizontal scrolling. Mobile card fields are the first five desktop fields. All detail fields in the register are present, except the explicitly hidden fields.
-
-- Leads: `first_name`, `last_name`, `company_name`, `email`, `status`, `source`, `next_follow_up`, `assigned_to`.
-- Accounts: `name`, `email`, `phone`, `industry`, `assigned_to`.
-- Contacts: `first_name`, `last_name`, `email`, `organization`, `phone`, `do_not_call`.
-- Opportunities: `name`, `account`, `stage`, `amount`, `currency`, `probability`, `closed_on`, `assigned_to`.
-- Cases: `name`, `status`, `priority`, `account`, `assigned_to`, `first_response_sla_deadline`, `resolution_sla_deadline`.
-- Tasks: `title`, `status`, `priority`, `due_date`, `assigned_to`, `account`.
-- Invoices: `invoice_number`, `invoice_title`, `status`, `account`, `account_name`, `project`, `contact`, `contact_name`, `client_name`, `client_email`, `issue_date`, `due_date`, `total_amount`, `amount_due`, `amount_paid`, `currency`, `is_overdue`, `line_items_count`, `created_at`.
-- Estimates: `estimate_number`, `title`, `status`, `account`, `account_name`, `contact`, `contact_name`, `opportunity`, `converted_to_invoice`, `client_name`, `issue_date`, `expiry_date`, `total_amount`, `currency`, `is_expired`, `introduction`, `deposit_percent`, `start_project`, `project_billing_type`, `project`, `deposit_invoice`, `deposit`, `created_at`.
-
-## Components, navigation and validation
-
-- Reused: founder Workspace menus `46:66` / `70:10581`, Side menu item set `43:427`, Table header `43:389`, Table row `43:405`, Export control `43:31`, existing logo assets and local variable collections.
-- CRM components: Action `93:4`, Field `93:6`, Mobile bar `93:9`; component gallery `93:3`. All are editable Figma components with linked instances.
-- Mobile CRM submenus: Zero `98:9181`, Filled `98:9227`. Merged menus: Zero `99:8146`, Filled `93:14`.
-- Four prototype entry flows start at Leads list: desktop/mobile × Zero/Filled. Submenu navigation preserves size/state. Filled rows/cards open detail. Action controls open the matching confirmation overlay. Converted-estimate links open Invoices.
-- Structural Figma audit: **64 screens, 1,602 field bindings, 28 confirmation overlays, 0 displayed public-link fields, 0 reported errors**. Case-study revision 3 preserves all 44 IDs.
-- Figma screenshots are authoring evidence only. Founder test screenshots have not been supplied; founder acceptance remains pending.
+Figma structural checks cover duplicate detail labels, hidden internals, column counts, confirmation context, required payment inputs, drawer clearance and canvas text. Screenshots are authoring evidence, not a founder browser acceptance test. Founder acceptance remains outstanding. No tests or screenshots are claimed as founder approval. Claude handles PR review and the founder merges.
