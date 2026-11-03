@@ -1,10 +1,11 @@
 """Isolation probe as seen from inside a per-client Enforce container.
 
-Run on the Coolify test host (never live Boston):
-  docker exec <enforce-container> python -m ghost.enforce_isolation_probe
+Run on disposable GitHub CI containers only (automated checks):
+  python -m ghost.enforce_isolation_probe
 
-On this builder box Docker socket is unavailable — unit tests evaluate fixture
-probe results instead of a live exec.
+Automated runs use disposable GitHub CI containers only. The founder's read-only
+live command after deployment is in docs/ops/AUTUMBRA-ENFORCE-ISOLATION.md.
+Builders never run this probe on live Boston.
 """
 from __future__ import annotations
 
