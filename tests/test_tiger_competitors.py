@@ -739,3 +739,15 @@ def test_serialized_card_bound_includes_escaped_text_duplicate():
     result = access.tiger_bounded_card({'products':[{'sku':'\\"'*2000} for _ in range(100)],'has_more':False},'products')
     assert len(json.dumps(result).encode()) < 256000
     assert result['has_more'] and result['products']
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('marker', ['Confirm you are human','Prove you are human','Sorry, blocked','Your request has been blocked'])
+async def test_sitemap_challenge_fragments_use_browser_detector(marker):
+    gate, recorded = OfflineGate(), []
+    async def fetch(url):
+        return {'status':404} if url.endswith('robots.txt') else {'status':200,'text':'<div>'+marker+'</div>'}
+    async def render(url): return {'ok':False,'challenge':True}
+    async def publish(site,url,html,human): recorded.append(human); return {'matches':[]}
+    result = await CatalogueDiscovery(fetch,render,gate,publish).run([SITE],[OWN])
+    assert result['sites'][0]['status'] == 'human_check' and recorded == [True]
+    assert gate.calls.count(SITE+'/sitemap.xml') == 2
