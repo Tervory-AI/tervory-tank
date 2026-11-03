@@ -225,6 +225,18 @@ def test_sa_hosted_model_may_see_an_identifier_and_the_allow_list_can_narrow_it(
     )
 
 
+def test_owned_za_route_only_receives_identifiers_after_graduation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ZA_HOSTED_MODELS", raising=False)
+    main._graduated_sa_models.discard(main._OWN_ZA_MODEL)
+    text = f"ID {SA_ID}"
+    assert main.model_call_refusal(text, main._OWN_ZA_MODEL, box="za", tenant_id=TENANT) == main.IDENTIFIER_REFUSAL
+    main._graduated_sa_models.add(main._OWN_ZA_MODEL)
+    try:
+        assert main.model_call_refusal(text, main._OWN_ZA_MODEL, box="za", tenant_id=TENANT) is None
+    finally:
+        main._graduated_sa_models.discard(main._OWN_ZA_MODEL)
+
+
 def test_pure_code_detect_is_not_a_model_refusal() -> None:
     text = f"The ID {SA_ID} is on the form."
     found = main.pii_module().detect(text)

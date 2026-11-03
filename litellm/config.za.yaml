@@ -28,7 +28,7 @@ model_list:
     litellm_params:
       model: openai/tervory-own-zenas-za
       api_base: http://zenas-own-model:8080/v1
-      api_key: none
+      api_key: os.environ/HF_INFERENCE_TOKEN
       input_cost_per_token: 0
       output_cost_per_token: 0
     model_info:
@@ -37,6 +37,7 @@ model_list:
       open_weights: true
       host: tervory-za
       hosted_in: za
+      owned: true
 
   # ---------- OpenAI (API key, Responses/Chat) ----------
   - model_name: luna            # cheap, fast workhorse: classify, extract, short drafts

@@ -20,6 +20,13 @@ def test_every_model_has_a_price_and_a_key_from_the_environment() -> None:
             assert m["litellm_params"]["model"].startswith("chatgpt/"), m["model_name"]
             assert "api_key" not in m["litellm_params"], m["model_name"]
             continue
+        if info.get("owned"):
+            assert m["model_name"] == "tervory-own-zenas-za"
+            assert info.get("hosted_in") == "za"
+            assert info.get("input_cost_per_token") == 0
+            assert info.get("output_cost_per_token") == 0
+            assert str(m["litellm_params"]["api_key"]).startswith("os.environ/")
+            continue
         assert info.get("input_cost_per_token", 0) > 0, m["model_name"]
         assert info.get("output_cost_per_token", 0) > 0, m["model_name"]
         assert str(m["litellm_params"]["api_key"]).startswith("os.environ/"), m["model_name"]
