@@ -349,3 +349,17 @@ async def test_b6_offline_evals_are_eligible(skill, version, total):
         previous = packages[(skill, "1.0.0")].cases
         for old, new in zip(previous, pkg.cases, strict=True):
             assert new == (dict(old, must_refuse=True) if old["name"] in {"future", "archived"} else old)
+
+
+@pytest.mark.asyncio
+async def test_mx_guards_missing_domain_and_context_before_normalizing():
+    contacts = load("tank/skills/base.contacts/1.3.0/run.py")
+
+    async def forbidden(*args, **kwargs):
+        pytest.fail("No request for missing domain or context")
+
+    ctx = SimpleNamespace(http=SimpleNamespace(get=forbidden))
+    assert await contacts.mx_ok(ctx, None) is None
+    assert await contacts.mx_ok(ctx, "") is None
+    assert await contacts.mx_ok(None, None) is None
+    assert await contacts.mx_ok(None, "placeholder.org") is None
