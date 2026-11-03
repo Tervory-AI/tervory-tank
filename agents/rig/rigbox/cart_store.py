@@ -54,6 +54,14 @@ class CartStore:
                 'ON CONFLICT(tenant_id,id) DO UPDATE SET payload=excluded.payload',
                 UUID(str(tenant)), identity, json.dumps(data))
 
+    async def swap(self, tenant, identity, expected, replacement):
+        """Compare the complete persisted row under the existing tenant lock."""
+        async with self.lock(tenant, identity) as rows:
+            if await rows.get(tenant, identity) != expected:
+                return False
+            await rows.put(tenant, identity, replacement)
+            return True
+
     async def checkouts(self, tenant):
         if self.pool is None:
             return [copy.deepcopy(v) for (t, k), v in self.store._commerce_rows.items()
