@@ -163,14 +163,14 @@ async def dispatch(action, actor, thread_id=None, card_id=None):
 async def code_actor(actor, conn):
     """Narrow code mode only; the normal connected MCP catalogue is unchanged."""
     installs = {(row['plugin_id'], row['version']) for row in await conn.fetch('SELECT plugin_id,version FROM tank.plugin_installs WHERE tenant_id=$1', actor.tenant_id)}
-    connections = {row['name']: (row['vault'], unpack(row['metadata']).get('server_url')) for row in await conn.fetch("SELECT name,vault,metadata FROM tank.vault_items WHERE tenant_id=$1 AND kind='connections' AND mcp_state='connected'", actor.tenant_id)}
+    connections = {(row['vault'], row['name']): (row['vault'], unpack(row['metadata']).get('server_url')) for row in await conn.fetch("SELECT name,vault,metadata FROM tank.vault_items WHERE tenant_id=$1 AND kind='connections' AND mcp_state='connected'", actor.tenant_id)}
     allowed = set()
     for key in installs:
         manifest = MANIFESTS.get(key)
         if manifest is None or not manifest.code_mode or not visible(actor, manifest):
             continue
         for name, tool in actor.mcp_tools.items():
-            vault, url = connections.get(tool['connection_id'], (None, None))
+            vault, url = connections.get((tool['vault'], tool['connection_id']), (None, None))
             if VAULTS.get(vault) not in manifest.products or tool['access'] != 'read':
                 continue
             if any(server.url == url and server.tools.get(tool['name']) == 'read' for server in manifest.servers):
