@@ -176,22 +176,49 @@ async def zenas(conn, tenant, region, start, end, figures):
 
 
 async def trigger(conn, tenant, region, start, end, figures):
+    marketing = {}
+    if await exists(conn, "tank.trigger_posts"):
+        published = await conn.fetchval("""SELECT count(*) FROM tank.trigger_posts p
+            JOIN tank.ledger l ON l.tenant_id=p.tenant_id AND l.id=p.ledger_id
+            WHERE p.tenant_id=$1 AND l.region=$2 AND p.state='published'
+            AND p.published_at >= $3 AND p.published_at < $4""", tenant, region, start, end)
+        marketing.update(published_posts=published, published_posts_source="tank.trigger_posts.published_at")
+    if await exists(conn, "tank.trigger_gbp_replies"):
+        replies = await conn.fetchval("""SELECT count(*) FROM tank.trigger_gbp_replies r
+            JOIN tank.ledger l ON l.tenant_id=r.tenant_id AND l.id=r.ledger_id
+            WHERE r.tenant_id=$1 AND l.region=$2 AND r.sent_at >= $3 AND r.sent_at < $4""", tenant, region, start, end)
+        marketing.update(review_replies=replies, review_replies_source="tank.trigger_gbp_replies.sent_at")
     row = await conn.fetchrow("""SELECT count(*) AS drafts,
         count(*) FILTER(WHERE feedback='accepted' AND feedback_at<$4) AS accepted,
         count(*) FILTER(WHERE feedback IN ('accepted','rejected') AND feedback_at<$4) AS reviewed
         FROM tank.ledger WHERE tenant_id=$1 AND region=$2 AND ts >= $3 AND ts < $4
         AND task_type='trigger.write' AND outcome='delivered'""", tenant, region, start, end)
-    put(figures, "trigger.drafts", row["drafts"], "tank.ledger.trigger.write")
+    example_drafts = await conn.fetchval("""SELECT count(DISTINCT l.id)
+        FROM tank.command_threads t CROSS JOIN LATERAL jsonb_each(t.state->'cards') c
+        CROSS JOIN LATERAL jsonb_array_elements(CASE
+            WHEN c.value->>'tool'='trigger.write.batch' AND jsonb_typeof(c.value->'result'->'items')='array'
+            THEN c.value->'result'->'items' ELSE jsonb_build_array(c.value->'result') END) item
+        JOIN tank.ledger l ON l.tenant_id=$1 AND l.id::text=item->>'ledger_id'
+        WHERE t.tenant_id=$1 AND l.region=$2 AND l.ts >= $3 AND l.ts < $4
+            AND c.value->>'status'='confirmed'
+            AND c.value->>'tool' IN ('trigger.write','trigger.revise','trigger.write.batch')
+            AND jsonb_typeof(item->'accepted_write_ids')='array'
+            AND item->'accepted_write_ids'<>'[]'::jsonb""", tenant, region, start, end)
+    put(figures, "trigger.drafts", row["drafts"], "tank.ledger.trigger.write",
+        drafts_using_accepted_examples=example_drafts, **marketing)
     put(figures, "trigger.acceptance_rate", 100 * row["accepted"] / row["reviewed"] if row["reviewed"] else 0,
         "tank.ledger.feedback", reviewed=row["reviewed"])
     # Read checker results, not the draft text or user prompts. A receipt binds
     # the action to this tenant, region and period; repeated events do not count.
-    rows = await conn.fetch("""SELECT DISTINCT l.id,c.value->'result'->'report' AS report
+    rows = await conn.fetch("""SELECT DISTINCT l.id,item->'report' AS report
         FROM tank.command_threads t CROSS JOIN LATERAL jsonb_each(t.state->'cards') c
-        JOIN tank.ledger l ON l.tenant_id=$1 AND l.id::text=c.value->'result'->>'ledger_id'
+        CROSS JOIN LATERAL jsonb_array_elements(CASE
+            WHEN c.value->>'tool'='trigger.write.batch' AND jsonb_typeof(c.value->'result'->'items')='array'
+            THEN c.value->'result'->'items' ELSE jsonb_build_array(c.value->'result') END) item
+        JOIN tank.ledger l ON l.tenant_id=$1 AND l.id::text=item->>'ledger_id'
         WHERE t.tenant_id=$1 AND l.region=$2 AND l.ts >= $3 AND l.ts < $4
-            AND c.value->>'status'='confirmed' AND c.value->>'tool'='trigger.write'
-            AND jsonb_typeof(c.value->'result'->'report')='object'""", tenant, region, start, end)
+            AND c.value->>'status'='confirmed' AND c.value->>'tool' IN ('trigger.write','trigger.revise','trigger.write.batch')
+            AND jsonb_typeof(item->'report')='object'""", tenant, region, start, end)
     reports = [obj(row["report"]) for row in rows]
     issues = sum(report.get("issue_count", 0) for report in reports)
     voice_hits = sum(item.get("source") == "voice" for report in reports for item in report.get("issues", []))

@@ -1,0 +1,715 @@
+PR #598 round 2 verification
+Working directory: /workspace/codex-cli-code-mode
+Main merged: 305b833b via 77060457. CLI version 0.2.0; main's 0.1.2 entry retained.
+No live model requests, keychain reads, production SQL or PR merge.
+
+COMMAND:
+TMPDIR="$PWD/.task-tmp" npm test --prefix cli
+RESULT: exit 0, 89 passed, 0 failed
+
+> @tervory/cli@0.2.0 test
+> node --expose-gc --test test/*.test.mjs
+
+TAP version 13
+# Subtest: login is a browser device approval: no paste prompt, polls, stores a refreshable credential
+ok 1 - login is a browser device approval: no paste prompt, polls, stores a refreshable credential
+  ---
+  duration_ms: 196.384
+  type: 'test'
+  ...
+# Subtest: ZA login goes straight to the ZA Tank and approval still opens the one Workspace
+ok 2 - ZA login goes straight to the ZA Tank and approval still opens the one Workspace
+  ---
+  duration_ms: 2.882216
+  type: 'test'
+  ...
+# Subtest: denied and expired approvals store nothing
+ok 3 - denied and expired approvals store nothing
+  ---
+  duration_ms: 4.642105
+  type: 'test'
+  ...
+# Subtest: a 401 or 403 while polling stops login at once instead of polling to expiry
+ok 4 - a 401 or 403 while polling stops login at once instead of polling to expiry
+  ---
+  duration_ms: 8.353844
+  type: 'test'
+  ...
+# Subtest: expiring access token refreshes once, rotates the keychain copy, then calls Tank
+ok 5 - expiring access token refreshes once, rotates the keychain copy, then calls Tank
+  ---
+  duration_ms: 12.654657
+  type: 'test'
+  ...
+# Subtest: expired or revoked refresh asks for login; logout revokes on the server and clears the keychain
+ok 6 - expired or revoked refresh asks for login; logout revokes on the server and clears the keychain
+  ---
+  duration_ms: 7.315988
+  type: 'test'
+  ...
+# Subtest: revoked token refused before command execution
+ok 7 - revoked token refused before command execution
+  ---
+  duration_ms: 20.90528
+  type: 'test'
+  ...
+# Subtest: refresh and device codes are redacted from terminal output
+ok 8 - refresh and device codes are redacted from terminal output
+  ---
+  duration_ms: 0.732274
+  type: 'test'
+  ...
+# Subtest: chat streams steps tokens receipt and N cancels without confirm
+ok 9 - chat streams steps tokens receipt and N cancels without confirm
+  ---
+  duration_ms: 9.60107
+  type: 'test'
+  ...
+# Subtest: one-shot defaults model to Auto and EOF cancels
+ok 10 - one-shot defaults model to Auto and EOF cancels
+  ---
+  duration_ms: 2.812965
+  type: 'test'
+  ...
+# Subtest: pinned model shows Tank-priced Auto comparison and never computes one
+ok 11 - pinned model shows Tank-priced Auto comparison and never computes one
+  ---
+  duration_ms: 3.081795
+  type: 'test'
+  ...
+# Subtest: customer receipt (no model names from Tank) shows dollar figures and the Auto label only
+ok 12 - customer receipt (no model names from Tank) shows dollar figures and the Auto label only
+  ---
+  duration_ms: 0.460663
+  type: 'test'
+  ...
+# Subtest: client cannot propose founder tools
+ok 13 - client cannot propose founder tools
+  ---
+  duration_ms: 3.340637
+  type: 'test'
+  ...
+# Subtest: known squad action uses code, creates pending card, requires explicit yes
+ok 14 - known squad action uses code, creates pending card, requires explicit yes
+  ---
+  duration_ms: 9.274529
+  type: 'test'
+  ...
+# Subtest: CSV file intake maps existing batch records without model
+ok 15 - CSV file intake maps existing batch records without model
+  ---
+  duration_ms: 221.38538
+  type: 'test'
+  ...
+# Subtest: build prints brief and declines without worker action
+ok 16 - build prints brief and declines without worker action
+  ---
+  duration_ms: 1.529857
+  type: 'test'
+  ...
+# Subtest: token region alone chooses endpoint; no mutable origin option
+ok 17 - token region alone chooses endpoint; no mutable origin option
+  ---
+  duration_ms: 0.652903
+  type: 'test'
+  ...
+# Subtest: threads and receipts preserve ledger numbers without rounding or estimates
+ok 18 - threads and receipts preserve ledger numbers without rounding or estimates
+  ---
+  duration_ms: 6.056082
+  type: 'test'
+  ...
+# Subtest: transport errors do not expose token or response body and never retry
+ok 19 - transport errors do not expose token or response body and never retry
+  ---
+  duration_ms: 2.977524
+  type: 'test'
+  ...
+# Subtest: terminal controls and complete credential strings are redacted
+ok 20 - terminal controls and complete credential strings are redacted
+  ---
+  duration_ms: 0.354832
+  type: 'test'
+  ...
+# Subtest: SSE handles UTF-8 and event boundaries split across reads
+ok 21 - SSE handles UTF-8 and event boundaries split across reads
+  ---
+  duration_ms: 25.367773
+  type: 'test'
+  ...
+# Subtest: stream truncation is not silently accepted or retried
+ok 22 - stream truncation is not silently accepted or retried
+  ---
+  duration_ms: 5.865541
+  type: 'test'
+  ...
+# Subtest: stateful sanitizer redacts synthetic credentials and controls at every character boundary
+ok 23 - stateful sanitizer redacts synthetic credentials and controls at every character boundary
+  ---
+  duration_ms: 88.114511
+  type: 'test'
+  ...
+# Subtest: actual showTurn path redacts split tokens and controls while streaming ordinary text
+ok 24 - actual showTurn path redacts split tokens and controls while streaming ordinary text
+  ---
+  duration_ms: 92.809236
+  type: 'test'
+  ...
+# Subtest: UTF-8 transport splits at every byte preserve sanitizer state
+ok 25 - UTF-8 transport splits at every byte preserve sanitizer state
+  ---
+  duration_ms: 163.840578
+  type: 'test'
+  ...
+# Subtest: authoritative replace discards preview and seq duplicates never duplicate the final answer
+ok 26 - authoritative replace discards preview and seq duplicates never duplicate the final answer
+  ---
+  duration_ms: 1.616069
+  type: 'test'
+  ...
+# Subtest: whole-string output strips C1 controls in titles cards models and receipts
+ok 27 - whole-string output strips C1 controls in titles cards models and receipts
+  ---
+  duration_ms: 0.146651
+  type: 'test'
+  ...
+# Subtest: job watcher observes steps and receipts until terminal state with read-only polls
+ok 28 - job watcher observes steps and receipts until terminal state with read-only polls
+  ---
+  duration_ms: 0.385842
+  type: 'test'
+  ...
+# Subtest: job watcher stops at its bound and does not repeat action or turn
+ok 29 - job watcher stops at its bound and does not repeat action or turn
+  ---
+  duration_ms: 1.396698
+  type: 'test'
+  ...
+# Subtest: job watcher cancellation and failed state stop without retry
+ok 30 - job watcher cancellation and failed state stop without retry
+  ---
+  duration_ms: 0.258652
+  type: 'test'
+  ...
+# Subtest: reopened chat shows saved messages and follows existing job without another model turn
+ok 31 - reopened chat shows saved messages and follows existing job without another model turn
+  ---
+  duration_ms: 1.751728
+  type: 'test'
+  ...
+# Subtest: review of \#506 B2: help hides models and --model; founder roster is formatted, never raw JSON
+ok 32 - review of \#506 B2: help hides models and --model; founder roster is formatted, never raw JSON
+  ---
+  duration_ms: 0.528633
+  type: 'test'
+  ...
+# Subtest: review of \#506 B2: a customer --model pin is refused by Tank (403) and the CLI names no model
+ok 33 - review of \#506 B2: a customer --model pin is refused by Tank (403) and the CLI names no model
+  ---
+  duration_ms: 3.92482
+  type: 'test'
+  ...
+# Subtest: review of \#506 B2: a customer receipt on a historic pin keeps the Auto line without any model field
+ok 34 - review of \#506 B2: a customer receipt on a historic pin keeps the Auto line without any model field
+  ---
+  duration_ms: 1.409649
+  type: 'test'
+  ...
+# Subtest: folder must be a git repository; paths and symlinks cannot escape
+ok 35 - folder must be a git repository; paths and symlinks cannot escape
+  ---
+  duration_ms: 208.19548
+  type: 'test'
+  ...
+# Subtest: secret filenames, binary data and oversized reads are refused; listing respects ignore
+ok 36 - secret filenames, binary data and oversized reads are refused; listing respects ignore
+  ---
+  duration_ms: 302.249184
+  type: 'test'
+  ...
+# Subtest: secret patterns are redacted as whole lines before file/search/git/command results leave
+ok 37 - secret patterns are redacted as whole lines before file/search/git/command results leave
+  ---
+  duration_ms: 645.238222
+  type: 'test'
+  ...
+# Subtest: literal/regex search caps at 200 matches and regex execution is bounded
+ok 38 - literal/regex search caps at 200 matches and regex execution is bounded
+  ---
+  duration_ms: 1555.805044
+  type: 'test'
+  ...
+# Subtest: edits require a prior read and literal y; stale file and approval-time mutations refuse
+ok 39 - edits require a prior read and literal y; stale file and approval-time mutations refuse
+  ---
+  duration_ms: 873.85496
+  type: 'test'
+  ...
+# Subtest: new file diff requires a missing-file read; malformed/context-mismatched diffs refuse
+ok 40 - new file diff requires a missing-file read; malformed/context-mismatched diffs refuse
+  ---
+  duration_ms: 226.92354
+  type: 'test'
+  ...
+# Subtest: commands show in full, require y and cannot run non-interactively; cwd and output cap
+ok 41 - commands show in full, require y and cannot run non-interactively; cwd and output cap
+  ---
+  duration_ms: 402.135786
+  type: 'test'
+  ...
+# Subtest: fake Tank code loop uses existing region/token, redacts results and never retries a failed turn
+ok 42 - fake Tank code loop uses existing region/token, redacts results and never retries a failed turn
+  ---
+  duration_ms: 185.506772
+  type: 'test'
+  ...
+# Subtest: list caps at 2000 entries, including repositories with more than 64 KB of names
+ok 43 - list caps at 2000 entries, including repositories with more than 64 KB of names
+  ---
+  duration_ms: 5291.979612
+  type: 'test'
+  ...
+# Subtest: approved command cannot read secret paths, outside symlinks or inherited host credentials
+ok 44 - approved command cannot read secret paths, outside symlinks or inherited host credentials
+  ---
+  duration_ms: 139.33587
+  type: 'test'
+  ...
+# Subtest: fake Tank can request a missing-file read, explicit edit and explicit test run without a new sign-in
+ok 45 - fake Tank can request a missing-file read, explicit edit and explicit test run without a new sign-in
+  ---
+  duration_ms: 468.635346
+  type: 'test'
+  ...
+# Subtest: all repository live-key families and assigned-secret lines are redacted
+ok 46 - all repository live-key families and assigned-secret lines are redacted
+  ---
+  duration_ms: 1.587798
+  type: 'test'
+  ...
+# Subtest: git status and diff work without exposing secret-file contents
+ok 47 - git status and diff work without exposing secret-file contents
+  ---
+  duration_ms: 118.3257
+  type: 'test'
+  ...
+# Subtest: cancelling at command approval stops execution and any following model turn
+ok 48 - cancelling at command approval stops execution and any following model turn
+  ---
+  duration_ms: 88.364373
+  type: 'test'
+  ...
+# Subtest: git read tools cannot execute repository clean/process filters without approval
+ok 49 - git read tools cannot execute repository clean/process filters without approval
+  ---
+  duration_ms: 493.890607
+  type: 'test'
+  ...
+# Subtest: missing files and approval-time ancestor swaps cannot create Git hooks
+ok 50 - missing files and approval-time ancestor swaps cannot create Git hooks
+  ---
+  duration_ms: 127.182666
+  type: 'test'
+  ...
+# Subtest: Git reads remain pinned when an approved command creates a nested repository
+ok 51 - Git reads remain pinned when an approved command creates a nested repository
+  ---
+  duration_ms: 464.825465
+  type: 'test'
+  ...
+# Subtest: external Node runtime is read-only, named before approval and cannot expose HOME
+ok 52 - external Node runtime is read-only, named before approval and cannot expose HOME
+  ---
+  duration_ms: 1288.982755
+  type: 'test'
+  ...
+# Subtest: session history is bounded, redacted and transient; continuation rounds share one prompt id
+ok 53 - session history is bounded, redacted and transient; continuation rounds share one prompt id
+  ---
+  duration_ms: 761.832481
+  type: 'test'
+  ...
+# Subtest: external Node intermediate links do not expose their host directory
+ok 54 - external Node intermediate links do not expose their host directory
+  ---
+  duration_ms: 216.567485
+  type: 'test'
+  ...
+# Subtest: external runtime rejects directories, nonexecutables and their symlinks before approval
+ok 55 - external runtime rejects directories, nonexecutables and their symlinks before approval
+  ---
+  duration_ms: 56.986628
+  type: 'test'
+  ...
+# Subtest: external runtimes refuse pip-user and uv launchers without exposing .local user data
+ok 56 - external runtimes refuse pip-user and uv launchers without exposing .local user data
+  ---
+  duration_ms: 59.702363
+  type: 'test'
+  ...
+# Subtest: deviceCall is bounded when Tank accepts and never answers, or stalls the body
+ok 57 - deviceCall is bounded when Tank accepts and never answers, or stalls the body
+  ---
+  duration_ms: 669.264377
+  type: 'test'
+  ...
+# Subtest: deviceCall passes an abort signal to the transport
+ok 58 - deviceCall passes an abort signal to the transport
+  ---
+  duration_ms: 8.244863
+  type: 'test'
+  ...
+# Subtest: stalled body + gc: deviceCall, Tank.json, a stalled stream and latest.json all end at their deadlines
+ok 59 - stalled body + gc: deviceCall, Tank.json, a stalled stream and latest.json all end at their deadlines
+  ---
+  duration_ms: 2436.116657
+  type: 'test'
+  ...
+# Subtest: no headers + gc: Tank.request ends at its header deadline
+ok 60 - no headers + gc: Tank.request ends at its header deadline
+  ---
+  duration_ms: 512.036083
+  type: 'test'
+  ...
+# Subtest: redirects are refused, never followed, on every bounded call
+ok 61 - redirects are refused, never followed, on every bounded call
+  ---
+  duration_ms: 43.558948
+  type: 'test'
+  ...
+# Subtest: Ctrl-C (the caller signal) still aborts a stalled stream at once
+ok 62 - Ctrl-C (the caller signal) still aborts a stalled stream at once
+  ---
+  duration_ms: 256.575656
+  type: 'test'
+  ...
+# Subtest: every early stop of events() aborts the upstream fetch and closes the connection
+ok 63 - every early stop of events() aborts the upstream fetch and closes the connection
+  ---
+  duration_ms: 431.647353
+  type: 'test'
+  ...
+# Subtest: a stream that finishes normally is not aborted
+ok 64 - a stream that finishes normally is not aborted
+  ---
+  duration_ms: 13.632611
+  type: 'test'
+  ...
+# Subtest: ZA accepts only the fixed Zitadel origin for both verification URLs
+ok 65 - ZA accepts only the fixed Zitadel origin for both verification URLs
+  ---
+  duration_ms: 26.201148
+  type: 'test'
+  ...
+# Subtest: ZA login opens Zitadel and stores only the unchanged Tank credential pair
+ok 66 - ZA login opens Zitadel and stores only the unchanged Tank credential pair
+  ---
+  duration_ms: 300.162483
+  type: 'test'
+  ...
+# Subtest: wrapped identity device codes are redacted across every chunk boundary
+ok 67 - wrapped identity device codes are redacted across every chunk boundary
+  ---
+  duration_ms: 1.366308
+  type: 'test'
+  ...
+# Subtest: ZA default login sends the old request and opens Boston approval
+ok 68 - ZA default login sends the old request and opens Boston approval
+  ---
+  duration_ms: 14.650227
+  type: 'test'
+  ...
+# Subtest: Zitadel flag is accepted only for ZA login
+ok 69 - Zitadel flag is accepted only for ZA login
+  ---
+  duration_ms: 2.10441
+  type: 'test'
+  ...
+# Subtest: public adapter forwards only PAT and content type to fixed local Tank
+ok 70 - public adapter forwards only PAT and content type to fixed local Tank
+  ---
+  duration_ms: 1117.779418
+  type: 'test'
+  ...
+# Subtest: public path refuses revoked PAT without leaking upstream body
+ok 71 - public path refuses revoked PAT without leaking upstream body
+  ---
+  duration_ms: 480.78278
+  type: 'test'
+  ...
+# Subtest: public path rejects foreign region malformed tokens worker endpoints and identity queries before fetch
+ok 72 - public path rejects foreign region malformed tokens worker endpoints and identity queries before fetch
+  ---
+  duration_ms: 359.011912
+  type: 'test'
+  ...
+# Subtest: public path preserves replay cursor SSE and cancellation signal
+ok 73 - public path preserves replay cursor SSE and cancellation signal
+  ---
+  duration_ms: 189.502033
+  type: 'test'
+  ...
+# Subtest: public POST body is bounded and content type checked
+ok 74 - public POST body is bounded and content type checked
+  ---
+  duration_ms: 224.925329
+  type: 'test'
+  ...
+# Subtest: the public adapter never forwards the model roster; the CLI shows customers no models and no raw JSON
+ok 75 - the public adapter never forwards the model roster; the CLI shows customers no models and no raw JSON
+  ---
+  duration_ms: 217.037498
+  type: 'test'
+  ...
+# Subtest: release is reproducible and the manifest matches the bytes
+ok 76 - release is reproducible and the manifest matches the bytes
+  ---
+  duration_ms: 2730.369318
+  type: 'test'
+  ...
+# Subtest: a default build (as the Workspace image runs it) offers cli/package.json's version
+ok 77 - a default build (as the Workspace image runs it) offers cli/package.json's version
+  ---
+  duration_ms: 2346.579287
+  type: 'test'
+  ...
+# Subtest: install.sh installs latest, honours TERVORY_CLI_VERSION, and refuses a tampered tarball
+ok 78 - install.sh installs latest, honours TERVORY_CLI_VERSION, and refuses a tampered tarball
+  ---
+  duration_ms: 5175.551652
+  type: 'test'
+  ...
+# Subtest: tervory update: latest, TERVORY_CLI_VERSION pin, and checksum refusal
+ok 79 - tervory update: latest, TERVORY_CLI_VERSION pin, and checksum refusal
+  ---
+  duration_ms: 1439.183801
+  type: 'test'
+  ...
+# Subtest: install.sh: deadlines on every download, wrapped in main, atomic swap
+ok 80 - install.sh: deadlines on every download, wrapped in main, atomic swap
+  ---
+  duration_ms: 0.849024
+  type: 'test'
+  ...
+# Subtest: install.sh refuses an https->http redirect over wget and over curl (behaviour, not text)
+ok 81 - install.sh refuses an https->http redirect over wget and over curl (behaviour, not text)
+  ---
+  duration_ms: 2909.735098
+  type: 'test'
+  ...
+# Subtest: update notice: at most daily, silent on failure
+ok 82 - update notice: at most daily, silent on failure
+  ---
+  duration_ms: 602.249357
+  type: 'test'
+  ...
+# Subtest: fails: shipped CLI code changed, version not bumped
+ok 83 - fails: shipped CLI code changed, version not bumped
+  ---
+  duration_ms: 982.652139
+  type: 'test'
+  ...
+# Subtest: fails for each shipped path: bin, install.sh, scripts, package-lock
+ok 84 - fails for each shipped path: bin, install.sh, scripts, package-lock
+  ---
+  duration_ms: 3298.920077
+  type: 'test'
+  ...
+# Subtest: fails: version lowered, lockfile not bumped, or no CHANGELOG entry
+ok 85 - fails: version lowered, lockfile not bumped, or no CHANGELOG entry
+  ---
+  duration_ms: 1614.383879
+  type: 'test'
+  ...
+# Subtest: passes: shipped code changed with a higher version, matching lockfile and CHANGELOG entry
+ok 86 - passes: shipped code changed with a higher version, matching lockfile and CHANGELOG entry
+  ---
+  duration_ms: 488.904051
+  type: 'test'
+  ...
+# Subtest: passes: only docs or tests changed, no bump needed
+ok 87 - passes: only docs or tests changed, no bump needed
+  ---
+  duration_ms: 515.940094
+  type: 'test'
+  ...
+# Subtest: passes: the base branch has no cli/ yet (first version)
+ok 88 - passes: the base branch has no cli/ yet (first version)
+  ---
+  duration_ms: 360.552421
+  type: 'test'
+  ...
+# Subtest: this checkout: package.json, package-lock.json and CHANGELOG agree on the version
+ok 89 - this checkout: package.json, package-lock.json and CHANGELOG agree on the version
+  ---
+  duration_ms: 416.00474
+  type: 'test'
+  ...
+1..89
+# tests 89
+# suites 0
+# pass 89
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 27865.587777
+
+COMMAND:
+TMPDIR="$PWD/.task-tmp" PYTHONPATH=.task-tmp/deps:.task-tmp/forge-deps:tank:tests POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55468/pooltest /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q tests/test_command_code.py tests/test_perplexity_research.py::test_schema_applies_twice_and_preserves_policy tests/test_schema.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+RESULT: exit 0, 23 passed
+Disposable PostgreSQL: docker run -d --name cli-code-mode-tests -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=pooltest -p 127.0.0.1:55468:5432 postgres:16
+.......................                                                  [100%]
+=============================== warnings summary ===============================
+tank/main.py:752
+  /workspace/codex-cli-code-mode/tank/main.py:752: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+.task-tmp/deps/fastapi/applications.py:4723
+.task-tmp/deps/fastapi/applications.py:4723
+.task-tmp/deps/fastapi/applications.py:4723
+.task-tmp/deps/fastapi/applications.py:4723
+.task-tmp/deps/fastapi/applications.py:4723
+  /workspace/codex-cli-code-mode/.task-tmp/deps/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tank/main.py:806
+  /workspace/codex-cli-code-mode/tank/main.py:806: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+  /workspace/codex-cli-code-mode/.task-tmp/deps/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+  /workspace/codex-cli-code-mode/.task-tmp/deps/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.task-tmp/deps/pydantic/_internal/_fields.py:192
+  /workspace/codex-cli-code-mode/.task-tmp/deps/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tank/agent_skills.py:531
+  /workspace/codex-cli-code-mode/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tank/skala_intake.py:71
+  /workspace/codex-cli-code-mode/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tank/skala_intake.py:77
+  /workspace/codex-cli-code-mode/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tank/skala_revalidation.py:192
+  /workspace/codex-cli-code-mode/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+23 passed, 14 warnings in 32.05s
+
+COMMAND:
+TMPDIR="$PWD/.task-tmp" node --test --test-name-pattern='external' cli/test/code-mode.test.mjs
+RESULT: exit 0, 4 passed
+TAP version 13
+# Subtest: external Node runtime is read-only, named before approval and cannot expose HOME
+ok 1 - external Node runtime is read-only, named before approval and cannot expose HOME
+  ---
+  duration_ms: 984.112277
+  type: 'test'
+  ...
+# Subtest: external Node intermediate links do not expose their host directory
+ok 2 - external Node intermediate links do not expose their host directory
+  ---
+  duration_ms: 177.128878
+  type: 'test'
+  ...
+# Subtest: external runtime rejects directories, nonexecutables and their symlinks before approval
+ok 3 - external runtime rejects directories, nonexecutables and their symlinks before approval
+  ---
+  duration_ms: 50.116503
+  type: 'test'
+  ...
+# Subtest: external runtimes refuse pip-user and uv launchers without exposing .local user data
+ok 4 - external runtimes refuse pip-user and uv launchers without exposing .local user data
+  ---
+  duration_ms: 50.440055
+  type: 'test'
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1504.121823
+
+COMMAND:
+TMPDIR="$PWD/.task-tmp" node cli/scripts/build-release.mjs --out "$PWD/.task-tmp/round2-release"
+RESULT: exit 0, six artifacts built
+de5dc84a5705e28170951a0bab765f2eaac555455752be6377323cf90d0ab545  tervory-cli-0.2.0-linux-x64-gnu.tar.gz (linux-x64-gnu, 3135736 bytes)
+800901b6588824a18e0d5e4a82f2329e237110cbd20ec90a3c86bf8ac9267485  tervory-cli-0.2.0-linux-x64-musl.tar.gz (linux-x64-musl, 3135786 bytes)
+7bb3fdc767ec36167e010e3a28a2e4ba8462e833e40febfec9c4dd3302022993  tervory-cli-0.2.0-linux-arm64-gnu.tar.gz (linux-arm64-gnu, 2962192 bytes)
+24a995cddfcfda2a0b516a1665bc3d7990a9631ccbacf3430734e5c84ccd39d8  tervory-cli-0.2.0-linux-arm64-musl.tar.gz (linux-arm64-musl, 2962192 bytes)
+48d952782f7bb6b12cbbb3af05e0f2cc5a100b05e2018fc1f11398810de0eb19  tervory-cli-0.2.0-darwin-x64.tar.gz (darwin-x64, 630329 bytes)
+4829452d8c91fc8250d5f2059c6bde3f6eefc7199de3096421fa59300d659829  tervory-cli-0.2.0-darwin-arm64.tar.gz (darwin-arm64, 606982 bytes)
+
+COMMAND:
+sh .github/scripts/cli_version_guard.sh origin/main
+RESULT: exit 0; CLI changed and the version moved 0.1.2 -> 0.2.0 with a CHANGELOG entry.
+
+COMMAND:
+/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+RESULT: exit 0; All checks passed!
+
+COMMAND:
+git diff --check origin/main
+RESULT: exit 0, no whitespace errors.
+
+WORKER PROOF:
+See worker-test.txt for the exact script/entrypoint command and actual TTY inputs/output.
+Read-only paths are specific Python files/libraries, never installation parents.
+Literal y -> tests/test_schema.py -> 2 passed in 0.19s, CLI exit 0.
+Keychain/HTTP only are offline stubs. No live receipt or founder browser acceptance is claimed.
+
+HISTORY:
+Round 1's local full-suite failures are retained in full-suite.txt. The founder's
+round 2 review confirms CI green on 9610a5d9; that historical local run is not
+represented as the current PR's CI status. This round's pushes trigger fresh CI.

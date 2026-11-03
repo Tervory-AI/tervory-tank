@@ -1,0 +1,60 @@
+{
+  "baseline_context": "3aadec73",
+  "final_runtime_context": "78d3a084",
+  "platform": "linux/amd64",
+  "measurement": "Docker image .Size, uncompressed",
+  "images": [
+    {
+      "tag": "codex-tisan-w3-j5:before",
+      "id": "sha256:1d05694014ef9fc305ae73044d18dea67ab5b62a0142470e21bff514a677e4a3",
+      "size_bytes": 3711284276
+    },
+    {
+      "tag": "codex-tisan-w3-j5:final",
+      "id": "sha256:652e1a7784e21f68b4c436f3cf1f430b387175f276181da80ab8b473225decb1",
+      "size_bytes": 3815972011
+    }
+  ],
+  "change_bytes": 104687735,
+  "runtime": {
+    "network": "none",
+    "version": "k6 v1.8.2 (commit/682f083071, go1.26.9, linux/amd64)",
+    "results": [
+      {
+        "name": "k6",
+        "ok": true,
+        "pages": [
+          {
+            "page": "/placeholder-clean",
+            "ok": true,
+            "status": 200,
+            "requests": 45,
+            "failures": 0,
+            "p95_ms": 4.779553399999998
+          }
+        ],
+        "summary": "/placeholder-clean: 200; p95 4.78 ms"
+      },
+      {
+        "name": "k6",
+        "ok": false,
+        "pages": [
+          {
+            "page": "/placeholder-500",
+            "ok": false,
+            "status": null,
+            "requests": 45,
+            "failures": 45,
+            "p95_ms": 4.4855782
+          }
+        ],
+        "summary": "/placeholder-500: failed; p95 4.49 ms"
+      }
+    ],
+    "source_sha256": {
+      "/app/scaffold.py": "f64b6486be36d27c149c3f0e12c67fc8f834a48435edcaf88393c09be8c194a5",
+      "/app/templates/next-site/scripts/quality-check.cjs": "8abe624cb19222a131176f9b977a75a6349d510ab4ee4f5df1cdcca943244980",
+      "/app/templates/next-site/scripts/smoke.k6.js": "ff2fe96afcd9fe1872d8438a1837f81cc73459b3f741d0f11996bffd25d853d2"
+    }
+  }
+}

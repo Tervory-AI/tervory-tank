@@ -212,7 +212,6 @@ class LocateAcceptIn(BaseModel):
     model_config = {"extra": "forbid"}
     product_id: str = Field(min_length=1, max_length=200)
     hold: str = Field(min_length=1, max_length=200)
-    payment_token: str = Field(min_length=1, max_length=200)
     contact: dict[str, Any] = Field(default_factory=dict)
     notice_version: str | None = Field(default=None, max_length=64)
     # Blind ship only: where the other store ships the parcel.
@@ -229,7 +228,7 @@ async def locate_confirm(request: Request, payload: LocateIn) -> Response:
 
 @router.post("/locate/accept")
 async def locate_accept(request: Request, payload: LocateAcceptIn) -> Response:
-    """Backend Accept: test-mode payment, then a sandbox-only order. No UI."""
+    """Accept a held quote and hand it to the store. No order or UI."""
     await _auth(request)
     service = _service(request)
     if not hasattr(service, "locate_accept"):

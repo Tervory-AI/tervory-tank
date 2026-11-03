@@ -208,6 +208,61 @@ def _match_score(terms: set[str], text: str, source_words: set[str], place: str,
     return 3 * len(terms & words) + len(terms & source_words)
 
 
+async def gated_facts(ledger: Any, tenant_id: str, facts: list[dict], *, fixtures: bool = False, now: datetime | None = None) -> list[dict]:
+    """Final assembly boundary for stored answers and supplied brief passages.
+
+    Authoritative prediction IDs and warning document links determine the cohort;
+    a caller cannot open it by putting a different cohort on a proposed fact.
+    Unknown warning/prediction references fail closed. Ordinary feed facts remain.
+    """
+    import inspect
+    from core.predictions import gate
+
+    loaded = None
+    documents = {}
+    accepted = []
+    for fact in facts:
+        href = str(fact.get("href") or fact.get("url") or "")
+        match = re.search(r"/market-lab/sources/([0-9a-fA-F-]{36})(?:[?#/]|$)", href)
+        doc_id = match.group(1) if match else None
+        if doc_id not in documents:
+            documents[doc_id] = await document(ledger, tenant_id, doc_id, fixtures=fixtures) if doc_id else None
+        if doc_id and documents[doc_id] is None:
+            from core.documents import records
+            uploads = await records(ledger, tenant_id, doc_id)
+            documents[doc_id] = uploads[0] if uploads else None
+        if doc_id and documents[doc_id] is None:
+            continue  # Missing, deleted or foreign tenant source cannot be cited.
+        doc = documents[doc_id] or {}
+        predictive = (doc.get("kind") in {"warning_evidence", "prediction", "warning"}
+                      or fact.get("kind") in {"prediction", "warning"}
+                      or any(fact.get(key) is not None for key in ("prediction_id", "warning_id")))
+        if not predictive:
+            accepted.append(fact)
+            continue
+        if loaded is None:
+            rows = ledger.predictions_for(tenant_id)
+            rows = await rows if inspect.isawaitable(rows) else rows
+            rows = [row for row in rows if str(row["tenant_id"]) == str(tenant_id)]
+            opened = {(row["kind"], row["feed"], row["horizon_seconds"]) for row in gate(rows, tenant_id, now=now)["cohorts"] if row["open"]}
+            loaded = rows, opened
+        rows, opened = loaded
+        candidates = []
+        for row in rows:
+            if row.get("outcome") is not None:
+                continue
+            sources = [source for source in row.get("sources") or [] if isinstance(source, dict)]
+            prediction_match = fact.get("prediction_id") is not None and str(row["id"]) == str(fact["prediction_id"])
+            warning_match = fact.get("warning_id") is not None and any(str(source.get("warning_id")) == str(fact["warning_id"]) for source in sources)
+            if prediction_match or warning_match:
+                candidates.append(row)
+            elif doc_id and any(doc_id in str(source.get("evidence", "")) for source in sources):
+                candidates.append(row)
+        if candidates and all((row.get("kind"), row.get("feed"), row.get("horizon_seconds")) in opened for row in candidates):
+            accepted.append(fact)
+    return accepted
+
+
 async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool = False, engine: str | None = None) -> dict:
     terms = _words(question)
     states = mentioned_states(question)
@@ -280,5 +335,5 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
     ranked.extend(await matched(ledger, tenant_id, question))
     ranked.sort(key=lambda row: (row[0], row[1]), reverse=True)
     best = ranked[0][0] if ranked else 0
-    facts = [row[2] for row in ranked if row[0] == best][:5]
+    facts = await gated_facts(ledger, tenant_id, [row[2] for row in ranked if row[0] == best][:5], fixtures=fixtures)
     return {"content": "Here is what the saved sources show. This information does not explain why something happened or predict what comes next." if facts else "No stored data matches this question", "facts": facts, "sources": [{"name": fact["name"], "href": fact["href"]} for fact in facts]}

@@ -11,6 +11,10 @@ COPY market_lab/feeds /app/feeds
 COPY market_lab/core /app/core
 COPY market_lab/engines /app/engines
 COPY market_lab/schema.sql /app/schema.sql
+# Reuse the same SMTP implementation and uncertain-send guard as Tiger/Zenas.
+COPY radix/scanlib/dependencies.py /app/agents/radix/scanlib/dependencies.py
+COPY tiger/alert_email.py /app/agents/tiger/alert_email.py
+COPY rig/rigbox/reserve.py /app/agents/rig/rigbox/reserve.py
 COPY market_lab/app.py /app/app.py
 COPY market_lab/gold_sources.py /app/gold_sources.py
 USER agent

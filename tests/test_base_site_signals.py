@@ -22,6 +22,11 @@ from base_product_fixtures import finished, raw
 from agents.base.engines.ffl import reference
 
 PKG = ROOT / "tank/skills/base.site_signals/1.0.0"
+@pytest.fixture(autouse=True, params=["1.0.0", "1.0.1"])
+def signals_version(request, monkeypatch):
+    monkeypatch.setitem(globals(), "PKG", ROOT / "tank/skills/base.site_signals" / request.param)
+
+
 AT = "2026-11-01T12:00:00+00:00"
 SITE = "https://recorded.example/"
 

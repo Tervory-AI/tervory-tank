@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.0 — 2026-11-03
+
+- One approval applies a validated unified diff across up to 20 files. Stale files or invalid hunks refuse the whole set; same-directory temporary files and renames preserve whole-file contents across a crash.
+- `/undo` restores the last of ten in-memory change sets after an explicit `y`, provided every file still matches. Undo stays local and never sends file contents to Tank.
+- Approved macOS commands use system sandbox-exec and the Apache-2.0 Codex Seatbelt base, with folder-only writes, restricted runtime reads, secret-path denial and no network. Missing sandboxes or invalid profiles refuse execution.
+- The CLI workflow runs the same test and confinement suite on Linux and macOS.
+
+## 0.3.0 — 2026-11-03
+
+- Code mode proposes authorized Tervory and connected MCP tools through existing Confirm cards, and returns redacted card results as data.
+- Bounded, redacted git-root AGENTS.md project notes accompany every prompt without entering thread, task or event storage.
+
+## 0.2.0 — 2026-11-03
+
+- Interactive `tervory code [folder]` sessions use the existing regional token corridor and Tank's ladder with the new `command.code` task.
+- Six bounded local tools: file listing, text reads/search, git status/diff, single-file unified edits and approved commands. Path and symlink checks, secret-path refusal and line redaction run locally.
+- Edits and commands require a real interactive terminal and an explicit `y`. Stale edits are refused; commands use the worker's existing Linux Bubblewrap, a 120-second deadline and a 64 KB output cap, without an unsandboxed fallback.
+- Command threads retain tool names/sizes, steps and actual receipts, without source or patch bodies. Model transcripts retain Tank's existing masking, tenant and regional handling. No sign-in or provider routing implementation is added.
+## 0.1.2 — 2026-11-01
+
+- ZA can opt in to the self-hosted Zitadel device sign-in with `tervory login --region za --sign-in zitadel`, including founders. Both verification URLs must use https://auth-za.tervory.com.
+- Existing us-east and default ZA Boston/Workspace approval (including older CLIs) are unchanged even when the ZA issuer is set. Tank access/refresh credentials and logout/revoke are unchanged.
+
 ## 0.1.1 — 2026-10-31
 
 - Every CLI network call has a hard deadline that covers the body (device calls 10 s, JSON 300 s, request headers 30 s, live events 120 s per read, update 15 s JSON / 180 s tarball); a stream that stops early (stall, cancel, bad event, or the caller leaving) closes its connection to Tank; redirects are refused, never followed.

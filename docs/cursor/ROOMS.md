@@ -166,6 +166,35 @@ See [Rig's box runbook](../../agents/rig/BOX.md) for the authenticated question,
 receipt and public-health checks. Stand-in catalogue data only on Boston; live
 ZA shopper data is not part of this pilot.
 
+## Tiger brain provision (TG3, 3 Nov 2026)
+
+Tiger's optional Hermes image reuses `agents/rig/Dockerfile.brain` and its pinned
+upstream build. The shared standby entrypoint exposes Tiger health only; it has
+no task API. No caller or escalation is added: `tiger.price_extract`,
+`tiger.price_structured` and `tiger.price_ocr` are code skills.
+
+Both `tiger-brain` (2 GiB limit) and `tiger-sandbox` (512 MiB limit) carry the
+Compose `brain` profile. Normal deployments exclude both. The separate
+`TIGER_BRAIN_ENABLED` setting defaults to false and remains reserved for a future
+caller. The brain joins only the Tiger corridor and its own sandbox network;
+the executor joins only that internal sandbox network, with a read-only root,
+tmpfs workspaces, dropped capabilities and no volume or Tank key. Only brain and
+executor receive `SANDBOX_KEY_TIGER`; use the existing `coolify-ops` room-setup
+with that extra name, without exposing its value.
+
+**Capacity evidence pending as of 3 Nov 2026:** the founder reports that Boston
+memory was cleaned, but a dated `ops/box-memory.sh` output has not been supplied.
+Host total/used/available bytes, running-container usage and aggregate memory
+limits therefore remain unrecorded. Keep the profile disabled until the ops
+thread's measured numbers show room for the two additional limits. Do not treat
+the requested limits above as measurements or capacity approval.
+
+After an authorized normal deploy, run `bash ops/seal-check.sh` on Boston and
+require `agent-tiger ... sealed` with no Tiger brain/sandbox running. Recheck the
+founder's existing Tiger /chats tools. If the optional profile is later enabled,
+both services must be present and pass the exact-network checks; use
+`agents/base/check_brain_isolation.py` with Tiger's five container names.
+
 ## Regions
 
 South African clients and South African law stay in South Africa. United States clients stay in the United States. Same code, deployed twice. The region is `TANK_REGION`: `za` or `us-east`. It is not a fork.

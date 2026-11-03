@@ -65,7 +65,11 @@ export function receiptLabel(row: Expense): string {
 }
 
 // Evidence and downloads retain these fields; page presentation awaits approved Figma frames.
-export const pageFieldExclusions: ReadonlySet<string> = new Set(["technologies", "sells_online", "site_newest_year"]);
+export const pageFieldExclusions: ReadonlySet<string> = new Set([
+  "technologies", "sells_online", "site_newest_year",
+  // Contact quality (B1): in evidence and CSV downloads only, until the Base page frame is approved.
+  "phone_e164", "phone_valid", "phone_line_type", "email_syntax_ok", "email_disposable",
+]);
 export function pageFields<T>(fields: Record<string, T>): [string, T][] {
   return Object.entries(fields).filter(([name]) => !pageFieldExclusions.has(name));
 }

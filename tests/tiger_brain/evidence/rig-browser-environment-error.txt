@@ -1,0 +1,16 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________________ test_browser_search_accessories_compare_admin _________________
+tests/test_rig_pr90_independent.py:1118: in test_browser_search_accessories_compare_admin
+    browser = playwright.chromium.launch(
+.venv/lib/python3.12/site-packages/playwright/sync_api/_generated.py:4103: in launch
+    self._sync(
+.venv/lib/python3.12/site-packages/playwright/_impl/_browser_type.py:101: in launch
+    await self._channel.send(
+.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:78: in send
+    return await self._connection.wrap_api_call(
+.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:636: in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E   playwright._impl._errors.Error: BrowserType.launch: Chromium distribution 'chrome' is not found at /opt/google/chrome/chrome
+E   Run "playwright install chrome"
+1 failed in 2.30s

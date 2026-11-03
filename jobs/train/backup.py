@@ -83,8 +83,20 @@ def collection_name(name: str) -> str:
     return name
 
 
-async def encrypted_dump(target: Path) -> None:
-    env, recipient = dump_configuration()
+def identity_dump_configuration() -> tuple[dict[str, str], str]:
+    if os.environ.get('TANK_REGION') != 'za':
+        raise StorageError('Identity backups run on ZA only')
+    password = os.environ.get('POSTGRES_ZITADEL_PASSWORD', '')
+    if not password or not shutil.which('pg_dump') or not shutil.which('age'):
+        raise StorageError('Identity backup settings or tools are missing')
+    env = {**tool_environment(), 'PGHOST': 'identity-postgres', 'PGPORT': '5432',
+           'PGDATABASE': 'zitadel', 'PGUSER': 'zitadel', 'PGPASSWORD': password,
+           'PGSSLMODE': 'disable'}
+    return env, recipient_value()
+
+
+async def encrypted_dump(target: Path, *, identity: bool = False) -> None:
+    env, recipient = identity_dump_configuration() if identity else dump_configuration()
     read_fd, write_fd = os.pipe()
     children = []
     try:
@@ -195,8 +207,10 @@ async def encrypted_qdrant_snapshot(collection: str, target: Path) -> None:
                     pass
 
 
-async def backup_once(owner: str = 'uploads') -> dict:
+async def backup_once(owner: str = 'uploads', *, identity: bool = False) -> dict:
     assert_backup_owner(owner)
+    if identity and (owner != 'zenas' or os.environ.get('TANK_REGION') != 'za'):
+        raise StorageError('Identity backup owner must be ZA Zenas')
     public = backup_public(owner)
     store = Storage(owner)
     try:
@@ -204,10 +218,10 @@ async def backup_once(owner: str = 'uploads') -> dict:
         store._prefix(PLATFORM_TENANT, 'backups', public=public)
         with tempfile.TemporaryDirectory(prefix='tervory-encrypted-backup-') as directory:
             path = Path(directory) / 'database.dump.age'
-            await encrypted_dump(path)
+            await encrypted_dump(path, identity=True) if identity else await encrypted_dump(path)
             return await archive_file(
                 store, path, 'backups', tenant_id=PLATFORM_TENANT,
-                public=public, label='database.dump.age')
+                public=public, label='identity/database.dump.age' if identity else 'database.dump.age')
     finally:
         await store.close()
 
@@ -260,9 +274,11 @@ def _print_result(payload: dict) -> None:
     print(json.dumps(payload), flush=True)
 
 
-async def main(owner: str, nightly: bool, target: str = 'all') -> None:
+async def main(owner: str, nightly: bool, target: str = 'all', *, identity: bool = False) -> None:
     assert_backup_owner(owner)
     public = backup_public(owner)
+    if identity and (target != 'database' or owner != 'zenas' or os.environ.get('TANK_REGION') != 'za'):
+        raise StorageError('Identity backup requires ZA Zenas database target')
     if target not in {'database', 'qdrant', 'all'}:
         raise StorageError('Backup target is invalid')
     # Fail at worker start, not silently after waiting for the first night.
@@ -270,7 +286,7 @@ async def main(owner: str, nightly: bool, target: str = 'all') -> None:
     try:
         store._prefix(PLATFORM_TENANT, 'backups', public=public)
         if target in {'database', 'all'}:
-            dump_configuration()
+            identity_dump_configuration() if identity else dump_configuration()
         if target in {'qdrant', 'all'}:
             qdrant_configuration()
     finally:
@@ -283,7 +299,7 @@ async def main(owner: str, nightly: bool, target: str = 'all') -> None:
                 next_run += timedelta(days=1)
             await asyncio.sleep((next_run - now).total_seconds())
         if target in {'database', 'all'}:
-            result = await backup_once(owner)
+            result = await backup_once(owner, identity=True) if identity else await backup_once(owner)
             _print_result({'kind': 'database', 'bucket': result['bucket'],
                            'key': result['key'], 'size_bytes': result['size_bytes']})
         if target in {'qdrant', 'all'}:
@@ -297,11 +313,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--owner', choices=['uploads', 'zenas'], default='uploads')
     parser.add_argument('--target', choices=['database', 'qdrant', 'all'], default='all')
+    parser.add_argument('--identity', action='store_true', help='ZA identity database only')
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--once', action='store_true')
     mode.add_argument('--nightly', action='store_true')
     args = parser.parse_args()
     try:
-        asyncio.run(main(args.owner, args.nightly, args.target))
+        asyncio.run(main(args.owner, args.nightly, args.target, identity=args.identity))
     except Exception:
         raise SystemExit('Encrypted backup failed; no complete backup was confirmed. Check worker configuration.') from None

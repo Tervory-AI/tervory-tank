@@ -123,11 +123,14 @@ async def proposal(env, text, *, tenant=TENANT, user='founder', role='', thread=
         response = await env.client.post('/v1/command/threads', json={'title': 'Offline voice test'}, headers=h)
         assert response.status_code == 200, response.text
         thread = response.json()['thread_id']
+    before = (await env.client.get(f'/v1/command/threads/{thread}', headers=h)).json()
+    known = {c.get('card_id') for c in before['cards']}
     response = await env.client.post(f'/v1/command/threads/{thread}/turn', json={'text': text}, headers=h)
     assert response.status_code == 200
     snapshot = (await env.client.get(f'/v1/command/threads/{thread}', headers=h)).json()
     assert snapshot['cards'], response.text
-    card = next(c for c in snapshot['cards'] if c['status'] == 'pending')
+    # W1 may leave a revision proposal pending. Confirm this turn's new card.
+    card = next(c for c in snapshot['cards'] if c['status'] == 'pending' and c['card_id'] not in known)
     return thread, card
 
 

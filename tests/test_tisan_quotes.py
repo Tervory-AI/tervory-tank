@@ -4,7 +4,7 @@ import importlib.util
 import json
 import sys
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from itertools import product
 from pathlib import Path
 from uuid import UUID
@@ -20,8 +20,14 @@ q = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = q
 spec.loader.exec_module(q)
 A, B = UUID(int=1), UUID(int=2)
-DATA = {'contact': {'email': 'quote@example.invalid'},
-        'items': [{'item_id': str(UUID(int=3)), 'quantity': 1}]}
+DATA = {'contact': {'name': 'placeholder customer', 'email': 'placeholder@example.invalid', 'reply_method': 'email'},
+        'items': [{'item_id': str(UUID(int=3)), 'type': 'product', 'description': 'placeholder product', 'quantity': 1}]}
+
+
+def quote_fields():
+    return {'quote_amount': '12.34', 'quote_currency': 'USD',
+            'valid_until': (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+            'quote_message': 'placeholder store quote'}
 
 
 class Pool:
@@ -63,6 +69,8 @@ class Pool:
                 return None
             if "SET state=$3" in sql:
                 self.rows[key]['state'] = args[2]
+                if len(args) > 3:
+                    self.rows[key].update(zip(q._QUOTE_FIELDS, args[3:]))
             elif "SET mail_state='sending'" in sql:
                 row = self.rows[key]
                 if row['mail_state'] != 'pending' or row['state'] not in ('submitted', 'acknowledged'):
@@ -97,7 +105,8 @@ async def at_state(store, state):
     if state == 'draft':
         return row
     for target in chain:
-        row = await store.move(A, row['id'], 'store-actor', target)
+        row = await store.move(A, row['id'], 'store-actor', target,
+                               **(quote_fields() if target == 'quoted' else {}))
         if target == state:
             return row
     raise AssertionError(state)
@@ -111,7 +120,8 @@ async def test_every_transition_and_refusal(before, after):
     row = await at_state(store, before)
     snapshot = copy.deepcopy((pool.rows, pool.events))
     if after in q.MOVES[before]:
-        result = await store.move(A, row['id'], 'store-actor', after)
+        result = await store.move(A, row['id'], 'store-actor', after,
+                                  **(quote_fields() if after == 'quoted' else {}))
         assert result['state'] == after
         event = (await store.read(A, row['id']))['events'][-1]
         assert event['from_state'] == before and event['to_state'] == after
@@ -256,7 +266,7 @@ def test_api_create_read_list_and_all_store_moves(client):
         json={'tenant_id': str(B), 'state': 'acknowledged'}).status_code == 404
     for state in ('acknowledged', 'quoted', 'accepted'):
         response = client.post(f'/quotes/{ref}/state', headers=HEADERS,
-            json={'tenant_id': str(A), 'state': state})
+            json={'tenant_id': str(A), 'state': state, **(quote_fields() if state == 'quoted' else {})})
         assert response.status_code == 200 and response.json()['state'] == state
     assert client.post(f'/quotes/{ref}/state', headers=HEADERS,
         json={'tenant_id': str(A), 'state': 'declined'}).status_code == 409

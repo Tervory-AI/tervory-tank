@@ -1,6 +1,6 @@
 """Rig's own Locate fulfilment: orders and supplier purchase orders in Rig's Postgres.
 
-Tervory no longer uses Odoo, so a paid Locate Accept is recorded here, not in
+Tervory no longer uses Odoo, so a store-confirmed accepted quote is recorded here, not in
 an ERP. One accepted quote makes exactly one row in agent_rig.locate_orders
 (what the shopper bought, at the held price) and one draft row in
 agent_rig.supplier_purchase_orders (what the store buys from the approved
@@ -50,10 +50,11 @@ _CURRENCY = re.compile(r"[A-Z]{3}")
 
 
 class Fulfilment(Protocol):
-    """What QuoteService.locate_accept needs after a captured payment."""
+    """Order placement after the store confirms receiving its own payment."""
 
     async def place_located_order(self, *, tenant_id: str, quote_id: str, located: dict[str, Any],
-                                  price: dict[str, Any], ship: dict[str, Any] | None = None) -> dict[str, Any]:
+                                  price: dict[str, Any], ship: dict[str, Any] | None = None,
+                                  quantity: int = 1) -> dict[str, Any]:
         """Record the order and its draft supplier PO. Idempotent per (tenant, quote)."""
         ...
 
@@ -97,8 +98,10 @@ class RigOrders:
 
     async def place_located_order(self, *, tenant_id: str, quote_id: str, located: dict[str, Any],
                                   price: dict[str, Any], ship: dict[str, Any] | None = None,
-                                  env: dict[str, str] | None = None) -> dict[str, Any]:
+                                  env: dict[str, str] | None = None, quantity: int = 1) -> dict[str, Any]:
         sandbox_orders(env)
+        if type(quantity) is not int or not 1 <= quantity <= 100:
+            raise DeliveryError("order_rejected")
         try:
             source, offer, live = located["source"], located["offer"], located["live"]
             product_id, source_id = str(located["product_sku"]), str(source["id"])
@@ -116,7 +119,7 @@ class RigOrders:
                     "vendor_name": str(source.get("vendor_name") or "").strip(),
                     "order_email": str(source.get("order_email") or "").strip(),
                     "item_sku": str(offer.get("sku") or ""), "item_url": str(offer.get("url") or ""),
-                    "quantity": 1, "unit_cost": _amount(live.get("price")),
+                    "quantity": quantity, "unit_cost": _amount(live.get("price")),
                     "currency": _currency(live.get("currency")), "ship_to": address,
                     "neutral_slip": neutral, "instructions": NEUTRAL_SLIP if neutral else "", "sent": None}
         try:
@@ -137,7 +140,7 @@ class RigOrders:
         "Email" is the local sandbox outbox (rigbox.supplier_orders); nothing is
         sent over a network. Idempotent: a sent PO is never written again, and
         the outbox file is created once (O_EXCL). On DeliveryError the caller
-        cancels (cancel below) and refunds.
+        uses the strict cancel boundary below; unknown sends stay for review.
         """
         from rigbox import supplier_orders
 
@@ -172,17 +175,17 @@ class RigOrders:
 
     async def cancel(self, tenant_id: str, quote_id: str, reason: str,
                      env: dict[str, str] | None = None, *, unsent: bool = False) -> str:
-        """Cancel the order and its unsent PO before a refund. Never raises.
+        """Cancel the order and its unsent PO. Never raises.
 
         Returns "cancelled", "missing", "sent", "unknown" or "unrecorded".
         "sent" means the supplier already has the PO (it is marked sent, or its
         outbox file exists and is reconciled now): the order is not cancelled,
-        and the caller must not refund. "unknown" means Rig could not tell
+        and the caller must not cancel it. "unknown" means Rig could not tell
         whether the PO was sent (for example the outbox file exists but can't be
-        read): nothing is cancelled and the caller must not refund; a person or
+        read): nothing is cancelled; a person or
         a later reconcile settles it. "unrecorded" means the store failed after
-        the outbox was checked; the caller still refunds and the open order
-        stays visible.
+        the outbox was checked; the order may still be placed, so the caller
+        must keep the order for review.
 
         Strict: when the outbox can't be checked for any reason (including
         outbox_not_configured or order_mode, since the mode or folder may have
@@ -201,11 +204,11 @@ class RigOrders:
         except Exception:  # noqa: BLE001
             log.warning("locate order reconcile before cancel failed")
             # Reconciliation may fail after finding the supplier's outbox PO.
-            # Until its send state is known, neither cancel nor refund it.
+            # Until its send state is known, do not cancel it.
             return "unknown"
         try:
             return await self.store.cancel_locate_order(tenant_id, quote_id, reason[:120])
-        except Exception:  # noqa: BLE001 — the refund still happens; the store sees the open order
+        except Exception:  # noqa: BLE001 — the store sees the open order
             log.warning("locate order cancel not recorded")
             return "unrecorded"
 
@@ -229,7 +232,7 @@ class RigOrders:
 
     async def reconcile(self, *, tenant_id: str, env: dict[str, str] | None = None,
                         limit: int = 200, older_than_minutes: int = 15,
-                        now: datetime | None = None) -> dict[str, Any]:
+                        now: datetime | None = None, auto_only: bool = False) -> dict[str, Any]:
         """Sandbox reconcile for send_supplier_order's recorded:false case.
 
         For each draft PO whose order is still placed, if the outbox file was
@@ -238,17 +241,20 @@ class RigOrders:
         A draft PO older than the cutoff with no outbox file is listed in
         "stranded": the send never happened (for example Rig stopped between
         recording the order and sending the PO). This method never writes the
-        outbox, cancels or refunds; the payment reconciler cancels and refunds
-        stranded auto-order POs. A PO whose outbox file can't be read is
+        outbox or cancels an order; stranded auto-order POs need store review. A PO whose outbox file can't be read is
         listed in "unknown" (never in "stranded"). Safe to run repeatedly.
+        auto_only=True (supplier-order recovery) lists only auto-ordered quotes,
+        least recently tried first: drafts placed without auto-order never
+        leave draft, so they would otherwise fill the list.
         """
         from rigbox import supplier_orders
 
         sandbox_orders(env)
         supplier_orders.outbox(env)
-        drafts = await self.store.draft_supplier_orders(tenant_id, limit)
+        listed = {"auto_only": True} if auto_only else {}
+        drafts = await self.store.draft_supplier_orders(tenant_id, limit, **listed)
         cutoff = (now or datetime.now(timezone.utc)) - timedelta(minutes=max(1, int(older_than_minutes)))
-        old = set(await self.store.draft_supplier_orders(tenant_id, limit, before=cutoff))
+        old = set(await self.store.draft_supplier_orders(tenant_id, limit, before=cutoff, **listed))
         fixed, stranded, unknown = [], [], []
         for quote_id in drafts:
             try:
