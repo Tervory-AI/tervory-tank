@@ -51,3 +51,9 @@ The job persists not_before, deadline_at, mode and estimated charge multiplier. 
 Missing frames: deadline entry, scheduled start/price explanation, queued/expired status.
 
 A8 validation: 4 tests passed in 177.18s on this host: cheapest versus first window, deadline fallback, provider completion budget, DST gap/fold, persisted waiting, exactly one dispatch and expiry without dispatch. Price and provider boundaries were stubbed; SQL was real. A missing native-provider field in the initial test double was corrected before this passing run. No test retries or production retries were added.
+
+## A22: multiple deployments per alias
+
+Both LiteLLM router configurations explicitly select simple-shuffle, so multiple deployments under one approved model_name are balanced by LiteLLM. No alias, provider, key, fallback or replica was added. Both model lists exactly match base 55b2e224; currently neither file has replicated aliases, so no multi-deployment production traffic was claimed. Runtime-only change: commit 8360d7a6, PR #645, pushed before the standing no-PR rule. It redeploys the main stack and tervory-tank-za and must land before this dependent backend.
+
+Verification: both YAML files parse, strategy is explicit and model_list is unchanged. The routing contract is documented in the official LiteLLM routing guide: https://docs.litellm.ai/docs/routing . No provider calls were made.
