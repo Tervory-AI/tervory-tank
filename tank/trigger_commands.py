@@ -76,6 +76,8 @@ async def plan(actor, text: str, task_id):
     if not cards:
         raise HTTPException(404, 'Writing record unavailable')
     last = max(cards, key=lambda c: c.get('started_at', ''))
+    if not selected and last.get('tool') == 'trigger.write.batch':
+        raise HTTPException(422, 'Writing record unavailable')
     status = {'accept': 'accepted', 'reject': 'rejected', 'changes': 'changes_requested'}[match[1].lower()]
     args = {'write_id': last['result']['write_id'], 'status': status, 'changes': selected[2] if selected else match[2]}
     return {'text': '', 'actions': [{'tool': 'trigger.feedback', 'arguments': args}]}
