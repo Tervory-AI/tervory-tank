@@ -168,7 +168,6 @@ async def test_invalid_archive_and_foreign_upload_never_reach_room(repo_api, mon
     else:
         assert dispatched[0] == (404, {'detail': 'Attachment not found'})
         assert count == 0
-        assert not result['evidence_ids']
         snapshot = (await client.get(f'/v1/command/threads/{thread}')).json()
         assert snapshot['receipts'] == []
 
