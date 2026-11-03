@@ -121,7 +121,13 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
                             else 'memory_limit' if isinstance(exc, MemoryError) else 'tool_unavailable'}
         except Exception as exc:
             # Never record exception text, stdout, raw responses or cookie values.
-            checks[name] = {'status': 'partial', 'reason': type(exc).__name__}
+            safe = {'tool_output_limit','incomplete_response','html_required','response_limit',
+                    'page_unavailable','certificate_unavailable','tls_report_unavailable',
+                    'tls_report_incomplete','tls_run_incomplete','signature_database_unavailable',
+                    'malware_run_incomplete','browser_incomplete'}
+            reason = str(exc) if isinstance(exc, ValueError) and str(exc) in safe else type(exc).__name__
+            checks[name] = {'status': 'skipped' if reason == 'signature_database_unavailable' else 'partial',
+                            'reason': reason}
         if checks[name]['status'] != 'complete':
             tool = {'tls':'testssl.sh','certificate':'scan.tls','pages':'sha256','malware':'clamav',
                     'browser':'chromium','notices':'comply.gdpr','page_load':'http'}.get(name,name)
