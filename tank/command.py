@@ -1240,6 +1240,7 @@ async def tank_policy(task_type: str = Query(min_length=1, max_length=200), defa
             result["held"] = {"swap_id": str(row["held_swap_id"]), "model": held["model"],
                               "held_at": row["held_at"], "done": jobs["done"], "total": jobs["total"]}
     from trigger_routes import code_receipt
+    result["text"] = dump(result)
     result["ledger_id"] = str(await code_receipt(actor.tenant_id, "tank.policy", agent="tank"))
     return result
 
@@ -1271,7 +1272,8 @@ async def tank_policy_fallbacks(body: PolicyFallbackArgs, actor: Actor = Depends
                 WHERE task_type=$1 AND tenant_id IS NOT DISTINCT FROM $2""",
                 body.task_type, target, body.fallbacks)
     from trigger_routes import code_receipt
-    return {"ok": True, "ledger_id": str(await code_receipt(actor.tenant_id, "tank.policy.fallbacks", agent="tank"))}
+    return {"ok": True, "text": dump({"task_type": body.task_type, "tenant_id": target, "fallbacks": body.fallbacks}),
+            "ledger_id": str(await code_receipt(actor.tenant_id, "tank.policy.fallbacks", agent="tank"))}
 
 
 @dataclass(frozen=True)
@@ -1448,8 +1450,12 @@ async def propose_action(conn: Any, row: dict, state: dict, action: PlannedActio
     card_id = str(uuid.uuid4())
     adapter = action_adapter(action, actor)
     label = adapter.label if adapter else "Start a worker build"
+    display_arguments = dict(action.arguments)
+    if action.tool in {"tank.policy", "tank.policy.fallbacks"}:
+        # Existing Brief/Response fields render actual data; no UI wording is added.
+        display_arguments["brief_markdown"] = dump(action.arguments)
     card = {"card_id": card_id, "kind": adapter.kind if adapter else "build", "summary": label,
-            "tool": action.tool, "arguments": action.arguments, "status": "pending",
+            "tool": action.tool, "arguments": display_arguments, "status": "pending",
             "payload": {"tool": action.tool, "arguments": action.arguments}}
     state["cards"][card_id] = card
     await event(conn, row, "card", public_card(card))
