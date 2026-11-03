@@ -168,6 +168,7 @@ for id in $ids; do
   # corridor/checkers, and Radix passive-egress gets only gw/proxy-link/egress.
   expected_nets=""
   case "$service" in
+    tiger-ocr) expected_nets="tervory-gw-tiger-ocr" ;;
     agent-trigger) expected_nets="tervory-gw-trigger ${project}_checkers" ;;
     trigger-languagetool) expected_nets="${project}_checkers" ;;
     passive-egress) expected_nets="tervory-gw-radix ${project}_proxy-link ${project}_egress" ;;
