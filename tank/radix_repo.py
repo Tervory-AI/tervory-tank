@@ -106,11 +106,11 @@ async def code_plan(actor, messages, task_id):
     import json
     import re
     from command import authorized_actor, db, require_tool, unpack
-    from main import RouteRequest, _record_local
 
     last = messages[-1] if messages else {}
     if last.get("role") != "user" or not re.match(r"\s*radix\.repo\.(scan|findings)\b", last.get("content", ""), re.I):
         return None
+    from main import RouteRequest, _record_local
     actor = await authorized_actor(actor)
     source = last
     if task_id:
