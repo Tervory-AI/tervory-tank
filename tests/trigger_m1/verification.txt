@@ -1,6 +1,6 @@
 Trigger M1 verification — 3 November 2026
 
-Code/test head: ca8cc947 (subsequent commits docs only).
+Code/test head: ca8cc9477bf0d8ced78bb823f353515a3f155b1d (subsequent commits docs only).
 Included main: b2fa83bdfca6d5788d12e11ce5230da1463a3621
 Own branch: codex/trigger-m1-marketing
 Own checkout: /workspace/codex-trigger-m1
@@ -334,3 +334,53 @@ bwrap --bind / / --dev-bind /dev /dev --bind /workspace/codex-trigger-m1-test-sc
 The remaining failed full-suite cases are being rerun with a private scratch
 namespace and an isolated interpreter reusing the pinned dependencies. This
 record does not claim those cases pass or that full-suite exit 1 is green.
+
+Follow-up verification: all ten original full-suite failures pass in focused retries.
+The original full command remains recorded as exit 1; it is not relabelled green.
+
+Isolated test interpreter (existing dependencies reused through .pth, no package changes):
+/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python -m venv --without-pip .m1-tmp/venv
+Dependency search paths in reused-test-dependencies.pth:
+/workspace/codex-trigger-m1/.m1-tmp/site
+/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages
+
+Retry wrapper, exact contents:
+import os
+import subprocess
+import sys
+from pathlib import Path
+root=Path.cwd()
+url='postgresql://postgres@127.0.0.1:32835/pooltest'
+for name in ('POOL_SCHEMA_DATABASE_URL','ZENAS_SCHEMA_DATABASE_URL','MEMORY_TEST_DATABASE_URL','BASE_TEST_DATABASE_URL','RLS_TEST_DATABASE_URL','SKALA_B3_TEST_DATABASE_URL','SKALA_INTAKE_TEST_DATABASE_URL','TIGER_MAIL_TEST_DATABASE_URL','RIG_TEST_DATABASE_URL','TRAINING_SCHEMA_DATABASE_URL'):
+ os.environ[name]=url
+os.environ.update(DATABASE_URL='postgresql://postgres@127.0.0.1:32835/market_test',
+ RADIX_PASSIVE_TEST_DATABASE_URL='postgresql://postgres@127.0.0.1:32835/radix_passive_test',
+ PYTHONPATH=str(root/'tank')+':'+str(root/'.m1-tmp/site'),
+ TMPDIR=str(root/'.m1-tmp/runtime'), PYTHONDONTWRITEBYTECODE='1',SUITE_WORKERS='4',SUITE_BUDGET_SCALE='2',GITHUB_ACTIONS='true',SUITE_JUNIT_DIR=str(root/'.m1-tmp/junit'),
+ READ1_CHROMIUM_EXECUTABLE='/home/ammosync/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell')
+
+import importlib.util
+spec=importlib.util.spec_from_file_location('offline',root/'.github/scripts/offline_suite.py')
+module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+os.environ.update(TMPDIR='/workspace/codex-trigger-m1-test-scratch',GIT_AUTHOR_NAME='Codex',GIT_AUTHOR_EMAIL='codex@users.noreply.github.com',GIT_COMMITTER_NAME='Codex',GIT_COMMITTER_EMAIL='codex@users.noreply.github.com')
+selected=['tests/test_base_engine_terms_approved.py::test_flat_app_layout_without_skills_dir_boots_empty','tests/test_workers_command.py::test_task_runner_reuses_local_branch_and_pr_for_followup','tests/test_rig_schema_lock_timeout.py','tests/test_market_lab_documents_real_tank.py','tests/test_market_lab_real_tank.py','tests/test_moot_published_states.py','tests/test_market_lab_warning_real_tank.py','tests/test_mcp_proxy.py','tests/test_skills_offline.py','tests/test_agent1_public_render.py']
+raise SystemExit(subprocess.call([sys.executable,'-m','pytest','-q','--disable-socket','--allow-hosts=127.0.0.1,localhost','--allow-unix-socket','--timeout=300','--durations=10',*selected],env=module.clean_env()))
+
+bwrap --bind / / --dev-bind /dev /dev --bind /workspace/codex-trigger-m1-test-scratch /tmp --ro-bind /tmp/tervory-command-workspace-20261031 /tmp/tervory-command-workspace-20261031 -- .m1-tmp/venv/bin/python .m1-tmp/run_selected.py
+
+Captured completion (two Node cases lack the second dependency symlink target in that namespace):
+FAILED tests/test_moot_published_states.py::test_moot_published_states - Asse...
+FAILED tests/test_mcp_proxy.py::test_public_mcp_proxy - AssertionError: node:...
+2 failed, 10 passed, 3 warnings in 259.10s (0:04:19)
+
+Both remaining Node cases after exposing the existing second dependency target read-only:
+bwrap --bind / / --dev-bind /dev /dev --bind /workspace/codex-trigger-m1-test-scratch /tmp --ro-bind /tmp/tervory-command-workspace-20261031 /tmp/tervory-command-workspace-20261031 --ro-bind /tmp/tervory-base-437-origin /tmp/tervory-base-437-origin -- env TMPDIR=/workspace/codex-trigger-m1-test-scratch PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank:.m1-tmp/site .m1-tmp/venv/bin/python -m pytest tests/test_moot_published_states.py tests/test_mcp_proxy.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --allow-unix-socket --timeout=180
+..                                                                       [100%]
+2 passed in 16.59s
+
+Repeated exact callback/TypeScript/Ruff/secret commands above after the final test additions:
+PASS actual GBP callback: trusted active tenant, bounded unique parameters, private POST exchange, no reflected code/token, fixed chats redirect
+TypeScript: exit 0, empty diagnostic output.
+All checks passed!
+..                                                                       [100%]
+2 passed in 16.94s
