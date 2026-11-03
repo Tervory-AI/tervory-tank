@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from base_evidence import field, public_url, row_fields
-from base_metrics import export_records, obj
+from base_metrics import csv_text, export_records, list_costs, obj
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from tenant_db import tenant_transaction
@@ -19,6 +19,7 @@ class FindArgs(BaseModel):
     licence_type: str | None = Field(default=None, min_length=1, max_length=100)
     engine_category: str | None = Field(default=None, min_length=1, max_length=100)
     has_website: bool | None = None
+    has_products: bool | None = None
     has_phone: bool | None = None
     has_email: bool | None = None
     email_syntax_ok: bool | None = None
@@ -50,6 +51,32 @@ def verified(item: Any) -> bool:
             and bool(public_url(item.get("source_url")) and item.get("checked_at")))
 
 
+def sourced_products(value: Any) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    return [{**product, "source_url": public_url(product.get("source_url")),
+             "url": public_url(product.get("url"))} for product in value if isinstance(product, dict)
+            and public_url(product.get("source_url"))
+            and isinstance(product.get("checked_at"), str) and product["checked_at"].strip()]
+
+
+PRODUCT_COLUMNS = ["record_id", "licence_key", "business_name", "name", "sku", "gtin", "mpn", "brand",
+                   "price", "currency", "availability", "url", "source_url", "checked_at"]
+
+
+def product_rows(records: list[dict]) -> list[dict]:
+    rows = []
+    for record in records:
+        products = obj(record["fields"]).get("products")
+        if not verified(products):
+            continue
+        for product in sourced_products(products.get("value")):
+            rows.append({**{key: product.get(key) for key in PRODUCT_COLUMNS[3:]},
+                         "record_id": record["record_id"], "licence_key": record.get("licence_key"),
+                         "business_name": record.get("name")})
+    return rows
+
+
 def project(row: dict) -> dict:
     profile, passes = obj(row.get("profile") or {}), obj(row.get("passes") or {})
     raw = obj(row.get("raw") or {})
@@ -74,6 +101,11 @@ def project(row: dict) -> dict:
     if tier.get("source") == "verify" and passes.get("7") and inputs:
         fields["confidence_tier"] = {**field(tier.get("value"), inputs[0]["source_url"], str(row["updated_at"])),
                                      "source": "base.verify", "inputs": inputs}
+    products = profile.get("products")
+    products = sourced_products(products.get("value") if isinstance(products, dict) else products)
+    if products:
+        oldest = min(products, key=lambda p: p["checked_at"].strip()[:10])
+        fields["products"] = field(products, public_url(oldest["source_url"]), oldest["checked_at"])
     return {"record_id": str(row["id"]), "name": (fields.get("name") or {}).get("value"),
             "licence_key": reference.get("licence_key"),
             "state": (fields.get("state") or {}).get("value"),
@@ -95,7 +127,7 @@ def matches(row: dict, filters: FindArgs) -> bool:
             options = actual if isinstance(actual, list) else [actual]
             if not any(str(item).strip().casefold() == wanted.strip().casefold() for item in options if item is not None):
                 return False
-    for key in ("website", "phone", "email"):
+    for key in ("website", "phone", "email", "products"):
         wanted = getattr(filters, "has_" + key)
         if wanted is not None and verified(fields.get(key)) is not wanted:
             return False
@@ -215,6 +247,17 @@ class Store:
             raise HTTPException(404, "Not found")
         return {**dict(row), "records": obj(row["records"]), "filters": obj(row["filters"])}
 
+    async def ledger(self, tenant: UUID, records: list[dict]) -> list[dict]:
+        ids = list(dict.fromkeys(UUID(row["record_id"]) for row in records))
+        if not ids:
+            return []
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("""SELECT l.*,b.record_id FROM tank.ledger l
+                JOIN tank.base_ledger_links b ON b.tenant_id=$1 AND b.ledger_id=l.id
+                WHERE l.tenant_id=$1 AND l.agent='base' AND b.record_id=ANY($2::uuid[])
+                ORDER BY l.ts,l.id,b.record_id""", tenant, ids)
+        return [dict(row) for row in rows]
+
     async def lists(self, tenant: UUID) -> list[dict]:
         async with self.pool.acquire() as conn:
             rows = await conn.fetch("SELECT list_id,name,created_at,cardinality(record_ids) AS total "
@@ -236,7 +279,7 @@ def preview(rows: list[dict]) -> dict:
         # or passive-detector internals. The saved/exported snapshot stays full.
         fields = {key: {part: item.get(part) for part in
                        ("value", "source_url", "checked_at", "confidence", "verified", "reason")}
-                  for key, item in row["fields"].items() if isinstance(item, dict)}
+                  for key, item in row["fields"].items() if isinstance(item, dict) and key != "products"}
         records.append({**row, "fields": fields, "summary": json.dumps(fields, ensure_ascii=False)})
     return {"total": len(rows), "records": records}
 
@@ -251,7 +294,8 @@ def build_router() -> APIRouter:
         return Store(db())
 
     async def result(actor, tool, data):
-        return {**data, "ledger_id": await receipt(actor.tenant_id, tool), "cost_usd": 0}
+        return {**({"cost_usd": 0} if "actual_usd" not in data else {}),
+                **data, "ledger_id": await receipt(actor.tenant_id, tool)}
 
     @router.get("/find")
     async def find(args: Annotated[FindArgs, Depends()], actor: Annotated[Actor, Depends(identity)]):
@@ -275,20 +319,39 @@ def build_router() -> APIRouter:
     async def show(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.list.show")
         saved = await store().show(actor.tenant_id, list_id)
-        return await result(actor, "base.list.show", {"name": saved["name"], **preview(saved["records"])})
+        costs = list_costs(await store().ledger(actor.tenant_id, saved["records"]),
+                           record_ids=[row["record_id"] for row in saved["records"]])
+        return await result(actor, "base.list.show", {"name": saved["name"], **preview(saved["records"]), **costs})
 
     @router.get("/export")
     async def export(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.list.export")
         saved = await store().show(actor.tenant_id, list_id)
-        return await result(actor, "base.list.export", {"total": len(saved["records"]),
+        costs = list_costs(await store().ledger(actor.tenant_id, saved["records"]),
+                           record_ids=[row["record_id"] for row in saved["records"]])
+        return await result(actor, "base.list.export", {"total": len(saved["records"]), **costs,
                             "url": "https://app.tervory.com/base/download?list_id=" + str(list_id)})
+
+    @router.get("/products")
+    async def products(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
+        require_tool(actor, "base.list.products")
+        saved = await store().show(actor.tenant_id, list_id)
+        return await result(actor, "base.list.products", {"total": len(product_rows(saved["records"])),
+                            "url": "https://app.tervory.com/base/download?list_id=" + str(list_id) + "&kind=products"})
+
+    @router.get("/products.csv")
+    async def products_csv(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
+        require_tool(actor, "base.list.products")
+        saved = await store().show(actor.tenant_id, list_id)
+        return Response(csv_text(product_rows(saved["records"]), PRODUCT_COLUMNS), media_type="text/csv; charset=utf-8",
+                        headers={"Content-Disposition": 'attachment; filename="base-products.csv"', "Cache-Control": "private, no-store"})
 
     @router.get("/csv")
     async def csv(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.list.export")
         saved = await store().show(actor.tenant_id, list_id)
-        return Response(export_records(saved["records"]), media_type="text/csv; charset=utf-8",
+        ledger = await store().ledger(actor.tenant_id, saved["records"])
+        return Response(export_records(saved["records"], ledger=ledger), media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition": 'attachment; filename="base-list.csv"', "Cache-Control": "private, no-store"})
 
     @router.post("/to-crm")
