@@ -2283,6 +2283,14 @@ INSERT INTO tank.policy(task_type,rung,model,cache_scope,max_tokens_out,eval_thr
 VALUES ('tisan.plan',1,'luna','tenant',3000,0.99,200,false)
 ON CONFLICT DO NOTHING;
 
+-- Code mode starts with the existing chat policy, including tenant-specific rows.
+-- A new task name, not a new provider choice. Never overwrite a code policy.
+INSERT INTO tank.policy
+SELECT (jsonb_populate_record(NULL::tank.policy,
+        to_jsonb(p) || '{"task_type":"command.code"}'::jsonb)).*
+FROM tank.policy p WHERE p.task_type='command.turn'
+ON CONFLICT DO NOTHING;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
