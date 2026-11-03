@@ -35,3 +35,25 @@ TMPDIR=/workspace/codex-tisan-q1-tmp .git/venv/bin/python -m pytest -q tests/tes
 ```
 
 The corrected-temp rerun encountered a worker timeout/crash while another full suite was using the shared host. It was stopped rather than counted as passing. A lower-concurrency full rerun follows, with short tracebacks so failures can be diagnosed without expensive long traceback formatting. No application tests or timeouts are weakened. No production database is used.
+
+Final-run setup: Python requirements from `tank/requirements.txt`, `tank/requirements-dev.txt` and `agents/rig/forge/requirements.lock`; the existing Workspace npm dependencies; pinned Chromium at `/home/ammosync/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome`. A fresh task-owned `postgres:16` container uses loopback port 32806 and trust authentication, with disposable `pooltest`, `radix_passive_test` and `market_test` databases. Every CI database variable is set, including the opt-in real-Postgres tests. The existing offline runner removes provider credentials and limits in-process sockets to loopback.
+
+The exact launcher `.git/q1-ci-run.py` used for the final run is:
+
+```python
+import os,subprocess,sys
+from pathlib import Path
+root=Path('/workspace/codex-tisan-q1')
+env=os.environ.copy()
+shared='postgresql://postgres@127.0.0.1:32806/pooltest'
+for name in ('POOL_SCHEMA','ZENAS_SCHEMA','MEMORY_TEST','BASE_TEST','RLS_TEST','SKALA_B3_TEST','SKALA_INTAKE_TEST','TIGER_MAIL_TEST','RIG_TEST','TRAINING_SCHEMA'):
+    env[name+'_DATABASE_URL']=shared
+env.update(RADIX_PASSIVE_TEST_DATABASE_URL='postgresql://postgres@127.0.0.1:32806/radix_passive_test', DATABASE_URL='postgresql://postgres@127.0.0.1:32806/market_test',TMPDIR='/workspace/codex-tisan-q1-tmp',SUITE_WORKERS='3',SUITE_BUDGET_SCALE='3',SUITE_JUNIT_DIR=str(root/'.git/q1-ci-junit'),PYTHONPATH='tank',READ1_CHROMIUM_EXECUTABLE='/home/ammosync/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome')
+raise SystemExit(subprocess.call([sys.executable,'.github/scripts/offline_suite.py','-vv','--tb=short'],env=env,cwd=root))
+```
+
+```sh
+.git/venv/bin/python .git/q1-ci-run.py > .git/q1-full-tank-suite-final-low.log 2>&1
+```
+
+The lower-concurrency full run is in progress; the final summary will follow. Test-generated dashboard HTML artifacts will be restored, not included in the PR.
