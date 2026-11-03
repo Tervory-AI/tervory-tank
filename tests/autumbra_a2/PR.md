@@ -1,3 +1,63 @@
+# PR #608 review fixes — 3 November 2026
+
+All seven review items at `c5afd368` are fixed on the same branch. CI's **Tank job on the final PR head** is the full-suite test of record; the earlier build-box full-suite results below are historical, not the acceptance result for this review.
+
+## Changes and proof locations
+
+1. `agents/ghost/smtp_email.py:23`: normalize every exception from address/port parsing to `ValueError("mail_not_configured")`. Partially configured or malformed SMTP reports `unavailable`, with `/health` still 200. `tests/test_autumbra_a2.py:371` covers empty FROM and two malformed FROM values with HOST set.
+2. `agents/ghost/smtp_email.py:35`, `agents/ghost/app.py:278`: persist the first valid SMTP availability moment in Watch's own `owner-email-availability.json`, under the existing atomic file-lock pattern. Health can establish this moment before the scheduler starts. Only action receipts strictly newer than it are eligible. The `act:` + receipt ID claim remains unchanged across restarts. Each action email is built from that action's receipt, retaining its own signed Undo link. `tests/test_autumbra_a2.py:384` proves old receipts produce zero emails, one new receipt sends once, and reopening Watch's state does not resend.
+3. `agents/ghost/webhooks.py:210`, `agents/ghost/app.py:866`: explicitly distinguish verified HMAC and native envelopes. Native Cloudflare/Google/Google Workspace events store only the latest verified metadata per provider (provider, byte count, body hash, verification time) in Watch's own folder and always return `accepted=true`, `queued=false`. They never use body-supplied tenant/site/address to authorize an action. Raw bodies and credentials are not stored. The HMAC queue path is preserved. `tests/test_autumbra_a2.py:432` and `:463` cover all three native names with another tenant's ID and the still-working HMAC path.
+4. `ops/seal-check.sh:279`: require all Enforce companion services for every app containing an `enforce` service, regardless of Coolify name. `tests/test_room_seal.py:619` covers both the usual name and `agent-placeholder-custom`, with complete services and each missing companion.
+5. `ops/seal-check.sh:142`: execute Enforce's exactly-one-internal-network check before the per-project branch can continue. The existing project/label/internal-flag checks also remain. Extra-network tests assert this check's actual rejection message. `docs/ops/AUTUMBRA-ENFORCE-ISOLATION.md:15` describes the checks that execute.
+6. `ops/seal-check.sh:41`, `:89`, `:259`: keep the four original rooms and Watch mandatory; require Enforce only when an app containing Enforce is present. Presence tracking also works with another Coolify name. `tests/test_room_seal.py:605` proves a Watch host without Enforce passes; the unsealed-Enforce regression and both resource-name cases still fail when required isolation/services are absent.
+7. `.github/workflows/tenant-rls.yml:4`: remove `codex/autumbra-a2-hardening` from the push trigger. Pull-request checks remain enabled.
+
+No page, product copy, network attachment, new outbound host or setting value was added. The durable cap, shared Rig mailer, Google verification/key path, CI compose probe and Market Lab read remain intact. No live-host probe, live provider push, SMTP send or production SQL was used for these review checks.
+
+## Exact commands and results
+
+Working directory: `/workspace/codex-autumbra-a2`. All focused pytest commands below used the exact prefix:
+
+```bash
+PYTHONPATH=.proof/python:tank TMPDIR=/workspace/codex-autumbra-a2/.proof/tmp /tmp/base-reliability-venv/bin/python -m pytest
+```
+
+| Arguments following that prefix | Result |
+| --- | --- |
+| `-q tests/test_autumbra_a2.py -k 'smtp or no_smtp'` | 4 passed, 18 deselected, 2.82s |
+| `-q tests/test_autumbra_webhooks_redteam.py` | 5 passed, 2.05s |
+| `-q tests/test_autumbra_a2.py::test_cloudflare_dashboard_test_hits_native_watch_route tests/test_autumbra_webhooks_redteam.py` | 6 passed, 2.37s |
+| `-q tests/test_room_seal.py::test_seal_check_reports_sealed_rooms tests/test_autumbra_cloudflare_live.py::test_seal_checks_enforce_observer_and_both_proxies` | 7 passed, 24.42s |
+| `-q tests/test_autumbra_a2.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1` | 30 passed, 14 warnings, 11.82s |
+| `-q tests/test_room_seal.py` | 106 passed, 149.01s |
+| `-q tests/test_autumbra_a2.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1` after the required main merge | 30 passed, 14 warnings, 6.72s |
+
+The combined affected check includes every existing Ghost/Autumbra test, the one-door check and all seal regressions. Its source tree includes main `3c336a75` and the seven review fixes:
+
+```bash
+env -i PATH="$PATH" LANG=C.UTF-8 TMPDIR=/workspace/codex-autumbra-a2/.proof/tmp PYTHONPATH=/workspace/codex-autumbra-a2/.proof/python:/workspace/codex-autumbra-a2/tank DATA_DIR=/workspace/codex-autumbra-a2/.proof/placeholder-review608 /tmp/base-reliability-venv/bin/python -m pytest -q tests/test_ghost_*.py tests/test_autumbra_*.py tests/test_tank_one_door.py tests/test_room_seal.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 > .proof/review608-affected.txt 2>&1
+```
+
+**Exit 0: 644 passed, 3 skipped, 15 warnings in 280.13s.** The three existing skips include the opt-in cloud/CI checks; local tests never arm the Enforce compose probe on the live builder host.
+
+```bash
+PYTHONPATH=.proof/python /tmp/base-reliability-venv/bin/python -m ruff check --select E9,F agents/ghost/smtp_email.py agents/ghost/webhooks.py agents/ghost/app.py tests/test_autumbra_a2.py tests/test_room_seal.py
+bash -n ops/seal-check.sh
+git diff --check
+```
+
+All exited 0; Ruff printed `All checks passed!`. `yaml.safe_load(Path('.github/workflows/tenant-rls.yml').read_text())` also passed (`tenant-rls.yml: valid YAML`).
+
+Started with `git fetch origin && git merge origin/main`. Repeated `git fetch origin && git merge origin/main` before every sequential `git push origin HEAD:codex/autumbra-a2-hardening`. A later main merge to `3c336a75` conflicted only in `.env.example`; retained both A2 Watch names and Trigger bot names, ran the 30 A2 tests, committed the merge and pushed successfully. No push failed and none ran in parallel.
+
+## Final-head CI record
+
+[PR #608 checks](https://github.com/Tervory-AI/tervory-tank/pull/608/checks) are the full-suite record. The exact final head, Tank conclusion, run URL and test summaries are recorded in [the PR description](https://github.com/Tervory-AI/tervory-tank/pull/608) after this evidence commit, so recording CI does not change the tested head. This file does not predict a CI result before the final push. No further source changes follow the final-head result.
+
+---
+
+The original implementation evidence follows unchanged. Its earlier local failures and pre-review CI links describe those earlier snapshots, not the final review head.
+
 # Autumbra A2 hardening
 
 Autumbra now persists its per-tenant hourly cap, claims owner-email delivery durably before using the existing Rig/Tiger SMTP sender, verifies native Cloudflare and Google push authentication, includes Watch/Enforce in the seal audit, and consumes the existing Market Lab contract through Tank. No UI, visible product wording, production schema, live control, Enforce egress or network placement changes are included.
