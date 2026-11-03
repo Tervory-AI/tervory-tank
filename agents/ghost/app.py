@@ -224,6 +224,7 @@ def enqueue_fixture_attack_for_watch(
     tenant_id: str | None = None,
     advisory: dict | None = None,
     queue: ThreatPayloadQueue | None = None,
+    source_data: dict[str, int] | None = None,
 ) -> dict:
     """Production Watch enqueue entrypoint used by /ghost/autumbra/queue/fixture-attack.
 
@@ -244,6 +245,7 @@ def enqueue_fixture_attack_for_watch(
         reason=reason,
         tenant_id=tenant_id,
         advisory=advisory,
+        source_data=source_data,
     )
 
 
@@ -336,6 +338,22 @@ async def _market_lab_intel_loop(app: FastAPI) -> None:
         await asyncio.sleep(3600)
 
 
+async def _standing_blocks_loop(app):
+    while True:
+        root = queue_root_base()
+        if root and root.exists():
+            for path in root.iterdir():
+                try:
+                    tenant = str(UUID(path.name))
+                except ValueError:
+                    continue
+                try:
+                    await app.state.shared_blocks.reconcile(tenant)
+                except Exception:
+                    app.state.block_memory_failures += 1
+        await asyncio.sleep(60)
+
+
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -363,8 +381,16 @@ def create_app() -> FastAPI:
                 except Exception:
                     app.state.threat_queue = None
             app.state.threat_queue_root = queue_root_base()
+            from chassis.memory import MemoryClient
+            from .shared_blocks import StandingBlocks
+            app.state.block_memory_failures = 0
+            app.state.shared_blocks = StandingBlocks(
+                MemoryClient(base_url="http://tank:8000/v1/ghost/autumbra/memory", http=http),
+                tank, store, watch_threat_queue)
+
             tasks = [
                 asyncio.create_task(watch(app)),
+                asyncio.create_task(_standing_blocks_loop(app)),
                 asyncio.create_task(nightly(app)),
                 asyncio.create_task(advisory_watch.watch(app)),
                 asyncio.create_task(_weekly_owner_email_loop(app)),
@@ -685,6 +711,10 @@ def create_app() -> FastAPI:
             **result,
         }
 
+    @app.get("/ghost/autumbra/blocks", dependencies=[Depends(require_tank)])
+    async def standing_blocks(tenant_id: UUID):
+        return await app.state.shared_blocks.items(str(tenant_id))
+
     @app.get("/ghost/patch/fixes", dependencies=[Depends(require_tank)])
     async def patch_fixes():
         from .fix_approval import fixes
@@ -906,9 +936,19 @@ def create_app() -> FastAPI:
                         {"accepted": False, "stored": False, "detail": "tenant_id must be a UUID"},
                         status_code=400,
                     )
-                ok, why = may_block_ip(address, raw_log=raw_log)
+                settings = load_settings(app.state.store, tenant_id)
+                ok, why = may_block_ip(address, raw_log=raw_log, client_own_cidrs=settings.own_cidrs)
                 if ok:
                     advisory = data.get("advisory") if isinstance(data.get("advisory"), dict) else None
+                    source_data = {}
+                    blocks = getattr(app.state, "shared_blocks", None)
+                    if blocks is not None:
+                        try:
+                            count = await blocks.count(tenant_id, address)
+                            if count:
+                                source_data = {"autumbra.shared_blocks": count}
+                        except Exception:
+                            app.state.block_memory_failures += 1
                     try:
                         queue_receipt = enqueue_fixture_attack_for_watch(
                             raw_log=raw_log,
@@ -917,6 +957,7 @@ def create_app() -> FastAPI:
                             reason=str(data.get("reason") or f"signed {provider} webhook")[:300],
                             tenant_id=tenant_id,
                             advisory=advisory,
+                            source_data=source_data,
                         )
                     except ValueError as exc:
                         # Fixed copy only — never echo exception/stack to the caller (CodeQL).
@@ -1042,7 +1083,7 @@ def create_app() -> FastAPI:
             tenant_id = _require_tenant_uuid(tenant_id)
             q = watch_threat_queue(tenant_id)
             tz = owner_time_zone(_load_tz(app.state.store, tenant_id))
-            return watch_enqueue_undo(
+            result = watch_enqueue_undo(
                 queue=q,
                 rule_id=str(rule_id) if rule_id else None,
                 prior_receipt_id=str(prior_receipt_id) if prior_receipt_id else None,
@@ -1050,6 +1091,13 @@ def create_app() -> FastAPI:
                 tenant_id=tenant_id,
                 time_zone=tz,
             )
+            blocks = getattr(app.state, "shared_blocks", None)
+            if blocks is not None:
+                try:
+                    await blocks.reconcile(tenant_id)
+                except Exception:
+                    app.state.block_memory_failures += 1
+            return result
         except ThreatBurned:
             return JSONResponse(
                 {"outcome": "burned", "detail": BURN_DETAIL, "queued": False},
