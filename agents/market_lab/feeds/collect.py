@@ -108,6 +108,17 @@ class EvidenceClient:
                         raise ValueError("response exceeds the feed limit")
         return json.loads(body)
 
+    def post_json(self, url: str, payload: dict) -> bytes:
+        """A publisher's read-only query API; never a caller-selected host."""
+        import json
+        self._allowed(url)
+        data = json.dumps(payload, separators=(",", ":")).encode()
+        if len(data) > 256000:
+            raise ValueError("feed query exceeds the limit")
+        body = self.client.request(url, headers={"Content-Type": "application/json"}, data=data)
+        self.documents.append({"url": public_url(url), "sha256": hashlib.sha256(body).hexdigest()})
+        return body
+
     def iter_lines(self, url: str, headers: dict | None = None):
         self._allowed(url)
         digest = hashlib.sha256()
