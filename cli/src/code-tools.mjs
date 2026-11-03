@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { lstat, realpath, readlink, open, readdir, readFile, writeFile, rename, unlink, mkdtemp, rm } from 'node:fs/promises';
+import { lstat, stat, access, realpath, readlink, open, readdir, readFile, writeFile, rename, unlink, mkdtemp, rm } from 'node:fs/promises';
 import { resolve, relative, isAbsolute, sep, dirname, basename } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -229,14 +229,59 @@ export class CodeFolder {
         } catch { /* not on this PATH entry */ }
       }
     }
-    if (!candidate || inside('/usr', candidate) || inside('/bin', candidate) || inside(this.root, candidate)) return { command, mounts: [] };
-    // Only recognized language runtimes may expose an external installation.
-    // Their bin + library directory is the runtime's own root, never its parent
-    // HOME, .config, .ssh or a keychain. Both a venv and its base interpreter may
-    // be needed; no other host directories or environment are inherited.
+    if (!candidate) return { command, mounts: [] };
+    const executableFile = async path => {
+      const canonical = await realpath(path);
+      if (!(await stat(path)).isFile() || !(await stat(canonical)).isFile()) throw refused();
+      await access(path, constants.X_OK); await access(canonical, constants.X_OK);
+      return canonical;
+    };
+    const resolved = await executableFile(candidate);
+    if (inside('/usr', candidate) || inside('/bin', candidate) || inside(this.root, candidate)) return { command, mounts: [] };
     if (!/^(node|python(?:3(?:\.\d+)?)?|pytest)$/.test(basename(candidate))) throw refused();
+    const mounts = []; const runners = []; const bound = new Set();
+    const safeHostPath = path => {
+      if (path === '/' || inside(path, process.env.HOME ?? '/') || secretPath(path)
+          || path.split(sep).some(part => ['.config', '.ssh', 'keyrings', 'keychains'].includes(part.toLowerCase()))) throw refused();
+    };
+    const bind = async (source, target = source) => {
+      safeHostPath(source); safeHostPath(target);
+      if (inside('/usr', target) || inside(this.root, target) || bound.has(target)) return;
+      bound.add(target); mounts.push('--ro-bind', source, target); runners.push(target);
+    };
+    const pythonInstall = async executable => {
+      const canonical = await executableFile(executable);
+      const prefix = dirname(dirname(executable));
+      // A bin in a general user-data directory is not a Python installation.
+      // In particular never infer ~/.local from a pip --user / uv launcher.
+      if (basename(dirname(executable)) !== 'bin' || basename(prefix) === '.local') throw refused();
+      if (inside('/usr', executable)) return;
+      const version = /^python(3\.\d+)$/.exec(basename(canonical))?.[1];
+      const libraries = (await readdir(resolve(prefix, 'lib'))).filter(name => /^python3\.\d+$/.test(name) && (!version || name === 'python' + version));
+      if (libraries.length !== 1) throw refused();
+      const library = resolve(prefix, 'lib', libraries[0]);
+      const actualLibrary = await realpath(library);
+      if (!inside(prefix, actualLibrary) || basename(actualLibrary) !== libraries[0] || !(await stat(actualLibrary)).isDirectory()) throw refused();
+      const config = resolve(prefix, 'pyvenv.cfg');
+      let venv = false;
+      try { venv = (await lstat(config)).isFile(); } catch { /* base interpreter */ }
+      if (venv) await bind(config);
+      else if (!(await stat(resolve(library, 'os.py'))).isFile()) throw refused();
+      await bind(actualLibrary, library);
+      // Standalone Python may dynamically link its own libpython. Bind matching
+      // regular library files, never the containing lib or installation parent.
+      for (const name of await readdir(resolve(prefix, 'lib'))) {
+        if (/^libpython3\.\d+\.so(?:\.\d+)*$/.test(name)) {
+          const path = resolve(prefix, 'lib', name); const actual = await realpath(path);
+          if (!inside(prefix, actual) || !(await stat(actual)).isFile()) throw refused();
+          await bind(actual, path);
+        }
+      }
+    };
     const executables = [candidate];
     if (basename(candidate) === 'pytest') {
+      // Refuse broad user installs before reading even the launcher shebang.
+      if (basename(dirname(candidate)) !== 'bin' || basename(dirname(dirname(candidate))) === '.local') throw refused();
       const handle = await open(candidate, constants.O_RDONLY);
       try {
         const bytes = Buffer.alloc(1024); const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
@@ -245,44 +290,34 @@ export class CodeFolder {
         executables.push(interpreter);
       } finally { await handle.close(); }
     }
-    const paths = [...executables, ...await Promise.all(executables.map(path => realpath(path)))];
-    const roots = [...new Set(paths.map(path => basename(path) !== 'node' && basename(dirname(path)) === 'bin' ? dirname(dirname(path)) : dirname(path)))];
-    const mounts = [];
-    for (const root of roots) {
-      if (inside('/usr', root) || inside(this.root, root)) continue;
-      if (root === '/' || root === process.env.HOME || inside(root, process.env.HOME ?? '/') || secretPath(root)
-          || root.split(sep).some(part => ['.config', '.ssh', 'keyrings', 'keychains'].includes(part.toLowerCase()))) throw refused();
-      // Mask secret filenames inside the read-only runtime as in the work tree.
-      const scan = async directory => {
-        for (const entry of await readdir(directory, { withFileTypes: true })) {
-          if (secretPath(entry.name) || ['.config', '.ssh', 'keychains', 'keyrings'].includes(entry.name.toLowerCase())) {
-            const path = resolve(directory, entry.name);
-            mounts.push(...(entry.isDirectory() ? ['--tmpfs', path] : ['--ro-bind', '/dev/null', path]));
-          } else if (entry.isDirectory()) await scan(resolve(directory, entry.name));
-        }
-      };
-      mounts.push('--ro-bind', root, root);
-      await scan(root);
-    }
-    // A venv may link via ~/.local/bin before reaching its base interpreter.
-    // Recreate only those intermediate links in the empty sandbox; never bind
-    // their parent directory (which could contain unrelated credentials).
     for (const executable of executables) {
-      let link = executable;
-      const target = await realpath(executable);
-      const seen = new Set();
+      const target = await executableFile(executable);
+      if (basename(executable) !== 'node' && basename(executable) !== 'pytest') {
+        await pythonInstall(executable);
+        if (target !== executable && !inside('/usr', target)) await pythonInstall(target);
+      }
+      await bind(target);
+      let link = executable; const seen = new Set();
       while ((await lstat(link)).isSymbolicLink()) {
-        if (seen.has(link)) throw refused();
-        seen.add(link);
-        if (!inside('/usr', link) && !roots.some(root => inside(root, link))) {
-          if (secretPath(link) || link.split(sep).some(part => ['.config', '.ssh', 'keychains', 'keyrings'].includes(part.toLowerCase()))) throw refused();
-          mounts.push('--symlink', target, link);
+        if (seen.has(link)) throw refused(); seen.add(link); safeHostPath(link);
+        if (!inside('/usr', link) && !inside(this.root, link) && !bound.has(link)) {
+          bound.add(link); mounts.push('--symlink', target, link);
         }
         link = resolve(dirname(link), await readlink(link));
       }
     }
+    // Mask secret paths within the specific Python library trees as before.
+    const scan = async directory => {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const path = resolve(directory, entry.name);
+        if (secretPath(entry.name) || ['.config', '.ssh', 'keychains', 'keyrings'].includes(entry.name.toLowerCase())) {
+          mounts.push(...(entry.isDirectory() ? ['--tmpfs', path] : ['--ro-bind', '/dev/null', path]));
+        } else if (entry.isDirectory()) await scan(path);
+      }
+    };
+    for (const path of runners) if ((await stat(path)).isDirectory()) await scan(path);
     const quoted = "'" + candidate.replaceAll("'", "'\"'\"'") + "'";
-    return { command: quoted + command.slice(match[0].length), mounts, runners: roots.filter(root => !inside('/usr', root) && !inside(this.root, root)) };
+    return { command: quoted + command.slice(match[0].length), mounts, runners };
   }
   async command(command, io, timeoutMs, mounts = []) {
     if (process.platform !== 'linux') throw refused();
