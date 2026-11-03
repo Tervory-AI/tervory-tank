@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hmac
 import logging
 import json
 import os
@@ -18,12 +19,18 @@ from typing import Any
 
 import httpx
 from storage import StorageError, archive_training_snapshot
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
 
 from gold import (PLATFORM_TENANT, Reviewer, add_candidate, encoded, input_hash,
                   obj, require_job, require_reviewer, runtime, is_holdout)
 
 log = logging.getLogger("tank.training")
+
+OFFICIAL_ZA_CASE_SOURCES = frozenset({
+    "concourt", "sca", "cac", "comptrib", "sars-taxcourt", "landcourt",
+    "ocj-highcourt", "labour-court", "labour-appeal", "special-tribunal",
+})
 
 
 def market_row(row: dict[str, Any]) -> bool:
@@ -211,8 +218,7 @@ async def collect_zenas(conn, tenant: uuid.UUID | None) -> None:
           AND d.state='released' AND r.decision='released' ORDER BY r.ts DESC LIMIT 1
         ) r ON true
         WHERE p.tenant_id IS NOT DISTINCT FROM $1::uuid AND p.region=$2
-        AND ((p.source='case' AND w.source='case' AND w.material_type='public_record')
-             OR (p.source='released' AND w.source='released' AND r.reviewer IS NOT NULL))
+        AND p.source='released' AND w.source='released' AND r.reviewer IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM tank.training_pairs t WHERE t.tenant_id=coalesce($1::uuid,$3)
           AND t.region=$2 AND t.source='zenas' AND t.source_ref=p.id::text)
         ORDER BY p.created_at LIMIT 500""", tenant, region, PLATFORM_TENANT,
@@ -232,7 +238,7 @@ async def collect_zenas(conn, tenant: uuid.UUID | None) -> None:
                         approved_by=row["reviewer"] or "decided case", source="zenas", ref=str(row["id"]),
                         gold_id=gold_id, holdout=is_holdout(scope, skill, value),
                         client_matter=row["source"] == "released",
-                        public=row["source"] == "case" and tenant is None)
+                        public=False)
 
 
 async def collect_fits(conn, tenant: uuid.UUID) -> None:
@@ -283,6 +289,10 @@ async def collect_once() -> None:
         if not await conn.fetchval("SELECT pg_try_advisory_lock(871222)"):
             return
         try:
+            # Previous case conversion used model-authored fields. Court-text pairs are the
+            # only public Zenas rows this collector leaves active now.
+            await conn.execute("""UPDATE tank.training_pairs SET active=false
+                WHERE region=$1 AND agent='zenas' AND source='zenas' AND public""", rt.box_region())
             if await conn.fetchval("SELECT to_regclass('agent_rig.training_events')"):
                 tenants = await conn.fetch("SELECT DISTINCT tenant_id FROM agent_rig.training_events WHERE region=$1", rt.box_region())
                 for row in tenants:
@@ -544,6 +554,50 @@ async def schedule_loop(operation: str) -> None:
 
 
 router = APIRouter(prefix="/v1/training", lifespan=lifespan)
+
+
+class CourtTextPair(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_id: str = Field(min_length=1, max_length=80)
+    document_id: str = Field(min_length=1, max_length=300)
+    version_id: str = Field(min_length=1, max_length=300)
+    status: str = Field(pattern="^(split|excluded)$")
+    reason: str = Field(default="", max_length=40)
+    input: dict[str, str] | None = None
+    output: dict[str, Any] | None = None
+
+
+@router.post("/zenas/court-text")
+async def save_court_text_pair(body: CourtTextPair, request: Request) -> dict[str, bool]:
+    """Accept only code-split official court text from the regional Zenas room."""
+    supplied = request.headers.get("x-tank-key", "")
+    expected = os.environ.get("TANK_KEY_ZENAS", "")
+    if not supplied or not expected or not hmac.compare_digest(supplied, expected):
+        raise HTTPException(401, "Room authentication required")
+    if runtime().box_region() != "za" or body.source_id not in OFFICIAL_ZA_CASE_SOURCES:
+        raise HTTPException(403, "Not in scope")
+    if body.status == "split" and (body.input is None or body.output is None or body.reason):
+        raise HTTPException(422, "Invalid court text split")
+    if body.status == "excluded" and (body.input is not None or body.output is not None
+                                      or body.reason not in {"empty", "criminal", "headings", "order"}):
+        raise HTTPException(422, "Invalid court text exclusion")
+    ref = f"{body.source_id}:{body.version_id}"
+    async with runtime().pool().acquire() as conn:
+        async with conn.transaction():
+            if body.status == "split":
+                value, output = dict(body.input or {}), dict(body.output or {})
+                await save_pair(
+                    conn, tenant=PLATFORM_TENANT, agent="zenas", task="zenas.reasoning",
+                    value=value, output=output, approved_by="court decision", source="court_text",
+                    ref=ref, holdout=is_holdout(PLATFORM_TENANT, "zenas.reasoning", value),
+                    client_matter=False, public=True, region="za",
+                )
+            await conn.execute(
+                """INSERT INTO tank.judgment_splits(region,source_id,document_id,version_id,status,reason)
+                VALUES('za',$1,$2,$3,$4,$5) ON CONFLICT(region,version_id) DO NOTHING""",
+                body.source_id, body.document_id, body.version_id, body.status, body.reason,
+            )
+    return {"ok": True}
 
 
 @router.post("/tiger/{observation_id}/confirm")
