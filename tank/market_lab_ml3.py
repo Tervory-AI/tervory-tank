@@ -68,7 +68,6 @@ def records(operation: str, data: dict) -> list[dict]:
 async def code_plan(actor, messages: list[dict], task_id=None):
     """Exact ML3 commands propose existing cards without consulting a model."""
     import command
-    from main import pool, box_region
     from types import SimpleNamespace
     last = messages[-1] if messages else {}
     if last.get("role") != "user":
@@ -77,6 +76,7 @@ async def code_plan(actor, messages: list[dict], task_id=None):
     allowed = {"market_lab." + name for name in READS} | {"market_lab.alerts." + name for name in ("email", "webhook", "off")}
     if not source or source.split(maxsplit=1)[0] not in allowed:
         return None
+    from main import pool, box_region
     if task_id:
         raw = await pool().fetchval("SELECT state FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND state->>'active_turn'=$3", actor.tenant_id, actor.user_id, str(task_id))
         original = next((m for m in reversed((obj(raw) or {}).get("messages", [])) if m.get("role") == "user"), {})
