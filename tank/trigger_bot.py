@@ -2,17 +2,17 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
 import json
+import logging
 import re
+from dataclasses import replace
 from uuid import UUID, uuid4, uuid5
 
 from fastapi import HTTPException
 from tenant_db import tenant_scope
 from trigger_bot_engine import respond
-from trigger_bot_grounding import Passage
-from trigger_bot_sources import Sources
 from trigger_bot_shared import SmtpMailer
+from trigger_bot_sources import Sources
 
 
 def obj(value):
@@ -118,8 +118,8 @@ class Bot:
             try:
                 result = await respond(tenant, text, retrieve=self.retrieve, route=self.route,
                                        live_rig=self.live_rig, receipt=self.receipt, voice=self.voice)
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 — fail closed at service boundary
+                logging.getLogger(__name__).warning('Bot service unavailable (%s)', type(exc).__name__)
         if result is None:
             result = {'state': 'handed_over' if conversation['status'] != 'closed' else 'closed',
                       'answer': None, 'sources': [], 'retrieved': [], 'cited': [], 'outcome': 'handed_over',
@@ -148,7 +148,7 @@ class Bot:
     async def lead_draft(self, tenant, conversation, text, contact):
         if not contact:
             # Explicit labels only; never infer a person's identity from prose.
-            contact = dict((key.lower(), value.strip()) for key, value in re.findall(r'(?im)^(Name|Email|Phone):\s*([^\n]+)', text))
+            contact = {key.lower(): value.strip() for key, value in re.findall(r'(?im)^(Name|Email|Phone):\s*([^\n]+)', text)}
         if not contact or not contact.get('name') or not (contact.get('email') or contact.get('phone')):
             return None
         draft = uuid4()
@@ -181,7 +181,8 @@ class Bot:
                 await sender.send({'to': recipient, 'subject': 'trigger.bot.handover',
                                    'text': json.dumps({'conversation_id': str(conversation), 'question': text}, ensure_ascii=False)})
                 status = 'sent'
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 — fail closed at service boundary
+                logging.getLogger(__name__).warning('Bot mail state uncertain (%s)', type(exc).__name__)
                 status = 'uncertain'
         await self.pool.execute('UPDATE tank.trigger_bot_drafts SET state=$3 WHERE tenant_id=$1 AND id=$2', tenant, marker, status)
         return status
@@ -199,10 +200,10 @@ async def refresh_loop(runtime):
                     bot = Bot(runtime)
                     try:
                         await bot.sources.refresh(row['tenant_id'], row['id'], bot.rig_pages)
-                    except Exception:
-                        pass
+                    except Exception as exc:  # noqa: BLE001 — fail closed at service boundary
+                        logging.getLogger(__name__).warning('Bot service unavailable (%s)', type(exc).__name__)
         except asyncio.CancelledError:
             raise
-        except Exception:
-            pass  # Retry maintenance later; never expose another tenant or search elsewhere.
+        except Exception as exc:  # noqa: BLE001 — fail closed at service boundary
+            logging.getLogger(__name__).warning('Bot maintenance unavailable (%s)', type(exc).__name__)
         await asyncio.sleep(3600)
