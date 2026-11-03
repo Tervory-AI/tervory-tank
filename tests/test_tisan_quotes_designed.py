@@ -135,7 +135,7 @@ async def test_item_count_edges(api, count, valid):
 
 
 QUOTE_CASES = [
-    ('quote_amount', '0.01', True), ('quote_amount', '1000000000.99', True),
+    ('quote_amount', '0.01', True), ('quote_amount', '9007199254740993.01', True),
     ('quote_amount', '0', False), ('quote_amount', '-0.01', False),
     ('quote_amount', '0.001', False), ('quote_amount', '1.230', False),
     ('quote_amount', 'NaN', False), ('quote_amount', 'Infinity', False), ('quote_amount', True, False),
@@ -168,6 +168,7 @@ async def test_quote_edges_and_complete_snapshot_at_transition(api, field, value
     assert row['state'] == ('quoted' if valid else 'acknowledged')
     assert (row['quote_amount'] is not None) == valid
     if valid:
+        assert Decimal(response.json()['quote_amount']) == Decimal(quote['quote_amount'])
         assert row['quote_currency'] == str(quote['quote_currency']).upper()
         assert row['valid_until'].tzinfo is not None
 
