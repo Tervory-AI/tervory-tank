@@ -309,3 +309,21 @@ async def test_missing_owned_exact_command_turn_never_reaches_model(database):
             [{'role': 'user', 'content': 'market_lab.warnings'}], task_id=uuid4())
     assert error.value.status_code == 422
     assert await database.pool.fetchval('SELECT count(*) FROM tank.ledger WHERE tenant_id=$1', OWNER) == 0
+
+
+@pytest.mark.asyncio
+async def test_room_feeds_returns_registered_key_names_without_values(monkeypatch):
+    from core import ml3 as room
+    monkeypatch.setenv('EIA_API_KEY', 'placeholder-private-value')
+    monkeypatch.setattr(room, 'overview', AsyncMock(return_value={'feeds': [
+        {'id': 'eia_diesel', 'name': 'placeholder feed', 'state': 'off', 'rows': 0}]}))
+    monkeypatch.setattr(room, 'latest', AsyncMock(return_value=None))
+    @asynccontextmanager
+    async def context(): yield SimpleNamespace()
+    app = FastAPI()
+    app.include_router(room.build_router(key_ok=lambda value: value == 'placeholder-room', ledger_context=context, engine='ffl'))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://placeholder') as http:
+        response = await http.post('/market/ml3/feeds', json={'tenant_id': str(OWNER)}, headers={'x-tank-key': 'placeholder-room'})
+    assert response.status_code == 200
+    assert response.json()['feeds'][0]['key_name'] == 'EIA_API_KEY'
+    assert 'placeholder-private-value' not in response.text
