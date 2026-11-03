@@ -88,7 +88,7 @@ class Bot:
     async def voice(self, tenant):
         # Existing Trigger voice endpoint owns canonical storage and scope.
         from trigger_routes import room
-        value = await room('voice', {'tenant_id': str(tenant)})
+        value = await room('voice/show', {'tenant_id': str(tenant)})
         return value.get('voice', value)
 
     async def route(self, tenant, messages):
@@ -108,22 +108,27 @@ class Bot:
             raise HTTPException(409, 'Bot is not configured for this tenant')
         await self.pool.execute('''INSERT INTO tank.trigger_bot_conversations(tenant_id,id,visitor_id)
             VALUES($1,$2,$3) ON CONFLICT DO NOTHING''', tenant, conversation_id, visitor_id)
+        conversation = await self.pool.fetchrow('''SELECT * FROM tank.trigger_bot_conversations
+            WHERE tenant_id=$1 AND id=$2 AND visitor_id=$3''', tenant, conversation_id, visitor_id)
+        if conversation is None:
+            raise HTTPException(404, 'Conversation unavailable')
+        result = None
+        if conversation['status'] == 'bot':
+            try:
+                result = await respond(tenant, text, retrieve=self.retrieve, route=self.route,
+                                       live_rig=self.live_rig, receipt=self.receipt, voice=self.voice)
+            except Exception:
+                pass
+        if result is None:
+            result = {'state': 'handed_over' if conversation['status'] != 'closed' else 'closed',
+                      'answer': None, 'sources': [], 'retrieved': [], 'cited': [], 'outcome': 'handed_over',
+                      'ledger_id': str(await self.receipt(tenant, 'trigger.bot.answer'))}
+        message_id = uuid4()
         async with self.pool.acquire() as conn, conn.transaction():
-            conversation = await conn.fetchrow('''SELECT * FROM tank.trigger_bot_conversations
+            current = await conn.fetchval('''SELECT status FROM tank.trigger_bot_conversations
                 WHERE tenant_id=$1 AND id=$2 AND visitor_id=$3 FOR UPDATE''', tenant, conversation_id, visitor_id)
-            if conversation is None:
-                raise HTTPException(404, 'Conversation unavailable')
-            if conversation['status'] == 'bot':
-                try:
-                    result = await respond(tenant, text, retrieve=self.retrieve, route=self.route,
-                                           live_rig=self.live_rig, receipt=self.receipt, voice=self.voice)
-                except Exception:
-                    result = {'state': 'handed_over', 'answer': None, 'sources': [], 'retrieved': [],
-                              'cited': [], 'outcome': 'handed_over', 'ledger_id': str(await self.receipt(tenant, 'trigger.bot.answer'))}
-            else:
-                result = {'state': conversation['status'], 'answer': None, 'sources': [], 'retrieved': [],
-                          'cited': [], 'outcome': 'handed_over', 'ledger_id': str(await self.receipt(tenant, 'trigger.bot.answer'))}
-            message_id = uuid4()
+            if current != 'bot':
+                result.update(state=current, answer=None, sources=[], cited=[], outcome='handed_over')
             await conn.execute('''INSERT INTO tank.trigger_bot_messages
                 (tenant_id,id,conversation_id,question,answer,retrieved,cited,outcome,ledger_id)
                 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)''', tenant, message_id, conversation_id, text,
@@ -147,9 +152,9 @@ class Bot:
             return None
         draft = uuid4()
         values = {'first_name': contact['name'], 'email': contact.get('email'), 'phone': contact.get('phone'),
-                  'description': text, 'assigned_to': [], 'contacts': [], 'teams': []}
+                  'description': text, 'source_ref': str(conversation), 'assigned_to': [], 'contacts': [], 'teams': []}
         await self.pool.execute('''INSERT INTO tank.trigger_bot_drafts(tenant_id,id,conversation_id,kind,data)
-            VALUES($1,$2,$3,'lead',$4::jsonb)''', tenant, draft, conversation, json.dumps(values))
+            VALUES($1,$2,$3,'lead',$4::jsonb)''', tenant, draft, conversation, json.dumps({k: v for k, v in values.items() if v is not None}))
         return draft
 
     async def notify(self, tenant, conversation, recipient, text):
