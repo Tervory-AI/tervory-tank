@@ -16,7 +16,7 @@ const LIVE = [
   /(?<![A-Za-z0-9_])sk-[A-Za-z0-9]{20,}/,
   /\b(?:sk|pk|rk)_live_[A-Za-z0-9]{8,}/, /\bAIza[0-9A-Za-z0-9_\-]{30,}/,
   /\beyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}/,
-  /(?:^|[^A-Za-z0-9])(?:aws_secret_access_key|api[_-]?key|secret[_-]?key|client[_-]?secret|password|passwd|access[_-]?token|auth[_-]?token)\s*[:=]\s*['"]?[^\s'"#]{12,}/i,
+  /(?:^|[^A-Za-z0-9])(?:aws_secret_access_key|api[_-]?key|secret[_-]?key|client[_-]?secret|password|passwd|access[_-]?token|auth[_-]?token)['"]?\s*[:=]\s*['"]?[^\s'"#]{12,}/i,
   /tv[rd]?1\.(?:us-east|za)\.[A-Za-z0-9_.-]+/,
 ];
 export function redactSecrets(value) {
