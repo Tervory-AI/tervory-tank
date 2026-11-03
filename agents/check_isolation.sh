@@ -68,13 +68,13 @@ except socket.gaierror:
 }
 
 # Corridor flags before host checks (Ghost needs them for Hermes expectations).
-tiger_corridor=0
+ocr_corridor=0
 base_corridor=0
 radix_corridor=0
 ghost_corridor=0
 for net in $(docker inspect -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}} {{end}}' "$container"); do
-  if [ "$net" = "tervory-gw-tiger" ]; then
-    tiger_corridor=1
+  if [ "$net" = "tervory-gw-tiger-ocr" ]; then
+    ocr_corridor=1
   fi
   if [ "$net" = "tervory-gw-base" ]; then
     base_corridor=1
@@ -106,24 +106,14 @@ done
 
 # qdrant stays dark: the agent talks to Hermes, not to the vector store.
 # agent-other stands in for any second agent: it is not on this network.
-# Tiger's browser is a neighbour only on tervory-gw-tiger. Every other
-# corridor must still be unable to resolve tiger, except Base: tervory-gw-base
-# may also reach tiger and searxng, and no other corridor may reach searxng.
-# (Corridor flags were set above.)
-for host in workspace redis qdrant litellm searxng tiger agent-other; do
-  if [ "$host" = "tiger" ] && [ "$tiger_corridor" -eq 1 ]; then
-    if resolves tiger; then
-      mark 0 "tiger resolves"
+# OCR resolves only on its dedicated internal corridor; neither room corridor
+# can reach the retired main-stack browser or the OCR service.
+for host in workspace redis qdrant litellm searxng tiger tiger-ocr agent-other; do
+  if [ "$host" = "tiger-ocr" ] && [ "$ocr_corridor" -eq 1 ]; then
+    if resolves tiger-ocr; then
+      mark 0 "tiger-ocr resolves"
     else
-      mark 1 "tiger resolves"
-    fi
-    continue
-  fi
-  if [ "$base_corridor" -eq 1 ] && [ "$host" = "tiger" ]; then
-    if resolves tiger; then
-      mark 0 "tiger resolves"
-    else
-      mark 1 "tiger resolves"
+      mark 1 "tiger-ocr resolves"
     fi
     continue
   fi
