@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install existing compose parser
-        run: pip install PyYAML==6.0.3
+        run: pip install PyYAML==6.0.3 selectolax==0.3.27
       - name: Build unchanged OCR image
         run: docker build -t codex-seal-ocr-test:local tiger
       - name: Offline compose isolation, PNG parity and peak memory
