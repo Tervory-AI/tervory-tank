@@ -60,7 +60,7 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
               const snapshot = await tank.json(`/v1/command/threads/${encodeURIComponent(thread)}`);
               const stored = snapshot.cards?.find(item => item.card_id === card.card_id);
               if (!stored) throw new Error('Tank sent an invalid answer.');
-              result = { tool: stored.tool, status: stored.status, result: stored.result };
+              result = { tool: stored.tool, status: stored.status, result: JSON.parse(JSON.stringify(stored.result ?? null, (key, value) => typeof value === 'string' ? redactSecrets(value) : value)) };
             }
           } else result = await local.tool(request, io);
         }
