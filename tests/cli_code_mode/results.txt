@@ -1,0 +1,25 @@
+CLI: TMPDIR="$PWD/.task-tmp" npm test --prefix cli
+  ---
+  duration_ms: 192.281826
+  type: 'test'
+  ...
+1..77
+# tests 77
+# suites 0
+# pass 77
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 15976.932516
+
+Command: exact pytest selection in EVIDENCE.md
+          
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+205 passed, 14 warnings in 140.01s (0:02:20)
+
+Schema/secrets: exact pytest selection in EVIDENCE.md
+....                                                                     [100%]
+4 passed in 23.14s
