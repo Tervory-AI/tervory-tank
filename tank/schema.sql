@@ -2517,8 +2517,8 @@ ALTER TABLE tank.trigger_bot_passages ADD COLUMN IF NOT EXISTS checked_at timest
 ALTER TABLE tank.trigger_bot_sources ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
 
 -- Website-bound keys are revoked with their source; legacy keys remain nullable.
-ALTER TABLE tank.trigger_bot_embed_keys ADD COLUMN IF NOT EXISTS source_id uuid
-;
+ALTER TABLE tank.trigger_bot_embed_keys ADD COLUMN IF NOT EXISTS source_id uuid;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
