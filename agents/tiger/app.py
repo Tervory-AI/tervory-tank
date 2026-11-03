@@ -7,6 +7,7 @@ import json
 import hmac
 import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -33,6 +34,7 @@ from watch import (
     check_url,
     dispatch_tenant,
     run_check,
+    ensure_tables,
 )
 
 AGENT = os.environ.get("AGENT_NAME", "tiger")
@@ -298,6 +300,23 @@ app = create_app(
         }
     ],
 )
+
+
+_tiger_inner = app.router.lifespan_context
+
+
+@asynccontextmanager
+async def _tiger_lifespan(instance):
+    async with _tiger_inner(instance):
+        # Room DDL runs as the room owner, even when administrative reads use
+        # a separate BYPASSRLS pool. Install it before the room serves traffic.
+        pool = getattr(instance.state.pool, 'raw', instance.state.pool)
+        async with pool.acquire() as conn:
+            await ensure_tables(conn, SCHEMA)
+        yield
+
+
+app.router.lifespan_context = _tiger_lifespan
 
 
 class WatchIn(BaseModel):
