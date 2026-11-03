@@ -222,7 +222,7 @@ class Records:
         return public_row(row) if row else None
 
     async def list(
-        self, agent: str, tenant: str, tier: str = "client", limit: int = 50
+        self, agent: str, tenant: str, tier: str = "client", limit: int = 50, offset: int = 0
     ) -> list[dict]:
         if tier not in ("client", "platform"):
             raise ValueError("Read-only reference corpus")
@@ -231,12 +231,12 @@ class Records:
             rows = await conn.fetch(
                 _sql(
                     """SELECT * FROM {schema}.memory_records
-                WHERE tenant_id=$1 AND tier=$2 ORDER BY created_at DESC,id LIMIT $3""",
+                WHERE tenant_id=$1 AND tier=$2 ORDER BY created_at DESC,id LIMIT $3 OFFSET $4""",
                     self.schema(agent),
                 ),
                 uuid.UUID(owner),
                 tier,
-                limit,
+                limit, offset,
             )
         return [public_row(row) for row in rows]
 
