@@ -30,11 +30,15 @@ class MemoryClient:
         return f"MemoryClient(agent={self._agent!r})"
 
     async def remember(self, tenant_id: str, text: str, kind: str, source: str, *,
-                       evidence: list[str] | None = None, confidence: float = .5) -> dict[str, Any]:
+                       evidence: list[str] | None = None, confidence: float = .5,
+                       record_id: str | None = None) -> dict[str, Any]:
+        from uuid import UUID
+        identity = {"id": str(UUID(record_id))} if record_id is not None else {}
         data = await self._send(
             "POST",
             "/memories",
             {
+                **identity,
                 "tenant_id": str(tenant_id),
                 "text": text,
                 "kind": kind,
@@ -74,6 +78,17 @@ class MemoryClient:
                 raise RuntimeError("hermes answer was not an object")
             memories.append(item)
         return memories
+
+    async def records(self, tenant_id: str, *, tier: str = "client") -> list[dict[str, Any]]:
+        """SQL listing only; never performs recall or an embedding search."""
+        from uuid import UUID
+        from urllib.parse import urlencode
+        if tier not in {"client", "platform"}:
+            raise ValueError("invalid memory tier")
+        data = await self._send("GET", "/records?" + urlencode({"tenant_id": str(UUID(tenant_id)), "tier": tier}))
+        if not isinstance(data, dict) or not isinstance(data.get("memories"), list) or any(not isinstance(row, dict) for row in data["memories"]):
+            raise RuntimeError("hermes answer was not an object")
+        return data["memories"]
 
     async def forget(self, memory_id: str, tenant_id: str) -> None:
         from uuid import UUID
