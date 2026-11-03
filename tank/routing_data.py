@@ -86,24 +86,34 @@ def _direct(tank: Any, data: dict, name: str, text: str, refusal_args: dict) -> 
     return str(direct["id"])
 
 
+class GatewayOptions(dict):
+    """Routing kwargs plus a local receipt alias map, never sent as request data."""
+    def __init__(self, values: dict, aliases: dict | None = None):
+        super().__init__(values)
+        self.aliases = aliases or {}
+
+
 async def dispatch(tank: Any, *, policy: dict, model: str, generation: dict,
-                   offpeak: bool, text: str, refusal_args: dict) -> dict:
+                   offpeak: bool, text: str, refusal_args: dict) -> GatewayOptions:
     data = await catalog(tank)
     direct = _direct(tank, data, model, text, refusal_args)
     if direct is not None:
-        return {"model": direct, "disable_fallbacks": True}
+        return GatewayOptions({"model": direct, "disable_fallbacks": True}, {direct: model})
     if "disable_fallbacks" in generation:
-        return {}
+        return GatewayOptions({})
     if offpeak:
-        return {"disable_fallbacks": True}
+        return GatewayOptions({"disable_fallbacks": True})
     names = policy.get("fallbacks")
     if names is None:
         names = data["chains"].get(model, [])
     chain = []
+    aliases = {}
     for name in names:
         if tank.model_call_refusal(text, name, **refusal_args):
             continue
         deployment = _direct(tank, data, name, text, refusal_args)
         chain.append({"model": deployment, "disable_fallbacks": True} if deployment else name)
+        if deployment:
+            aliases[deployment] = name
     # Override every configured exception chain too: they are not permission checked.
-    return {"fallbacks": chain, "context_window_fallbacks": [], "content_policy_fallbacks": []}
+    return GatewayOptions({"fallbacks": chain, "context_window_fallbacks": [], "content_policy_fallbacks": []}, aliases)
