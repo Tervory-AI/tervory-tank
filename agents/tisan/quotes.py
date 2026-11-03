@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
+import asyncpg
+
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 State = Literal['draft', 'submitted', 'acknowledged', 'quoted', 'accepted', 'declined']
@@ -38,6 +40,14 @@ class Missing(LookupError):
     """No request in the supplied tenant."""
 
 
+def _text_without_controls(value: Any) -> Any:
+    if isinstance(value, str) and any(
+        (ord(char) < 32 and char not in '\n\t') or 127 <= ord(char) <= 159 for char in value
+    ):
+        raise ValueError('invalid_transition')
+    return value
+
+
 class Contact(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     name: str = Field(min_length=1, max_length=120)
@@ -45,6 +55,8 @@ class Contact(BaseModel):
     phone: str | None = Field(default=None, max_length=40)
     company: str | None = Field(default=None, max_length=120)
     reply_method: Literal['email', 'phone']
+
+    _text_fields = field_validator('name', 'company', mode='before')(_text_without_controls)
 
     @field_validator('name')
     @classmethod
@@ -86,6 +98,8 @@ class Item(BaseModel):
     quantity: int = Field(ge=1, le=10000)
     notes: str | None = Field(default=None, max_length=2000)
 
+    _text_fields = field_validator('description', 'notes', mode='before')(_text_without_controls)
+
     @field_validator('description')
     @classmethod
     def nonblank_description(cls, value: str) -> str:
@@ -117,16 +131,20 @@ class Move(BaseModel):
     valid_until: Any = None
     quote_message: Any = None
 
+    _message_controls = field_validator('quote_message', mode='before')(_text_without_controls)
+
 
 _QUOTE_FIELDS = ('quote_amount', 'quote_currency', 'valid_until', 'quote_message')
 
 
 class QuoteData(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    quote_amount: Decimal = Field(gt=0, decimal_places=2, allow_inf_nan=False)
+    quote_amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2, allow_inf_nan=False)
     quote_currency: str = Field(strict=True)
     valid_until: AwareDatetime
     quote_message: str = Field(strict=True, min_length=1, max_length=2000)
+
+    _message_controls = field_validator('quote_message', mode='before')(_text_without_controls)
 
     @field_validator('quote_amount')
     @classmethod
@@ -139,10 +157,9 @@ class QuoteData(BaseModel):
     @classmethod
     def currency(cls, value: str) -> str:
         # Same uppercase/fullmatch rule as rigbox.fulfilment._currency.
-        value = value.upper()
-        if re.fullmatch(r'[A-Z]{3}', value) is None:
+        if re.fullmatch(r'[A-Za-z]{3}', value) is None:
             raise ValueError('invalid_transition')
-        return value
+        return value.upper()
 
     @field_validator('valid_until', mode='before')
     @classmethod
@@ -242,11 +259,14 @@ class Quotes:
                 raise Refused('invalid_transition') from None
             if quote.valid_until <= datetime.now(timezone.utc) or any(row.get(key) is not None for key in _QUOTE_FIELDS):
                 raise Refused('invalid_transition')
-            updated = await conn.fetchrow('''UPDATE agent_tisan.quote_requests
-                SET state=$3,quote_amount=$4,quote_currency=$5,valid_until=$6,quote_message=$7,
-                    updated_at=clock_timestamp() WHERE tenant_id=$1 AND id=$2 RETURNING *''',
-                tenant, request_id, state, quote.quote_amount, quote.quote_currency,
-                quote.valid_until, quote.quote_message)
+            try:
+                updated = await conn.fetchrow('''UPDATE agent_tisan.quote_requests
+                    SET state=$3,quote_amount=$4,quote_currency=$5,valid_until=$6,quote_message=$7,
+                        updated_at=clock_timestamp() WHERE tenant_id=$1 AND id=$2 RETURNING *''',
+                    tenant, request_id, state, quote.quote_amount, quote.quote_currency,
+                    quote.valid_until, quote.quote_message)
+            except asyncpg.CheckViolationError:
+                raise Refused('invalid_transition') from None
         else:
             updated = await conn.fetchrow('''UPDATE agent_tisan.quote_requests
                 SET state=$3,updated_at=clock_timestamp() WHERE tenant_id=$1 AND id=$2 RETURNING *''',
