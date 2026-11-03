@@ -3186,8 +3186,11 @@ def make_ctx(pkg: skala.SkillPackage, tenant_id: uuid.UUID, task_id: uuid.UUID |
         kw["home_region"] = chosen
         return await _model_for_skill(**kw)
 
-    return skala.SkillContext(tenant_id=tenant_id, skill_ref=ref, agent=pkg.agent, task_id=task_id,
-                              _model=_model, http=_http, env=dict(SKILL_ENV))
+    ctx = skala.SkillContext(tenant_id=tenant_id, skill_ref=ref, agent=pkg.agent, task_id=task_id,
+                             _model=_model, http=_http, env=dict(SKILL_ENV))
+    if pkg.agent == "base":
+        __import__("agent_skills").bind_base_browser(ctx)
+    return ctx
 
 
 # Evals and previews run under the platform tenant so their model spend never lands on a client.
