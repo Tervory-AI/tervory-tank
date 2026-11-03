@@ -1,12 +1,31 @@
 # Autumbra Enforce lifecycle — founder test-host acceptance
 
+**Security revision status: blocked; do not configure or deploy this branch.**
+The six lifecycle setting mappings have been removed from Watch. The isolated
+`enforce-lifecycle` service is not implemented yet. Do not put a control-plane
+write token on Watch. Only one instance of the eventual isolated service may
+receive these settings; the lifecycle lock is per process.
+
+The requested read/write-only token conflicts with the currently published
+[Coolify delete endpoint](https://coolify.io/docs/api/endpoints/applications/delete-application-by-uuid),
+which explicitly requires both write and deploy. The
+[permissions reference](https://coolify.io/docs/api/permissions) defines read
+as redacted inspection, write as resource mutation, and deploy as deployment
+operations; it also requires the token owner to remain a team administrator or
+owner for privileged calls. The requested token must have read/write only,
+without deploy, root or read:sensitive. Compatibility must be established from
+the installed version's API contract before the isolated service is implemented.
+No installed Coolify version or corresponding API documentation is available in
+this checkout or through a connected Coolify tool. No permission was broadened.
+
+
 Gate 1 creates and removes a separate Git-backed Coolify application per tenant.
 Creation never deploys it. Use the founder's own test tenant UUID, never a client.
 No Workspace page or visible wording changes. All three commands propose the
 existing Confirm cards in `/chats`; nothing executes until Confirm.
 
 1. Create a dedicated Coolify team containing only Enforce resources. Create its
-   token with **read, write and deploy**, **without read:sensitive**. Do not use
+   token with **read and write**, **without deploy, root or read:sensitive**. Do not use
    the Watch inventory token. Keep this team's project and source access separate
    from other Tervory resources. The founder enters all values in Coolify; no
    value belongs in chat, Git, screenshots, logs or acceptance evidence.
@@ -17,7 +36,8 @@ existing Confirm cards in `/chats`; nothing executes until Confirm.
    `/agents/ghost/docker-compose.enforce.yml`. Automatic and instant deployment
    are both disabled. The compose file is fetched from Git at deployment time;
    its existing egress and health services remain included.
-3. On the **Autumbra Watch** resource, fill these six names:
+3. After the compatibility blocker is resolved, fill these six names on the
+   isolated **enforce-lifecycle** resource only (not yet implemented):
 
    - `AUTUMBRA_COOLIFY_URL`: Coolify HTTPS origin, optionally ending `/api/v1`.
    - `AUTUMBRA_COOLIFY_TOKEN`: the dedicated team's token.
@@ -26,8 +46,7 @@ existing Confirm cards in `/chats`; nothing executes until Confirm.
    - `AUTUMBRA_COOLIFY_ENVIRONMENT`: the environment name.
    - `AUTUMBRA_COOLIFY_GITHUB_APP_UUID`: the connected GitHub App source.
 
-   Deploy the reviewed Watch image and setting mappings through the normal
-   founder-controlled merge/deploy flow. No builder opens the environment panel.
+   Deployment of the isolated service remains blocked as stated above. No builder opens the environment panel.
    Empty configuration retains the existing fixture execution behavior.
 4. In `/chats`, enter `autumbra.enforce.create <your-test-tenant-uuid>` and confirm
    its card. Inspect the dedicated team in your own browser. The new application
@@ -55,14 +74,16 @@ existing Confirm cards in `/chats`; nothing executes until Confirm.
    remains `None`; only the founder sets it after measurement. Counts already
    come from the dedicated team's current Coolify applications.
 7. In `/chats`, enter `autumbra.enforce.destroy <your-test-tenant-uuid>`, confirm,
-   and verify that only that exact resource is removed, including its volumes,
-   networks and configuration. Confirm `autumbra.enforce.list` again and verify
+   and verify that only that exact resource is removed, including its networks and configuration. **Volumes are kept for the founder
+   to clean up separately**; lifecycle deletion never requests volume removal. Confirm `autumbra.enforce.list` again and verify
    its absence. An already-missing resource returns `absent`.
 
 A timeout or server error after a mutation returns `unknown` and is never retried
 automatically. Inspect the resource in the dedicated team before taking another
 action. A create is refused while its exact name exists; it will not silently
-replace or deploy a partially configured resource. No environment-list, logs,
+replace or deploy a partially configured resource. A definite settings-write
+refusal after creation returns `created_unconfigured` and its UUID; destroy
+that resource (keeping volumes), then explicitly create again. No environment-list, logs,
 start or deploy API is called by this lifecycle.
 
 The founder's browser screenshots, command receipts, health and helper output
