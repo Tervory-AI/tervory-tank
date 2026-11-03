@@ -251,9 +251,14 @@ async def execute(payload: dict, tenant_id: str, *, tank: Any = None, http: Any 
                                     if name in {"home", "contact", "privacy"}]}, project)
             (project / "content").mkdir(exist_ok=True)
             (project / "content/site.json").write_text(json.dumps({"schema": "tisan.content/1", **plan}, ensure_ascii=False, indent=2) + "\n")
-            checks, detail = await scaffold.run_checks(project)
+            checks, detail = await scaffold.run_checks(project, tenant_id=tenant, tank=tank)
             if detail or not checks or not all(c["ok"] for c in checks):
-                return {"ok": False, "slug": brief["slug"], "build": number, "checks": checks, "detail": detail}
+                failed = scaffold._manifest(brief, files=scaffold.project_files(project), checks=checks,
+                                            detail=detail, archive="", build=number)
+                (folder / f"{number}.json").write_text(json.dumps(failed, indent=2) + "\n")
+                rows = scaffold._quality_results(checks)
+                return {"ok": False, "slug": brief["slug"], "build": number, "checks": checks, "detail": detail,
+                        **({"results": rows} if rows else {})}
             env_dts = project / "next-env.d.ts"
             if env_dts.is_file():
                 env_dts.write_text(env_dts.read_text().replace('/// <reference path="./.next/types/routes.d.ts" />\n', "", 1))
@@ -292,6 +297,7 @@ async def handle(ctx: Any) -> dict:
         raise failure
     if result.get("ok") is True:
         import hashlib
+
         from chassis.events import publish
         await publish(str(ctx.tenant_id), "tisan.build.ready", str(ctx.job_id), {
             "job_id": str(ctx.job_id), "site_id": hashlib.sha256(result["slug"].encode()).hexdigest()})

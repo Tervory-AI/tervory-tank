@@ -2442,6 +2442,57 @@ ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_state text NOT NULL DE
 ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_tools jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_discovered_at timestamptz;
 
+-- ML3 alert preferences and delivery claims join an existing RLS rollout.
+CREATE TABLE IF NOT EXISTS tank.market_lab_alerts (
+    tenant_id uuid PRIMARY KEY,
+    email_enabled boolean NOT NULL DEFAULT false,
+    email_since timestamptz,
+    webhook_url text,
+    webhook_sealed text,
+    webhook_since timestamptz,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS tank.market_lab_deliveries (
+    tenant_id uuid NOT NULL,
+    warning_id uuid NOT NULL,
+    channel text NOT NULL CHECK (channel IN ('email','webhook')),
+    status text NOT NULL CHECK (status IN ('pending','sending','sent','uncertain','suppressed')),
+    letter jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, warning_id, channel)
+);
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        ALTER TABLE tank.market_lab_alerts ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE tank.market_lab_alerts FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.market_lab_alerts'::regclass AND polname='tenant_access') THEN
+            CREATE POLICY tenant_access ON tank.market_lab_alerts FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.market_lab_alerts'::regclass AND polname='tenant_boundary') THEN
+            CREATE POLICY tenant_boundary ON tank.market_lab_alerts AS RESTRICTIVE FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        ALTER TABLE tank.market_lab_deliveries ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE tank.market_lab_deliveries FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.market_lab_deliveries'::regclass AND polname='tenant_access') THEN
+            CREATE POLICY tenant_access ON tank.market_lab_deliveries FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.market_lab_deliveries'::regclass AND polname='tenant_boundary') THEN
+            CREATE POLICY tenant_boundary ON tank.market_lab_deliveries AS RESTRICTIVE FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+    END IF;
+END
+$$;
+
 -- Trigger B1: tenant-private evidence and conversations. Founder-approved
 -- retention is 12 months after the last message (2026-11-03).
 CREATE TABLE IF NOT EXISTS tank.trigger_bot_sources (

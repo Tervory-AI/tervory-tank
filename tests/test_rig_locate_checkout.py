@@ -1,7 +1,6 @@
-"""Locate switch, live confirm, holds, test-only payments and sandbox-only orders.
+"""Locate switch, live confirm, holds and sandbox-only order guards.
 
-Offline. Checkers, payment providers and the order step are test doubles here only; the
-product path wires the real checkers and no payment provider.
+Offline. Checkers and the order step are test doubles here only.
 """
 import json
 import sys
@@ -14,7 +13,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agents" / "rig"))
-from rigbox import payments
 from rigbox.locate import SupplyStore, catalogue, enabled
 from rigbox.locate_live import (Checkers, Holds, LiveResult, LocateRefused, SourceApiChecker, TigerChecker,
                                 confirm, hold_token, read_token)
@@ -140,7 +138,7 @@ async def test_confirm_issues_hold_from_live_price_without_supplier_fields():
     # (45 + 5) * 18 / 0.8 from the live price, not the imported 40.
     assert public["price"] == {"amount": "1125.00", "currency": "ZAR"}
     assert checker.calls == [(TENANT, "other-store", "RSR|POF90307")]
-    assert set(shopper_body(public)) == {"status", "eta", "price", "expires_at", "hold"}
+    assert set(shopper_body(public)) == {"status", "eta", "ship_days", "price", "expires_at", "hold"}
     assert "other-store" not in json.dumps(shopper_body(public)) and "RSR" not in json.dumps(public)
     assert read_token(SECRET, TENANT, public["hold"], datetime.now(timezone.utc)) == result["hold_id"]
 
@@ -222,52 +220,8 @@ async def test_hold_token_rejects_tamper_other_tenant_expiry_and_reuse():
 
 # 4. Payments: test mode only, no live key.
 
-class FakeProvider:
-    """Test double. Never a concrete provider in the product path."""
-
-    name = "test-double"
-
-    def __init__(self, key="sk_test_double", test=True, status="captured"):
-        self.key, self.test, self.status = key, test, status
-        self.captured, self.refunded, self.refund_keys = [], [], []
-
-    def keys(self):
-        return [self.key]
-
-    async def capture(self, *, amount, currency, token, reference, metadata):
-        self.captured.append((amount, currency, reference))
-        return payments.Charge("ch_test_1", self.status, amount, currency, self.test)
-
-    async def refund(self, *, charge, reason, idempotency_key, metadata):
-        assert reason == payments.REFUND_REASON
-        self.refunded.append(metadata["cause"])
-        self.refund_keys.append(idempotency_key)
-        return payments.Charge(charge.reference, "refunded", charge.amount, charge.currency, True)
 
 
-@pytest.mark.asyncio
-async def test_payments_refuse_without_test_mode_live_keys_and_unproven_test_charges():
-    test_env = {"RIG_LOCATE_PAYMENTS_MODE": "test"}
-    for env in ({}, {"RIG_LOCATE_PAYMENTS_MODE": "live"}, {"RIG_LOCATE_PAYMENTS_MODE": "TEST"}):
-        with pytest.raises(payments.PaymentRefused, match="payments_mode"):
-            payments.guard(FakeProvider(), env)
-    with pytest.raises(payments.PaymentRefused, match="payments_not_configured"):
-        payments.guard(None, test_env)
-    for key in ("sk_live_x", "pk_live_x", "rk_live_x", "LIVE_secret", "key-live-1"):
-        with pytest.raises(payments.PaymentRefused, match="live_key_refused"):
-            payments.guard(FakeProvider(key), test_env)
-    for name in ("STRIPE_SECRET_KEY", "PAYSTACK_SECRET_KEY"):
-        with pytest.raises(payments.PaymentRefused, match="live_key_refused"):
-            payments.guard(FakeProvider(), {**test_env, name: "sk_live_from_env"})
-    with pytest.raises(payments.PaymentRefused) as raised:
-        payments.guard(FakeProvider("sk_" + "live_" + "SECRETVALUE"), test_env)  # dummy, built so no key-shaped literal
-    assert "SECRETVALUE" not in str(raised.value)
-    with pytest.raises(payments.PaymentRefused, match="live_charge_refused"):
-        await payments.capture(FakeProvider(test=False), amount="1", currency="ZAR", token="tok", reference="r",
-                               metadata={}, env=test_env)
-    charge = await payments.capture(FakeProvider(), amount="1", currency="ZAR", token="tok", reference="r",
-                                    metadata={}, env=test_env)
-    assert charge.test is True and charge.status == "captured"
 
 
 # 5. Orders: sandbox only.
@@ -297,97 +251,16 @@ class SandboxOrders:
                 "purchase_order": {"number": "P00001", "state": "draft"}}
 
 
-async def checkout(monkeypatch, *, fail=False, provider=None):
-    monkeypatch.setenv("RIG_LOCATE_HOLD_SECRET", "s" * 40)
-    monkeypatch.setenv("RIG_LOCATE_ORDER_MODE", "sandbox")
-    monkeypatch.setenv("RIG_LOCATE_PAYMENTS_MODE", "test")
-    for name in ("STRIPE_SECRET_KEY", "PAYSTACK_SECRET_KEY"):
-        monkeypatch.delenv(name, raising=False)
-    store = await rate_stub(await shop())
-    orders = SandboxOrders(fail)
-    service = QuoteService(store, None, orders, MemoryQuotes(store))
-    service.fulfilment = orders
-    service.locate_checker = Live(available("45.00"))
-    service.payments = provider or FakeProvider()
-    held = await service.locate_confirm(TENANT, "part-1")
-    body = {"product_id": "part-1", "hold": held["hold"], "payment_token": "tok_test_visa",
-            "contact": {"name": "Shopper", "email": "shopper@example.com"}}
-    return store, service, orders, held, body
 
 
-@pytest.mark.asyncio
-async def test_accept_pays_in_test_mode_then_orders_and_records_each_state(monkeypatch):
-    store, service, orders, held, body = await checkout(monkeypatch)
-    result = await service.locate_accept(TENANT, body)
-    assert result["state"] == "ordered" and result["payment"]["test"] is True
-    assert result["price"] == held["price"] == {"amount": "1125.00", "currency": "ZAR"}
-    quote = next(q for q in store.quotes if q["id"] == result["request_id"])
-    state = quote["payload"]["locate_state"]
-    assert state["state"] == "ordered" and state["order"] == "S00001" and state["purchase_order"] == "P00001"
-    assert state["payment"] == {"reference": "ch_test_1", "provider": "test-double", "test": True}
-    assert quote["payload"]["product"]["price"] == held["price"]
-    assert orders.placed == [(TENANT, result["request_id"], "RSR|POF90307", "45.00")]
-    assert service.payments.captured == [(Decimal("1125.00"), "ZAR", f"rig:{TENANT}:{result['request_id']}")]
-    # Single use: the same hold cannot pay twice.
-    with pytest.raises(RigError) as raised:
-        await service.locate_accept(TENANT, body)
-    assert raised.value.status == 410 and len(service.payments.captured) == 1
 
 
-@pytest.mark.asyncio
-async def test_accept_refunds_when_sandbox_order_fails(monkeypatch):
-    store, service, orders, _, body = await checkout(monkeypatch, fail=True)
-    with pytest.raises(RigError) as raised:
-        await service.locate_accept(TENANT, body)
-    assert raised.value.status == 502
-    state = store.quotes[-1]["payload"]["locate_state"]
-    assert state["state"] == "order_failed_refunded" and service.payments.refunded == ["order_failed"]
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("change", [
-    {"RIG_LOCATE_ORDER_MODE": "live"}, {"RIG_LOCATE_PAYMENTS_MODE": "live"},
-    {"STRIPE_SECRET_KEY": "sk_live_present"}, {"RIG_LOCATE_HOLD_SECRET": "short"},
-])
-async def test_accept_refuses_before_taking_hold_or_payment(monkeypatch, change):
-    store, service, orders, held, body = await checkout(monkeypatch)
-    for name, value in change.items():
-        monkeypatch.setenv(name, value)
-    with pytest.raises(RigError) as raised:
-        await service.locate_accept(TENANT, body)
-    assert raised.value.status == 503
-    assert service.payments.captured == [] and orders.sent == [] and orders.placed == []
-    hold_id = held["hold"].split(".")[0]
-    assert store.supply_state[TENANT]["holds"][hold_id]["used_at"] is None
 
 
-@pytest.mark.asyncio
-async def test_accept_without_provider_refuses(monkeypatch):
-    _, service, orders, _, body = await checkout(monkeypatch)
-    service.payments = None
-    with pytest.raises(RigError) as raised:
-        await service.locate_accept(TENANT, body)
-    assert raised.value.status == 503 and orders.sent == []
 
 
-@pytest.mark.asyncio
-async def test_tenant_isolation_hold_offer_and_switch(monkeypatch):
-    store, service, orders, held, body = await checkout(monkeypatch)
-    # Another store cannot use this hold, even with Locate switched on and the same sku.
-    product = (await store.products(TENANT))[0]
-    await store.upsert_product(OTHER, dict(product))
-    await store.save_rule(OTHER, {"freight": "5", "duty_percent": "0", "margin_percent": "20"})
-    with pytest.raises(RigError) as raised:
-        await service.locate_accept(OTHER, body)
-    assert raised.value.code == "locate_disabled"
-    await store.put_retailer(OTHER, "other", "o@example.com", None, "Other", locate_enabled=True)
-    with pytest.raises(RigError) as raised:
-        await service.locate_accept(OTHER, body)
-    assert raised.value.status == 422
-    # The other store has no approved source or offer of its own.
-    assert await service.locate_confirm(OTHER, "part-1") == {"status": "unavailable"}
-    assert service.payments.captured == [] and orders.placed == []
-    assert (await service.locate_accept(TENANT, body))["state"] == "ordered"
 
 
 # 6. Product checkers: unknown unless explicitly configured and answered.

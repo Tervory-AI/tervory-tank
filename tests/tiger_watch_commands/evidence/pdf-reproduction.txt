@@ -1,0 +1,18 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________ test_pdf_block_records_url_and_prevents_a_second_download ___________
+tests/test_tiger_public_policy.py:123: in test_pdf_block_records_url_and_prevents_a_second_download
+    first = await visitor.visit("https://store.example/price.pdf", task=task, run=run)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_agent1_browser.py:95: in visit
+    return await browser.visit(browser.Page(url=url), owner, identifier, browser.site_origin(url), run=run)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agents/_brain/browser.py:361: in visit
+    result = await _visit(body, tenant, task, origin, run, directory)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agents/_brain/browser.py:584: in _visit
+    raise HTTPException(503, "The browser could not read this page; no result is claimed.") from None
+E   fastapi.exceptions.HTTPException: 503: The browser could not read this page; no result is claimed.
+=========================== short test summary info ============================
+FAILED tests/test_tiger_public_policy.py::test_pdf_block_records_url_and_prevents_a_second_download
+1 failed in 2.81s
