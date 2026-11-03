@@ -5,6 +5,7 @@ import asyncio
 import json
 import hashlib
 import hmac
+import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -338,6 +339,11 @@ async def _market_lab_intel_loop(app: FastAPI) -> None:
         await asyncio.sleep(3600)
 
 
+def _block_memory_unavailable(app):
+    app.state.block_memory_failures += 1
+    logging.getLogger(__name__).warning("Autumbra block-memory reconciliation unavailable")
+
+
 async def _standing_blocks_loop(app):
     while True:
         root = queue_root_base()
@@ -350,7 +356,7 @@ async def _standing_blocks_loop(app):
                 try:
                     await app.state.shared_blocks.reconcile(tenant)
                 except Exception:
-                    app.state.block_memory_failures += 1
+                    _block_memory_unavailable(app)
         await asyncio.sleep(60)
 
 
@@ -948,7 +954,7 @@ def create_app() -> FastAPI:
                             if count:
                                 source_data = {"autumbra.shared_blocks": count}
                         except Exception:
-                            app.state.block_memory_failures += 1
+                            _block_memory_unavailable(app)
                     try:
                         queue_receipt = enqueue_fixture_attack_for_watch(
                             raw_log=raw_log,
@@ -1096,7 +1102,7 @@ def create_app() -> FastAPI:
                 try:
                     await blocks.reconcile(tenant_id)
                 except Exception:
-                    app.state.block_memory_failures += 1
+                    _block_memory_unavailable(app)
             return result
         except ThreatBurned:
             return JSONResponse(
