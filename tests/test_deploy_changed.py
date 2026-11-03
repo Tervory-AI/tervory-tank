@@ -648,3 +648,10 @@ def test_a_budget_skipped_room_is_not_retried_by_a_later_run(monkeypatch: pytest
     monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
     assert mod.main() == 0
     assert order == ["agent-rig"]
+
+
+@pytest.mark.parametrize("path", ["tiger/Dockerfile", "tiger/app.py", "tiger/pool.py", "tiger/ocr.py"])
+def test_tiger_image_sources_deploy_only_the_tiger_room(monkeypatch, path):
+    mod = _script(monkeypatch)
+    assert mod.wanted([path]) == (False, {"agent-tiger"}, False)
+    assert mod.wanted([path, "tank/main.py"]) == (True, {"agent-tiger"}, False)
