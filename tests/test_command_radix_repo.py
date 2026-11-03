@@ -128,20 +128,49 @@ async def test_confirmed_archive_all_scanners_redacted_and_zero_receipts(repo_ap
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('ownership', ['same', 'other-user', 'other-tenant'])
-async def test_invalid_archive_and_foreign_upload_never_reach_room(repo_api, monkeypatch, ownership):
+@pytest.mark.parametrize('ownership,archive_kind', [
+    ('same', 'invalid'), ('other-user', 'tar'), ('other-user', 'zip'),
+    ('other-tenant', 'tar'), ('other-tenant', 'zip'),
+])
+async def test_invalid_archive_and_foreign_upload_never_reach_room(repo_api, monkeypatch, ownership, archive_kind):
     client, pool, runtime = repo_api
     headers = {'x-tervory-user': 'placeholder-other'} if ownership == 'other-user' else (
         {'x-tervory-tenant': str(OTHER)} if ownership == 'other-tenant' else None)
-    _, attachment = await upload(client, b'placeholder: not an archive', headers=headers)
+    raw = b'placeholder: not an archive'
+    if archive_kind == 'tar':
+        raw = _tar({'placeholder.txt': 'placeholder'})
+    elif archive_kind == 'zip':
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w') as archive:
+            archive.writestr('placeholder.txt', 'placeholder')
+        raw = buffer.getvalue()
+    _, attachment = await upload(client, raw, headers=headers)
     thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
     room = AsyncMock(side_effect=AssertionError('placeholder: must not reach room'))
     monkeypatch.setattr('ghost_routes.call_room', room)
+    dispatched = []
+    dispatch = command.dispatch_action
+    async def observe(action, actor):
+        status, data = await dispatch(action, actor)
+        dispatched.append((status, data))
+        return status, data
+    monkeypatch.setattr(command, 'dispatch_action', observe)
     card = await propose(client, thread, 'radix.repo.scan', {'attachment_id': attachment})
     result = (await client.post(f"/v1/command/cards/{card['card_id']}", json={'action': 'confirm'})).json()
     assert result['status'] == 'failed'
     room.assert_not_awaited()
-    assert await pool.fetchval("SELECT count(*) FROM tank.ledger WHERE tenant_id=$1 AND model='code' AND cost_usd=0", TENANT) == 1
+    assert len(dispatched) == 1
+    count = await pool.fetchval("SELECT count(*) FROM tank.ledger WHERE tenant_id=$1", TENANT)
+    if ownership == 'same':
+        assert dispatched[0][0] == 422
+        assert dispatched[0][1]['detail'] == 'Hand over a tar or zip archive.'
+        assert count == 1
+    else:
+        assert dispatched[0] == (404, {'detail': 'Attachment not found'})
+        assert count == 0
+        assert not result['evidence_ids']
+        snapshot = (await client.get(f'/v1/command/threads/{thread}')).json()
+        assert snapshot['receipts'] == []
 
 
 @pytest.mark.asyncio
