@@ -20,7 +20,7 @@ class Settings(BaseModel):
     privacy_notice: str = Field(default='', max_length=4000)
     notice_version: str = Field(default='', max_length=64)
     accent: str = Field(default='#001840', pattern=r'^#[0-9a-fA-F]{6}$')
-    ink: str = Field(default='#001840', pattern=r'^#[0-9a-fA-F]{6}$')
+    ink: str = Field(default='#1a1a1a', pattern=r'^#[0-9a-fA-F]{6}$')
     paper: str = Field(default='#ffffff', pattern=r'^#[0-9a-fA-F]{6}$')
     line: str = Field(default='#7a7a85', pattern=r'^#[0-9a-fA-F]{6}$')
     expected_digest: str = ''
