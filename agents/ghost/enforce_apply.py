@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from .cloudflare_edge import CloudflarePlanRefused
 from .client_settings import ApplyMode, ClientAutumbraSettings
 from .durable_shields import load_pending, persist_control, persist_pending
 from .fixture_edge import DEFAULT_CONTROL, FixtureEdgeControl
@@ -86,6 +87,12 @@ def _health_after_apply(edge: FixtureEdgeControl, row: dict | None = None) -> bo
     if row is not None and isinstance(edge, CloudflareEdgeControl):
         return edge.health_check(applied_after=row["applied_at"])
     return edge.health_check()
+
+
+def _plan_refusal(receipt: dict[str, Any], error: CloudflarePlanRefused) -> dict[str, Any]:
+    receipt.update(applied=False, outcome="refused_plan", note=str(error),
+                   control="cloudflare", cloudflare_plan=error.plan)
+    return receipt
 
 
 def _apply_shield(edge: FixtureEdgeControl, *, site: str, kind: str,
@@ -186,6 +193,12 @@ def apply_from_payload(
             address=payload.address,
         )
 
+    if name == "cloudflare" and payload.kind == "waf_managed" and mode is not ApplyMode.never:
+        try:
+            edge.check_managed_plan()
+        except CloudflarePlanRefused as error:
+            return _plan_refusal(receipt, error)
+
     supported = (payload.kind == "block_ip" and bool(payload.address)) or (
         name == "cloudflare" and payload.kind == "rate_limit" and bool(payload.path)
     )
@@ -195,7 +208,10 @@ def apply_from_payload(
         mode is ApplyMode.auto_when_checks_pass
         and supported
     ):
-        row = _apply_shield(edge, site=site, kind=payload.kind, address=payload.address, path=payload.path, ref=ref)
+        try:
+            row = _apply_shield(edge, site=site, kind=payload.kind, address=payload.address, path=payload.path, ref=ref)
+        except CloudflarePlanRefused as error:
+            return _plan_refusal(receipt, error)
         receipt["applied_record"] = row
         receipt["undo"] = {"rule_id": row["rule_id"], "control": name}
         applied = True
@@ -432,7 +448,16 @@ def approve_pending(
             raise ValueError("pending address is on the never-block list")
     ref = f"approve-{rid.replace('-', '')[:16]}"
     t0 = time.perf_counter()
-    applied_row = _apply_shield(edge, site=site, kind=row.get("kind", "block_ip"), address=address, path=row.get("path"), ref=ref)
+    try:
+        applied_row = _apply_shield(edge, site=site, kind=row.get("kind", "block_ip"), address=address, path=row.get("path"), ref=ref)
+    except CloudflarePlanRefused as error:
+        persist_pending(data_dir, pending)
+        return _plan_refusal({
+            "id": str(uuid4()), "product": "Autumbra", "role": "Enforce",
+            "action": "approve_shield", "prior_receipt_id": rid, "site": site,
+            "kind": row.get("kind"), "timestamp": utc_now(),
+            "tenant_id": settings.tenant_id, **settings.receipt_stamp(),
+        }, error)
     shield_seconds = time.perf_counter() - t0
     _persist(data_dir, edge)
     persist_pending(data_dir, pending)

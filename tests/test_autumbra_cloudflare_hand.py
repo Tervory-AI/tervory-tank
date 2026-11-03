@@ -22,7 +22,8 @@ REF = "enforce-" + "e" * 16
 class FakeCloudflare:
     """Checks the exact wire contract and keeps an unrelated rule for Undo proof."""
 
-    def __init__(self, kind="rate_limit", missing=False):
+    def __init__(self, kind="rate_limit", missing=False, plan="pro", address="198.51.100.20"):
+        self.plan, self.address = plan, address
         self.kind, self.missing = kind, missing
         self.calls = []
         self.rules = [{"id": OTHER, "ref": "somebody-else", "expression": "true"}]
@@ -36,6 +37,8 @@ class FakeCloudflare:
         if method == "GET" and path == "/client/v4/zones":
             assert request.url.params == httpx.QueryParams({"name": "tervory.com"})
             result = [{"name": "tervory.com", "id": ZONE}]
+            if self.plan is not None:
+                result[0]["plan"] = {"legacy_id": self.plan}
         elif method == "GET" and "/phases/" in path:
             phase = "http_ratelimit" if self.kind == "rate_limit" else "http_request_firewall_custom"
             assert path == base + f"/phases/{phase}/entrypoint"
@@ -64,7 +67,7 @@ class FakeCloudflare:
                                "requests_per_period": 20, "mitigation_timeout": 10},
                 )
             else:
-                expected["expression"] = '(http.host eq "tervory.com" and ip.src eq 198.51.100.20)'
+                expected["expression"] = f'(http.host eq "tervory.com" and ip.src eq {self.address})'
             assert body == expected
             self.rules.append({**body, "id": RULE})
             result = {"id": RULESET, "rules": self.rules}
@@ -323,3 +326,53 @@ def test_fixture_rate_limit_behavior_is_unchanged_when_token_empty(monkeypatch):
     receipt = apply_from_payload(payload(), settings=settings(), control=fixture)
     assert receipt["control"] == "fixture_edge" and receipt["applied"] is False
     assert fixture.list_blocked() == []
+
+
+@pytest.mark.parametrize("kind", ["rate_limit", "waf_managed"])
+@pytest.mark.parametrize("plan", ["free", None, "unrecognized"])
+def test_plan_refusal_receipt_has_no_write(kind, plan):
+    api = FakeCloudflare(kind=kind, plan=plan)
+    receipt = apply_from_payload(payload(kind), settings=settings(), control=edge(api))
+    assert receipt["applied"] is False
+    assert receipt["control"] == "cloudflare"
+    assert receipt["cloudflare_plan"] == (plan if plan == "free" else None)
+    assert receipt["note"] == "Cloudflare request failed."
+    assert api.calls == [("GET", "/client/v4/zones")]
+    assert len(api.rules) == 1
+
+
+def test_pro_rate_limit_records_plan_and_preserves_host():
+    api = FakeCloudflare(plan="pro")
+    receipt = apply_from_payload(payload(), settings=settings(), control=edge(api))
+    assert receipt["applied"] is True
+    assert receipt["applied_record"]["cloudflare_plan"] == "pro"
+    assert 'http.host eq "tervory.com"' in receipt["applied_record"]["expression"]
+
+
+def test_free_block_ip_applies():
+    api = FakeCloudflare(kind="block_ip", plan="free", address="192.0.2.1")
+    receipt = apply_from_payload(payload("block_ip", address="192.0.2.1"), settings=settings(), control=edge(api))
+    assert receipt["applied"] is True
+    assert receipt["applied_record"]["cloudflare_plan"] == "free"
+
+
+def test_approval_rechecks_plan_and_refuses_downgrade(tmp_path):
+    api = FakeCloudflare(plan="pro")
+    control = edge(api)
+    config = settings(ApplyMode.approve_each)
+    proposed = apply_from_payload(payload(), settings=config, control=control, data_dir=tmp_path)
+    api.plan = "free"
+    approved = approve_pending(accept_threat_payload({
+        "action": "approve_shield", "site": "tervory.com", "tenant_id": TENANT,
+        "prior_receipt_id": proposed["id"],
+    }), settings=config, control=control, data_dir=tmp_path)
+    assert approved["applied"] is False
+    assert approved["cloudflare_plan"] == "free"
+    assert approved["control"] == "cloudflare"
+    assert api.calls == [("GET", "/client/v4/zones")]
+
+
+def test_m24_documentation_address_passes_unchanged_never_block_gate():
+    from agents.ghost.never_block import may_block_ip
+    p = payload("block_ip", address="192.0.2.1")
+    assert may_block_ip(p.address, raw_log=p.address) == (True, "ok")

@@ -42,9 +42,11 @@ ALONE = ["tests/tiger_g5", "tests/zenas_regulation_alerts"]
 ELSEWHERE = ["tests/ci_security", "tests/test_live_check.py"]
 # Provider keys and tokens must never reach the suite, even if a runner has them set.
 # Wall-clock seconds per run. Hosted-runner times on main, 31 Oct 2026: main 651-834s,
-# tests/tiger_g5 11-15s, tests/zenas_regulation_alerts 6-7s. All three budgets plus
-# about 1.5 minutes of job setup fit inside the tank job's 30-minute timeout.
-BUDGETS = {"main": 1080, "tests/tiger_g5": 180, "tests/zenas_regulation_alerts": 180}
+# tests/tiger_g5 11-15s, tests/zenas_regulation_alerts 6-7s. On 3 Nov 2026 main reached
+# 1060-1065s (runs on 1ad2c794 and c5afd368) against the old 1080s budget, and a PR run
+# was stopped over budget, so main gets 1560s. All three budgets plus about 1.5 minutes
+# of job setup fit inside the tank job's 36-minute timeout.
+BUDGETS = {"main": 1560, "tests/tiger_g5": 180, "tests/zenas_regulation_alerts": 180}
 OVER_BUDGET = 124  # the exit code timeout(1) uses
 KEY_HINTS = ("API_KEY", "TOKEN", "SECRET", "PASSWORD", "OPENAI", "ANTHROPIC", "OPENROUTER",
              "PERPLEXITY", "DEEPSEEK", "GROQ", "TOGETHER", "MISTRAL", "GEMINI", "XAI_", "HF_")
