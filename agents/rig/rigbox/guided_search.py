@@ -109,6 +109,13 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         ranked_rows = [
             by_sku[item] for item in ranked.get("ids") or [] if item in by_sku
         ]
+        if not ranked_rows and _category_only(cleaned) == _ALL_PARTS:
+            ranked_rows = [
+                row
+                for row in products
+                if str(row.get("category") or "") in _value("part_categories", [])
+            ]
+            ranked = {"exact_match": True}
         if not ranked_rows:
             found = _known_gap(asked, products, fits)
             if found is not None:
