@@ -165,6 +165,10 @@ class Coolify:
             return data
         except CoolifyUnknown:
             raise
+        except Refused:
+            if mutation:
+                raise
+            raise Refused("Coolify response unavailable") from None
         except (httpx.HTTPError, ValueError):
             if mutation:
                 raise CoolifyUnknown("Coolify mutation outcome unknown") from None
