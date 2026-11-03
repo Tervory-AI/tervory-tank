@@ -34,9 +34,9 @@ body:has(.trigger-console) main { max-width:none; padding:0; margin:0; }
 .trigger-table th,.trigger-table td { border-bottom:1px solid var(--tr-line); vertical-align:top; }
 .trigger-table tr[data-record] { cursor:pointer; }
 .trigger-mobile-records { display:none; }
-.trigger-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
-.trigger-field { display:flex; min-width:0; flex-direction:column; gap:8px; background:white; padding:16px; overflow-wrap:anywhere; }
-.trigger-field-label { font-size:14px; }
+.trigger-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0; background:white; border-radius:8px; overflow:hidden; }
+.trigger-field { display:flex; min-width:0; flex-direction:column; gap:8px; background:white; padding:16px; border-bottom:1px solid var(--tr-line); overflow-wrap:anywhere; }
+.trigger-field-label { font-size:14px; color:var(--tr-muted); }
 .trigger-field-value { min-height:24px; white-space:pre-wrap; }
 .trigger-field input,.trigger-field textarea,.trigger-field select { width:100%; min-width:0; background:white; border:1px solid var(--tr-input); border-radius:8px; padding:8px; min-height:44px; }
 .trigger-field textarea { min-height:96px; resize:vertical; }
