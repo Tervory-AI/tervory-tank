@@ -1,12 +1,12 @@
 # Rig cart (US) — Proposed, not approved
 
-Page: [10 · Rig cart (US)](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=289-13919), node `289:13919`. Branch: `codex/rig-cart-figma`. Design-check revision: 3 November 2026.
+Page: [10 · Rig cart (US)](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=289-13919), node `289:13919`. Branch: `codex/rig-cart-figma`. Design-check revisions: rounds 1 and 2, 3 November 2026.
 
 All 52 frames and their review bars remain **Proposed, not approved**. Copy below is proposed for founder approval. Illustrative values exist only in Figma, not on a live screen. This branch changes only this register relative to main; no widget, admin, payment, credential or other runtime code is changed.
 
 ## Frame register
 
-The original 38 frame IDs are retained. All 94 distinct node IDs named in the review still resolve, including text removed from visible layouts by hiding it. Fourteen additional frames cover seven desktop/mobile pairs. Heights below come from the final canvas, not the original generator.
+The original 38 frame IDs are retained. All 94 distinct node IDs named in the round-1 review still resolve. Original hidden layers are retained only to preserve those IDs and are listed below as not for build. Hidden stale layers in the 14 new frames have been deleted. Fourteen additional frames cover seven desktop/mobile pairs. Heights below come from the final canvas, not the original generator.
 
 | Screen | Node ID | Size | Existing source reused |
 | --- | --- | --- | --- |
@@ -59,7 +59,7 @@ The original 38 frame IDs are retained. All 94 distinct node IDs named in the re
 | S04-error · Store checkout unavailable | [321:6266](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=321-6266) | 1440 × 960 | Widget status/panel, timer panel and actions |
 | S04-error · Store checkout unavailable | [321:6285](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=321-6285) | 375 × 960 | Widget status/panel, timer panel and actions |
 | A08-late · Order paid after window | [321:6304](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=321-6304) | 1440 × 960 | RetailerAdmin stacked history and actions |
-| A08-late · Order paid after window | [321:6343](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=321-6343) | 375 × 961 | RetailerAdmin stacked history and actions |
+| A08-late · Order paid after window | [321:6343](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=321-6343) | 375 × 979 | RetailerAdmin stacked history and actions |
 | A07-choose-open · Choose a platform · open | [321:6382](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=321-6382) | 1440 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
 | A07-choose-open · Choose a platform · open | [321:6410](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=321-6410) | 375 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
 
@@ -79,13 +79,13 @@ The original 38 frame IDs are retained. All 94 distinct node IDs named in the re
 | 11 | #1003 says Unpaid order cancelled, shows $205.00, and explains that the next checkout re-checks price and stock. |
 | 12 | The four flagged disabled buttons use ink on the existing light background, with opacity 1. Shopper label contrast is 15.31:1; admin is 16.12:1. |
 | 13 | All ten flagged mobile admin buttons and their action rows are 305px wide. |
-| 14–15 | S04 shows the five-minute duration and says the window starts at this store’s checkout, with no pre-Continue countdown. S06b uses the same panel treatment for TIME LEFT / 03:42; its page heading is YOUR CART, leaving one not-completed notice. |
-| 16 | A07-choose is a closed select with chevron. A07-choose-open shows its option list. Only Shopify, WooCommerce and BigCommerce appear. The old Other text is hidden, with its node ID retained. |
+| 14–15 | S04 shows the five-minute duration and says the window starts at this store’s checkout, with no pre-Continue countdown. S06b uses the same panel treatment for TIME LEFT / 03:42; its page heading is STORE CHECKOUT, leaving one not-completed notice. |
+| 16 | A07-choose is a closed select with chevron. A07-choose-open shows its option list. Only Shopify, WooCommerce and BigCommerce appear. The old Other text is hidden only in the original frames to retain its node IDs. It is deleted from the new open-select frames. |
 | 17 | Each credential form identifies its own platform admin as the source and Rig admin as the place to type the values. All credential fields remain blank. |
 | 18a | S03-empty adds empty cart at both widths. |
-| 18b | S05c adds an unavailable-after-recheck line with active Back order / Leave actions on that line; checkout remains disabled pending that choice. |
+| 18b | S05c adds an unavailable-after-recheck line with active Back order / Remove item actions on that line; checkout remains disabled pending that choice. |
 | 18c | S05d adds a recheck with no changes, retaining the original price and delivery. |
-| 18d | S06c and A08-late add the shopper return and admin row for payment received after the window. The order proceeds at its original held total of $205.00. |
+| 18d | S06c and A08-late add the shopper return and admin row for payment received after the window. The order proceeds at its original original total of $205.00. |
 | 18e | S04-error adds a store-checkout-unavailable hand-off state with Try again / Back to cart. It says the five-minute window has not started. |
 | 18f | Existing S05a now explicitly says the unpaid store order was cancelled before rechecking. |
 | 19 | Primitive section `289:13940` is resized to contain all seven source primitives, including `289:13949`, `289:13953` and `289:13957`. |
@@ -102,7 +102,7 @@ Credential instructions: “Get this store’s credentials from its Shopify admi
 
 Expired unpaid order (S05a): “The unpaid store order was cancelled. We’re checking current prices and stock before checkout can continue.”
 
-Late payment (S06c): “This store received your payment after the 5-minute window ended. Your order is going through. Your lens pouch remains back ordered.”
+Late payment (S06c): “{STORE NAME} received your payment after the 5-minute window ended. Your order is going through. Your lens pouch remains back ordered.”
 
 Hand-off failure (S04-error): “We could not open this store’s checkout. You can try again or return to your cart.” Follow-up: “Prices and stock will be checked again before the next checkout. The 5-minute window has not started.”
 
@@ -119,16 +119,15 @@ Empty, unavailable-line and unchanged-recheck copy in the linked frames is also 
 | CT-01, CS-02, LP-03 | Those products’ SKU slots. |
 | $120.00, $125.00 | Original and rechecked first-line unit-price slots. |
 | $25.00, $35.00 | Second- and third-line unit-price slots. |
-| $120.00, $125.00, $50.00, $35.00 | Computed line-total slots: quantity × held unit price. |
+| $120.00, $125.00, $50.00, $35.00 | Computed line-total slots: quantity × original unit price. |
 | $120.00 | Single-item cart-total slot in the added state. |
-| $205.00, $210.00 | Original/rechecked cart totals and unpaid/paid order-amount slots. |
+| $35.00, $205.00, $210.00 | Illustrative order-amount slots. #1004 uses $35.00; #1005 uses $205.00. Cart totals remain $205.00 original / $210.00 rechecked. |
 | Quantity 1, 2, 1 | Editable quantity slots for the three cart lines; the single-item state also uses 1. |
 | “3 lines · 4 items” | Computed count slots, not fixed copy for every cart. |
 | 2–3 business days | Store-stock minimum/maximum delivery slots; A09’s numeric fields show 2 and 3. |
 | 7–10 business days | Per-line longer-delivery slots from the Locate offer; no admin setting is proposed for this. |
 | #1001, #1002, #1003, #1004, #1005 | Order-number slots, not real orders. |
 | 03:42 / “03:42 left” | Remaining-time slot, shown after checkout starts. |
-| 00:00 | Expired-timer slot in the cancelled admin order. |
 
 The five-minute payment window is a product rule, not an editable illustrative setting. Shopify, WooCommerce and BigCommerce are platform choices, not sample stores. Blank credential fields are not example values.
 
@@ -174,3 +173,65 @@ git status --short --branch
 ```
 
 Main refreshes were clean; the intermediate merge push succeeded at `79317ef9`. Final command results are reported in the task. Scripts and audit JSON under `.git/rig-design/` are untracked orchestration, not repository deliverables. No runtime tests were required for this Figma/register-only revision. Claude opens the PR; founder approval and merge are still outstanding.
+
+## Round-2 re-check — all nine items
+
+| Item | Final change |
+| --- | --- |
+| 1 | The S05c tripod line has “No longer available. Back order it or remove it.” directly after its price, in the existing notice emphasis. The pouch keeps its distinct back-order status. The four specified S05c/S01c line buttons say Remove item; related instructions agree. |
+| 2 | Deleted the two hidden full carts, two hidden changed-price messages, two hidden Other options, and six hidden subtitles/headings from the new frames, including their child layers. No hidden stale layers remain in the 14 new frames. Original hidden layers below are not for build. |
+| 3 | Every A08/A08-late row’s third line starts with its amount. #1002 is $205.00; #1004 is $35.00; #1005 is $205.00. #1003’s bare timer is replaced with Payment window ended. These amounts are illustrative slots. |
+| 4 | All twelve chosen-platform fields in credential/testing/connected/failed frames are closed selects with the same chevron and input treatment as the two original choose fields. The existing open-select option list remains. |
+| 5 | S06b and S04-error use STORE CHECKOUT, because these states do not display the cart. |
+| 6 | Both paid-order notices use {STORE NAME}. The late-payment notice begins “{STORE NAME} received your payment after the 5-minute window ended.” |
+| 7 | The register refers to original total and original unit price. No wording implies that Rig holds a card or takes payment. |
+| 8 | All ten remaining summary buttons are exactly the bordered panel’s inner content width: 278px desktop / 301px mobile. The two stale empty-cart summary buttons were deleted with the hidden carts. Left and right insets now match. |
+| 9 | A09 helper copy is “Minimum and maximum business days for this store’s own stock. Items sourced from another supplier show that supplier’s longer delivery time.” The internal name is absent from the retailer-visible copy. |
+
+### Original hidden layers — not for build
+
+These 22 original text layers are kept solely for ID continuity. They are excluded from visible layouts and must not be implemented as UI. Deleted layers from new frames are not build references.
+
+| Node ID | Historical layer | Build status |
+| --- | --- | --- |
+| [291:8061](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8061) | Shop platform · not connected | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8068](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8068) | Shopify · WooCommerce · BigCommerce · Other | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8083](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8083) | Shop platform · not connected | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8090](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8090) | Shopify · WooCommerce · BigCommerce · Other | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8105](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8105) | Shopify · enter credentials | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8132](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8132) | Shopify · enter credentials | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8159](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8159) | WooCommerce · enter credentials | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8190](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8190) | WooCommerce · enter credentials | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8221](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8221) | BigCommerce · enter credentials | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8248](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8248) | BigCommerce · enter credentials | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8275](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8275) | Shop platform · testing | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8296](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8296) | Shop platform · testing | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8317](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8317) | Shop platform · connected | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8341](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8341) | Shop platform · connected | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8365](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8365) | Shop platform · connection failed | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8389](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8389) | Shop platform · connection failed | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8413](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8413) | Orders | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8415](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8415) | Orders | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8452](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8452) | Store delivery time | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8472](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8472) | Orders | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8474](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8474) | Orders | **Not for build** — hidden solely to preserve an original ID. |
+| [291:8511](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8511) | Store delivery time | **Not for build** — hidden solely to preserve an original ID. |
+
+Round-2 verification: 52 frame IDs retained; all 94 round-1 review IDs still resolve; no hidden nodes remain in new frames; no horizontal text overflow; ten summary button widths equal their 278/301px content widths; fourteen closed platform selects plus the two open-select states. Screenshots of S05c mobile, Shopify credentials mobile, A08 mobile and S04-error mobile were inspected after the edits. No runtime code or founder live-store acceptance test is claimed.
+
+Exact final commands for this re-check:
+
+```sh
+git status --short --branch
+git diff --check
+git add docs/figma/RIG-CART-FRAMES.md
+git commit -m 'docs(figma): record round-two cart design corrections'
+git fetch origin main && git merge origin/main && git push origin codex/rig-cart-figma
+git diff --check origin/main...HEAD
+git diff --name-only origin/main...HEAD
+git status --short --branch
+git rev-parse HEAD
+git rev-parse origin/codex/rig-cart-figma
+```
+
+The page remains Proposed, not approved. Founder approval and merge are outstanding.
