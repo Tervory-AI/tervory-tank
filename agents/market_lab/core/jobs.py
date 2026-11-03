@@ -229,17 +229,11 @@ async def perform_opportunities(
         )
     else:
         writeup = "No product gap this month."
-    await _call(
-        ledger.save_report,
-        {
-            "id": str(uuid.uuid4()),
-            "tenant_id": tenant_id,
-            "made_at": clock,
-            "question": "Where is demand outrunning supply?",
-            "answer": writeup,
-            "citations": [],
-        },
-    )
+    from core.briefs import save as save_brief
+    await save_brief(ledger, {
+        "id": str(uuid.uuid4()), "tenant_id": tenant_id, "made_at": clock,
+        "question": "Where is demand outrunning supply?", "answer": writeup, "citations": [],
+    }, now=clock)
     if memory is not None:
         await memory.remember(tenant_id, writeup, "report", "schedule:opportunities")
     return {
