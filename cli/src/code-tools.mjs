@@ -41,7 +41,7 @@ export async function processOutput(command, args, { cwd, gitDirectory, gitWorkT
     if (signal?.aborted) return reject(refused());
     try {
       child = spawn(command, args, { cwd, shell: false, detached: process.platform !== 'win32', windowsHide: true,
-        env: { PATH: process.env.PATH, LANG: 'C.UTF-8', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_LITERAL_PATHSPECS: '1',
+        env: { PATH: process.env.PATH, ...(process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot } : {}), LANG: 'C.UTF-8', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_LITERAL_PATHSPECS: '1',
           ...(temporaryDirectory ? { TMPDIR: temporaryDirectory } : {}),
           ...(gitDirectory ? { GIT_DIR: gitDirectory, GIT_WORK_TREE: gitWorkTree } : {}) },
         stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
@@ -311,6 +311,8 @@ export class CodeFolder {
     return { applied: true };
   }
   async prepareCommand(command) {
+    // No Windows backend here provides the filesystem/network confinement of bwrap.
+    if (process.platform === 'win32') throw refused();
     const match = /^(?:'([^']+)'|"([^"]+)"|([^\s;|&<>]+))(?=\s|$)/.exec(command);
     if (!match) return { command, mounts: [] };
     const executable = match[1] ?? match[2] ?? match[3];
