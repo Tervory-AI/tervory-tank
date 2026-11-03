@@ -2314,6 +2314,35 @@ BEGIN
 END
 $$;
 
+-- Trigger W1 provenance remains in the existing tenant-private tables.
+ALTER TABLE tank.trigger_writes ADD COLUMN IF NOT EXISTS format text;
+ALTER TABLE tank.trigger_writes ADD COLUMN IF NOT EXISTS accepted_write_ids uuid[] NOT NULL DEFAULT '{}';
+ALTER TABLE tank.trigger_writes ADD COLUMN IF NOT EXISTS write_context jsonb NOT NULL DEFAULT '{}';
+ALTER TABLE tank.trigger_writes ADD COLUMN IF NOT EXISTS parent_write_id uuid;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='tank.trigger_writes'::regclass AND conname='trigger_parent_tenant') THEN
+        ALTER TABLE tank.trigger_writes ADD CONSTRAINT trigger_parent_tenant FOREIGN KEY (tenant_id,parent_write_id) REFERENCES tank.trigger_writes(tenant_id,id);
+    END IF;
+    -- Match personal_tokens: follow an existing rollout, never enable legacy RLS.
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        ALTER TABLE tank.trigger_writes ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE tank.trigger_writes FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_writes'::regclass AND polname='tenant_access') THEN
+            CREATE POLICY tenant_access ON tank.trigger_writes FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_writes'::regclass AND polname='tenant_boundary') THEN
+            CREATE POLICY tenant_boundary ON tank.trigger_writes AS RESTRICTIVE FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+    END IF;
+END
+$$;
+CREATE INDEX IF NOT EXISTS trigger_writes_format_recent ON tank.trigger_writes(tenant_id,format,created_at DESC);
+
 -- MCP G1: reuse CLI credentials, with a distinct audience and public-client binding.
 ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS audience text NOT NULL DEFAULT 'cli'
     CHECK (audience IN ('cli','mcp'));
