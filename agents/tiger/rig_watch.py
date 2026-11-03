@@ -12,6 +12,7 @@ import logging
 import os
 import re
 from datetime import datetime
+from functools import lru_cache
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
@@ -370,31 +371,41 @@ _DISCOVERY_CHALLENGE_HINT = re.compile(
     r'security check|cf-error-details|sorry.{0,20}blocked|your request.{0,20}blocked', re.I)
 
 
-def discovery_robots_allows(body, url, token='tervorytiger'):
-    """Discovery-only RFC 9309 path/query matching; ordinary watches unchanged."""
-    from urllib.parse import urlsplit
+def _discovery_robot_normalize(value):
+    def unescape(match):
+        char = chr(int(match[1], 16))
+        return char if char.isascii() and (char.isalnum() or char in '-._~') else match[0].upper()
+    return re.sub(r'%([0-9a-fA-F]{2})', unescape, value)
+
+
+@lru_cache(maxsize=64)
+def _discovery_robot_rules(body, token):
+    # Public policy only. Parsing/compilation happens once, rather than once
+    # for every loc in a large sitemap. A changed body is a different key.
     from watch import _robot_groups, _rules_for
     groups = _robot_groups(body)
     rules = _rules_for(groups, token)
     if rules is None:
         rules = [rule for agents, group in groups if '*' in agents for rule in group]
-    def normalize(value):
-        def unescape(match):
-            char = chr(int(match[1], 16))
-            return char if char.isascii() and (char.isalnum() or char in '-._~') else match[0].upper()
-        return re.sub(r'%([0-9a-fA-F]{2})', unescape, value)
-    parsed = urlsplit(url)
-    target = normalize((parsed.path or '/') + ('?' + parsed.query if parsed.query else ''))
-    matched = []
+    compiled = []
     for kind, rule in rules:
         if not rule:
             continue
-        rule = normalize(rule)
+        rule = _discovery_robot_normalize(rule)
         end = rule.endswith('$')
         pattern = rule[:-1] if end else rule
-        if re.match('^' + '.*'.join(re.escape(part) for part in pattern.split('*')) + ('$' if end else ''), target):
-            matched.append((len(pattern.replace('*', '').encode()), kind == 'allow'))
-    return max(matched, default=(0, True))[1]
+        regex = re.compile('^' + '.*'.join(re.escape(part) for part in pattern.split('*')) + ('$' if end else ''))
+        compiled.append((regex, len(pattern.replace('*', '').encode()), kind == 'allow'))
+    return tuple(compiled)
+
+
+def discovery_robots_allows(body, url, token='tervorytiger'):
+    """Discovery-only RFC 9309 path/query matching; ordinary watches unchanged."""
+    from urllib.parse import urlsplit
+    parsed = urlsplit(url)
+    target = _discovery_robot_normalize((parsed.path or '/') + ('?' + parsed.query if parsed.query else ''))
+    return max(((length, allow) for regex, length, allow in _discovery_robot_rules(body, token)
+                if regex.match(target)), default=(0, True))[1]
 
 
 def discovery_same(site, url):
