@@ -87,7 +87,7 @@ General user launchers under `~/.local/bin` are refused, including pip-user
 pytest and uv Python links; use a dedicated venv or interpreter installation.
 The complete command and each read-only file/library path are shown before
 `Run [y/N]`. On Linux, intermediate interpreter symlinks are recreated in the
-empty sandbox; macOS allows only their selected executable targets. Their host
+empty sandbox; macOS allows only their selected executable targets and verified file aliases. Their host
 directories remain unavailable. Secret paths inside runtimes are hidden.
 `$HOME`, `~/.config`, `~/.ssh` and keychain directories are never mounted. Other
 host folders remain unavailable. Use a leading executable, rather than hiding
@@ -96,7 +96,7 @@ unsandboxed fallback. If Bubblewrap is unavailable or cannot create the sandbox,
 commands are refused. macOS probes its Seatbelt profile before executing a
 command and refuses a missing executable or invalid profile. Its temporary files
 stay inside the selected folder; system libraries and explicitly selected
-runtimes are read-only. Secret paths, home configuration, SSH and keychain paths
+runtimes are read-only. Secret paths, home configuration, SSH and keychain/keyring paths
 remain inaccessible and networking is denied. The CLI kills the command's process
 group when it exits, including background children. A child calling `setsid()`
 can still escape that process-group cleanup on macOS and remain alive inside
