@@ -7,6 +7,8 @@ first; a model opinion is never required for this gate. Actions per hour are cap
 from __future__ import annotations
 
 import ipaddress
+import os
+from pathlib import Path
 import re
 import time
 from collections import defaultdict
@@ -134,22 +136,33 @@ def may_block_ip(
 
 
 class ActionCap:
-    """Per-tenant actions-per-hour cap (in-process; Coolify restarts reset the window)."""
+    """Per-tenant sliding hour; production uses the box's locked durable state."""
 
-    def __init__(self, limit: int = DEFAULT_ACTIONS_PER_HOUR, *, clock=time.time):
+    def __init__(self, limit: int = DEFAULT_ACTIONS_PER_HOUR, *, clock=time.time, data_dir=None):
         if limit < 1:
             raise ValueError("Action cap must be at least 1.")
+        root = data_dir or os.environ.get("DATA_DIR")
+        self._path = Path(root) / "action-cap.json" if root else None
         self.limit = limit
         self._clock = clock
         self._hits: dict[str, list[float]] = defaultdict(list)
 
     def allow(self, tenant_id: str) -> tuple[bool, str]:
+        if self._path is not None:
+            from .durable_state import locked_state
+            try:
+                with locked_state(self._path) as state:
+                    return self._allow(tenant_id, state)
+            except (OSError, ValueError, TypeError):
+                # Corrupt/unwritable state never resets a safety budget.
+                return False, f"actions-per-hour cap ({self.limit}) reached"
+        return self._allow(tenant_id, self._hits)
+
+    def _allow(self, tenant_id: str, state: dict) -> tuple[bool, str]:
         now = self._clock()
-        window_start = now - 3600
-        hits = [t for t in self._hits[tenant_id] if t >= window_start]
-        self._hits[tenant_id] = hits
+        hits = [t for t in state.get(tenant_id, []) if t >= now - 3600]
+        state[tenant_id] = hits
         if len(hits) >= self.limit:
             return False, f"actions-per-hour cap ({self.limit}) reached"
         hits.append(now)
-        self._hits[tenant_id] = hits
         return True, "ok"

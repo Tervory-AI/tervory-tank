@@ -46,7 +46,8 @@ def gateway(monkeypatch):
     monkeypatch.setenv("TANK_KEY_BASE", "base-test")
     monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder-test")
     monkeypatch.setenv("TANK_REGION", "us-east")
-    monkeypatch.setattr(tank.app.state, "ghost_recovery_backend", None, raising=False)
+    # Starlette State.__delattr__ raises KeyError if a test already removed it.
+    monkeypatch.setitem(tank.app.state._state, "ghost_recovery_backend", None)
     return conn
 
 

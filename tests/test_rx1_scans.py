@@ -100,9 +100,10 @@ def test_skill_engines_match_the_radix_scanners() -> None:
         ("scan.secrets", "secrets.py"),
         ("scan.dependencies", "dependencies.py"),
         ("scan.static", "static.py"),
+        ("scan.iac", "iac.py"),
     )
     # scan.dependencies 1.1.0 (candidate) carries the real-OSV engine; 1.0.0 and 1.0.1 stay as released.
-    latest = {"scan.secrets": "1.0.0", "scan.dependencies": "1.1.0", "scan.static": "1.0.0"}
+    latest = {"scan.secrets": "1.0.0", "scan.dependencies": "1.1.0", "scan.static": "1.0.0", "scan.iac": "1.0.0"}
     for skill, name in pairs:
         engine = ROOT / "tank" / "skills" / skill / latest[skill] / "engine.py"
         source = ROOT / "agents" / "radix" / "scanlib" / name
@@ -120,6 +121,9 @@ def test_image_pins_scanners_and_does_not_scan_over_the_network() -> None:
     assert "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb" in text
     assert "SEMGREP_VERSION=1.182.1" in text
     assert "PIP_AUDIT_VERSION=2.10.1" in text
+    assert "CHECKOV_VERSION=3.3.21" in text
+    assert '"checkov==${CHECKOV_VERSION}"' in text
+    assert "CHECKOV_BIN=/opt/checkov/bin/checkov" in text
     assert "RADIX_USE_SYSTEM_TOOLS=1" in text
     assert "RADIX_OSV_DIR=/opt/osv" in text
     assert "CMD [" in text

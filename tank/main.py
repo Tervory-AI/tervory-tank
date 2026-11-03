@@ -3274,11 +3274,12 @@ class EvalRun(BaseModel):
 
 
 async def run_room_eval(pkg: skala.SkillPackage, payload: dict[str, Any], ctx: skala.SkillContext) -> dict[str, Any]:
-    key = os.environ.get("TANK_KEY_TISAN", "")
-    if pkg.id not in {"tisan.figma", "tisan.scaffold", "tisan.build"} or not key or _http is None:
+    room = "radix" if pkg.id == "scan.iac" else "tisan"
+    key = os.environ.get(f"TANK_KEY_{room.upper()}", "")
+    if pkg.id not in {"tisan.figma", "tisan.scaffold", "tisan.build", "scan.iac"} or not key or _http is None:
         raise RuntimeError("eval room is unavailable")
     response = await _http.post(
-        "http://agent-tisan:8000/evals/run",
+        f"http://agent-{room}:8000/evals/run",
         headers={"X-Tank-Key": key},
         json={"skill_id": pkg.id, "version": pkg.version, "tenant_id": str(ctx.tenant_id), "input": payload},
         timeout=660,
@@ -3302,7 +3303,7 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
         pkg, lambda: __import__("skala_revalidation").eval_context(
             __import__("sys").modules[__name__], pkg,
             make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here)),
-        execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold", "tisan.build"} else None,
+        execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold", "tisan.build", "scan.iac"} else None,
     )
     if __import__("skala_revalidation").ACTIVE.get() is not None:
         return await __import__("skala_revalidation").record(
@@ -4205,6 +4206,7 @@ app.include_router(__import__("agent_skills").build_router(__import__("sys").mod
 app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_lists").build_router())
 app.include_router(__import__("tiger_alerts").build_router())
+app.include_router(__import__("tisan_requests").build_router())
 app.include_router(__import__("base_audit_commands").build_router())
 app.include_router(__import__("rig_brain_routes").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("moa").router)
