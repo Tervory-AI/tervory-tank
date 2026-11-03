@@ -168,10 +168,10 @@ class Google:
                     locations.append({'location': name + '/' + row['name'], 'title': row.get('title')})
         return locations
 
-    async def pages(self, tenant, url, field, params=None):
+    async def pages(self, tenant, url, field, params=None, *, conn=None):
         rows, page = [], None
         for _ in range(100):
-            data = await self.request(tenant, 'GET', url, params={**(params or {}), **({'pageToken': page} if page else {})})
+            data = await self.request(tenant, 'GET', url, conn=conn, params={**(params or {}), **({'pageToken': page} if page else {})})
             batch = data.get(field, [])
             if not isinstance(batch, list):
                 raise GoogleFailure(502)
