@@ -1,0 +1,175 @@
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [ 15%]
+................................................................F.F..... [ 30%]
+.....................................F..................F.F.F........... [ 46%]
+........................................................................ [ 61%]
+........................................................................ [ 77%]
+........................................................................ [ 92%]
+.................................                                        [100%]
+=================================== FAILURES ===================================
+____ test_room_migration_and_nonowner_tank_admin_after_role_ownership[True] ____
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+tests/test_tiger_competitors.py:756: in test_room_migration_and_nonowner_tank_admin_after_role_ownership
+    await conn.execute('DROP ROLE '+role)
+/usr/local/lib/python3.12/site-packages/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+asyncpg/protocol/protocol.pyx:375: in query
+    ???
+E   asyncpg.exceptions.DependentObjectsStillExistError: role "agent_tiger" cannot be dropped because some objects depend on it
+E   DETAIL:  4 objects in database tiger_g5_test_821aa6dcc25b42fe8a7e6f8ee0d296a1
+___ test_room_migration_and_nonowner_tank_admin_after_role_ownership[False] ____
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+tests/test_tiger_competitors.py:705: in test_room_migration_and_nonowner_tank_admin_after_role_ownership
+    await conn.execute('CREATE ROLE agent_tiger NOLOGIN NOSUPERUSER NOBYPASSRLS')
+/usr/local/lib/python3.12/site-packages/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+asyncpg/protocol/protocol.pyx:375: in query
+    ???
+E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists
+__________ test_pdf_block_records_url_and_prevents_a_second_download ___________
+[gw1] linux -- Python 3.12.16 /repo/.venv/bin/python
+tests/test_tiger_public_policy.py:123: in test_pdf_block_records_url_and_prevents_a_second_download
+    first = await visitor.visit("https://store.example/price.pdf", task=task, run=run)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_agent1_browser.py:95: in visit
+    return await browser.visit(browser.Page(url=url), owner, identifier, browser.site_origin(url), run=run)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agents/_brain/browser.py:361: in visit
+    result = await _visit(body, tenant, task, origin, run, directory)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agents/_brain/browser.py:584: in _visit
+    raise HTTPException(503, "The browser could not read this page; no result is claimed.") from None
+E   fastapi.exceptions.HTTPException: 503: The browser could not read this page; no result is claimed.
+_____ test_room_schema_concurrently_repeats_without_catalog_writes[False] ______
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+tests/test_tiger_competitors.py:959: in test_room_schema_concurrently_repeats_without_catalog_writes
+    await conn.execute('CREATE ROLE agent_tiger NOLOGIN NOSUPERUSER NOBYPASSRLS')
+/usr/local/lib/python3.12/site-packages/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+asyncpg/protocol/protocol.pyx:375: in query
+    ???
+E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists
+______ test_room_schema_concurrently_repeats_without_catalog_writes[True] ______
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+tests/test_tiger_competitors.py:959: in test_room_schema_concurrently_repeats_without_catalog_writes
+    await conn.execute('CREATE ROLE agent_tiger NOLOGIN NOSUPERUSER NOBYPASSRLS')
+/usr/local/lib/python3.12/site-packages/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+asyncpg/protocol/protocol.pyx:375: in query
+    ???
+E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists
+____________ test_room_schema_repairs_only_missing_table_privileges ____________
+[gw0] linux -- Python 3.12.16 /repo/.venv/bin/python
+tests/test_tiger_competitors.py:995: in test_room_schema_repairs_only_missing_table_privileges
+    await conn.execute('CREATE ROLE agent_tiger NOLOGIN NOSUPERUSER NOBYPASSRLS')
+/usr/local/lib/python3.12/site-packages/asyncpg/connection.py:349: in execute
+    result = await self._protocol.query(query, timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+asyncpg/protocol/protocol.pyx:375: in query
+    ???
+E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists
+=============================== warnings summary ===============================
+../usr/local/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../usr/local/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /usr/local/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../usr/local/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../usr/local/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /usr/local/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../usr/local/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../usr/local/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /usr/local/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/test_tiger_alerts_read.py::test_kind_filter_and_one_tiger_zero_receipt[memory-new_product]
+tests/test_tiger_alerts_read.py::test_all_five_saved_kinds_and_data_only_counts[memory]
+  /repo/tank/main.py:754: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/test_tiger_alerts_read.py: 10 warnings
+  /usr/local/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_tiger_alerts_read.py::test_kind_filter_and_one_tiger_zero_receipt[memory-new_product]
+tests/test_tiger_alerts_read.py::test_all_five_saved_kinds_and_data_only_counts[memory]
+  /repo/tank/main.py:814: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tests/test_tiger_alerts_read.py::test_kind_filter_and_one_tiger_zero_receipt[memory-new_product]
+tests/test_tiger_alerts_read.py::test_all_five_saved_kinds_and_data_only_counts[memory]
+  /repo/tank/agent_skills.py:531: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_tiger_alerts_read.py::test_kind_filter_and_one_tiger_zero_receipt[memory-new_product]
+tests/test_tiger_alerts_read.py::test_all_five_saved_kinds_and_data_only_counts[memory]
+  /repo/tank/skala_intake.py:71: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/test_tiger_alerts_read.py::test_kind_filter_and_one_tiger_zero_receipt[memory-new_product]
+tests/test_tiger_alerts_read.py::test_all_five_saved_kinds_and_data_only_counts[memory]
+  /repo/tank/skala_intake.py:77: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tests/test_tiger_alerts_read.py::test_kind_filter_and_one_tiger_zero_receipt[memory-new_product]
+tests/test_tiger_alerts_read.py::test_all_five_saved_kinds_and_data_only_counts[memory]
+  /repo/tank/skala_revalidation.py:192: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/test_command.py::test_moa_seat_requires_override_and_loads_parent_policy[command.turn#moa.seat_1]
+tests/test_command.py::test_route_seat_is_durable_in_every_ledger_insert[rig.ask#moa.writer-fixture-pin-writer-delivered]
+  /usr/local/lib/python3.12/site-packages/qdrant_client/async_qdrant_remote.py:236: UserWarning: Failed to obtain server version. Unable to check client-server compatibility. Set check_compatibility=False to skip version check.
+    show_warning(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_tiger_competitors.py::test_room_migration_and_nonowner_tank_admin_after_role_ownership[True]
+FAILED tests/test_tiger_competitors.py::test_room_migration_and_nonowner_tank_admin_after_role_ownership[False]
+FAILED tests/test_tiger_public_policy.py::test_pdf_block_records_url_and_prevents_a_second_download
+FAILED tests/test_tiger_competitors.py::test_room_schema_concurrently_repeats_without_catalog_writes[False]
+FAILED tests/test_tiger_competitors.py::test_room_schema_concurrently_repeats_without_catalog_writes[True]
+FAILED tests/test_tiger_competitors.py::test_room_schema_repairs_only_missing_table_privileges
+6 failed, 459 passed, 30 warnings in 391.27s (0:06:31)
