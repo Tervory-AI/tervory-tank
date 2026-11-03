@@ -190,3 +190,74 @@ flow, and supply browser screenshots and command receipts with values concealed.
 No founder screenshot, live health result or live isolation result exists from
 this builder run. Final-head Tank and Workspace PR CI results are also pending
 Claude opening the PR. Neither offline tests nor this document claim DONE.
+
+## Security revision — partial fixes, blocked before gate 2
+
+This section supersedes the initial gate 1 handoff. No merge or main update was
+performed. Security revision source/test head before this evidence update:
+`60635d38` on `codex/autumbra-w3`.
+
+- `tank/ghost_routes.py:144`: create and destroy now resolve Command identity,
+  require their founder tool and the bound confirmed card before any room call.
+  Non-success outcomes return 409 with the review's exact reconciliation text;
+  successful outcomes add a $0 code receipt.
+- `agents/ghost/enforce_lifecycle.py:159`, `:301`, `:350`, `:369`, `:384`, `:394`:
+  retain volumes; match complete resource names; create a tenant provenance
+  marker; distinguish refused POST from created-but-unconfigured PATCH; require
+  all source/provenance fields before deletion.
+- `agents/ghost/app.py:1266`: list returns only names, UUIDs and status; missing
+  configuration uses the requested message.
+- `tank/command.py:1846`: check recognized tool names before authorization and
+  use the review's usage error.
+- `agents/ghost/docker-compose.yml:33`: lifecycle mappings removed from Watch;
+  browser also receives none. This removes the unsafe write-token mapping
+  without pretending a working isolated replacement exists.
+- `.env.example:534`: setting names reserved for the isolated service only,
+  read/write without deploy or sensitive-read permissions.
+- `tests/test_autumbra_coolify_lifecycle.py:1`: Confirm bypass returns 409;
+  correctly bound card succeeds; tenant admins are refused; retained volumes,
+  missing/foreign provenance, definite POST/PATCH refusals, unknown outcomes,
+  redirects and actual confirmed-dispatch routing are tested. Watch's six-name
+  credential seal is asserted against its real compose file.
+- `docs/ops/AUTUMBRA-ENFORCE-LIFECYCLE.md:3`: operational blocker, permission
+  sources, retained-volume instructions and created-unconfigured recovery.
+
+Commands and results for this revision:
+
+```sh
+PYTHONPATH=/workspace/codex-autumbra-w3/.test-deps /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q tests/test_autumbra_coolify_lifecycle.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --basetemp=/workspace/codex-autumbra-w3/.pytest-focused --tb=short
+```
+
+Intermediate regression before the final seal/provenance/dispatch cases:
+**25 passed, 4 warnings in 3.76s**.
+
+```sh
+PYTHONPATH=/workspace/codex-autumbra-w3/.test-deps /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q tests/test_autumbra_coolify_lifecycle.py tests/test_autumbra_lifecycle_fixture.py tests/test_autumbra_tenant_isolation_routes.py tests/test_ghost_routes.py tests/tisan_promotion --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --basetemp=/workspace/codex-autumbra-w3/.pytest-focused --tb=short
+/home/ammosync/trigger-crm-venv312/bin/ruff check agents/ghost/enforce_lifecycle.py agents/ghost/app.py tank/ghost_routes.py tank/command.py tests/test_autumbra_coolify_lifecycle.py --select E9,F
+git diff --check
+```
+
+**82 passed, 3 skipped, 15 warnings in 25.18s; Ruff passed; diff check passed.**
+No live network, Coolify resource, setting value, database or model was used.
+
+Exact missing prerequisites and unfinished work:
+
+1. **Gate 1, review items 6/9/10:** the installed Coolify version's API contract
+   proving the requested application DELETE works with read/write **without
+   deploy**. The current public DELETE reference requires deploy. The installed
+   version is absent from the repository's operations documentation and no
+   Coolify connector is available. The isolated service, its Tank corridor and
+   internal API reachability are not implemented. Only the unsafe Watch
+   mappings have been removed. Do not configure or deploy this branch.
+2. **Gate 2:** not started, because the requested preceding gate 1 security
+   revision is blocked.
+3. **Gate 3:** read-only prerequisite inspection found the brief's explicit
+   stop condition. `hermes/records.py:448` selects and deletes only client-tier
+   records. `hermes/service.py:223` delegates `/memories/{memory_id}` to that
+   method, then falls back to vector deletion; it does not delete a published
+   platform-tier SQL record. `hermes/record_routes.py` has no platform-record
+   DELETE endpoint. Missing: an existing authenticated, tenant/source-bound
+   platform-record withdrawal path. No sharing or standing-block pipeline was
+   added, and Hermes was not changed outside this brief.
+
+No founder browser acceptance or final-head Tank/Workspace CI result is claimed.
