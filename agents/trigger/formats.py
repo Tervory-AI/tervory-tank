@@ -61,8 +61,12 @@ def _x_urls(text: str):
     for match in _X_URL.finditer(text):
         host = match['host']
         try:
-            # IDNA rejects labels exceeding 63 encoded bytes, including Unicode.
-            encoded = host.encode('idna').decode('ascii')
+            # Match upstream's lightweight IDNA check: punycode each Unicode
+            # label without IDNA-2003 mappings (for example, mapping ß to ss).
+            encoded = '.'.join(label if label.isascii() else 'xn--' + label.encode('punycode').decode('ascii')
+                               for label in host.split('.'))
+            if any(len(label) > 63 for label in encoded.split('.')):
+                continue
         except UnicodeError:
             continue
         if any('_' in label for label in encoded.split('.')[-2:]):
