@@ -34,7 +34,7 @@ class Bot:
         if product_id and not re.fullmatch(r'[A-Za-z0-9._-]{1,64}', product_id):
             raise ValueError('product_id')
         path = '/v1/rig/products/' + product_id if product_id else '/v1/rig/search'
-        params = [('tenant_id', str(tenant))]
+        params = [('tenant_id', str(tenant)), ('source_record', '1')]
         if not product_id:
             params += [('q', question[:200]), ('limit', '50')]
         response = self.rt._rig_response(await self.rt._rig_call('GET', path, params, None, timeout=30), tenant)
@@ -51,6 +51,7 @@ class Bot:
     @staticmethod
     def product_page(row):
         # Copy only actual product facts. Never invent currency/price or a URL.
+        row = {**row, **row.get('source_record', {})}
         fields = {k: row[k] for k in ('id', 'sku', 'name', 'brand', 'description', 'price', 'currency', 'stock', 'availability', 'attributes') if k in row}
         return {'text': json.dumps(fields, ensure_ascii=False, default=str), 'url': row['url'],
                 'title': str(row.get('name') or row.get('sku') or row['id']),
@@ -166,6 +167,14 @@ class Bot:
         if claimed is None:
             return 'already_claimed'
         status = 'unconfigured'
+        if not recipient:
+            import os
+            try:
+                recipient = json.loads(os.environ.get('TRIGGER_BOT_HANDOVER_ADDRESSES', '{}')).get(str(tenant))
+            except (ValueError, AttributeError):
+                recipient = None
+        if recipient and not re.fullmatch(r'[^\s@,;\r\n]+@[^\s@,;\r\n]+\.[^\s@,;\r\n]+', recipient):
+            recipient = None
         sender = SmtpMailer.from_env()
         if sender is not None and recipient:
             try:
