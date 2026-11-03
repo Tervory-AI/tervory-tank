@@ -454,11 +454,12 @@ def test_queries_are_tenant_scoped_and_the_room_is_wired() -> None:
 
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     services = compose["services"]
-    for name in ("tank", "postgres", "hermes", "tiger"):
+    for name in ("tank", "postgres", "hermes"):
         assert "tervory-gw-tiger" in services[name]["networks"]
     for name in ("workspace", "redis", "qdrant", "litellm", "searxng", "agent-roles"):
         assert "tervory-gw-tiger" not in (services[name].get("networks") or [])
-    assert "tervory-gw-template" not in services["tiger"]["networks"]
+    assert "tiger" not in services
+    assert services["tank"]["environment"]["TIGER_URL"] == "http://tiger-ocr:3000"
     assert services["tank"]["environment"]["TANK_KEY_TIGER"] == "${TANK_KEY_TIGER:-}"
     assert services["hermes"]["environment"]["TANK_KEY_TIGER"] == "${TANK_KEY_TIGER:-}"
     assert "AGENT_DB_PASSWORD_TIGER" in services["agent-roles"]["environment"]
@@ -482,9 +483,10 @@ def test_queries_are_tenant_scoped_and_the_room_is_wired() -> None:
     assert "AGENT_DB_PASSWORD_TIGER=" in env
 
     script = (ROOT / "agents" / "check_isolation.sh").read_text(encoding="utf-8")
-    assert 'if [ "$host" = "tiger" ] && [ "$tiger_corridor" -eq 1 ]' in script
+    assert 'if [ "$host" = "tiger-ocr" ] && [ "$ocr_corridor" -eq 1 ]' in script
+    assert 'mark 0 "tiger resolves"' not in script
     assert '[ "$net" = "tervory-gw-tiger" ] && has_part "$short" tiger' in script
-    assert "for host in workspace redis qdrant litellm searxng tiger agent-other; do" in script
+    assert "for host in workspace redis qdrant litellm searxng tiger tiger-ocr agent-other; do" in script
 
     agent = _load("tiger_agent_app", ROOT / "agents" / "tiger" / "app.py")
     assert agent.app.state.agent == "tiger"
