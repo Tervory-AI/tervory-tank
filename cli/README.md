@@ -63,7 +63,13 @@ Secret-looking lines are redacted before any local result leaves the machine.
 Edits show their diff and require an explicit `y`; a file changed since its read
 cannot be edited. Commands show the full command and require an explicit `y`, run
 in the selected folder, time out after 120 seconds and retain at most 64 KB of
-output. Non-interactive sessions cannot apply edits or run commands.
+output. Non-interactive sessions cannot apply edits or run commands. Approved
+commands use the worker's existing Linux Bubblewrap (`bwrap`): only the selected
+folder is writable, secret paths and `.git` internals are hidden, the environment
+is restricted, and host folders and networking are unavailable. There is no
+unsandboxed fallback. If Bubblewrap is unavailable or cannot create the sandbox,
+commands are refused. This command runner is currently Linux-only; the other
+existing CLI commands retain their current platform support.
 
 **Storage:** the Command thread and `/chats` retain user requests, steps, receipts
 and tool names/sizes, without tool-result file contents or proposed patches.
