@@ -36,3 +36,22 @@ identity from server-side configuration, ignores body tenant claims, and retains
 only bounded receipt metadata and hashes of alert identifiers/types. Raw alert
 objects, email addresses, provider tokens and mailbox content are not stored.
 Alerts never become source-IP blocks by guessing an address from their contents.
+
+## M9 — health after every shield
+
+Per-client Enforce keeps the existing one-way observer and approved health
+proxy. `AUTUMBRA_HEALTH_URL` selects an HTTPS path on the already approved
+`SITE_NAME` host (currently the reviewed dogfood host `tervory.com`); it cannot
+introduce another host, port, credentials, query or fragment. This does not
+open arbitrary client egress. New hosts still require a reviewed proxy/zone
+allowlist change. Give this setting only to Enforce and its health observer.
+
+The observer makes a streaming HTTPS GET through `health-egress-proxy`, discards
+the body and cookies, follows no redirects and accepts only 2xx. It samples
+once per second and signs only site, URL, status, elapsed time, outcome and probe
+start time. Enforce requires a signed result whose GET started after the
+confirmed Cloudflare write, waits at most 30 seconds, and records that result
+as `health_probe`. Stale/missing/invalid results and all failed GETs trigger
+owned-rule Undo. There is no switch to disable this after live apply or approval.
+Fixture health booleans are never used by the Cloudflare adapter. Test transports
+remain offline; only the founder's later run establishes live health evidence.

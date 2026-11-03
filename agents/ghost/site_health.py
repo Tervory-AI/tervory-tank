@@ -7,6 +7,7 @@ import json
 import math
 import os
 import time
+from urllib.parse import urlsplit
 from pathlib import Path
 
 import httpx
@@ -21,9 +22,27 @@ def canonical(result: dict) -> bytes:
     return json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
 
+def health_url(site: str) -> str:
+    # Existing health egress approves this exact host; no caller-selected host.
+    if site not in HEALTH_URLS:
+        raise ValueError("Health host is not approved.")
+    url = os.environ.get("AUTUMBRA_HEALTH_URL", "").strip() or HEALTH_URLS[site]
+    parsed = urlsplit(url)
+    if (parsed.scheme != "https" or parsed.hostname != site
+            or parsed.port not in {None, 443} or parsed.username or parsed.password
+            or parsed.query or parsed.fragment or len(url) > 1000
+            or any(ord(c) < 33 for c in url)):
+        raise ValueError("Health URL must use the client's approved HTTPS host.")
+    return url
+
+
 def observer_site() -> str | None:
     site = os.environ.get("SITE_NAME", "").strip()
-    return site if site in HEALTH_URLS else None
+    try:
+        health_url(site)
+    except ValueError:
+        return None
+    return site
 
 
 def health_configured(site: str | None = None) -> bool:
@@ -48,7 +67,7 @@ def _read_result(site: str) -> dict | None:
             return None
         age = time.time() - result["checked_at"]
         if (set(result) != {"site", "url", "ok", "status", "ms", "checked_at"}
-                or result["site"] != site or result["url"] != HEALTH_URLS[site]
+                or result["site"] != site or result["url"] != health_url(site)
                 or type(result["ok"]) is not bool
                 or not math.isfinite(result["ms"]) or result["ms"] < 0
                 or not 0 <= age <= 30):
@@ -70,7 +89,7 @@ def read_health(site: str, *, after: float | None = None, wait_seconds: float = 
         result = _read_result(site)
         if result is not None and (after is None or result["checked_at"] > after):
             return (result["ok"] is True and type(result["status"]) is int
-                    and 200 <= result["status"] < 400)
+                    and 200 <= result["status"] < 300)
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             return False
@@ -78,7 +97,7 @@ def read_health(site: str, *, after: float | None = None, wait_seconds: float = 
 
 
 def observe_once(client: httpx.Client, site: str) -> dict:
-    url = HEALTH_URLS[site]
+    url = health_url(site)
     started = time.monotonic()
     checked_at = time.time()
     status = None
@@ -91,7 +110,7 @@ def observe_once(client: httpx.Client, site: str) -> dict:
         pass
     finally:
         client.cookies.clear()
-    return {"site": site, "url": url, "ok": status is not None and 200 <= status < 400,
+    return {"site": site, "url": url, "ok": status is not None and 200 <= status < 300,
             "status": status, "ms": round((time.monotonic() - started) * 1000, 3),
             "checked_at": checked_at}
 
@@ -115,7 +134,7 @@ def main() -> None:
             temporary = path.with_suffix(".tmp")
             temporary.write_text(json.dumps({"result": result, "signature": signature}))
             temporary.replace(path)
-            time.sleep(15)
+            time.sleep(1)
 
 
 if __name__ == "__main__":
