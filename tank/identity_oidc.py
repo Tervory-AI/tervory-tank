@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 import httpx
 import jwt
 
-ISSUER = 'https://auth.za.tervory.com'
+ISSUER = 'https://auth-za.tervory.com'
 ORG_CLAIM = 'urn:zitadel:iam:user:resourceowner:id'
 # Zitadel defines this reserved claim as roles for the requesting application's
 # own project. Never combine it with project-specific claims from other projects.
@@ -43,7 +43,7 @@ def endpoint(value: str) -> str:
     if not isinstance(value, str):
         raise IdentityError('Identity endpoint refused')
     parsed = urlsplit(value)
-    if (parsed.scheme != 'https' or parsed.netloc != 'auth.za.tervory.com'
+    if (parsed.scheme != 'https' or parsed.netloc != 'auth-za.tervory.com'
             or parsed.username or parsed.password or parsed.fragment):
         raise IdentityError('Identity endpoint refused')
     return value
