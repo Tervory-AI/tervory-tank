@@ -1205,7 +1205,7 @@ class PolicyArgs(Body):
 
 
 class PolicyFallbackArgs(PolicyArgs):
-    fallbacks: list[str] | None = Field(default=None, max_length=7)
+    fallbacks: list[str] | None = Field(max_length=7)
 
 
 async def policy_code_plan(actor: Actor, messages: list[dict], task_id: uuid.UUID | None):
@@ -1426,6 +1426,8 @@ def validate_action(action: PlannedAction, actor: Actor) -> PlannedAction:
         ):
             raise HTTPException(422, "invalid artifact") from None
         raise HTTPException(422, "The action arguments are invalid") from None
+    if action.tool == "tank.policy.fallbacks" and "fallbacks" not in args:
+        args["fallbacks"] = None  # An explicit reset must remain visible before Confirm.
     return PlannedAction(tool=action.tool, arguments=args)
 
 
