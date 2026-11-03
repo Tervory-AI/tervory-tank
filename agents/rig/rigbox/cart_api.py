@@ -76,20 +76,33 @@ async def shopper_cart(operation: str, request: Request):
         return await failure(request, exc)
 
 
+async def commerce_operation(service, tenant, operation, data):
+    if operation == 'connect':
+        return await service.connect(tenant, data)
+    if operation == 'orders' and not data:
+        from rigbox.cart import public_checkout, public_line
+        return {'orders': [{**public_checkout(row), 'lines': [public_line(x) for x in row['lines']]}
+                           for row in await service.rows.checkouts(tenant)]}
+    if operation == 'store-delivery':
+        if set(data) != {'min_days', 'max_days'} or any(
+                type(data[key]) is not int or not 0 <= data[key] <= 60 for key in data):
+            raise CommerceError('delivery')
+        if data['min_days'] > data['max_days']:
+            raise CommerceError('delivery')
+        async with service.rows.lock(tenant, 'connect'):
+            config = await service.store.commerce_config(tenant)
+            await service.store.save_commerce_config(tenant, {**config, 'delivery': dict(data)})
+        return {'saved': True}
+    raise CommerceError('invalid')
+
+
 @router.post('/admin/commerce/{operation}')
 async def admin_commerce(operation: str, request: Request):
     await _admin(request)
     try:
         service, tenant = cart(request), _tenant(request)
         data = await body(request)
-        if operation == 'connect':
-            result = await service.connect(tenant, data)
-        elif operation == 'orders' and not data:
-            from rigbox.cart import public_checkout, public_line
-            result = {'orders': [{**public_checkout(row), 'lines': [public_line(x) for x in row['lines']]}
-                                 for row in await service.rows.checkouts(tenant)]}
-        else:
-            raise CommerceError('invalid')
+        result = await commerce_operation(service, tenant, operation, data)
         return JSONResponse(result, headers={'Cache-Control': 'no-store'})
     except CommerceError as exc:
         return await failure(request, exc)
