@@ -1,6 +1,6 @@
 """Rig's own Locate fulfilment: orders and supplier purchase orders in Rig's Postgres.
 
-Tervory no longer uses Odoo, so a paid Locate Accept is recorded here, not in
+Tervory no longer uses Odoo, so a store-confirmed accepted quote is recorded here, not in
 an ERP. One accepted quote makes exactly one row in agent_rig.locate_orders
 (what the shopper bought, at the held price) and one draft row in
 agent_rig.supplier_purchase_orders (what the store buys from the approved
@@ -50,7 +50,7 @@ _CURRENCY = re.compile(r"[A-Z]{3}")
 
 
 class Fulfilment(Protocol):
-    """What QuoteService.locate_accept needs after a captured payment."""
+    """Order placement after the store confirms receiving its own payment."""
 
     async def place_located_order(self, *, tenant_id: str, quote_id: str, located: dict[str, Any],
                                   price: dict[str, Any], ship: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -137,7 +137,7 @@ class RigOrders:
         "Email" is the local sandbox outbox (rigbox.supplier_orders); nothing is
         sent over a network. Idempotent: a sent PO is never written again, and
         the outbox file is created once (O_EXCL). On DeliveryError the caller
-        cancels (cancel below) and refunds.
+        uses the strict cancel boundary below; unknown sends stay for review.
         """
         from rigbox import supplier_orders
 
@@ -172,18 +172,17 @@ class RigOrders:
 
     async def cancel(self, tenant_id: str, quote_id: str, reason: str,
                      env: dict[str, str] | None = None, *, unsent: bool = False) -> str:
-        """Cancel the order and its unsent PO before a refund. Never raises.
+        """Cancel the order and its unsent PO. Never raises.
 
         Returns "cancelled", "missing", "sent", "unknown" or "unrecorded".
         "sent" means the supplier already has the PO (it is marked sent, or its
         outbox file exists and is reconciled now): the order is not cancelled,
-        and the caller must not refund. "unknown" means Rig could not tell
+        and the caller must not cancel it. "unknown" means Rig could not tell
         whether the PO was sent (for example the outbox file exists but can't be
-        read): nothing is cancelled and the caller must not refund; a person or
+        read): nothing is cancelled; a person or
         a later reconcile settles it. "unrecorded" means the store failed after
         the outbox was checked; the order may still be placed, so the caller
-        must not refund yet: Accept leaves the quote at "cancelling" and
-        reconcile_payments cancels again, then refunds.
+        must keep the order for review.
 
         Strict: when the outbox can't be checked for any reason (including
         outbox_not_configured or order_mode, since the mode or folder may have
@@ -202,11 +201,11 @@ class RigOrders:
         except Exception:  # noqa: BLE001
             log.warning("locate order reconcile before cancel failed")
             # Reconciliation may fail after finding the supplier's outbox PO.
-            # Until its send state is known, neither cancel nor refund it.
+            # Until its send state is known, do not cancel it.
             return "unknown"
         try:
             return await self.store.cancel_locate_order(tenant_id, quote_id, reason[:120])
-        except Exception:  # noqa: BLE001 — the refund still happens; the store sees the open order
+        except Exception:  # noqa: BLE001 — the store sees the open order
             log.warning("locate order cancel not recorded")
             return "unrecorded"
 
@@ -239,10 +238,9 @@ class RigOrders:
         A draft PO older than the cutoff with no outbox file is listed in
         "stranded": the send never happened (for example Rig stopped between
         recording the order and sending the PO). This method never writes the
-        outbox, cancels or refunds; the payment reconciler cancels and refunds
-        stranded auto-order POs. A PO whose outbox file can't be read is
+        outbox or cancels an order; stranded auto-order POs need store review. A PO whose outbox file can't be read is
         listed in "unknown" (never in "stranded"). Safe to run repeatedly.
-        auto_only=True (the payment reconciler) lists only auto-ordered quotes,
+        auto_only=True (supplier-order recovery) lists only auto-ordered quotes,
         least recently tried first: drafts placed without auto-order never
         leave draft, so they would otherwise fill the list.
         """

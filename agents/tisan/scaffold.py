@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import tarfile
 import tempfile
 from pathlib import Path
@@ -32,7 +33,7 @@ _CORE_COLOURS = ("ink", "paper", "accent", "line")
 _CORE_FONTS = ("heading", "body")
 _STANDARD_PAGES = ("home", "about", "contact", "privacy")
 _IGNORED_PAGES = {"404", "not-found"}
-_SKIP_DIRS = {"node_modules", ".next", "playwright-report", "test-results", ".lighthouseci", "out"}
+_SKIP_DIRS = {"node_modules", ".next", "playwright-report", "test-results", ".lighthouseci", "out", ".quality-checks.json"}
 _LABELS = {"home": "Home", "about": "About", "contact": "Contact", "privacy": "Privacy"}
 _CHECKS = (
     ("npm ci", 240),
@@ -292,6 +293,8 @@ def write_project(brief: dict[str, Any], dest: Path) -> None:
             ".lighthouseci",
             "out",
             "tsconfig.tsbuildinfo",
+            "quality-secrets.fixture",
+            ".quality-checks.json",
         ),
     )
     (dest / "lib" / "site.ts").write_text(render_site(brief), encoding="utf-8")
@@ -320,7 +323,7 @@ def write_project(brief: dict[str, Any], dest: Path) -> None:
                 source = file.read_text(encoding="utf-8")
                 body = '<p className="mt-3">' + _jsx_text(copy) + '</p>'
                 if re.search(r'<p className="mt-3">.*?</p>', source, re.DOTALL):
-                    source = re.sub(r'<p className="mt-3">.*?</p>', lambda _: body, source, count=1, flags=re.DOTALL)
+                    source = re.sub(r'<p className="mt-3">.*?</p>', lambda _, body=body: body, source, count=1, flags=re.DOTALL)
                 else:
                     source = source.replace('</h1>', '</h1>\n      ' + body, 1)
                 file.write_text(source, encoding="utf-8")
@@ -388,6 +391,8 @@ def _check_env() -> dict[str, str]:
     env["NEXT_TELEMETRY_DISABLED"] = "1"
     env["PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD"] = "1"
     env["CI"] = "1"
+    if os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+        env["PLAYWRIGHT_BROWSERS_PATH"] = os.environ["PLAYWRIGHT_BROWSERS_PATH"]
     env["NPM_CONFIG_UPDATE_NOTIFIER"] = "false"
     cache = os.environ.get("TISAN_NPM_CACHE", "").strip()
     if not cache:
@@ -419,6 +424,7 @@ async def _run(args: list[str], cwd: Path, env: dict[str, str], timeout: int) ->
             *args,
             cwd=cwd,
             env=env,
+            start_new_session=True,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
@@ -426,9 +432,14 @@ async def _run(args: list[str], cwd: Path, env: dict[str, str], timeout: int) ->
         return 127, f"{args[0]} is not installed"
     try:
         out, _ = await asyncio.wait_for(proc.communicate(), timeout)
-    except asyncio.TimeoutError:
-        proc.kill()
+    except (TimeoutError, asyncio.CancelledError) as exc:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         await proc.wait()
+        if isinstance(exc, asyncio.CancelledError):
+            raise
         return 124, "timed out"
     text = (out or b"").decode("utf-8", "replace")
     return proc.returncode if proc.returncode is not None else 1, text
@@ -441,7 +452,92 @@ def _short(text: str) -> str:
     return flat
 
 
-async def run_checks(project: Path) -> tuple[list[dict[str, Any]], str]:
+def _quality_results(checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Use the existing card's result rows; never introduce a page or UI label."""
+    return [{"name": c["name"], "ok": c["ok"], "summary": c.get("summary", "")}
+            for c in checks if c["name"] in {"accessibility", "lighthouse", "links", "secrets"}]
+
+
+async def _secret_check(project: Path, tenant_id: str | None, tank: Any = None) -> dict[str, Any]:
+    check: dict[str, Any] = {"name": "secrets", "ok": False, "findings": []}
+    if not tenant_id:
+        return {**check, "summary": "scan.secrets requires the build tenant"}
+    files = []
+    for name in project_files(project):
+        path = project / name
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue  # The existing scanner accepts text, not binary assets.
+        if len(text.encode("utf-8")) > 1_000_000:
+            return {**check, "summary": "scan.secrets input exceeds the file limit", "file": name}
+        for line, value in enumerate(text.splitlines(), 1):
+            if len(value) > 5000:  # scan.secrets deliberately skips longer lines.
+                return {**check, "findings": [{"file": name, "line": line, "rule": "scan-input-limit"}],
+                        "summary": f"{name}:{line} exceeds scan.secrets line coverage"}
+        files.append({"path": name, "text": text})
+    if not files:
+        return {**check, "summary": "no generated text files were scanned"}
+    try:
+        async def scan(client: Any) -> dict[str, Any]:
+            report = await client.approved_skill(tenant_id, "scan.secrets", {"files": files})
+            if report is None:
+                return {**check, "pending_approval": True,
+                        "summary": "scan.secrets has no approved version; founder approval is required in /skala"}
+            if (not isinstance(report, dict) or not isinstance(report.get("critical"), int)
+                    or report["critical"] < 0 or report.get("leaked") is True
+                    or any(not isinstance(report.get(k), str) for k in ("file", "rule"))
+                    or not isinstance(report.get("line"), int)):
+                return {**check, "summary": "scan.secrets returned an incomplete report"}
+            # Return only scanner locations. Never propagate payloads, values or raw errors.
+            finding = {k: report[k] for k in ("file", "line", "rule")}
+            found = bool(report["critical"] or report["file"] or report["rule"])
+            return {**check, "ok": not found, "checked_files": len(files),
+                    "findings": [finding] if found else [],
+                    "summary": (f'{finding["file"]}:{finding["line"]} {finding["rule"]}' if found
+                                else f"{len(files)} generated text files; no findings")}
+        if tank is not None:
+            return await scan(tank)
+        import httpx
+        from chassis.tank import TankClient
+        async with httpx.AsyncClient(timeout=60, trust_env=False, follow_redirects=False) as http:
+            client = TankClient(os.environ.get("TANK_URL", "http://tank:8000"), os.environ.get("TANK_KEY", ""), "tisan", http)
+            return await scan(client)
+    except Exception:  # noqa: BLE001 - Fail closed without exposing upstream scanner values.
+        return {**check, "summary": "scan.secrets is unavailable or is not shared with Tisan; no clean result was recorded"}
+
+
+async def _quality_checks(project: Path, env: dict[str, str], tenant_id: str | None, tank: Any) -> list[dict[str, Any]]:
+    report_file = project / ".quality-checks.json"
+    report_file.unlink(missing_ok=True)
+    code, _ = await _run(["node", "scripts/quality-check.cjs"], project, env, 360)
+    try:
+        reports = json.loads(report_file.read_text(encoding="utf-8"))
+        if (not isinstance(reports, list) or [c.get("name") for c in reports] != ["accessibility", "lighthouse", "links"]
+                or any(type(c.get("ok")) is not bool for c in reports)):
+            raise ValueError
+        if code not in (0, 1) or (code == 1 and all(c["ok"] for c in reports)):
+            raise ValueError
+    except (OSError, ValueError, TypeError, AttributeError):
+        reports = [{"name": name, "ok": False, "summary": "local browser checks unavailable"}
+                   for name in ("accessibility", "lighthouse", "links")]
+    finally:
+        report_file.unlink(missing_ok=True)
+    for check in reports:
+        if check["name"] == "accessibility" and "summary" not in check:
+            check["summary"] = "; ".join(f'{v["page"]} {v.get("width", "")} {v["rule"]} {v["element"]}'
+                                          for v in check.get("violations", [])) or "desktop and mobile pages; no serious or critical violations"
+        elif check["name"] == "lighthouse" and "summary" not in check:
+            check["summary"] = "; ".join(row["page"] + " " + json.dumps(row["scores"], sort_keys=True)
+                                          for row in check.get("scores", [])) or "Lighthouse returned no scores"
+        elif check["name"] == "links" and "summary" not in check:
+            check["summary"] = "; ".join(f'{v["page"]}: {v["url"]} answered {v["status"]}'
+                                          for v in check.get("failures", [])) or f'{len(check.get("checked", []))} local links/assets answered 200; external links were not fetched'
+    reports.append(await _secret_check(project, tenant_id, tank))
+    return reports
+
+
+async def run_checks(project: Path, *, tenant_id: str | None = None, tank: Any = None) -> tuple[list[dict[str, Any]], str]:
     env = _check_env()
     checks: list[dict[str, Any]] = []
     code, output = await _run(_command("npm ci"), project, env, 240)
@@ -458,7 +554,9 @@ async def run_checks(project: Path) -> tuple[list[dict[str, Any]], str]:
         checks.append({"name": name, "ok": code == 0})
         if code != 0:
             return checks, _short(output) or f"{name} failed"
-    return checks, ""
+    checks.extend(await _quality_checks(project, env, tenant_id, tank))
+    failed = [c["name"] for c in checks if not c["ok"]]
+    return checks, ("Failed checks: " + ", ".join(failed) if failed else "")
 
 
 def _manifest(
@@ -485,6 +583,7 @@ def _manifest(
             "logo_url": brief["logo_url"],
         },
         "checks": checks,
+        "results": _quality_results(checks),
         "detail": detail,
     }
 
@@ -580,7 +679,7 @@ async def execute(
             measurements = select_visual_frames(reading, node_id, target_path)
             (visual_dir / "frames.json").write_text(json.dumps(measurements))
         if run_checks_now:
-            checks, detail = await run_checks(project)
+            checks, detail = await run_checks(project, tenant_id=tenant)
         else:
             checks, detail = [], "checks not run"
         # Next adds a reference to .next during build. That folder is not part of the project we keep.

@@ -936,12 +936,25 @@ class RigAdminAction(Body):
 
 @router.post("/rig/admin/{operation}")
 async def rig_admin_action(operation: str, request: Request, actor: Actor = Depends(identity)):
-    permit_feed(actor, "rig", "shopify")
-    if operation not in {"import", "delete-products", "connect", "refresh", "mapping", "confirm-mapping", "settings", "embed-keys", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"}:
+    if operation != "confirm-store-payment":
+        permit_feed(actor, "rig", "shopify")
+    if operation not in {"confirm-store-payment", "import", "delete-products", "connect", "refresh", "mapping", "confirm-mapping", "settings", "embed-keys", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"}:
         raise HTTPException(404, "Unknown retailer operation.")
     if operation == "exchange-rate" and not actor.founder:
         raise HTTPException(403, "Only the founder may set exchange rates.")
     body = await parse(request, RigAdminAction, 12_000_000 if operation in {"import", "mapping", "confirm-mapping", "delete-products"} else 16000)
+    if operation == "confirm-store-payment":
+        from command import RigConfirmPaymentArgs, require_tool
+        from trigger_commands import confirmation
+        from trigger_routes import code_receipt
+        require_tool(actor, "rig.quote.confirm_payment")
+        try:
+            data = RigConfirmPaymentArgs.model_validate(body.data).model_dump(mode="json")
+        except ValidationError:
+            raise HTTPException(422, "The action arguments are invalid") from None
+        confirmation(actor, "rig.quote.confirm_payment", data)
+        result = await rig_request(actor, operation, data)
+        return {**result, "ledger_id": str(await code_receipt(actor.tenant_id, "rig.quote.confirm_payment", agent="rig"))}
     if operation in {"mapping", "confirm-mapping"}:
         try:
             data = {**body.data, "target": "rig"}

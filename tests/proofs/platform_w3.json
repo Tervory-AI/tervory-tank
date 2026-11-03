@@ -1,0 +1,1054 @@
+{
+  "scope": "Platform gate 1: browser test determinism; no product changes",
+  "branch": "codex/platform-w3",
+  "tested_code_head": "caf2c51dab0f5460b9e8de687535722bd41e7b28",
+  "before": {
+    "head": "9ca6dab26cb7d0b9784064ab7fbb57b651a31184",
+    "acceptance": "Founder accepted this interrupted baseline in place of the original 50-run requirement.",
+    "shell_nav": {
+      "completed": 26,
+      "passed": 19,
+      "failed": 7,
+      "runs": [
+        {
+          "run": 1,
+          "exit": 0,
+          "seconds": 16.673
+        },
+        {
+          "run": 2,
+          "exit": 0,
+          "seconds": 15.58
+        },
+        {
+          "run": 3,
+          "exit": 0,
+          "seconds": 20.62
+        },
+        {
+          "run": 4,
+          "exit": 0,
+          "seconds": 18.587
+        },
+        {
+          "run": 5,
+          "exit": 0,
+          "seconds": 25.75
+        },
+        {
+          "run": 6,
+          "exit": 0,
+          "seconds": 17.757
+        },
+        {
+          "run": 7,
+          "exit": 0,
+          "seconds": 17.917
+        },
+        {
+          "run": 8,
+          "exit": 0,
+          "seconds": 21.226
+        },
+        {
+          "run": 9,
+          "exit": 0,
+          "seconds": 17.194
+        },
+        {
+          "run": 10,
+          "exit": 0,
+          "seconds": 21.049
+        },
+        {
+          "run": 11,
+          "exit": 0,
+          "seconds": 25.805
+        },
+        {
+          "run": 12,
+          "exit": 0,
+          "seconds": 17.746
+        },
+        {
+          "run": 13,
+          "exit": 0,
+          "seconds": 16.38
+        },
+        {
+          "run": 14,
+          "exit": 0,
+          "seconds": 27.019
+        },
+        {
+          "run": 15,
+          "exit": 0,
+          "seconds": 21.055
+        },
+        {
+          "run": 16,
+          "exit": 0,
+          "seconds": 19.876
+        },
+        {
+          "run": 17,
+          "exit": 0,
+          "seconds": 17.577
+        },
+        {
+          "run": 18,
+          "exit": 1,
+          "seconds": 31.888
+        },
+        {
+          "run": 19,
+          "exit": 1,
+          "seconds": 41.188
+        },
+        {
+          "run": 20,
+          "exit": 1,
+          "seconds": 31.529
+        },
+        {
+          "run": 21,
+          "exit": 1,
+          "seconds": 148.976
+        },
+        {
+          "run": 22,
+          "exit": 1,
+          "seconds": 56.206
+        },
+        {
+          "run": 23,
+          "exit": 1,
+          "seconds": 59.265
+        },
+        {
+          "run": 24,
+          "exit": 1,
+          "seconds": 33.034
+        },
+        {
+          "run": 25,
+          "exit": 0,
+          "seconds": 27.894
+        },
+        {
+          "run": 26,
+          "exit": 0,
+          "seconds": 12.486
+        }
+      ],
+      "failure_outputs": [
+        {
+          "run": 18,
+          "output": ".F                                                                       [100%]\n=================================== FAILURES ===================================\n____ test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar _____\n\n    def test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar() -> None:\n        env = os.environ.copy()\n        result = subprocess.run(\n            [\"node\", \"--experimental-strip-types\", str(ROOT / \"tests\" / \"shell_browser.ts\")],\n            cwd=ROOT,\n            capture_output=True,\n            text=True,\n            check=False,\n            env=env,\n        )\n>       assert result.returncode == 0, result.stdout + \"\\n\" + result.stderr\nE       AssertionError: \nE         (node:2108823) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/codex-platform-w3/workspace/app/product-nav.ts is not specified and it doesn't parse as CommonJS.\nE         Reparsing as ES module because module syntax was detected. This incurs a performance overhead.\nE         To eliminate this warning, add \"type\": \"module\" to /workspace/codex-platform-w3/workspace/package.json.\nE         (Use `node --trace-warnings ...` to show where the warning was created)\nE         file:///workspace/codex-platform-w3/tests/shell_browser.ts:224\nE               const timeout = setTimeout(() => { this.pending.delete(id); reject(new Error(`Chrome timed out: ${method}`)); }, 15000);\nE                                                                                  ^\nE         \nE         Error: Chrome timed out: Runtime.evaluate\nE             at Timeout._onTimeout (file:///workspace/codex-platform-w3/tests/shell_browser.ts:224:74)\nE             at listOnTimeout (node:internal/timers:585:17)\nE             at process.processTimers (node:internal/timers:521:7)\nE         \nE         Node.js v22.23.4\nE         \nE       assert 1 == 0\nE        +  where 1 = CompletedProcess(args=['node', '--experimental-strip-types', '/workspace/codex-platform-w3/tests/shell_browser.ts'], r...imeout (node:internal/timers:585:17)\\n    at process.processTimers (node:internal/timers:521:7)\\n\\nNode.js v22.23.4\\n').returncode\n\ntests/test_shell_nav.py:33: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_shell_nav.py::test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar\n1 failed, 1 passed in 28.92s\n"
+        },
+        {
+          "run": 19,
+          "output": ".F                                                                       [100%]\n=================================== FAILURES ===================================\n____ test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar _____\n\n    def test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar() -> None:\n        env = os.environ.copy()\n        result = subprocess.run(\n            [\"node\", \"--experimental-strip-types\", str(ROOT / \"tests\" / \"shell_browser.ts\")],\n            cwd=ROOT,\n            capture_output=True,\n            text=True,\n            check=False,\n            env=env,\n        )\n>       assert result.returncode == 0, result.stdout + \"\\n\" + result.stderr\nE       AssertionError: \nE         (node:2115141) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/codex-platform-w3/workspace/app/product-nav.ts is not specified and it doesn't parse as CommonJS.\nE         Reparsing as ES module because module syntax was detected. This incurs a performance overhead.\nE         To eliminate this warning, add \"type\": \"module\" to /workspace/codex-platform-w3/workspace/package.json.\nE         (Use `node --trace-warnings ...` to show where the warning was created)\nE         file:///workspace/codex-platform-w3/tests/shell_browser.ts:224\nE               const timeout = setTimeout(() => { this.pending.delete(id); reject(new Error(`Chrome timed out: ${method}`)); }, 15000);\nE                                                                                  ^\nE         \nE         Error: Chrome timed out: Runtime.evaluate\nE             at Timeout._onTimeout (file:///workspace/codex-platform-w3/tests/shell_browser.ts:224:74)\nE             at listOnTimeout (node:internal/timers:585:17)\nE             at process.processTimers (node:internal/timers:521:7)\nE         \nE         Node.js v22.23.4\nE         \nE       assert 1 == 0\nE        +  where 1 = CompletedProcess(args=['node', '--experimental-strip-types', '/workspace/codex-platform-w3/tests/shell_browser.ts'], r...imeout (node:internal/timers:585:17)\\n    at process.processTimers (node:internal/timers:521:7)\\n\\nNode.js v22.23.4\\n').returncode\n\ntests/test_shell_nav.py:33: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_shell_nav.py::test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar\n1 failed, 1 passed in 38.42s\n"
+        },
+        {
+          "run": 20,
+          "output": ".F                                                                       [100%]\n=================================== FAILURES ===================================\n____ test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar _____\n\n    def test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar() -> None:\n        env = os.environ.copy()\n        result = subprocess.run(\n            [\"node\", \"--experimental-strip-types\", str(ROOT / \"tests\" / \"shell_browser.ts\")],\n            cwd=ROOT,\n            capture_output=True,\n            text=True,\n            check=False,\n            env=env,\n        )\n>       assert result.returncode == 0, result.stdout + \"\\n\" + result.stderr\nE       AssertionError: \nE         (node:2120478) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/codex-platform-w3/workspace/app/product-nav.ts is not specified and it doesn't parse as CommonJS.\nE         Reparsing as ES module because module syntax was detected. This incurs a performance overhead.\nE         To eliminate this warning, add \"type\": \"module\" to /workspace/codex-platform-w3/workspace/package.json.\nE         (Use `node --trace-warnings ...` to show where the warning was created)\nE         file:///workspace/codex-platform-w3/tests/shell_browser.ts:224\nE               const timeout = setTimeout(() => { this.pending.delete(id); reject(new Error(`Chrome timed out: ${method}`)); }, 15000);\nE                                                                                  ^\nE         \nE         Error: Chrome timed out: Runtime.evaluate\nE             at Timeout._onTimeout (file:///workspace/codex-platform-w3/tests/shell_browser.ts:224:74)\nE             at listOnTimeout (node:internal/timers:585:17)\nE             at process.processTimers (node:internal/timers:521:7)\nE         \nE         Node.js v22.23.4\nE         \nE       assert 1 == 0\nE        +  where 1 = CompletedProcess(args=['node', '--experimental-strip-types', '/workspace/codex-platform-w3/tests/shell_browser.ts'], r...imeout (node:internal/timers:585:17)\\n    at process.processTimers (node:internal/timers:521:7)\\n\\nNode.js v22.23.4\\n').returncode\n\ntests/test_shell_nav.py:33: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_shell_nav.py::test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar\n1 failed, 1 passed in 26.74s\n"
+        },
+        {
+          "run": 21,
+          "output": ".F                                                                       [100%]\n=================================== FAILURES ===================================\n____ test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar _____\n\n    def test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar() -> None:\n        env = os.environ.copy()\n        result = subprocess.run(\n            [\"node\", \"--experimental-strip-types\", str(ROOT / \"tests\" / \"shell_browser.ts\")],\n            cwd=ROOT,\n            capture_output=True,\n            text=True,\n            check=False,\n            env=env,\n        )\n>       assert result.returncode == 0, result.stdout + \"\\n\" + result.stderr\nE       AssertionError: \nE         (node:2125866) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/codex-platform-w3/workspace/app/product-nav.ts is not specified and it doesn't parse as CommonJS.\nE         Reparsing as ES module because module syntax was detected. This incurs a performance overhead.\nE         To eliminate this warning, add \"type\": \"module\" to /workspace/codex-platform-w3/workspace/package.json.\nE         (Use `node --trace-warnings ...` to show where the warning was created)\nE         file:///workspace/codex-platform-w3/tests/shell_browser.ts:224\nE               const timeout = setTimeout(() => { this.pending.delete(id); reject(new Error(`Chrome timed out: ${method}`)); }, 15000);\nE                                                                                  ^\nE         \nE         Error: Chrome timed out: Runtime.evaluate\nE             at Timeout._onTimeout (file:///workspace/codex-platform-w3/tests/shell_browser.ts:224:74)\nE             at listOnTimeout (node:internal/timers:585:17)\nE             at process.processTimers (node:internal/timers:521:7)\nE         \nE         Node.js v22.23.4\nE         \nE       assert 1 == 0\nE        +  where 1 = CompletedProcess(args=['node', '--experimental-strip-types', '/workspace/codex-platform-w3/tests/shell_browser.ts'], r...imeout (node:internal/timers:585:17)\\n    at process.processTimers (node:internal/timers:521:7)\\n\\nNode.js v22.23.4\\n').returncode\n\ntests/test_shell_nav.py:33: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_shell_nav.py::test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar\n1 failed, 1 passed in 66.69s (0:01:06)\n"
+        },
+        {
+          "run": 22,
+          "output": ".F                                                                       [100%]\n=================================== FAILURES ===================================\n____ test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar _____\n\n    def test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar() -> None:\n        env = os.environ.copy()\n        result = subprocess.run(\n            [\"node\", \"--experimental-strip-types\", str(ROOT / \"tests\" / \"shell_browser.ts\")],\n            cwd=ROOT,\n            capture_output=True,\n            text=True,\n            check=False,\n            env=env,\n        )\n>       assert result.returncode == 0, result.stdout + \"\\n\" + result.stderr\nE       AssertionError: \nE         (node:2133636) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/codex-platform-w3/workspace/app/product-nav.ts is not specified and it doesn't parse as CommonJS.\nE         Reparsing as ES module because module syntax was detected. This incurs a performance overhead.\nE         To eliminate this warning, add \"type\": \"module\" to /workspace/codex-platform-w3/workspace/package.json.\nE         (Use `node --trace-warnings ...` to show where the warning was created)\nE         file:///workspace/codex-platform-w3/tests/shell_browser.ts:263\nE           throw new Error(`Page did not load ${url}`);\nE                 ^\nE         \nE         Error: Page did not load http://127.0.0.1:33043/fixtures/actual-customer.html\nE             at navigate (file:///workspace/codex-platform-w3/tests/shell_browser.ts:263:9)\nE             at async main (file:///workspace/codex-platform-w3/tests/shell_browser.ts:422:5)\nE             at async file:///workspace/codex-platform-w3/tests/shell_browser.ts:496:1\nE         \nE         Node.js v22.23.4\nE         \nE       assert 1 == 0\nE        +  where 1 = CompletedProcess(args=['node', '--experimental-strip-types', '/workspace/codex-platform-w3/tests/shell_browser.ts'], r...rowser.ts:422:5)\\n    at async file:///workspace/codex-platform-w3/tests/shell_browser.ts:496:1\\n\\nNode.js v22.23.4\\n').returncode\n\ntests/test_shell_nav.py:33: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_shell_nav.py::test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar\n1 failed, 1 passed in 42.05s\n"
+        },
+        {
+          "run": 23,
+          "output": ".F                                                                       [100%]\n=================================== FAILURES ===================================\n____ test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar _____\n\n    def test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar() -> None:\n        env = os.environ.copy()\n        result = subprocess.run(\n            [\"node\", \"--experimental-strip-types\", str(ROOT / \"tests\" / \"shell_browser.ts\")],\n            cwd=ROOT,\n            capture_output=True,\n            text=True,\n            check=False,\n            env=env,\n        )\n>       assert result.returncode == 0, result.stdout + \"\\n\" + result.stderr\nE       AssertionError: \nE         (node:2139204) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/codex-platform-w3/workspace/app/product-nav.ts is not specified and it doesn't parse as CommonJS.\nE         Reparsing as ES module because module syntax was detected. This incurs a performance overhead.\nE         To eliminate this warning, add \"type\": \"module\" to /workspace/codex-platform-w3/workspace/package.json.\nE         (Use `node --trace-warnings ...` to show where the warning was created)\nE         file:///workspace/codex-platform-w3/tests/shell_browser.ts:224\nE               const timeout = setTimeout(() => { this.pending.delete(id); reject(new Error(`Chrome timed out: ${method}`)); }, 15000);\nE                                                                                  ^\nE         \nE         Error: Chrome timed out: Runtime.evaluate\nE             at Timeout._onTimeout (file:///workspace/codex-platform-w3/tests/shell_browser.ts:224:74)\nE             at listOnTimeout (node:internal/timers:585:17)\nE             at process.processTimers (node:internal/timers:521:7)\nE         \nE         Node.js v22.23.4\nE         \nE       assert 1 == 0\nE        +  where 1 = CompletedProcess(args=['node', '--experimental-strip-types', '/workspace/codex-platform-w3/tests/shell_browser.ts'], r...imeout (node:internal/timers:585:17)\\n    at process.processTimers (node:internal/timers:521:7)\\n\\nNode.js v22.23.4\\n').returncode\n\ntests/test_shell_nav.py:33: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_shell_nav.py::test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar\n1 failed, 1 passed in 54.90s\n"
+        },
+        {
+          "run": 24,
+          "output": ".F                                                                       [100%]\n=================================== FAILURES ===================================\n____ test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar _____\n\n    def test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar() -> None:\n        env = os.environ.copy()\n        result = subprocess.run(\n            [\"node\", \"--experimental-strip-types\", str(ROOT / \"tests\" / \"shell_browser.ts\")],\n            cwd=ROOT,\n            capture_output=True,\n            text=True,\n            check=False,\n            env=env,\n        )\n>       assert result.returncode == 0, result.stdout + \"\\n\" + result.stderr\nE       AssertionError: \nE         (node:2146489) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/codex-platform-w3/workspace/app/product-nav.ts is not specified and it doesn't parse as CommonJS.\nE         Reparsing as ES module because module syntax was detected. This incurs a performance overhead.\nE         To eliminate this warning, add \"type\": \"module\" to /workspace/codex-platform-w3/workspace/package.json.\nE         (Use `node --trace-warnings ...` to show where the warning was created)\nE         file:///workspace/codex-platform-w3/tests/shell_browser.ts:224\nE               const timeout = setTimeout(() => { this.pending.delete(id); reject(new Error(`Chrome timed out: ${method}`)); }, 15000);\nE                                                                                  ^\nE         \nE         Error: Chrome timed out: Emulation.setDeviceMetricsOverride\nE             at Timeout._onTimeout (file:///workspace/codex-platform-w3/tests/shell_browser.ts:224:74)\nE             at listOnTimeout (node:internal/timers:585:17)\nE             at process.processTimers (node:internal/timers:521:7)\nE         \nE         Node.js v22.23.4\nE         \nE       assert 1 == 0\nE        +  where 1 = CompletedProcess(args=['node', '--experimental-strip-types', '/workspace/codex-platform-w3/tests/shell_browser.ts'], r...imeout (node:internal/timers:585:17)\\n    at process.processTimers (node:internal/timers:521:7)\\n\\nNode.js v22.23.4\\n').returncode\n\ntests/test_shell_nav.py:33: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_shell_nav.py::test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar\n1 failed, 1 passed in 28.36s\n"
+        }
+      ]
+    },
+    "rig_landing_overflow": {
+      "completed": 12,
+      "passed": 12,
+      "failed_completed_runs": 0,
+      "stalled_repetition": 13,
+      "cases_completed_before_stall": 3,
+      "runs": [
+        {
+          "run": 1,
+          "exit": 0,
+          "seconds": 24.485
+        },
+        {
+          "run": 2,
+          "exit": 0,
+          "seconds": 28.156
+        },
+        {
+          "run": 3,
+          "exit": 0,
+          "seconds": 32.95
+        },
+        {
+          "run": 4,
+          "exit": 0,
+          "seconds": 28.358
+        },
+        {
+          "run": 5,
+          "exit": 0,
+          "seconds": 30.017
+        },
+        {
+          "run": 6,
+          "exit": 0,
+          "seconds": 26.406
+        },
+        {
+          "run": 7,
+          "exit": 0,
+          "seconds": 33.529
+        },
+        {
+          "run": 8,
+          "exit": 0,
+          "seconds": 27.272
+        },
+        {
+          "run": 9,
+          "exit": 0,
+          "seconds": 31.912
+        },
+        {
+          "run": 10,
+          "exit": 0,
+          "seconds": 31.844
+        },
+        {
+          "run": 11,
+          "exit": 0,
+          "seconds": 30.883
+        },
+        {
+          "run": 12,
+          "exit": 0,
+          "seconds": 42.642
+        }
+      ]
+    },
+    "forced_collision": {
+      "processes": 2,
+      "passed": 0,
+      "failed": 2,
+      "outputs": [
+        "(node:2028703) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/codex-platform-w3/workspace/app/product-nav.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /workspace/codex-platform-w3/workspace/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nfile:///workspace/codex-platform-w3/tests/shell_browser.ts:224\n      const timeout = setTimeout(() => { this.pending.delete(id); reject(new Error(`Chrome timed out: ${method}`)); }, 15000);\n                                                                         ^\n\nError: Chrome timed out: Runtime.evaluate\n    at Timeout._onTimeout (file:///workspace/codex-platform-w3/tests/shell_browser.ts:224:74)\n    at listOnTimeout (node:internal/timers:585:17)\n    at process.processTimers (node:internal/timers:521:7)\n\nNode.js v22.23.4\n",
+        "(node:2028705) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/codex-platform-w3/workspace/app/product-nav.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /workspace/codex-platform-w3/workspace/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nfile:///workspace/codex-platform-w3/tests/shell_browser.ts:263\n  throw new Error(`Page did not load ${url}`);\n        ^\n\nError: Page did not load http://127.0.0.1:46539/fixtures/actual-1440.html\n    at navigate (file:///workspace/codex-platform-w3/tests/shell_browser.ts:263:9)\n    at async main (file:///workspace/codex-platform-w3/tests/shell_browser.ts:381:7)\n    at async file:///workspace/codex-platform-w3/tests/shell_browser.ts:496:1\n\nNode.js v22.23.4\n"
+      ]
+    },
+    "command": "PROOF_PHASE=before-isolated .venv312/bin/python .platform-proof/repeat.py > .platform-proof/before-isolated-progress.log 2>&1",
+    "historical_harness_only_do_not_run_on_this_host": "import concurrent.futures, json, os, pathlib, subprocess, time\nroot = pathlib.Path(__file__).resolve().parents[1]\nphase = os.environ.get('PROOF_PHASE', 'before')\nout = root / '.platform-proof' / phase\nout.mkdir(exist_ok=True)\nenv = {k:v for k,v in os.environ.items() if not any(s in k.upper() for s in ('API_KEY','TOKEN','SECRET','PASSWORD','OPENAI','ANTHROPIC','OPENROUTER','PERPLEXITY','DEEPSEEK','GROQ','TOGETHER','MISTRAL','GEMINI','XAI_','HF_'))}\nenv['PATH'] = str(root / '.venv312/bin') + ':' + env['PATH']\nenv['CHROME_PATH'] = '/home/ammosync/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome'\nenv['SUITE_WORKERS'] = '4'\nenv['TMPDIR'] = str(root / '.platform-proof/tmp')\nenv['READ1_CHROMIUM_EXECUTABLE'] = env['CHROME_PATH']\npython = str(root / '.venv312/bin/python')\ndef suite():\n    with (out/'suite.log').open('w') as log:\n        code = subprocess.call([python,'.github/scripts/offline_suite.py'],cwd=root,env=env,stdout=log,stderr=subprocess.STDOUT)\n    print('suite',code,flush=True)\n    return code\ndef repeat(name):\n    results=[]\n    for i in range(1,51):\n        started=time.monotonic()\n        with (out/f'{name}-{i:02}.log').open('w') as log:\n            code=subprocess.call([python,'-m','pytest',f'tests/test_{name}.py','-q','--disable-socket','--allow-unix-socket','--allow-hosts=127.0.0.1,localhost,::1'],cwd=root,env=env,stdout=log,stderr=subprocess.STDOUT)\n        results.append({'run':i,'exit':code,'seconds':round(time.monotonic()-started,3)})\n        (out/f'{name}.json').write_text(json.dumps(results,indent=2))\n        print(name,i,code,results[-1]['seconds'],flush=True)\n    return results\nwith concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:\n    tasks=[pool.submit(suite),pool.submit(repeat,'shell_nav'),pool.submit(repeat,'rig_landing_overflow')]\n    for future in concurrent.futures.as_completed(tasks): future.result()\n",
+    "historical_collision_harness": "import concurrent.futures, os, pathlib, subprocess\nroot=pathlib.Path(__file__).resolve().parents[1]\nenv={k:v for k,v in os.environ.items() if not any(s in k.upper() for s in ('API_KEY','TOKEN','SECRET','PASSWORD'))}\nenv['TMPDIR']=str(root/'.platform-proof/tmp')\nenv['CHROME_PATH']='/home/ammosync/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome'\ndef run(i):\n with (root/f'.platform-proof/collision-before-{i}.log').open('w') as log:\n  code=subprocess.call(['node','--experimental-strip-types','--import','data:text/javascript,Math.random=()=>0','tests/shell_browser.ts'],cwd=root,env=env,stdout=log,stderr=subprocess.STDOUT)\n print(i,code,flush=True)\nwith concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:\n list(pool.map(run,range(2)))\n",
+    "startup_measurements_seconds": [
+      0.423,
+      0.636,
+      0.479,
+      0.463,
+      0.4,
+      0.475,
+      0.435,
+      0.42,
+      0.488,
+      0.946,
+      0.881,
+      0.584,
+      0.488,
+      0.663,
+      0.668,
+      0.76,
+      0.806,
+      0.603,
+      0.868,
+      0.587,
+      0.625,
+      0.472,
+      0.554,
+      0.539,
+      0.696,
+      1.539,
+      1.288,
+      1.057,
+      1.27,
+      0.866,
+      1.019,
+      1.248,
+      0.715,
+      0.464,
+      0.645,
+      0.488,
+      0.643,
+      0.607,
+      0.54,
+      0.501,
+      0.673,
+      0.688,
+      0.407,
+      0.558,
+      0.726,
+      0.678,
+      0.667,
+      0.785,
+      0.914,
+      0.553
+    ],
+    "startup_measurement_output": "runs 50 max_seconds 1.539\n",
+    "startup_budget_seconds": 15
+  },
+  "after": {
+    "instruction": "No parallel offline suite and no 50-run loop on this host. Two 20-run loops execute sequentially, followed by two forced-collision rounds.",
+    "command": ".venv312/bin/python .platform-proof/after.py > .platform-proof/after-progress.log 2>&1",
+    "harness": "import concurrent.futures\nimport json\nimport os\nfrom pathlib import Path\nimport subprocess\nimport time\n\nROOT = Path(__file__).resolve().parents[1]\nOUT = ROOT / '.platform-proof/after'\nOUT.mkdir(exist_ok=True)\nENV = {k: v for k, v in os.environ.items() if not any(s in k.upper() for s in (\n    'API_KEY', 'TOKEN', 'SECRET', 'PASSWORD', 'OPENAI', 'ANTHROPIC', 'OPENROUTER',\n    'PERPLEXITY', 'DEEPSEEK', 'GROQ', 'TOGETHER', 'MISTRAL', 'GEMINI', 'XAI_', 'HF_'))}\nENV['PATH'] = str(ROOT / '.venv312/bin') + ':' + ENV['PATH']\nENV['TMPDIR'] = str(ROOT / '.platform-proof/tmp')\nENV['CHROME_PATH'] = '/home/ammosync/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome'\nENV['READ1_CHROMIUM_EXECUTABLE'] = ENV['CHROME_PATH']\nPYTHON = str(ROOT / '.venv312/bin/python')\nRESULTS = []\n\ndef run(label, cmd):\n    start = time.monotonic()\n    with (OUT / f'{label}.log').open('w') as log:\n        code = subprocess.call(cmd, cwd=ROOT, env=ENV, stdout=log, stderr=subprocess.STDOUT)\n    row = {'label': label, 'command': cmd, 'exit': code, 'seconds': round(time.monotonic() - start, 3)}\n    print(json.dumps(row), flush=True)\n    return row\n\n# Never overlap the two repetition loops, and never retry a failed invocation.\nfor name in ('shell_nav', 'rig_landing_overflow'):\n    for index in range(1, 21):\n        row = run(f'{name}-{index:02}', [PYTHON, '-m', 'pytest', f'tests/test_{name}.py', '-q',\n            '--disable-socket', '--allow-unix-socket', '--allow-hosts=127.0.0.1,localhost,::1'])\n        RESULTS.append(row)\n        (OUT / 'results.json').write_text(json.dumps(RESULTS, indent=2))\n        if row['exit']:\n            raise SystemExit(f\"Stopped at first failure: {row['label']}\")\n\n# Two controlled collision rounds. The pair must overlap to force the old RNG\n# implementation onto the same debugging port; each new browser chooses port 0.\nfor index in range(1, 3):\n    cmd = ['node', '--experimental-strip-types', '--import', 'data:text/javascript,Math.random=()=>0',\n           'tests/shell_browser.ts']\n    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:\n        pending = [pool.submit(run, f'collision-{index}-{member}', cmd) for member in range(2)]\n        rows = [future.result() for future in pending]\n    RESULTS.extend(rows)\n    (OUT / 'results.json').write_text(json.dumps(RESULTS, indent=2))\n    if any(row['exit'] for row in rows):\n        raise SystemExit(f'Stopped at collision round {index}')\n",
+    "shell_nav": {
+      "invocations": 20,
+      "passed": 20,
+      "failed": 0,
+      "elapsed_seconds": 190.478,
+      "min_seconds": 7.867,
+      "median_seconds": 8.945,
+      "max_seconds": 13.955
+    },
+    "rig_landing_overflow": {
+      "invocations": 20,
+      "passed": 20,
+      "failed": 0,
+      "elapsed_seconds": 462.462,
+      "min_seconds": 18.107,
+      "median_seconds": 20.96,
+      "max_seconds": 41.031
+    },
+    "forced_collision": {
+      "invocations": 4,
+      "passed": 4,
+      "failed": 0,
+      "elapsed_seconds": 47.958,
+      "min_seconds": 11.62,
+      "median_seconds": 11.772,
+      "max_seconds": 12.794,
+      "rounds": 2,
+      "processes_per_round": 2
+    },
+    "runs": [
+      {
+        "label": "shell_nav-01",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 11.023
+      },
+      {
+        "label": "shell_nav-02",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 9.425
+      },
+      {
+        "label": "shell_nav-03",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 8.484
+      },
+      {
+        "label": "shell_nav-04",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 8.064
+      },
+      {
+        "label": "shell_nav-05",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 12.139
+      },
+      {
+        "label": "shell_nav-06",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 8.364
+      },
+      {
+        "label": "shell_nav-07",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 8.188
+      },
+      {
+        "label": "shell_nav-08",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 7.867
+      },
+      {
+        "label": "shell_nav-09",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 8.021
+      },
+      {
+        "label": "shell_nav-10",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 8.952
+      },
+      {
+        "label": "shell_nav-11",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 8.246
+      },
+      {
+        "label": "shell_nav-12",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 13.955
+      },
+      {
+        "label": "shell_nav-13",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 11.439
+      },
+      {
+        "label": "shell_nav-14",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 9.253
+      },
+      {
+        "label": "shell_nav-15",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 8.616
+      },
+      {
+        "label": "shell_nav-16",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 8.938
+      },
+      {
+        "label": "shell_nav-17",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 8.455
+      },
+      {
+        "label": "shell_nav-18",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 10.884
+      },
+      {
+        "label": "shell_nav-19",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 9.955
+      },
+      {
+        "label": "shell_nav-20",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_shell_nav.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 10.21
+      },
+      {
+        "label": "rig_landing_overflow-01",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 20.822
+      },
+      {
+        "label": "rig_landing_overflow-02",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 22.947
+      },
+      {
+        "label": "rig_landing_overflow-03",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 20.564
+      },
+      {
+        "label": "rig_landing_overflow-04",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 20.24
+      },
+      {
+        "label": "rig_landing_overflow-05",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 21.578
+      },
+      {
+        "label": "rig_landing_overflow-06",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 18.107
+      },
+      {
+        "label": "rig_landing_overflow-07",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 19.541
+      },
+      {
+        "label": "rig_landing_overflow-08",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 21.673
+      },
+      {
+        "label": "rig_landing_overflow-09",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 20.718
+      },
+      {
+        "label": "rig_landing_overflow-10",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 31.37
+      },
+      {
+        "label": "rig_landing_overflow-11",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 41.031
+      },
+      {
+        "label": "rig_landing_overflow-12",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 30.964
+      },
+      {
+        "label": "rig_landing_overflow-13",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 25.529
+      },
+      {
+        "label": "rig_landing_overflow-14",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 25.597
+      },
+      {
+        "label": "rig_landing_overflow-15",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 21.345
+      },
+      {
+        "label": "rig_landing_overflow-16",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 19.257
+      },
+      {
+        "label": "rig_landing_overflow-17",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 20.793
+      },
+      {
+        "label": "rig_landing_overflow-18",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 19.787
+      },
+      {
+        "label": "rig_landing_overflow-19",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 19.501
+      },
+      {
+        "label": "rig_landing_overflow-20",
+        "command": [
+          "/workspace/codex-platform-w3/.venv312/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_rig_landing_overflow.py",
+          "-q",
+          "--disable-socket",
+          "--allow-unix-socket",
+          "--allow-hosts=127.0.0.1,localhost,::1"
+        ],
+        "exit": 0,
+        "seconds": 21.098
+      },
+      {
+        "label": "collision-1-0",
+        "command": [
+          "node",
+          "--experimental-strip-types",
+          "--import",
+          "data:text/javascript,Math.random=()=>0",
+          "tests/shell_browser.ts"
+        ],
+        "exit": 0,
+        "seconds": 11.919
+      },
+      {
+        "label": "collision-1-1",
+        "command": [
+          "node",
+          "--experimental-strip-types",
+          "--import",
+          "data:text/javascript,Math.random=()=>0",
+          "tests/shell_browser.ts"
+        ],
+        "exit": 0,
+        "seconds": 12.794
+      },
+      {
+        "label": "collision-2-0",
+        "command": [
+          "node",
+          "--experimental-strip-types",
+          "--import",
+          "data:text/javascript,Math.random=()=>0",
+          "tests/shell_browser.ts"
+        ],
+        "exit": 0,
+        "seconds": 11.62
+      },
+      {
+        "label": "collision-2-1",
+        "command": [
+          "node",
+          "--experimental-strip-types",
+          "--import",
+          "data:text/javascript,Math.random=()=>0",
+          "tests/shell_browser.ts"
+        ],
+        "exit": 0,
+        "seconds": 11.625
+      }
+    ],
+    "outputs": {
+      "shell_nav-01": "..                                                                       [100%]\n2 passed in 9.37s\n",
+      "shell_nav-02": "..                                                                       [100%]\n2 passed in 7.64s\n",
+      "shell_nav-03": "..                                                                       [100%]\n2 passed in 7.34s\n",
+      "shell_nav-04": "..                                                                       [100%]\n2 passed in 7.01s\n",
+      "shell_nav-05": "..                                                                       [100%]\n2 passed in 11.11s\n",
+      "shell_nav-06": "..                                                                       [100%]\n2 passed in 7.32s\n",
+      "shell_nav-07": "..                                                                       [100%]\n2 passed in 7.12s\n",
+      "shell_nav-08": "..                                                                       [100%]\n2 passed in 6.80s\n",
+      "shell_nav-09": "..                                                                       [100%]\n2 passed in 7.00s\n",
+      "shell_nav-10": "..                                                                       [100%]\n2 passed in 7.90s\n",
+      "shell_nav-11": "..                                                                       [100%]\n2 passed in 7.22s\n",
+      "shell_nav-12": "..                                                                       [100%]\n2 passed in 12.91s\n",
+      "shell_nav-13": "..                                                                       [100%]\n2 passed in 10.15s\n",
+      "shell_nav-14": "..                                                                       [100%]\n2 passed in 8.12s\n",
+      "shell_nav-15": "..                                                                       [100%]\n2 passed in 7.58s\n",
+      "shell_nav-16": "..                                                                       [100%]\n2 passed in 7.86s\n",
+      "shell_nav-17": "..                                                                       [100%]\n2 passed in 7.38s\n",
+      "shell_nav-18": "..                                                                       [100%]\n2 passed in 9.92s\n",
+      "shell_nav-19": "..                                                                       [100%]\n2 passed in 8.94s\n",
+      "shell_nav-20": "..                                                                       [100%]\n2 passed in 9.12s\n",
+      "rig_landing_overflow-01": "........                                                                 [100%]\n8 passed in 19.75s\n",
+      "rig_landing_overflow-02": "........                                                                 [100%]\n8 passed in 21.86s\n",
+      "rig_landing_overflow-03": "........                                                                 [100%]\n8 passed in 19.29s\n",
+      "rig_landing_overflow-04": "........                                                                 [100%]\n8 passed in 19.14s\n",
+      "rig_landing_overflow-05": "........                                                                 [100%]\n8 passed in 20.51s\n",
+      "rig_landing_overflow-06": "........                                                                 [100%]\n8 passed in 17.04s\n",
+      "rig_landing_overflow-07": "........                                                                 [100%]\n8 passed in 18.47s\n",
+      "rig_landing_overflow-08": "........                                                                 [100%]\n8 passed in 20.55s\n",
+      "rig_landing_overflow-09": "........                                                                 [100%]\n8 passed in 19.32s\n",
+      "rig_landing_overflow-10": "........                                                                 [100%]\n8 passed in 25.87s\n",
+      "rig_landing_overflow-11": "........                                                                 [100%]\n8 passed in 34.26s\n",
+      "rig_landing_overflow-12": "........                                                                 [100%]\n8 passed in 27.30s\n",
+      "rig_landing_overflow-13": "........                                                                 [100%]\n8 passed in 23.15s\n",
+      "rig_landing_overflow-14": "........                                                                 [100%]\n8 passed in 23.53s\n",
+      "rig_landing_overflow-15": "........                                                                 [100%]\n8 passed in 19.71s\n",
+      "rig_landing_overflow-16": "........                                                                 [100%]\n8 passed in 18.23s\n",
+      "rig_landing_overflow-17": "........                                                                 [100%]\n8 passed in 19.73s\n",
+      "rig_landing_overflow-18": "........                                                                 [100%]\n8 passed in 18.73s\n",
+      "rig_landing_overflow-19": "........                                                                 [100%]\n8 passed in 18.37s\n",
+      "rig_landing_overflow-20": "........                                                                 [100%]\n8 passed in 20.03s\n",
+      "collision-1-0": "(node:2313299) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/codex-platform-w3/workspace/app/product-nav.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /workspace/codex-platform-w3/workspace/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nshell browser checks passed for 16 routes\n",
+      "collision-1-1": "(node:2313298) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/codex-platform-w3/workspace/app/product-nav.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /workspace/codex-platform-w3/workspace/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nshell browser checks passed for 16 routes\n",
+      "collision-2-0": "(node:2315773) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/codex-platform-w3/workspace/app/product-nav.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /workspace/codex-platform-w3/workspace/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nshell browser checks passed for 16 routes\n",
+      "collision-2-1": "(node:2315772) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/codex-platform-w3/workspace/app/product-nav.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /workspace/codex-platform-w3/workspace/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\nshell browser checks passed for 16 routes\n"
+    },
+    "checks": [
+      {
+        "command": ".venv312/bin/ruff check tests/test_rig_landing_overflow.py --select E9,F",
+        "result": "All checks passed!"
+      },
+      {
+        "command": "git diff --check",
+        "result": "exit 0"
+      }
+    ],
+    "retries": 0,
+    "full_suite_test_of_record": "CI only. This artifact makes no claim about CI; inspect the three tank shard checks on the final PR head.",
+    "founder_browser_screenshots": "Not performed or claimed; these are local automated browser tests."
+  }
+}

@@ -76,6 +76,8 @@ services:
       context: ..
       dockerfile: ghost/Dockerfile.browser
     restart: unless-stopped
+    # Reap finished Chrome children (3 Nov: 33,845 zombie chrome processes had built up).
+    init: true
     mem_limit: 1g
     cpus: 0.5
     environment:
