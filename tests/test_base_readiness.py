@@ -59,7 +59,7 @@ def test_social_links_from_html_keep_each_page_and_date_in_records_and_csv():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('population', [3, 200])
-async def test_dc_campaign_through_confirmed_cards_collection_audit_and_download(audit_db, monkeypatch, population):
+async def test_dc_campaign_through_confirmed_cards_collection_audit_and_download(audit_db, monkeypatch, population):  # noqa: F811 -- shared pytest fixture
     pool, rt, product_client = audit_db
     rt.BASE_AGENT_URL = 'http://fixture-room'
     store = BaseStore(rt)

@@ -99,3 +99,17 @@ Result: all checks passed. Existing Base download fixtures are unchanged and run
 as part of the Base regression. Earlier readiness attempts exposed fixture-only
 construction errors (a missing raw mapping and an incorrect command_threads
 insert); those runs failed and are superseded by the passing corrected fixtures.
+
+Final combined Base + command/token regression: **621 passed**, 57 warnings,
+140.91s. No skips. This includes all existing Base tests and the unchanged
+base_lists_download.cjs fixture. The only later test-file edit is a lint annotation
+for the shared pytest fixture; no test behavior changed.
+
+Before the final push, the exact required CI lint command was run:
+
+    ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+
+Result: **All checks passed!** CI tank/workspace results for the final head are
+recorded in PR #647 once available. No main merge or force push was performed.
+The initial non-fast-forward push was resolved by fetching and rebasing the
+branch onto Claude's c29fdcf0 fix, retaining both changes.
