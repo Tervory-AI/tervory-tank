@@ -93,4 +93,3 @@ class ConfirmDraft(Args):
 TOOLS = {'source.add': SourceAdd, 'source.remove': SourceRemove, 'sources': Args,
          'ask': Ask, 'faq.add': FAQ, 'feedback': Feedback, 'review': Args, 'stats': Args,
          'lead.confirm': ConfirmDraft, 'quote.confirm': ConfirmDraft}
-
