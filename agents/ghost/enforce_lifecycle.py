@@ -14,6 +14,7 @@ tree (one project dir per tenant) so tests prove isolation without Coolify/Docke
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 from dataclasses import dataclass
@@ -21,6 +22,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+try:
+    from enforce_coolify import Coolify, CoolifyUnknown, Refused, identifier
+except ModuleNotFoundError:  # Repository tests; image uses the copied file only.
+    from agents.tisan.promotion import Coolify, CoolifyUnknown, Refused, identifier
+
+COOLIFY_SETTINGS = (
+    "AUTUMBRA_COOLIFY_URL", "AUTUMBRA_COOLIFY_TOKEN",
+    "AUTUMBRA_COOLIFY_PROJECT_UUID", "AUTUMBRA_COOLIFY_SERVER_UUID",
+    "AUTUMBRA_COOLIFY_ENVIRONMENT", "AUTUMBRA_COOLIFY_GITHUB_APP_UUID",
+)
+COMPOSE_PATH = Path(__file__).with_name("docker-compose.enforce.yml")
+
+
+def coolify_configured() -> bool:
+    return all(os.environ.get(name, "").strip() for name in COOLIFY_SETTINGS)
+
 
 # Founder correction: hold until measured dogfood / Boston RSS — do not guess 6/8/20.
 DEFAULT_CONTAINER_CAP: int | None = None
@@ -257,3 +275,103 @@ class FixtureComposeBackend:
             "project": meta["project"],
             "threat_payload_queue": meta.get("threat_payload_queue"),
         }
+
+
+class CoolifyEnforceBackend:
+    """Dedicated-team Coolify API. No deployment or environment reads, no retries."""
+
+    def __init__(self, coolify: Coolify, *, project: str, server: str,
+                 environment: str, github_app: str):
+        self.coolify = coolify
+        self.project, self.server = identifier(project), identifier(server)
+        self.environment, self.github_app = environment, identifier(github_app)
+
+    @classmethod
+    def from_env(cls, http):
+        return cls(Coolify(http, os.environ[COOLIFY_SETTINGS[0]],
+                           os.environ[COOLIFY_SETTINGS[1]],
+                           url_setting=COOLIFY_SETTINGS[0], token_setting=COOLIFY_SETTINGS[1]),
+                   project=os.environ[COOLIFY_SETTINGS[2]],
+                   server=os.environ[COOLIFY_SETTINGS[3]],
+                   environment=os.environ[COOLIFY_SETTINGS[4]],
+                   github_app=os.environ[COOLIFY_SETTINGS[5]])
+
+    async def list(self) -> list[dict[str, str]]:
+        rows = await self.coolify.call("GET", "/applications", allow_list=True)
+        if not isinstance(rows, list):
+            raise Refused("Coolify application list unavailable")
+        result = []
+        for row in rows:
+            if not isinstance(row, dict) or not isinstance(row.get("name"), str):
+                raise Refused("Coolify application list unavailable")
+            if row["name"].startswith(PROJECT_PREFIX):
+                result.append({"name": row["name"], "uuid": identifier(row.get("uuid", "")),
+                               "status": str(row.get("status") or "unknown")})
+        return result
+
+    async def create_plan(self, tenant_id: str) -> dict[str, Any]:
+        name = project_name(tenant_id)
+        rows = await self.list()
+        if any(row["name"] == name for row in rows):
+            raise Refused("Enforce project already exists")
+        return plan_create(tenant_id.lower(), existing_count=len(rows), cap=DEFAULT_CONTAINER_CAP)
+
+    @staticmethod
+    def settings_for(plan: dict[str, Any]) -> dict[str, str]:
+        return {"TENANT_ID": plan["tenant_id"], "ENFORCE_DATA_VOLUME": plan["volume"],
+                "THREAT_PAYLOAD_QUEUE_VOLUME": plan["threat_payload_queue"],
+                "ENFORCE_NETWORK_NAME": plan["network"]["name"]}
+
+    @classmethod
+    def founder_fills(cls, plan: dict[str, Any]) -> list[str]:
+        names = set(re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)[^}]*\}", COMPOSE_PATH.read_text()))
+        return sorted(names - cls.settings_for(plan).keys())
+
+    async def create(self, plan: dict[str, Any]) -> dict[str, Any]:
+        # Re-plan at the write boundary: neither a body count nor a stale plan is authority.
+        plan = await self.create_plan(plan["tenant_id"])
+        receipt = receipt_for(plan)
+        receipt["founder_fills"] = self.founder_fills(plan)
+        mutated = False
+        try:
+            mutated = True
+            created = await self.coolify.call("POST", "/applications/private-github-app", mutation=True,
+                json={"project_uuid": self.project, "server_uuid": self.server,
+                      "environment_name": self.environment, "github_app_uuid": self.github_app,
+                      "git_repository": "https://github.com/Tervory-AI/tervory-tank.git",
+                      "git_branch": "main", "build_pack": "dockercompose", "name": plan["project"],
+                      "docker_compose_location": "/agents/ghost/docker-compose.enforce.yml",
+                      "instant_deploy": False, "is_auto_deploy_enabled": False})
+            app_uuid = identifier(created.get("uuid", ""))
+            receipt["uuid"] = app_uuid
+            await self.coolify.call("PATCH", f"/applications/{app_uuid}/envs/bulk",
+                mutation=True, discard_response=True,
+                json={"data": [{"key": key, "value": value, "is_preview": False,
+                                "is_buildtime": True, "is_runtime": True, "is_literal": True}
+                               for key, value in self.settings_for(plan).items()]})
+            receipt["outcome"] = "created"
+        except CoolifyUnknown:
+            receipt["outcome"] = "unknown"
+        except Refused:
+            # The resource may exist even when its four settings could not be written.
+            receipt["outcome"] = "unknown" if mutated else "refused"
+        return receipt
+
+    async def destroy(self, plan: dict[str, Any]) -> dict[str, Any]:
+        plan = plan_destroy(plan["tenant_id"].lower())
+        matches = [row for row in await self.list() if row["name"] == plan["project"]]
+        if len(matches) > 1:
+            raise Refused("Enforce project name is not unique")
+        if not matches:
+            return receipt_for(plan, outcome="absent")
+        receipt = receipt_for(plan)
+        receipt["uuid"] = matches[0]["uuid"]
+        try:
+            await self.coolify.call("DELETE", "/applications/" + matches[0]["uuid"],
+                mutation=True, discard_response=True,
+                params={"delete_configurations": "true", "delete_volumes": "true",
+                        "delete_connected_networks": "true", "docker_cleanup": "false"})
+            receipt["outcome"] = "destroyed"
+        except CoolifyUnknown:
+            receipt["outcome"] = "unknown"
+        return receipt
