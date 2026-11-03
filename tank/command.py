@@ -479,6 +479,9 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
                      *, task_id: uuid.UUID | None = None, on_token: TokenSink | None = None,
                      priority: str | None = None) -> Any:
     from main import Message, RouteRequest, box_region, run_route
+    planned = await policy_code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     planned = await tiger_code_plan(actor, messages, task_id)
     if planned is not None:
         return planned
@@ -1203,6 +1206,31 @@ class PolicyArgs(Body):
 
 class PolicyFallbackArgs(PolicyArgs):
     fallbacks: list[str] | None = Field(default=None, max_length=7)
+
+
+async def policy_code_plan(actor: Actor, messages: list[dict], task_id: uuid.UUID | None):
+    """An explicit policy command needs no model to propose its existing card."""
+    last = messages[-1] if messages else {}
+    if last.get("role") != "user":
+        return None
+    match = re.fullmatch(r"\s*(tank\.policy(?:\.fallbacks)?)(?::|\s|$)\s*(.*)",
+                         last.get("content", ""), re.S)
+    if not match:
+        return None
+    actor = await authorized_actor(actor)
+    tool, source = match.groups()
+    require_tool(actor, tool)
+    try:
+        args = json.loads(source) if source.lstrip().startswith("{") else {"task_type": source.strip()}
+    except ValueError:
+        raise HTTPException(422, "The action arguments are invalid") from None
+    if tool == "tank.policy.fallbacks" and (not isinstance(args, dict) or "fallbacks" not in args):
+        raise HTTPException(422, "The action arguments are invalid")
+    action = validate_action(PlannedAction(tool=tool, arguments=args), actor)
+    from trigger_routes import code_receipt
+    from types import SimpleNamespace
+    receipt = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent="tank")
+    return SimpleNamespace(content=dump({"text": "", "actions": [action.model_dump(mode="json")]}), ledger_id=receipt)
 
 
 async def policy_fallbacks_prepare(conn: Any, args: dict, actor: Actor) -> dict:
