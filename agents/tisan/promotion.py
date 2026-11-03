@@ -135,26 +135,39 @@ class Journal:
         return [self.get(tenant, site, row['id']) for row in ids]
 
 
+class CoolifyUnknown(Refused):
+    """A mutation may have reached Coolify; callers must never retry it."""
+
+
 class Coolify:
-    def __init__(self, http: httpx.AsyncClient, base: str, token: str) -> None:
+    def __init__(self, http: httpx.AsyncClient, base: str, token: str, *,
+                 url_setting: str = "TISAN_COOLIFY_URL",
+                 token_setting: str = "TISAN_COOLIFY_TOKEN") -> None:
         p = urlsplit(base)
         if p.scheme != 'https' or not p.hostname or p.username or p.password or p.query or p.fragment or p.path not in ('', '/', '/api/v1', '/api/v1/'):
-            raise Refused('TISAN_COOLIFY_URL must be an HTTPS API origin')
+            raise Refused(f'{url_setting} must be an HTTPS API origin')
         if not token:
-            raise Refused('TISAN_COOLIFY_TOKEN is not set')
+            raise Refused(f'{token_setting} is not set')
         self.http, self.base, self._token = http, base.rstrip('/').removesuffix('/api/v1'), token
 
-    async def call(self, method: str, path: str, **kwargs: Any) -> dict:
+    async def call(self, method: str, path: str, *, allow_list: bool = False,
+                   mutation: bool = False, **kwargs: Any) -> dict | list:
         try:
             r = await self.http.request(method, self.base + '/api/v1' + path,
                 headers={'Authorization': 'Bearer ' + self._token}, follow_redirects=False, timeout=30, **kwargs)
+            if mutation and r.status_code >= 500:
+                raise CoolifyUnknown("Coolify mutation outcome unknown")
             if r.status_code >= 300:
                 raise Refused('Coolify request failed')
             data = r.json()
-            if not isinstance(data, dict):
+            if not isinstance(data, (dict, list) if allow_list else dict):
                 raise Refused('Coolify response shape unavailable')
             return data
+        except CoolifyUnknown:
+            raise
         except (httpx.HTTPError, ValueError):
+            if mutation:
+                raise CoolifyUnknown("Coolify mutation outcome unknown") from None
             raise Refused('Coolify response unavailable') from None
 
     async def current(self, app: str, *, allow_failed: bool = False) -> dict:
