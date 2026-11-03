@@ -22,7 +22,7 @@ in the shared Git info/exclude. No other thread's temporary files were deleted.
 2. Backend fake OIDC/JWKS, device login, identity stack and backup: **34 passed**, 3 warnings (19.44 seconds). Disposable `cli-w4-oidc-proof` Postgres on loopback only; removed afterward. Initial collection lacked PyJWT; installed the repository-pinned `PyJWT[crypto]==2.15.1` into task-owned `.tmp/w4-python`, without modifying a shared venv, then reran successfully.
 3. `tests/test_ci_minutes_workflows.py`: **67 passed** (6.33 seconds).
 4. All eight platform archives built twice byte-identically on Linux; 10 files signed with an ephemeral, in-memory offline test key; all eight archives plus the signed manifest/checksum list verified. No release key value was read or generated. Hash evidence below pertains to that offline build before the final README correction; final archives get their own manifest/checksums.
-5. Tampering, wrong public key, signature mismatch, checksum/size disagreement and missing platform tests pass. The integrated fake OIDC HTTP fixture approves separately from polling, then exercises ZA code reads/edits, local undo and plugin Confirm without a US call. The backend suite separately verifies real JWT signatures and tenant/role mapping.
+5. Tampering, wrong public key, signature mismatch, checksum/size disagreement and missing platform and wrong-version/replayed-manifest tests pass. The integrated fake OIDC HTTP fixture approves separately from polling, then exercises ZA code reads/edits, local undo and plugin Confirm without a US call. The backend suite separately verifies real JWT signatures and tenant/role mapping.
 
 Reproduction of the focused backend run (existing venv, task-owned dependencies):
 

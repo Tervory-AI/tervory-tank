@@ -35,9 +35,10 @@ test('consumer verifies signatures, sizes and checksum agreement before extracti
     const sha256 = createHash('sha256').update(bytes).digest('hex');
     writeFileSync(join(root, file), bytes);
     writeFileSync(join(root, 'SHA256SUMS'), `${sha256}  ${file}\n`);
-    writeFileSync(join(root, 'manifest.json'), JSON.stringify({ artifacts: { 'win32-x64-msvc': { file, size: bytes.length, sha256 } } }));
+    writeFileSync(join(root, 'manifest.json'), JSON.stringify({ version: '0.5.0', artifacts: { 'win32-x64-msvc': { file, size: bytes.length, sha256 } } }));
     signRelease(root, pair.privateKey, pair.publicKey);
     assert.equal(verifyRelease(root, pair.publicKey, 'win32-x64-msvc'), 1);
+    assert.throws(() => verifyRelease(root, pair.publicKey, 'win32-x64-msvc', '0.4.0'), /version refused/);
     assert.throws(() => verifyRelease(root, pair.publicKey, 'missing'), /platform refused/);
     writeFileSync(join(root, file), 'tampered');
     assert.throws(() => verifyRelease(root, pair.publicKey), /signature refused/);

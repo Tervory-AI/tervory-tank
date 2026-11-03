@@ -43,7 +43,7 @@ the founder, corresponding to `CLI_RELEASE_SIGNING_PUBLIC_KEY`. From a trusted
 checkout, verify before extracting (the same verifier works on macOS/Linux):
 
 ```powershell
-node cli/scripts/verify-release.mjs ./download ./trusted-release-public.pem win32-x64-msvc
+node cli/scripts/verify-release.mjs ./download ./trusted-release-public.pem win32-x64-msvc 0.5.0
 ```
 
 Exact successful output:
