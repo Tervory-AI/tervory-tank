@@ -117,7 +117,7 @@ async def test_stale_confirmation_lease_recovers_same_saved_order_and_outbox(mon
 @pytest.mark.parametrize("legacy_state", ["payment_pending", "payment_failed", "payment_refused", "captured", "refunded", "ordered"])
 async def test_historical_provider_state_is_preserved_and_cannot_place_an_order(monkeypatch, tmp_path, legacy_state):
     store, service, _, _, _ = await auto_shop(monkeypatch, tmp_path)
-    historical = {"state": legacy_state, "payment": {"reference": "old-audit-reference"}}
+    historical = {"state": legacy_state, "payment": {"reference": "placeholder-audit-reference"}}
     await store.add_quote(TENANT, "historical", {"locate_state": historical}, {})
     with pytest.raises(RigError):
         await service.confirm_store_payment(TENANT, "historical")
@@ -128,10 +128,10 @@ async def test_historical_provider_state_is_preserved_and_cannot_place_an_order(
 @pytest.mark.asyncio
 async def test_quote_items_expose_store_time_offer_time_or_back_order_without_provenance():
     store = await rate_stub(await shop())
-    await store.put_retailer(TENANT, "shop", "shop@example.com", None, "Shop",
+    await store.put_retailer(TENANT, "placeholder-shop", "placeholder-shop@example.com", None, "placeholder Shop",
                              delivery={"min_days": 2, "max_days": 3})
     service = QuoteService(store, None, HandoffDouble(), MemoryQuotes(store))
-    body = {"product_id": "part-1", "contact": {"name": "Shopper", "email": "shopper@example.com"}}
+    body = {"product_id": "part-1", "contact": {"name": "placeholder Shopper", "email": "placeholder-shopper@example.com"}}
     located = await service.quote(TENANT, body)
     assert located["items"][0]["delivery"] == {"ship_days": 10, "eta": "2026-11-12", "back_order": False}
     store.supply_state[TENANT]["offers"] = []
@@ -153,14 +153,14 @@ async def test_every_setup_item_carries_delivery_metadata():
     from rigbox.store import MemoryStore
     store = MemoryStore()
     await seed(store, TENANT)
-    await store.put_retailer(TENANT, "shop", "shop@example.com", None, "Shop",
+    await store.put_retailer(TENANT, "placeholder-shop", "placeholder-shop@example.com", None, "placeholder Shop",
                              delivery={"min_days": 2, "max_days": 3})
     service = QuoteService(store, None, HandoffDouble(), MemoryQuotes(store))
     setup = (await service.setups(TENANT, "CORE-1"))["setups"][0]
     unavailable = setup["parts"][-1]["product"]["id"]
     row = next(row for row in await store.products(TENANT) if row["sku"] == unavailable)
     await store.upsert_product(TENANT, {**row, "attributes": {"stock": {"status": "out_of_stock"}}})
-    quote = await service.quote(TENANT, {"setup": setup, "contact": {"name": "Shopper", "email": "shopper@example.com"}})
+    quote = await service.quote(TENANT, {"setup": setup, "contact": {"name": "placeholder Shopper", "email": "placeholder-shopper@example.com"}})
     assert len(quote["items"]) == len(setup["parts"])
     assert all("delivery" in item for item in quote["items"])
     assert quote["items"][-1]["delivery"]["back_order"] is True
@@ -171,7 +171,7 @@ async def test_every_setup_item_carries_delivery_metadata():
 async def test_store_delivery_range_is_validated_and_preserved():
     store = await rate_stub(await shop())
     retailer = Retailer(QuoteService(store, None, HandoffDouble(), MemoryQuotes(store)))
-    base = {"name": "Shop", "email": "shop@example.com"}
+    base = {"name": "placeholder Shop", "email": "placeholder-shop@example.com"}
     for bad in (None, {"min_days": 2}, {"min_days": True, "max_days": 3},
                 {"min_days": 4, "max_days": 2}, {"min_days": 0, "max_days": 366}):
         with pytest.raises(ValueError):
@@ -195,7 +195,7 @@ async def test_retailer_http_confirmation_requires_existing_control_auth_and_onl
         url = "/internal/retailer/confirm-store-payment"
         assert (await client.post(url, json=request)).status_code == 401
         headers = {"x-rig-retailer-key": KEY}
-        invalid = await client.post(url, json={**request, "data": {**request["data"], "bank_details": "refused"}}, headers=headers)
+        invalid = await client.post(url, json={**request, "data": {**request["data"], "bank_details": "placeholder"}}, headers=headers)
         assert invalid.status_code == 422 and not store.locate_orders
         other = await client.post(url, json={**request, "tenant_id": OTHER}, headers=headers)
         assert other.status_code == 404 and not store.locate_orders
@@ -224,7 +224,7 @@ async def test_postgres_store_confirmation_schema_twice_and_tenant_isolation(mon
         fixture = await shop()
         await store.upsert_product(TENANT, (await fixture.products(TENANT))[0])
         await store.save_rule(TENANT, {"freight": "5", "duty_percent": "0", "margin_percent": "20"})
-        await store.put_retailer(TENANT, "shop", "shop@example.com", None, "Shop", locate_enabled=True,
+        await store.put_retailer(TENANT, "placeholder-shop", "placeholder-shop@example.com", None, "placeholder Shop", locate_enabled=True,
                                  auto_order=True, delivery={"min_days": 2, "max_days": 3})
         await store.save_rate(TENANT, "USD", "18", "ZAR")
         supply = SupplyStore(store)
@@ -238,7 +238,7 @@ async def test_postgres_store_confirmation_schema_twice_and_tenant_isolation(mon
         service.locate_checker = Live(available("45.00"))
         held = await service.locate_confirm(TENANT, "part-1")
         accepted = await service.locate_accept(TENANT, {"product_id": "part-1", "hold": held["hold"],
-            "contact": {"name": "Shopper", "email": "shopper@example.com"}})
+            "contact": {"name": "placeholder Shopper", "email": "placeholder-shopper@example.com"}})
         assert await pool.fetchval("SELECT count(*) FROM agent_rig.locate_orders") == 0
         with pytest.raises(RigError):
             await service.confirm_store_payment(OTHER, accepted["request_id"])

@@ -2,7 +2,7 @@
 
 Payments were removed on **3 Nov**, by the founder’s decision: the ZA quote flow ends at the store. The client accepts Rig’s held-price quote; the store issues its own invoice in its own system and receives EFT directly. Rig does not collect, capture, void or refund money, and takes no card or bank fields. This supersedes the former pay-on-Accept handoff and its TestAdapter/payment-webhook instructions.
 
-Branch: `codex/rig-no-payments`, isolated checkout `/workspace/codex-rig-nopay`. Main already contains #599, #604 and #603; none was reapplied. The completed Figma branch and the other cart checkout were preserved. Claude opens the PR. The founder merges; no PR merge or deployment was performed.
+Branch: `codex/rig-no-payments`; continuation checkout `/workspace/fresh-rig-nopay-0845` (historical checkout `/workspace/codex-rig-nopay`). Main already contains #599, #604 and #603; none was reapplied. The completed Figma branch and the other cart checkout were preserved. Claude opens the PR. The founder merges; no PR merge or deployment was performed.
 
 ## Resulting flow and API
 
@@ -50,7 +50,7 @@ Read `tank/main.py:_startup` (`:754` onward) before pushing: it uses the separat
 
 Deployment impact on a future founder merge: Rig source changes redeploy the Rig room and regional copies, including ZA. There are no compose changes; only the obsolete name in `.env.example` is removed. No secret value was read, typed or created, no provider was connected, and no production data changed.
 
-## Validation and exact commands
+## Historical validation and exact commands
 
 Final complete Rig suite: **735 passed, 19 skipped, 14 warnings in 554.03s (0:09:14)**, exit 0.
 
@@ -251,3 +251,38 @@ Names containing the old word “refund” are historical test identifiers; rema
 No founder-browser test or screenshot is claimed. After the founder merges/deploys, he must accept a quote on the Custom Nation test page and see its store handoff without a payment step, then confirm through the authenticated retailer API and verify exactly one order/PO. API responses carry each item’s delivery time or back-order flag without supplier details. Widget display and a retailer confirmation button remain Figma items; this job adds no unapproved rendering or wording.
 
 The founder’s test screenshots must be added to the PR after that acceptance. Tests passing is not the founder’s DONE WHEN. Claude opens the PR; the founder’s review and merge remain pending.
+
+
+## Fresh continuation of #613
+
+The latest public `task_complete` at 2026-11-03T16:47:59.307Z explicitly acknowledged stopping with no push in flight. Its reported uncommitted `tank/command.py` diff was copied read-only from the stopped checkout and preserved here. No old checkout was edited.
+
+`rig.quote.confirm_payment` uses the existing /chats Confirm card, with the tool name as its label and only `quote_id` as its argument. Tenant admins receive it through the same additional tool exposure as Trigger; the founder also receives it, ordinary members do not. Confirmed dispatch binds the saved card to the signed-in tenant, user, tool and arguments. The existing Tank corridor derives tenant identity from the actor and writes a $0 `code` ledger receipt on success. This operation uses its tool permission rather than requiring a separate Rig squad grant; other retailer operations keep their existing gate.
+
+| File and line | Continuation change |
+| --- | --- |
+| `tank/command.py:44`, `:118`, `:1018`, `:1262`, `:1461`, `:1655` | Tool registration, admin/founder exposure, strict arguments, adapter and confirmed dispatch; preserved stopped-owner patch. |
+| `tank/access.py:938` | Existing confirmation corridor checks tool authority; other operations retain the Rig squad gate. |
+| `tests/test_command.py:1408`, `:1430`, `:1469` | Ordinary-member denial/admin/founder exposure, required Confirm and $0 code receipt, other-tenant 404 through confirmed admin dispatch. |
+| `tests/test_rig_no_payments.py:120`, `:131`, `:134`, `:156`, `:163`, `:174`, `:198`, `:227`, `:241` | Explicit placeholder test data. |
+
+After merge, the founder fills these setting names only: `RIG_LOCATE_ORDER_MODE`, `RIG_RETAILER_KEY`, `RIG_LOCATE_OUTBOX_DIR` for auto-order, plus the store's delivery range through existing retailer settings.
+
+No founder browser acceptance is claimed. Verification uses offline tests with a disposable local Postgres, never a model call. Historical results above are not claims for this continuation's final head. CI's `tank` job is the full-suite test of record; its final-head result is recorded in the PR body.
+
+Fresh-checkout commands (the first collection attempt lacked `jsonschema`; the local overlay reuses installed packages without changing a shared environment):
+
+```sh
+git clone --single-branch --branch codex/rig-no-payments https://github.com/Tervory-AI/tervory-tank.git /workspace/fresh-rig-nopay-0845
+git config user.name Codex
+git config user.email codex@openai.com
+git -C /workspace/codex-rig-nopay diff -- tank/command.py | git apply
+docker run --detach --name fresh-rig-nopay-0845-pg --publish 127.0.0.1::5432 --env POSTGRES_HOST_AUTH_METHOD=trust postgres:16
+docker port fresh-rig-nopay-0845-pg 5432
+TMPDIR=/workspace/fresh-rig-nopay-0845/.rig-validation PYTHONPATH=.rig-validation/python-overlay:agents/_chassis:agents/rig POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32864/postgres RIG_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32864/postgres /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python -m pytest tests/test_command.py -k rig_confirmation tests/test_rig_no_payments.py -q --tb=short --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+TMPDIR=/workspace/fresh-rig-nopay-0845/.rig-validation PYTHONPATH=.rig-validation/python-overlay:agents/_chassis:agents/rig RIG_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32864/postgres /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python -m pytest tests/test_rig_no_payments.py -q --tb=short --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+/home/ammosync/trigger-crm-venv312/bin/ruff check tank/command.py tank/access.py tests/test_command.py tests/test_rig_no_payments.py --select E9,F
+git diff --check
+```
+
+Results: the three new Command tests pass (`3 passed, 99 deselected`); the separate no-payments suite passes (`16 passed`). Lint and whitespace pass. The initial new permission test omitted its runtime fixture; that test harness issue was corrected before these passing runs.

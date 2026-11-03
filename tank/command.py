@@ -41,7 +41,7 @@ TOOLS = {
     "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.to_crm"],
     "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.position"],
     "market_lab": ["market_lab.research"],
-    "rig": ["rig.search", "rig.ask"],
+    "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment"],
     "tisan": ["tisan.scaffold"],
     "radix": ["radix.scan", "radix.repo.scan", "radix.repo.findings"],
     "zenas": ["zenas.ask", "zenas.matters", "zenas.review", "zenas.watch.add", "zenas.watch.list", "zenas.watch.enable", "zenas.watch.disable"],
@@ -115,8 +115,10 @@ def allowed_tools(actor: Actor) -> list[str]:
     squads = TOOLS.keys() if actor.founder else actor.squads & SQUADS
     founder_tools = [name for name in FOUNDER_TOOLS
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
-    voice_tools = TOOLS["trigger"] if actor.tenant_admin and not actor.founder else []
-    return sorted([tool for squad in squads for tool in TOOLS[squad]] + founder_tools + voice_tools + list(actor.mcp_tools))
+    voice_tools = TOOLS["trigger"] + ["rig.quote.confirm_payment"] if actor.tenant_admin and not actor.founder else []
+    return sorted([tool for squad in squads for tool in TOOLS[squad]
+                   if tool != "rig.quote.confirm_payment" or actor.tenant_admin or actor.founder]
+                  + founder_tools + voice_tools + list(actor.mcp_tools))
 
 
 def require_tool(actor: Actor, name: str) -> None:
@@ -1013,6 +1015,10 @@ class RigAskArgs(QuestionArgs):
     product_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_.:-]+$")
 
 
+class RigConfirmPaymentArgs(Body):
+    quote_id: str = Field(min_length=1, max_length=200)
+
+
 class SkillVersionArgs(Body):
     skill_id: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$")
     version: str = Field(max_length=50, pattern=r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$")
@@ -1253,6 +1259,7 @@ ADAPTERS = {
     "market_lab.research": Adapter("POST", "/v1/research", QuestionArgs, "Research a market question", True, "paid_run"),
     "rig.search": Adapter("GET", "/v1/rig/search", QueryArgs, "Search the product catalogue"),
     "rig.ask": Adapter("POST", "/v1/rig/ask", RigAskArgs, "Ask about a product", True, "paid_run"),
+    "rig.quote.confirm_payment": Adapter("POST", "/v1/access/rig/admin/confirm-store-payment", RigConfirmPaymentArgs, "rig.quote.confirm_payment"),
     "tisan.scaffold": Adapter("POST", "/v1/skala/tisan.scaffold/run", ScaffoldArgs, "Create a site scaffold", False, "other", "tisan.scaffold"),
     "radix.domain.prove": Adapter("POST", "/v1/radix/passive/domains", RadixDomainArgs, "radix.domain.prove"),
     "radix.passive.scan": Adapter("POST", "/v1/radix/passive/scans", RadixPassiveArgs, "radix.passive.scan"),
@@ -1451,6 +1458,8 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, scope, None
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
+    if action.tool == "rig.quote.confirm_payment":
+        return adapter.method, path, {}, {"data": args}
     if action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review"}:
         return adapter.method, path, {}, args  # Actor headers supply identity, never body fields.
     if adapter.method == "GET":
@@ -1643,7 +1652,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if action.tool.startswith("mcp."):
                 from mcp_connections import dispatch
                 status, result = await dispatch(action, actor)
-            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "radix.repo.scan"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"rig.quote.confirm_payment", "base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "radix.repo.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
