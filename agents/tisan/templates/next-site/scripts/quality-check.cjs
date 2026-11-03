@@ -10,8 +10,6 @@ const {
   writeFileSync,
 } = require("node:fs");
 const { join } = require("node:path");
-const { chromium } = require("@playwright/test");
-const AxeBuilder = require("@axe-core/playwright").default;
 const { sitePaths } = require("./site-paths.cjs");
 
 const listen = (server) =>
@@ -120,6 +118,8 @@ function lighthouseScores(reports, assertions) {
 }
 
 async function browserChecks(origin, paths, proxyUrl) {
+  const { chromium } = require("@playwright/test");
+  const AxeBuilder = require("@axe-core/playwright").default;
   const accessibility = { name: "accessibility", ok: true, pages: [], violations: [] };
   const links = { name: "links", ok: true, checked: [], failures: [], external: [] };
   const browser = await chromium.launch({
