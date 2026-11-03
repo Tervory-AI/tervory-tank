@@ -2503,6 +2503,24 @@ CREATE TABLE IF NOT EXISTS tank.trigger_bot_windows (
  tenant_id uuid NOT NULL, window_id bigint NOT NULL, salt bytea NOT NULL,
  PRIMARY KEY(tenant_id,window_id)
 );
+-- Remove legacy counters whose short-lived window has already expired.
+DELETE FROM tank.trigger_bot_limits l
+ WHERE NOT EXISTS (SELECT 1 FROM tank.trigger_bot_windows w
+                   WHERE w.tenant_id=l.tenant_id AND w.window_id=l.window_id);
+DO $$ BEGIN
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                WHERE conrelid='tank.trigger_bot_limits'::regclass
+                  AND conname='trigger_bot_limits_window_fk') THEN
+  ALTER TABLE tank.trigger_bot_limits ADD CONSTRAINT trigger_bot_limits_window_fk
+   FOREIGN KEY (tenant_id,window_id)
+   REFERENCES tank.trigger_bot_windows(tenant_id,window_id) ON DELETE CASCADE;
+ END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                WHERE conrelid='tank.trigger_bot_limits'::regclass
+                  AND conname='trigger_bot_limits_hits_positive') THEN
+  ALTER TABLE tank.trigger_bot_limits ADD CONSTRAINT trigger_bot_limits_hits_positive CHECK (hits>0);
+ END IF;
+END $$;
 -- Same conditional ENABLE/FORCE + permissive/restrictive boundary as personal_tokens.
 DO $$ DECLARE tab text; BEGIN
  IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
