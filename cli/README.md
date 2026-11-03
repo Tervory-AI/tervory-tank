@@ -84,7 +84,7 @@ An unchanged installation prints `Tervory CLI 0.5.0 is already installed.`.
 A successful change prints `Downloading Tervory CLI <version> (<platform>)`,
 `SHA-256 verified: <sha256>` and `Updated Tervory CLI <old-version> -> <version>.` on separate
 lines. Versioned builds currently live in the Workspace image; older pins can
-stop resolving after a new image deploy. Installed copies check for updates at
+stop resolving after a new image deploy. Linux/macOS installed copies check for updates at
 most daily with a 1.5-second budget; `TERVORY_NO_UPDATE_CHECK=1` disables notices.
 
 ## Login: US and ZA

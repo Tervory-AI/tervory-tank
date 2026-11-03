@@ -147,6 +147,8 @@ export async function update({ transport, io, version, root = PACKAGE_ROOT, tar 
  * notice or null; never throws (offline, slow or broken answers are ignored).
  */
 export async function updateNotice({ transport, now = Date.now, root = PACKAGE_ROOT, timeoutMs = 1500 }) {
+  // Windows uses verified archive installation; never suggest its refused updater.
+  if (process.platform === 'win32') return null;
   try {
     const release = await installedRelease(root);
     if (!release) return null;
