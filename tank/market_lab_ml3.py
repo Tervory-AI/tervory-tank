@@ -17,7 +17,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from tenant_db import tenant_path
 
@@ -228,6 +228,19 @@ async def webhooks(tenant: UUID) -> dict:
     return {"sent": sent}
 
 
+class ConfidenceBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: UUID
+    hits: int = Field(ge=0, strict=True)
+    total: int = Field(ge=0, strict=True)
+
+    @model_validator(mode="after")
+    def valid_counts(self):
+        if self.hits > self.total:
+            raise ValueError("The action arguments are invalid")
+        return self
+
+
 class MailBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tenant_id: UUID
@@ -266,6 +279,12 @@ def build_router(tank):
     async def room_only(request: Request, x_tank_key: str = Header(default="")):
         if not command.key_matches(x_tank_key, os.environ.get("TANK_KEY_MARKET_LAB", "")):
             raise HTTPException(401, "Room key required")
+
+    @router.post("/v1/market-lab/internal/confidence", dependencies=[Depends(room_only)])
+    @tenant_path("body")
+    async def confidence(body: ConfidenceBody):
+        from base_reliability import wilson_lower
+        return {"confidence": wilson_lower(body.hits, body.total), "hits": body.hits, "total": body.total}
 
     @router.post("/v1/market-lab/internal/alerts/{operation}", dependencies=[Depends(room_only)])
     @tenant_path("body")
