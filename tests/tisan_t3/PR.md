@@ -201,3 +201,94 @@ The main portion is being rerun using the same checked-in runner's
 local budget, with `GITHUB_ACTIONS=true` for per-failure source locations.
 This is a pending diagnostic, **not a green full-suite claim**. Its complete
 outcome and exact helper invocation will be appended before final handoff.
+
+## Full-suite environment diagnostics and repaired main run
+
+The first main rerun was interrupted explicitly to preserve its diagnostics
+once environmental failures were identified. It returned exit 2 after 322.94s:
+**25 failed, 3208 passed, 8 skipped, 8 collection errors, 114 warnings**. This was
+an interrupted partial run, not a completed full-suite result. The 8 collection
+errors were missing phonenumbers, jwt, trimesh or boto3 in the existing local
+interpreter. The failed browser cases reported closed Chrome processes and
+failed `/tmp/playwright_chromiumdev_profile-*` cache/login-database writes under
+the existing quota. Tiger's migration diagnostics reported an already-existing
+`agent_tiger` role in the reused disposable cluster. None is hidden or waived.
+
+Focused diagnostic commands, on the original cluster and default temporary path:
+
+```sh
+PYTHONPATH=tank:.git/t3-deps POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32843/tisan_t3_test /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q tests/test_tiger_competitors.py::test_room_migration_and_nonowner_tank_admin_after_role_ownership --disable-socket --allow-hosts=127.0.0.1,localhost --tb=short --basetemp=.git/t3-tiger-diagnostic-tmp
+PYTHONPATH=tank:.git/t3-deps /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q tests/test_read1_review.py::test_canvas_normalizes_modern_css_colours --disable-socket --allow-hosts=127.0.0.1,localhost --tb=short --basetemp=.git/t3-read1-diagnostic-tmp
+```
+
+Results: **2 failed in 2.90s** (duplicate role), and **3 failed** (Chrome profile
+writes failed under `/tmp`). No Tiger or READ-1 source/assertion was changed.
+Repaired only the owned test environment:
+
+```sh
+docker run --detach --rm --name codex-tisan-t3-diagnostic-postgres --publish 127.0.0.1::5432 --env POSTGRES_HOST_AUTH_METHOD=trust --tmpfs /var/lib/postgresql/data postgres:16.15
+docker port codex-tisan-t3-diagnostic-postgres 5432
+mkdir -p .git/t3-runtime-tmp
+PYTHONPATH=tank:.git/t3-deps POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32851/postgres /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q tests/test_tiger_competitors.py::test_room_migration_and_nonowner_tank_admin_after_role_ownership --disable-socket --allow-hosts=127.0.0.1,localhost --tb=short --basetemp=.git/t3-tiger-clean-tmp
+TMPDIR=/workspace/codex-tisan-t3/.git/t3-runtime-tmp PYTHONPATH=tank:.git/t3-deps /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q tests/test_read1_review.py::test_canvas_normalizes_modern_css_colours --disable-socket --allow-hosts=127.0.0.1,localhost --tb=short --basetemp=.git/t3-read1-clean-tmp
+```
+
+Fresh cluster bound only `127.0.0.1:32851`. Results: **2 passed in 4.48s** and
+**3 passed in 4.76s**. These include reapplying the actual Tank schema as its
+non-superuser admin after room-role ownership, with the new Tisan DDL present.
+No shared temporary directory was purged.
+
+Installed only existing pinned suite dependencies into `.git/t3-deps`:
+
+```sh
+TMPDIR=/workspace/codex-tisan-t3/.git/t3-runtime-tmp /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pip install --no-cache-dir --no-deps --target .git/t3-deps phonenumbers==9.0.42 PyJWT==2.15.1 boto3==1.40.47 botocore==1.40.76 jmespath==1.1.0 s3transfer==0.14.0 trimesh==4.9.0 numpy==2.2.6
+TMPDIR=/workspace/codex-tisan-t3/.git/t3-runtime-tmp /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pip install --no-cache-dir --target .git/t3-deps python-dateutil==2.9.0.post0
+```
+
+Both exited 0. The intermediate import check found missing dateutil; the second
+command installed its existing Forge-lock pin and six. Final import check for
+phonenumbers, jwt, trimesh, boto3, dateutil and urllib3 succeeded. No dependency
+manifest or shared interpreter was changed; no model/weights were installed.
+
+Created `tisan_t3_test`, `market_test` and `radix_passive_test` with `docker exec
+codex-tisan-t3-diagnostic-postgres createdb -U postgres <name>` (all exit 0).
+Stopped only this task's original disposable cluster after its tests finished:
+`docker stop codex-tisan-t3-postgres` (exit 0; its `--rm` removed it). The clean
+main run reuses the actual checked-in offline runner helpers with this exact
+local helper, saved as `.git/t3-rerun-main.py`:
+
+```python
+import importlib.util
+import os
+from pathlib import Path
+
+root = Path.cwd()
+spec = importlib.util.spec_from_file_location('t3_offline_runner', root / '.github/scripts/offline_suite.py')
+runner = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(runner)
+env = runner.clean_env()
+shared = 'postgresql://postgres@127.0.0.1:32851/tisan_t3_test'
+for name in ('POOL_SCHEMA_DATABASE_URL', 'ZENAS_SCHEMA_DATABASE_URL', 'MEMORY_TEST_DATABASE_URL',
+             'BASE_TEST_DATABASE_URL', 'RLS_TEST_DATABASE_URL', 'SKALA_B3_TEST_DATABASE_URL',
+             'SKALA_INTAKE_TEST_DATABASE_URL', 'TIGER_MAIL_TEST_DATABASE_URL', 'RIG_TEST_DATABASE_URL',
+             'TRAINING_SCHEMA_DATABASE_URL'):
+    env[name] = shared
+for name, database in [('RADIX_PASSIVE_TEST_DATABASE_URL', 'radix_passive_test'), ('DATABASE_URL', 'market_test')]:
+    env[name] = 'postgresql://postgres@127.0.0.1:32851/' + database
+env['GITHUB_ACTIONS'] = 'true'
+env['TMPDIR'] = str(root / '.git/t3-runtime-tmp')
+env['PYTHONPATH'] = str(root / 'tank') + ':' + str(root / '.git/t3-deps')
+args = runner.pytest_args('3', '300')
+args += ['--junitxml=' + str(root / '.git/t3-junit/main-clean.xml')]
+args += ['--ignore=' + p for p in runner.ALONE + runner.ELSEWHERE]
+raise SystemExit(runner.run(args, 2160, 'main-local-rerun', cwd=root, env=env))
+```
+
+Invoked with:
+
+```sh
+TMPDIR=/workspace/codex-tisan-t3/.git/t3-runtime-tmp /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python .git/t3-rerun-main.py
+```
+
+The clean main result is still pending at this checkpoint. Its final outcome
+will be appended; neither earlier main attempt is being represented as green.
