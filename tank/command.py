@@ -122,14 +122,9 @@ def allowed_tools(actor: Actor) -> list[str]:
     client_tools = TISAN_CLIENT_TOOLS if actor.tenant_admin and not actor.founder else []
     plugin_tools = (["plugins.list"] + (["plugins.install", "plugins.remove"] if actor.tenant_admin else [])) if not actor.founder and (actor.squads & SQUADS or actor.tenant_admin) else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]
-<<<<<<< HEAD
-                   if tool != "rig.quote.confirm_payment" or actor.tenant_admin or actor.founder]
-                  + founder_tools + voice_tools + client_tools + plugin_tools + list(actor.mcp_tools))
-=======
                    if (tool != "rig.quote.confirm_payment" and not tool.startswith("market_lab.alerts."))
                    or actor.tenant_admin or actor.founder]
-                  + founder_tools + voice_tools + client_tools + list(actor.mcp_tools))
->>>>>>> origin/main
+                  + founder_tools + voice_tools + client_tools + plugin_tools + list(actor.mcp_tools))
 
 
 def require_tool(actor: Actor, name: str) -> None:
