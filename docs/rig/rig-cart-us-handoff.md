@@ -201,10 +201,27 @@ shown in the committed verification file in a separate subprocess with a
 300-second limit, captures its output/exit code, and writes an ignored local
 results JSON. It does not change source, credentials, data or test expectations.
 The tested runtime/test tree is `f08033f6`; later commits contain handoff or
-verification evidence only. Every completed source/test file was committed and
+verification evidence and a whitespace-only schema EOF cleanup. No SQL token or
+runtime behavior changed after the regression run. Every completed source/test file was committed and
 pushed individually to `codex/rig-cart-us`. No PR was opened, labelled or merged,
 no main push or additional main merge occurred, and no deployment was attempted.
 
 Additional changed evidence file: `tests/rig_cart_gate1/verification.txt:1`.
 The exact missing approved controls/wording remain those listed above. Gate 2
 implementation and gate 3 are unstarted; no founder-browser completion is claimed.
+
+
+Final cleanup commands:
+
+```sh
+git diff --check aa930a8d HEAD
+git status --short
+git rev-parse HEAD
+docker rm -fv codex-rig-cart-wave3-placeholder-pg
+```
+
+The first full-range whitespace check found a trailing blank line introduced by
+the schema-block move; it was removed and the full-range check then passed.
+The disposable test container was removed. The original checkout and ignored
+validation/source evidence remain preserved. The working tree is clean after
+pushing the evidence commit; the new head is reported in the chat.
