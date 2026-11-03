@@ -1,6 +1,5 @@
 """Read-only capacity script: fake commands only, no Docker daemon or host probe."""
 
-import os
 from pathlib import Path
 import shlex
 import shutil
