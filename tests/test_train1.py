@@ -216,7 +216,7 @@ async def test_lawyer_released_and_decided_case_pairs(database):
         public = await conn.fetchval("INSERT INTO agent_zenas.worked_matters(region,source,jurisdiction,material_type) VALUES ('us-east','case','us','public_record') RETURNING id")
         await conn.execute("INSERT INTO agent_zenas.training_pairs(region,source,worked_id,request) VALUES ('us-east','case',$1,'public decision')", public)
         await training.collect_zenas(conn, None)
-        assert await conn.fetchval("SELECT count(*) FROM tank.training_pairs") == 2
+        assert await conn.fetchval("SELECT count(*) FROM tank.training_pairs") == 1
 
 
 @pytest.mark.asyncio

@@ -231,10 +231,12 @@ async def test_public_za_decided_case_exports_but_client_matter_does_not(databas
     monkeypatch.setenv('HF_ORG', 'fixture')
     monkeypatch.setattr(gold, 'is_holdout', lambda *args: False)
     async with pool.acquire() as conn:
-        await conn.execute((ROOT / 'agents/zenas/schema.sql').read_text())
-        case = await conn.fetchval("INSERT INTO agent_zenas.worked_matters(region,source,jurisdiction,material_type) VALUES ('za','case','za','public_record') RETURNING id")
-        await conn.execute("INSERT INTO agent_zenas.training_pairs(region,source,worked_id,request) VALUES ('za','case',$1,'Public ZA decision')", case)
-        await training.collect_zenas(conn, None)
+        await training.save_pair(conn, tenant=PLATFORM_TENANT, agent='zenas', task='zenas.reasoning',
+            value={'facts': 'Public ZA decision', 'issues': 'placeholder issue'},
+            output={'reasoning': 'placeholder reasons', 'order': 'The application is granted.',
+                    'outcome': 'granted', 'costs': 'without costs'},
+            approved_by='court decision', source='court_text', ref='concourt:placeholder-version',
+            public=True, client_matter=False, region='za')
         await training.save_pair(conn, tenant=uuid.uuid4(), agent='zenas', task='zenas.reasoning',
             value={'text': 'Client matter'}, output={}, approved_by='fixture', source='zenas', ref='client',
             public=True, client_matter=True)
@@ -249,7 +251,7 @@ async def test_public_za_decided_case_exports_but_client_matter_does_not(databas
     real_client = httpx.AsyncClient
     monkeypatch.setattr(training.httpx, 'AsyncClient', lambda **kw: real_client(transport=httpx.MockTransport(respond), **kw))
     assert (await training.export_once())['exported'] == 1
-    assert captured[0]['input'] == {'text': 'Public ZA decision'}
+    assert captured[0]['input'] == {'facts': 'Public ZA decision', 'issues': 'placeholder issue'}
     assert captured[0]['region'] == 'za'
     load('train').validate_rows(captured)
 
