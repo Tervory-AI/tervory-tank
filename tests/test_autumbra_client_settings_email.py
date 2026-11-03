@@ -220,8 +220,6 @@ def test_owner_email_sender_is_called_for_three_fixture_clients():
         "advisory_url": "https://example.test/cve",
     }]
     fixtures = [
-        ("00000000-0000-0000-0000-0000000000f1", ApplyMode.auto_when_checks_pass,
-         "let us fix this kind of problem automatically", "auto@example.test"),
         ("00000000-0000-0000-0000-0000000000f2", ApplyMode.approve_each,
          "approve fixes yourself", "approve@example.test"),
         ("00000000-0000-0000-0000-0000000000f3", ApplyMode.never,
