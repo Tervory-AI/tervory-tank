@@ -114,7 +114,7 @@ export function identityApprovalUrl(start, region) {
     const base = new URL(start.verification_uri);
     const url = new URL(start.verification_uri_complete || start.verification_uri);
     for (const value of [base, url]) {
-      if (value.origin !== 'https://auth.za.tervory.com' || value.username || value.password || value.hash) {
+      if (value.origin !== 'https://auth-za.tervory.com' || value.username || value.password || value.hash) {
         throw new Error();
       }
     }
