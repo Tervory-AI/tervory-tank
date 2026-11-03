@@ -45,6 +45,11 @@ async def main():
         assert response.status_code == 200, response.text
         assert response.json()['choices'][0]['message']['content'] == 'placeholder fallback'
         print("placeholder: fallback HTTP passed", flush=True)
+        nested = await client.post('/v1/chat/completions', json={'model': 'placeholder-fallback',
+            'messages': messages, 'fallbacks': [{'model': 'placeholder-direct', 'disable_fallbacks': True}],
+            'mock_testing_fallbacks': True})
+        assert nested.status_code == 200, nested.text
+        assert nested.json()['choices'][0]['message']['content'] == 'placeholder direct'
         normal = await client.post('/v1/chat/completions', json={'model': 'placeholder-group', 'messages': messages, 'fallbacks': []})
         assert normal.status_code == 200, normal.text
         assert normal.json()['choices'][0]['message']['content'] == 'placeholder hosted'
