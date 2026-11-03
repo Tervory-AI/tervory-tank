@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { codeSession } from './code-mode.mjs';
 import { basename, extname } from 'node:path';
 import { parse } from 'csv-parse/sync';
 import { installedRelease, packageVersion, update } from './update.mjs';
@@ -452,7 +453,7 @@ export function options(argv) {
 export async function run(argv, { store, transport, io, env = process.env }) {
   const { args, flags } = options(argv); const [name, ...rest] = args;
   if (!name || name === 'help') {
-    io.write('tervory login [--region us-east|za] [--sign-in zitadel] | logout | chat [thread] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] | build "change" | receipts <thread|task> | update [--version X.Y.Z] | version\n');
+    io.write('tervory login [--region us-east|za] [--sign-in zitadel] | logout | chat [thread] | code [folder] | ask "question" | threads | run <agent> <task> [--file path] [--args JSON] | build "change" | receipts <thread|task> | update [--version X.Y.Z] | version\n');
     return;
   }
   if (name === 'update') {
@@ -481,6 +482,10 @@ export async function run(argv, { store, transport, io, env = process.env }) {
   if (name === 'logout') return logout({ store, transport, io });
   const token = await session(store, transport);
   const tank = new Tank(token, transport, io.signal);
+  if (name === 'code') {
+    if (rest.length > 1 || Object.keys(flags).some(flag => flag !== 'model')) throw new Error('Invalid command option.');
+    return codeSession(tank, rest[0] ?? '.', flags.model ?? 'auto', io, receiptLines, safe);
+  }
   if (name === 'models') {
     // Founder-only and unadvertised: Tank answers 404 to everyone else (and the
     // app.tervory.com corridor does not forward it). Never print Tank's raw JSON.
