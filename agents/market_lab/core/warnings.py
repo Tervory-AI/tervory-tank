@@ -198,10 +198,17 @@ async def run(
                 # Freeze only the completed, non-overlapping history available
                 # at issuance. Future outcomes never revise this confidence.
                 from core.warning_bridge import call
-                reliability = await call("confidence", {"tenant_id": tenant, "hits": stats["hits"], "total": count})
-                prediction.update(confidence=reliability["confidence"], kind=config["id"], feed=config["source"])
-                prediction["sources"].append({"confidence_method": "wilson_lower_95",
-                                              "hits": stats["hits"], "total": count})
+                try:
+                    reliability = await call("confidence", {"tenant_id": tenant, "hits": stats["hits"], "total": count})
+                except RuntimeError:
+                    # An optional calculation corridor must not prevent the
+                    # warning itself. Unavailable confidence stays unknown.
+                    reliability = None
+                prediction.update(confidence=reliability["confidence"] if reliability else None,
+                                  kind=config["id"], feed=config["source"])
+                if reliability:
+                    prediction["sources"].append({"confidence_method": "wilson_lower_95",
+                                                  "hits": stats["hits"], "total": count})
                 await ledger.save_prediction(prediction)
                 await ledger.conn.execute(
                     """INSERT INTO agent_market_lab.warnings

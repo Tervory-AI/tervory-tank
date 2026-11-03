@@ -88,7 +88,8 @@ async def test_wilson_confidence_is_existing_code_and_rejects_invalid_counts(dat
 
 
 @pytest.mark.asyncio
-async def test_warning_issues_and_returns_frozen_wilson_confidence(database, monkeypatch):
+@pytest.mark.parametrize('connection', ['available', 'missing', 'unavailable'])
+async def test_warning_issues_and_returns_frozen_wilson_confidence(database, monkeypatch, connection):
     import json
     from datetime import date, timedelta
     from types import SimpleNamespace
@@ -119,20 +120,30 @@ async def test_warning_issues_and_returns_frozen_wilson_confidence(database, mon
     calls = []
     async def corridor(operation, payload):
         calls.append((operation, payload))
+        if connection == 'unavailable':
+            raise RuntimeError('placeholder unavailable connection')
         response = await database.client.post('/v1/market-lab/internal/' + operation, json=payload,
                                               headers={'x-tank-key': 'placeholder-market-lab-key'})
         assert response.status_code == 200
         return response.json()
-    monkeypatch.setattr(warning_bridge, 'call', corridor)
+    if connection == 'missing':
+        monkeypatch.delenv('TANK_KEY', raising=False)
+    else:
+        monkeypatch.setattr(warning_bridge, 'call', corridor)
     async with database.pool.acquire() as conn:
         ledger = PostgresLedger(conn)
         await ledger.apply_schema()
         await warnings.run(ledger, OWNER, 'placeholder_engine', now=at,
                            imported=[{'watch': 'placeholder_watch', 'observations': []}])
         saved = await ledger.predictions_for(OWNER)
-        assert len(saved) == 1 and saved[0]['confidence'] == pytest.approx(wilson_lower(3, 3))
-        assert calls == [('confidence', {'tenant_id': OWNER, 'hits': 3, 'total': 3})]
-        assert saved[0]['sources'][-1] == {'confidence_method': 'wilson_lower_95', 'hits': 3, 'total': 3}
+        expected = pytest.approx(wilson_lower(3, 3)) if connection == 'available' else None
+        assert len(saved) == 1 and saved[0]['confidence'] == expected
+        assert calls == ([] if connection == 'missing' else
+                         [('confidence', {'tenant_id': OWNER, 'hits': 3, 'total': 3})])
+        if connection == 'available':
+            assert saved[0]['sources'][-1] == {'confidence_method': 'wilson_lower_95', 'hits': 3, 'total': 3}
+        else:
+            assert not any('confidence_method' in source for source in saved[0]['sources'])
         import market_lab_ml3
         displayed = market_lab_ml3.records('predictions', {'predictions': saved})
         assert json.loads(displayed[0]['summary'])['confidence'] == saved[0]['confidence']
