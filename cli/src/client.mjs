@@ -473,7 +473,7 @@ export async function run(argv, { store, transport, io, env = process.env }) {
     const { region = 'us-east', 'sign-in': signIn, ...other } = flags;
     if (rest.length || Object.keys(other).length || !ORIGINS[region]
         || (signIn !== undefined && (region !== 'za' || signIn !== 'zitadel'))) {
-      throw new Error('Login accepts --region us-east or --region za, with --sign-in zitadel on ZA only.');
+      throw new Error('Login accepts only --region us-east or --region za; ZA also accepts --sign-in zitadel.');
     }
     return login(region, signIn, { store, transport, io });
   }
