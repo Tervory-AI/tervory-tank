@@ -208,26 +208,6 @@ services:
       retries: 3
       start_period: 60s
 
-  tiger:
-    build: ./tiger
-    restart: unless-stopped
-    shm_size: "1gb"            # Chromium needs shared memory
-    environment:
-      TIGER_MAX_PAGES: ${TIGER_MAX_PAGES:-4}
-    volumes:
-      - tiger_data:/data
-    networks:
-      - default
-      - tervory-gw-tiger
-    expose:
-      - "3000"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-
   tank:
     build:
       context: ./tank
@@ -296,7 +276,7 @@ services:
       BASE_AGENT_URL: http://agent-base:8000
       BASE_REFERENCE_FILE_URL: ${BASE_REFERENCE_FILE_URL:-}
       SEARXNG_URL: http://searxng:8080
-      TIGER_URL: http://tiger:3000
+      TIGER_URL: http://tiger-ocr:3000
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
     depends_on:
       postgres:
@@ -307,6 +287,7 @@ services:
       - default
       - tervory-gw-template
       - tervory-gw-tiger
+      - tervory-gw-tiger-ocr
       - tervory-gw-trigger
       - tervory-gw-trigger-crm
       - tervory-gw-market_lab
@@ -546,3 +527,9 @@ networks:
 
   tervory-gw-trigger:
     name: tervory-gw-trigger
+
+  # Internal network, no internet. Created once on the server:
+  #   docker network create --internal tervory-gw-tiger-ocr
+  tervory-gw-tiger-ocr:
+    external: true
+    name: tervory-gw-tiger-ocr
