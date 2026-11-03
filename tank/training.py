@@ -18,7 +18,7 @@ from typing import Any
 
 import httpx
 from storage import StorageError, archive_training_snapshot
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from gold import (PLATFORM_TENANT, Reviewer, add_candidate, encoded, input_hash,
                   obj, require_job, require_reviewer, runtime, is_holdout)
@@ -558,7 +558,9 @@ async def schedule_loop(operation: str) -> None:
 router = APIRouter(prefix="/v1/training", lifespan=lifespan)
 
 @router.get("/teachers")
-async def teachers(skill_id: str, actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]:
+async def teachers(skill_id: str = Query(min_length=1, max_length=100,
+                                       pattern=r"^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$"),
+                   actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]:
     """Founder-only tenant-local aggregates; pair content never leaves this query."""
     if not actor.founder:
         raise HTTPException(404, "not found")
