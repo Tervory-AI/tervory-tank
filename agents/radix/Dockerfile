@@ -12,6 +12,12 @@ COPY radix/osv_bake.py /bake/osv_bake.py
 RUN mkdir -p /out \
     && python /bake/osv_bake.py /out/osv.sqlite PyPI=/osv/PyPI.zip npm=/osv/npm.zip
 
+# R6 signatures are downloaded only while building this stage.
+FROM python:3.12-slim AS signatures
+RUN apt-get update && apt-get install -y --no-install-recommends clamav-freshclam ca-certificates \
+    && mkdir -p /out && chown clamav:clamav /out \
+    && freshclam --datadir=/out --stdout
+
 FROM python:3.12-slim
 
 # Pinned scanners. The downloads run at image build. A scan does not use the network.
@@ -31,7 +37,7 @@ ARG TARGETARCH
 WORKDIR /app
 COPY _chassis/requirements.txt .
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git tar unzip default-jre-headless \
+    && apt-get install -y --no-install-recommends ca-certificates curl git tar unzip default-jre-headless clamav nodejs npm bash openssl \
     && pip install --no-cache-dir -r requirements.txt \
     && python -m venv /opt/semgrep \
     && /opt/semgrep/bin/pip install --no-cache-dir "semgrep==${SEMGREP_VERSION}" \
@@ -58,6 +64,13 @@ RUN sh /tmp/install-passive-tools.sh \
     && ln -s /opt/bin/nuclei /usr/local/bin/nuclei \
     && pip install --no-cache-dir dnspython==2.9.0 PyYAML==6.0.3 \
     && rm /tmp/install-passive-tools.sh
+COPY radix/install-watch-tools.sh /tmp/install-watch-tools.sh
+RUN sh /tmp/install-watch-tools.sh && rm /tmp/install-watch-tools.sh
+COPY radix/browser/package*.json /app/browser/
+RUN cd /app/browser && npm ci --ignore-scripts --no-audit --no-fund \
+    && PLAYWRIGHT_BROWSERS_PATH=/opt/radix-browsers npx playwright install --with-deps chromium
+COPY radix/browser/check.cjs /app/browser/check.cjs
+COPY --from=signatures /out/ /var/lib/clamav/
 COPY _chassis/chassis /app/chassis
 COPY radix/app.py /app/app.py
 COPY radix/gold_sources.py /app/gold_sources.py
@@ -66,7 +79,7 @@ COPY radix/net.py /app/net.py
 COPY radix/live.py /app/live.py
 COPY radix/egress.py /app/egress.py
 COPY radix/egress-policy.json /app/egress-policy.json
-COPY radix/passive_*.py /app/
+COPY radix/passive_*.py radix/regulation_events.py /app/
 COPY radix/verify /app/verify
 COPY radix/schema.sql /app/schema.sql
 COPY radix/scanlib /app/scanlib
@@ -74,6 +87,9 @@ COPY radix/scanlib/osv/ /opt/osv/
 RUN chown -R agent:agent /app /opt/osv
 # Root-owned and read-only for the agent; copied after the chown so it is one layer.
 COPY --from=osv /out/osv.sqlite /opt/osv/osv.sqlite
+# testssl requires hexdump even with DNS disabled. No runtime package install.
+RUN apt-get update && apt-get install -y --no-install-recommends bsdextrautils \
+    && rm -rf /var/lib/apt/lists/*
 USER agent
 ENV AGENT_NAME=radix \
     DATA_DIR=/data \

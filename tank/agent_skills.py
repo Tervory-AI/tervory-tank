@@ -31,7 +31,7 @@ log = logging.getLogger("tank.agent_skills")
 ROOM = "base"
 # Rooms with a brain pilot. room_text() maps a request's room to one of these fixed
 # strings; SQL always receives the room and its task type as bound parameters.
-ROOMS = {"base": "base", "rig": "rig"}
+ROOMS = {"base": "base", "rig": "rig", "tiger": "tiger"}
 SUBMISSIONS = Path("/tmp/tervory-agent-skills")
 LEDGER_SQL = """
 INSERT INTO tank.ledger
@@ -51,8 +51,7 @@ def room_text(room: str) -> str:
 
 def room_key(room: str, authorization: str = "", x_tank_key: str = "") -> None:
     """Only enabled rooms. Never accept the Workspace or another room's key."""
-    if room not in {"base", "rig"}:
-        raise HTTPException(403, "This room does not have a brain pilot.")
+    room = room_text(room)
     bearer = authorization.removeprefix("Bearer ") if authorization.startswith("Bearer ") else ""
     if bearer and x_tank_key and not hmac.compare_digest(bearer.encode(), x_tank_key.encode()):
         raise HTTPException(401, "Conflicting room keys.")

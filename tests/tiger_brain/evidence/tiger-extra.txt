@@ -1,0 +1,5 @@
+..............................................................s......... [ 75%]
+........................                                                 [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/tiger_before_deploy/test_before_deploy.py:181: 100-page gold set is still for a person to fill
+95 passed, 1 skipped, 3 warnings in 85.30s (0:01:25)

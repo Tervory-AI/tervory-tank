@@ -2182,30 +2182,67 @@ ALTER TABLE tank.skill_evals ADD COLUMN IF NOT EXISTS revalidation_id uuid;
 CREATE UNIQUE INDEX IF NOT EXISTS skill_evals_revalidation_once
     ON tank.skill_evals(revalidation_id) WHERE revalidation_id IS NOT NULL;
 
+-- Routing data: null fallbacks inherit the gateway chain. Holds never serve early.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS fallbacks text[];
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS held_policy jsonb;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS held_swap_id uuid;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS held_at timestamptz;
+ALTER TABLE tank.skill_revalidations ADD COLUMN IF NOT EXISTS swap_id uuid;
+CREATE INDEX IF NOT EXISTS skill_revalidations_swap
+    ON tank.skill_revalidations(tenant_id,swap_id);
+
 CREATE OR REPLACE FUNCTION tank.queue_skill_revalidations() RETURNS trigger
 LANGUAGE plpgsql AS $$
-DECLARE previous text;
+DECLARE serving tank.policy%ROWTYPE;
+        requested jsonb;
+        swap uuid;
 BEGIN
-    IF TG_OP = 'UPDATE' THEN
-        previous := OLD.model;
-    ELSIF NEW.tenant_id IS NOT NULL THEN
-        SELECT model INTO previous FROM tank.policy
-          WHERE task_type=NEW.task_type AND tenant_id IS NULL;
-    END IF;
-    -- Initial creation without a prior effective model is not a swap.
-    IF previous IS NULL OR previous IS NOT DISTINCT FROM NEW.model THEN
+    IF current_setting('tank.policy_swap_apply',true) = 'on' THEN
+        NEW.held_policy := NULL;
+        NEW.held_swap_id := NULL;
+        NEW.held_at := NULL;
         RETURN NEW;
     END IF;
+    IF TG_OP = 'UPDATE' THEN
+        serving := OLD;
+    ELSE
+        -- An upsert's UPDATE trigger owns existing rows; do not queue twice.
+        IF EXISTS (SELECT 1 FROM tank.policy WHERE task_type=NEW.task_type
+                   AND tenant_id IS NOT DISTINCT FROM NEW.tenant_id) THEN
+            RETURN NEW;
+        END IF;
+        SELECT * INTO serving FROM tank.policy
+          WHERE task_type=NEW.task_type AND tenant_id IS NULL;
+    END IF;
+    NEW.held_policy := NULL;
+    NEW.held_swap_id := NULL;
+    NEW.held_at := NULL;
+    IF serving.model IS NULL OR serving.model IS NOT DISTINCT FROM NEW.model
+       OR NOT EXISTS (SELECT 1 FROM tank.skills s
+                      WHERE s.task_type=NEW.task_type AND s.state='approved') THEN
+        RETURN NEW;
+    END IF;
+    swap := gen_random_uuid();
+    requested := to_jsonb(NEW);
     INSERT INTO tank.skill_revalidations
-      (tenant_id,policy_tenant_id,task_type,old_model,model,policy,skill_id,version)
+      (tenant_id,policy_tenant_id,task_type,old_model,model,policy,skill_id,version,swap_id)
     SELECT '00000000-0000-0000-0000-000000000001'::uuid,
-           NEW.tenant_id,NEW.task_type,previous,NEW.model,to_jsonb(NEW),s.id,s.version
+           NEW.tenant_id,NEW.task_type,serving.model,NEW.model,requested,s.id,s.version,swap
       FROM tank.skills s WHERE s.task_type=NEW.task_type AND s.state='approved';
+    INSERT INTO tank.policy_log(task_type,action,from_model,to_model,by_user,detail)
+    VALUES (NEW.task_type,'held',serving.model,NEW.model,'tank',
+            jsonb_build_object('swap_id',swap,'tenant_id',NEW.tenant_id));
+    serving.tenant_id := NEW.tenant_id;
+    serving.task_type := NEW.task_type;
+    NEW := serving;
+    NEW.held_policy := requested;
+    NEW.held_swap_id := swap;
+    NEW.held_at := clock_timestamp();
     RETURN NEW;
 END;
 $$;
 CREATE OR REPLACE TRIGGER policy_skill_revalidation
-    AFTER INSERT OR UPDATE OF model ON tank.policy
+    BEFORE INSERT OR UPDATE OF model ON tank.policy
     FOR EACH ROW EXECUTE FUNCTION tank.queue_skill_revalidations();
 
 -- Provider prompt caching: cache read/write tokens reported by the provider,
@@ -2761,6 +2798,77 @@ DO $$ BEGIN
   END IF;
  END IF;
 END $$;
+
+-- A result can release only the currently held swap, under the same row lock.
+CREATE OR REPLACE FUNCTION tank.finish_policy_swap(p_task text,p_tenant uuid,p_swap uuid)
+RETURNS void LANGUAGE plpgsql AS $$
+DECLARE serving tank.policy%ROWTYPE;
+        requested tank.policy%ROWTYPE;
+        failed boolean;
+        pending boolean;
+        previous_flag text;
+BEGIN
+    SELECT * INTO serving FROM tank.policy WHERE task_type=p_task
+      AND tenant_id IS NOT DISTINCT FROM p_tenant FOR UPDATE;
+    IF p_swap IS NULL OR serving.held_swap_id IS DISTINCT FROM p_swap THEN
+        RETURN;
+    END IF;
+    SELECT bool_or(error IS NOT NULL),bool_or(completed_at IS NULL)
+      INTO failed,pending FROM tank.skill_revalidations
+      WHERE tenant_id='00000000-0000-0000-0000-000000000001'::uuid AND swap_id=p_swap;
+    IF NOT coalesce(failed,false) AND coalesce(pending,true) THEN
+        RETURN;
+    END IF;
+    requested := jsonb_populate_record(NULL::tank.policy,serving.held_policy);
+    IF coalesce(failed,false) THEN
+        UPDATE tank.policy SET held_policy=NULL,held_swap_id=NULL,held_at=NULL
+          WHERE task_type=p_task AND tenant_id IS NOT DISTINCT FROM p_tenant;
+        INSERT INTO tank.policy_log(task_type,action,from_model,to_model,by_user,detail)
+        VALUES (p_task,'hold_failed',serving.model,requested.model,'tank',
+                jsonb_build_object('swap_id',p_swap,'tenant_id',p_tenant));
+        RETURN;
+    END IF;
+    previous_flag := current_setting('tank.policy_swap_apply',true);
+    PERFORM set_config('tank.policy_swap_apply','on',true);
+    UPDATE tank.policy SET
+            rung=requested.rung,
+            model=requested.model,
+            priority=requested.priority,
+            batch_eligible=requested.batch_eligible,
+            cache_scope=requested.cache_scope,
+            max_tokens_out=requested.max_tokens_out,
+            system_prompt=requested.system_prompt,
+            eval_threshold=requested.eval_threshold,
+            updated_at=requested.updated_at,
+            candidate_model=requested.candidate_model,
+            shadow_rate=requested.shadow_rate,
+            previous_model=serving.model,
+            min_shadow_samples=requested.min_shadow_samples,
+            max_reject_rate=requested.max_reject_rate,
+            auto_promote=requested.auto_promote,
+            field_floors=requested.field_floors,
+            semantic_cache=requested.semantic_cache,
+            promoted_at=requested.promoted_at,
+            number_tolerance=requested.number_tolerance,
+            baseline_model=requested.baseline_model,
+            moa_enabled=requested.moa_enabled,
+            moa_config=requested.moa_config,
+            escalation_model=requested.escalation_model,
+            confidence_floor=requested.confidence_floor,
+            acceptance_window_s=requested.acceptance_window_s,
+            matter_matching=requested.matter_matching,
+            max_cost_usd=requested.max_cost_usd,
+            routellm_weak_model=requested.routellm_weak_model,
+            routellm_threshold=requested.routellm_threshold,
+            fallbacks=requested.fallbacks,
+            held_policy=NULL,held_swap_id=NULL,held_at=NULL
+      WHERE task_type=p_task AND tenant_id IS NOT DISTINCT FROM p_tenant;
+    PERFORM set_config('tank.policy_swap_apply',coalesce(previous_flag,''),true);
+    INSERT INTO tank.policy_log(task_type,action,from_model,to_model,by_user,detail)
+    VALUES (p_task,'released',serving.model,requested.model,'tank',
+            jsonb_build_object('swap_id',p_swap,'tenant_id',p_tenant));
+END;
+$$;
 
 -- Tisan T3: client requests and immutable revision/sign-off events, never publication.
 CREATE TABLE IF NOT EXISTS tank.tisan_requests (

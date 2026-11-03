@@ -702,6 +702,7 @@ class PolicyRow(BaseModel):
     tenant_id: uuid.UUID | None = None
     rung: int = Field(default=1, ge=1, le=4)
     model: str
+    fallbacks: list[str] | None = None
     priority: str = "standard"
     batch_eligible: bool = False
     cache_scope: str = "none"
@@ -918,24 +919,30 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
         problem = graduate.code_candidate_problem(body.model, state=await skill_state(*parsed), task_type=pkg.task_type, on_disk=True)
         if problem:
             raise HTTPException(409, problem)
+    await __import__("routing_data").validate_fallbacks(__import__("sys").modules[__name__], body.model, body.fallbacks)
     async with pool().acquire() as conn:
-        await conn.execute(
+        async with conn.transaction():
+            await conn.execute(
             """
             INSERT INTO tank.policy
               (task_type, tenant_id, rung, model, priority, batch_eligible, cache_scope,
-               max_tokens_out, system_prompt, eval_threshold, escalation_model,confidence_floor,acceptance_window_s,semantic_cache,matter_matching,max_cost_usd,updated_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, now())
+               max_tokens_out, system_prompt, eval_threshold, escalation_model,confidence_floor,acceptance_window_s,semantic_cache,matter_matching,max_cost_usd,fallbacks,updated_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, now())
             ON CONFLICT (task_type, COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid))
             DO UPDATE SET rung=$3, model=$4, priority=$5, batch_eligible=$6, cache_scope=$7,
                           max_tokens_out=$8, system_prompt=$9, eval_threshold=$10, escalation_model=$11,confidence_floor=$12,
-                          acceptance_window_s=$13,semantic_cache=$14,matter_matching=$15,max_cost_usd=$16,updated_at=now()
+                          acceptance_window_s=$13,semantic_cache=$14,matter_matching=$15,max_cost_usd=$16,fallbacks=$17,updated_at=now()
             """,
             body.task_type, body.tenant_id, body.rung, body.model, body.priority,
             body.batch_eligible, body.cache_scope, body.max_tokens_out, body.system_prompt,
             body.eval_threshold, body.escalation_model, body.confidence_floor, body.acceptance_window_s,
-            body.semantic_cache, body.matter_matching, body.max_cost_usd,
-        )
-    return {"ok": True}
+            body.semantic_cache, body.matter_matching, body.max_cost_usd, body.fallbacks,
+            )
+            held = await conn.fetchval(
+                "SELECT held_swap_id IS NOT NULL FROM tank.policy WHERE task_type=$1 AND tenant_id IS NOT DISTINCT FROM $2",
+                task_type, body.tenant_id,
+            )
+    return {"ok": True, **({"held": True} if held else {})}
 
 
 @app.delete("/v1/policy/{task_type}", dependencies=[Depends(require_key)])
@@ -1399,17 +1406,26 @@ async def run_route(
                 WHERE id=$1 AND tenant_id=$2 AND offpeak_job_id=$1""", _receipt_id, req.tenant_id, sent_at)
     started = time.perf_counter()
     dispatched_settings = {"max_tokens": max_tokens, **generation}
+    routing = await __import__("routing_data").dispatch(
+        __import__("sys").modules[__name__], policy=policy, model=model,
+        generation=generation, offpeak=_offpeak_dispatch, text=sent,
+        refusal_args={"box": box, "tenant_id": str(req.tenant_id), "task_type": req.task_type,
+                      "caller": caller, "skill": req.skill, "pool_read": pool_read},
+    )
     try:
         if _on_token is not None and req.task_type == "command.turn":
             r = await stream_completion(LITELLM_URL, LITELLM_MASTER_KEY,
-                                        {"model": model, "messages": messages, **dispatched_settings}, _on_token)
+                                        {"model": model, "messages": messages, **dispatched_settings, **routing}, _on_token)
         else:
             async with httpx.AsyncClient(timeout=120) as client:
                 r = await client.post(
                     f"{LITELLM_URL}/v1/chat/completions",
                     headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-                    json={"model": model, "messages": messages, **dispatched_settings},
+                    json={"model": model, "messages": messages, **dispatched_settings, **routing},
                 )
+        answered_group = r.headers.get("x-litellm-model-group")
+        if answered_group in routing.aliases:
+            r.headers["x-litellm-model-group"] = routing.aliases[answered_group]
     except StreamFailure as exc:
         ledger_id = uuid.uuid4()
         async with pool().acquire() as conn:
@@ -1691,7 +1707,12 @@ async def _roster_models() -> list[dict[str, Any]]:
     import yaml
 
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return [row for row in (_roster_row(item) for item in raw.get("model_list") or []) if row and not _build_row(row)]
+    first = {}
+    for item in raw.get("model_list") or []:
+        row = _roster_row(item)
+        if row and not _build_row(row):
+            first.setdefault(row["model_name"], row)
+    return list(first.values())
 
 
 async def _live_price_quotes() -> list[graduate.Quote]:
@@ -1859,7 +1880,7 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
 _POLICY_MOVE = """
     SELECT task_type, model, candidate_model, previous_model, rung, eval_threshold,
            min_shadow_samples, max_reject_rate, auto_promote, field_floors,
-           semantic_cache, promoted_at, number_tolerance, shadow_rate
+           semantic_cache, promoted_at, number_tolerance, shadow_rate, held_swap_id, fallbacks
     FROM tank.policy
     WHERE task_type=$1 AND tenant_id IS NULL
 """
@@ -1960,6 +1981,8 @@ async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by
         log.warning("graduation %s: build-only model not promoted", task_type)
         return
     if move.action == "promote":
+        await __import__("routing_data").validate_fallbacks(
+            __import__("sys").modules[__name__], move.policy["model"], before.get("fallbacks"))
         updated = await conn.execute(
             """
             UPDATE tank.policy
@@ -1982,15 +2005,19 @@ async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by
         return
     if move.action != "rollback":
         return
+    await conn.execute("SELECT set_config('tank.policy_swap_apply','on',true)")
     updated = await conn.execute(
         """
         UPDATE tank.policy
-        SET model=previous_model, previous_model=NULL, promoted_at=NULL, semantic_cache=$2,
+        SET model=CASE WHEN held_swap_id IS NOT NULL THEN model ELSE previous_model END,
+            previous_model=NULL, promoted_at=NULL, semantic_cache=$2,
             rung=$3, shadow_rate=0, updated_at=now()
-        WHERE task_type=$1 AND tenant_id IS NULL AND previous_model IS NOT NULL AND promoted_at IS NOT NULL
+        WHERE task_type=$1 AND tenant_id IS NULL
+          AND (held_swap_id IS NOT NULL OR (previous_model IS NOT NULL AND promoted_at IS NOT NULL))
         """,
         task_type, bool(move.policy.get("semantic_cache")), int(move.policy["rung"]),
     )
+    await conn.execute("SELECT set_config('tank.policy_swap_apply','',true)")
     if str(updated).endswith(" 0"):
         return
     await conn.execute(
@@ -2025,8 +2052,15 @@ async def _move_task(task_type: str, *, by: str = "tank", automatic: bool = True
                 move = graduate.apply(policy, evidence, now)
             else:
                 move = graduate.promote_if_proven(policy, evidence, now, automatic=False)
+            if automatic and policy.get("held_swap_id") and move.action == "promote":
+                return graduate.Move("hold", policy)
             if move.action != "hold":
                 await _apply_move(conn, move, policy, by)
+                if move.action == "promote":
+                    held = await conn.fetchval(
+                        "SELECT held_swap_id IS NOT NULL FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL", task_type)
+                    if held:
+                        move.policy["held"] = True
             return move
 
 
@@ -2388,35 +2422,38 @@ async def promote(task_type: str, body: PromoteBody) -> dict[str, Any]:
         if move.reason == graduate.ROUTER_BLOCK:
             raise HTTPException(status_code=400, detail=move.reason)
         raise HTTPException(status_code=409, detail=move.reason or "not proven")
-    return {"ok": True, "model": move.policy["model"], "previous_model": move.policy["previous_model"]}
+    return {"ok": True, "model": move.policy["model"], "previous_model": move.policy["previous_model"],
+            **({"held": True} if move.policy.get("held") else {})}
 
 
 @app.post("/v1/graduation/{task_type}/rollback", dependencies=[Depends(require_key)])
 async def rollback(task_type: str, body: PromoteBody) -> dict[str, Any]:
     async with pool().acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT model, previous_model FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL",
-            task_type,
-        )
-        if row is None or not row["previous_model"]:
-            raise HTTPException(status_code=400, detail="nothing to roll back to")
-        if graduate.router_cannot_serve(row["previous_model"]):
-            raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
-        rung, semantic = _rung_for(row["previous_model"])
-        await conn.execute(
-            """
-            UPDATE tank.policy
-            SET model=previous_model, previous_model=NULL, promoted_at=NULL, semantic_cache=$2,
-                rung=$3, shadow_rate=0, updated_at=now()
-            WHERE task_type=$1 AND tenant_id IS NULL
-            """,
-            task_type, semantic, rung,
-        )
-        await conn.execute(
-            "INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail) VALUES ($1,'rollback',$2,$3,$4,$5::jsonb)",
-            task_type, row["model"], row["previous_model"], body.by, json.dumps({"automatic": False}),
-        )
-    return {"ok": True, "model": row["previous_model"]}
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT model,previous_model,held_swap_id FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL FOR UPDATE",
+                task_type,
+            )
+            if row is None or (not row["previous_model"] and not row["held_swap_id"]):
+                raise HTTPException(status_code=400, detail="nothing to roll back to")
+            target = row["model"] if row["held_swap_id"] else row["previous_model"]
+            if graduate.router_cannot_serve(target):
+                raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
+            rung, semantic = _rung_for(target)
+            await conn.execute("SELECT set_config('tank.policy_swap_apply','on',true)")
+            await conn.execute(
+                """UPDATE tank.policy
+                SET model=$2,previous_model=NULL,promoted_at=NULL,semantic_cache=$3,
+                    rung=$4,shadow_rate=0,updated_at=now()
+                WHERE task_type=$1 AND tenant_id IS NULL""",
+                task_type, target, semantic, rung,
+            )
+            await conn.execute("SELECT set_config('tank.policy_swap_apply','',true)")
+            await conn.execute(
+                "INSERT INTO tank.policy_log (task_type,action,from_model,to_model,by_user,detail) VALUES ($1,'rollback',$2,$3,$4,$5::jsonb)",
+                task_type, row["model"], target, body.by, json.dumps({"automatic": False}),
+            )
+    return {"ok": True, "model": target}
 
 
 @app.put("/v1/graduation/{task_type}/auto", dependencies=[Depends(require_key)])

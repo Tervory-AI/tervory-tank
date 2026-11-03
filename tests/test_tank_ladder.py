@@ -11,6 +11,25 @@ from test_tank_tenant_boundaries import boundary  # noqa: F401 -- shared isolate
 REAL_RUN = skala.run_skill
 
 
+async def pass_policy_swaps(b):
+    """Complete fixture-only revalidations without calling a model."""
+    import skala_revalidation
+    from gold import PLATFORM_TENANT
+    async with b.pool.acquire() as conn:
+        jobs = await conn.fetch("""SELECT j.* FROM tank.skill_revalidations j
+            JOIN tank.policy p ON p.task_type=j.task_type
+            AND p.tenant_id IS NOT DISTINCT FROM j.policy_tenant_id
+            AND p.held_swap_id=j.swap_id
+            WHERE j.tenant_id=$1 AND j.completed_at IS NULL""", PLATFORM_TENANT)
+    for job in jobs:
+        token = skala_revalidation.ACTIVE.set(dict(job))
+        try:
+            await skala_revalidation.record(b.tank, {"score": 1, "threshold": 1,
+                "eligible": True, "passed": 1, "total": 1, "cost_usd": 0, "details": []})
+        finally:
+            skala_revalidation.ACTIVE.reset(token)
+
+
 @pytest_asyncio.fixture
 async def ladder(boundary, monkeypatch):  # noqa: F811 -- pytest fixture injection
     b = boundary
@@ -25,6 +44,7 @@ async def ladder(boundary, monkeypatch):  # noqa: F811 -- pytest fixture injecti
             CASE task_type WHEN 'base.normalize' THEN '1.0.0' ELSE '2.0.0' END
             WHERE tenant_id IS NULL AND task_type IN ('base.normalize','base.extract')""")
         await conn.execute("UPDATE tank.policy SET cache_scope='none' WHERE task_type='base.normalize'")
+    await pass_policy_swaps(b)
     b.sent = []
 
     class Provider:

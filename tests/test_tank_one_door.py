@@ -196,6 +196,11 @@ def scan(root: Path) -> list[Finding]:
 # Canonical AST/token fingerprints and occurrence counts, never a whole-file waiver.
 # A changed or additional call in an audited file needs a fresh review.
 EXCEPTIONS: dict[tuple[str, str, str], tuple[int, str]] = {
+    ('tests/tank_routing/litellm_probe.py', 'provider import', 'd85e5baf1e8f72b6'): (1, 'Offline LiteLLM routing probe: placeholder deployments use mock_response; HTTP requests use in-process ASGITransport, never a provider.'),
+    ('tests/tank_routing/litellm_probe.py', 'provider import', '0666fda020abbadd'): (1, 'Offline LiteLLM routing probe: placeholder deployments use mock_response; HTTP requests use in-process ASGITransport, never a provider.'),
+    ('tests/tank_routing/litellm_probe.py', 'provider import', '3eff0c0bfa851196'): (1, 'Offline LiteLLM routing probe: placeholder deployments use mock_response; HTTP requests use in-process ASGITransport, never a provider.'),
+    ('tests/tank_routing/litellm_probe.py', 'provider import', 'f740448886a3227c'): (1, 'Offline LiteLLM routing probe: placeholder deployments use mock_response; HTTP requests use in-process ASGITransport, never a provider.'),
+    ('tests/tank_routing/litellm_probe.py', 'model/paid endpoint', '7c773e03813fb599'): (4, 'Offline LiteLLM routing probe: placeholder deployments use mock_response; HTTP requests use in-process ASGITransport, never a provider.'),
     ('tests/test_base_database.py', 'model/paid endpoint', '78462f840ad17f59'): (2, 'Offline httpx.Request/Response values passed directly to Tank receipt hooks; no request is sent to Brave.'),
     ('tests/test_base_vendor_meter.py', 'model/paid endpoint', '78462f840ad17f59'): (3, 'Offline vendor-meter tests use MockTransport or call hooks directly; no provider traffic.'),
     ('tests/test_base_vendor_meter.py', 'model/paid endpoint', '47bc5ec6af477dfc'): (1, 'Offline blocked-site test with MockTransport proves Brave cannot be called after a site block.'),
@@ -225,8 +230,8 @@ EXCEPTIONS: dict[tuple[str, str, str], tuple[int, str]] = {
     ('tests/zenas_za_meaning_search/test_hermes_law.py', 'model/paid endpoint', '682052aabab5db9c'): (2, 'In-process ASGI requests with a stub encoder and local Qdrant; outbound sockets are disabled.'),
     ('hermes/embeddings.py', 'model invocation', 'f6436138f93f0a6c'): (1, 'Founder-authorized pinned CPU encoder, fixed local files only; no runtime download or external inference API.'),
     ('tank/training_jobs/run.py', 'paid compute', '71e2d2652eb1b27a'): (1, 'Tank-owned HF Jobs submit is founder-confirmed, spend-capped, and protected by advisory lock 871228 plus a durable reservation.'),
-    ('litellm/config.yaml', 'configured endpoint', '4eca9db60dcd6816'): (14, 'The Tank-owned provider backend roster; keys are environment references.'),
-    ('litellm/config.za.yaml', 'configured endpoint', '4eca9db60dcd6816'): (14, 'The ZA Tank-owned provider backend roster; keys are environment references.'),
+    ('litellm/config.yaml', 'configured endpoint', '4eca9db60dcd6816'): (16, 'The Tank-owned provider backend roster, including the two routing-data HF deployments; keys are environment references.'),
+    ('litellm/config.za.yaml', 'configured endpoint', '4eca9db60dcd6816'): (16, 'The ZA Tank-owned provider backend roster, including the two routing-data HF deployments; keys are environment references.'),
     ('researcher/app.py', 'model/paid endpoint', '9f3fd5c68c992e75'): (1, 'Exact loopback destination guard; the local adapter forwards model work only to Tank /v1/route.'),
     ('researcher/app.py', 'model/paid endpoint', 'bfc9f701a06f6902'): (1, 'Inbound local compatibility endpoint; its only upstream is fixed Tank /v1/route, with redirects disabled.'),
     ('tests/market_lab_gpt_researcher/test_researcher.py', 'model/paid endpoint', '7c773e03813fb599'): (1, 'Offline MockTransport provider response behind the real Tank route; socket connections are forbidden.'),

@@ -1,0 +1,244 @@
+{
+  "before": [
+    {
+      "id": "231:10351",
+      "parent": "231:10306",
+      "type": "FRAME",
+      "name": "Approve or deny",
+      "x": 0,
+      "y": 736,
+      "width": 375,
+      "height": 76,
+      "fills": [
+        {
+          "type": "SOLID",
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "NORMAL",
+          "color": {
+            "r": 1,
+            "g": 1,
+            "b": 1
+          },
+          "boundVariables": {
+            "color": {
+              "type": "VARIABLE_ALIAS",
+              "id": "VariableID:42:13"
+            }
+          }
+        }
+      ],
+      "strokes": [],
+      "cornerRadius": 0,
+      "layoutMode": "HORIZONTAL",
+      "paddingTop": 16,
+      "paddingRight": 16,
+      "paddingBottom": 16,
+      "paddingLeft": 16,
+      "itemSpacing": 16,
+      "visible": true
+    },
+    {
+      "id": "231:10352",
+      "parent": "231:10351",
+      "type": "INSTANCE",
+      "name": "MCP action / approve",
+      "x": 16,
+      "y": 16,
+      "width": 163.5,
+      "height": 44,
+      "fills": [
+        {
+          "type": "SOLID",
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "NORMAL",
+          "color": {
+            "r": 1,
+            "g": 1,
+            "b": 1
+          },
+          "boundVariables": {
+            "color": {
+              "type": "VARIABLE_ALIAS",
+              "id": "VariableID:42:13"
+            }
+          }
+        }
+      ],
+      "strokes": [
+        {
+          "type": "SOLID",
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "NORMAL",
+          "color": {
+            "r": 0.5176470875740051,
+            "g": 0.5529412031173706,
+            "b": 0.6392157077789307
+          },
+          "boundVariables": {
+            "color": {
+              "type": "VARIABLE_ALIAS",
+              "id": "VariableID:465:26692"
+            }
+          }
+        }
+      ],
+      "cornerRadius": 8,
+      "layoutMode": "VERTICAL",
+      "paddingTop": 8,
+      "paddingRight": 8,
+      "paddingBottom": 8,
+      "paddingLeft": 8,
+      "itemSpacing": 8,
+      "visible": true
+    },
+    {
+      "id": "I231:10352;93:5",
+      "parent": "231:10352",
+      "type": "TEXT",
+      "name": "label",
+      "characters": "Approve",
+      "x": 9,
+      "y": 13,
+      "width": 145.5,
+      "height": 18,
+      "fills": [
+        {
+          "type": "SOLID",
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "NORMAL",
+          "color": {
+            "r": 0,
+            "g": 0.09399999678134918,
+            "b": 0.25099998712539673
+          },
+          "boundVariables": {
+            "color": {
+              "type": "VARIABLE_ALIAS",
+              "id": "VariableID:42:14"
+            }
+          }
+        }
+      ],
+      "strokes": [],
+      "fontName": {
+        "family": "Inter",
+        "style": "Semi Bold",
+        "variationSettings": {
+          "wght": 600,
+          "slnt": 0
+        }
+      },
+      "fontSize": 13,
+      "textAutoResize": "HEIGHT",
+      "visible": true
+    },
+    {
+      "id": "231:10354",
+      "parent": "231:10351",
+      "type": "INSTANCE",
+      "name": "MCP action / deny",
+      "x": 195.5,
+      "y": 16,
+      "width": 163.5,
+      "height": 44,
+      "fills": [
+        {
+          "type": "SOLID",
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "NORMAL",
+          "color": {
+            "r": 1,
+            "g": 1,
+            "b": 1
+          },
+          "boundVariables": {
+            "color": {
+              "type": "VARIABLE_ALIAS",
+              "id": "VariableID:42:13"
+            }
+          }
+        }
+      ],
+      "strokes": [
+        {
+          "type": "SOLID",
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "NORMAL",
+          "color": {
+            "r": 0.5176470875740051,
+            "g": 0.5529412031173706,
+            "b": 0.6392157077789307
+          },
+          "boundVariables": {
+            "color": {
+              "type": "VARIABLE_ALIAS",
+              "id": "VariableID:465:26692"
+            }
+          }
+        }
+      ],
+      "cornerRadius": 8,
+      "layoutMode": "VERTICAL",
+      "paddingTop": 8,
+      "paddingRight": 8,
+      "paddingBottom": 8,
+      "paddingLeft": 8,
+      "itemSpacing": 8,
+      "visible": true
+    },
+    {
+      "id": "I231:10354;93:5",
+      "parent": "231:10354",
+      "type": "TEXT",
+      "name": "label",
+      "characters": "Deny",
+      "x": 9,
+      "y": 13,
+      "width": 145.5,
+      "height": 18,
+      "fills": [
+        {
+          "type": "SOLID",
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "NORMAL",
+          "color": {
+            "r": 0,
+            "g": 0.09399999678134918,
+            "b": 0.25099998712539673
+          },
+          "boundVariables": {
+            "color": {
+              "type": "VARIABLE_ALIAS",
+              "id": "VariableID:42:14"
+            }
+          }
+        }
+      ],
+      "strokes": [],
+      "fontName": {
+        "family": "Inter",
+        "style": "Semi Bold",
+        "variationSettings": {
+          "wght": 600,
+          "slnt": 0
+        }
+      },
+      "fontSize": 13,
+      "textAutoResize": "HEIGHT",
+      "visible": true
+    }
+  ],
+  "mutatedNodeIds": [
+    "231:10352",
+    "I231:10352;93:5"
+  ],
+  "createdNodeIds": [],
+  "deletedNodeIds": []
+}

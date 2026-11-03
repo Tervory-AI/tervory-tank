@@ -1,6 +1,6 @@
 """Radix scan follow-up: tank/agent_skills.py passes room and task type as bound parameters.
 
-room_key() already allows only base or rig, so this was safe. These tests keep it safe if
+room_key() allows only Base, Rig or Tiger, so this was safe. These tests keep it safe if
 that guard ever moves: a hostile room value never reaches SQL text, and every write stays
 tied to the tenant. All gateway and database traffic is faked.
 """
@@ -17,16 +17,19 @@ from fastapi import FastAPI, HTTPException
 
 import agent_skills as route
 
-HOSTILE = ["base'); DELETE FROM tank.ledger; --", "rig' OR '1'='1", "Base", "tiger", "", None, 7]
+HOSTILE = ["base'); DELETE FROM tank.ledger; --", "rig' OR '1'='1",
+           "tiger'); DELETE FROM tank.ledger; --", "Base", "Tiger", "radix", "", None, 7, [], {}]
 
 
 class Pool:
     def __init__(self):
         self.rows = []
         self.fetched = []
+        self.acquired = 0
 
     @asynccontextmanager
     async def acquire(self):
+        self.acquired += 1
         yield self
 
     @asynccontextmanager
@@ -48,7 +51,7 @@ class Pool:
 
 @pytest.fixture
 def setup(monkeypatch):
-    keys = {room: uuid.uuid4().hex for room in ("base", "rig")}
+    keys = {room: uuid.uuid4().hex for room in ("base", "rig", "tiger")}
     for room, key in keys.items():
         monkeypatch.setenv("TANK_KEY_" + room.upper(), key)
     pool = Pool()
@@ -78,7 +81,7 @@ def setup(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("room", ["base", "rig"])
+@pytest.mark.parametrize("room", ["base", "rig", "tiger"])
 async def test_room_and_task_type_are_bound_parameters_and_rows_carry_the_tenant(setup, room):
     app, _tank, pool, keys, original = setup
     tenant = uuid.uuid4()
@@ -90,7 +93,7 @@ async def test_room_and_task_type_are_bound_parameters_and_rows_carry_the_tenant
     ledger, transcript, receipt = pool.rows
     task_type = f"agent.{room}.think"
     for sql, args in pool.rows:
-        assert "'base'" not in sql and "'rig'" not in sql and "think'" not in sql
+        assert "'base'" not in sql and "'rig'" not in sql and "'tiger'" not in sql and "think'" not in sql
         assert args[1] == tenant  # every write is the caller's tenant
     assert "tenant_id" in ledger[0] and ledger[1][13:] == (room, task_type)
     assert transcript[1][4] == task_type and "$5" in transcript[0]
@@ -104,26 +107,31 @@ async def test_hostile_room_never_reaches_sql(setup, room):
     with pytest.raises(HTTPException) as refused:
         route.room_text(room)
     assert refused.value.status_code == 403
+    with pytest.raises(HTTPException) as key_refused:
+        route.room_key(room, x_tank_key="placeholder-hostile-key")
+    assert key_refused.value.status_code == 403
     with pytest.raises(HTTPException):
         await route.complete(tank, route.Chat(messages=[{"role": "user", "content": "x"}]), uuid.uuid4(), None, "us-east", room=room)
     with pytest.raises(HTTPException):
         await route.export_skills(tank, uuid.uuid4(), "us-east", room=room)
     assert pool.rows == [] and pool.fetched == []
+    assert pool.acquired == 0
 
 
 @pytest.mark.asyncio
-async def test_reads_bind_room_and_filter_by_tenant(setup):
+@pytest.mark.parametrize("room", ["base", "rig", "tiger"])
+async def test_reads_bind_room_and_filter_by_tenant(setup, room):
     app, tank, pool, keys, original = setup
     tenant = uuid.uuid4()
-    await route.export_skills(tank, tenant, "us-east", room="rig")
+    await route.export_skills(tank, tenant, "us-east", room=room)
     sql, args = pool.fetched[-1]
-    assert "s.agent=$3" in sql and "a.tenant_id=$1" in sql and args == (tenant, "us-east", "rig")
+    assert "s.agent=$3" in sql and "a.tenant_id=$1" in sql and args == (tenant, "us-east", room)
     async with original(transport=httpx.ASGITransport(app=app), base_url="http://tank") as client:
-        response = await client.get("/v1/agents/base/receipts", params={"tenant_id": str(tenant), "task_id": str(uuid.uuid4())},
-                                    headers={"Authorization": "Bearer " + keys["base"]})
+        response = await client.get(app.url_path_for("receipts", room=room), params={"tenant_id": str(tenant), "task_id": str(uuid.uuid4())},
+                                    headers={"Authorization": "Bearer " + keys[room]})
     assert response.status_code == 200
     sql, args = pool.fetched[-1]
-    assert "r.room=$3" in sql and "r.tenant_id=$1 AND l.tenant_id=$1" in sql and args[0] == tenant and args[2] == "base"
+    assert "r.room=$3" in sql and "r.tenant_id=$1 AND l.tenant_id=$1" in sql and args[0] == tenant and args[2] == room
 
 
 def test_no_sql_text_is_built_from_room_or_task_type():
