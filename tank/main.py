@@ -4243,6 +4243,7 @@ app.include_router(__import__("agent_skills").build_router(__import__("sys").mod
 app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_lists").build_router())
 app.include_router(__import__("base_compare").build_router())
+app.include_router(__import__("base_campaign_commands").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("tiger_watch_commands").build_router())
 app.include_router(__import__("tiger_alerts").build_router())
 app.include_router(__import__("tisan_requests").build_router())

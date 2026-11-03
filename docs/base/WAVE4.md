@@ -43,7 +43,7 @@ No main merge, force push, PR creation, label change or merge was performed.
 | `agents/base/engines/README.md:1` | Package boundary, scaffold invocation and activation prerequisites. |
 | `tests/test_base_wave4.py:1` | Phone/eval, Apollo totals/agreement/ambiguity/ownership/receipt/adapter/card, FFL byte inventory and scaffold regression tests. |
 | `tests/base_compare_apollo.cjs:1` | Founder and client card proof using existing Total, Cost, Summary and Records labels. |
-| `docs/base/WAVE4.md:1` | F5 licence mismatch, F12 missing frame, per-file handoff and verification. |
+| `docs/base/WAVE4.md:1` | F5 completion, F12 missing frame, per-file handoff and verification. |
 
 ## Verification
 
