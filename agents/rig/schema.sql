@@ -600,4 +600,3 @@ CREATE TABLE IF NOT EXISTS agent_rig.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
-
