@@ -492,9 +492,9 @@ class CatalogueDiscovery:
                                 fields = {**dict(parse_qsl(parsed.query)), **form['fields'], form['query']: gtin}
                                 searches.append(urlunsplit(parsed._replace(query=urlencode(fields), fragment='')))
                             active['queue'].extend({'kind': 'search', 'url': target, 'sku': product['sku']} for target in dict.fromkeys(searches) if allowed(target))
-                        # Persist the catalogue position even when this SKU has
-                        # no usable identifier. Local work is bounded as well.
-                        return state, False
+                        # Skip unusable/finished SKUs in this bounded local loop;
+                        # no job row or one-second wait is needed per empty SKU.
+                        continue
                     finish('completed')
                     return state, state['site_index'] >= len(sites)
                 action = active['queue'].pop(0)
@@ -575,7 +575,9 @@ class CatalogueDiscovery:
         except DiscoveryStopped as exc:
             finish(str(exc))
         except (httpx.HTTPError, OSError, ValueError):
-            finish('unavailable')
+            active['warnings'].append({'url': url, 'reason': 'transport_error'})
+            if kind == 'robots':
+                finish('unavailable')
         return state, state['site_index'] >= len(sites)
 
     async def run(self, sites, products):
