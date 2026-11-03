@@ -1,0 +1,153 @@
+Platform gates 2 and 3 proof and handoff
+
+Branch: codex/platform-registry
+Implementation/test head: 88b23e3cb2be0068bf41fd314a4486b793353451
+Fresh origin/main baseline: a870ade14bce0b15fb1fb88fbf80d868029f253f
+Golden-only first commit: e3ef6aa8, before extraction commit 164f38e0.
+Gate 2 checkpoint: cd3d611fb1ed0627589f68982d5e7aa4da0a4e5f.
+No merge/rebase of main. PR #625/codex/platform-w3 left alone.
+This evidence-only commit follows the tested implementation head.
+
+Gate 2
+Eleven product command modules own declarations, adapter factories, permissions
+and optional code_plan hooks. Explicit assembly preserves original order and
+public command exports. Routes register at the same two main.py points; hooks
+preserve task creation, cancel and gather(return_exceptions=True) behavior.
+Existing SQL stays in place; empty product regions precede generated memory.
+Dockerfile copies the new package. AGENTS documents adding a tool and router.
+No workspace, compose, .env.example, workflow or industry-specific changes.
+
+The frozen source showed the two literal sets differ: REQUEST_BODY_TOOLS shapes
+requests, CONFIRMED gates dispatch. tisan.preview is request-body only;
+rig.quote.confirm_payment, tiger.match/confirm/reject and radix.repo.scan are
+confirmed only. Preserve both sets and original Trigger/MCP prefix behavior.
+
+Golden provenance
+The original JSON golden was committed before extraction. Gate 3 changes only
+skala.teachers membership/planning/adapter, its required read route, and the
+nullable teacher_model ALTER; every other snapshot section was asserted unchanged.
+Rename registry_frozen.json to registry_frozen.golden in cbb1279a preserved content
+exactly: the existing one-door scanner mistook historical endpoints in JSON data
+for runtime model calls. No scanner, exception or assertion changed. The frozen
+test still parses JSON and checks full equality in a fresh interpreter.
+
+Gate 3
+Existing founder promotion remains 99 percent agreement / 200 samples and requires
+a matching RouteLLM fingerprint. Automatic promotion still waits for a person.
+Generic router_cannot_serve stays unchanged for other callers. One shared serving
+helper scores the last user prompt in a thread under the existing global cap4.
+Timeout: 0.5 seconds, bounding added foreground latency to 500ms while cold loading
+or scoring finishes in the background. Timed-out threads retain their capacity
+slot until actually finished. Busy/slow/error/urgent/drift/refused-weak cases use
+strong. Refusal checks include the policy system prompt. Deferred work retains
+the decision. Receipts name the answering model, ledger routing status is served,
+and both shadow paths are suppressed. Rollback restores strong; configure refuses
+changes until rollback. Revalidation uses the helper and existing receipt checks.
+
+run_route change
+Only main.py:1250-1259 (resolve before router guard) and :1514-1517 (annotate the
+delivered ledger) were added inside run_route. Removing exactly those marked
+blocks gives unchanged function SHA256:
+3f33cc4218d786327c064f68aaf2a93cd45675c8ad9d751c9ed0753394a6ebe9
+A test enforces this. _POLICY_MOVE settings SELECT is outside run_route.
+The brief requires separate review of these two blocks before merge.
+
+Teacher provenance
+One nullable additive idempotent ALTER inside the platform region; no backfill.
+Future rung1/2 ledger pairs record the model; code/cache/nonledger sources keep
+NULL. Ledger-sourced gold lookup requires the same tenant. skala.teachers is a
+founder-only zero-cost code receipt read, outside confirmed dispatch, returning
+counts of active positive pairs (including active holdouts), grouped by version,
+task and model, and newest timestamp. Never pair content. Private version metadata
+is scoped by owner tenant and region. Existing Name/Task/Model/Count labels reused.
+newest_created_at needs a Figma-approved result label; it remains API metadata.
+No page, UI or visible wording added.
+
+Local evidence (serial, no retries or outside provider calls)
+Gate2 frozen/extensions: 3 passed.
+Gate2 command/MCP/boot without database: 95 passed, 71 skipped.
+Existing RouteLLM with disposable PostgreSQL: 13 passed.
+RouteLLM/frozen/extensions: 28 passed.
+Broad 19-file serial regression: 414 passed, 14 skipped, 1 failed in 448.36s.
+The sole failure was the golden JSON static-scan false positive described above.
+After rename/generic planner, registry/extensions/unchanged one-door scanner:
+31 passed in 28.35s.
+Final real-SQL teacher isolation and command/Radix/Zenas/MCP:
+163 passed in 234.53s, including foreign tenant/region metadata isolation.
+Ruff E9,F on changed Python and git diff --check passed.
+Counts overlap: do not sum them or call this a full-suite pass.
+No prohibited parallel offline suite or 50-run loop was run.
+
+CI and live acceptance
+No branch PR exists at report time; founder/Claude opens it per the brief.
+Tank/workspace CI for the final head is pending, the full-suite test of record.
+Founder live acceptance after merge/deploy remains: product reads, promotion,
+weak/strong scored receipts, rollback, skala.teachers. No CI/live pass claimed.
+Next shared files to split: workspace/lib/tank.ts and
+workspace/app/chats/presentation.ts.
+
+Changed files and current diff line locations
+AGENTS.md: 44
+tank/Dockerfile: 18
+tank/command.py: 27, 40, 112, 115, 483, 1234, 1411, 1605
+tank/command_tools/__init__.py: 1
+tank/command_tools/base.py: 1
+tank/command_tools/market_lab.py: 1
+tank/command_tools/mcp.py: 1
+tank/command_tools/radix.py: 1
+tank/command_tools/rig.py: 1
+tank/command_tools/skala.py: 1
+tank/command_tools/tiger.py: 1
+tank/command_tools/tisan.py: 1
+tank/command_tools/trigger.py: 1
+tank/command_tools/worker.py: 1
+tank/command_tools/zenas.py: 1
+tank/graduate.py: 338, 349, 359, 451
+tank/main.py: 806, 811, 1250, 1514, 1866, 4195, 4673, 4691
+tank/routellm_shadow.py: 1, 83, 123
+tank/routes_registry.py: 1
+tank/schema.sql: 2762
+tank/skala_revalidation.py: 48, 51, 73, 86, 93
+tank/training.py: 118, 123, 128, 138, 149, 187, 193, 555
+tests/registry_frozen.golden: 1
+tests/test_platform_registry_integration.py: 1
+tests/test_platform_routellm_serving.py: 1
+tests/test_registry_extensions.py: 1
+tests/test_registry_frozen.py: 1
+
+Host harness, reproduced for audit
+
+focused.py
+import os, subprocess, sys
+hints=('API_KEY','TOKEN','SECRET','PASSWORD','DATABASE_URL','OPENAI','ANTHROPIC','OPENROUTER','PERPLEXITY','DEEPSEEK','GROQ','TOGETHER','MISTRAL','GEMINI','XAI_','HF_')
+env={k:v for k,v in os.environ.items() if not any(h in k.upper() for h in hints)}
+env['PYTHONPATH']='tank:agents/_chassis'
+env['TMPDIR']='/workspace/codex-platform-w3/.platform-proof/tmp'
+raise SystemExit(subprocess.call([sys.executable,'-m','pytest','-q','--disable-socket','--allow-unix-socket','--allow-hosts=127.0.0.1,localhost,::1',*sys.argv[1:]],env=env))
+
+with-pg.py
+import os, pathlib, socket, subprocess, sys
+import pgserver
+from pgserver.postgres_server import pg_ctl
+hints=('API_KEY','TOKEN','SECRET','PASSWORD','DATABASE_URL','OPENAI','ANTHROPIC','OPENROUTER','PERPLEXITY','DEEPSEEK','GROQ','TOGETHER','MISTRAL','GEMINI','XAI_','HF_')
+env={k:v for k,v in os.environ.items() if not any(h in k.upper() for h in hints)}
+env['PYTHONPATH']='tank:agents/_chassis'
+data=pathlib.Path('.platform-proof/tmp/placeholder_pg').resolve()
+server=pgserver.get_server(data)
+try:
+    pg_ctl(['-m','fast','-w','stop'],pgdata=data,user=server.system_user,timeout=15)
+    with socket.socket() as handle:
+        handle.bind(('127.0.0.1',0))
+        port=handle.getsockname()[1]
+    pg_ctl(['-w','-o',f'-h 127.0.0.1 -p {port} -k {data}','-l',str(data/'log'),'start'],pgdata=data,user=server.system_user,timeout=15)
+    env['POOL_SCHEMA_DATABASE_URL']=f'postgresql://postgres@127.0.0.1:{port}/postgres'
+    env['TMPDIR']='/workspace/codex-platform-w3/.platform-proof/tmp'
+    print('Disposable PostgreSQL started in the assigned checkout; external sockets disabled.',flush=True)
+    result=subprocess.call([sys.executable,'-m','pytest','-q','--disable-socket','--allow-unix-socket','--allow-hosts=127.0.0.1,localhost,::1',*sys.argv[1:]],env=env)
+finally:
+    server.cleanup()
+raise SystemExit(result)
+
+Final invocations (.venv312/bin/python):
+.platform-proof/focused.py tests/test_registry_frozen.py tests/test_registry_extensions.py tests/test_tank_one_door.py
+.platform-proof/with-pg.py tests/test_platform_registry_integration.py::test_teachers_sources_counts_receipt_and_tenant_isolation tests/test_command.py tests/test_command_radix.py tests/test_command_zenas_z4.py tests/test_mcp_schema.py tests/test_mcp_oauth.py --timeout=120 --timeout-method=thread -o faulthandler_timeout=90 --durations=5
