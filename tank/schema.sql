@@ -2426,6 +2426,7 @@ BEGIN
 END
 $$;
 
+
 -- G3: founder-owned MCP approval registry (global, deliberately no tenant/RLS).
 CREATE TABLE IF NOT EXISTS tank.mcp_servers (
     url text PRIMARY KEY,
@@ -2440,6 +2441,156 @@ ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_state text NOT NULL DE
     CHECK (mcp_state IN ('not_approved','needs_sign_in','connected','sign_in_failed'));
 ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_tools jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_discovered_at timestamptz;
+
+-- Trigger M1: private posts, channel connections and confirmed replies.
+CREATE TABLE IF NOT EXISTS tank.trigger_posts (
+ tenant_id uuid NOT NULL, id uuid NOT NULL DEFAULT gen_random_uuid(),
+ write_id uuid, user_id text NOT NULL, operation_id uuid NOT NULL,
+ channel text NOT NULL CHECK(channel IN ('gbp','facebook','instagram','linkedin','x')),
+ format text NOT NULL, text text NOT NULL, report jsonb NOT NULL, voice_revision jsonb,
+ revision integer NOT NULL DEFAULT 1, approved_revision integer,
+ state text NOT NULL DEFAULT 'draft' CHECK(state IN ('draft','approved','scheduled','published','failed','cancelled')),
+ planned_at timestamptz, time_zone text, location text, connection_generation uuid,
+ delivery text NOT NULL DEFAULT 'pending' CHECK(delivery IN ('pending','inflight','uncertain','done')),
+ attempt_id uuid, attempts integer NOT NULL DEFAULT 0, retryable boolean NOT NULL DEFAULT false,
+ retry_at timestamptz, lease_until timestamptz, platform_error text,
+ platform_id text, platform_url text, published_at timestamptz, ledger_id uuid,
+ created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(tenant_id,id), UNIQUE(tenant_id,operation_id),
+ FOREIGN KEY(tenant_id,write_id) REFERENCES tank.trigger_writes(tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS trigger_posts_due ON tank.trigger_posts(planned_at,retry_at)
+ WHERE state IN ('scheduled','failed');
+ALTER TABLE tank.trigger_posts ADD COLUMN IF NOT EXISTS claimed_at timestamptz;
+CREATE TABLE IF NOT EXISTS tank.trigger_post_events (
+ tenant_id uuid NOT NULL, id uuid NOT NULL DEFAULT gen_random_uuid(), post_id uuid NOT NULL,
+ revision integer NOT NULL, state text NOT NULL, operation_id uuid NOT NULL,
+ ledger_id uuid, created_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(tenant_id,id), UNIQUE(tenant_id,operation_id),
+ FOREIGN KEY(tenant_id,post_id) REFERENCES tank.trigger_posts(tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_gbp_connections (
+ tenant_id uuid PRIMARY KEY, generation uuid NOT NULL, sealed text,
+ status text NOT NULL CHECK(status IN ('connected','disconnecting','disconnected')),
+ location text, location_title text, reviews_checked_at timestamptz,
+ user_id text NOT NULL, updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_gbp_states (
+ tenant_id uuid NOT NULL, state_hash text NOT NULL, user_id text NOT NULL,
+ generation uuid NOT NULL, sealed text NOT NULL, expires_at timestamptz NOT NULL,
+ consumed_at timestamptz, PRIMARY KEY(tenant_id,state_hash)
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_gbp_reviews (
+ tenant_id uuid NOT NULL, location text NOT NULL, review_id text NOT NULL,
+ rating text NOT NULL, text text NOT NULL, updated_at timestamptz NOT NULL,
+ PRIMARY KEY(tenant_id,location,review_id)
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_gbp_replies (
+ tenant_id uuid NOT NULL, id uuid NOT NULL DEFAULT gen_random_uuid(),
+ location text NOT NULL, review_id text NOT NULL, generation uuid NOT NULL, write_id uuid NOT NULL,
+ text text NOT NULL, report jsonb NOT NULL, revision integer NOT NULL DEFAULT 1,
+ state text NOT NULL DEFAULT 'draft' CHECK(state IN ('draft','sending','sent','failed')),
+ sent_hash text, platform_error text, sent_at timestamptz, ledger_id uuid,
+ PRIMARY KEY(tenant_id,id), UNIQUE(tenant_id,location,review_id),
+ FOREIGN KEY(tenant_id,location,review_id) REFERENCES tank.trigger_gbp_reviews(tenant_id,location,review_id),
+ FOREIGN KEY(tenant_id,write_id) REFERENCES tank.trigger_writes(tenant_id,id)
+);
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.trigger_posts ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_posts FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_posts'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.trigger_posts FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_posts'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.trigger_posts AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.trigger_post_events ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_post_events FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_post_events'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.trigger_post_events FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_post_events'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.trigger_post_events AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.trigger_gbp_connections ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_gbp_connections FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_gbp_connections'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.trigger_gbp_connections FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_gbp_connections'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.trigger_gbp_connections AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.trigger_gbp_states ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_gbp_states FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_gbp_states'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.trigger_gbp_states FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_gbp_states'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.trigger_gbp_states AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.trigger_gbp_reviews ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_gbp_reviews FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_gbp_reviews'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.trigger_gbp_reviews FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_gbp_reviews'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.trigger_gbp_reviews AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.trigger_gbp_replies ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_gbp_replies FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_gbp_replies'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.trigger_gbp_replies FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_gbp_replies'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.trigger_gbp_replies AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
 
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;

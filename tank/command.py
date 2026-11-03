@@ -33,6 +33,8 @@ router = APIRouter(prefix="/v1/command", tags=["command"])
 logger = logging.getLogger(__name__)
 _background: set[asyncio.Task] = set()
 SQUADS = frozenset({"base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"})
+from trigger_marketing_contract import TOOLS as MARKETING_TOOLS
+
 TOOLS = {
     "trigger": ["trigger.revise", "trigger.voice.learn", "trigger.write.batch", "trigger.scorecard", "trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
     "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.to_crm"],
@@ -41,8 +43,10 @@ TOOLS = {
     "rig": ["rig.search", "rig.ask"],
     "tisan": ["tisan.scaffold"],
     "radix": ["radix.scan"],
-    "zenas": ["zenas.ask", "zenas.matters", "zenas.review"],
+    "zenas": ["zenas.ask", "zenas.matters", "zenas.review", "zenas.watch.add", "zenas.watch.list", "zenas.watch.enable", "zenas.watch.disable"],
 }
+TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
+
 FOUNDER_TOOLS = ["base.audit.start", "base.audit.csv", "base.audit.review", "trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
                  "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
@@ -1053,6 +1057,16 @@ class MatterArgs(Body):
     title: str = Field(min_length=1, max_length=200)
 
 
+class ZenasWatchAddArgs(Body):
+    source: str = Field(max_length=40)
+    topic: str = Field(min_length=1, max_length=200)
+    options: dict[str, str] = Field(default_factory=dict)
+
+
+class ZenasWatchIdArgs(Body):
+    watch_id: uuid.UUID
+
+
 class ReviewArgs(Body):
     playbook_id: uuid.UUID
     text: str = Field(min_length=1, max_length=20000)
@@ -1223,6 +1237,10 @@ ADAPTERS = {
     "radix.scan": Adapter("POST", "/v1/skala/scan.static/run", ScanArgs, "Scan supplied source text", False, "other", "scan.static"),
     "zenas.ask": Adapter("POST", "/v1/zenas/answers", ZenasAskArgs, "Ask a civil law question", True, "paid_run"),
     "zenas.matters": Adapter("POST", "/v1/zenas/matters", MatterArgs, "Create a matter"),
+    "zenas.watch.add": Adapter("POST", "/v1/zenas/regulations/watches", ZenasWatchAddArgs, "zenas.watch.add"),
+    "zenas.watch.list": Adapter("GET", "/v1/zenas/regulations/watches", EmptyArgs, "zenas.watch.list"),
+    "zenas.watch.enable": Adapter("POST", "/v1/zenas/regulations/watches/{watch_id}", ZenasWatchIdArgs, "zenas.watch.enable"),
+    "zenas.watch.disable": Adapter("POST", "/v1/zenas/regulations/watches/{watch_id}", ZenasWatchIdArgs, "zenas.watch.disable"),
     "zenas.review": Adapter("POST", "/v1/zenas/contract-reviews", ReviewArgs, "Review a contract", True, "paid_run"),
     "skala.list": Adapter("GET", "/v1/skala", EmptyArgs, "List skills"),
     "skala.evals": Adapter("POST", "/v1/skala/{skill_id}/{version}/evals", SkillVersionArgs, "Run skill evaluations", True, "paid_run"),
@@ -1231,6 +1249,12 @@ ADAPTERS = {
     "ledger.receipts": Adapter("GET", "/v1/proof", ProofArgs, "Read ledger receipts"),
     "ledger.savings": Adapter("GET", "/v1/proof", SavingsArgs, "Read recorded costs and savings"),
 }
+
+
+MARKETING_PAID_TOOLS = frozenset({'post.create', 'gbp.reply.draft'})
+ADAPTERS.update({"trigger." + name: Adapter("POST", "/v1/trigger/marketing/" + name, schema, "trigger." + name,
+                                          name in MARKETING_PAID_TOOLS, 'paid_run' if name in MARKETING_PAID_TOOLS else 'other')
+                 for name, schema in MARKETING_TOOLS.items()})
 
 
 class PlannedAction(Body):
@@ -1313,7 +1337,10 @@ async def propose_tool(thread_id: uuid.UUID, body: PlannedAction, actor: Actor =
 
 
 async def propose_action(conn: Any, row: dict, state: dict, action: PlannedAction, actor: Actor | None = None) -> dict:
-    if action.tool.startswith("trigger."):
+    if action.tool.removeprefix("trigger.") in MARKETING_TOOLS:
+        from trigger_marketing_api import prepare as marketing_prepare
+        action = await marketing_prepare(action, await authorized_actor(actor or Actor(row["tenant_id"], row["user_id"], False), conn), conn)
+    elif action.tool.startswith("trigger."):
         from trigger_commands import prepare
         action = await prepare(action, await authorized_actor(actor or Actor(row["tenant_id"], row["user_id"], False), conn), state)
     card_id = str(uuid.uuid4())
@@ -1367,6 +1394,9 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         args = {"target": args["url"], "artifact": "commit:" + args["commit"]}
     elif action.tool == "radix.findings":
         path = path.format(scan_id=args.pop("scan_id"))
+    elif action.tool in {"zenas.watch.enable", "zenas.watch.disable"}:
+        path = path.format(watch_id=args.pop("watch_id"))
+        args["enabled"] = action.tool == "zenas.watch.enable"
     if action.tool.startswith("zenas."):
         scope["home_region"] = box_region()
     if "{skill_id}" in path:
@@ -1419,6 +1449,9 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     if len(response.content) > response_limit:
         raise ValueError("Tool response is too large; outcome needs reconciliation")
     result = response.json()
+    if action.tool == "zenas.watch.list" and 200 <= response.status_code < 300:
+        from trigger_routes import code_receipt
+        result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="zenas"))
     if action.tool == "radix.domain.prove" and 200 <= response.status_code < 300:
         result = {key: result[key] for key in ("name", "value", "expires_at")}
     elif action.tool == "radix.passive.scan" and 200 <= response.status_code < 300:
@@ -1602,8 +1635,8 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 if refused is not None:
                     card["result"] = refused
                 detail = result.get("detail") if isinstance(result, dict) else None
-                card["error"] = (detail if action.tool == "radix.passive.scan"
-                                 and isinstance(detail, str) and detail in {"invalid artifact", "domain proof required"}
+                card["error"] = (detail if isinstance(detail, str) and (action.tool.startswith("zenas.watch.")
+                                 or (action.tool == "radix.passive.scan" and detail in {"invalid artifact", "domain proof required"}))
                                  else "The action was refused or failed. It has not been retried.")
             await step(conn, row, state, {"step_id": card_id, "label": adapter.label,
                                           "actor": action.tool.split('.')[0],

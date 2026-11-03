@@ -17,13 +17,13 @@ from fastapi.responses import JSONResponse
 router = APIRouter(prefix="/v1/trigger", tags=["trigger"])
 
 
-async def code_receipt(tenant_id: UUID, task: str, *, task_id: UUID | None = None) -> UUID:
+async def code_receipt(tenant_id: UUID, task: str, *, task_id: UUID | None = None, agent: str = "trigger") -> UUID:
     from main import box_region, pool
     return await pool().fetchval(
         "INSERT INTO tank.ledger(tenant_id,region,agent,task_type,rung,model,cost_usd,"
         "tokens_in,tokens_out,task_id) "
-        "VALUES($1,$2,'trigger',$3,3,'code',0,0,0,$4) RETURNING id",
-        tenant_id, box_region(), task, task_id)
+        "VALUES($1,$2,$5,$3,3,'code',0,0,0,$4) RETURNING id",
+        tenant_id, box_region(), task, task_id, agent)
 
 
 async def code_plan(actor: Actor, messages: list[dict], task_id: UUID | None):
@@ -45,7 +45,10 @@ async def code_plan(actor: Actor, messages: list[dict], task_id: UUID | None):
                                       actor.tenant_id, actor.user_id, str(task_id))
         messages = unpack(raw or {}).get('messages', [])
         source_text = next((m.get('content', '') for m in reversed(messages) if m.get('role') == 'user'), source_text)
-    proposed = await plan(actor, source_text, task_id)
+    from trigger_marketing_api import plan as marketing_plan
+    proposed = await marketing_plan(actor, source_text)
+    if proposed is None:
+        proposed = await plan(actor, source_text, task_id)
     if proposed is not None:
         return SimpleNamespace(content=json.dumps(proposed, ensure_ascii=False), ledger_id=await code_receipt(actor.tenant_id, "command.turn", task_id=task_id))
     prefix = r"\s*trigger(?:\.check|[, ]+check)(?:\s+(?:this\s+)?paragraph)?\s*:\s*"

@@ -1351,35 +1351,6 @@ export async function mootPublishedMatches(matchId?: string, signal?: AbortSigna
   return response.json();
 }
 
-/** MOOT-1a: list fixture problems via Tank → Zenas room (server-side only). */
-export function mootFixtures(): Promise<{ fixtures: string[] }> {
-  return tank<{ fixtures: string[] }>("/v1/zenas/moot/fixtures", { method: "GET" });
-}
-
-/** MOOT-1a: counsel bundle for one side (bench notes must never appear). */
-export function mootCounselBundle(problemId: string, side: "appellant" | "respondent"): Promise<Record<string, unknown>> {
-  return tank<Record<string, unknown>>(`/v1/zenas/moot/problems/${encodeURIComponent(problemId)}/counsel/${side}`, {
-    method: "GET",
-  });
-}
-
-/** MOOT-1a: AI-against-AI fairness pair on a fixture problem. */
-export function mootAiAi(body: { problem_id: string; home_region: string; strictness?: string }): Promise<Record<string, unknown>> {
-  return tank<Record<string, unknown>>("/v1/zenas/moot/matches/ai-ai", { method: "POST", body: JSON.stringify(body) });
-}
-
-/** MOOT-1a: student modes on a fixture problem. */
-export function mootStudentMatch(body: {
-  problem_id: string;
-  home_region: string;
-  mode: "student_ai" | "student_student";
-  student_side: "appellant" | "respondent";
-  student_text: string;
-  strictness?: string;
-}): Promise<Record<string, unknown>> {
-  return tank<Record<string, unknown>>("/v1/zenas/moot/matches/student", { method: "POST", body: JSON.stringify(body) });
-}
-
 // Market Lab: the server derives tenantId from Clerk before calling this corridor.
 export type MarketFeed = {
   id: string; name: string; kind: "copy" | "linked"; rows: number;
