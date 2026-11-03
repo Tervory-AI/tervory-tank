@@ -34,7 +34,6 @@ import asyncio
 import importlib.util
 import json
 import socket
-from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -79,7 +78,7 @@ def markup(**changes):
 
 
 @pytest.mark.parametrize('value,expected', [(GTIN, '04006381333931'), ('0' + GTIN, '04006381333931'),
-    ('4006-3813 33931', '04006381333931'), ('96385074', '00000096385074'), ('4006381333932', None), (4006381333931, None), ('abc', None)])
+    ('4006-3813 33931', '04006381333931'), ('96385074', '00000096385074'), ('4006381333932', None), (4006381333931, None), ('abc', None), ('00000000000000', None), ('0000-0000', None)])
 def test_gtin_normalization_validates_check_digit(value, expected):
     assert access.tiger_gtin(value) == expected
 
@@ -243,8 +242,8 @@ async def test_position_figures_use_latest_tenant_reading_and_zero_receipt(corri
     assert row['competitors'][0]['price'] == '12' and row['competitors'][0]['checked_at']
     assert row['competitors'][0]['url'] == PAGE
     corridor.actor.current = command.Actor(OTHER, 'offline-user', False, frozenset({'tiger'}))
-    row = (await corridor.client.get('/v1/access/tiger/position')).json()['products'][0]
-    assert row['own_price'] == '99.00' and row['competitors'] == [] and row['rank'] is None
+    result = (await corridor.client.get('/v1/access/tiger/position')).json()
+    assert result['products'] == [] and result['total'] == 0
 
 
 def test_position_ties_missing_and_cross_currency_are_not_guessed():
@@ -395,7 +394,7 @@ async def test_start_durable_job_returns_matches_to_existing_card_and_denies_oth
     assert response.status_code == 200, response.text
     result = response.json()
     job = await corridor.pool.fetchrow('SELECT * FROM agent_tiger.jobs WHERE tenant_id=$1 AND id=$2', TENANT,UUID(result['job_id']))
-    assert job['kind'] == 'competitor_match' and job['timeout_s'] == 86400
+    assert job['kind'] == 'competitor_match' and job['timeout_s'] == 45
     assert result['cost_usd'] == 0 and result['model_calls'] == 0
     gate = OfflineGate()
     async def fetch(url, **kwargs):
@@ -411,8 +410,14 @@ async def test_start_durable_job_returns_matches_to_existing_card_and_denies_oth
     monkeypatch.setattr(corridor.agent,'DiscoveryGate',lambda pool:gate)
     monkeypatch.setattr(corridor.agent.app.state,'http',corridor.client,raising=False)
     monkeypatch.delenv('TANK_KEY',raising=False)
-    data = await corridor.agent.competitor_match(SimpleNamespace(tenant_id=str(TENANT),job_id=result['job_id'],input=json.loads(job['input'])))
-    await corridor.pool.execute("UPDATE agent_tiger.jobs SET status='completed',result=$3::jsonb WHERE tenant_id=$1 AND id=$2",TENANT,job['id'],json.dumps(data))
+    for _ in range(30):
+        data = await corridor.agent.competitor_match(SimpleNamespace(tenant_id=str(TENANT),job_id=str(job['id']),input=json.loads(job['input'])))
+        await corridor.pool.execute("UPDATE agent_tiger.jobs SET status='completed',result=$3::jsonb WHERE tenant_id=$1 AND id=$2",TENANT,job['id'],json.dumps(data))
+        if not data['continuation_id']:
+            break
+        job = await corridor.pool.fetchrow('SELECT * FROM agent_tiger.jobs WHERE id=$1', UUID(data['continuation_id']))
+    else:
+        pytest.fail('Discovery did not finish its bounded slices')
     card = await access.tiger_card_result(TENANT,result)
     assert card['status'] == 'completed'
     assert card['matches'][0]['url'] == PAGE and card['matches'][0]['identifiers']['seen']['gtins'] == [GTIN]
@@ -437,12 +442,12 @@ async def test_human_check_records_tenant_queue_without_match_or_watch(corridor)
 
 
 @pytest.mark.asyncio
-async def test_subsequent_catalogue_checks_use_structured_only_even_when_unreadable(corridor, monkeypatch):
+async def test_matching_preserves_existing_watch_reader_and_ocr(corridor, monkeypatch):
     await publish(corridor,markup())
     calls = []
     async def extract(tenant,name,body):
         calls.append(name)
-        assert name == 'tiger.price_structured'
+        assert name in {'tiger.price_extract', 'tiger.price_ocr'}
         return {'items': [],'method':None}
     async def render(*args,**kwargs):
         return {'ok':True,'url':PAGE,'html':'<p>No structured price</p>','png_base64':'offline'}
@@ -453,7 +458,7 @@ async def test_subsequent_catalogue_checks_use_structured_only_even_when_unreada
     # injected readers to exercise both paths without any external/model call.
     async def run(store,tenant,watch,agent,render_fn,extract_fn,ocr_fn,*args,**kwargs):
         await extract_fn('<p>Offline</p>',PAGE)
-        assert await ocr_fn('offline',PAGE) == {'items':[]}
+        assert (await ocr_fn('offline',PAGE))['items'] == []
         return {'status':'unread'}
     monkeypatch.setattr(corridor.agent,'run_check',run)
     monkeypatch.setattr(corridor.agent,'_render',render)
@@ -461,10 +466,11 @@ async def test_subsequent_catalogue_checks_use_structured_only_even_when_unreada
     ctx = SimpleNamespace(tenant_id=str(TENANT),input={'url':PAGE},job_id=uuid4(),agent='tiger',files=None,
                           tank=SimpleNamespace(run_skill=extract,approved_skill=approved))
     assert await corridor.agent.check(ctx) == {'status':'unread'}
-    assert calls == ['tiger.price_structured']
+    assert calls == ['tiger.price_extract', 'tiger.price_ocr']
 
 
-from test_agent1_browser import visitor  # noqa: E402,F401 — reuse offline browser transport
+from test_agent1_browser import visitor as _offline_visitor  # noqa: E402
+visitor = _offline_visitor
 from test_agent1_isolation import browser as public_browser
 
 
@@ -479,15 +485,9 @@ async def test_discovery_browser_only_admits_one_anonymous_get_and_never_clicks(
     result = await public_browser.visit(public_browser.Page(url=PAGE,catalogue_match=True,price_reader=True),
         str(TENANT),str(uuid4()),SITE)
     assert result['ok'] and visitor.context_options['storage_state'] is None
-    actions = []
-    async def abort(): actions.append('abort')
-    async def proceed(): actions.append('continue')
-    for url,kind,method in [(PAGE,'document','GET'),(PAGE,'document','GET'),
-            (SITE+'/script.js','script','GET'),(SITE+'/other','document','GET'),
-            ('https://other.example/item','document','GET'),(PAGE,'document','POST')]:
-        request = SimpleNamespace(url=url,resource_type=kind,method=method,is_navigation_request=lambda:True)
-        await visitor.request_handler(SimpleNamespace(request=request,abort=abort,continue_=proceed))
-    assert actions == ['continue','abort','abort','abort','abort','abort']
+    assert visitor.started == []
+    assert visitor.robots_calls == [PAGE]
+    assert visitor.request_options == [{'timeout': 10000, 'max_redirects': 0}]
     clicks.assert_not_awaited()
 
 
@@ -528,3 +528,196 @@ async def test_failed_watch_creation_cannot_commit_a_feed_link(corridor,monkeypa
     assert response.status_code == 503
     assert await corridor.pool.fetchval('SELECT count(*) FROM tank.access_feed_links') == 0
     assert await corridor.pool.fetchval('SELECT state FROM agent_tiger.matches WHERE tenant_id=$1',TENANT) == 'suggested'
+
+@pytest.mark.parametrize('rule', ['/?s=', '/*?s='])
+def test_discovery_robots_matches_queries_and_wildcards(rule):
+    from rig_watch import discovery_robots_allows
+    body = 'User-agent: *\nDisallow: ' + rule
+    assert not discovery_robots_allows(body, SITE + '/?s=' + GTIN + '&post_type=product')
+    assert discovery_robots_allows(body, PAGE)
+    assert discovery_robots_allows('User-agent: *\nDisallow: /products/*$\nAllow: /products/item$', PAGE)
+
+
+def test_link_filter_never_resolves_dns(monkeypatch):
+    from rig_watch import discovery_same
+    monkeypatch.setattr(socket, 'getaddrinfo', lambda *a, **k: pytest.fail('link filter resolved DNS'))
+    assert discovery_same(SITE, SITE.upper().replace('HTTPS:', 'https:') + '/product')
+    assert not discovery_same(SITE, SITE + ':444/product')
+    assert not discovery_same(SITE, SITE + '/manual.pdf')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('response', [
+    {'status':200, 'text':'<!doctype html><html>Not found</html>'},
+    {'status':302, 'location':SITE+'/'}, {'status':410}, {'status':500}])
+async def test_odd_sitemap_does_not_prevent_search(response):
+    gate, published = OfflineGate(), []
+    async def fetch(url):
+        return {'status':404} if url.endswith('robots.txt') else response
+    async def render(url):
+        if '/search?' in url:
+            return {'ok':False, 'reason':'redirect', 'status':302, 'location':PAGE}
+        return {'ok':True,'url':url,'html':markup()}
+    async def publish(site,url,html,human):
+        published.append(url)
+        return {'matches':[{'sku':'own','state':'confirmed'}]}
+    result = await CatalogueDiscovery(fetch,render,gate,publish).run([SITE],[OWN])
+    assert result['sites'][0]['status'] == 'completed'
+    assert published == [PAGE]
+    assert gate.calls.count(PAGE) == 1
+    assert gate.calls.index(PAGE) > gate.calls.index(SITE+'/search?q='+GTIN)
+    assert gate.calls.count(SITE+'/sitemap.xml') == 1
+
+
+def test_large_and_truncated_sitemaps_keep_bounded_locations():
+    from rig_watch import discovery_sitemap
+    source = '<urlset>' + ''.join('<url><loc>'+SITE+'/p/'+str(i)+'</loc></url>' for i in range(4000)) + '</urlset>'
+    assert len(source.encode()) > 100000
+    kind, urls, cut = discovery_sitemap(source)
+    assert kind == 'urlset' and len(urls) == 4000 and not cut
+    assert discovery_sitemap(source, limit=10)[2]
+    assert discovery_sitemap(source[:-20])[2]
+
+
+@pytest.mark.asyncio
+async def test_search_markup_is_not_published_and_pdf_is_not_reserved():
+    gate, published = OfflineGate(), []
+    async def fetch(url):
+        if url.endswith('robots.txt'):
+            return {'status':404}
+        return {'status':200, 'text':'<urlset><url><loc>'+SITE+'/manual.pdf</loc></url></urlset>'}
+    async def render(url): return {'ok':True,'url':url,'html':markup()}
+    async def publish(*args): published.append(args); return {'matches':[]}
+    await CatalogueDiscovery(fetch,render,gate,publish).run([SITE],[OWN])
+    assert not published and not gate.blocked
+    assert not any(url.endswith('.pdf') for url in gate.calls)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status',['waiting','handling'])
+async def test_existing_handoff_is_unchanged_by_discovery(corridor,status):
+    await corridor.pool.execute("""INSERT INTO tank.access_queue(tenant_id,room,site,reason,browser_handle,status,handler)
+        VALUES($1,'tiger',$2,'captcha',$3,$4,'founder')""", TENANT,SITE,uuid4(),status)
+    before = dict(await corridor.pool.fetchrow('SELECT * FROM tank.access_queue WHERE tenant_id=$1',TENANT))
+    await publish(corridor,'',human=True)
+    assert dict(await corridor.pool.fetchrow('SELECT * FROM tank.access_queue WHERE tenant_id=$1',TENANT)) == before
+
+
+@pytest.mark.asyncio
+async def test_large_unmatched_catalogue_position_fits_card(corridor,monkeypatch):
+    async def catalogue(tenant): return [{**OWN,'sku':str(i)} for i in range(1000)]
+    monkeypatch.setattr(access,'tiger_catalogue',catalogue)
+    response = await corridor.client.get('/v1/access/tiger/position')
+    assert response.status_code == 200
+    assert response.json()['products'] == [] and response.json()['total'] == 0
+    assert len(response.content) < 256000
+
+
+@pytest.mark.asyncio
+async def test_run_sightings_do_not_leak_into_other_cards(corridor):
+    jobs = [uuid4(), uuid4()]
+    for job in jobs:
+        await corridor.pool.execute("INSERT INTO agent_tiger.jobs(id,tenant_id,kind,input) VALUES($1,$2,'competitor_match','{}')",job,TENANT)
+    for job in jobs:
+        response = await corridor.client.post('/v1/access/rig/tiger/match-page',json={
+            'tenant_id':str(TENANT),'site':SITE,'url':PAGE,'html':markup(), 'job_id':str(job)})
+        assert response.status_code == 200
+    # A third run with the same time window saw nothing.
+    third = uuid4()
+    await corridor.pool.execute("INSERT INTO agent_tiger.jobs(id,tenant_id,kind,input) VALUES($1,$2,'competitor_match','{}')",third,TENANT)
+    assert (await access.tiger_card_result(TENANT,{'job_id':str(third)}))['matches'] == []
+    for job in jobs:
+        assert len((await access.tiger_card_result(TENANT,{'job_id':str(job)}))['matches']) == 1
+
+
+@pytest.mark.asyncio
+async def test_card_database_error_preserves_saved_card(monkeypatch):
+    monkeypatch.setattr(access,'_tiger_card_result',AsyncMock(side_effect=RuntimeError('offline DB unavailable')))
+    saved = {'job_id':str(uuid4()),'matches':[]}
+    assert await access.tiger_card_result(TENANT,saved) == saved
+
+
+@pytest.mark.asyncio
+async def test_catalogue_browser_preserves_cookie_bytes_and_refuses_redirects(visitor,monkeypatch):
+    monkeypatch.setattr(public_browser,'access_configured',lambda:False)
+    storage = public_browser.storage_for(str(TENANT),SITE)
+    storage.parent.mkdir(parents=True,exist_ok=True)
+    original = b'{"cookies":[{"name":"solved","value":"synthetic"}],"origins":[]}\n'
+    storage.write_bytes(original)
+    visitor.status, visitor.redirect = 302, PAGE
+    result = await public_browser.visit(public_browser.Page(url=SITE+'/?s='+GTIN,catalogue_match=True),str(TENANT),str(uuid4()),SITE)
+    assert result['reason'] == 'redirect' and result['location'] == PAGE
+    assert visitor.started == [] and visitor.request_options[0]['max_redirects'] == 0
+    assert storage.read_bytes() == original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('private,pdf', [(True,False),(False,True)])
+async def test_catalogue_unsupported_is_not_a_human_check(visitor,monkeypatch,private,pdf):
+    monkeypatch.setattr(public_browser,'access_configured',lambda:private)
+    monkeypatch.setattr(public_browser,'access_rpc',AsyncMock(return_value={'state':'allowed'}))
+    result = await public_browser.visit(public_browser.Page(url=PAGE+('.pdf' if pdf else ''),catalogue_match=True),str(TENANT),str(uuid4()),SITE)
+    assert result['reason'] == 'unsupported' and not result['challenge']
+    assert visitor.robots_calls == []
+
+
+@pytest.mark.asyncio
+async def test_check_is_claimed_between_discovery_slices(corridor,monkeypatch):
+    from chassis.worker import claim_next, run_claimed
+    root, check = uuid4(), uuid4()
+    await corridor.pool.execute("INSERT INTO agent_tiger.jobs(id,tenant_id,kind,input) VALUES($1,$2,'competitor_match',$3::jsonb)",root,TENANT,json.dumps({'sites':[SITE],'products':[OWN]}))
+    monkeypatch.setattr(corridor.agent,'_fetch_text',AsyncMock(return_value={'status':404}))
+    monkeypatch.setattr(corridor.agent,'DiscoveryGate',lambda pool:OfflineGate())
+    first = await corridor.agent.competitor_match(SimpleNamespace(tenant_id=str(TENANT),job_id=str(root),input={'sites':[SITE],'products':[OWN]}))
+    assert first['continuation_id']
+    await corridor.pool.execute("UPDATE agent_tiger.jobs SET status='completed' WHERE id=$1",root)
+    await corridor.pool.execute("INSERT INTO agent_tiger.jobs(id,tenant_id,kind,input,run_at) VALUES($1,$2,'check','{}',now()-interval '1 second')",check,TENANT)
+    async with corridor.pool.acquire() as conn:
+        claimed = await claim_next(conn,'tiger')
+    assert claimed['id'] == check
+    # The actual check handler gets a turn before traversal resumes.
+    ran = []
+    async def check_handler(ctx): ran.append(ctx.job_id); return {'status':'checked'}
+    async with corridor.pool.acquire() as conn:
+        await run_claimed(conn,'tiger',claimed,{'check':check_handler},lambda job:SimpleNamespace(job_id=str(job['id'])))
+    assert await corridor.pool.fetchval('SELECT status FROM agent_tiger.jobs WHERE id=$1',check) == 'done'
+    await corridor.pool.execute("UPDATE agent_tiger.jobs SET run_at=now() WHERE id=$1",UUID(first['continuation_id']))
+    async with corridor.pool.acquire() as conn:
+        continuation = await claim_next(conn,'tiger')
+    assert continuation['id'] == UUID(first['continuation_id']) and ran == [str(check)]
+    assert json.loads(continuation['input'])['cursor']['active']['queue']
+    async with corridor.pool.acquire() as conn:
+        await run_claimed(conn,'tiger',continuation,{'competitor_match':corridor.agent.competitor_match},
+                          lambda job:SimpleNamespace(tenant_id=str(TENANT),job_id=str(job['id']),input=json.loads(job['input'])))
+    assert corridor.agent._fetch_text.await_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('role_first', [True,False])
+async def test_agent_role_has_t1_privileges_in_both_deployment_orders(database,role_first):
+    from chassis.roles import _ownership
+    async with database.acquire() as conn:
+        await conn.execute('CREATE ROLE agent_tiger NOLOGIN NOSUPERUSER NOBYPASSRLS')
+        try:
+            if role_first:
+                # Existing deployment: migration grants to a role already provisioned.
+                await conn.execute((ROOT/'tank/schema.sql').read_text())
+            else:
+                # Fresh deployment: provisioner's ownership pass follows migration.
+                await conn.execute('GRANT USAGE,CREATE ON SCHEMA agent_tiger TO agent_tiger')
+                await conn.execute(_ownership('agent_tiger'))
+            for table in ('matches','match_runs','match_sightings','discovery_limits'):
+                for privilege in ('SELECT','INSERT','UPDATE'):
+                    assert await conn.fetchval("SELECT has_table_privilege('agent_tiger',$1,$2)",'agent_tiger.'+table, privilege)
+            async with conn.transaction():
+                await conn.execute('SET LOCAL ROLE agent_tiger')
+                await conn.execute("SELECT set_config('app.tenant_id',$1,true)",str(TENANT))
+                await conn.execute("INSERT INTO agent_tiger.discovery_limits(site) VALUES($1)",SITE)
+                await conn.execute("UPDATE agent_tiger.discovery_limits SET requests=1 WHERE site=$1",SITE)
+                assert await conn.fetchval('SELECT requests FROM agent_tiger.discovery_limits WHERE site=$1',SITE) == 1
+                await conn.execute("INSERT INTO agent_tiger.match_runs(tenant_id,operation_id,ledger_id) VALUES($1,$2,$3)",TENANT,uuid4(),uuid4())
+        finally:
+            # Reassign disposable database objects before removing the NOLOGIN role.
+            await conn.execute('REASSIGN OWNED BY agent_tiger TO postgres')
+            await conn.execute('DROP OWNED BY agent_tiger')
+            await conn.execute('DROP ROLE agent_tiger')
