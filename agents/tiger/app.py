@@ -15,7 +15,7 @@ from gold_sources import candidates
 from pydantic import BaseModel
 
 from alert_email import deliver_pending
-from rig_watch import RigWatches, TankRig, check_now
+from rig_watch import RigWatches, TankRig, check_now, CatalogueDiscovery, DiscoveryGate
 from chassis.app import create_app
 from chassis.jobs import JobContext
 from watch import (
@@ -60,10 +60,10 @@ async def ping(ctx: JobContext) -> dict:
     return result
 
 
-async def _render(url: str, session: str, agent: str, tenant: str, task: str = "") -> dict[str, Any]:
+async def _render(url: str, session: str, agent: str, tenant: str, task: str = "", *, catalogue_match: bool = False) -> dict[str, Any]:
     response = await app.state.http.post(
         f"{TIGER_URL.rstrip('/')}/render",
-        json={"url": url, "screenshot": True, "settle_ms": 10000, "max_ms": 25000,
+        json={"url": url, "catalogue_match": catalogue_match, "screenshot": True, "settle_ms": 10000, "max_ms": 25000,
               "request_timeout_ms": 45000, "price_reader": True},
         headers={"X-Tank-Key": os.environ.get("TANK_KEY", ""), "X-Tenant-ID": tenant,
                  "X-Home-Region": os.environ.get("TANK_REGION", "us-east"), "X-Task-ID": task},
@@ -75,7 +75,7 @@ async def _render(url: str, session: str, agent: str, tenant: str, task: str = "
     data = response.json()
     if not isinstance(data, dict):
         return {"ok": False, "challenge": False, "error": "browser answer was not an object"}
-    if data.get("login_status") == "logged in" and not data.get("portal_item"):
+    if not catalogue_match and data.get("login_status") == "logged in" and not data.get("portal_item"):
         # Login itself returns status only. Read numeric fields in a second
         # request, with the session cookie in the same room's own browser.
         response = await app.state.http.post(f"{TIGER_URL.rstrip('/')}/render",
@@ -86,7 +86,17 @@ async def _render(url: str, session: str, agent: str, tenant: str, task: str = "
     return data
 
 
-async def _fetch_text(url: str) -> str:
+async def _fetch_text(url: str, *, catalogue: bool = False):
+    if catalogue:
+        check_url(url)
+        async with app.state.http.stream("GET", url, timeout=8, headers={"User-Agent": ROBOTS_UA}, follow_redirects=False) as response:
+            raw = bytearray()
+            async for chunk in response.aiter_bytes():
+                raw.extend(chunk[:100_000 - len(raw)])
+                if len(raw) >= 100_000:
+                    break
+            return {"status": response.status_code, "location": response.headers.get("location"),
+                    "text": raw.decode("utf-8-sig", errors="replace")}
     response = await app.state.http.get(
         url,
         timeout=8,
@@ -183,9 +193,24 @@ async def rig_discover(ctx: JobContext) -> dict:
     return {"tenants": count}
 
 
+async def competitor_match(ctx: JobContext) -> dict:
+    corridor = TankRig(app.state.http)
+    async def fetch(url):
+        return await _fetch_text(url, catalogue=True)
+    async def render(url):
+        return await _render(url, "", AGENT, ctx.tenant_id, str(ctx.job_id), catalogue_match=True)
+    async def publish(site, url, html, human_check):
+        return await corridor.request('POST', '/match-page', json={
+            'tenant_id': str(ctx.tenant_id), 'site': site, 'url': url,
+            'html': html, 'human_check': human_check})
+    return await CatalogueDiscovery(fetch, render, DiscoveryGate(app.state.pool), publish).run(
+        ctx.input.get('sites', []), ctx.input.get('products', []))
+
+
 app = create_app(
     agent=AGENT,
-    handlers={"ping": ping, "check": check, "dispatch": dispatch, "rig_discover": rig_discover},
+    handlers={"ping": ping, "check": check, "dispatch": dispatch, "rig_discover": rig_discover, "competitor_match": competitor_match},
+    job_timeouts={"competitor_match": 86400},
     schedules=[
         {"tenant_id": HEARTBEAT_TENANT, "cron": "* * * * *", "kind": "rig_discover", "input": {}},
         {
