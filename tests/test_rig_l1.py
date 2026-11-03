@@ -117,6 +117,8 @@ async def test_second_store_owns_categories_parts_and_sentences_without_fallback
     shades = await service.search(tenant, "shades", 24)
     assert lamps["focus_id"] == "SECOND-LAMP-01"
     assert shades["ids"] == ["SECOND-SHADE-01"]
+    related = await service.search(tenant, "shade to go with the lamp", 3)
+    assert related["ids"][0] == "SECOND-SHADE-01"
     assert {row["category"] for row in shades["results"]} == {"shade"}
     packed = await service.search(tenant, "2 pack lamps", 24)
     assert packed["message"] == "We list lamps separately."

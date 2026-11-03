@@ -1630,6 +1630,9 @@ def _clause_names(clause: str, products: list[dict[str, Any]]) -> bool:
 def _split_clauses(query: str, products: list[dict[str, Any]]) -> list[str]:
     query = " ".join(query.split())
     forced = "+" in query or "," in query
+    # A relation phrase names a part for a host, rather than a two-item build.
+    if not forced and _intent(query)[1]:
+        return []
     if not forced and (not re.search("\\b(?:with|and)\\b", query, re.IGNORECASE)):
         return []
     parts = re.split("\\+|,|\\bwith\\b|\\band\\b", query, flags=re.IGNORECASE)
