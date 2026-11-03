@@ -52,6 +52,30 @@ DO $$ BEGIN
  END IF;
 END $$;
 
+-- R6: only hashes of complete page observations, never saved page bodies.
+CREATE TABLE IF NOT EXISTS agent_radix.page_hashes (
+ tenant_id uuid NOT NULL, scan_id uuid NOT NULL, domain text NOT NULL,
+ url text NOT NULL, sha256 text NOT NULL CHECK (sha256 ~ '^[a-f0-9]{64}$'),
+ PRIMARY KEY (tenant_id,scan_id,url)
+);
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+  ALTER TABLE agent_radix.page_hashes ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE agent_radix.page_hashes FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.page_hashes'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON agent_radix.page_hashes FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.page_hashes'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON agent_radix.page_hashes AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE TABLE IF NOT EXISTS agent_radix.memory_records (
     id uuid PRIMARY KEY,
