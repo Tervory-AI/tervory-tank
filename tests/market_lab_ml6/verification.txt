@@ -1,0 +1,140 @@
+ML6 verification — /workspace/codex-market-lab-w3
+Source head: 1282aa069274806bf439b2892b27a7066dd9a3f0
+No merge of main, outside-network tests, production data or provider/model calls.
+
+Initial focused command: TMPDIR=/workspace/codex-market-lab-w3/.tmp PYTHONPATH=tank .venv/bin/python -m pytest -q tests/test_market_lab_ml6.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --timeout=120
+Initial result: exit 2, ModuleNotFoundError: core during collection. Fixed the standalone test import path.
+Second result: exit 1, 2 passed and 7 setup errors from async fixtures declared with pytest.fixture. Switched to pytest_asyncio.fixture and a transaction-capable pgserver connection.
+Third result: exit 0, 9 passed in 16.19s.
+
+$ TMPDIR=/workspace/codex-market-lab-w3/.tmp PYTHONPATH=tank .venv/bin/python -m pytest -q tests/test_market_lab_ml6.py tests/test_market_lab_ml3.py tests/test_market_lab_ml5.py tests/test_tiger_alert_email.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --timeout=120
+Result: exit 1, 58 passed, 1 skipped, 1 failed. Tiger test_email_copy_matches_actual_workspace_formatter requires workspace/node_modules/typescript, absent in this fresh checkout. No Tiger code changed.
+
+$ cd workspace && TMPDIR=/workspace/codex-market-lab-w3/.tmp npm ci --ignore-scripts --no-audit --no-fund
+Result: exit 0; 
+added 45 packages in 12s
+
+$ TMPDIR=/workspace/codex-market-lab-w3/.tmp PYTHONPATH=tank .venv/bin/python -m pytest -q tests/test_market_lab*.py tests/test_feeds*.py tests/market_lab_feeds tests/market_lab_keyless_feeds tests/market_lab_gpt_researcher tests/test_autumbra_market_lab_intel.py tests/test_access1_feeds.py tests/test_tiger_alert_email.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --timeout=120
+Result: exit 0
+...................................s.....................s.............. [ 20%]
+.....................................s...................s.............. [ 41%]
+.s.................................................................s.... [ 62%]
+........................................................................ [ 83%]
+...................s...............................s.....                [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-w3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-w3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-w3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+337 passed, 9 skipped, 3 warnings in 86.75s (0:01:26)
+
+$ TMPDIR=/workspace/codex-market-lab-w3/.tmp PYTHONPATH=tank .venv/bin/python -m pytest -q tests/tiger_g5 --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --timeout=120
+Result: exit 0
+...sss......ssssss.s.s.ssssssss....ssss.s.s.s.                           [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-w3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-w3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-w3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tank/main.py:754
+  /workspace/codex-market-lab-w3/tank/main.py:754: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4723
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4723
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4723
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4723
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4723
+  /workspace/codex-market-lab-w3/.venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tank/main.py:814
+  /workspace/codex-market-lab-w3/tank/main.py:814: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tank/agent_skills.py:531
+  /workspace/codex-market-lab-w3/tank/agent_skills.py:531: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tank/skala_intake.py:71
+  /workspace/codex-market-lab-w3/tank/skala_intake.py:71: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tank/skala_intake.py:77
+  /workspace/codex-market-lab-w3/tank/skala_intake.py:77: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tank/skala_revalidation.py:192
+  /workspace/codex-market-lab-w3/tank/skala_revalidation.py:192: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+20 passed, 26 skipped, 14 warnings in 3.66s
+
+$ .venv/bin/ruff check --select E9,F agents/market_lab/app.py agents/market_lab/core/briefs.py agents/market_lab/core/jobs.py agents/market_lab/core/ledger.py agents/market_lab/core/ml3.py tank/command.py tank/market_lab_ml3.py tests/test_market_lab_ml6.py
+Result: exit 0; All checks passed!
+
+$ git diff --check fc26952f
+Result: exit 0; no output.
+
+Each finished file was committed and pushed serially:
+git add <file> && git commit -m <message> && git push origin codex/market-lab-w3
+All pushes succeeded. No main merge, PR creation, label, merge or production deployment.
+
+Source-head CI metadata:
+gh api repos/Tervory-AI/tervory-tank/commits/1282aa069274806bf439b2892b27a7066dd9a3f0/check-runs
+Tank (1/2/3) and Workspace were queued in run 41736299802. This is not a CI pass. Final-head results are recorded in the PR after the evidence commits.
+
+No test containers were started. TMPDIR is the assigned checkout .tmp; Postgres is disposable pgserver. SMTP uses the existing Tiger local catcher and unmodified Rig mailer, with only its local STARTTLS boundary stubbed; webhook receiver is a local ASGI endpoint through ML3 signing/public_stream. No founder delivery screenshots or acceptance are claimed.
