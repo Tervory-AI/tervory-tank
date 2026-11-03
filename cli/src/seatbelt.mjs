@@ -28,6 +28,10 @@ export async function seatbeltProfile(root, mounts = []) {
   return base + `
 ; Tervory additions: minimum system/runtime reads, selected-folder writes only.
 (allow file-read* file-map-executable ${paths})
+; Loader/container checks from the pinned upstream minimal platform policy.
+(allow system-mac-syscall (mac-policy-name "vnguard"))
+(allow system-mac-syscall (require-all (mac-policy-name "Sandbox") (mac-syscall-number 67)))
+(allow file-read-metadata (path-ancestors "/System/Volumes/Data/private"))
 (allow file-read-metadata ${roots.map(path => `(path-ancestors ${quote(path)})`).join(' ')})
 (allow file-read-metadata (literal "/") (literal "/dev") (literal "/private") (literal "/private/var"))
 (allow file-read* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/random") (literal "/dev/urandom"))
