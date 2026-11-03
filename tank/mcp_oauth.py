@@ -15,7 +15,7 @@ import time
 from urllib.parse import urlencode, urlsplit
 
 from mcp_client import Client, Refused, SignInRequired, document, request
-from mcp_connections import approved, connection, credentials, state, store_credentials
+from mcp_connections import approved, connection, credentials, db, state, store_credentials, unpack
 
 CLIENT_ID = 'https://app.tervory.com/oauth/client/mcp.json'
 REDIRECT_URI = 'https://app.tervory.com/oauth/callback'
@@ -145,13 +145,13 @@ def token_data(response: dict, previous: dict) -> dict:
     expiry = response.get('expires_in')
     if not isinstance(access, str) or not access or len(access) > 16000 or response.get('token_type', '').lower() != 'bearer':
         raise Refused('MCP OAuth token refused')
-    if isinstance(expiry, bool) or not isinstance(expiry, (int, float)) or not 0 < expiry <= 366 * 86400:
+    if expiry is not None and (isinstance(expiry, bool) or not isinstance(expiry, (int, float)) or not 0 < expiry <= 366 * 86400):
         raise Refused('MCP OAuth expiry refused')
     refresh = response.get('refresh_token', previous.get('refresh_token'))
     if refresh is not None and (not isinstance(refresh, str) or len(refresh) > 16000):
         raise Refused('MCP OAuth token refused')
     return {key: value for key, value in {**previous, 'access_token': access,
-            'refresh_token': refresh, 'expires_at': time.time() + expiry}.items() if key != 'pending'}
+            'refresh_token': refresh, 'expires_at': time.time() + expiry if expiry is not None else None}.items() if key != 'pending'}
 
 
 async def callback(actor, opaque_state: str, code: str | None, error: str | None, issuer: str | None = None) -> bool:
@@ -182,31 +182,50 @@ async def callback(actor, opaque_state: str, code: str | None, error: str | None
         value = token_data(response, {key: pending[key] for key in ('resource', 'issuer', 'token_endpoint', 'client_id')})
         await store_credentials(row, value, mcp_state='connected')
         from mcp_connections import discover
-        await discover(actor, vault, ident, force=True)
+        await discover(actor, vault, ident, force=False)
         return True
     except Refused:
         await state(row, 'sign_in_failed')
         return False
 
 
-async def refresh(row, data: dict) -> dict:
-    resource = row['metadata']['server_url']
-    await approved(resource)
-    if data.get('resource') != resource:
-        raise SignInRequired()
-    if data.get('expires_at', 0) > time.time() + 60:
-        return data
-    if not data.get('refresh_token'):
-        raise SignInRequired()
-    try:
-        response = await post(data['token_endpoint'], {'grant_type': 'refresh_token', 'refresh_token': data['refresh_token'],
-                                                     'client_id': data['client_id'], 'resource': resource})
-        updated = token_data(response, data)
-        await store_credentials(row, updated, mcp_state='connected')
-        return updated
-    except Refused:
-        await state(row, 'sign_in_failed')
-        raise SignInRequired() from None
+async def refresh(row, data: dict, *, force=False) -> dict:
+    # A row lock works across Tank processes. Re-read inside the lock, including
+    # when the caller's snapshot was taken before a concurrent token rotation.
+    failed = False
+    async with db().acquire() as conn, conn.transaction():
+        locked = await conn.fetchrow("SELECT * FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 AND kind='connections' AND name=$3 FOR UPDATE", row['tenant_id'], row['vault'], row['name'])
+        if not locked:
+            raise SignInRequired()
+        current = {**dict(locked), 'metadata': unpack(locked['metadata'])}
+        resource = current['metadata']['server_url']
+        await approved(resource)
+        latest = credentials(current)
+        expiry = latest.get('expires_at')
+        fresh = expiry is None or expiry > time.time() + 60
+        if latest.get('resource') != resource:
+            raise SignInRequired()
+        rotated = latest.get('access_token') != data.get('access_token')
+        if fresh and (not force or rotated):
+            row.update(current)
+            return latest
+        if not latest.get('refresh_token'):
+            raise SignInRequired()
+        try:
+            response = await post(latest['token_endpoint'], {'grant_type': 'refresh_token', 'refresh_token': latest['refresh_token'],
+                                                           'client_id': latest['client_id'], 'resource': resource})
+            updated = token_data(response, latest)
+            await store_credentials(current, updated, mcp_state='connected', conn=conn)
+            row.update(current)
+            return updated
+        except Refused:
+            # Compare sealed bytes as well: a stale failure never overwrites a
+            # successful renewal or a new authorization handoff.
+            await state(current, 'sign_in_failed', conn=conn)
+            row.update(current)
+            failed = True
+    if failed:
+        raise Refused('MCP OAuth refresh refused') from None
 
 
 # Workspace server corridor; no browser-supplied tenant/user assertions are accepted.
