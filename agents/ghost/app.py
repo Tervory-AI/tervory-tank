@@ -49,7 +49,8 @@ from .market_lab_intel import (
 )
 from .webhooks import WebhookRejected, accept_webhook, drop_counts
 from .red_team import list_exercises, run_exercise
-from .enforce_lifecycle import FixtureComposeBackend, plan_create, plan_destroy, receipt_for
+from .enforce_lifecycle import (CoolifyEnforceBackend, Refused, coolify_configured,
+                                FixtureComposeBackend, plan_create, plan_destroy, receipt_for)
 from .owner_email import send_owner_update
 from .smtp_email import smtp_available_since, transport_status
 from .durable_state import locked_state
@@ -1214,6 +1215,15 @@ def create_app() -> FastAPI:
             execute = bool(data.get("execute"))
         except Exception:
             raise HTTPException(422, "Create plan was not understood.") from None
+        if execute and coolify_configured():
+            try:
+                async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as http:
+                    backend = CoolifyEnforceBackend.from_env(http)
+                    plan = await backend.create_plan(tenant_id)
+                    receipt = await backend.create(plan)
+                return {"plan": plan, "receipt": receipt}
+            except (ValueError, RuntimeError) as exc:
+                raise HTTPException(422, str(exc)) from None
         try:
             plan = plan_create(tenant_id, existing_count=existing)
         except (ValueError, RuntimeError) as exc:
@@ -1236,6 +1246,13 @@ def create_app() -> FastAPI:
             execute = bool(data.get("execute"))
         except Exception:
             raise HTTPException(422, "Destroy plan was not understood.") from None
+        if execute and coolify_configured():
+            try:
+                async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as http:
+                    receipt = await CoolifyEnforceBackend.from_env(http).destroy(plan)
+                return {"plan": plan, "receipt": receipt}
+            except (ValueError, RuntimeError) as exc:
+                raise HTTPException(422, str(exc)) from None
         if execute:
             root = os.environ.get("AUTUMBRA_FIXTURE_COMPOSE_ROOT", "").strip()
             if not root:
@@ -1244,6 +1261,16 @@ def create_app() -> FastAPI:
         else:
             receipt = receipt_for(plan)
         return {"plan": plan, "receipt": receipt}
+
+    @app.get("/ghost/autumbra/enforce/list", dependencies=[Depends(require_tank)])
+    async def autumbra_enforce_list():
+        if not coolify_configured():
+            raise HTTPException(422, "Fixture compose root is not configured.")
+        try:
+            async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as http:
+                return {"applications": await CoolifyEnforceBackend.from_env(http).list()}
+        except Refused as exc:
+            raise HTTPException(422, str(exc)) from None
 
     @app.post("/ghost/autumbra/owner-update", dependencies=[Depends(require_tank)])
     async def autumbra_owner_update(request: Request):
