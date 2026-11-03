@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException
-from trigger_google import Google
+from trigger_google import V4, Google, GoogleFailure
 from trigger_marketing_contract import FORMATS, schedulable, utc_now
 
 
@@ -92,7 +92,9 @@ class Marketing:
             row = await self.post(tenant, args.post_id, conn=conn, lock=True)
             if existing:
                 return public(row)
-            if row['revision'] != args.expected_revision or row['state'] in {'published', 'cancelled'} or row['delivery'] == 'uncertain' or (row['delivery'] == 'inflight' and operation != 'post.cancel'):
+            if (row['revision'] != args.expected_revision or row['state'] in {'published', 'cancelled'}
+                    or (row['delivery'] == 'uncertain' and operation not in {'post.cancel', 'post.retry'})
+                    or (row['delivery'] == 'inflight' and operation != 'post.cancel')):
                 raise HTTPException(409)
             state, target, generation = row['state'], row['location'], row['connection_generation']
             if operation == 'post.edit':
@@ -126,13 +128,46 @@ class Marketing:
             elif operation == 'post.cancel':
                 row = await conn.fetchrow("UPDATE tank.trigger_posts SET state='cancelled',delivery='done',retryable=false,retry_at=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING *", tenant, args.post_id)
             elif operation == 'post.retry':
-                if state != 'failed' or row['delivery'] != 'pending' or row['approved_revision'] != row['revision']:
+                if state != 'failed' or row['approved_revision'] != row['revision']:
                     raise HTTPException(409)
-                row = await conn.fetchrow("UPDATE tank.trigger_posts SET state='scheduled',attempts=0,retry_at=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING *", tenant, args.post_id)
+                found = await self.reconcile(conn, row) if row['delivery'] == 'uncertain' else None
+                if found:
+                    row = await conn.fetchrow('''UPDATE tank.trigger_posts SET state='published',delivery='done',
+                        retryable=false,retry_at=NULL,platform_error=NULL,platform_id=$3,platform_url=$4,published_at=$5,
+                        updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING *''', tenant, args.post_id,
+                        found['name'], found.get('searchUrl'), found['created'])
+                else:
+                    row = await conn.fetchrow("UPDATE tank.trigger_posts SET state='scheduled',delivery='pending',attempts=0,retry_at=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING *", tenant, args.post_id)
             else:
                 raise HTTPException(404)
             await self.event(conn, row, operation_id)
             return public(row)
+
+    async def reconcile(self, conn, row):
+        tenant = row['tenant_id']
+        binding = await conn.fetchrow("SELECT generation,location FROM tank.trigger_gbp_connections WHERE tenant_id=$1 AND status='connected'", tenant)
+        if not binding or (binding['generation'], binding['location']) != (row['connection_generation'], row['location']):
+            raise HTTPException(409)
+        # Pre-review claims persisted the same timestamp as a five-minute lease.
+        claimed = row['claimed_at'] or (row['lease_until'] - timedelta(minutes=5) if row['lease_until'] else None)
+        if claimed is None:
+            raise HTTPException(409)
+        posts = await self.google.pages(tenant, V4+row['location']+'/localPosts', 'localPosts', conn=conn)
+        for post in posts:
+            if not isinstance(post, dict):
+                raise GoogleFailure(502)
+            if post.get('summary') != row['text']:
+                continue
+            try:
+                created = datetime.fromisoformat(post['createTime'].replace('Z', '+00:00'))
+                name = post['name']
+                if created.tzinfo is None or not isinstance(name, str) or not name.startswith(row['location']+'/localPosts/'):
+                    raise ValueError
+            except (KeyError, TypeError, ValueError, AttributeError):
+                raise GoogleFailure(502) from None  # An incomplete read cannot authorize another POST.
+            if created > claimed:
+                return {**post, 'created': created}
+        return None
 
     async def posts(self, tenant, args):
         # Dates are filtered in each post's own zone, not the server's date.
