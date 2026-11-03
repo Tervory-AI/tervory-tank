@@ -274,7 +274,7 @@ async def handle(ctx: Any) -> dict:
         result = {"ok": False, "detail": type(exc).__name__}
     claim = {"slug": result.get("slug", ctx.input.get("slug")), "build": result.get("build"),
              "ok": result.get("ok") is True, "checks": result.get("checks", [])}
-    for key in ("detail", "refused", "copy_needed", "media_needed"):
+    for key in ("detail", "refused"):
         if key in result:
             claim[key] = result[key]
     evidence = [str(ctx.job_id)]
