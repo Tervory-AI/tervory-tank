@@ -485,7 +485,7 @@ def enforce_drain_once(
         return None
     _item_id, payload = taken
     edge = control or DEFAULT_CONTROL
-    cap = action_cap or ActionCap()
+    cap = action_cap or ActionCap(data_dir=data_dir or queue.root)
 
     transit = _queue_transit_seconds(payload)
 
