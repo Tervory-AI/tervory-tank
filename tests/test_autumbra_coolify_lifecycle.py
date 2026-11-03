@@ -230,3 +230,33 @@ async def test_tank_admin_boundary_and_list_receipt(monkeypatch):
             result = await client.post('/v1/ghost/autumbra/enforce/' + action, headers=headers, json={'tenant_id': B})
             assert result.status_code == 200
             assert room.call_args.kwargs['body'] == {'tenant_id': B, 'execute': True}
+
+
+@pytest.mark.asyncio
+async def test_configured_room_uses_live_count_and_requires_room_key(tmp_path, monkeypatch):
+    for setting in lifecycle.COOLIFY_SETTINGS:
+        monkeypatch.setenv(setting, 'placeholder-setting')
+    monkeypatch.setenv('TANK_KEY', 'placeholder-room-key')
+    monkeypatch.setenv('DATA_DIR', str(tmp_path))
+    api = FakeAPI()
+    api.rows = [{'name': lifecycle.project_name(B), 'uuid': 'placeholder-b', 'status': 'exited'}]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(api)) as http:
+        service = backend(http)
+        monkeypatch.setattr(lifecycle.CoolifyEnforceBackend, 'from_env', classmethod(lambda cls, _: service))
+        with TestClient(create_app()) as client:
+            path = '/ghost/autumbra/enforce/'
+            headers = {'X-Tank-Key': 'placeholder-room-key'}
+            assert client.get(path + 'list').status_code == 401
+            assert not api.calls
+            result = client.post(path + 'plan-create', headers=headers,
+                                 json={'tenant_id': A, 'existing_count': 999, 'execute': True})
+            assert result.status_code == 200
+            assert result.json()['plan']['cap']['current'] == 1
+            assert result.json()['receipt']['outcome'] == 'created'
+            assert len(client.get(path + 'list', headers=headers).json()['applications']) == 2
+            duplicate = client.post(path + 'plan-create', headers=headers,
+                                    json={'tenant_id': A, 'existing_count': 0, 'execute': True})
+            assert duplicate.status_code == 422
+            assert len([r for r in api.calls if r.method == 'POST']) == 1
+            result = client.post(path + 'plan-destroy', headers=headers, json={'tenant_id': A, 'execute': True})
+            assert result.json()['receipt']['outcome'] == 'destroyed'
