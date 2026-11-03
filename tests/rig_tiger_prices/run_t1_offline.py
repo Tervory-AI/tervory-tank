@@ -34,7 +34,14 @@ try:
     env = {**os.environ,'POOL_SCHEMA_DATABASE_URL':uri,'TIGER_MAIL_TEST_DATABASE_URL':uri}
     if full_tank:
         async def prepare():
-            conn = await asyncpg.connect(uri)
+            for attempt in range(100):
+                try:
+                    conn = await asyncpg.connect(uri, timeout=2)
+                    break
+                except (OSError, asyncpg.PostgresError):
+                    await asyncio.sleep(.3)
+            else:
+                raise RuntimeError('Disposable PostgreSQL TCP did not become ready')
             try:
                 for database in ('pooltest','market_test','radix_passive_test'):
                     await conn.execute('CREATE DATABASE '+database)
