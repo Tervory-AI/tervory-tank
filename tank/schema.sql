@@ -2229,8 +2229,7 @@ BEGIN
     RETURN NEW;
 END;
 $$;
-DROP TRIGGER IF EXISTS policy_skill_revalidation ON tank.policy;
-CREATE TRIGGER policy_skill_revalidation
+CREATE OR REPLACE TRIGGER policy_skill_revalidation
     BEFORE INSERT OR UPDATE OF model ON tank.policy
     FOR EACH ROW EXECUTE FUNCTION tank.queue_skill_revalidations();
 
