@@ -151,6 +151,8 @@ jobs:
         run: |
           brew list gnu-tar >/dev/null 2>&1 || brew install gnu-tar
           brew list coreutils >/dev/null 2>&1 || brew install coreutils
+          brew list wget >/dev/null 2>&1 || brew install wget
+          brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
           echo "$(brew --prefix gnu-tar)/libexec/gnubin" >> "$GITHUB_PATH"
           echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
           test -x /usr/bin/sandbox-exec
@@ -162,6 +164,6 @@ jobs:
         # The same code-mode suite runs in the Ubuntu job. It requires echo's
         # exit 0 and uses a reachable host listener as the network control.
         run: |
-          export PATH="$(brew --prefix gnu-tar)/libexec/gnubin:$(brew --prefix coreutils)/libexec/gnubin:/usr/bin:/bin:$PATH"
+          export PATH="$(brew --prefix gnu-tar)/libexec/gnubin:$(brew --prefix coreutils)/libexec/gnubin:$(brew --prefix openssl@3)/bin:/usr/bin:/bin:$PATH"
           npm test
         working-directory: cli
