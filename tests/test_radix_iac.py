@@ -110,6 +110,8 @@ def test_eval_refuses_unhanded_or_unsafe_files(files):
 
 @pytest.mark.asyncio
 async def test_room_eval_auth_and_exact_skill_version(monkeypatch):
+    # Reproduce a worker that already cached another room's sibling module.
+    monkeypatch.setitem(sys.modules, 'gold_sources', type(sys)('placeholder_other_room_gold_sources'))
     monkeypatch.syspath_prepend(str(ROOT / 'agents/radix'))
     # Other room tests import a sibling gold_sources under the same bare name.
     monkeypatch.delitem(sys.modules, 'gold_sources', raising=False)
