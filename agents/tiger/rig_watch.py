@@ -484,14 +484,21 @@ class CatalogueDiscovery:
                     if active.get('home_finished') and index < len(products):
                         product = products[index]
                         active['search_index'] = index + 1
-                        gtin = re.sub(r'[\s-]', '', str(product.get('gtin') or ''))
-                        if product['sku'] not in active['confirmed'] and re.fullmatch(r'[0-9]{8}|[0-9]{12,14}', gtin) and gtin.strip('0'):
-                            searches = [site + '/search?' + urlencode({'q': gtin}), site + '/?' + urlencode({'s': gtin, 'post_type': 'product'})]
-                            for form in active['forms'][:20]:
-                                parsed = urlsplit(form['action'])
-                                fields = {**dict(parse_qsl(parsed.query)), **form['fields'], form['query']: gtin}
-                                searches.append(urlunsplit(parsed._replace(query=urlencode(fields), fragment='')))
-                            active['queue'].extend({'kind': 'search', 'url': target, 'sku': product['sku']} for target in dict.fromkeys(searches) if allowed(target))
+                        raw_gtin = product.get('gtin')
+                        gtin = re.sub(r'[\s-]', '', raw_gtin) if isinstance(raw_gtin, str) else ''
+                        if (product['sku'] in active['confirmed']
+                                or not re.fullmatch(r'[0-9]{8}|[0-9]{12,14}', gtin) or not gtin.strip('0')):
+                            continue
+                        # Same GS1 check digit as Tank's tiger_gtin identity rule.
+                        total = sum(int(c) * (3 if i % 2 == 0 else 1) for i, c in enumerate(reversed(gtin[:-1])))
+                        if (10 - total % 10) % 10 != int(gtin[-1]):
+                            continue
+                        searches = [site + '/search?' + urlencode({'q': gtin}), site + '/?' + urlencode({'s': gtin, 'post_type': 'product'})]
+                        for form in active['forms'][:20]:
+                            parsed = urlsplit(form['action'])
+                            fields = {**dict(parse_qsl(parsed.query)), **form['fields'], form['query']: gtin}
+                            searches.append(urlunsplit(parsed._replace(query=urlencode(fields), fragment='')))
+                        active['queue'].extend({'kind': 'search', 'url': target, 'sku': product['sku']} for target in dict.fromkeys(searches) if allowed(target))
                         # Skip unusable/finished SKUs in this bounded local loop;
                         # no job row or one-second wait is needed per empty SKU.
                         continue
