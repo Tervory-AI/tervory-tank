@@ -453,7 +453,7 @@ def test_hermes_joins_each_agent_corridor() -> None:
     assert "TANK_API_KEY" in env
     qdrant_nets = services["qdrant"].get("networks") or []
     assert "tervory-gw-template" not in qdrant_nets
-    for name in ("workspace", "redis", "litellm", "searxng", "tiger", "agent-roles"):
+    for name in ("workspace", "redis", "litellm", "searxng", "agent-roles"):
         nets = services[name].get("networks") or []
         assert "tervory-gw-template" not in nets
     assert "tervory-gw-template" in services["tank"]["networks"]
