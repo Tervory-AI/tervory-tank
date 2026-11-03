@@ -166,7 +166,15 @@ async def receipt(tenant: UUID, tool: str) -> str:
 
 
 def preview(rows: list[dict]) -> dict:
-    return {"total": len(rows), "records": [{**row, "summary": json.dumps(row["fields"], ensure_ascii=False)} for row in rows[:20]]}
+    records = []
+    for row in rows[:20]:
+        # Cards need measured values and provenance, not nested scoring inputs
+        # or passive-detector internals. The saved/exported snapshot stays full.
+        fields = {key: {part: item.get(part) for part in
+                       ("value", "source_url", "checked_at", "confidence", "verified", "reason")}
+                  for key, item in row["fields"].items() if isinstance(item, dict)}
+        records.append({**row, "fields": fields, "summary": json.dumps(fields, ensure_ascii=False)})
+    return {"total": len(rows), "records": records}
 
 
 def build_router() -> APIRouter:
