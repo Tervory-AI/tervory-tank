@@ -1,100 +1,75 @@
-# Base B4 — find, lists and CRM review handoff
+# Base B4 — PR #594 review proof
 
-Branch: `codex/base-b4-find-lists`. Claude opens the PR; the founder merges. No main push, deployment, production SQL, live lead creation, provider/model call, or live credential inspection was performed.
+Branch: `codex/base-b4-find-lists`. PR: https://github.com/Tervory-AI/tervory-tank/pull/594.
+The founder merges. No deployment, production SQL, live CRM writes or model calls were performed here.
 
-## What changed (file and line)
+## Final implementation and review fixes
 
-- `tank/base_lists.py:14`: strictly validated find filters for state, city, licence type/category, verified contact presence, B1 quality, B2 passive signals, final verification tier and original checked dates. Unknown quality does not satisfy a negative-quality filter. Uploaded identity is not promoted into verified identity; identity may come from the recorded platform reference and its original source/date.
-- `tank/base_lists.py:127`: reads `agent_base.records` with an explicit tenant predicate; completed and partial failed attempts can contribute independently verified evidence. Saved lists store the exact IDs, filters and full evidence snapshots. Later enrichment cannot silently change membership or exported values.
-- `tank/base_lists.py:168`: count plus the first 20 rows, retaining field values/source URLs/check dates in the existing generic card result. No new card renderer or interface copy. Existing cards keep their existing first-five-item visual preview; the structured result includes all 20 rows.
-- `tank/base_lists.py:180`: authenticated find/list/show/export routes, a $0 Base code receipt, and the existing byte-for-byte `export_records` CSV serializer. Save/send endpoints require the durable, exact Command confirmation binding. CRM sends are limited to at most 100 selected snapshot records and serialized per tenant.
-- `tank/base_list_crm.py:23`: builds a lead only from verified values, with source `Base` and a description recording each sent field's URL/date. Requires verified company identity; unverified phone/email/address values are omitted.
-- `tank/base_list_crm.py:78`: uses the existing `trigger_crm.binding` and attested fixed-endpoint `upstream` corridor. Checks existing open/closed leads across every page before writes, skips matching email or normalized website, and skips duplicate identities within the card. Incomplete duplicate reads fail closed. Missing binding sends nothing and reuses the existing corridor's wording. Every selected record receives a result; ambiguous writes are not retried.
-- `tank/command.py:37` and `:1152`: Base-only tool catalogue and unpaid adapters for `base.find`, `base.list.save`, `base.lists`, `base.list.show`, `base.list.export`, `base.list.to_crm`. Reads use GET. Save/send reuse the existing durable confirmed-card dispatcher; identity remains in authenticated server headers, outside tool arguments. The bounded 100-record CRM action has its own longer timeout; other action limits are unchanged.
-- `tank/trigger_crm.py:57`: a Base client may use the corridor only while executing its own confirmed `base.list.to_crm` card. Existing Trigger CRM actions remain founder-only.
-- `tank/main.py:4194`: mounts the router before the existing tenant-endpoint binder (`:4711`). `_startup` (`:753`) was inspected before pushing: schema applies through the existing admin/raw bootstrap path, with existing RLS role checks. No startup logic or runtime configuration changed.
-- `tank/schema.sql:2337`: additive/idempotent saved-list table. Follows `personal_tokens` exactly: join an existing `command_threads` RLS rollout, enable and force RLS, install tenant access and restrictive boundary policies with matching USING/WITH CHECK. Never starts RLS on a legacy installation.
-- `workspace/app/base/download/route.ts:12`: accepts a saved-list ID through the existing authenticated download route and server-only Command corridor. Preserves CSV bytes; batch downloads retain their existing redirect. No Base page render code changed.
-- `tests/test_base_lists.py`, `tests/base_lists_download.cjs`: offline filters, verification guards, tenant predicates and ownership, immutable snapshots, byte equality, no-binding behavior, duplicates, 100-record bound, confirmation/authority, receipt/read method and actual Workspace download-route tests. An additional real-Postgres fixture test verifies snapshot persistence plus restrictive tenant RLS; it remains skipped here until the local test service is configured.
+- `tank/base_lists.py:14`: tenant-only typed filters over verified contact evidence, B1 quality, B2 site signals, reference identity and final verification tier. Unknown quality never satisfies a negative-quality filter.
+- `tank/base_lists.py:131`: one literal, parameterized SQL cursor query pushes state, city, licence type, engine/category and checked-date prefilters into WHERE, using the same profile/reference paths as `project()`. SQL conservatively includes candidate sources; the existing Python verification/precedence checks remain authoritative. Non-ASCII values stay conservative to preserve Python casefold semantics. Read batches are bounded by `prefetch=200`.
+- `tank/base_lists.py:174`: find retains the exact total and only 20 preview rows, not all tenant records.
+- `tank/base_lists.py:183`: save scans a stable repeatable-read transaction, keeps at most 10,000 IDs and an exact total, and refuses larger lists with HTTP 422 and `detail.total` before inserting anything. Accepted snapshots stream in 200-row chunks to the existing saved-list JSON; the process never holds the whole snapshot. Both cursor passes see the same database snapshot.
+- `tank/command.py` (`list_refusal_result`): the existing failed card retains only the safe integer total for this specific oversized-save refusal. Its existing error text and existing Total label are reused; no new page wording.
+- `tank/base_lists.py` (`to_crm`): selected records are sent in saved-list order. Pool/tenant-lock acquisition is bounded to 30 seconds; queue expiry returns one failed result per selected record without sending anything.
+- `tank/base_list_crm.py:8`: fixed concurrency 5, 45-second whole-operation write deadlines, 60-second duplicate discovery deadline, no ambiguous-write retries. Identities are reserved in list order before concurrent work, preventing within-card duplicate races. Results retain input/list order regardless of completion order.
+- `tank/command.py:888`: the CRM card limit is **1,020 seconds (17 minutes)**: 60 seconds discovery + 20 waves × 45 seconds + 60 seconds margin. The margin includes the 30-second pool/tenant-lock wait and 30 seconds for cleanup/receipt handling. The former 4,200-second limit is removed.
+- `workspace/app/base/download/route.ts:15`: forwards success status and unchanged CSV bytes. For 403/404/500 errors it forwards the upstream status/body and content type without CSV attachment headers.
+- `workspace/lib/tank.ts:1218`: an explicit server-only `passThroughErrors` option preserves Tank responses for that fixed saved-list download path. Existing callers keep their existing sanitized error behavior.
+- `tank/schema.sql`: saved lists follow the `personal_tokens` conditional RLS rollout, including FORCE RLS and a restrictive tenant boundary. Every saved-list read/write also has an explicit tenant predicate. No startup/runtime configuration changed. `_startup` and the router-before-tenant-binder registration order were checked.
+- `tank/base_list_crm.py`: only verified company, website, phone, email, city and state are sent through the existing bound CRM corridor. The description records each sent value's original URL and date. Existing email/website duplicates are skipped, and missing binding sends nothing, reusing existing wording.
 
-## Figma and browser acceptance
+The existing Base CSV serializer and columns are unchanged. Base pages are unchanged; `/chats` reuses existing cards. Their existing first-five-item visual preview remains unchanged; structured find results contain the first 20 records.
 
-**Base page: find, lists and send to CRM — awaiting approved Figma frame.** No Base page view was implemented. `/chats` reuses its existing cards and rendering limits. The tool names in the card summaries are the exact names specified in the brief.
+## 50,000 synthetic records: measured local PostgreSQL test
 
-**Founder-browser screenshots are pending, not fabricated.** Offline fixtures were never placed on a live screen. Acceptance still requires the founder's tenant in `/chats`: find DC dealers with a verified website and syntax-valid, non-disposable email; save and download that list; confirm 10 selected snapshot records into the bound BottleCRM organization; see those leads at crm.tervory.com. No browser/CRM acceptance is claimed by these tests.
-
-## Exact commands and results
-
-Working directory: `/workspace/codex-base-b4` unless stated otherwise.
+Command (repo root):
 
 ```sh
-git clone https://github.com/Tervory-AI/tervory-tank.git /workspace/codex-base-b4
-cd /workspace/codex-base-b4
-git fetch origin main
-git checkout -B codex/base-b4-find-lists origin/main
-ls tank/command.py tank/base_evidence.py workspace/app/base/download/route.ts tank/base_metrics.py tank/trigger_crm.py tank/schema.sql tank/main.py
+PYTHONPATH=tank:tests:. .venv/bin/python tests/base_lists_scale.py
 ```
 
-All exited 0; every named existing file was present. Read applicable `AGENTS.md`. Set `user.name=Codex` and `user.email=codex@users.noreply.github.com` in this checkout only.
+Exit 0. The script creates and deletes its own private local PostgreSQL cluster under this checkout's `.git/`, inserts **50,000 synthetic records**, and runs the actual SQL cursor, SQL prefilters and Python projection/verification. It uses no outside network, live tenant or credentials. State/city/licence/date filters all match this worst-case dataset, so all 50,000 candidates are scanned.
 
-```sh
-/home/ammosync/.local/bin/python3.12 -m venv .venv
-.venv/bin/python -m pip install -r tank/requirements.txt -r tank/requirements-dev.txt
-```
+| Operation | Time | Peak traced Python allocation | Peak client RSS |
+| --- | ---: | ---: | ---: |
+| Find: exact total 50,000, 20 previews | 63.383 s | 1.140 MiB | 92.703 MiB |
+| Save refused: exact total 50,000, no insertion | 46.652 s | 2.121 MiB | 93.762 MiB |
 
-Exit 0. Existing pinned dependencies only; no dependency or lockfile change.
+Times include `tracemalloc` instrumentation. RSS is the Python client process's absolute high-water mark (including imports), not the separate PostgreSQL server's memory. The test asserts the count, 20-row result bound and oversized-save refusal. An earlier traced run measured 51.360 s / 1.131 MiB for find and 44.594 s / 2.121 MiB for refusal; the table uses the final RSS-instrumented run, rather than selecting the faster run.
+
+`test_fifty_thousand_matches_keep_twenty_previews_and_refuse_save` also gates 50,000-match aggregation/cap behavior in the normal offline suite with a generated cursor stream. It asserts that no list was inserted.
+
+## Exact regression commands and results
+
+Working directory `/workspace/codex-base-b4` unless specified.
 
 ```sh
 .venv/bin/python -m pytest -q -ra tests/test_base_* tests/test_command.py tests/test_trigger_crm.py tests/test_skills_offline.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
 ```
 
-Exit 0: **400 passed, 101 skipped, 15 warnings in 66.66s**. Includes every existing Base test plus Command, existing Trigger CRM and all offline skill evaluations. Warnings concern existing framework deprecations / Pydantic field names. The earlier focused run found two real test-harness mistakes (runtime settings imported unnecessarily; database helper mocked too late); both were fixed. No remaining real test failure is claimed away as a missing service.
+**405 passed, 101 skipped, 15 warnings in 74.81 seconds; exit 0.** Includes every existing Base test, the Command/CRM tests and all offline skill evals. The 101 skips require explicit local Postgres fixtures (`BASE_TEST_DATABASE_URL` / `POOL_SCHEMA_DATABASE_URL`), not production settings. Their existing per-module breakdown is 10 ATF, 14 audit, 6 Base database, 1 new saved-list RLS test, 14 reference adoption, 7 reference file, 3 source reliability and 46 Command tests. Warnings are existing framework/Pydantic warnings. CI's isolated Postgres jobs provide the remaining integration coverage; use the current PR checks, not this local skip result, as CI proof.
 
 ```sh
-.venv/bin/python -m pytest -q tests/test_base_lists.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
 node tests/base_lists_download.cjs
-```
-
-The final focused result is recorded below after the Workspace route regression. Node exited 0:
-
-```text
-Saved-list CSV bytes preserved; tenant identity forwarded; existing batch download unchanged.
-```
-
-The full suite ran before the final additional Workspace wrapper test and preview compaction; the final focused run covers those changes. The server serializer itself is reused and unchanged.
-
-```sh
-npm ci --ignore-scripts --no-audit --no-fund
-npx tsc --noEmit
-```
-
-Run in `/workspace/codex-base-b4/workspace`. Each exited 0; TypeScript emitted no diagnostics. No Workspace package/lockfile change.
-
-```sh
-.venv/bin/ruff check tank/base_lists.py tank/base_list_crm.py tests/test_base_lists.py
+cd workspace && npx tsc --noEmit
+.venv/bin/ruff check tank/base_lists.py tank/base_list_crm.py tests/base_lists_scale.py tests/test_base_lists.py
 git diff --check
 ```
 
-Exit 0; `All checks passed!` and no whitespace errors.
+Each exits 0 (the TypeScript command runs from repo root; subsequent commands run from repo root again). Download tests verify byte equality, tenant identity forwarding, original batch redirect, and unmodified upstream 403/404/500 bodies/statuses without CSV headers. Concurrency tests reach exactly 5 active writes, preserve ordered results and assert the 1,020-second budget. Refusal tests retain the count while rejecting arbitrary failed-provider details. No new interface labels or error wording are introduced.
 
-## Local Postgres gaps
+## SQL / Semgrep proof
 
-All 101 full-run skips explicitly need the isolated local PostgreSQL test service, not a production connection. Configuration names only: `BASE_TEST_DATABASE_URL`; audit/source-reliability also accept `POOL_SCHEMA_DATABASE_URL`; Command uses `POOL_SCHEMA_DATABASE_URL`.
+All SQL newly introduced by B4/review is a **literal string**. Runtime tenant IDs, filter strings/dates, ID arrays and JSON snapshots are passed separately as `$1`…`$7` parameters. There is no interpolated table name, SQL f-string, concatenated request value or generated WHERE clause.
 
-| Module | Skips |
-| --- | ---: |
-| test_base_atf_download.py | 10 |
-| test_base_audit.py | 14 |
-| test_base_database.py | 6 |
-| test_base_lists.py (new real snapshot/RLS check) | 1 |
-| test_base_reference_adopt.py | 14 |
-| test_base_reference_file.py | 7 |
-| test_base_source_reliability.py | 3 |
-| test_command.py | 46 |
+`test_new_sql_is_literal_with_bound_runtime_arguments` walks the AST of the production list module, PostgreSQL benchmark and B4 tests. It requires SQL call arguments to be string constants and runtime arguments to have `$1` binding. The only excluded call is the pre-existing fixture bootstrap reading the fixed repository `tank/schema.sql`, not newly generated SQL. Fixture roles now use static literal identifiers instead of f-strings. Static setup DDL has no runtime values to bind.
 
-CI/PR checks and founder-browser screenshots are not yet observed. Passing these offline tests is not the product's definition of done.
+The PR body records final CI links/status after the final push, including the security job that runs Semgrep. No claim is based on canceled or superseded-head runs.
 
-## Push discipline
+## Founder / Figma acceptance
 
-Every finished file was committed, then `git fetch origin main`, `git merge --no-edit origin/main`, and `git push -u origin codex/base-b4-find-lists`. Every push succeeded. One branch only. No PR was opened because the brief assigns that to Claude.
-56 passed, 1 skipped, 3 warnings in 1.97s
+**Base page: find, lists and send to CRM — awaiting an approved Figma frame.** No Base page view was built.
+
+**Founder-browser screenshots remain pending.** This review work did not create live leads or place synthetic fixtures on a live screen. Product acceptance still requires the founder, in `/chats`, to find DC dealers with verified websites and syntax-valid non-disposable emails, save/download the list, confirm 10 selected records into the bound CRM, and see the leads at crm.tervory.com. Passing tests and CI do not substitute for that browser test.
+
+Every completed file was committed on this same branch, followed by `git fetch origin main`, `git merge --no-edit origin/main`, and `git push -u origin codex/base-b4-find-lists`. All pushes succeeded. No PR merge or main push was performed.
