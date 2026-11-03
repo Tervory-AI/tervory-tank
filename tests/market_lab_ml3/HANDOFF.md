@@ -180,3 +180,14 @@ git fetch origin main && git merge --no-edit origin/main && git push origin HEAD
 
 The initial resume merge was commit `623b6740`; it auto-merged command/schema and
 retained current main. Subsequent merges reported already up to date.
+
+## Fresh-thread CI follow-up (3 November 2026)
+
+Work resumed in `/workspace/fresh-market-ml3-0845` on the existing branch.
+The previous owner's latest public task_complete explicitly reported stopped and
+ML3 clean at e2732ab0, with no unpushed changes reported.
+Main was integrated once at 8299ff941cf1e959a69bd34f44c02a819c174755.
+Conflicts preserve both ML3 and main additions. A faulty conflict-resolution
+script truncated command.py in 27520b62; 809e5e6f restores it completely.
+Python compilation and diff checks pass. No model calls or production actions
+were used. Tank CI for the corrected head is pending; no acceptance is claimed.
