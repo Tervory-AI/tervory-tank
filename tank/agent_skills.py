@@ -499,6 +499,14 @@ async def guard_submission_owner(tank: Any, pkg: Any, tenant_id: uuid.UUID) -> N
         raise HTTPException(403, "This skill belongs to another tenant or region.")
 
 
+def bind_base_browser(ctx: Any) -> None:
+    """Use Base's authenticated room browser for every Base execution context."""
+    ctx.env["TIGER_URL"] = "http://base-browser-gateway:3000"
+    ctx.http = BaseSkillHTTP(ctx.http, ctx.tenant_id, ctx.task_id, (
+        ctx.env.get("SEARXNG_URL", ""), "https://api.search.brave.com/res/v1/web/search",
+    ))
+
+
 async def guard_base_run(tank: Any, pkg: Any, body: Any, ctx: Any) -> None:
     local_region(tank, body.home_region)
     if pkg.agent != ROOM or body.preview or await tank.skill_state(pkg.id, pkg.version) != "approved":
@@ -517,10 +525,7 @@ async def guard_base_run(tank: Any, pkg: Any, body: Any, ctx: Any) -> None:
             raise HTTPException(409, "Model enrichment deferred until free recovery finishes.")
         ctx._model = defer_model
         ctx.env = {k: v for k, v in ctx.env.items() if not k.endswith(("_KEY", "_TOKEN"))}
-    ctx.env["TIGER_URL"] = "http://base-browser-gateway:3000"
-    ctx.http = BaseSkillHTTP(ctx.http, body.tenant_id, ctx.task_id, (
-        ctx.env.get("SEARXNG_URL", ""), "https://api.search.brave.com/res/v1/web/search",
-    ))
+    bind_base_browser(ctx)
 
 
 def build_router(tank: Any) -> APIRouter:
