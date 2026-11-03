@@ -84,6 +84,18 @@ unsandboxed fallback. If Bubblewrap is unavailable or cannot create the sandbox,
 commands are refused. This command runner is currently Linux-only; the other
 existing CLI commands retain their current platform support.
 
+Code mode can propose the signed-in tenant's Tervory and connected MCP tools
+through `tervory` requests. These actions use the existing Confirm cards, including
+reads, and appear in the same thread in `/chats`. Cancellation returns no result;
+confirmed card results are redacted and returned as untrusted tool data.
+
+At session start, `AGENTS.md` at the selected folder's git root is read through
+the same bounded, secret-refusing file reader. Its redacted project notes travel
+with each prompt inside the 200,000-byte history budget. Conventions and test
+commands may guide the answer; credentials, URLs, providers, models, tenants and
+regions cannot come from project notes. Notes are not stored in threads, tasks
+or events.
+
 **Storage:** the Command thread and `/chats` retain user requests, steps, receipts
 and tool names/sizes, without tool-result file contents or proposed patches.
 A prompt is stored once across its continuation rounds. Earlier prompts,
