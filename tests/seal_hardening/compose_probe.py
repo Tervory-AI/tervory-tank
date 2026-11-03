@@ -12,6 +12,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 import urllib.error
 
@@ -32,6 +33,13 @@ def reachable(host, port=3000):
 
 def inside():
     mode = sys.argv[2]
+    if mode == "allow":
+        for _ in range(50):
+            if reachable(sys.argv[3]):
+                print("reachable positive control", sys.argv[3])
+                return
+            time.sleep(0.2)
+        raise AssertionError("positive control did not listen")
     if mode == "deny":
         for host in sys.argv[3:]:
             for port in (3000, 443, 5432, 6379, 6333, 8000):
@@ -81,6 +89,8 @@ def run():
                 "tiger-browser": probe(room["services"]["tiger-browser"]["networks"]),
                 "tiger-browser-gateway": probe(room["services"]["tiger-browser-gateway"]["networks"]),
                 "base": probe(["base"]), "other": probe(["other"])}
+    services["outside"] = probe(["other"])
+    services["outside"]["entrypoint"] = ["python", "-m", "http.server", "3000"]
     baseline = copy.deepcopy(ocr)
     baseline["networks"] = ["baseline"]
     baseline.pop("cap_drop")
@@ -103,8 +113,11 @@ def run():
             # OCR has no source mount in production; copy this test-only probe into
             # its ephemeral /tmp rather than adding any production attachment.
             subprocess.run(["docker", "cp", str(Path(__file__).resolve()), ids["tiger-ocr"] + ":/tmp/probe.py"], check=True)
+            execute("tank", "allow", "outside")
+            outside = json.loads(call("docker", "inspect", "--format", "{{json .NetworkSettings.Networks}}", ids["outside"]))
+            outside_address = next(iter(outside.values()))["IPAddress"]
             denied = ["tank", "postgres", "redis", "qdrant", "litellm", "agent-tiger", "tiger-browser", "base", "other", "1.1.1.1", "8.8.8.8"]
-            print(call(*cmd, "exec", "-T", "tiger-ocr", "python", "/tmp/probe.py", "inside", "deny", *denied[1:]), flush=True)
+            print(call(*cmd, "exec", "-T", "tiger-ocr", "python", "/tmp/probe.py", "inside", "deny", "outside", outside_address, *denied[1:]), flush=True)
             # Tank is its one intended neighbour; the OCR endpoint can see Tank's
             # address, but Tank holds no listener in this disposable proof.
             for service in ("agent-tiger", "tiger-browser", "tiger-browser-gateway", "base", "other"):
