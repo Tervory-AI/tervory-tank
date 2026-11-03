@@ -125,7 +125,7 @@ def gate(rows: list[dict], tenant_id: str, *, now: datetime | None = None) -> di
     """A cohort opens 90 days after its earliest qualifying resolved original.
 
     Unresolved, unmeasurable, premature and foreign resolutions cannot age it.
-    The clock is injectable for offline tests, never a tenant override setting.
+    The clock is injectable for tests, never a tenant override setting.
     """
     at = clock(now or datetime.now(UTC))
     groups = {}
