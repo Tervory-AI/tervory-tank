@@ -72,12 +72,11 @@ newest set only after an explicit `y` and only while every file still matches
 what the CLI wrote. New files are removed on undo. Undo is refused outside an
 interactive terminal and sends no command or file contents to Tank.
 
- Commands show the full command and require an explicit `y`, run
+Commands show the full command and require an explicit `y`, run
 in the selected folder, time out after 120 seconds and retain at most 64 KB of
 output. Non-interactive sessions cannot apply edits or run commands. Approved
 commands use Linux Bubblewrap (`bwrap`) or macOS `/usr/bin/sandbox-exec` with a
-deny-by-default Seatbelt policy: only the selected
-folder is writable, secret paths and `.git` internals are hidden, the environment
+deny-by-default Seatbelt policy: only the selected folder is writable, secret paths and `.git` internals are hidden, the environment
 is restricted, and networking is unavailable. For a leading Node, Python or
 pytest executable outside `/usr` and the selected folder, the CLI resolves its
 regular executable and its canonical executable. Node binds only that binary
@@ -87,8 +86,9 @@ installation. The installation parent and `bin` directory are never bound.
 General user launchers under `~/.local/bin` are refused, including pip-user
 pytest and uv Python links; use a dedicated venv or interpreter installation.
 The complete command and each read-only file/library path are shown before
-`Run [y/N]`. Intermediate interpreter symlinks are recreated in the empty sandbox;
-their host directories are not mounted. Secret paths inside runtimes are hidden.
+`Run [y/N]`. On Linux, intermediate interpreter symlinks are recreated in the
+empty sandbox; macOS allows only their selected executable targets. Their host
+directories remain unavailable. Secret paths inside runtimes are hidden.
 `$HOME`, `~/.config`, `~/.ssh` and keychain directories are never mounted. Other
 host folders remain unavailable. Use a leading executable, rather than hiding
 an external runtime behind a shell wrapper or an environment assignment. There is no
