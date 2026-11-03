@@ -49,8 +49,11 @@ The existing `trigger.write` route still owns all actual draft calls.
   did not provide a numeric post limit. Community/third-party claims were not
   substituted for official documentation. The format therefore has no enforced
   limit, as explicitly required when an official limit cannot be found.
-- Instagram: [official media reference](https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media/)
-  returned HTTP 429 during verification. No third-party number was adopted.
+- Instagram: [official error-code reference](https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/error-codes),
+  HTTP 400/code 36004/subcode 2207010, specifies 2,200 characters. Applied in the
+  PR #595 review fix on 2026-11-03 using the official row supplied by the reviewer;
+  this environment's fetch still returned HTTP 429. Character count only; no
+  separate hashtag or mention checks were added.
 - Facebook: no verified official organic-post limit found; none enforced.
 - Product description, email (subject and body), article: no publishing platform
   specified, therefore no invented universal limit.
@@ -183,3 +186,27 @@ accepted examples or copy have been invented for this handoff. Interrupted paid
 batches retain the existing Command uncertain-outcome/no-automatic-retry behavior;
 completed item rows can survive an interruption, so recovery is not claimed by
 the all-success offline acceptance tests.
+
+
+## PR #595 review fix — 2026-11-03
+
+`agents/trigger/formats.py:28` now sets Instagram captions to 2,200 characters,
+with Meta's official error-code URL and explicit checked date 2026-11-03.
+`tests/test_trigger_w1.py:46` checks the 2,200/2,201 boundary, exact `over_limit`
+count and source, and confirms no separate hashtag/mention limits are imposed.
+Other format limits are unchanged. README source notes match the correction.
+
+```bash
+TMPDIR="$PWD/.w1-tmp" PYTHONPATH="$PWD/.w1-tmp/site" \
+/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q \
+  tests/test_trigger_w1.py -k 'formats_and_exact_counts or instagram_caption' \
+  --disable-socket --tb=short
+# 2 passed, 14 deselected, 5 existing warnings in 2.51s.
+/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m ruff check \
+  agents/trigger/formats.py tests/test_trigger_w1.py --select E9,F
+git diff --check
+# PASS.
+```
+
+Each finished file was committed, origin/main fetched and merged, then pushed to
+`codex/trigger-w1-writing`. No model, database, live copy or UI operation was used.
