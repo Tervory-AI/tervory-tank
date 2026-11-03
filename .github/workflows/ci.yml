@@ -144,7 +144,8 @@ jobs:
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
     # Full suite: about 14 minutes on the hosted 4-core runner (run 41229068797: 808 s of tests in
     # the main pass, 834 s for the whole suite, 15 min for the job); the per-test timeout is 5 minutes.
-    timeout-minutes: 30
+    # 3 Nov 2026: the main pass reached about 1065 s, so the job allows 36 minutes.
+    timeout-minutes: 36
     services:
       postgres:
         image: postgres:16
