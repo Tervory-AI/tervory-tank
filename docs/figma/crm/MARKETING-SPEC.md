@@ -8,7 +8,7 @@ One 240px Trigger menu. Desktop 1440×900: 1200px work area, 1136px usable conte
 
 ## Current flows
 
-- Channels: one 64px row per channel on desktop. At 375, one 112px two-line connection card per channel; there is no horizontal Channels table. Name, account and status allow two lines. Connected → Disconnect → Confirm · Disconnect; Needs reconnecting → Reconnect → Confirm · Connect; Off → Connect → Confirm · Connect. Zero Connect never opens Disconnect. Filled is a state specimen, with no claim of live account status.
+- Channels: one 64px row per channel on desktop. At 375, one 120px two-line connection card per channel; there is no horizontal Channels table. Name, account and status allow two lines. Connected → Disconnect → Confirm · Disconnect; Needs reconnecting → Reconnect → Confirm · Connect; Off → Connect → Confirm · Connect. Zero Connect never opens Disconnect. Filled is a state specimen, with no claim of live account status.
 - Filled calendars: equal seven-column cells with day numbers and one placeholder post card showing channel, status and time. It opens Post detail `149:8745`. Day numerals describe the calendar geometry; the period and all post content remain placeholders, not a scheduled client post.
 - Google posts is reachable from the menu. Header and row widths match. Desktop rows and mobile cards open Post detail. Post detail and Google posts have their own active navigation item.
 - Google reviews: Zero shows No reviews yet.; Filled shows a review summary linked to Review detail. Detail order is Review, Draft reply, Checker findings, Send reply. Sending retains the founder confirmation step and returns to that detail.
@@ -49,14 +49,14 @@ Action family `266:3038`: Primary `266:3032`, Secondary `266:3034`, Destructive 
 - `149:11184` · google-reviews|Desktop|Filled · Changed after approval, awaiting founder · Fields: Profile; Review; Rating; Received at; Reply brief; Draft reply; Saved voice; Checker findings; Reply status.
 - `149:11549` · google-reviews|Mobile|Zero · Changed after approval, awaiting founder · Fields: Profile; Review; Rating; Received at; Reply brief; Draft reply; Saved voice; Checker findings; Reply status.
 - `149:11811` · google-reviews|Mobile|Filled · Changed after approval, awaiting founder · Fields: Profile; Review; Rating; Received at; Reply brief; Draft reply; Saved voice; Checker findings; Reply status.
-- `149:21139` · confirm-approve|Desktop|Zero · Changed after approval, awaiting founder · Fields: Post title; Text; Channels; Voice revision; Checker findings.
-- `149:21481` · confirm-approve|Desktop|Filled · Changed after approval, awaiting founder · Fields: Post title; Text; Channels; Voice revision; Checker findings.
-- `149:21823` · confirm-approve|Mobile|Zero · Changed after approval, awaiting founder · Fields: Post title; Text; Channels; Voice revision; Checker findings.
-- `149:22062` · confirm-approve|Mobile|Filled · Changed after approval, awaiting founder · Fields: Post title; Text; Channels; Voice revision; Checker findings.
-- `149:22301` · confirm-schedule|Desktop|Zero · Changed after approval, awaiting founder · Fields: Post title; Approved revision; Channels; Scheduled for; Time zone.
-- `149:22643` · confirm-schedule|Desktop|Filled · Changed after approval, awaiting founder · Fields: Post title; Approved revision; Channels; Scheduled for; Time zone.
-- `149:22985` · confirm-schedule|Mobile|Zero · Changed after approval, awaiting founder · Fields: Post title; Approved revision; Channels; Scheduled for; Time zone.
-- `149:23224` · confirm-schedule|Mobile|Filled · Changed after approval, awaiting founder · Fields: Post title; Approved revision; Channels; Scheduled for; Time zone.
+- `149:21139` · confirm-approve|Desktop|Zero · Changed after approval, awaiting founder · Fields: Post title; Text; Channels; Saved voice; Checker findings.
+- `149:21481` · confirm-approve|Desktop|Filled · Changed after approval, awaiting founder · Fields: Post title; Text; Channels; Saved voice; Checker findings.
+- `149:21823` · confirm-approve|Mobile|Zero · Changed after approval, awaiting founder · Fields: Post title; Text; Channels; Saved voice; Checker findings.
+- `149:22062` · confirm-approve|Mobile|Filled · Changed after approval, awaiting founder · Fields: Post title; Text; Channels; Saved voice; Checker findings.
+- `149:22301` · confirm-schedule|Desktop|Zero · Changed after approval, awaiting founder · Fields: Post title; Approved revision; Channels; Date; Time zone; Time.
+- `149:22643` · confirm-schedule|Desktop|Filled · Changed after approval, awaiting founder · Fields: Post title; Approved revision; Channels; Date; Time zone; Time.
+- `149:22985` · confirm-schedule|Mobile|Zero · Changed after approval, awaiting founder · Fields: Post title; Approved revision; Channels; Date; Time zone; Time.
+- `149:23224` · confirm-schedule|Mobile|Filled · Changed after approval, awaiting founder · Fields: Post title; Approved revision; Channels; Date; Time zone; Time.
 - `149:23463` · confirm-send-reply|Desktop|Zero · Changed after approval, awaiting founder · Fields: Profile; Review; Reply; Checker findings.
 - `149:23802` · confirm-send-reply|Desktop|Filled · Changed after approval, awaiting founder · Fields: Profile; Review; Reply; Checker findings.
 - `149:24141` · confirm-send-reply|Mobile|Zero · Changed after approval, awaiting founder · Fields: Profile; Review; Reply; Checker findings.
@@ -99,3 +99,12 @@ Existing labels, day names, channel names and placeholder field labels are retai
 Founder confirms exact post revision, channels, saved voice and checks before approval; scheduling includes the approved revision, date, time and time zone. Changed copy/media/channels invalidate approval. All seven per-channel previews retain length limit, unit and counted length. Missing limits block scheduling. Platform results display only returned reach, clicks and comments, never invented zeroes.
 
 Open-source social scheduler is a founder engine decision; Postiz remains a candidate, not an installed or selected engine. Existing Trigger drafting and code checks are reused. No model API call, live connection, credential, app implementation or deployment is part of this design change. Authoring checks and screenshots are evidence of the proposal; the founder's visual acceptance is still required.
+
+
+## Authoring verification · 3 November
+
+Menu destinations were checked on both pages, including both mobile drawers and the new Google posts and Post detail entries. Same-page destinations navigate in the prototype; cross-page entries link to the corresponding Figma frame. Schedule confirmation returns to the approved Composer. Mobile Channels use 120px cards with 44px actions and two-line names. Drawer scroll content ends with 16px clearance above the 240px-wide pinned block when scrolled to the end.
+
+Commands run in `/workspace/codex-crm-marketing-chat-design`: `git fetch origin` (passed); `git diff --check` (passed); `git status --short` (only these two SPEC documents); `git push origin codex/crm-marketing-chat-design` (passed after each documentation commit). Figma checks inspected frame bounds, field sets, prototype destinations and mirrored SPEC text. Authoring screenshots covered Channels 375, Google posts 1440, calendar 1440, review detail 1440, approved Composer 375, lead form 375, Answer and Sending. These are authoring checks, not screenshots of a founder acceptance test. Founder browser acceptance remains outstanding.
+
+Shared changed controls: action family `266:3038` (primary `266:3032`, secondary `266:3034`, destructive `266:3036`); navigation family `266:3212` (desktop `266:3039`, mobile `266:3125`). Component variant words Primary, Secondary and Destructive are design metadata. The complete changed screen node register is above; original root IDs are retained. Approval captions are outside product screens.
