@@ -38,6 +38,13 @@ def build_router(*, key_ok, ledger_context, engine):
                 dates = {str(r["id"]): r["created_at"] for r in await ledger.conn.fetch(
                     "SELECT id,created_at FROM agent_market_lab.warnings WHERE tenant_id=$1 ORDER BY created_at DESC,id LIMIT 50", body.tenant_id)}
                 return {**result, "warnings": [{**w, "created_at": dates[w["id"]]} for w in result["warnings"]]}
+            if operation == "patterns":
+                from core.jobs import load_engine
+                from core.patterns import listing as patterns
+                return await patterns(ledger.memory, tenant, load_engine(engine).warning_plan())
+            if operation == "gate":
+                from core.predictions import gate
+                return gate(await ledger.predictions_for(tenant), tenant)
             if operation == "predictions":
                 return {"predictions": await ledger.predictions_for(tenant)}
             if operation == "calibration":
