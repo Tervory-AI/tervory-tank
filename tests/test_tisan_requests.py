@@ -48,6 +48,7 @@ async def test_each_build_has_one_private_measured_record(monkeypatch, outcome):
     if outcome == 'passed':
         source['archive'] = '/data/builds/' + str(TENANT) + '/placeholder-site/3.tar.gz'
     if outcome == 'refused':
+        source.pop('slug')
         source.update(refused=True, detail='placeholder refusal')
     execute = AsyncMock(side_effect=RuntimeError('placeholder private error')) if outcome == 'exception' else AsyncMock(return_value=copy.deepcopy(source))
     monkeypatch.setattr(b, 'execute', execute)
@@ -63,14 +64,21 @@ async def test_each_build_has_one_private_measured_record(monkeypatch, outcome):
     async with httpx.AsyncClient(transport=httpx.MockTransport(hermes)) as http:
         ctx = SimpleNamespace(input=brief(), tenant_id=str(TENANT), job_id=str(uuid.uuid4()), tank=None,
             memory=MemoryClient(base_url='http://placeholder-hermes', api_key='placeholder-room', agent='tisan', http=http))
-        result = await b.handle(ctx)
+        if outcome == 'exception':
+            with pytest.raises(RuntimeError, match='placeholder private error'):
+                await b.handle(ctx)
+            result = None
+        else:
+            result = await b.handle(ctx)
     assert len(records) == 1 and records[0]['tenant_id'] == str(TENANT)
     assert records[0]['kind'] == 'build' and records[0]['confidence'] == 1.0
     claim = json.loads(records[0]['text'])
-    assert claim['slug'] == 'placeholder-site' and claim['ok'] == (outcome == 'passed')
+    assert claim.get('slug') == (None if outcome in ('refused', 'exception') else 'placeholder-site')
+    assert claim['ok'] == (outcome == 'passed')
     assert claim['checks'] == ([] if outcome == 'exception' else source['checks'])
     assert records[0]['evidence'] == [ctx.job_id] + (['3.tar.gz'] if outcome == 'passed' else [])
-    assert result['memory_id'] == record_id
+    if result is not None:
+        assert result['memory_id'] == record_id
     assert 'tier' not in records[0] and 'public' not in records[0]
     assert 'placeholder private error' not in records[0]['text']
 
@@ -112,7 +120,7 @@ def test_admin_catalogue_and_build_validation(runtime):
         with pytest.raises(ValidationError):
             command.TisanRequestArgs.model_validate({**brief(), field: {}})
     with pytest.raises(ValidationError):
-        requests.FeedbackArgs(request_id=uuid.uuid4(), text='p' * 4001)
+        requests.FeedbackArgs(slug='placeholder-site', text='p' * 4001)
 
 
 def journal_row(journal, number, *, tenant=TENANT, state='succeeded', sha=SHA, action='publish'):
@@ -166,15 +174,16 @@ async def test_full_request_preview_revision_signoff_and_tenant_isolation(client
     data = created.json()
     request_id = data['request_id']
     assert data['status'] == 'requested' and data['input'] == brief() and data['cost_usd'] == 0
-    body = {'request_id': request_id}
+    body = {'slug': 'placeholder-site'}
     empty = await http.get('/v1/command/tisan/preview', params=body)
-    assert empty.json()['status'] == 'unavailable' and 'url' not in empty.json()
+    assert empty.json()['status'] == 'requested' and 'url' not in empty.json()
     journal_row(journal, 1)
     journal_row(journal, 9, state='failed')
     journal_row(journal, 8, state='pending')
     journal_row(journal, 99, tenant=OTHER)
     preview = await http.get('/v1/command/tisan/preview', params=body)
-    assert preview.json()['build'] == 1 and preview.json()['commit'] == SHA
+    assert preview.json()['build_id'] == 1 and preview.json()['commit'] == SHA
+    assert preview.json()['status'] == 'requested' and preview.json()['url'] == 'https://placeholder-stage.test/'
     feedback = {**body, 'text': 'placeholder change request'}
     assert (await http.post('/v1/command/tisan/feedback', json=feedback)).status_code == 409
     assert (await http.post('/v1/command/tisan/handover', json=body)).status_code == 409
@@ -187,16 +196,21 @@ async def test_full_request_preview_revision_signoff_and_tenant_isolation(client
     assert (await confirmed(http, 'tisan.feedback', feedback)).status_code == 409
     journal_row(journal, 2, sha='b' * 40)
     newer = (await http.get('/v1/command/tisan/preview', params=body)).json()
-    assert newer['build'] == 2 and newer['commit'] == 'b' * 40
+    assert newer['build_id'] == 2 and newer['commit'] == 'b' * 40
+    second = await confirmed(http, 'tisan.feedback', feedback)
+    assert second.status_code == 200 and second.json()['build_id'] == 2
     assert (await confirmed(http, 'tisan.feedback', feedback)).status_code == 409
+    journal_row(journal, 3, sha='c' * 40)
     accepted = await confirmed(http, 'tisan.handover', body)
     assert accepted.status_code == 200 and accepted.json()['status'] == 'accepted'
-    assert accepted.json()['commit'] == 'b' * 40
-    assert (await confirmed(http, 'tisan.feedback', feedback)).status_code == 409
+    assert accepted.json()['commit'] == 'c' * 40
+    assert accepted.json()['build_id'] == 3 and accepted.json()['url'] == 'https://placeholder-stage.test/'
+    assert (await confirmed(http, 'tisan.feedback', feedback)).status_code == 404
+    assert (await http.get('/v1/command/tisan/preview', params=body)).status_code == 404
     async with pool.acquire() as conn:
         events = await conn.fetch('SELECT kind,build,"commit",text FROM tank.tisan_request_events WHERE tenant_id=$1 AND request_id=$2 ORDER BY created_at', TENANT, uuid.UUID(request_id))
-        assert [e['kind'] for e in events] == ['requested', 'changes_requested', 'accepted']
-        assert events[1]['text'] == feedback['text'] and events[1]['build'] == 1 and events[2]['build'] == 2
+        assert [e['kind'] for e in events] == ['requested', 'changes_requested', 'changes_requested', 'accepted']
+        assert events[1]['text'] == feedback['text'] and events[1]['build'] == 1 and events[2]['build'] == 2 and events[3]['build'] == 3
         receipt = await conn.fetchrow('SELECT cost_usd,model,agent FROM tank.ledger WHERE tenant_id=$1 AND id=$2', TENANT, uuid.UUID(accepted.json()['ledger_id']))
         assert receipt['cost_usd'] == 0 and receipt['model'] == 'code' and receipt['agent'] == 'tisan'
     foreign = await http.get('/v1/command/tisan/preview', params=body, headers={'X-Tervory-Tenant': str(OTHER)})
@@ -325,3 +339,27 @@ async def test_existing_build_card_hydrates_memory_only_from_its_tenant(client, 
         assert (await http.get('/v1/command/threads/' + thread_id, headers={**founder, 'X-Tervory-Tenant': str(OTHER)})).status_code == 404
         assert len(calls) == 1
     runtime._http = original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('raw', ['[1]', 'null', '1', '"placeholder"'])
+async def test_non_object_chat_arguments_return_existing_422(runtime, monkeypatch, raw):
+    actor = command.Actor(TENANT, 'placeholder-admin', False, tenant_admin=True)
+    monkeypatch.setattr(command, 'authorized_actor', AsyncMock(return_value=actor))
+    with pytest.raises(HTTPException) as error:
+        await requests.code_plan(actor, [{'role': 'user', 'content': 'tisan.feedback ' + raw}], uuid.uuid4())
+    assert error.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_crash_survives_memory_outage(monkeypatch):
+    b = builder()
+    crash = RuntimeError('placeholder crash')
+    monkeypatch.setattr(b, 'execute', AsyncMock(side_effect=crash))
+    remember = AsyncMock(side_effect=ValueError('placeholder memory outage'))
+    ctx = SimpleNamespace(input=brief(), tenant_id=str(TENANT), job_id=str(uuid.uuid4()), tank=None,
+                          memory=SimpleNamespace(remember=remember))
+    with pytest.raises(RuntimeError) as error:
+        await b.handle(ctx)
+    assert error.value is crash and remember.await_count == 1
+    assert 'slug' not in json.loads(remember.call_args.args[1])
