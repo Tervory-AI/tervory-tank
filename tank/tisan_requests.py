@@ -165,6 +165,30 @@ async def code_plan(actor, messages, task_id):
         ledger_id=await code_receipt(actor.tenant_id, 'command.turn', task_id=task_id, agent='tisan'))
 
 
+async def queue_pipeline(actor, operation, data):
+    from main import _http
+    key = os.environ.get('TANK_KEY_TISAN', '')
+    if _http is None or not key:
+        refused('pipeline_unavailable', 503)
+    try:
+        dispatched = await _http.post('http://agent-tisan:8000/pipeline/start', json={
+            'tenant_id': str(actor.tenant_id), 'request_id': str(operation), 'page_id': data['page_id'],
+            'brief': {**{k: v for k, v in data.items() if k not in {'page_id', 'assembly'}},
+                      **data.get('assembly', {})}},
+            headers={'X-Tank-Key': key, 'X-Tervory-Tenant': str(actor.tenant_id),
+                     'X-Tervory-Admin': actor.user_id}, timeout=30, follow_redirects=False)
+        if dispatched.status_code != 200:
+            refused('pipeline_unavailable', 503)
+        job = dispatched.json()
+        if (not isinstance(job, dict) or job.get('tenant_id') != str(actor.tenant_id)
+                or job.get('request_id') != str(operation) or job.get('job_id') != str(operation)
+                or job.get('kind') != 'pipeline' or job.get('status') not in {'queued', 'running', 'done', 'failed'}):
+            refused('pipeline_unavailable', 503)
+        return {key: job[key] for key in ('job_id', 'kind', 'status')}
+    except (httpx.HTTPError, ValueError, KeyError, TypeError):
+        refused('pipeline_unavailable', 503)
+
+
 def build_router():
     from command import Actor, TisanRequestArgs, db, identity, require_tool
     from trigger_commands import confirmation
@@ -180,9 +204,16 @@ def build_router():
     @router.post('/request')
     async def request(args: TisanRequestArgs, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, 'tisan.request')
+        from command import current_actor
+        actor = current_actor(actor)
         data = args.model_dump(mode='json', exclude_none=True)
+        if (data.get('page_id') or data.get('assembly')) and not actor.founder:
+            refused('founder_required', 403)
         operation = confirmation(actor, 'tisan.request', data)
-        return await result(actor, 'tisan.request', await Store(db()).create(actor.tenant_id, actor.user_id, operation, data))
+        saved = await Store(db()).create(actor.tenant_id, actor.user_id, operation, data)
+        if actor.founder and data.get('page_id'):
+            saved.update(await queue_pipeline(actor, operation, data))
+        return await result(actor, 'tisan.request', saved)
 
     @router.get('/preview')
     async def preview(slug: Annotated[str, Field(min_length=1, max_length=60, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")], actor: Annotated[Actor, Depends(identity)]):
@@ -209,13 +240,24 @@ def build_router():
 async def build_result(tenant: UUID, result: dict) -> dict:
     """Hydrate a long build's existing card through the existing room job read."""
     from main import _http
-    if result.get('kind') != 'build' or result.get('status') not in ('queued', 'running'):
+    if result.get('kind') not in {'build', 'pipeline'} or result.get('status') not in ('queued', 'running'):
         return result
     key = os.environ.get('TANK_KEY_TISAN', '')
     if _http is None or not key:
         return result
     try:
         job_id = str(UUID(result['job_id']))
+        if result.get('kind') == 'pipeline':
+            response = await _http.get('http://agent-tisan:8000/pipeline/status/' + job_id,
+                params={'tenant_id': str(tenant)}, headers={'X-Tank-Key': key}, timeout=15, follow_redirects=False)
+            if response.status_code != 200 or len(response.content) > 256000:
+                return result
+            measured = response.json()
+            if measured.get('tenant_id') != str(tenant) or measured.get('request_id') != job_id:
+                return result
+            return {**result, **{k: v for k, v in measured.items() if k in {
+                'status', 'pipeline_status', 'steps', 'checks', 'results', 'ok', 'slug', 'build',
+                'memory_id', 'url', 'commit', 'detail', 'summary', 'copy_needed', 'media_needed'}}}
         response = await _http.get('http://agent-tisan:8000/jobs/' + job_id,
             params={'tenant_id': str(tenant)}, headers={'X-Tank-Key': key,
                 'X-Tervory-Tenant': str(tenant)}, timeout=10, follow_redirects=False)

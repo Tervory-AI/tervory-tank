@@ -113,3 +113,28 @@ def test_legacy_build_without_repo_receipt_cannot_publish(tmp_path):
     path.write_text(json.dumps(data))
     with pytest.raises(ValueError, match='repo scan required'):
         publish.stored_build(tmp_path, TENANT, 'site', 1)
+
+
+@pytest.mark.asyncio
+async def test_repo_receipt_is_recorded_in_existing_build_memory(tmp_path, corridor, monkeypatch):
+    from agents.tisan import builder
+    from unittest.mock import AsyncMock
+    import chassis.events
+    app, state = corridor
+    state['critical'] = 1
+    build(tmp_path)
+    source = json.loads((tmp_path / 'builds' / TENANT / 'site/1.json').read_text())
+    source['checks'] = [source['checks'][0]]
+    source['archive'] = str(tmp_path / 'builds' / TENANT / 'site/1.tar.gz')
+    monkeypatch.setattr(builder, 'execute', AsyncMock(return_value=source))
+    monkeypatch.setattr(chassis.events, 'publish', AsyncMock())
+    memory = SimpleNamespace(remember=AsyncMock(return_value={'id': 'placeholder-memory'}))
+    actual = repo_scan.check
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://placeholder-tank') as client:
+        async def check(archive, tenant, **kwargs):
+            return await actual(archive, tenant, http=client)
+        monkeypatch.setattr(repo_scan, 'check', check)
+        result = await builder.handle(SimpleNamespace(input={}, tenant_id=TENANT, job_id=str(uuid4()), tank=None, memory=memory))
+    claim = json.loads(memory.remember.call_args.args[1])
+    assert result['ok'] is False and claim['ok'] is False
+    assert claim['checks'][-1]['critical'] == 1 and claim['checks'][-1]['scan_id']

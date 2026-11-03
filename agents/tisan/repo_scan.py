@@ -80,6 +80,7 @@ async def attach(result, tenant, *, http=None):
     result = {**result, 'checks': [*result.get('checks', []), check_result],
               'results': [*result.get('results', []), {k: check_result[k] for k in ('name', 'ok', 'summary')}]}
 
+    result['summary'] = check_result['summary']
     if check_result['ok'] is not True:
         result.update(ok=False, detail='Failed checks: radix.repo')
     # Publish reads this same sidecar and independently verifies the archive hash.
@@ -114,6 +115,6 @@ async def promotion_gate(journal, root: Path, http, tenant, site, expected):
     build = publish.stored_build(root, tenant, site, number)['manifest']
     check_row = next(c for c in build['checks'] if c['name'] == 'radix.repo')
     verified = await inspect(http, tenant, check_row['scan_id'], check_row['archive_sha256'])
-    if verified is None or verified['ok'] is not True:
-        raise ValueError('repo scan did not pass')
+    if verified is None:
+        raise ValueError('repo scan did not complete')
     return verified

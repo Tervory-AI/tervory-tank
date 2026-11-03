@@ -89,7 +89,8 @@ async def rig(tmp_path):
         return dict(gate)
     async def repo(tenant, site, expected):
         assert (tenant, site, expected) == (TENANT, 'site', NEW)
-        return {'ok': True, 'scan_id': 'placeholder-repo', 'critical': 0}
+        return {'ok': True, 'scan_id': str(uuid.uuid4()), 'critical': 0, 'scan_complete': True,
+                'tenant_id': tenant, 'archive_sha256': 'c' * 64}
     service = Promotion(journal, coolify, check, scan, repo)
     yield fake, journal, service, live, gate
     await http.aclose()

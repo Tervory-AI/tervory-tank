@@ -219,8 +219,14 @@ class Promotion:
                 if self.repo_gate is None:
                     raise Refused('repo scan required')
                 details['repo_scan'] = await self.repo_gate(tenant, site, expected)
-                if not isinstance(details['repo_scan'], dict) or details['repo_scan'].get('ok') is not True:
+                if (not isinstance(details['repo_scan'], dict) or details['repo_scan'].get('ok') is not True
+                        or details['repo_scan'].get('tenant_id') != tenant
+                        or details['repo_scan'].get('scan_complete') is not True
+                        or type(details['repo_scan'].get('critical')) is not int
+                        or details['repo_scan']['critical'] != 0
+                        or not re.fullmatch(r'[a-f0-9]{64}', details['repo_scan'].get('archive_sha256', ''))):
                     raise Refused('repo scan did not pass')
+                uuid.UUID(details['repo_scan'].get('scan_id', ''))
                 details['staging_deployment'] = staging['deployment']
                 details['live_check'] = await self.live_check(config['url'])
                 if not isinstance(details['live_check'], dict) or details['live_check'].get('passed') is not True:

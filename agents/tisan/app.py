@@ -70,6 +70,8 @@ async def ping(ctx: JobContext) -> dict:
 
 async def scaffold(ctx: JobContext) -> dict:
     """Build one site for this job's tenant. The tenant comes from the job, not the brief."""
+    if not await _approved_build(ctx):
+        return {'ok': False, 'refused': True, 'detail': 'approved page required'}
     module = _scaffold_module()
     result = await module.execute(ctx.input, str(ctx.tenant_id))
     scanner = _load_beside(_figma_cache(), "tisan_repo_scan", "repo_scan.py")
@@ -94,14 +96,41 @@ def _figma_cache() -> dict[str, Any]:
     return _figma
 
 
-# Ten minutes for a site build. Ping and every other agent stay on the chassis default.
+# Twenty minutes for local checks plus the bounded R5 repo scan. Ping and every other agent stay on the chassis default.
 SCAFFOLD_TIMEOUT_S = 1200
+
+async def _approved_build(ctx: JobContext) -> bool:
+    module = _load_beside(_figma_cache(), 'tisan_pipeline_room', 'pipeline.py')
+    loader = lambda key, filename: _load_beside(_figma_cache(), key, filename)
+    service = module.service(ctx, app.state.pool, loader, Path(os.environ.get('DATA_DIR', '/data')))
+    try:
+        await service.approved_page(str(ctx.tenant_id), ctx.input.get('page_id'))
+        return True
+    except (ValueError, OSError, HTTPException):
+        return False
+
+
+async def build(ctx: JobContext) -> dict:
+    if not await _approved_build(ctx):
+        return {'ok': False, 'refused': True, 'detail': 'approved page required'}
+    return await _load_beside(_figma_cache(), 'tisan_builder', 'builder.py').handle(ctx)
+
+
+async def pipeline(ctx: JobContext) -> dict:
+    module = _load_beside(_figma_cache(), 'tisan_pipeline_room', 'pipeline.py')
+    root = Path(os.environ.get('DATA_DIR', '/data'))
+    loader = lambda key, filename: _load_beside(_figma_cache(), key, filename)
+    service = module.service(ctx, app.state.pool, loader, root)
+    loader('tisan_gold_sources', 'gold_sources.py').founder(
+        os.environ.get('TANK_KEY', ''), ctx.input.get('actor', ''))
+    return await service.run(str(ctx.tenant_id), str(ctx.job_id), ctx.input)
+
 
 app = create_app(
     agent=AGENT,
-    handlers={"ping": ping, "scaffold": scaffold, "figma": figma,
-              "build": lambda ctx: _load_beside(_figma_cache(), "tisan_builder", "builder.py").handle(ctx)},
-    job_timeouts={"scaffold": SCAFFOLD_TIMEOUT_S, "build": SCAFFOLD_TIMEOUT_S},
+    handlers={"ping": ping, "scaffold": scaffold, "figma": figma, "pipeline": pipeline,
+              "build": build},
+    job_timeouts={"scaffold": SCAFFOLD_TIMEOUT_S, "build": SCAFFOLD_TIMEOUT_S, "pipeline": 2400},
     schedules=[
         {
             "tenant_id": HEARTBEAT_TENANT,
@@ -159,3 +188,6 @@ _load_beside({}, 'tisan_publish', 'publish.py').mount(app, _load_beside({}, 'tis
 # J4 is API-only; no page, generated copy or automatic email acknowledgement.
 _load_beside({}, 'tisan_quotes', 'quotes.py').mount(
     app, sys.modules['tisan_gold_sources'].founder)
+
+_load_beside(_figma_cache(), 'tisan_pipeline_room', 'pipeline.py').mount(
+    app, lambda key, filename: _load_beside(_figma_cache(), key, filename))
