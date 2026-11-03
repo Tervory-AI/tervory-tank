@@ -1,0 +1,231 @@
+tests/test_rig.py 0 ['10 passed in 1.24s']
+tests/test_rig_3d_deployment.py 0 ['1 passed in 4.76s']
+tests/test_rig_3d_engine.py 0 ['50 passed, 14 warnings in 27.23s']
+tests/test_rig_3d_uploads.py 0 ['12 passed in 0.98s']
+tests/test_rig_3d_workspace.py 0 ['1 passed in 0.98s']
+tests/test_rig_admin.py 0 ['9 passed in 0.75s']
+tests/test_rig_agent_page.py 0 ['6 passed in 0.13s']
+tests/test_rig_archon_search_memory.py 0 ['2 passed in 0.23s']
+tests/test_rig_ask_facts.py 0 ['5 passed in 0.15s']
+tests/test_rig_box.py 0 ['7 passed in 0.84s']
+tests/test_rig_box_containers.py 0 ['1 skipped in 0.10s']
+tests/test_rig_box_runtime.py 0 ['1 skipped in 0.51s']
+tests/test_rig_box_tank.py 0 ['1 passed, 4 skipped, 3 warnings in 2.24s']
+tests/test_rig_cart.py 0 ['17 passed in 2.02s']
+tests/test_rig_cart_admin.py 0 ['10 passed, 3 warnings in 3.05s']
+tests/test_rig_cart_postgres.py 0 ['2 passed in 3.64s']
+tests/test_rig_closest.py 0 ['21 passed in 1.35s']
+tests/test_rig_cn_archon.py 0 ['169 passed in 74.17s (0:01:14)']
+tests/test_rig_confirmation_command.py 0 ['2 passed, 3 warnings in 3.10s']
+tests/test_rig_cost_guard.py 0 ['32 passed, 2 skipped in 40.00s']
+tests/test_rig_delete_products.py 0 ['19 passed, 3 warnings in 36.78s']
+tests/test_rig_feeds.py 0 ['8 passed in 0.28s']
+tests/test_rig_feeds_catalogues.py 0 ['24 passed, 3 warnings in 16.30s']
+tests/test_rig_feeds_mapping.py 0 ['1 passed, 3 warnings in 6.34s']
+tests/test_rig_feeds_pricing.py 0 ['8 passed in 0.13s']
+tests/test_rig_feeds_retailer.py 0 ['25 passed, 3 warnings in 10.38s']
+tests/test_rig_feeds_review.py 0 ['17 passed, 3 warnings in 4.14s']
+tests/test_rig_feeds_workspace.py 0 ['2 passed in 2.45s']
+tests/test_rig_fit_suggest_code.py 0 ['5 passed in 1.05s']
+tests/test_rig_forge_containers.py 0 ['1 skipped in 0.08s']
+tests/test_rig_forge_geometry.py 0 ['5 passed in 1.86s']
+tests/test_rig_forge_gpu.py 0 ['6 passed in 0.37s']
+tests/test_rig_forge_gpu_artifacts.py 0 ['4 passed in 0.16s']
+tests/test_rig_forge_job_state.py 0 ['3 passed in 1.27s']
+tests/test_rig_forge_pipeline.py 0 ['6 skipped in 0.59s']
+tests/test_rig_forge_relay.py 0 ['4 passed in 1.02s']
+tests/test_rig_forge_review.py 0 ['11 passed in 1.10s']
+tests/test_rig_forge_seal.py 0 ['5 passed in 0.78s']
+tests/test_rig_forge_tank.py 0 ['4 skipped in 0.61s']
+tests/test_rig_forge_workflow_concurrency.py 0 ['2 passed in 0.19s']
+tests/test_rig_gold.py 0 ['3 passed in 2.31s']
+tests/test_rig_isolation.py 0 ['1 passed in 0.76s']
+tests/test_rig_journey.py 0 ['2 passed in 0.85s']
+tests/test_rig_landing_overflow.py 0 ['8 passed in 23.79s']
+tests/test_rig_locate_checkout.py 0 ['19 passed in 2.31s']
+tests/test_rig_no_live_demo.py 0 ['13 passed in 1.06s']
+tests/test_rig_no_payments.py 0 ['21 passed in 3.48s']
+tests/test_rig_optional_auto_order.py 0 ['24 passed in 1.97s']
+tests/test_rig_optional_blind_ship.py 0 ['17 passed in 21.34s']
+tests/test_rig_page.py 0 ['11 passed in 2.15s']
+tests/test_rig_postgres.py 0 ['1 passed in 4.60s']
+tests/test_rig_pr90_independent.py 0 ['10 passed in 17.41s']
+tests/test_rig_proxy.py 0 ['7 passed, 14 warnings in 5.30s']
+tests/test_rig_quote_notice.py 0 ['16 passed in 33.96s']
+tests/test_rig_quotes.py 0 ['21 passed in 5.04s']
+tests/test_rig_quotes_browser.py 0 ['3 passed in 27.88s']
+tests/test_rig_quotes_hosting.py 0 ['3 passed in 0.59s']
+tests/test_rig_quotes_limits.py 0 ['9 passed in 2.03s']
+tests/test_rig_quotes_postgres.py 0 ['9 passed in 13.93s']
+tests/test_rig_recall.py 0 ['7 passed in 0.65s']
+tests/test_rig_recall_window.py 0 ['8 passed in 5.45s']
+tests/test_rig_runtime_catalogues.py 0 ['3 passed in 2.26s']
+tests/test_rig_schema_lock_timeout.py 0 ['2 passed in 7.02s']
+tests/test_rig_search_input_safety.py 0 ['8 passed in 5.75s']
+tests/test_rig_store_job.py 0 ['11 passed in 2.54s']
+tests/test_rig_supply_locate.py 0 ['18 passed in 5.39s']
+tests/test_rig_v5_page.py 0 ['10 passed in 3.27s']
+
+Additional final cart/admin focused run:
+............................                                             [100%]
+=============================== warnings summary ===============================
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+28 passed, 3 warnings in 4.43s
+
+Workspace production build:
+
+> tervory-workspace@0.1.0 build
+> next build
+
+   ▲ Next.js 15.5.28
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 12.6s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/39) ...
+   Generating static pages (9/39) 
+   Generating static pages (19/39) 
+   Generating static pages (29/39) 
+ ✓ Generating static pages (39/39)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                       Size  First Load JS
+┌ ƒ /                                            465 B         107 kB
+├ ƒ /_not-found                                  991 B         104 kB
+├ ƒ /.well-known/oauth-authorization-server      304 B         103 kB
+├ ƒ /.well-known/oauth-protected-resource        304 B         103 kB
+├ ƒ /.well-known/oauth-protected-resource/mcp    304 B         103 kB
+├ ƒ /access                                     4.2 kB         107 kB
+├ ƒ /access/api/[...path]                        304 B         103 kB
+├ ƒ /access/live/[id]                          1.46 kB         104 kB
+├ ƒ /admin                                     6.33 kB         112 kB
+├ ƒ /admin/autumbra                            4.39 kB         110 kB
+├ ƒ /admin/feeds                               1.07 kB         107 kB
+├ ƒ /admin/ghost                                 304 B         103 kB
+├ ƒ /admin/homes                               1.02 kB         107 kB
+├ ƒ /admin/unpriced                              304 B         103 kB
+├ ƒ /api/autumbra/receipts/weekly/[tenant]       304 B         103 kB
+├ ƒ /api/autumbra/undo                           304 B         103 kB
+├ ƒ /api/base                                    304 B         103 kB
+├ ƒ /api/base/context-trial                      304 B         103 kB
+├ ƒ /api/base/export                             304 B         103 kB
+├ ƒ /api/billing/webhook                         304 B         103 kB
+├ ƒ /api/case-studies/[[...path]]                304 B         103 kB
+├ ƒ /api/chat                                    304 B         103 kB
+├ ƒ /api/feedback                                304 B         103 kB
+├ ƒ /api/health                                  304 B         103 kB
+├ ƒ /api/ledger                                  304 B         103 kB
+├ ƒ /api/memory/records/[id]                     304 B         103 kB
+├ ƒ /api/skala                                   304 B         103 kB
+├ ƒ /api/skala/gold                              304 B         103 kB
+├ ƒ /api/tank                                    304 B         103 kB
+├ ƒ /api/tank/chat                               304 B         103 kB
+├ ƒ /api/tasks                                   304 B         103 kB
+├ ƒ /api/trigger-crm/[...path]                   304 B         103 kB
+├ ƒ /api/zenas/answers                           304 B         103 kB
+├ ƒ /api/zenas/documents/[id]/reviews            304 B         103 kB
+├ ƒ /api/zenas/feeds                             304 B         103 kB
+├ ƒ /api/zenas/feeds/load                        304 B         103 kB
+├ ƒ /api/zenas/feeds/region                      304 B         103 kB
+├ ƒ /api/zenas/feeds/region/convert              304 B         103 kB
+├ ƒ /api/zenas/feeds/region/load                 304 B         103 kB
+├ ƒ /api/zenas/matters                           304 B         103 kB
+├ ƒ /api/zenas/matters/[id]/documents            304 B         103 kB
+├ ƒ /api/zenas/matters/[id]/release              304 B         103 kB
+├ ƒ /api/zenas/moot/[[...segments]]              304 B         103 kB
+├ ƒ /api/zenas/review                            304 B         103 kB
+├ ƒ /api/zenas/review-switch                     304 B         103 kB
+├ ƒ /api/zenas/selftest                          304 B         103 kB
+├ ƒ /api/zenas/tenants                           304 B         103 kB
+├ ƒ /autumbra                                    172 B         103 kB
+├ ƒ /autumbra/receipts/weekly/[tenant]           304 B         103 kB
+├ ƒ /autumbra/undo/[id]                        1.13 kB         104 kB
+├ ƒ /base                                      19.6 kB         122 kB
+├ ƒ /base/download                               304 B         103 kB
+├ ƒ /base/product/[...path]                      304 B         103 kB
+├ ƒ /billing                                     366 B         103 kB
+├ ƒ /chats                                     11.8 kB         114 kB
+├ ƒ /chats/api/[...path]                         304 B         103 kB
+├ ƒ /chats/evidence/[thread]                     174 B         103 kB
+├ ƒ /chats/evidence/[thread]/[row]               174 B         103 kB
+├ ƒ /cli/device                                  304 B         103 kB
+├ ƒ /cli/sign-ins                                171 B         103 kB
+├ ƒ /control                                   2.51 kB         105 kB
+├ ƒ /control/signups                             171 B         103 kB
+├ ƒ /control/source                              304 B         103 kB
+├ ƒ /data                                      3.58 kB         106 kB
+├ ƒ /ledger                                      304 B         103 kB
+├ ƒ /market-lab                                10.9 kB         114 kB
+├ ƒ /market-lab/ask                              304 B         103 kB
+├ ƒ /market-lab/files                            304 B         103 kB
+├ ƒ /market-lab/sources/[id]                     171 B         103 kB
+├ ƒ /market-lab/warnings/feedback                304 B         103 kB
+├ ƒ /matters                                   1.29 kB         104 kB
+├ ƒ /mcp                                         304 B         103 kB
+├ ƒ /moot                                        180 B         106 kB
+├ ƒ /moot/[match]                                170 B         103 kB
+├ ƒ /moot/status                                 304 B         103 kB
+├ ƒ /oauth/callback                              304 B         103 kB
+├ ƒ /oauth/client/mcp.json                       304 B         103 kB
+├ ƒ /oauth/register                              304 B         103 kB
+├ ƒ /oauth/revoke                                304 B         103 kB
+├ ƒ /oauth/start                                 304 B         103 kB
+├ ƒ /oauth/token                                 304 B         103 kB
+├ ƒ /oauth/trigger-gbp/callback                  304 B         103 kB
+├ ƒ /onboarding                                6.05 kB         151 kB
+├ ƒ /onboarding/status                           304 B         103 kB
+├ ƒ /prices                                      322 B         103 kB
+├ ƒ /radix                                     10.3 kB         155 kB
+├ ƒ /radix/plugins/files                         304 B         103 kB
+├ ƒ /radix/requests                              304 B         103 kB
+├ ƒ /review                                    2.88 kB         109 kB
+├ ƒ /rig                                         10 kB         113 kB
+├ ƒ /rig/admin                                 9.15 kB         112 kB
+├ ƒ /rig/admin/api                               304 B         103 kB
+├ ƒ /rig/admin/three-d                         1.08 kB         104 kB
+├ ƒ /rig/admin/three-d/file/[...path]            304 B         103 kB
+├ ƒ /rig/api/rig                                 304 B         103 kB
+├ ƒ /rig/price-history                           304 B         103 kB
+├ ƒ /sign-in/[[...sign-in]]                      334 B         150 kB
+├ ƒ /sign-up/[[...sign-up]]                      334 B         150 kB
+├ ƒ /skala                                      8.5 kB         111 kB
+├ ƒ /skala/gold                                3.41 kB         106 kB
+├ ƒ /tank                                      5.38 kB         108 kB
+├ ƒ /tank/moa                                    170 B         103 kB
+├ ƒ /tank/proof                                1.87 kB         109 kB
+├ ƒ /tank/proof/export                           304 B         103 kB
+├ ƒ /tank/proof/savings-export                   304 B         103 kB
+├ ƒ /tasks                                     2.06 kB         105 kB
+├ ƒ /tiger                                     6.74 kB         109 kB
+├ ƒ /tisan                                     11.6 kB         114 kB
+├ ƒ /v1/bot/messages                             304 B         103 kB
+├ ƒ /v1/command/[...path]                        304 B         103 kB
+├ ƒ /zenas                                     16.8 kB         123 kB
+└ ƒ /zenas/feeds                               2.31 kB         108 kB
++ First Load JS shared by all                   103 kB
+  ├ chunks/0b5f52f6-b5ccf42de48551c2.js        54.2 kB
+  ├ chunks/102-a6635787b5da744f.js             46.2 kB
+  └ other shared chunks (total)                2.19 kB
+
+
+ƒ Middleware                                     93 kB
+
+ƒ  (Dynamic)  server-rendered on demand
+
+
+Workspace CI Node commands: command_1b_contract, command_window_header, device_login_next_fetch, chats_command_stall, cli_sign_ins and rig_feeds_admin_route.test all exited 0.
+SSR/browser admin checks: passed. Quote DOM and screenshot pixels identical at 1440 and 375.
