@@ -131,8 +131,8 @@ async def test_real_builder_passes_all_four_quality_gates(tmp_path):
         {'name': 'contact', 'path': '/contact', 'sections': []},
         {'name': 'privacy', 'path': '/privacy', 'sections': []}]}
     payload = {'name': 'Quality fixture', 'slug': 'quality-fixture', 'pages': ['contact', 'privacy'],
-               'brand': {'colours': {'ink': '#001840', 'paper': '#F4F6FB', 'accent': '#E80008', 'line': '#B8BFD0'},
-                         'fonts': {'heading': 'Jost', 'body': 'Inter'}}, 'plan': plan}
+               'brand': {'colours': {'ink': '#1a1a1a', 'paper': '#ffffff', 'accent': '#1d4ed8', 'line': '#d4d4d8'},
+                         'fonts': {'heading': 'Literata', 'body': 'Atkinson Hyperlegible'}}, 'plan': plan}
     payload['copy'] = {slot[0]: str(__import__('uuid').uuid4()) for slot in builder.slots(plan, builder.manifest()) if not slot[5]}
     def accepted(request):
         return httpx.Response(200, json={'tenant_id': TENANT, 'write_id': request.url.path.rsplit('/', 1)[-1], 'text': 'Accepted test-only content'})
