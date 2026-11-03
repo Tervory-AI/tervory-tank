@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache, wraps
 import json
@@ -215,6 +216,16 @@ def pattern(role: str) -> re.Pattern[str]:
 
 def say(role: str, *args: Any) -> str:
     return term("sentences", role).format(*args)
+
+
+@contextmanager
+def using(raw: Any):
+    """Scope explicit vocabulary for callers composing the pure helpers."""
+    token = _CURRENT.set(validate(raw))
+    try:
+        yield
+    finally:
+        _CURRENT.reset(token)
 
 
 def scoped(function):
