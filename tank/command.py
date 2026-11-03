@@ -1377,7 +1377,8 @@ def public_card(card: dict) -> dict:
             # Raw arrays and stored tool rule IDs remain unchanged.
             rows = []
             for state in ("new", "fixed", "unchanged"):
-                for finding in result.get(state, []) or []:
+                entries = result.get(state)
+                for finding in entries if isinstance(entries, list) else []:
                     if not isinstance(finding, dict):
                         continue
                     rule = str(finding.get("rule") or "")
