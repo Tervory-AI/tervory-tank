@@ -21,11 +21,12 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model, model_validator
 
 import command_repo
 from trigger_bot_contract import TOOLS as BOT_TOOLS
 from base_lists import FindArgs, SaveArgs, ListArgs, SendArgs
+from tisan_requests import TOOLS as TISAN_CLIENT_TOOLS, RequestIdArgs as TisanRequestIdArgs, FeedbackArgs as TisanFeedbackArgs
 from base_audit_commands import StartArgs as AuditStartArgs, CsvArgs as AuditCsvArgs, ReviewArgs as AuditReviewArgs
 from tenant_db import tenant_path
 from command_stream import AnswerText, TokenSink
@@ -52,6 +53,7 @@ FOUNDER_TOOLS = ["base.audit.start", "base.audit.csv", "base.audit.review", "tri
                  "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
+FOUNDER_TOOLS += TISAN_CLIENT_TOOLS
 
 
 def db() -> Any:
@@ -116,7 +118,8 @@ def allowed_tools(actor: Actor) -> list[str]:
     founder_tools = [name for name in FOUNDER_TOOLS
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
     voice_tools = TOOLS["trigger"] if actor.tenant_admin and not actor.founder else []
-    return sorted([tool for squad in squads for tool in TOOLS[squad]] + founder_tools + voice_tools + list(actor.mcp_tools))
+    client_tools = TISAN_CLIENT_TOOLS if actor.tenant_admin and not actor.founder else []
+    return sorted([tool for squad in squads for tool in TOOLS[squad]] + founder_tools + voice_tools + client_tools + list(actor.mcp_tools))
 
 
 def require_tool(actor: Actor, name: str) -> None:
@@ -396,6 +399,10 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
         row = await owned(conn, thread_id, actor)
     state = unpack(row["state"])
     for card in state.get("cards", {}).values():
+        if (card.get("tool") == "tisan.build" and card.get("status") == "confirmed"
+                and current_actor(actor).founder and isinstance(card.get("result"), dict)):
+            from tisan_requests import build_result
+            card["result"] = await build_result(actor.tenant_id, card["result"])
         if card.get("tool") == "tiger.match" and card.get("status") == "confirmed" and isinstance(card.get("result"), dict):
             from access import tiger_card_result
             card["result"] = await tiger_card_result(actor.tenant_id, card["result"])
@@ -479,6 +486,10 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
                      *, task_id: uuid.UUID | None = None, on_token: TokenSink | None = None,
                      priority: str | None = None) -> Any:
     from main import Message, RouteRequest, box_region, run_route
+    from tisan_requests import code_plan as tisan_code_plan
+    planned = await tisan_code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     planned = await tiger_code_plan(actor, messages, task_id)
     if planned is not None:
         return planned
@@ -1041,6 +1052,13 @@ class TisanBuildArgs(Body):
     media: dict[str, str] = Field(default_factory=dict)
 
 
+# Reuse the build contract's field constraints without exposing plan/copy/media.
+TisanRequestArgs = create_model('TisanRequestArgs', __base__=Body,
+    **{name: (TisanBuildArgs.model_fields[name].annotation, TisanBuildArgs.model_fields[name])
+       for name in ('name', 'slug', 'locale', 'brand')},
+    request=(str, Field(min_length=1, max_length=16000)))
+
+
 class SourceFile(Body):
     path: str = Field(min_length=1, max_length=200)
     text: str = Field(max_length=20000)
@@ -1216,6 +1234,10 @@ from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServ
 
 
 ADAPTERS = {
+    "tisan.request": Adapter("POST", "/v1/command/tisan/request", TisanRequestArgs, "tisan.request"),
+    "tisan.preview": Adapter("GET", "/v1/command/tisan/preview", TisanRequestIdArgs, "tisan.preview"),
+    "tisan.feedback": Adapter("POST", "/v1/command/tisan/feedback", TisanFeedbackArgs, "tisan.feedback"),
+    "tisan.handover": Adapter("POST", "/v1/command/tisan/handover", TisanRequestIdArgs, "tisan.handover"),
     "base.audit.start": Adapter("POST", "/v1/command/base/audits/start", AuditStartArgs, "base.audit.start"),
     "base.audit.csv": Adapter("GET", "/v1/command/base/audits/export", AuditCsvArgs, "base.audit.csv"),
     "base.audit.review": Adapter("POST", "/v1/command/base/audits/review", AuditReviewArgs, "base.audit.review"),
@@ -1451,7 +1473,9 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, scope, None
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
-    if action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review"}:
+    if action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", *TISAN_CLIENT_TOOLS}:
+        if adapter.method == 'GET':
+            return adapter.method, path, args, None
         return adapter.method, path, {}, args  # Actor headers supply identity, never body fields.
     if adapter.method == "GET":
         return adapter.method, path, {**args, **scope}, None
@@ -1643,7 +1667,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if action.tool.startswith("mcp."):
                 from mcp_connections import dispatch
                 status, result = await dispatch(action, actor)
-            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "radix.repo.scan"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
