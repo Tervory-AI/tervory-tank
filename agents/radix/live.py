@@ -313,7 +313,7 @@ def scan_http(url: str, *, http: httpx.Client | None = None) -> dict[str, Any]:
     }
 
 
-def tls_findings(cert: dict[str, Any] | None, protocol: str | None, url: str = HOME_URL) -> list[dict[str, Any]]:
+def tls_findings(cert: dict[str, Any] | None, protocol: str | None, url: str = HOME_URL, *, host: str = APPROVED_HOST) -> list[dict[str, Any]]:
     """Read a verified certificate dict. Do not include other names on it."""
     findings: list[dict[str, Any]] = []
     if protocol not in {"TLSv1.2", "TLSv1.3"}:
@@ -342,13 +342,13 @@ def tls_findings(cert: dict[str, Any] | None, protocol: str | None, url: str = H
         for kind, value in cert.get("subjectAltName", ())
         if kind == "DNS"
     }
-    if APPROVED_HOST not in names:
+    if host not in names:
         findings.append(
             _finding(
                 "scan.tls",
                 "high",
                 "tls-name",
-                "The certificate name does not match lokd.co.za.",
+                f"The certificate name does not match {host}.",
                 url,
             )
         )
