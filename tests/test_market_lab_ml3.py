@@ -297,3 +297,15 @@ async def test_exact_chat_commands_never_reach_a_model(database):
     with pytest.raises(HTTPException) as error:
         await command.route_turn(database.actor, [{'role':'user', 'content':'market_lab.feeds {"tenant_id":"placeholder"}'}])
     assert error.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_missing_owned_exact_command_turn_never_reaches_model(database):
+    from fastapi import HTTPException
+    # The fake runtime has no run_route or model request types. A model fallback
+    # fails this test independently of the expected validation response.
+    with pytest.raises(HTTPException) as error:
+        await command.route_turn(database.actor,
+            [{'role': 'user', 'content': 'market_lab.warnings'}], task_id=uuid4())
+    assert error.value.status_code == 422
+    assert await database.pool.fetchval('SELECT count(*) FROM tank.ledger WHERE tenant_id=$1', OWNER) == 0
