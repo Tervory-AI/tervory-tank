@@ -14,3 +14,7 @@ Candidate; founder approval in Skala is required.
   with `--network none`; the adjacent fixture files match the case inputs.
 - Engine is a byte copy of `agents/radix/scanlib/iac.py`. Skala executes the
   cases through Radix's room-key-only `/evals/run`, using its existing room path.
+
+Review checkpoint: the intentionally unsafe Docker and Kubernetes fixture data
+use `.fixture` filenames so they cannot be mistaken for deployable configuration.
+Eval input filenames, contents, Checkov rules and engine bytes are unchanged.
