@@ -23,7 +23,6 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
       if (plan.answer) io.write(sanitize(redactSecrets(plan.answer)) + '\n');
       io.write(formatReceipt(plan.receipt ?? {}).map(sanitize).join('\n') + '\n');
       if (!plan.requests.length) break;
-      results = [];
       for (const request of plan.requests) {
         let result;
         try { result = await local.tool(request, io); }
@@ -31,7 +30,8 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
         // The tool's output has already been redacted line-by-line. Redact the
         // envelope too, so model-supplied argument strings cannot smuggle secrets.
         const output = redactSecrets(JSON.stringify({ arguments: request.arguments, result }));
-        if (Buffer.byteLength(output) > 400000 || results.reduce((n, item) => n + Buffer.byteLength(item.output), 0) + Buffer.byteLength(output) > 1_500_000) {
+        while (results.length && (results.length >= 6 || results.reduce((n, item) => n + Buffer.byteLength(item.output), 0) + Buffer.byteLength(output) > 1_500_000)) results.shift();
+        if (Buffer.byteLength(output) > 400000) {
           results.push({ name: request.name, output: JSON.stringify({ error: 'Code tool result exceeds the limit.' }) });
         } else results.push({ name: request.name, output });
       }
