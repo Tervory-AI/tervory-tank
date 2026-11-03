@@ -305,6 +305,7 @@ async def token(request: Request):
     tenant = uuid.UUID(hex=match[1])
     access_token, refresh_token = device.credential_pair('us-east', tenant)
     issued = device.now()
+    expiries = (issued + device.ACCESS_TTL, issued + device.REFRESH_TTL)
     with tenant_scope(tenant):
         async with command.db().acquire() as conn:
             async with conn.transaction():
@@ -323,8 +324,8 @@ async def token(request: Request):
                     return oauth_error('invalid_grant')
                 ident = await conn.fetchval("""INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,device_name,token_hash,expires_at,refresh_hash,refresh_expires_at,audience,client_id)
                     VALUES($1,$2,'us-east',$3,$3,$4,$5,$6,$7,'mcp',$8) RETURNING token_id""",
-                    tenant, row['user_id'], row['client_name'], pat.digest(access_token), issued + device.ACCESS_TTL,
-                    pat.digest(refresh_token), issued + device.REFRESH_TTL, client_id)
+                    tenant, row['user_id'], row['client_name'], pat.digest(access_token), expiries[0],
+                    pat.digest(refresh_token), expiries[1], client_id)
                 await conn.execute("""UPDATE tank.oauth_codes SET consumed_at=now(),token_id=$3
                     WHERE tenant_id=$1 AND code_hash=$2""", tenant, pat.digest(code), ident)
     return JSONResponse(device.grant(access_token, refresh_token, ident, 'us-east', issued), headers=device.NO_STORE)
