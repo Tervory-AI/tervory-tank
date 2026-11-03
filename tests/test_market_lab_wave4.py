@@ -12,6 +12,7 @@ from core.evidence import document_page
 from core.jobs import perform_opportunities
 from core.ledger import MemoryLedger
 from engines.ffl.engine import plan
+from test_market_lab_ml3 import database as database
 
 OWNER, OTHER = str(uuid4()), str(uuid4())
 NOW = datetime(2026, 11, 3, tzinfo=UTC)
@@ -67,3 +68,71 @@ async def test_unsourced_recommendations_are_omitted_and_empty_brief_is_held():
     saved = ledger.reports[-1]
     assert saved['answer'] == '' and saved['citations'] == []
     assert all(d['status'] == 'held' and d['reason'] == 'no_cited_claims' for d in ledger.brief_deliveries.values())
+
+
+@pytest.mark.asyncio
+async def test_wilson_confidence_is_existing_code_and_rejects_invalid_counts(database):
+    from base_reliability import wilson_lower
+    for hits, total in [(0, 0), (0, 3), (3, 3), (180, 200)]:
+        response = await database.client.post('/v1/market-lab/internal/confidence',
+            json={'tenant_id': OWNER, 'hits': hits, 'total': total},
+            headers={'x-tank-key': 'placeholder-market-lab-key'})
+        assert response.status_code == 200
+        assert response.json()['confidence'] == wilson_lower(hits, total)
+    assert wilson_lower(3, 3) < .5
+    bad = await database.client.post('/v1/market-lab/internal/confidence',
+        json={'tenant_id': OWNER, 'hits': 4, 'total': 3}, headers={'x-tank-key': 'placeholder-market-lab-key'})
+    assert bad.status_code == 422
+    denied = await database.client.post('/v1/market-lab/internal/confidence', json={'tenant_id': OWNER, 'hits': 1, 'total': 1})
+    assert denied.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_warning_issues_and_returns_frozen_wilson_confidence(database, monkeypatch):
+    import json
+    from datetime import date, timedelta
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from core import warnings, warning_store, warning_bridge
+    from core.ledger import PostgresLedger
+    from engines.ffl.warnings import plan as warning_plan
+    from base_reliability import wilson_lower
+    config = {**warning_plan()['pairs'][0], 'id': 'placeholder_pair', 'source': 'placeholder_upstream',
+              'ref': 'placeholder_ref', 'label': 'placeholder upstream', 'downstream_source': 'placeholder_downstream'}
+    start = date(2020, 1, 1)
+    triggers = [42 + 126 * i for i in range(4)]
+    upstream, downstream = [], []
+    for days in range(0, triggers[-1] + 8, 7):
+        point = {'date': (start + timedelta(days=days)).isoformat()}
+        upstream.append({**point, 'value': 70 if days in triggers else 100})
+        downstream.append({**point, 'value': 1 if any(t + 35 <= days <= t + 56 for t in triggers) else 2})
+    at = datetime.combine(start + timedelta(days=triggers[-1] + 7), datetime.min.time(), UTC)
+    module = SimpleNamespace(warning_plan=lambda: {'pairs': [config], 'outcomes': [
+        {'source': 'placeholder_downstream', 'label': 'placeholder target'}]},
+        warning_series=lambda *args: [{'source': 'placeholder_downstream', 'ref': 'placeholder_target'}])
+    monkeypatch.setattr(warnings, 'load_engine', lambda _: module)
+    monkeypatch.setattr(warning_store, 'import_series', AsyncMock())
+    monkeypatch.setattr(warning_store, 'series', AsyncMock(return_value={
+        'placeholder_up': {'source': config['source'], 'ref': config['ref'], 'points': upstream},
+        'placeholder_downstream:placeholder_target': {'source': config['downstream_source'],
+            'id': 'placeholder_downstream:placeholder_target', 'name': 'placeholder target', 'points': downstream}}))
+    calls = []
+    async def corridor(operation, payload):
+        calls.append((operation, payload))
+        response = await database.client.post('/v1/market-lab/internal/' + operation, json=payload,
+                                              headers={'x-tank-key': 'placeholder-market-lab-key'})
+        assert response.status_code == 200
+        return response.json()
+    monkeypatch.setattr(warning_bridge, 'call', corridor)
+    async with database.pool.acquire() as conn:
+        ledger = PostgresLedger(conn)
+        await ledger.apply_schema()
+        await warnings.run(ledger, OWNER, 'placeholder_engine', now=at,
+                           imported=[{'watch': 'placeholder_watch', 'observations': []}])
+        saved = await ledger.predictions_for(OWNER)
+        assert len(saved) == 1 and saved[0]['confidence'] == pytest.approx(wilson_lower(3, 3))
+        assert calls == [('confidence', {'tenant_id': OWNER, 'hits': 3, 'total': 3})]
+        assert saved[0]['sources'][-1] == {'confidence_method': 'wilson_lower_95', 'hits': 3, 'total': 3}
+        import market_lab_ml3
+        displayed = market_lab_ml3.records('predictions', {'predictions': saved})
+        assert json.loads(displayed[0]['summary'])['confidence'] == saved[0]['confidence']
