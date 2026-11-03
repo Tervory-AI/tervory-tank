@@ -320,3 +320,19 @@ def test_weekly_smtp_transport_claim_is_stable_across_rebuilds(monkeypatch):
     assert first[0]['sent'] and not second[0]['sent']
     assert first[0]['transport'] == 'smtp' and len(letters) == 1
     assert 'Quiet week.' in letters[0]['text']
+
+
+@pytest.mark.asyncio
+async def test_google_replay_refused_for_entire_valid_token_lifetime(signing, monkeypatch):
+    from agents.ghost import native_webhooks
+    public, token = signing
+    clock = [time.time()]
+    monkeypatch.setattr(native_webhooks, 'time', SimpleNamespace(time=lambda: clock[0]))
+    class PlaceholderTank:
+        async def call(self, *_):
+            return {'keys': [public]}
+    bearer = 'Bearer ' + token(exp=int(clock[0]) + 3600)
+    await verify_google_push(push_body(), bearer, PlaceholderTank())
+    clock[0] += 601
+    with pytest.raises(WebhookRejected):
+        await verify_google_push(push_body(), bearer, PlaceholderTank())
