@@ -2,7 +2,7 @@
 
 ## 0.1.2 — 2026-11-01
 
-- ZA can opt in to the self-hosted Zitadel device sign-in with `tervory login --region za --sign-in zitadel`, including founders. Both verification URLs must use https://auth.za.tervory.com.
+- ZA can opt in to the self-hosted Zitadel device sign-in with `tervory login --region za --sign-in zitadel`, including founders. Both verification URLs must use https://auth-za.tervory.com.
 - Existing us-east and default ZA Boston/Workspace approval (including older CLIs) are unchanged even when the ZA issuer is set. Tank access/refresh credentials and logout/revoke are unchanged.
 
 ## 0.1.1 — 2026-10-31
