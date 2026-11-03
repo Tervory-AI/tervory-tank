@@ -149,8 +149,9 @@ receipt. Non-GBP channels never enter the send queue in M1.
 
 A confirmed rate-limit rejection uses bounded code backoff (three attempts;
 60 then 120 seconds before the next attempts). After that it stops; a confirmed
-`trigger.post.retry` can reset an eligible transient failure. Length errors are
-terminal and do not enter automatic backoff.
+`trigger.post.retry` can explicitly reset a known failure after a fresh Confirm;
+it cannot reset an uncertain delivery. Length errors are terminal for automatic
+retry and do not enter backoff. Editing still returns the post to draft.
 
 Google's create endpoint has no documented request-id/idempotency field. A
 transport error, 5xx, malformed success or crashed in-flight attempt therefore
