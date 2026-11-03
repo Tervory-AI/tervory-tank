@@ -31,7 +31,11 @@ async def test_cart_admin_rejects_ordinary_member_before_dispatch(monkeypatch, o
 
 
 @pytest.mark.asyncio
-async def test_cart_admin_credentials_sealed_not_forwarded_returned_or_logged(monkeypatch, caplog):
+@pytest.mark.parametrize("platform,primary", [("shopify", {"access_token": "placeholder-access"}),
+    ("woocommerce", {"consumer_key": "placeholder-key", "consumer_secret": "placeholder-secret"}),
+    ("bigcommerce", {"access_token": "placeholder-access"})])
+@pytest.mark.parametrize("preserve", [False, True])
+async def test_cart_admin_credentials_sealed_not_forwarded_returned_or_logged(monkeypatch, caplog, platform, primary, preserve):
     app = FastAPI()
     app.include_router(access.router)
     actor = command.Actor(UUID(TENANT), 'placeholder-admin', False, frozenset({'rig'}), True)
@@ -45,7 +49,7 @@ async def test_cart_admin_credentials_sealed_not_forwarded_returned_or_logged(mo
 
         async def fetchval(self, sql, *args):
             assert args == (actor.tenant_id, "placeholder-commerce")
-            return None
+            return 'placeholder-previous-envelope' if preserve else None
 
         async def execute(self, sql, *args):
             assert 'INSERT INTO tank.vault_items' in sql
@@ -59,14 +63,16 @@ async def test_cart_admin_credentials_sealed_not_forwarded_returned_or_logged(mo
         forwarded.append((who.tenant_id, operation, data))
         return {'saved': True}
     monkeypatch.setattr(access, 'rig_request', room)
-    credential = {'access_token': 'placeholder-access', 'webhook_secret': 'placeholder-webhook'}
-    config = {'mode': 'cart', 'platform': 'shopify', 'vault_name': 'placeholder-commerce',
-              'credential': credential}
+    monkeypatch.setattr(access.vault, 'open_seal', lambda envelope, context: {'value': json.dumps({'webhook_secret': 'placeholder-webhook'})})
+    credential = {**primary, 'webhook_secret': 'placeholder-webhook'}
+    config = {'mode': 'cart', 'platform': platform, 'vault_name': 'placeholder-commerce',
+              'credential': primary if preserve else credential}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='https://placeholder.example') as api:
         response = await api.post('/v1/access/rig/admin/commerce-connect', json={'data': config})
     assert response.status_code == 200 and response.json() == {'saved': True}
-    assert sealed == [({'value': json.dumps(credential)},
-                       f'plugins:v1:{TENANT}:rig.vault:secret:placeholder-commerce')]
+    assert len(sealed) == 1
+    assert json.loads(sealed[0][0]['value']) == credential
+    assert sealed[0][1] == f'plugins:v1:{TENANT}:rig.vault:secret:placeholder-commerce'
     assert written[0][0] == actor.tenant_id and written[0][-1] == 'placeholder-encrypted-envelope'
     assert forwarded == [(actor.tenant_id, 'commerce-connect', {k: v for k, v in config.items() if k != 'credential'})]
     assert all(value not in response.text + caplog.text for value in credential.values())
