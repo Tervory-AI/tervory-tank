@@ -335,10 +335,18 @@ def _copied(policy: dict[str, Any]) -> dict[str, Any]:
     return dict(policy)
 
 
+
+def matching_routellm_candidate(policy: dict[str, Any]) -> bool:
+    """Only the current strong/weak/threshold/checkpoint pin may pass promotion."""
+    from routellm_shadow import configuration
+    config = configuration(policy)
+    return config is not None and policy.get("candidate_model") == config.candidate
+
+
 def _promoted(policy: dict[str, Any], now: datetime) -> dict[str, Any]:
     updated = _copied(policy)
     candidate = str(policy.get("candidate_model") or "")
-    if router_cannot_serve(candidate):
+    if router_cannot_serve(candidate) and not matching_routellm_candidate(policy):
         raise ValueError(ROUTER_BLOCK)
     updated["previous_model"] = policy.get("model")
     updated["model"] = candidate
@@ -347,6 +355,9 @@ def _promoted(policy: dict[str, Any], now: datetime) -> dict[str, Any]:
     updated["promoted_at"] = _aware(now)
     if candidate.startswith(SKILL_PREFIX):
         updated["rung"] = 3
+        updated["semantic_cache"] = False
+    elif candidate.startswith("routellm:"):
+        updated["rung"] = 1
         updated["semantic_cache"] = False
     elif candidate == CACHE_CANDIDATE or candidate.startswith("cache:"):
         updated["rung"] = 4
@@ -437,7 +448,7 @@ def promote_if_proven(policy: dict[str, Any], evidence: Evidence, now: datetime,
     if not policy.get("candidate_model"):
         return Move("hold", _copied(policy), "no candidate")
     candidate = str(policy.get("candidate_model") or "")
-    if router_cannot_serve(candidate):
+    if router_cannot_serve(candidate) and not matching_routellm_candidate(policy):
         return Move("hold", _copied(policy), ROUTER_BLOCK)
     ok, reason = proven_reason(policy, evidence)
     if not ok:
