@@ -1,6 +1,6 @@
-# Rig cart US — dependency stop, 3 November 2026
+# Rig cart US — gates 1–3, 3 November 2026
 
-Incomplete; not ready for founder acceptance. Claude opens the PR. No merge or deployment was performed.
+All three gates are implemented. The latest completion sections and verification files below supersede the historical dependency/design stops. Claude opened draft PR #628; exact-head hosted CI status is recorded there. No merge, deployment or live-store acceptance is claimed.
 
 The existing cart work was preserved, main was merged, and the pending test change was committed and pushed as `d1b8bbd3`. That change uses `Service(store)` instead of a partial test double in `tests/test_rig_cart.py`.
 
