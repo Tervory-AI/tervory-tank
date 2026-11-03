@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from html.parser import HTMLParser
+from datetime import datetime, timezone
 import json
 import re
 from urllib.parse import urljoin, urlsplit, urldefrag
@@ -54,7 +55,10 @@ async def crawl(url: str, get=public_get) -> list[dict]:
         visited.add(current)
         if not rules.can_fetch('TervoryBot', current):
             continue
-        body, headers = await get(current, headers={'User-Agent': 'TervoryBot'}, limit=1_000_000)
+        try:
+            body, headers = await get(current, headers={'User-Agent': 'TervoryBot'}, limit=1_000_000)
+        except (ValueError, OSError):
+            continue
         size += len(body)
         if size > 20_000_000:
             break
@@ -64,7 +68,7 @@ async def crawl(url: str, get=public_get) -> list[dict]:
         page.feed(body.decode('utf-8', 'replace'))
         text = ' '.join(' '.join(page.text).split())
         if text:
-            pages.append({'url': current, 'title': current, 'text': text})
+            pages.append({'url': current, 'title': current, 'text': text, 'checked_at': datetime.now(timezone.utc)})
         pending.extend(urldefrag(urljoin(current, link))[0] for link in page.links[:500])
     return pages
 
@@ -142,10 +146,10 @@ class Sources:
                 await conn.execute('DELETE FROM tank.trigger_bot_passages WHERE tenant_id=$1 AND source_id=$2', tenant, source)
                 for point, text, page in staged:
                     await conn.execute('''INSERT INTO tank.trigger_bot_passages
-                        (tenant_id,id,source_id,text,url,title,kind,sku,product_id,question,approved_answer)
-                        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)''', tenant, point, source, text,
+                        (tenant_id,id,source_id,text,url,title,kind,sku,product_id,question,approved_answer,checked_at)
+                        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)''', tenant, point, source, text,
                         page.get('url'), page.get('title', row['title']), row['kind'], page.get('sku'),
-                        page.get('product_id'), page.get('question'), page.get('approved_answer'))
+                        page.get('product_id'), page.get('question'), page.get('approved_answer'), page.get('checked_at', datetime.now(timezone.utc)))
                 await conn.execute('''UPDATE tank.trigger_bot_sources SET status='ready',checked_at=now(),
                     next_check=now()+interval '7 days' WHERE tenant_id=$1 AND id=$2''', tenant, source)
         except Exception:
