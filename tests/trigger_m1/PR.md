@@ -46,7 +46,7 @@ in `agents/trigger/formats.py:26`:
 | `agents/trigger/formats.py:26` | Founder rule, check date and three official references; GBP limit stays unset. |
 | `agents/trigger/service.py:102` | Review text is separately labelled untrusted customer data, not the trusted task brief or dispatch instruction. |
 | `tank/trigger_marketing_contract.py:1` | Typed existing-card tools, checker eligibility, explicit-offset/IANA scheduling validation. |
-| `tank/schema.sql:2437` | Six additive/idempotent tenant tables above generated memory; conditional ENABLE/FORCE RLS follows existing rollout guard. |
+| `tank/schema.sql:2445` | Six additive/idempotent tenant tables above generated memory; conditional ENABLE/FORCE RLS follows existing rollout guard. |
 | `tank/trigger_google.py:1` | Official OAuth/API endpoints, one-use tenant/user state, PKCE, scoped vault refresh storage, transient access tokens and sanitized failures. |
 | `tank/trigger_marketing.py:1` | Owned W1 drafts, revision/profile-bound approval, editing, scheduling, calendar, review cursor and saved reply drafts. |
 | `tank/trigger_publisher.py:1` | Committed claims, locked sends, bounded rate-limit backoff, terminal length failures, ambiguous-delivery refusal and confirmed reply PUT. |
@@ -56,7 +56,7 @@ in `agents/trigger/formats.py:26`:
 | `tank/main.py:106`, `:805`, `:4689` | Publisher starts after startup guards, cancels before pool shutdown; mount API. |
 | `tank/case_study_sources.py:179` | Actual publication/reply counts as metadata on the existing draft figure; tenant, receipt region and date scoped. No new report labels. |
 | `workspace/app/oauth/trigger-gbp/callback/route.ts:1` | Existing authenticated server transport completes OAuth, then returns to `/chats`; no new page or reflected exchange data. |
-| `.env.example:1`, `docker-compose.yml:1`, `docker-compose.za.yml:1` | Names-only OAuth forwarding; exact setting locations listed in ops instructions. No values. |
+| `.env.example:505`, `docker-compose.yml:240`, `docker-compose.za.yml:137` | Names-only OAuth forwarding; exact setting locations listed in ops instructions. No values. |
 | `docs/ops/TRIGGER-GBP.md:1` | Official access/client/scope/redirect instructions, existing-card workflow, recovery semantics and founder acceptance steps. |
 | `tests/trigger_m1/test_marketing.py:1` | Offline state/length/concurrency/retry/DST/Confirm/reply/OAuth tests. |
 | `tests/trigger_m1/test_m1_storage.py:1` | Actual W1 Confirm cards, customer-data prompt boundary, native RLS/startup guards and credential redaction. |
