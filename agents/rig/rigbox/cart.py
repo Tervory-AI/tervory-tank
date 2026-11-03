@@ -172,6 +172,8 @@ class Cart:
 
     async def checkout(self, tenant, token):
         config = await self.config(tenant)
+        if not callable(getattr(self.service, 'store_confirms_payment', None)):
+            raise CommerceError('store_confirmation_unavailable')
         identity = session_id(token)
         async with self.rows.lock(tenant, identity) as rows:
             cart = await rows.get(tenant, identity)
@@ -223,10 +225,11 @@ class Cart:
         return {**public_checkout(row), 'lines': [public_line(line) for line in row['lines']]}
 
     async def _paid(self, tenant, row, order):
-        if (not order.get('paid') or money(order['total']) != row['remote']['total']
+        if (not order.get('paid') or order.get('totals_valid') is not True
+                or money(order['merchandise']) != row['remote']['merchandise']
                 or order['currency'] != row['remote']['currency']):
             raise CommerceError('order_mismatch')
-        row.update(state='paid_pending', paid_order_id=order['order_id'],
+        row.update(state='paid_pending', paid_order_id=order['order_id'], paid_total=money(order['total']),
                    late_payment=self.clock() >= stamp(row['expires_at']))
 
     async def _fulfil(self, tenant, row):
