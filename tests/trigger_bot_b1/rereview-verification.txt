@@ -1,0 +1,60 @@
+PR #600 rereview: isolated /workspace/codex-trigger-b1-rereview, branch codex/trigger-b1-bot.
+No production database or model calls.
+
+Setup: python3.12 -m venv .venv; .venv/bin/pip install -q -r tank/requirements.txt -r tank/requirements-dev.txt pgserver
+Workspace: (cd workspace && npm ci --ignore-scripts --no-audit --no-fund)
+
+Exact disposable PostgreSQL harness (.git/run-rereview.py):
+import os
+from pathlib import Path
+import subprocess
+import sys
+import pgserver
+
+server = pgserver.get_server(Path('.git/rereview-pg'), cleanup_mode='delete')
+uri = server.get_uri()
+# Fixture databases are disposable; no configured runtime connection is read.
+for name in ('POOL_SCHEMA_DATABASE_URL', 'MEMORY_TEST_DATABASE_URL'):
+    os.environ[name] = uri
+result = subprocess.run([sys.executable, '-m', 'pytest', '-q', '-ra',
+    'tests/trigger_bot_b1', 'tests/test_tisan_builder_interfaces.py::test_policy_survives_actual_schema_generator',
+    'tests/test_agent_memory_records.py::test_all_agent_schema_files_use_one_generator',
+    '--disable-socket', '--allow-unix-socket', '--allow-hosts=127.0.0.1,localhost,::1'], check=False)
+server.cleanup()
+sys.exit(result.returncode)
+
+Command: .venv/bin/python .git/run-rereview.py
+Initial result: 147 passed, 3 failed (Workspace node_modules not installed); installed the locked dependencies above.
+Final result: 153 passed, 14 warnings in 61.65s; zero skips.
+Includes all B1, the tisan generator check and agent schema generator check.
+
+Exact RLS harness (.git/run-rls.py):
+import os
+from pathlib import Path
+import socket
+import subprocess
+import sys
+import pgserver
+from pgserver._commands import pg_ctl
+server = pgserver.get_server(Path('.git/rls-pg'), cleanup_mode='delete')
+with socket.socket() as sock:
+    sock.bind(('127.0.0.1', 0))
+    port = sock.getsockname()[1]
+pg_ctl(['-w', 'restart', '-o', f'-h 127.0.0.1 -p {port} -k {server.pgdata}'],
+       pgdata=server.pgdata, user=server.system_user, timeout=15)
+os.environ['RLS_TEST_DATABASE_URL'] = f'postgresql://postgres@127.0.0.1:{port}/postgres'
+result = subprocess.run([sys.executable, '-m', 'pytest', '-q', '-ra',
+    'tests/test_tenant_rls.py', '--disable-socket', '--allow-unix-socket',
+    '--allow-hosts=127.0.0.1,localhost,::1'], check=False)
+server.cleanup()
+sys.exit(result.returncode)
+
+Command: .venv/bin/python .git/run-rls.py
+Result: interrupted after 4 passed and 11 repeated fixture errors: bundled pgserver has no pg_trgm extension. No application assertions failed. Remaining tests not completed locally; CI PostgreSQL provides the authoritative full-module result.
+
+.venv/bin/python -m ruff check tank/trigger_bot_grounding.py tests/trigger_bot_b1/test_rereview.py tests/trigger_bot_b1/test_retention.py
+Result: All checks passed!
+git diff --check
+Result: exit 0.
+
+Broader lint on tank/trigger_bot.py additionally reports its pre-existing import order (SmtpMailer, PgRateLimits); unchanged by this review.
