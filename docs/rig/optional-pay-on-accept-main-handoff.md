@@ -369,3 +369,7 @@ git status --short --branch
 ```
 
 The GitHub PR body contains the removed/changed test inventory and final-head CI state. Founder-browser acceptance and screenshots remain outstanding; no acceptance is claimed from unit tests.
+
+The later public `task_complete` at **2026-11-03T16:54:18.938Z** confirms the old owner stopped at `b182a962` with a clean working tree. That head and its newer blind-shipping regression/docs were preserved by a second remote-branch merge. The rejected intervening push changed no remote refs. No force-push was used.
+
+Final local verification after preserving all newer remote work: **67 passed, 83 deselected, 3 warnings in 28.50s**, covering no-payments, supplier auto-order/blind-shipping, saved-card confirmation and tenant/admin boundaries with local Postgres. The earlier complete Command/no-payments run also passed **102 tests** before the remote additions. Ruff E9,F and whitespace checks pass. See the exact expanded pytest command in the PR body. No final-head CI success is inferred from these local results.
