@@ -138,3 +138,17 @@ and owned-rule Undo. They contain no token, raw provider body or URL query.
 tests exercise the adapter but are not deployed-edge measurements. After deploy,
 record actual receipt JSON and edge evidence as described in the dogfood runbook;
 no live budget success is claimed by this build.
+
+## M24 — founder run after deploy
+
+Use [the Wave 4 dogfood runbook](AUTUMBRA-DOGFOOD-W4.md) for the controlled
+tervory.com test source, actual edge block, fresh health result, emailed receipt
+and one-tap Undo. It distinguishes API-only probes from real-traffic proof and
+records the exact deployed head and actual timings. It does not authorize this
+builder to deploy, send live traffic or send an email. Those live acceptance
+results remain unmeasured until the founder runs the procedure.
+
+Legacy automatic code-fix settings normalize to approval on read/validation;
+new receipts and owner emails never claim automatic patching. Fixes may be
+prepared as draft PRs but are never merged or deployed by Autumbra. No AI
+second-opinion step is required. Existing human approval and CI remain mandatory.

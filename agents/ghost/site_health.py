@@ -77,17 +77,22 @@ def _read_result(site: str) -> dict | None:
         return None
 
 
-def read_health(site: str, *, after: float | None = None, wait_seconds: float = 0) -> bool:
-    """Require a signed result strictly after apply, waiting at most 60 seconds.
+def read_health(site: str, *, after: float | None = None, wait_seconds: float = 0,
+                result_out: dict | None = None) -> bool:
+    """Require a signed result strictly after apply, waiting at most 30 seconds.
 
     Pre-apply success or failure cannot judge the new rule. An authenticated
     post-apply failure is immediately false; missing/invalid results wait only
     until the fixed deadline, then fail closed for automatic Undo.
     """
-    deadline = time.monotonic() + min(60.0, max(0.0, wait_seconds))
+    if result_out is not None:
+        result_out.clear()
+    deadline = time.monotonic() + min(30.0, max(0.0, wait_seconds))
     while True:
         result = _read_result(site)
         if result is not None and (after is None or result["checked_at"] > after):
+            if result_out is not None:
+                result_out.update(result)
             return (result["ok"] is True and type(result["status"]) is int
                     and 200 <= result["status"] < 300)
         remaining = deadline - time.monotonic()

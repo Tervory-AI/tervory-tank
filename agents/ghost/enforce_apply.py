@@ -55,11 +55,13 @@ def select_control(*, site: str, settings: ClientAutumbraSettings,
             return edge
         if not os.environ.get(TOKEN_ENV, "").strip():
             raise CloudflareEdgeError("Cloudflare request failed.")
+        probe_result = {}
         live = CloudflareEdgeControl(
             tenant_id=settings.tenant_id, site=site, transport=CloudflareProxyTransport(),
             token=os.environ[TOKEN_ENV], health_probe=lambda: read_health(site),
-            fresh_health_probe=lambda after: read_health(site, after=after, wait_seconds=30),
+            fresh_health_probe=lambda after: read_health(site, after=after, wait_seconds=30, result_out=probe_result),
         )
+        live.last_health_result = probe_result
         live.blocked.update(edge.blocked)
         return live
     configured = bool(os.environ.get(TOKEN_ENV, "").strip())
@@ -73,11 +75,13 @@ def select_control(*, site: str, settings: ClientAutumbraSettings,
         if edge.tenant_id != settings.tenant_id or edge.site != site:
             raise ValueError("Cloudflare control does not belong to this client and site.")
         return edge
+    probe_result = {}
     live = CloudflareEdgeControl(
         tenant_id=settings.tenant_id, site=site, transport=CloudflareProxyTransport(),
         token=os.environ[TOKEN_ENV], health_probe=lambda: read_health(site),
-        fresh_health_probe=lambda after: read_health(site, after=after, wait_seconds=30),
+        fresh_health_probe=lambda after: read_health(site, after=after, wait_seconds=30, result_out=probe_result),
     )
+    live.last_health_result = probe_result
     live.blocked.update(edge.blocked)
     return live
 
@@ -87,7 +91,9 @@ def _health_after_apply(edge: FixtureEdgeControl, row: dict | None = None) -> bo
     if row is not None and isinstance(edge, CloudflareEdgeControl):
         healthy = edge.health_check(applied_after=row["applied_at"])
         from .site_health import _read_result
-        result = _read_result(edge.site)
+        result = getattr(edge, "last_health_result", None)
+        if not result:
+            result = _read_result(edge.site)
         if result is not None and result["checked_at"] > row["applied_at"]:
             edge.last_health_result = result
         return healthy

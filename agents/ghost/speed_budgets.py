@@ -54,15 +54,7 @@ def budgets_ok(receipt: dict[str, Any]) -> tuple[bool, list[str]]:
     """Assert fixture/live receipts meet the product budgets."""
     budgets = receipt.get("budgets") or {}
     fails: list[str] = []
-    checks = (
-        ("event_to_decision", EVENT_TO_DECISION_RULE),
-        ("decision_to_shield", DECISION_TO_SHIELD),
-        ("health_check", HEALTH_CHECK),
-        ("auto_undo_e2e", AUTO_UNDO_E2E),
-        ("queue_transit", QUEUE_TRANSIT),
-        ("event_to_shield_e2e", EVENT_TO_SHIELD_E2E),
-    )
-    for key, limit in checks:
+    for key, limit in LIMITS.items():
         entry = budgets.get(key)
         if entry is None:
             continue  # Only assert stages that ran.

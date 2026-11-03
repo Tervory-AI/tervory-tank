@@ -58,3 +58,24 @@ def test_client_health_url_cannot_expand_egress(url, monkeypatch):
         health.health_url('tervory.com')
 
 
+
+
+def test_health_receipt_keeps_exact_sample_used_for_undo(monkeypatch):
+    import time
+
+    from agents.ghost.enforce_apply import _health_after_apply
+    sample = {'site': 'tervory.com', 'url': 'https://tervory.com/', 'ok': False,
+              'status': 503, 'ms': 2.0, 'checked_at': time.time()}
+    reads = []
+    def result(site):
+        reads.append(site)
+        # A later observer sample must not replace the failed sample in a receipt.
+        return sample if len(reads) == 1 else {**sample, 'ok': True, 'status': 200}
+    monkeypatch.setattr(health, '_read_result', result)
+    control = edge(FakeCloudflare('block_ip'))
+    captured = {}
+    control.last_health_result = captured
+    control._fresh_health_probe = lambda after: health.read_health('tervory.com', after=after, result_out=captured)
+    assert _health_after_apply(control, {'applied_at': sample['checked_at'] - 1}) is False
+    assert control.last_health_result == sample
+    assert reads == ['tervory.com']

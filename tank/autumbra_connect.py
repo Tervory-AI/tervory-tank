@@ -21,14 +21,18 @@ async def verify_cloudflare(http, token: str, zone_name: str, zone_id: str) -> N
         response = await http.get('https://api.cloudflare.com/client/v4/user/tokens/verify',
                                   headers=headers, follow_redirects=False, timeout=10)
         data = response.json()
+        if not isinstance(data, dict):
+            raise ValueError()
         if response.status_code != 200 or data.get('success') is not True or data['result']['status'] != 'active':
             raise ValueError()
         response = await http.get('https://api.cloudflare.com/client/v4/zones',
                                   headers=headers, params={'per_page': 50}, follow_redirects=False, timeout=10)
         data = response.json()
+        if not isinstance(data, dict):
+            raise ValueError()
         rows = data.get('result')
         if (response.status_code != 200 or data.get('success') is not True or not isinstance(rows, list)
-                or len(rows) != 1 or rows[0].get('id') != zone_id or rows[0].get('name') != zone_name
+                or len(rows) != 1 or not isinstance(rows[0], dict) or rows[0].get('id') != zone_id or rows[0].get('name') != zone_name
                 or data.get('result_info', {}).get('total_count', len(rows)) != 1):
             raise ValueError()
     except (httpx.HTTPError, ValueError, KeyError, TypeError):

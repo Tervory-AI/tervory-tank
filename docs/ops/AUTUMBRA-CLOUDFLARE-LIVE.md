@@ -1,5 +1,8 @@
 # Autumbra Cloudflare live hand — tervory.com only
 
+Wave 4 acceptance uses [the founder dogfood runbook](AUTUMBRA-DOGFOOD-W4.md).
+The historical API-only documentation-address procedure below is not real-traffic proof.
+
 Founder authorization: 3 November 2026, 02:47 America/Los_Angeles.
 PR #566 is merged; follow-up work is reviewed in PR #607. The founder merges.
 **M24 LIVE TEST REMAINS HELD pending A2 real owner-email delivery.**
@@ -72,15 +75,15 @@ python -c 'from ghost.site_health import read_health; print(read_health("tervory
 Require `True`. With a blank secret or blank/unsupported SITE_NAME, the observer
 logs one fixed line and sleeps without requests until the project is configured
 and redeployed. A configured observer fetches only this project's SITE_NAME.
-The observer GETs only `https://tervory.com/`, without a request
+The observer GETs only the approved HTTPS path on `tervory.com` (root by default), without a request
 body, cookies or redirects. Its only persisted result fields are
 `site, url, ok, status, ms, checked_at`, with an HMAC signature. Missing, unsigned,
-tampered, failed or more-than-30-second-old results are false. After an apply, Enforce waits up to 60 seconds for an authenticated result
+tampered, failed or more-than-30-second-old results are false. After an apply, Enforce waits up to 30 seconds for an authenticated result
 whose probe started strictly after the rule's confirmed apply time. A prior
 success cannot approve the new rule. A fresh failed result, or no qualifying
 result within that deadline, automatically undoes the owned rule. Proxy errors
 retain that exact Undo for retry; approval and Undo never switch its control to
-the fixture. Health waiting is recorded separately in the receipt's health stage. API connectivity
+the fixture. Only 2xx health responses pass; redirects fail. Health waiting is recorded separately in the receipt's health stage. API connectivity
 is never substituted for site health.
 
 Enforce chooses Cloudflare only with all four gates: configured token,

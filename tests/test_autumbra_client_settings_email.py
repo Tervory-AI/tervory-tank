@@ -70,7 +70,7 @@ def test_owner_email_three_fix_paragraphs():
                 "source_url": "https://feodotracker.abuse.ch"},
     )
     for mode, needle in [
-        (ApplyMode.auto_when_checks_pass, "let us fix this kind of problem automatically"),
+        (ApplyMode.auto_when_checks_pass, "approve fixes yourself"),
         (ApplyMode.approve_each, "approve fixes yourself"),
         (ApplyMode.never, "never touch your code"),
     ]:
@@ -91,12 +91,12 @@ def test_owner_email_three_fix_paragraphs():
         assert "[" not in mail["body"]
         assert "payment provider and Cloudflare were never blocked" in mail["body"]
         others = {
-            ApplyMode.auto_when_checks_pass: "let us fix this kind of problem automatically",
+            ApplyMode.auto_when_checks_pass: "approve fixes yourself",
             ApplyMode.approve_each: "approve fixes yourself",
             ApplyMode.never: "never touch your code",
         }
         for other_mode, other_needle in others.items():
-            if other_mode is mode:
+            if other_needle == needle:
                 continue
             assert other_needle not in mail["body"]
 
@@ -105,7 +105,7 @@ def test_three_fixture_clients_get_matching_paragraphs():
     """Three fixture clients — one per client mode — each get the matching paragraph."""
     fixtures = [
         ("00000000-0000-0000-0000-0000000000f1", ApplyMode.auto_when_checks_pass,
-         "let us fix this kind of problem automatically"),
+         "approve fixes yourself"),
         ("00000000-0000-0000-0000-0000000000f2", ApplyMode.approve_each,
          "approve fixes yourself"),
         ("00000000-0000-0000-0000-0000000000f3", ApplyMode.never,
@@ -224,7 +224,7 @@ def test_owner_email_sender_is_called_for_three_fixture_clients():
     }]
     fixtures = [
         ("00000000-0000-0000-0000-0000000000f1", ApplyMode.auto_when_checks_pass,
-         "let us fix this kind of problem automatically", "auto@example.test"),
+         "approve fixes yourself", "auto@example.test"),
         ("00000000-0000-0000-0000-0000000000f2", ApplyMode.approve_each,
          "approve fixes yourself", "approve@example.test"),
         ("00000000-0000-0000-0000-0000000000f3", ApplyMode.never,
@@ -287,3 +287,13 @@ def test_weekly_owner_update_is_a_real_job_entry_quiet_week():
     assert all("Quiet week." in r["body"] for r in results)
     assert all("1,204" in r["body"] for r in results)
     assert {r["to"] for r in results} == {"a@example.test", "b@example.test", "c@example.test"}
+
+
+def test_legacy_automatic_fix_preference_still_requires_tap(tmp_path):
+    store = Store(tmp_path / 'legacy-fixes.sqlite3')
+    tenant = '00000000-0000-0000-0000-0000000000cc'
+    store.set_state(tenant, 'autumbra_client_settings', {'fix_mode': ApplyMode.auto_when_checks_pass.value})
+    assert load_settings(store, tenant).fix_mode is ApplyMode.approve_each
+    settings = ClientAutumbraSettings(tenant_id=tenant, fix_mode=ApplyMode.auto_when_checks_pass)
+    assert settings.fix_mode is ApplyMode.approve_each
+    assert settings.model_dump(mode='json')['fix_mode'] == 'I approve each one'
