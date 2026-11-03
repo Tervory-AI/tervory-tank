@@ -363,3 +363,40 @@ async def test_crash_survives_memory_outage(monkeypatch):
         await b.handle(ctx)
     assert error.value is crash and remember.await_count == 1
     assert 'slug' not in json.loads(remember.call_args.args[1])
+
+
+@pytest.mark.asyncio
+async def test_slug_selects_newest_open_request_and_keeps_tenants_private(client):
+    http, pool, journal, _ = client
+    first = (await confirmed(http, 'tisan.request', brief())).json()['request_id']
+    second = (await confirmed(http, 'tisan.request', brief())).json()['request_id']
+    other_slug = {**brief(), 'slug': 'placeholder-other'}
+    await confirmed(http, 'tisan.request', other_slug)
+    body = {'slug': brief()['slug']}
+    preview = await http.get('/v1/command/tisan/preview', params=body)
+    assert preview.json()['request_id'] == second
+    journal_row(journal, 1)
+    accepted = await confirmed(http, 'tisan.handover', body)
+    assert accepted.json()['request_id'] == second and accepted.json()['status'] == 'accepted'
+    assert (await http.get('/v1/command/tisan/preview', params=body)).json()['request_id'] == first
+    assert (await http.get('/v1/command/tisan/preview', params={'slug': 'placeholder-missing'})).status_code == 404
+    assert (await http.get('/v1/command/tisan/preview', params=body,
+                           headers={'X-Tervory-Tenant': str(OTHER)})).status_code == 404
+    async with pool.acquire() as conn:
+        assert await conn.fetchval("SELECT state FROM tank.tisan_requests WHERE tenant_id=$1 AND request_id=$2",
+                                   TENANT, uuid.UUID(first)) == 'requested'
+
+
+@pytest.mark.asyncio
+async def test_slug_plans_use_site_argument_and_reject_request_id(runtime, monkeypatch):
+    actor = command.Actor(TENANT, 'placeholder-admin', False, tenant_admin=True)
+    monkeypatch.setattr(command, 'authorized_actor', AsyncMock(return_value=actor))
+    monkeypatch.setattr(__import__('trigger_routes'), 'code_receipt', AsyncMock(return_value=uuid.uuid4()))
+    for tool in ('tisan.preview', 'tisan.handover'):
+        plan = await requests.code_plan(actor, [{'role': 'user', 'content': tool + ' placeholder-site'}], uuid.uuid4())
+        action = json.loads(plan.content)['actions'][0]
+        assert action['arguments'] == {'slug': 'placeholder-site'}
+        assert action['tool'] == tool
+        with pytest.raises(HTTPException) as error:
+            command.validate_action(command.PlannedAction(tool=tool, arguments={'request_id': str(uuid.uuid4())}), actor)
+        assert error.value.status_code == 422
