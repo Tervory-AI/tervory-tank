@@ -141,12 +141,15 @@ async def test_build_memory_keeps_complete_k6_result(monkeypatch, passed):
     builder = load('j5_builder', ROOT / 'agents/tisan/builder.py')
     check = {'name': 'k6', 'ok': passed, 'pages': [{'page': '/placeholder', 'status': 200 if passed else None,
                                                'p95_ms': 12.5, 'requests': 45, 'failures': 0 if passed else 45}]}
-    monkeypatch.setattr(builder, 'execute', AsyncMock(return_value={'ok': False, 'build': 1, 'checks': [check]}))
+    monkeypatch.setattr(builder, 'execute', AsyncMock(return_value={'ok': passed, 'slug': 'placeholder-site', 'build': 1, 'checks': [check]}))
+    import chassis.events
+    monkeypatch.setattr(chassis.events, 'publish', AsyncMock())
     memory = SimpleNamespace(remember=AsyncMock(return_value={'id': 'placeholder-memory'}))
     result = await builder.handle(SimpleNamespace(input={}, tenant_id=TENANT, tank=None,
                                                   job_id='placeholder-job', memory=memory))
     claim = json.loads(memory.remember.call_args.args[1])
-    assert claim['checks'] == [check] and result['memory_id'] == 'placeholder-memory'
+    assert claim['checks'] == [check] and claim['ok'] is passed
+    assert result['memory_id'] == 'placeholder-memory'
 
 
 @pytest.mark.asyncio
