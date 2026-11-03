@@ -9,6 +9,7 @@ from base_evidence import field, public_url, row_fields
 from base_metrics import export_records, obj
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
+from tenant_db import tenant_transaction
 
 
 class FindArgs(BaseModel):
@@ -173,7 +174,7 @@ class Store:
 
     async def find(self, tenant: UUID, filters: FindArgs) -> dict:
         count, rows = 0, []
-        async with self.pool.acquire() as conn, conn.transaction(isolation="repeatable_read", readonly=True):
+        async with tenant_transaction(self.pool, isolation="repeatable_read", readonly=True) as conn:
             async for row in self.scan(conn, tenant, filters):
                 count += 1
                 if len(rows) < 20:
@@ -184,7 +185,7 @@ class Store:
         # One stable transaction, two bounded cursor passes: count/IDs first,
         # then stream immutable snapshot chunks directly into the saved list.
         ids, count = [], 0
-        async with self.pool.acquire() as conn, conn.transaction(isolation="repeatable_read"):
+        async with tenant_transaction(self.pool, isolation="repeatable_read") as conn:
             async for row in self.scan(conn, tenant, filters):
                 count += 1
                 if len(ids) < 10000:
