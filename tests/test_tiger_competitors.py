@@ -34,6 +34,7 @@ import asyncio
 import importlib.util
 import json
 import socket
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -108,6 +109,9 @@ def test_microdata_identifiers_and_nested_brand_use_existing_price_reader():
 
 @pytest.fixture(scope='module')
 def postgres(tmp_path_factory):
+    configured = os.environ.get('POOL_SCHEMA_DATABASE_URL')
+    if configured:
+        return SimpleNamespace(get_uri=lambda:configured)
     import pgserver
     return pgserver.get_server(tmp_path_factory.mktemp('tiger-t1-postgres'))
 
@@ -338,12 +342,12 @@ async def test_real_gate_enforces_rate_page_cap_failure_accounting_and_reset(dat
 
 @pytest.mark.asyncio
 async def test_schema_rollout_is_idempotent_legacy_safe_and_enforces_tenant_rls(database):
-    ddl = (ROOT / 'tank/schema.sql').read_text()
     assert not await database.fetchval("SELECT relrowsecurity FROM pg_class WHERE oid='agent_tiger.matches'::regclass")
     await database.execute('ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY')
-    await database.execute(ddl)
-    await database.execute(ddl)
-    for table in ('matches','match_runs'):
+    async with database.acquire() as conn:
+        await ensure_tables(conn, 'agent_tiger')
+        await ensure_tables(conn, 'agent_tiger')
+    for table in ('matches','match_runs','match_sightings'):
         assert await database.fetchval('SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid=$1::regclass', 'agent_tiger.'+table)
         assert await database.fetchval("SELECT count(*) FROM pg_policy WHERE polrelid=$1::regclass AND polname IN ('tenant_access','tenant_boundary')", 'agent_tiger.'+table) == 2
     await database.execute("INSERT INTO agent_tiger.matches(tenant_id,sku,url,method,identifiers,seen_on,state) VALUES($1,'own',$2,'gtin','{}',$2,'confirmed')", TENANT,PAGE)
@@ -666,6 +670,7 @@ async def test_check_is_claimed_between_discovery_slices(corridor,monkeypatch):
     from chassis.worker import claim_next, run_claimed
     root, check = uuid4(), uuid4()
     await corridor.pool.execute("INSERT INTO agent_tiger.jobs(id,tenant_id,kind,input) VALUES($1,$2,'competitor_match',$3::jsonb)",root,TENANT,json.dumps({'sites':[SITE],'products':[OWN]}))
+    await corridor.pool.execute('INSERT INTO agent_tiger.match_runs(tenant_id,operation_id,job_id,ledger_id) VALUES($1,$2,$3,$4)',TENANT,uuid4(),root,uuid4())
     monkeypatch.setattr(corridor.agent,'_fetch_text',AsyncMock(return_value={'status':404}))
     monkeypatch.setattr(corridor.agent,'DiscoveryGate',lambda pool:OfflineGate())
     first = await corridor.agent.competitor_match(SimpleNamespace(tenant_id=str(TENANT),job_id=str(root),input={'sites':[SITE],'products':[OWN]}))
@@ -685,7 +690,9 @@ async def test_check_is_claimed_between_discovery_slices(corridor,monkeypatch):
     async with corridor.pool.acquire() as conn:
         continuation = await claim_next(conn,'tiger')
     assert continuation['id'] == UUID(first['continuation_id']) and ran == [str(check)]
-    assert json.loads(continuation['input'])['cursor']['active']['queue']
+    assert json.loads(continuation['input']) == {'root_job_id':str(root)}
+    saved = await corridor.pool.fetchval('SELECT cursor FROM agent_tiger.match_runs WHERE tenant_id=$1 AND job_id=$2',TENANT,root)
+    assert json.loads(saved)['active']['queue']
     async with corridor.pool.acquire() as conn:
         await run_claimed(conn,'tiger',continuation,{'competitor_match':corridor.agent.competitor_match},
                           lambda job:SimpleNamespace(tenant_id=str(TENANT),job_id=str(job['id']),input=json.loads(job['input'])))
@@ -693,34 +700,63 @@ async def test_check_is_claimed_between_discovery_slices(corridor,monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('role_first', [True,False])
-async def test_agent_role_has_t1_privileges_in_both_deployment_orders(database,role_first):
+@pytest.mark.parametrize('tables_first',[True,False])
+async def test_room_migration_and_nonowner_tank_admin_after_role_ownership(database,tables_first):
     from chassis.roles import _ownership
     async with database.acquire() as conn:
         await conn.execute('CREATE ROLE agent_tiger NOLOGIN NOSUPERUSER NOBYPASSRLS')
+        await conn.execute('CREATE ROLE tiger_t1_admin NOLOGIN NOSUPERUSER BYPASSRLS')
         try:
-            if role_first:
-                # Existing deployment: migration grants to a role already provisioned.
-                await conn.execute((ROOT/'tank/schema.sql').read_text())
-            else:
-                # Fresh deployment: provisioner's ownership pass follows migration.
-                await conn.execute('GRANT USAGE,CREATE ON SCHEMA agent_tiger TO agent_tiger')
-                await conn.execute(_ownership('agent_tiger'))
-            for table in ('matches','match_runs','match_sightings','discovery_limits'):
-                for privilege in ('SELECT','INSERT','UPDATE'):
-                    assert await conn.fetchval("SELECT has_table_privilege('agent_tiger',$1,$2)",'agent_tiger.'+table, privilege)
+            if not tables_first:
+                await conn.execute('DROP TABLE agent_tiger.match_sightings,agent_tiger.match_runs,agent_tiger.matches,agent_tiger.discovery_limits')
+            await conn.execute('GRANT USAGE,CREATE ON SCHEMA agent_tiger TO agent_tiger')
+            await conn.execute(_ownership('agent_tiger'))
+            # Give the documented admin its existing Tank-owned migrations,
+            # without membership/CREATE/ownership in the room's schema.
+            schemas = ('tank','base','agent_tank','agent_base')
+            relations = await conn.fetch("""SELECT format('%I.%I',n.nspname,c.relname) AS qualified,c.relkind
+                FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname=ANY($1::text[]) AND c.relkind IN ('r','p','S')
+                ORDER BY CASE WHEN c.relkind='S' THEN 1 ELSE 0 END""", list(schemas))
+            for relation in relations:
+                kind = 'SEQUENCE' if relation['relkind'] == b'S' or relation['relkind'] == 'S' else 'TABLE'
+                await conn.execute('ALTER '+kind+' '+relation['qualified']+' OWNER TO tiger_t1_admin')
+            for schema in schemas:
+                await conn.execute('ALTER SCHEMA '+schema+' OWNER TO tiger_t1_admin')
+            functions = await conn.fetch("SELECT p.oid::regprocedure::text AS signature FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN ('tank','base','agent_tank','agent_base') AND p.prokind='f'")
+            for function in functions:
+                await conn.execute('ALTER FUNCTION '+function['signature']+' OWNER TO tiger_t1_admin')
+            database_name = await conn.fetchval('SELECT current_database()')
+            await conn.execute('GRANT CREATE ON DATABASE '+database_name+' TO tiger_t1_admin')
             async with conn.transaction():
                 await conn.execute('SET LOCAL ROLE agent_tiger')
-                await conn.execute("SELECT set_config('app.tenant_id',$1,true)",str(TENANT))
-                await conn.execute("INSERT INTO agent_tiger.discovery_limits(site) VALUES($1)",SITE)
-                await conn.execute("UPDATE agent_tiger.discovery_limits SET requests=1 WHERE site=$1",SITE)
-                assert await conn.fetchval('SELECT requests FROM agent_tiger.discovery_limits WHERE site=$1',SITE) == 1
-                await conn.execute("INSERT INTO agent_tiger.match_runs(tenant_id,operation_id,ledger_id) VALUES($1,$2,$3)",TENANT,uuid4(),uuid4())
+                await ensure_tables(conn,'agent_tiger')
+                await ensure_tables(conn,'agent_tiger')
+                assert not await conn.fetchval('SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname=current_user')
+            async with conn.transaction():
+                await conn.execute('SET LOCAL ROLE tiger_t1_admin')
+                assert not await conn.fetchval("SELECT has_schema_privilege(current_user,'agent_tiger','CREATE')")
+                assert not await conn.fetchval("SELECT pg_has_role(current_user,'agent_tiger','MEMBER')")
+                assert await conn.fetchval('SELECT rolbypassrls AND NOT rolsuper FROM pg_roles WHERE rolname=current_user')
+                await conn.execute((ROOT/'tank/schema.sql').read_text())
+                await conn.execute((ROOT/'tank/schema.sql').read_text())
+            # The ELSE branch must undo an earlier rollout, as in Tisan.
+            await conn.execute('ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY')
+            async with conn.transaction():
+                await conn.execute('SET LOCAL ROLE agent_tiger')
+                await ensure_tables(conn,'agent_tiger')
+            await conn.execute('ALTER TABLE tank.command_threads DISABLE ROW LEVEL SECURITY')
+            async with conn.transaction():
+                await conn.execute('SET LOCAL ROLE agent_tiger')
+                await ensure_tables(conn,'agent_tiger')
+            for table in ('matches','match_runs','match_sightings'):
+                assert not await conn.fetchval('SELECT relrowsecurity OR relforcerowsecurity FROM pg_class WHERE oid=$1::regclass','agent_tiger.'+table)
         finally:
-            # Reassign disposable database objects before removing the NOLOGIN role.
-            await conn.execute('REASSIGN OWNED BY agent_tiger TO postgres')
-            await conn.execute('DROP OWNED BY agent_tiger')
-            await conn.execute('DROP ROLE agent_tiger')
+            for role in ('agent_tiger','tiger_t1_admin'):
+                await conn.execute('REASSIGN OWNED BY '+role+' TO postgres')
+                await conn.execute('DROP OWNED BY '+role)
+                await conn.execute('DROP ROLE '+role)
+
 
 @pytest.mark.asyncio
 async def test_catalogue_fetch_uses_separate_robot_and_sitemap_caps(corridor,monkeypatch):
@@ -764,3 +800,152 @@ async def test_position_arithmetic_includes_competitors_beyond_twentieth(corrido
     row = response.json()['products'][0]
     assert len(row['competitors']) == 21 and row['rank'] == 22
     assert row['cheapest']['url'] == urls[-1] and row['difference'] == '14.00'
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failed_kind',['map','product'])
+async def test_item_transport_timeout_continues_other_candidates_and_search(failed_kind):
+    gate, visits = OfflineGate(), []
+    bad = SITE + ('/listed.xml' if failed_kind == 'map' else '/products/bad')
+    async def fetch(url):
+        visits.append(url)
+        if url.endswith('/robots.txt'):
+            return {'status':200,'text':'User-agent: *\nSitemap: '+SITE+'/listed.xml'}
+        if failed_kind == 'map' and url == bad:
+            raise httpx.ReadTimeout('synthetic sitemap timeout')
+        return {'status':200,'text':'<urlset><url><loc>'+SITE+'/products/bad</loc></url><url><loc>'+PAGE+'</loc></url></urlset>'}
+    async def render(url):
+        visits.append(url)
+        if failed_kind == 'product' and url == bad:
+            raise OSError('synthetic product transport error')
+        return {'ok':True,'url':url,'html':''}
+    result = await CatalogueDiscovery(fetch,render,gate,AsyncMock(return_value={'matches':[]})).run([SITE],[OWN])
+    assert result['sites'][0]['status'] == 'completed'
+    assert SITE+'/sitemap.xml' in visits and SITE+'/search?q='+GTIN in visits and PAGE in visits
+    assert {'url':bad,'reason':'transport_error'} in result['sites'][0]['warnings']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status',[401,403])
+async def test_browser_service_refusal_is_not_a_site_challenge(corridor,monkeypatch,status):
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request:httpx.Response(status))) as client:
+        monkeypatch.setattr(corridor.agent.app.state,'http',client)
+        async def render(url):
+            return await corridor.agent._render(url,'','tiger',str(TENANT),catalogue_match=True)
+        active = {'robots':'','queue':[{'kind':'product','url':PAGE}],'visited':[],
+                  'confirmed':[],'forms':[],'pages':0,'warnings':[]}
+        publish_page = AsyncMock(side_effect=AssertionError('Service errors must not publish captcha items'))
+        await CatalogueDiscovery(AsyncMock(),render,DiscoveryGate(corridor.pool),publish_page).step(
+            [SITE],[OWN],{'site_index':0,'sites':[],'active':active})
+    publish_page.assert_not_awaited()
+    assert not await corridor.pool.fetchval('SELECT human_check FROM agent_tiger.discovery_limits WHERE site=$1',SITE)
+    assert await corridor.pool.fetchval('SELECT count(*) FROM tank.access_queue') == 0
+
+
+@pytest.mark.asyncio
+async def test_slow_catalogue_fetch_has_an_overall_deadline(corridor,monkeypatch):
+    class Trickle(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            while True:
+                await asyncio.sleep(.005)
+                yield b' '
+    async def respond(request): return httpx.Response(200,stream=Trickle())
+    monkeypatch.setattr(corridor.agent,'CATALOGUE_FETCH_BUDGET_S',.03)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        monkeypatch.setattr(corridor.agent.app.state,'http',client)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(corridor.agent._fetch_text(SITE+'/sitemap.xml',catalogue=True),.5)
+
+
+@pytest.mark.asyncio
+async def test_catalogue_render_has_an_overall_deadline(corridor,monkeypatch):
+    async def respond(request):
+        await asyncio.sleep(1)
+        return httpx.Response(200,json={'ok':True})
+    monkeypatch.setattr(corridor.agent,'CATALOGUE_RENDER_BUDGET_S',.03)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        monkeypatch.setattr(corridor.agent.app.state,'http',client)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(corridor.agent._render(PAGE,'','tiger',str(TENANT),catalogue_match=True),.5)
+
+
+async def seeded_run(system,products):
+    root, operation = uuid4(), uuid4()
+    payload = {'sites':[SITE],'products':products,'operation_id':str(operation)}
+    await system.pool.execute("INSERT INTO agent_tiger.jobs(id,tenant_id,kind,input) VALUES($1,$2,'competitor_match',$3::jsonb)",root,TENANT,json.dumps(payload))
+    await system.pool.execute('INSERT INTO agent_tiger.match_runs(tenant_id,operation_id,job_id,ledger_id) VALUES($1,$2,$3,$4)',TENANT,operation,root,uuid4())
+    return SimpleNamespace(tenant_id=str(TENANT),job_id=str(root),input=payload)
+
+
+@pytest.mark.asyncio
+async def test_large_catalogue_continuation_input_is_only_a_run_reference(corridor,monkeypatch):
+    products = [{**OWN,'sku':'product-'+str(i)} for i in range(2000)]
+    ctx = await seeded_run(corridor,products)
+    monkeypatch.setattr(corridor.agent,'_fetch_text',AsyncMock(return_value={'status':404}))
+    monkeypatch.setattr(corridor.agent,'DiscoveryGate',lambda pool:OfflineGate())
+    result = await corridor.agent.competitor_match(ctx)
+    child = UUID(result['continuation_id'])
+    payload = await corridor.pool.fetchval('SELECT input FROM agent_tiger.jobs WHERE id=$1',child)
+    assert json.loads(payload) == {'root_job_id':ctx.job_id}
+    assert len(payload.encode()) < 100
+    # One catalogue copy; the cursor lives once on the run, never in jobs.
+    assert await corridor.pool.fetchval("SELECT count(*) FROM agent_tiger.jobs WHERE tenant_id=$1 AND input ? 'products'",TENANT) == 1
+    assert await corridor.pool.fetchval("SELECT count(*) FROM agent_tiger.jobs WHERE tenant_id=$1 AND input ? 'cursor'",TENANT) == 0
+
+
+@pytest.mark.asyncio
+async def test_two_thousand_skus_without_gtin_need_only_bounded_empty_slices(corridor,monkeypatch):
+    ctx = await seeded_run(corridor,[{**OWN,'sku':str(i),'gtin':None} for i in range(2000)])
+    monkeypatch.setattr(corridor.agent,'_fetch_text',AsyncMock(return_value={'status':404}))
+    monkeypatch.setattr(corridor.agent,'_render',AsyncMock(return_value={'ok':True,'url':SITE+'/','html':''}))
+    monkeypatch.setattr(corridor.agent,'DiscoveryGate',lambda pool:OfflineGate())
+    for slices in range(1,8):
+        result = await corridor.agent.competitor_match(ctx)
+        if not result['continuation_id']:
+            break
+        job = await corridor.pool.fetchrow('SELECT id,input FROM agent_tiger.jobs WHERE id=$1',UUID(result['continuation_id']))
+        ctx = SimpleNamespace(tenant_id=str(TENANT),job_id=str(job['id']),input=json.loads(job['input']))
+    else:
+        pytest.fail('Unusable SKUs generated per-product continuations')
+    assert slices <= 6 and result['status'] == 'completed'
+    assert corridor.agent._render.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_exhausted_slice_marks_run_and_card_failed(corridor,monkeypatch):
+    from chassis.worker import claim_next, run_claimed
+    ctx = await seeded_run(corridor,[OWN])
+    await corridor.pool.execute("UPDATE agent_tiger.jobs SET attempts=max_attempts-1 WHERE id=$1",UUID(ctx.job_id))
+    await corridor.pool.execute('UPDATE agent_tiger.match_runs SET progress=$2::jsonb WHERE job_id=$1',UUID(ctx.job_id),json.dumps({'status':'running'}))
+    monkeypatch.setattr(CatalogueDiscovery,'step',AsyncMock(side_effect=RuntimeError('synthetic slice failure')))
+    async with corridor.pool.acquire() as conn:
+        job = await claim_next(conn,'tiger')
+        await run_claimed(conn,'tiger',job,{'competitor_match':corridor.agent.competitor_match},lambda job:ctx)
+    assert await corridor.pool.fetchval('SELECT status FROM agent_tiger.jobs WHERE id=$1',UUID(ctx.job_id)) == 'failed'
+    progress = json.loads(await corridor.pool.fetchval('SELECT progress FROM agent_tiger.match_runs WHERE job_id=$1',UUID(ctx.job_id)))
+    assert progress['status'] == 'failed'
+    assert (await access.tiger_card_result(TENANT,{'job_id':ctx.job_id}))['status'] == 'failed'
+
+
+@pytest.mark.asyncio
+async def test_card_reconciles_worker_crash_after_last_attempt(corridor):
+    ctx = await seeded_run(corridor,[OWN])
+    child = uuid4()
+    await corridor.pool.execute("INSERT INTO agent_tiger.jobs(id,tenant_id,kind,input,status) VALUES($1,$2,'competitor_match',$3::jsonb,'failed')",child,TENANT,json.dumps({'root_job_id':ctx.job_id}))
+    await corridor.pool.execute('UPDATE agent_tiger.match_runs SET progress=$2::jsonb WHERE job_id=$1',UUID(ctx.job_id),json.dumps({'status':'running','continuation_id':str(child)}))
+    result = await access.tiger_card_result(TENANT,{'job_id':ctx.job_id})
+    assert result['status'] == 'failed' and result['discovery']['failed_job_id'] == str(child)
+    saved = json.loads(await corridor.pool.fetchval('SELECT progress FROM agent_tiger.match_runs WHERE job_id=$1',UUID(ctx.job_id)))
+    assert saved['status'] == 'failed'
+
+@pytest.mark.asyncio
+async def test_room_startup_installs_matching_schema_before_serving(corridor,monkeypatch):
+    from contextlib import asynccontextmanager
+    @asynccontextmanager
+    async def inner(instance):
+        yield
+    monkeypatch.setattr(corridor.agent,'_tiger_inner',inner)
+    await corridor.pool.execute('DROP TABLE agent_tiger.match_sightings,agent_tiger.match_runs,agent_tiger.matches,agent_tiger.discovery_limits')
+    # An administrative read pool must not be selected for owner-only room DDL.
+    monkeypatch.setattr(corridor.agent.app.state,'pool',SimpleNamespace(raw=corridor.pool))
+    async with corridor.agent.app.router.lifespan_context(corridor.agent.app):
+        assert await corridor.pool.fetchval("SELECT to_regclass('agent_tiger.match_runs') IS NOT NULL")
