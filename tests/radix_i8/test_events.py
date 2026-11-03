@@ -169,7 +169,7 @@ async def pool():
         await conn.execute(DDL)
         await conn.execute(schema)
         await conn.execute(DDL)
-        await conn.execute('TRUNCATE agent_radix.regulation_runs,agent_radix.passive_scans,agent_radix.passive_domains CASCADE')
+        await conn.execute('TRUNCATE agent_radix.page_hashes,agent_radix.regulation_runs,agent_radix.passive_scans,agent_radix.passive_domains CASCADE')
     try: yield pool
     finally: await pool.close()
 
