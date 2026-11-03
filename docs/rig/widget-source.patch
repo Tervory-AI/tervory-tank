@@ -1,3 +1,80 @@
+diff --git a/tests/cart.test.ts b/tests/cart.test.ts
+new file mode 100644
+index 0000000..111b829
+--- /dev/null
++++ b/tests/cart.test.ts
+@@ -0,0 +1,16 @@
++import { expect, it } from "vitest";
++import { lineProjection, orderProjection, renderCart, type CartView } from "../widget/src/ui/cart";
++import { neutral } from "../widget/src/theme/themes";
++import { renderView, type View } from "../widget/src/ui/render";
++const line = lineProjection({ id: "placeholder-line", product_id: "placeholder-sku", title: "placeholder product", quantity: 2, price: "12.00", currency: "USD", kind: "stock", delivery: { min_days: 2, max_days: 3 }, source: { name: "placeholder-private-source", url: "https://placeholder-private.example", cost: "9.00" } });
++const view = (screen: CartView["screen"]): CartView => ({ store: "placeholder store", screen, lines: [line], product: line, order: null, busy: false, now: Date.parse("2026-11-03T12:00:00Z") });
++it("empty cart uses no fixture products", () => { const state = view("cart"); state.lines = []; expect(renderCart(state)).toContain("Your cart is empty"); expect(renderCart(state)).not.toContain("placeholder product"); });
++it("added state uses server quantity and price", () => expect(renderCart(view("added"))).toContain("Quantity: 2 · Cart total: $24.00"));
++it("price change requires review", () => { const state = view("changed"); state.lines = [{ ...line, price: "13.00", previous: { price: "12.00", delivery: line.delivery } }]; expect(renderCart(state)).toContain("Price changed: $12.00 → $13.00."); });
++it("unavailable choice disables checkout", () => { const state = view("unavailable"); state.lines = [{ ...line, unavailable: true }]; expect(renderCart(state)).toMatch(/data-action="cart-handoff"[^>]* disabled/); });
++it("expired copy confirms server cancellation", () => expect(renderCart(view("rechecking"))).toContain("The unpaid store order was cancelled."));
++it.each([false, true])("paid/late order: %s", late => { const state = view("paid"); state.order = orderProjection({ id: "placeholder-checkout", state: "placed", expires_at: "2026-11-03T12:05:00Z", payment_confirmed: true, late_payment: late, total: "24.00", currency: "USD", number: "placeholder-order", lines: [line] }); expect(renderCart(state)).toContain(late ? "Payment received after the window" : "Payment confirmed"); expect(renderCart(state)).toContain("Total paid: $24.00"); });
++it("time left comes from server expires_at", () => { const state = view("return"); state.order = orderProjection({ id: "placeholder-checkout", state: "pending", expires_at: "2026-11-03T12:02:00Z" }); expect(renderCart(state)).toContain("02:00"); state.now += 31000; expect(renderCart(state)).toContain("01:29"); });
++it("checkout unavailable uses approved copy", () => expect(renderCart(view("error"))).toContain("The 5-minute window has not started."));
++it("supplier fields never enter state", () => { expect(JSON.stringify(line)).not.toMatch(/private|source|cost|https:/); });
++it("quote output remains independent", () => { const state = { theme: neutral, screen: "home", query: "", results: [], selectedId: null, product: null, setups: [], activeTier: null, graph: null, expanded: [], swap: null, askQuestion: "", askAnswer: null, askCites: "", linkUrl: "", linkRequestId: null, linkError: null, quote: null, message: null, customizedTiers: [] } as View; expect(renderCart(view("search"))).toBe(""); expect(renderView(state)).not.toContain("cart-"); });
+diff --git a/tests/custom-nation-privacy-slot.test.ts b/tests/custom-nation-privacy-slot.test.ts
+new file mode 100644
+index 0000000..ace3d8b
+--- /dev/null
++++ b/tests/custom-nation-privacy-slot.test.ts
+@@ -0,0 +1,49 @@
++import { expect, it } from "vitest";
++import { customNation, neutral } from "../widget/src/theme/themes";
++import { renderView, type View } from "../widget/src/ui/render";
++
++it.each([customNation, neutral])("keeps the $id privacy slot empty and hidden while wording is unavailable", (theme) => {
++  const state: View = {
++    theme, screen: "home", query: "", results: [], selectedId: null,
++    product: null, setups: [], activeTier: null, graph: null, expanded: [],
++    swap: null, askQuestion: "", askAnswer: null, askCites: "", linkUrl: "",
++    linkRequestId: null, linkError: null, quote: null, message: null,
++    customizedTiers: [],
++  };
++  expect(renderView(state)).not.toContain("data-quote-privacy");
++  state.quote = {
++    kind: "setup", title: "Offline setup", totalLabel: "", name: "", email: "",
++    error: null, requestId: null,
++  };
++  const quote = renderView(state);
++  expect(quote.match(/<div data-quote-privacy hidden><\/div>/g)).toHaveLength(1);
++  expect(quote).toContain(`${theme.copy.quoteSend}</button>\n      <div data-quote-privacy hidden></div>`);
++  state.quote = null;
++  state.screen = "missing";
++  const link = renderView(state);
++  expect(link.match(/<div data-quote-privacy hidden><\/div>/g)).toHaveLength(1);
++  expect(link).toContain(`${theme.copy.requestQuote}</button>\n      <div data-quote-privacy hidden></div>`);
++});
++
++
++it.each([customNation, neutral])("renders only store-supplied escaped notice text in both forms for $id", (theme) => {
++  const state: View = {
++    theme, screen: "missing", query: "", results: [], selectedId: null,
++    product: null, setups: [], activeTier: null, graph: null, expanded: [],
++    swap: null, askQuestion: "", askAnswer: null, askCites: "", linkUrl: "",
++    linkRequestId: null, linkError: null, quote: null, message: null,
++    customizedTiers: [], noticeReady: true,
++    notice: {text: '<script>alert("policy")</script> & policy', url: 'https://shop.example.test/privacy?x="value"', version: "offline-version"},
++  };
++  for (const screen of ["missing", "home"] as const) {
++    state.screen = screen;
++    state.quote = screen === "home" ? {kind: "product", title: "Offline", totalLabel: "", name: "", email: "", error: null, requestId: null} : null;
++    const html = renderView(state);
++    expect(html).toContain('data-quote-privacy><a href="https://shop.example.test/privacy?x=&quot;value&quot;"');
++    expect(html).toContain('&lt;script&gt;alert(&quot;policy&quot;)&lt;/script&gt; &amp; policy');
++    expect(html).not.toContain('<script>');
++    state.noticeReady = false;
++    expect(renderView(state)).toMatch(/type="submit" disabled/);
++    state.noticeReady = true;
++  }
++});
 diff --git a/tests/rig4.test.ts b/tests/rig4.test.ts
 index 884811b..91369d5 100644
 --- a/tests/rig4.test.ts
@@ -194,10 +271,10 @@ index 9625631..573a4de 100644
 -  if (initial.sample) { const sample = node("p", "SAMPLE DATA"); sample.className = "sample"; root.append(sample); }
 diff --git a/widget/src/ui/cart-controller.ts b/widget/src/ui/cart-controller.ts
 new file mode 100644
-index 0000000..5fa7b02
+index 0000000..8bca0d4
 --- /dev/null
 +++ b/widget/src/ui/cart-controller.ts
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,88 @@
 +import { lineProjection, orderProjection, renderCart, type CartView } from "./cart";
 +type Request = (operation: string, data: Record<string, unknown>) => Promise<Record<string, unknown>>;
 +export class CartController {
@@ -209,13 +286,16 @@ index 0000000..5fa7b02
 +  private generation = 0;
 +  constructor(private request: Request, private changed: () => void, private storageKey: string) {}
 +  async start(): Promise<void> {
++    const generation = this.generation;
 +    try {
 +      const result = await this.request("session", {});
++      if (generation !== this.generation) return;
 +      if (result.mode !== "cart" || typeof result.session !== "string") return;
 +      this.enabled = true; this.view.store = typeof result.store_name === "string" ? result.store_name : "";
 +      try { this.session = sessionStorage.getItem(this.storageKey) || result.session; sessionStorage.setItem(this.storageKey, this.session); } catch { this.session = result.session; }
 +      await this.read();
-+      this.timer = window.setInterval(() => { this.view.now = Date.now(); if (this.view.order) void this.poll(); this.changed(); }, 1000);
++      if (generation !== this.generation) return;
++      this.timer = window.setInterval(() => { this.view.now = Date.now(); if (this.view.order && !this.view.order.payment_confirmed) void this.poll(); }, 1000);
 +    } catch { /* Quote stores have no cart session; their rendering stays unchanged. */ }
 +  }
 +  stop(): void { window.clearInterval(this.timer); this.generation++; }
@@ -285,7 +365,7 @@ index 0000000..5fa7b02
 +}
 diff --git a/widget/src/ui/cart.ts b/widget/src/ui/cart.ts
 new file mode 100644
-index 0000000..a77831f
+index 0000000..0d59bcf
 --- /dev/null
 +++ b/widget/src/ui/cart.ts
 @@ -0,0 +1,75 @@
@@ -356,7 +436,7 @@ index 0000000..a77831f
 +  else {
 +    const notices: Partial<Record<CartScreen, [string, string]>> = { rechecking: ["Your 5-minute window ended", "The unpaid store order was cancelled. We’re checking current prices and stock before checkout can continue."], changed: ["Prices and delivery updated", "Review the changes below before continuing to this store’s checkout. A new 5-minute payment window starts when checkout begins again."], unchanged: ["Prices and stock are unchanged", "Your cart is ready. A new 5-minute payment window starts at this store’s checkout."], unavailable: ["An item is no longer available", "Choose Back order or Remove item below before continuing."] };
 +    const message = notices[screen];
-+    body = `${message ? notice(...message) : ""}<div class="cart-layout"><div class="cart-lines">${lines.map(line => lineCard(line, true, false, busy || screen === "rechecking")).join("")}</div><aside class="cart-card cart-summary"><h2>SUMMARY</h2><p class="cart-price">Total: ${esc(price(total(lines), lines[0].currency))}</p><p>${screen === "unavailable" ? "Choose back order or remove item before checkout." : `${lines.length} lines · ${lines.reduce((n, line) => n + line.quantity, 0)} items`}</p>${button(screen === "rechecking" ? "Checking prices and stock…" : screen === "unavailable" ? "Choose back order or remove item" : "Continue to store checkout", "handoff", false, busy || screen === "rechecking" || screen === "unavailable")}<p>Payment is completed at this store’s own checkout. Rig never takes payment.</p></aside></div>`;
++    body = `${message ? notice(...message) : ""}<div class="cart-layout"><div class="cart-lines">${lines.map(line => lineCard(line, true, false, busy || screen === "rechecking" || Boolean(order))).join("")}</div><aside class="cart-card cart-summary"><h2>SUMMARY</h2><p class="cart-price">Total: ${esc(price(total(lines), lines[0].currency))}</p><p>${screen === "unavailable" ? "Choose back order or remove item before checkout." : `${lines.length} lines · ${lines.reduce((n, line) => n + line.quantity, 0)} items`}</p>${button(screen === "rechecking" ? "Checking prices and stock…" : screen === "unavailable" ? "Choose back order or remove item" : "Continue to store checkout", "handoff", false, busy || screen === "rechecking" || screen === "unavailable")}<p>Payment is completed at this store’s own checkout. Rig never takes payment.</p></aside></div>`;
 +  }
 +  return `<div class="rig-cart"><header><strong>${esc(view.store)}</strong><span>Rig</span></header><h1 tabindex="-1">${heading}</h1>${body}</div>`;
 +}
