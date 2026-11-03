@@ -72,6 +72,8 @@ async def scaffold(ctx: JobContext) -> dict:
     """Build one site for this job's tenant. The tenant comes from the job, not the brief."""
     module = _scaffold_module()
     result = await module.execute(ctx.input, str(ctx.tenant_id))
+    scanner = _load_beside(_figma_cache(), "tisan_repo_scan", "repo_scan.py")
+    result = await scanner.attach(result, str(ctx.tenant_id))
     if result.get("ok") is True and result.get("slug"):
         from chassis.events import publish
         await publish(str(ctx.tenant_id), "tisan.build.ready", str(ctx.job_id), {
@@ -93,7 +95,7 @@ def _figma_cache() -> dict[str, Any]:
 
 
 # Ten minutes for a site build. Ping and every other agent stay on the chassis default.
-SCAFFOLD_TIMEOUT_S = 600
+SCAFFOLD_TIMEOUT_S = 1200
 
 app = create_app(
     agent=AGENT,

@@ -275,6 +275,11 @@ async def handle(ctx: Any) -> dict:
     failure = None
     try:
         result = await execute(ctx.input, str(ctx.tenant_id), tank=ctx.tank)
+        try:
+            from agents.tisan import repo_scan
+        except ModuleNotFoundError:
+            import repo_scan
+        result = await repo_scan.attach(result, str(ctx.tenant_id))
     except Exception as exc:
         # An execution failure is measured too; never persist exception messages.
         failure = exc

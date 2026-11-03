@@ -202,6 +202,7 @@ def build_router():
         operation = confirmation(actor, 'tisan.handover', args.model_dump(mode='json', exclude_none=True))
         return await result(actor, 'tisan.handover', await Store(db()).move(actor.tenant_id, actor.user_id, operation,
                             args.slug, 'accepted'))
+    router.include_router(__import__('tisan_pipeline').build_router())
     return router
 
 
