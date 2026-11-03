@@ -48,6 +48,12 @@ jobs:
         working-directory: cli
       - run: node --check bin/tervory.mjs && node --check src/client.mjs
         working-directory: cli
+      - name: Prepare the local code-command sandbox
+        run: |
+          if ! command -v bwrap >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y bubblewrap
+          fi
       - run: npm test
         working-directory: cli
       - run: npm pack --dry-run
