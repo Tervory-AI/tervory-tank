@@ -1371,6 +1371,21 @@ def public_card(card: dict) -> dict:
     # view fields or copy. Execution, confirmation and receipts keep the real tool.
     if card.get("tool") == "radix.changes":
         public["tool"] = "radix.findings"
+        result = card.get("result")
+        if isinstance(result, dict) and any(isinstance(result.get(key), list) for key in ("new", "fixed", "unchanged")):
+            # Reuse the approved Rule value for existing comparison/item data.
+            # Raw arrays and stored tool rule IDs remain unchanged.
+            rows = []
+            for state in ("new", "fixed", "unchanged"):
+                for finding in result.get(state, []) or []:
+                    if not isinstance(finding, dict):
+                        continue
+                    rule = str(finding.get("rule") or "")
+                    item = finding.get("item")
+                    if isinstance(item, str) and item != finding.get("file"):
+                        rule += " · " + item
+                    rows.append({**finding, "rule": state + " · " + rule})
+            public["result"] = {**result, "findings": rows}
     return public
 
 
