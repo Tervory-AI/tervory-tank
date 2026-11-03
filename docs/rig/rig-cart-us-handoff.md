@@ -241,3 +241,54 @@ preserves an already saved value when the approved form omits it. An absent
 signing value fails webhook verification closed; it is never substituted with
 an access token, generated, returned or logged. These gaps no longer block gates
 2 or 3 under the founder's explicit instruction. Main is not merged again.
+
+## Gate 2 completed — 3 November 2026
+
+Built the 52 approved widget/admin variants from the frame register. The two
+founder-authorised gaps remain under Waiting for Figma above. The three A07
+forms omit signing fields; the scoped sealed vault preserves an existing
+signing value and accepts a future approved input. Confirmed-payment placement
+failures show the existing Needs a person status without an untrue sentence.
+
+Implementation: `workspace/app/rig/admin/commerce-admin.tsx`, `types.ts`,
+`actions.ts`, `page.tsx`, `retailer-admin.css`, and the exact select-chevron asset;
+widget source remains in `docs/rig/widget-source.patch`, rebuilt with the pinned
+`agents/rig/rigbox/quotes/rebuild-widget.sh`. Cart-mode session discovery leaves
+quote content unchanged. Cart previews, atomic line edits, product mapping,
+server-side rechecks and public order projections use the existing cart routes.
+No Workspace navigation or shell file changed.
+
+Evidence: `tests/rig_cart_ui/` contains all 52 built/reference pairs at 1440/375,
+quote before/after pairs, and `gate2-verification.txt`. Figma annotation bands
+and its future navigation are excluded from the implementation. Offline fixture
+IDs differ, font rasterization can differ, and quantity inputs are 44px rather
+than Figma's 42px to meet the explicit minimum target requirement. These are
+synthetic browser captures, not founder/live-store acceptance.
+
+Verification completed:
+
+- All 67 existing `tests/test_rig*.py` files: **771 passed, 19 skipped**, no failed files.
+- Final focused cart/admin run, including the additional atomic-edit/recheck test: **28 passed**.
+- Pinned widget rebuild: **36 Vitest tests passed**; TypeScript/Vite/bundle guards passed.
+- Quote rendered content DOM and screenshot pixels are identical before/after at both widths.
+- Real React SSR/browser checks: saved credentials absent, blank password input,
+  platform selector keyboard focus, and confirmed/unconfirmed Needs a person rows pass.
+- Workspace `npm run build` and its CI Node commands (contract, header,
+  device-login fetch, chats stalls, CLI sign-ins) pass, as does Rig's admin-route test.
+- Changed Python Ruff E9/F and whitespace checks pass.
+
+Commands: `TMPDIR=.rig-validation bash agents/rig/rigbox/quotes/rebuild-widget.sh`;
+`node tests/rig_cart_ui/{capture,admin-check,quote-compare}.cjs` (individual invocations);
+`npm run build` in workspace; per-file pytest commands in the verification file,
+with sockets blocked except loopback. Disposable Postgres is task-owned,
+127.0.0.1:32875, never a live database. The complete regression pass precedes
+final CSS/copy-only widget alignment; widget rebuild and comparisons cover that
+alignment. Final L1 verification will run the Rig suite again.
+
+Additional official API references for gate 2: Shopify's
+[productVariants query](https://shopify.dev/docs/api/admin-graphql/latest/queries/productVariants)
+and BigCommerce's
+[Get Store Information](https://docs.bigcommerce.com/developer/api-reference/rest/admin/management/store-information/v2/get-store-information).
+
+No PR was opened or merged. Claude opens the PR; hosted tank/workspace CI results
+must be recorded for its final head and are not inferred from local checks.
