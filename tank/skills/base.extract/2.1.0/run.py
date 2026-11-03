@@ -630,7 +630,10 @@ def _product(node: dict, offer: dict, page: dict, method: str) -> dict:
 
 def _structured_products(nodes: list[dict], page: dict, method: str) -> list[dict]:
     products = []
+    offered = {id(node["itemOffered"]) for node in nodes if "offer" in _leaves(node) and isinstance(node.get("itemOffered"), dict)}
     for node in nodes:
+        if id(node) in offered:
+            continue
         leaves = _leaves(node)
         if _kind(leaves) == "product":
             offers = [offer for offer in _as_list(node.get("offers")) if isinstance(offer, dict)]
