@@ -266,3 +266,39 @@ async def test_linked_page_404_is_gone_but_500_is_incomplete(tmp_path):
         else:
             assert result['page_hashes'] is None
             assert not any(f['rule']=='gone' for f in result['findings'])
+
+
+@pytest.mark.asyncio
+async def test_watch_completion_survives_newer_event_queue_row(pool,monkeypatch):
+    import passive_gateway as gateway
+    import passive_routes as routes
+    from regulation_events import Queue
+    from test_events import message
+    store=await watched(pool)
+    class Server:
+        def __init__(self,*args,**kwargs): pass
+        def start(self): return self
+        def close(self): pass
+    async def proof(*args): return True
+    monkeypatch.setattr(gateway,'private_bind_address',lambda:'127.0.0.1')
+    lease=gateway.Lease(store,check=proof,server=Server)
+    monkeypatch.setattr(gateway.app.state,'lease',lease,raising=False)
+    async def scanner(*args):
+        await Queue(pool).enqueue(A,message())
+        return []
+    result=await routes.execute(store,routes.Scan(tenant_id=A,target=TARGET,
+        artifact=passive_store.watch_artifact(DOMAIN)),watched=True,scanner=scanner,
+        http=httpx.AsyncClient(transport=httpx.ASGITransport(app=gateway.app)))
+    assert result['status']=='complete'
+    newer=await store.changes(A,DOMAIN)
+    assert newer['status']=='pending' and newer['scan_id']!=result['scan_id']
+
+
+@pytest.mark.parametrize('host,expected', [('shop.placeholder.example',[]),
+    ('deep.shop.placeholder.example',['tls-name'])])
+def test_watched_subdomain_certificate_wildcards_use_standard_matching(host,expected):
+    from live import tls_findings
+    cert=certificate(30)
+    cert['subjectAltName']=[('DNS','*.placeholder.example')]
+    result=tls_findings(cert,'TLSv1.3','https://'+host+'/',host=host)
+    assert [f['rule'] for f in result]==expected
