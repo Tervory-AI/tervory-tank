@@ -5,7 +5,7 @@ from dataclasses import replace
 import json
 from uuid import UUID
 
-from semantic_cache import NUMBER
+from semantic_cache import NUMBER, NEGATION
 from trigger_bot_grounding import FAQ_THRESHOLD, PRICE_OR_STOCK, Passage, eligible, grounded
 
 
@@ -27,7 +27,8 @@ async def respond(tenant: UUID, question: str, *, retrieve, route, live_rig, rec
             safe.append(passage)
     for passage in safe:
         if (passage.kind == 'faq' and passage.approved_answer and passage.score >= FAQ_THRESHOLD
-                and NUMBER.findall(question.casefold()) == NUMBER.findall(passage.text.casefold())):
+                and NUMBER.findall(question.casefold()) == NUMBER.findall(passage.text.casefold())
+                and NEGATION.findall(question.casefold()) == NEGATION.findall(passage.text.casefold())):
             answer, cited, outcome = passage.approved_answer, [passage], 'faq'
             break
     if answer is None and safe:
