@@ -1291,23 +1291,26 @@ class TigerMatchPage(Body):
     human_check: bool = False
 
 
-async def tiger_link(tenant, match: dict) -> None:
-    # URL uniqueness is the existing alert-context contract; never overwrite
-    # another SKU's explicit binding, even if the page claims several products.
+async def tiger_link(tenant, match: dict) -> bool:
+    from main import _tiger_call
+    # Hold the evidence row and URL binding together through watch creation.
+    # Concurrent confirmation/rejection cannot leave a rejected row linked.
     async with db().acquire() as conn:
         async with conn.transaction():
+            current = await conn.fetchrow('SELECT state FROM agent_tiger.matches WHERE tenant_id=$1 AND id=$2 FOR UPDATE', tenant, match['id'])
+            if current is None or current['state'] == 'rejected':
+                return False
             await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', str(tenant) + ':' + match['url'])
             linked = await conn.fetchval('SELECT sku FROM tank.access_feed_links WHERE tenant_id=$1 AND url=$2', tenant, match['url'])
             if linked is not None and linked != match['sku']:
-                return
+                return False
+            response = await _tiger_call('POST', '/watchlist', [], json.dumps({'tenant_id': str(tenant), 'url': match['url'], 'every': '6h',
+                'alert_price': True, 'alert_stock': True, 'alert_new_product': True, 'alert_below_cost': True, 'alert_market_gap': True}).encode())
+            if response.status_code not in {201,409}:
+                raise HTTPException(503, 'Tiger is unreachable')
             await conn.execute('INSERT INTO tank.access_feed_links(tenant_id,url,sku) VALUES($1,$2,$3) ON CONFLICT(tenant_id,url) DO NOTHING', tenant, match['url'], match['sku'])
-    from main import _tiger_call
-    response = await _tiger_call('POST', '/watchlist', [], json.dumps({'tenant_id': str(tenant), 'url': match['url'], 'every': '6h',
-        'alert_price': True, 'alert_stock': True, 'alert_new_product': True, 'alert_below_cost': True, 'alert_market_gap': True}).encode())
-    if response.status_code not in {201,409}:
-        raise HTTPException(503, 'Tiger is unreachable')
-    async with db().acquire() as conn:
-        await conn.execute("UPDATE agent_tiger.matches SET state='confirmed' WHERE tenant_id=$1 AND id=$2 AND state<>'rejected'", tenant, match['id'])
+            await conn.execute("UPDATE agent_tiger.matches SET state='confirmed' WHERE tenant_id=$1 AND id=$2", tenant, match['id'])
+            return True
 
 
 @router.post('/rig/tiger/match-page')
@@ -1431,7 +1434,8 @@ async def tiger_match_decide(decision: str, request: Request, actor: Actor = Dep
         own = next((p for p in await tiger_catalogue(actor.tenant_id) if p['sku'] == row['sku']), None)
         if own is None or tiger_identity_match(own, evidence) is None:
             raise HTTPException(409, 'Confirmed action required')
-        await tiger_link(actor.tenant_id, dict(row))
+        if not await tiger_link(actor.tenant_id, dict(row)):
+            raise HTTPException(409, 'Confirmed action required')
     else:
         async with db().acquire() as conn:
             await conn.execute("UPDATE agent_tiger.matches SET state='rejected' WHERE tenant_id=$1 AND id=$2 AND state='suggested'", actor.tenant_id, body.match_id)
