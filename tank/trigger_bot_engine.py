@@ -1,12 +1,18 @@
 """One evidence-bound answer path for Command and the future public visitor API."""
 from __future__ import annotations
 
-from dataclasses import replace
 import json
+import logging
+from dataclasses import replace
 from uuid import UUID
 
-from semantic_cache import NUMBER, NEGATION
-from trigger_bot_grounding import FAQ_THRESHOLD, PRICE_OR_STOCK, Passage, eligible, grounded
+from semantic_cache import NEGATION, NUMBER
+from trigger_bot_grounding import (
+    FAQ_THRESHOLD,
+    PRICE_OR_STOCK,
+    eligible,
+    grounded,
+)
 
 
 async def respond(tenant: UUID, question: str, *, retrieve, route, live_rig, receipt, voice):
@@ -47,8 +53,8 @@ async def respond(tenant: UUID, question: str, *, retrieve, route, live_rig, rec
                 candidate, used = verified
                 if not PRICE_OR_STOCK.search(candidate) or all(p.kind == 'rig' for p in used):
                     answer, cited, outcome = candidate, used, 'sources'
-        except Exception:
-            pass  # No model/provider text or exception reaches the visitor.
+        except Exception as exc:  # noqa: BLE001 — fail closed at service boundary
+            logging.getLogger(__name__).warning('Bot route unavailable (%s)', type(exc).__name__)
     if ledger is None:
         ledger = str(await receipt(tenant, 'trigger.bot.answer'))
     return {'state': 'bot' if answer is not None else 'handed_over', 'answer': answer,
