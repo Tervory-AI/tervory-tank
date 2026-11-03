@@ -1527,6 +1527,11 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             # On failures, raw provider detail is not exposed or stored.
             if card["status"] == "confirmed":
                 card["result"] = result
+                if action.tool == 'trigger.feedback' and result.get('status') == 'changes_requested':
+                    # Feedback is code-only. A new paid draft still needs its own Confirm.
+                    revision = validate_action(PlannedAction(tool='trigger.revise',
+                        arguments={'write_id': result['write_id']}), actor)
+                    await propose_action(conn, row, state, revision, actor)
             else:
                 detail = result.get("detail") if isinstance(result, dict) else None
                 card["error"] = (detail if action.tool == "radix.passive.scan"
