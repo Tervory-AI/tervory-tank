@@ -1,4 +1,4 @@
-# 1.0.2
+# 1.1.0
 
 Share the unchanged deterministic scanner with Tisan for tenant-scoped build quality checks through Tank. Existing approved versions remain untouched; this package requires founder approval.
 
