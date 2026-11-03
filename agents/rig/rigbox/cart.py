@@ -131,7 +131,10 @@ class Cart:
                 # Back-order is explicit; price comes from the store's own public product.
                 if not needs_supply(product):
                     raise CommerceError('stock')
-                line.update(kind='back_order', price=money(product['price']), delivery={'status': 'back_order'})
+                shown = await self.service.product(tenant, sku)
+                if shown['price']['currency'] != line['currency']:
+                    raise CommerceError('currency')
+                line.update(kind='back_order', price=money(shown['price']['amount']), delivery={'status': 'back_order'})
                 private = {'kind': 'back_order'}
             else:
                 raise CommerceError('stock')
