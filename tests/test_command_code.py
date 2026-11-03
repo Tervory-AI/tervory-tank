@@ -230,6 +230,8 @@ async def test_code_tervory_pending_card_project_privacy_and_no_dispatch(api, mo
     tasks = await pool.fetch("SELECT input::text,result::text FROM tank.tasks WHERE tenant_id=$1", TENANT)
     assert note not in json.dumps(snapshot) + events + json.dumps([dict(row) for row in tasks])
     route.return_value.content = json.dumps({'requests': [request, {'name': 'tervory', 'arguments': {'tool': 'placeholder.unknown', 'arguments': {}}}]})
+    route.return_value.ledger_id = uuid.uuid4()
+    await pool.execute("INSERT INTO tank.ledger(id,tenant_id,agent,task_type,model,cost_usd) VALUES($1,$2,'orchestrator','command.code','placeholder-model',0)", route.return_value.ledger_id, TENANT)
     denied = await client.post(f'/v1/command/threads/{thread}/code-turn', json={'text': 'denied'})
     assert denied.status_code == 422
     assert len((await client.get(f'/v1/command/threads/{thread}')).json()['cards']) == 1
