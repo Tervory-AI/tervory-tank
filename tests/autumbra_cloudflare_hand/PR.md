@@ -136,3 +136,21 @@ database settings and restricts sockets to loopback. An initial invocation with
 the smaller local environment exited 4 because pytest-socket was absent; the
 existing CI environment supplied it. One old expectation was updated to the
 required fixed error when a real shield's token is unavailable.
+
+## Review fix 2 — opt-in exact SNI admission
+
+`agents/radix/egress.py` adds `Proxy(require_sni=False)`. Both Enforce proxies
+opt in. OpenSSL's existing ClientHello parser reads bounded bytes with a
+five-second deadline and admits only an exact `verified_host` SNI; it forwards
+the original bytes unchanged and creates no certificate or key. Mismatched,
+missing, case-changed and trailing-dot SNI, plaintext and truncated handshakes
+are refused before opening the upstream connection. Radix defaults remain off.
+The CI Compose probe now sends actual ClientHellos and checks rejected SNI too.
+TLS layout references: [RFC 6066](https://www.rfc-editor.org/rfc/rfc6066#section-3)
+and [RFC 8446](https://www.rfc-editor.org/rfc/rfc8446#section-4.1.2).
+
+Command: `/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python .proof/run_review.py tests/test_autumbra_a3_review.py`
+Exit 0: **17 passed in 7.50s**.
+Command: `/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python .proof/run_review.py tests/test_bucket1_radix.py tests/test_radix_passive.py`
+Exit 0: **48 passed, 6 skipped in 2.23s**, including existing opaque relay and
+pinned-destination behavior with SNI admission disabled.

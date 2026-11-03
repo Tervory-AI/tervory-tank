@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import ssl
 import subprocess
 import sys
 import time
@@ -57,6 +58,18 @@ def connected(host, port):
         return False
 
 
+def client_hello(host):
+    outgoing = ssl.MemoryBIO()
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    client = context.wrap_bio(ssl.MemoryBIO(), outgoing, server_hostname=host)
+    try:
+        client.do_handshake()
+    except ssl.SSLWantReadError:
+        pass
+    return outgoing.read()
+
+
 def probe():
     proxy_host, allowed = sys.argv[2:4]
     for _ in range(60):
@@ -74,8 +87,14 @@ def probe():
             reply = conn.recv(4096)
             assert (b"200 Connection Established" in reply) == (target == allowed+":443"), (target, reply)
             if target == allowed+":443":
-                conn.sendall(b"GET / HTTP/1.1\r\nHost: offline\r\n\r\n")
+                conn.sendall(client_hello(allowed))
                 assert b"204 No Content" in conn.recv(4096)
+    for hello in (client_hello("example.com"), client_hello(None), b"GET / HTTP/1.1\r\n\r\n"):
+        with socket.create_connection((proxy_host, 8080), 2) as conn:
+            conn.sendall(f"CONNECT {allowed}:443 HTTP/1.1\r\n\r\n".encode())
+            assert b"200 Connection Established" in conn.recv(4096)
+            conn.sendall(hello)
+            assert b"204 No Content" not in conn.recv(4096), "SNI admission bypass"
     for host in ("fake-api", "fake-health", "tank", "other-client", "health-observer"
                  if proxy_host == "egress-proxy" else "enforce", "1.1.1.1",
                  "172.30.242.10", "172.30.243.10", "172.30.244.10", "172.30.245.10"):

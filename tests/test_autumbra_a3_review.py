@@ -95,3 +95,77 @@ def test_failed_approval_is_requeued_with_same_control(monkeypatch, tmp_path):
     monkeypatch.setattr(control, '_request', original)
     assert enforce_drain_once(queue, settings=settings(), control=control, data_dir=tmp_path)['outcome'] == 'undone'
     assert not control.blocked
+
+
+def client_hello(host, version=None):
+    import ssl
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    if version is not None:
+        context.maximum_version = version
+    outgoing = ssl.MemoryBIO()
+    client = context.wrap_bio(ssl.MemoryBIO(), outgoing, server_hostname=host)
+    try:
+        client.do_handshake()
+    except ssl.SSLWantReadError:
+        pass
+    return outgoing.read()
+
+
+@pytest.mark.parametrize('host', ['api.cloudflare.com', 'tervory.com'])
+@pytest.mark.parametrize('case', ['matching', 'mismatch', 'missing', 'plaintext', 'truncated', 'case', 'trailing_dot'])
+def test_opt_in_sni_refuses_before_upstream(host, case):
+    hello = (b'GET / HTTP/1.1\r\n\r\n' if case == 'plaintext' else
+             client_hello(None if case == 'missing' else
+                          'example.com' if case == 'mismatch' else
+                          host.upper() if case == 'case' else
+                          host+'.' if case == 'trailing_dot' else host))
+    if case == 'truncated':
+        hello = hello[:10]
+    connected = []
+    received = []
+    threads = []
+    def upstream(ip, port):
+        import threading
+        one, two = socket.socketpair()
+        connected.append((ip, port))
+        def collect():
+            with two:
+                raw = b''
+                while len(raw) < len(hello):
+                    chunk = two.recv(65536)
+                    if not chunk:
+                        break
+                    raw += chunk
+                received.append(raw)
+                two.sendall(b'accepted')
+        thread = threading.Thread(target=collect)
+        thread.start()
+        threads.append(thread)
+        return one
+    server = Server(Proxy(verified_host=host, allow_storage=False, require_sni=True,
+                          resolve=lambda name: '1.1.1.1', connect=upstream)).start()
+    try:
+        with socket.create_connection(('127.0.0.1', server.port), timeout=2) as conn:
+            conn.sendall(f'CONNECT {host}:443 HTTP/1.1\r\n\r\n'.encode())
+            assert b'200 Connection Established' in conn.recv(4096)
+            # Exercise partial TCP delivery of the ClientHello.
+            conn.sendall(hello[:7])
+            conn.sendall(hello[7:])
+            if case == 'truncated':
+                conn.shutdown(socket.SHUT_WR)
+            reply = conn.recv(4096)
+            assert (reply == b'accepted') is (case == 'matching')
+        assert len(connected) == (1 if case == 'matching' else 0)
+        if case == 'matching':
+            assert received == [hello]
+    finally:
+        server.close()
+        for thread in threads:
+            thread.join(2)
+
+
+def test_radix_sni_default_off_preserves_plaintext_relay():
+    # Existing Radix contract allows opaque bytes; opt-in must not alter it.
+    original = Proxy()
+    assert original._require_sni is False
