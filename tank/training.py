@@ -600,6 +600,69 @@ async def save_court_text_pair(body: CourtTextPair, request: Request) -> dict[st
     return {"ok": True}
 
 
+@router.get("/status")
+async def training_status(actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]:
+    if not actor.founder:
+        raise HTTPException(403, "Founder access required")
+    region = runtime().box_region()
+    items: list[dict[str, Any]] = []
+    async with runtime().pool().acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT agent,
+              count(*) FILTER (WHERE active AND public AND NOT client_matter AND NOT holdout) AS ready,
+              count(*) FILTER (WHERE active AND public AND NOT client_matter AND holdout) AS holdout
+            FROM tank.training_pairs WHERE tenant_id=$1 AND region=$2 GROUP BY agent ORDER BY agent""",
+            PLATFORM_TENANT, region,
+        )
+        exports = {row["agent"]: row for row in await conn.fetch(
+            """SELECT DISTINCT ON (agent) agent,day,exported_at FROM tank.training_exports
+            WHERE region=$1 ORDER BY agent,day DESC""", region,
+        )}
+        for row in rows:
+            export = exports.get(row["agent"])
+            items.extend((
+                {"name": f"{row['agent']} pairs ready", "count": int(row["ready"]),
+                 "status": "ready"},
+                {"name": f"{row['agent']} holdout", "count": int(row["holdout"]),
+                 "status": "held out"},
+                {"name": f"{row['agent']} export", "count": int(row["ready"]),
+                 "status": f"complete {export['day']}" if export else "not exported"},
+            ))
+        job = await conn.fetchrow(
+            """SELECT id,model_repo,estimated_usd,actual_usd,created_at FROM tank.training_jobs
+            WHERE tenant_id=$1 AND region=$2 ORDER BY created_at DESC LIMIT 1""", actor.tenant, region,
+        )
+        if job:
+            items.append({"name": str(job["model_repo"]), "count": 1,
+                          "status": "complete" if job["actual_usd"] is not None else "running",
+                          "cost_usd": job["actual_usd"] if job["actual_usd"] is not None else job["estimated_usd"]})
+        if region == "za":
+            stored = {row["source_id"]: int(row["count"]) for row in await conn.fetch(
+                """SELECT source_id,count(DISTINCT document_id) AS count FROM zenas_pool.documents
+                WHERE jurisdiction='za' AND kind='case' AND effective_to IS NULL
+                  AND status IS DISTINCT FROM 'superseded' AND source_id=ANY($1::text[])
+                GROUP BY source_id""", sorted(OFFICIAL_ZA_CASE_SOURCES),
+            )}
+            split_rows = await conn.fetch(
+                """SELECT source_id,status,count(*) AS count FROM tank.judgment_splits
+                WHERE region='za' GROUP BY source_id,status""",
+            )
+            split = {(row["source_id"], row["status"]): int(row["count"]) for row in split_rows}
+            pairs = {row["source_id"]: int(row["count"]) for row in await conn.fetch(
+                """SELECT split_part(source_ref,':',1) AS source_id,count(*) AS count
+                FROM tank.training_pairs WHERE tenant_id=$1 AND region='za' AND agent='zenas'
+                  AND source='court_text' AND active GROUP BY split_part(source_ref,':',1)""", PLATFORM_TENANT,
+            )}
+            for source in sorted(OFFICIAL_ZA_CASE_SOURCES):
+                items.extend((
+                    {"name": f"{source} judgments stored", "count": stored.get(source, 0), "status": "stored"},
+                    {"name": f"{source} split", "count": split.get((source, "split"), 0), "status": "split"},
+                    {"name": f"{source} excluded", "count": split.get((source, "excluded"), 0), "status": "excluded"},
+                    {"name": f"{source} pairs ready", "count": pairs.get(source, 0), "status": "ready"},
+                ))
+    return {"items": items}
+
+
 @router.post("/tiger/{observation_id}/confirm")
 async def confirm_tiger(observation_id: uuid.UUID, actor: Reviewer = Depends(require_reviewer)) -> dict[str, bool]:
     if not actor.founder:
