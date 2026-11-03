@@ -19,7 +19,9 @@ export async function seatbeltProfile(root, mounts = []) {
       // Darwin uses canonical host paths instead of a synthetic mount tree.
       // /dev/null masks are replaced by the deny rule below.
       if (source !== '/dev/null') runtime.push(source, target);
-    } else if (operation === '--symlink') { i += 2; }
+    } else if (operation === '--symlink') {
+      i++; runtime.push(mounts[i++]); // Only the selected executable alias, never its parent directory.
+    }
     else if (operation === '--tmpfs') { i++; }
     else throw new Error('Code tool refused.');
   }
@@ -41,6 +43,7 @@ export async function seatbeltProfile(root, mounts = []) {
 ; Apple's system git launcher resolves the selected Xcode toolchain here.
 (allow file-read* file-map-executable (regex #"^/Applications/Xcode[^/]*[.]app/Contents/(Developer/usr|SharedFrameworks)(/|$)"))
 (allow file-read-metadata (regex #"^/Applications/Xcode[^/]*[.]app(/Contents(/Developer)?)?$"))
+(allow file-read* (literal "/private/var/select/sh") (literal "/var/select/sh"))
 (allow file-read* (literal "/var/db/xcode_select_link") (literal "/private/var/db/xcode_select_link"))
 (allow file-write* (subpath ${quote(root)}))
 (deny file-read* file-write* file-map-executable (regex #${quote(secrets)}))
