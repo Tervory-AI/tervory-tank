@@ -57,7 +57,7 @@ def live(tmp_path, monkeypatch):
             status = state.variables_status if variables else 200
             if state.mode == 'timeout':
                 threading.Event().wait(0.15)
-            if state.mode in {'500', '401', '404', '429', '302'}:
+            if state.mode in {'500', '401', '403', '404', '429', '302'}:
                 status = int(state.mode)
             body = json.dumps(state.variables if variables else state.nodes).encode()
             if state.mode == 'echo':
@@ -169,7 +169,7 @@ async def test_variables_403_preserves_unknown_collections_and_no_values(live):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('mode', ['timeout', '500', '401', '404', '429', '302',
+@pytest.mark.parametrize('mode', ['timeout', '500', '401', '403', '404', '429', '302',
                                   'oversized-header', 'oversized-stream', 'malformed', 'echo'])
 async def test_fixed_errors_never_store_or_log_tokens(live, mode, monkeypatch, caplog):
     caplog.set_level(logging.DEBUG)
@@ -241,23 +241,49 @@ def test_deploy_routing_and_all_proxy_copy_sources_resolve():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('index', [6, 7, 8])
-async def test_new_skill_recorded_rest_cases_through_proxy(live, index, monkeypatch):
+async def test_new_skill_nine_evals_are_eligible_and_free_offline(live, monkeypatch):
+    from skala import _parse_package, run_evals
     skill = load(SKILL / 'run.py', 'placeholder_skill')
     monkeypatch.setattr(skill, '_load', lambda: live.reader)
-    cases = [json.loads(line) for line in (SKILL / 'evals/cases.jsonl').read_text().splitlines()]
-    case = cases[index]
-    assert case['recorded_rest'] == 'recorded-rest.json'
-    live.variables_status = case.get('variables_status', 200)
-    tenant = case['input']['tenant_id']
-    # Patch storage only; run() still derives the tenant from its context.
     monkeypatch.setenv('DATA_DIR', str(live.root))
-    if case.get('must_refuse'):
-        with pytest.raises(live.reader.FigmaError) as raised:
-            await skill.run(case['input'], SimpleNamespace(tenant_id=tenant))
-        assert str(raised.value) == case['expected_error']['message']
-        assert live.requests == []
-    else:
-        result = await skill.run(case['input'], SimpleNamespace(tenant_id=tenant))
-        for key, value in case['expected'].items():
-            assert result[key] == value
+    package = _parse_package(SKILL / 'skill.yaml', SKILL)
+    cases = iter(package.cases)
+
+    async def execute(_package, payload, ctx):
+        case = next(cases)
+        if case.get('recorded_rest'):
+            assert case['recorded_rest'] == 'recorded-rest.json'
+            monkeypatch.setenv('FIGMA_TOKEN', TOKEN)
+        else:
+            monkeypatch.delenv('FIGMA_TOKEN', raising=False)
+        live.variables_status = case.get('variables_status', 200)
+        ctx.tenant_id = payload.get('tenant_id', TENANT)
+        return await skill.run(payload, ctx)
+
+    result = await run_evals(package, lambda: SimpleNamespace(tenant_id=TENANT, cost_usd=0, calls=0),
+                             execute=execute)
+    assert result['passed'] == result['total'] == 9, result['details']
+    assert result['eligible'] is True and result['score'] == 1.0
+    assert result['cost_usd'] == 0 and all(not row['used_model'] for row in result['details'])
+    assert len(live.requests) == 4  # two live successes, zero requests for the tenant refusal
+
+
+@pytest.mark.asyncio
+async def test_skill_context_identity_overrides_payload_tenant(live, monkeypatch):
+    skill = load(SKILL / 'run.py', 'placeholder_identity_skill')
+    monkeypatch.setattr(skill, '_load', lambda: live.reader)
+    payload = {'file_key': FILE, 'tenant_id': TENANT}
+    with pytest.raises(live.reader.FigmaError, match='not paired'):
+        await skill.run(payload, SimpleNamespace(tenant_id=OTHER))
+    with pytest.raises(RuntimeError, match='tenant_id is required'):
+        await skill.run(payload, SimpleNamespace())
+    assert live.requests == [] and live.connects == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status', [401, 500])
+async def test_other_variables_errors_are_fixed_failures_without_a_reading(live, status):
+    live.variables_status = status
+    with pytest.raises(live.reader.FigmaError, match=f'^{FAILED}$'):
+        await live.reader.execute({'file_key': FILE}, TENANT, data_root=live.root)
+    assert len(live.requests) == 2 and not live.root.exists()
