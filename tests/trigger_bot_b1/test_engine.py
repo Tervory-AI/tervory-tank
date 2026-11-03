@@ -187,3 +187,27 @@ async def test_no_crm_binding_fails_before_draft_claim_or_upstream(monkeypatch):
         pool.fetchrow.assert_not_awaited()
     finally:
         CONFIRMED.reset(bound)
+
+
+@pytest.mark.parametrize('currency', ['USD', 'R', 'BRL'])
+def test_currency_attached_to_existing_amount_cannot_change_its_unit(currency):
+    evidence = passage(text='Price ZAR3', kind='rig')
+    assert grounded({'answer': f'Price {currency}3', 'passage_ids': [str(POINT)]}, [evidence]) is None
+    assert grounded({'answer': 'Price ZAR3', 'passage_ids': [str(POINT)]}, [evidence]) is not None
+
+
+def test_reused_rig_security_and_smtp_implementations_keep_original_behavior():
+    import ast
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    shared = ast.parse((root / 'tank/trigger_bot_shared.py').read_text().replace('tank.trigger_bot_windows', 'agent_rig.rate_windows').replace('tank.trigger_bot_limits', 'agent_rig.rate_counts'))
+    def definition(tree, name):
+        return ast.dump(next(node for node in tree.body if getattr(node, 'name', None) == name), include_attributes=False)
+    for original, names in [
+        ('agents/rig/rigbox/quotes/limits.py', ['FailedKeyLimits', 'MemoryRateLimits', 'PgRateLimits']),
+        ('agents/rig/rigbox/quotes/keys.py', ['issue_embed_key']),
+        ('agents/rig/rigbox/reserve.py', ['SmtpMailer']),
+    ]:
+        source = ast.parse((root / original).read_text())
+        for name in names:
+            assert definition(shared, name) == definition(source, name), name
