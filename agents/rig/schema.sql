@@ -169,6 +169,8 @@ ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS auto_order boolean NOT 
 
 -- Founder-approved carry-over. Preserve any store settings already configured.
 ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS shop jsonb NOT NULL DEFAULT '{}'::jsonb;
+-- Store-owned stock delivery range. Empty means the store has not supplied a time.
+ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS delivery jsonb NOT NULL DEFAULT '{}'::jsonb;
 UPDATE agent_rig.retailers SET shop = '{"search":true,"mail_reservations":true,"centre_sku":"ARCHON-TYPE-B","not_stocked":[{"name":"Glock","also":["glok","glock"]},{"name":"Sig","also":["sig","sigsauer"]},{"name":"CZ","also":["cz"]}]}'::jsonb
 WHERE slug = 'archon' AND shop = '{}'::jsonb;
 
