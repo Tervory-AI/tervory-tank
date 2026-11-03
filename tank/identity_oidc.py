@@ -72,12 +72,15 @@ async def fetch(method: str, url: str, **kwargs) -> dict:
 async def discovery() -> dict:
     issuer, _ = settings()
     async with _lock:
+        if _cache.get('issuer') == issuer and _cache.get('expires', 0) > time.monotonic():
+            return dict(_cache['discovery'])
+    data = await fetch('GET', issuer + '/.well-known/openid-configuration')
+    if data.get('issuer') != issuer:
+        raise IdentityError('Identity discovery refused')
+    for name in ('device_authorization_endpoint', 'token_endpoint', 'jwks_uri'):
+        endpoint(data.get(name))
+    async with _lock:
         if _cache.get('issuer') != issuer or _cache.get('expires', 0) <= time.monotonic():
-            data = await fetch('GET', issuer + '/.well-known/openid-configuration')
-            if data.get('issuer') != issuer:
-                raise IdentityError('Identity discovery refused')
-            for name in ('device_authorization_endpoint', 'token_endpoint', 'jwks_uri'):
-                endpoint(data.get(name))
             _cache.clear()
             _cache.update(issuer=issuer, discovery=data, expires=time.monotonic() + 300)
         return dict(_cache['discovery'])
@@ -94,22 +97,25 @@ async def verify(token: str) -> dict:
         if header.get('alg') != 'RS256' or not isinstance(kid, str) or not kid or len(kid) > 200:
             raise IdentityError('Identity token refused')
         async with _lock:
-            keys = _cache.get('keys', [])
-            matches = [key for key in keys if key.get('kid') == kid]
-            if not matches:
-                # Refresh once on an unknown kid, including the first token.
-                jwks = await fetch('GET', data['jwks_uri'])
-                keys = jwks.get('keys')
-                if not isinstance(keys, list) or len(keys) > 100 or not all(isinstance(k, dict) for k in keys):
-                    raise IdentityError('Identity keys refused')
+            matches = [key for key in _cache.get('keys', []) if key.get('kid') == kid]
+            refresh = not matches and time.monotonic() >= _cache.get('keys_refresh_after', 0)
+            if refresh:
+                # Reserve before releasing the lock; failed fetches are bounded too.
+                _cache['keys_refresh_after'] = time.monotonic() + 60
+        if refresh:
+            jwks = await fetch('GET', data['jwks_uri'])
+            keys = jwks.get('keys')
+            if not isinstance(keys, list) or len(keys) > 100 or not all(isinstance(k, dict) for k in keys):
+                raise IdentityError('Identity keys refused')
+            async with _lock:
                 _cache['keys'] = keys
-                matches = [key for key in keys if key.get('kid') == kid]
-            if len(matches) != 1:
-                raise IdentityError('Identity key refused')
-            key = matches[0]
-            if key.get('kty') != 'RSA' or key.get('use', 'sig') != 'sig' or key.get('alg', 'RS256') != 'RS256':
-                raise IdentityError('Identity key refused')
-            public = jwt.PyJWK.from_dict(key, algorithm='RS256').key
+            matches = [key for key in keys if key.get('kid') == kid]
+        if len(matches) != 1:
+            raise IdentityError('Identity key refused')
+        key = matches[0]
+        if key.get('kty') != 'RSA' or key.get('use', 'sig') != 'sig' or key.get('alg', 'RS256') != 'RS256':
+            raise IdentityError('Identity key refused')
+        public = jwt.PyJWK.from_dict(key, algorithm='RS256').key
         claims = jwt.decode(token, public, algorithms=['RS256'], audience=client, issuer=issuer,
                             options={'require': ['iss', 'aud', 'sub', 'exp', 'iat']})
         aud = claims['aud']
