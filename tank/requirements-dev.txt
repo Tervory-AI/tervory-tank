@@ -39,4 +39,4 @@ pgserver==0.1.4
 dnspython==2.9.0
 
 # Trigger's style checks (tests/skala_intake, tests/trigger_*); same pin as agents/trigger/requirements.txt.
-proselint==0.16.0
+-r ../agents/trigger/requirements.txt
