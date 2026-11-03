@@ -34,4 +34,4 @@ async def run(payload: dict[str, Any], ctx: Any) -> dict[str, Any]:
     if tenant is None:
         raise RuntimeError("tenant_id is required")
     module = _load()
-    return await module.execute(payload, str(tenant))
+    return await module.execute(payload, str(tenant), live=True)
