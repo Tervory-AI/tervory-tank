@@ -680,7 +680,8 @@ test('rename identity mismatch refuses and still rolls back independent files', 
   f.renameFile = async (source, target) => {
     await rename(source, target);
     if (++calls === 2) {
-      await fsPromises.unlink(target);
+      // Keep the displaced inode allocated: ext4 may immediately reuse an unlinked inode.
+      await fsPromises.rename(target, target + '.placeholder-displaced');
       await writeFile(target, 'placeholder concurrent replacement\n');
     }
   };
