@@ -8,11 +8,17 @@ All 68 frames at `87fcb1bf` are **Approved 3 Nov**, approved by the founder on 3
 
 Rule 9: page surfaces remain light. The 52 main controls (Approve, Add, Add server, Add connection, Try again and Sign in with the provider) have navy #001840 fills and white labels. Deny, Cancel, Disconnect and Revoke remain white with navy text. Remove server styling is unchanged. Brand red #E80008 remains confined to logo image assets.
 
-CRM Action 93:4, Field 93:6 and white navigation 182:9119 / 180:8387 (mobile variant 180:8467) are reused. Shared main components and production code were not changed. The shared CRM navigation and its Close button were not edited. Organization is consistent in copy and layer names. All 56 duplicate content identity/logo blocks were removed; 28 Rig/Tisan text nodes were preserved outside those blocks.
+CRM Action 93:4, Field 93:6 and white navigation 182:9119 / 180:8387 (mobile variant 180:8467) are reused. The rule 9 pass left shared main components unchanged. The subsequent shared-menu product-heading fix is Approved 3 Nov; its Close button and menu items are unchanged. Production code was not changed. Organization is consistent in copy and layer names. All 56 duplicate content identity/logo blocks were removed; 28 Rig/Tisan text nodes were preserved outside those blocks.
 
 Preserved intro IDs 239:102 and 239:110. Removed choice blocks 239:95 and 239:103, including 239:96 and old wording 231:11802 / 231:11840. Removed return-host field instances 231:10280 / 231:10330.
 
 Revoke confirmations cover computer and app rows on desktop/mobile. All 12 existing Rig/Tisan Disconnect actions open corresponding confirmation frames. Expand/collapse and Add connection controls link to their states. The wording in these frames is covered by the founder’s 13:28 PT approval of `87fcb1bf`.
+
+## Shared menu fix — Approved 3 Nov
+
+Decision: Claude under the founder’s 3 Nov delegation. The shared menu now exposes the Product heading text property, default Trigger, on both main variants. Product pages use their existing approved names. All 18 visible MCP mismatches, including 231:11986, are fixed. Menu items (Writing, CRM, Sales, Marketing and the rest), the Close control, geometry, and styling are unchanged. No nodes were created or deleted.
+
+[Shared menu register: all changed IDs and Missing frames](MCP-MENU-20261103.md) · [Machine-readable changes](shared-menu-20261103/changes.json). Missing separately approved product-specific menus: Rig, Tisan and Tiger; existing items are retained and no items are invented.
 
 ## Verification
 
