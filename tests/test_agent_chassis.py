@@ -571,7 +571,8 @@ def test_agent_boxes_do_not_share_a_network():
     for name in ("tank", "postgres"):
         assert "tervory-gw-template" in services[name]["networks"]
         assert "default" in services[name]["networks"]
-    for name in ("tiger", "workspace", "litellm", "redis", "qdrant", "searxng"):
+    assert "tiger" not in services
+    for name in ("workspace", "litellm", "redis", "qdrant", "searxng"):
         assert "tervory-gw-template" not in (services[name].get("networks") or [])
     tank = services["tank"]
     assert "command" not in tank
