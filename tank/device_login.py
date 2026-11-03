@@ -218,6 +218,7 @@ async def rotate_refresh(presented: str, *, audience: str, client_id: str | None
     tenant = uuid.UUID(hex=match.group(2))
     access, rotated = credential_pair(box, tenant)
     issued = now()
+    expiries = (issued + ACCESS_TTL, issued + REFRESH_TTL)
     with tenant_scope(tenant):
         async with command.db().acquire() as conn:
             # Rotation: the presented refresh token and the old access token stop working.
@@ -226,8 +227,8 @@ async def rotate_refresh(presented: str, *, audience: str, client_id: str | None
                 WHERE tenant_id=$1 AND region=$2 AND refresh_hash=$3 AND revoked_at IS NULL
                 AND audience=$8 AND client_id IS NOT DISTINCT FROM $9
                 AND refresh_expires_at > now() RETURNING token_id""",
-                tenant, box, pat.digest(presented), pat.digest(access), issued + ACCESS_TTL,
-                pat.digest(rotated), issued + REFRESH_TTL, audience, client_id)
+                tenant, box, pat.digest(presented), pat.digest(access), expiries[0],
+                pat.digest(rotated), expiries[1], audience, client_id)
     if token_id is None:
         return error("invalid_grant")
     return JSONResponse(grant(access, rotated, token_id, box, issued), headers=NO_STORE)
