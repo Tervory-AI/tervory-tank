@@ -493,10 +493,11 @@ def _service_block(compose: str, name: str) -> str:
 
 def test_room_files_and_main_compose_add_the_corridor() -> None:
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "\n  tiger:\n" not in compose
     assert compose.count("TANK_KEY_MARKET_LAB: ${TANK_KEY_MARKET_LAB:-}") == 2
     assert "AGENT_DB_PASSWORD_MARKET_LAB: ${AGENT_DB_PASSWORD_MARKET_LAB:-}" in compose
     assert "name: tervory-gw-market_lab" in compose
-    for service in ("redis", "qdrant", "litellm", "searxng", "tiger", "workspace", "agent-roles"):
+    for service in ("redis", "qdrant", "litellm", "searxng", "workspace", "agent-roles"):
         assert "tervory-gw-market_lab" not in _service_block(compose, service)
     for service in ("postgres", "hermes", "tank"):
         assert "tervory-gw-market_lab" in _service_block(compose, service)
