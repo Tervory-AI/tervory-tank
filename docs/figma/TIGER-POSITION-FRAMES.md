@@ -1,3 +1,38 @@
+# Tiger follow-up correction — navy borders and Cheapest line height
+
+Branch `codex/tiger-figma`; starting commit `881a2ab6`. Implemented the founder’s two follow-up corrections in Figma. All existing IDs and every text string are preserved. No nodes created or removed. No new words. Current status stays **Changed after approval, awaiting founder**. Only this register is committed; production code and deployments are unchanged.
+
+## Directly edited nodes — 14
+
+| Correction | Exact node IDs | Persisted result |
+| --- | --- | --- |
+| Confirm border | `256:380`, `256:450` | 1px `#001840`, copied with its existing colour-variable binding from read-only CRM / Action Confirm `98:8796`. White fill, navy text and 48px height retained. |
+| Selected segment border | `256:67`, `256:197`, `256:342`, `256:435`, `256:532`, `256:640`, `267:19268`, `267:19380`, `267:19462`, `267:19588` | Same 1px `#001840` border. Existing `#e9edf6` fill, navy text and 48px height retained. No dark fill added. |
+| Cheapest typography | `I256:254;43:407`, `I256:271;43:407` | Line height changed from 21px to 140%, matching `I256:257;43:407`; Inter Regular 14 remains. Values render 20px high and parent rows `256:254`, `256:271` are now 36px, matching the Rank row. |
+
+## Nodes changed by automatic layout reflow — 15 additional IDs
+
+`256:170`, `256:174`, `256:180`, `256:194`, `256:204`, `256:240`, `256:254`, `256:257`, `256:260`, `256:263`, `256:271`, `256:274`, `256:277`, `256:280`, `256:692`
+
+These nodes were not directly edited. The two Cheapest rows each lost 1px; the mobile Price position frame `256:170` is now **375 × 2725**, previously 375 × 2727. All other nine frame sizes and all other node geometry remained unchanged. In total this pass changed **29 existing nodes** (14 direct + 15 additional reflow nodes).
+
+## Wording and validation
+
+**New words: none.** A full before/after comparison of every text ID and character string on page `256:9` passed. All original node-ID sets match, with no additions/removals. The shared CRM source was read only. Persisted-property verification passed for all twelve borders, all twelve 48px control heights, the ten retained light selected fills, and both 140% line heights / 36px Cheapest rows. Navy border contrast is 17.43:1 on white and exceeds 3:1 on the selected light fill.
+
+Final desktop/mobile Matches and mobile Price position screenshots were visually inspected after the edit. No new clipping or overflow was visible; source geometry comparison confirms that only the intended mobile Cheapest reflow occurred. The prior light-theme/spacing restyle handoff still applies; Workspace must also match these navy borders and 140% line heights. No production code was edited. Application tests are not applicable to this Figma/document-only correction.
+
+| Frame | Screenshot | SHA-256 |
+| --- | --- | --- |
+| `256:170` | [PNG](/workspace/codex-tiger-figma/.git/tiger-design/border-256-170.png) | `b4dec2fce11ca18215cbb46953e767cfd24c9d3679cdcbf17e2394166d2aa4d6` |
+| `256:283` | [PNG](/workspace/codex-tiger-figma/.git/tiger-design/border-256-283.png) | `d86b06a1cd51a555009c56582b08f0e81f592ba6dc448c697d1d6e04680f95c0` |
+| `256:406` | [PNG](/workspace/codex-tiger-figma/.git/tiger-design/border-256-406.png) | `d8258546c093683c9cc7247afbe0ef72e10b4d8436faea97f7e6a1965cf87202` |
+
+Checks: exact before/after node IDs and text; all twelve border colours/weights/heights/fills; both line-height values and row heights; all ten frame sizes; full geometry comparison; `git diff --check`; only this register differs from main. Commit and push target: `origin codex/tiger-figma`; result is reported in this chat.
+
+---
+
+## Previous correction pass — historical evidence
 # Tiger correction register — 3 Nov, founder ruling 11:37 PT
 
 Implemented the nine requested corrections and the founder’s 3 Nov 11:37 PT ruling: no dark backgrounds on this Tiger page. All ten existing frame IDs and every existing descendant ID survive. No nodes were deleted. Changes remain **Changed after approval, awaiting founder**; the recorded earlier approval is history, not approval of this correction pass.
