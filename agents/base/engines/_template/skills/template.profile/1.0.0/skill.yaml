@@ -1,0 +1,10 @@
+id: template.profile
+version: 1.0.0
+agent: base
+rung: 3
+description: ""
+input:
+  type: object
+output:
+  type: object
+eval_threshold: 1.0
