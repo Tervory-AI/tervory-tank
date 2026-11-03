@@ -79,10 +79,10 @@ def grounded(output: Any, passages: list[Passage]) -> tuple[str, list[Passage]] 
             return None
         dates = re.compile(r"\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|today|tomorrow|yesterday|January|February|March|April|May|June|July|August|September|October|November|December)\b", re.IGNORECASE)
         source_text = ' '.join(p.text for p in cited).casefold()
-        if any(token.casefold() not in source_text for token in dates.findall(answer)):
+        if not {token.casefold() for token in dates.findall(answer)} <= {token.casefold() for token in dates.findall(source_text)}:
             return None
-        currencies = re.compile(r"[$£€]|\b(?:USD|GBP|EUR|ZAR)\b")
-        if any(token not in ' '.join(p.text for p in cited) for token in currencies.findall(answer)):
+        currencies = re.compile(r"[$£€]|(?<![A-Za-z])(?:[A-Z]{3}|R)(?=\s*\d|\b)")
+        if not set(currencies.findall(answer)) <= set(currencies.findall(' '.join(p.text for p in cited))):
             return None
         # The engine owns links. A model cannot introduce a destination or a raw citation URL.
         if re.search(r"https?://|\]\(", answer, re.IGNORECASE):
