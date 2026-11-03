@@ -38,7 +38,7 @@ set -uo pipefail
 DOCKER="${DOCKER:-docker}"
 
 # Rooms whose compose files declare sealed services; each must be found and sealed.
-EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig agent-ghost)
+EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig agent-ghost agent-tisan)
 # Watch is confined to its declared corridor; each Enforce has exactly one internal network.
 
 # service name -> the one non-internal network it may also join
@@ -184,6 +184,8 @@ for id in $ids; do
   expected_nets=""
   case "$service" in
     agent-ghost|ghost-browser) expected_nets="tervory-gw-ghost" ;;
+    agent-tisan) expected_nets="tervory-gw-tisan ${project}_figma_internal" ;;
+    figma-egress-proxy) expected_nets="${project}_figma_internal ${project}_egress" ;;
     agent-trigger) expected_nets="tervory-gw-trigger ${project}_checkers" ;;
     trigger-languagetool) expected_nets="${project}_checkers" ;;
     passive-egress) expected_nets="tervory-gw-radix ${project}_proxy-link ${project}_egress" ;;
@@ -207,7 +209,9 @@ for id in $ids; do
       elif [[ "$service" == "agent-ghost" || "$service" == "ghost-browser" ]]; then
         continue
       elif [[ "$service" == "agent-trigger" && "$net" == "tervory-gw-trigger" ]] ||
-           [[ "$service" == "passive-egress" && "$net" == "${project}_egress" ]]; then
+           [[ "$service" == "passive-egress" && "$net" == "${project}_egress" ]] ||
+           [[ "$service" == "agent-tisan" && "$net" == "tervory-gw-tisan" ]] ||
+           [[ "$service" == "figma-egress-proxy" && "$net" == "${project}_egress" ]]; then
         continue
       elif [[ "$service" != "agent-rig" && "$net" != "tervory-gw-rig" && !( "$service" == "rig-forge-egress" && "$net" == "${project}_forge-outbound" ) ]]; then
         internal_flag "$net"

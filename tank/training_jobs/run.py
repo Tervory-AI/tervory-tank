@@ -101,7 +101,19 @@ async def run(args):
         finally:
             await conn.close()
         print('Billed cost recorded')
-        return
+        return {'status': 'complete', 'name': job_id, 'cost_usd': Decimal(str(receipt['billed_usd']))}
+    if getattr(args, 'job_id', ''):
+        job_id = validate_name(args.job_id)
+        job = api.inspect_job(job_id=job_id, namespace=org)
+        if job.status.stage not in ('COMPLETED', 'ERROR', 'CANCELED', 'DELETED'):
+            return {'status': 'job has not finished'}
+        conn = await asyncpg.connect(os.environ['DATABASE_URL'])
+        try:
+            ledger_id = await record_receipt(conn, job_id, Decimal(args.billed_usd))
+        finally:
+            await conn.close()
+        return {'status': 'complete', 'name': job_id, 'cost_usd': Decimal(args.billed_usd),
+                'ledger_id': str(ledger_id)}
     flavor = training_hardware(agent)
     if flavor not in HARDWARE:
         raise ValueError('Training hardware is not allowed')
@@ -151,11 +163,16 @@ if __name__ == '__main__':
     parser.add_argument('--submit', action='store_true')
     parser.add_argument('--agent', choices=['zenas'], default='')
     parser.add_argument('--receipt', help='Local final HF billing receipt JSON; no credentials')
+    parser.add_argument('--job-id', default='')
+    parser.add_argument('--billed-usd', default='0')
+    parser.add_argument('--json', action='store_true')
     args = parser.parse_args()
     if args.submit:
         from datetime import date
         date.fromisoformat(args.day)
     try:
-        asyncio.run(run(args))
+        result = asyncio.run(run(args))
+        if args.json:
+            print(json.dumps(result, default=str))
     except Exception:
         raise SystemExit('Training operation failed; check configuration, budget and provenance. Credentials are not logged.') from None

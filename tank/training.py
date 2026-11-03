@@ -12,10 +12,12 @@ import logging
 import json
 import os
 import re
+import sys
 import uuid
 from contextlib import asynccontextmanager, suppress
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -606,24 +608,25 @@ async def _training_readiness(conn: Any, body: TrainingRunRequest) -> dict[str, 
 
 
 async def _training_quote(body: TrainingRunRequest) -> dict[str, Any]:
-    from huggingface_hub import HfApi
-    from training_jobs.run import estimate, training_hardware
-    flavor = training_hardware(body.agent)
-    api = HfApi(token=os.environ["HF_TOKEN"])
-    hardware = await asyncio.to_thread(
-        lambda: next(item for item in api.list_jobs_hardware() if item.name == flavor)
+    return await _training_subprocess("--agent", body.agent, "--minutes", str(body.minutes))
+
+
+async def _training_subprocess(*arguments: str) -> dict[str, Any]:
+    """Run the narrowly scoped HF client without changing Tank's offline environment."""
+    child_env = os.environ.copy()
+    child_env["HF_HUB_OFFLINE"] = "0"
+    script = Path(__file__).with_name("training_jobs") / "run.py"
+    process = await asyncio.create_subprocess_exec(
+        sys.executable, str(script), *arguments, "--json",
+        env=child_env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
     )
-    if hardware.unit_label != "minute":
-        raise HTTPException(503, "Unknown billing unit")
+    stdout, _ = await process.communicate()
+    if process.returncode != 0:
+        return {"status": "Training operation failed; check configuration, budget and provenance."}
     try:
-        amount = estimate(
-            Decimal(hardware.unit_cost_micro_usd) / 1_000_000,
-            body.minutes,
-            Decimal(os.environ.get("HF_TRAIN_MAX_USD") or "50"),
-        )
-    except ValueError as exc:
-        return {"status": str(exc)}
-    return {"status": "ready", "cost_usd": amount, "name": flavor}
+        return json.loads(stdout.decode().strip().splitlines()[-1])
+    except (IndexError, UnicodeDecodeError, json.JSONDecodeError):
+        return {"status": "Training operation returned an invalid result."}
 
 
 @router.post("/run/plan")
@@ -650,13 +653,10 @@ async def training_run(
     quote = await _training_quote(body)
     if quote.get("status") != "ready":
         return quote
-    from training_jobs.run import run
-    from types import SimpleNamespace
-
-    return await run(SimpleNamespace(
-        receipt=None, minutes=body.minutes, submit=True,
-        day=datetime.now(timezone.utc).date().isoformat(), agent=body.agent,
-    ))
+    return await _training_subprocess(
+        "--agent", body.agent, "--minutes", str(body.minutes), "--submit",
+        "--day", datetime.now(timezone.utc).date().isoformat(),
+    )
 
 
 @router.post("/receipt")
@@ -667,19 +667,9 @@ async def training_receipt(
         raise HTTPException(403, "Founder access required")
     if not os.environ.get("HF_TOKEN") or not os.environ.get("HF_ORG"):
         return {"status": "Hugging Face training is not configured"}
-    from huggingface_hub import HfApi
-    from training_jobs.run import record_receipt
-
-    api = HfApi(token=os.environ["HF_TOKEN"])
-    job = await asyncio.to_thread(
-        lambda: api.inspect_job(job_id=body.job_id, namespace=os.environ["HF_ORG"])
+    return await _training_subprocess(
+        "--job-id", body.job_id, "--billed-usd", str(body.billed_usd),
     )
-    if job.status.stage not in ("COMPLETED", "ERROR", "CANCELED", "DELETED"):
-        return {"status": "job has not finished"}
-    async with runtime().pool().acquire() as conn:
-        ledger_id = await record_receipt(conn, body.job_id, body.billed_usd)
-    return {"status": "complete", "name": body.job_id, "cost_usd": body.billed_usd,
-            "ledger_id": str(ledger_id)}
 
 
 @router.post("/zenas/court-text")

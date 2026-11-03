@@ -1,6 +1,7 @@
 """No live GPU, HF credentials or client exports are needed to validate training."""
 from decimal import Decimal
 import importlib.util
+import os
 from pathlib import Path
 from types import SimpleNamespace
 import uuid
@@ -77,14 +78,26 @@ async def test_training_run_and_receipt_refuse_tenant_admin_before_provider(monk
 
 @pytest.mark.asyncio
 async def test_zenas_plan_reads_live_hf_price(monkeypatch):
-    import sys
-    hardware = SimpleNamespace(name='a10g-small', unit_label='minute', unit_cost_micro_usd=25000)
-    api = SimpleNamespace(list_jobs_hardware=lambda: [hardware])
     monkeypatch.setenv('HF_TOKEN', 'placeholder-token')
     monkeypatch.setenv('HF_TRAIN_MAX_USD', '50')
-    monkeypatch.setitem(sys.modules, 'huggingface_hub', SimpleNamespace(HfApi=lambda **_kwargs: api))
+    async def child(*args):
+        assert args == ('--agent', 'zenas', '--minutes', '120')
+        return {'status': 'ready', 'cost_usd': '3', 'hardware': 'a10g-small'}
+    monkeypatch.setattr(training, '_training_subprocess', child)
     result = await training._training_quote(training.TrainingRunRequest(agent='zenas', minutes=120))
-    assert result == {'status': 'ready', 'cost_usd': Decimal('3'), 'name': 'a10g-small'}
+    assert result == {'status': 'ready', 'cost_usd': '3', 'hardware': 'a10g-small'}
+
+
+@pytest.mark.asyncio
+async def test_tank_stays_hf_offline_while_training_child_is_online(monkeypatch):
+    from unittest.mock import AsyncMock
+    monkeypatch.setenv('HF_HUB_OFFLINE', '1')
+    process = SimpleNamespace(returncode=0, communicate=AsyncMock(return_value=(b'{"status":"ready"}\n', b'')))
+    launch = AsyncMock(return_value=process)
+    monkeypatch.setattr(training.asyncio, 'create_subprocess_exec', launch)
+    assert await training._training_subprocess('--agent', 'zenas') == {'status': 'ready'}
+    assert os.environ['HF_HUB_OFFLINE'] == '1'
+    assert launch.await_args.kwargs['env']['HF_HUB_OFFLINE'] == '0'
 
 @pytest.mark.parametrize('change', [{'tenant_id': uuid.uuid4()}, {'public': False}, {'client_matter': True},
                                     {'region': 'za'}, {'holdout': True}, {'active': False}])

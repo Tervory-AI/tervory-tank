@@ -156,7 +156,6 @@ services:
       TANK_API_KEY: ${TANK_API_KEY}
       HF_TOKEN: ${HF_TOKEN:-}
       HF_ORG: ${HF_ORG:-}
-      HF_TRAIN_MAX_USD: ${HF_TRAIN_MAX_USD:-50}
       TRAINING_JOB_KEY: ${TRAINING_JOB_KEY:-}
       TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       # Homes-only key: POST /v1/zenas/tenants with home za, nothing else.
