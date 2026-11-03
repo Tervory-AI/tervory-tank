@@ -28,7 +28,7 @@ try:
     uri = f'postgresql://postgres@{address}/postgres'
     env = {**os.environ,'POOL_SCHEMA_DATABASE_URL':uri,'TIGER_MAIL_TEST_DATABASE_URL':uri}
     command = [sys.executable,'-m','pytest',*map(str,sorted((ROOT/'tests').glob('test_tiger*.py'))),
-        'tests/rig_tiger_prices','-q','--tb=short','--timeout=90','--disable-socket',
+        'tests/rig_tiger_prices','tests/test_command.py','tests/test_personal_tokens.py','-q','--tb=short','--timeout=90','--disable-socket',
         '--allow-unix-socket','--allow-hosts=127.0.0.1,::1']
     result = subprocess.run(command,cwd=ROOT,env=env)
 finally:
