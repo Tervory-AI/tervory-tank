@@ -2804,6 +2804,61 @@ DO $$ BEGIN
  END IF;
 END $$;
 
+-- Trigger B3: WhatsApp conversation identities, durable inbound claims and free-tier budget.
+-- Founder-authorized widening of the existing channel constraint; no data is removed.
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='tank.trigger_bot_conversations'::regclass
+   AND conname='trigger_bot_conversations_channel_check' AND pg_get_constraintdef(oid) LIKE '%whatsapp%') THEN
+  ALTER TABLE tank.trigger_bot_conversations DROP CONSTRAINT IF EXISTS trigger_bot_conversations_channel_check;
+  ALTER TABLE tank.trigger_bot_conversations ADD CONSTRAINT trigger_bot_conversations_channel_check
+   CHECK(channel IN ('web','whatsapp'));
+ END IF;
+END $$;
+ALTER TABLE tank.trigger_bot_conversations ADD COLUMN IF NOT EXISTS whatsapp_sealed text;
+CREATE TABLE IF NOT EXISTS tank.trigger_whatsapp_months (
+ tenant_id uuid NOT NULL, phone_number_id text NOT NULL, month date NOT NULL,
+ timezone text NOT NULL, count integer NOT NULL CHECK(count BETWEEN 1 AND 1000),
+ PRIMARY KEY(tenant_id,phone_number_id,month)
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_whatsapp_events (
+ tenant_id uuid NOT NULL, event_hash text NOT NULL, conversation_id uuid NOT NULL,
+ state text NOT NULL DEFAULT 'claimed' CHECK(state IN ('claimed','sending','sent','uncertain','handed_over')),
+ created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(tenant_id,event_hash),
+ FOREIGN KEY(tenant_id,conversation_id) REFERENCES tank.trigger_bot_conversations(tenant_id,id) ON DELETE CASCADE
+);
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.trigger_whatsapp_months ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_whatsapp_months FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_whatsapp_months'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.trigger_whatsapp_months FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_whatsapp_months'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.trigger_whatsapp_months AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.trigger_whatsapp_events ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_whatsapp_events FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_whatsapp_events'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON tank.trigger_whatsapp_events FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_whatsapp_events'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.trigger_whatsapp_events AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
