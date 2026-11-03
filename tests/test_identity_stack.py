@@ -106,8 +106,37 @@ def test_stack_is_isolated_pinned_and_uses_only_existing_proxy():
     for service in services.values():
         assert 'ports' not in service
         assert not any('SMTP' in name for name in service.get('environment', {}))
+    assert services['identity-backup']['depends_on'] == {'identity-postgres': {'condition': 'service_healthy'}}
+    assert 'IDENTITY_BOOTSTRAP_KEY_EXPIRATION' in services['tervory-setup']['environment']
+    # Existing main backup has no route to this separate private database.
+    za = yaml.safe_load((ROOT / 'docker-compose.za.yml').read_text())
+    assert za['services']['r2-backup-za']['networks'] == ['default']
+    assert stack['networks']['database'].get('external', False) is False
     assert services['identity-backup']['build']['target'] == 'backup'
     assert services['identity-backup']['environment']['TANK_REGION'] == 'za'
     assert 'DATABASE_URL' not in services['identity-backup']['environment']
     za = yaml.safe_load((ROOT / 'docker-compose.za.yml').read_text())
     assert za['services']['tank']['environment']['IDENTITY_ISSUER'] == '${IDENTITY_ISSUER:-}'
+
+
+def test_expired_bootstrap_skips_only_successfully_completed_setup(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv('IDENTITY_BOOTSTRAP_KEY_EXPIRATION', '2000-01-01T00:00:00Z')
+    def no_network(*args, **kwargs):
+        pytest.fail('Expired completed bootstrap must not authenticate or call an API')
+    monkeypatch.setattr(httpx, 'Client', no_network)
+    with pytest.raises(SETUP['SetupError'], match='without completed setup'):
+        SETUP['main'](tmp_path)
+    result = {'client_id': '30001@tervory', 'project_id': '20001', 'owner_org_id': '10001'}
+    marker = tmp_path / 'tervory.json'
+    marker.write_text(json.dumps(result))
+    # No machine-key file exists: even reading/signing it would fail this test.
+    assert SETUP['main'](tmp_path) is None
+    output = capsys.readouterr()
+    assert output.out == result['client_id'] + '\n'
+    assert output.err == 'Identity setup already completed; bootstrap key expired; no changes attempted\n'
+    assert json.loads(marker.read_text()) == result
+    marker.write_text(json.dumps({'client_id': result['client_id']}))
+    with pytest.raises(SETUP['SetupError'], match='record refused'):
+        SETUP['main'](tmp_path)
+    monkeypatch.setenv('IDENTITY_BOOTSTRAP_KEY_EXPIRATION', '2999-01-01T00:00:00Z')
+    assert SETUP['completed_setup'](tmp_path) is None
