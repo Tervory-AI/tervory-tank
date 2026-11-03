@@ -8,6 +8,8 @@ exists). A model is never called from Enforce. No Tank key required.
 from __future__ import annotations
 
 import os
+
+import httpx
 import time
 from pathlib import Path
 from typing import Any
@@ -31,25 +33,34 @@ def control_name(control: FixtureEdgeControl) -> str:
 
 def select_control(*, site: str, settings: ClientAutumbraSettings,
                    control: FixtureEdgeControl | None = None) -> FixtureEdgeControl:
-    """Enforce-only credential read; egress hold always keeps runtime on fixture.
-
-    Explicit mock-backed controls let offline tests exercise the complete path.
-    There is intentionally no runtime flag that can lift the egress hold.
-    """
-    from .cloudflare_edge import CloudflareEdgeControl, TOKEN_ENV
+    """Select live control only behind all four approved gates."""
+    from .cloudflare_edge import (
+        CloudflareEdgeControl, CloudflareProxyTransport, TOKEN_ENV, proxy_answers,
+    )
+    from .site_health import health_configured, read_health
 
     edge = control or DEFAULT_CONTROL
+    if isinstance(edge, CloudflareEdgeControl) and isinstance(edge._client._transport, httpx.MockTransport):
+        if edge.tenant_id != settings.tenant_id or edge.site != site:
+            raise ValueError("Cloudflare control does not belong to this client and site.")
+        return edge
+    configured = bool(os.environ.get(TOKEN_ENV, "").strip())
+    if not configured or zone_of(site) is None or not health_configured() or not proxy_answers():
+        if isinstance(edge, CloudflareEdgeControl):
+            fixture = FixtureEdgeControl(tenant_id=settings.tenant_id, site=site)
+            fixture.blocked.update(edge.blocked)
+            return fixture
+        return edge
     if isinstance(edge, CloudflareEdgeControl):
         if edge.tenant_id != settings.tenant_id or edge.site != site:
             raise ValueError("Cloudflare control does not belong to this client and site.")
         return edge
-    # Read the setting only here in Enforce, never in Watch or shared rule code.
-    configured = bool(os.environ.get(TOKEN_ENV, "").strip())
-    if not configured or zone_of(site) is None:
-        return edge
-    # Founder hold: no live transport may be constructed until the separately
-    # approved proxy AND site-health integration land. Token alone does nothing.
-    return edge
+    live = CloudflareEdgeControl(
+        tenant_id=settings.tenant_id, site=site, transport=CloudflareProxyTransport(),
+        token=os.environ[TOKEN_ENV], health_probe=lambda: read_health(site),
+    )
+    live.blocked.update(edge.blocked)
+    return live
 
 
 def _apply_shield(edge: FixtureEdgeControl, *, site: str, kind: str,
