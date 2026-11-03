@@ -52,8 +52,8 @@ class Watch(Domain):
     run_now: bool = True
 
 
-async def execute(store, body: Scan, *, scanner=collect, http=None, watched=False) -> dict:
-    ident = await store.create(body.tenant_id, body.target, body.artifact, watched=True) if watched else await store.create(body.tenant_id, body.target, body.artifact)
+async def execute(store, body: Scan, *, scanner=collect, http=None, watched=False, ident=None) -> dict:
+    ident = ident or (await store.create(body.tenant_id, body.target, body.artifact, watched=True) if watched else await store.create(body.tenant_id, body.target, body.artifact))
     lease = {'tenant_id': str(body.tenant_id), 'scan_id': str(ident)}
     async with httpx.AsyncClient(trust_env=False, timeout=15) if http is None else http as client:
         try:
