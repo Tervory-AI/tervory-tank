@@ -1,8 +1,8 @@
-# Rig cart (US) — Proposed, not approved
+# Rig cart (US) — Approved 3 Nov 2026
 
 Page: [10 · Rig cart (US)](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=289-13919), node `289:13919`. Branch: `codex/rig-cart-figma`. Design-check revisions: rounds 1 and 2, then the 12-item sizing round, 3 November 2026. The sizing-round values below supersede earlier dimensional audit results.
 
-All 52 frames and their review bars remain **Proposed, not approved**. Copy below is proposed for founder approval. Illustrative values exist only in Figma, not on a live screen. This branch changes only this register relative to main; no widget, admin, payment, credential or other runtime code is changed.
+All 52 frames are **Approved 3 Nov 2026**, following the founder’s explicit approval of page `289:13919` as it stood at `0f403e3ebae8470a2186592690958fbe857b0f19`. Earlier Proposed statements below are historical. Frame-name status suffixes are updated; review-bar text and design content are unchanged. Illustrative values exist only in Figma, not on a live screen. This branch changes only this register relative to main; no widget, admin, payment, credential or other runtime code is changed.
 
 ## Frame register
 
@@ -439,3 +439,10 @@ Figma read-back confirmed every instance at x=0, y=0 inside its x=0 wrapper, wit
 The full Orders frame `291:8405` composition screenshot was inspected after the changes: white navigation, correct entry order, readable labels, full 906px sidebar and no visible clipping or overlap. Navigation consists of linked instances and editable text; the only image fills are the CRM component’s approved Tervory logo assets, not flattened UI screenshots. This is tool-based design verification, not founder browser acceptance. All 52 frames and review bars remain Proposed, not approved. No model calls were used to check the work.
 
 Work was performed in the isolated clone `/workspace/fresh-rig-figma-0845` on the existing `codex/rig-cart-figma` branch. The old owner’s latest public `task_complete` (3 November 2026, 16:47:59 UTC) confirmed stopping, no push in flight, and Figma head `dd8e5bfb` pushed and clean. Its reported uncommitted work belongs to the separate no-payments folder and was left untouched. Only this register changes in Git; no runtime code, secrets or production actions are involved.
+
+
+## Founder approval · 3 Nov 2026
+
+The founder explicitly approved page **10 · Rig cart (US)** (`289:13919`) as it stood at head **`0f403e3ebae8470a2186592690958fbe857b0f19`** (`0f403e3e`) on **3 Nov 2026**. This approval supersedes the historical Proposed status entries above.
+
+All 52 frame names were renamed from “Proposed, not approved” to “Approved 3 Nov 2026”. Figma returned all 52 preserved frame IDs, confirmed 52 approved frame names, and found zero remaining frame names containing the old status. Only frame names changed in Figma; review-bar text, layout, styling, copy, components and node IDs are unchanged. This records the founder’s explicit approval in this thread; it makes no additional browser-acceptance claim.
