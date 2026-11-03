@@ -543,3 +543,12 @@ SKIPPED [1] tests/trigger_first_build/test_trigger.py:337: Requires isolated roo
 489 passed, 2 skipped, 60 warnings in 110.95s (0:01:50)
 
 No founder-browser acceptance or screenshots. The real Trigger/LanguageTool integration remains unrun in this isolated setup; a fake checker is not presented as that test.
+
+Separate pinned CRM WSGI runtime on this checkout:
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank /home/ammosync/trigger-crm-venv312/bin/python -m pytest tests/test_trigger_crm_wsgi.py -q
+....                                                                     [100%]
+4 passed in 2.27s
+
+Disposable test service cleanup after all checks:
+docker stop --time 5 codex-trigger-m1-pg-final-20261103
+# PASS: codex-trigger-m1-pg-final-20261103 stopped. Docker warns that --time is deprecated in favor of --timeout. No production container changed.
