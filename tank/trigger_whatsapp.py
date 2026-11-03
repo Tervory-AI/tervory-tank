@@ -108,10 +108,11 @@ async def reserve(conn, phone, binding, event):
         return None
     value = await conn.fetchval('''INSERT INTO tank.trigger_whatsapp_months
         (tenant_id,phone_number_id,month,timezone,count) VALUES($1,$2,$3,$4,1)
-        ON CONFLICT(tenant_id,phone_number_id,month) DO UPDATE
-        SET count=tank.trigger_whatsapp_months.count+1
-        WHERE tank.trigger_whatsapp_months.count<1000 AND tank.trigger_whatsapp_months.timezone=$4
-        RETURNING count''', binding.tenant, phone, period, binding.zone.key)
+        ON CONFLICT DO NOTHING RETURNING count''', binding.tenant, phone, period, binding.zone.key)
+    if value is None:
+        value = await conn.fetchval('''UPDATE tank.trigger_whatsapp_months SET count=count+1
+            WHERE tenant_id=$1 AND phone_number_id=$2 AND month=$3 AND timezone=$4 AND count<1000
+            RETURNING count''', binding.tenant, phone, period, binding.zone.key)
     if value is None:
         return None
     await conn.execute('''UPDATE tank.trigger_whatsapp_events SET state='sending'
