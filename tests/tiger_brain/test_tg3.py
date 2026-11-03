@@ -58,7 +58,7 @@ def test_optional_services_reuse_pinned_runtime_and_sandbox_without_caller():
         assert not set(spec["environment"]) & {"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "LITELLM_MASTER_KEY"}
         assert not any(key in spec for key in ("ports", "privileged", "cap_add", "env_file", "network_mode"))
     source = (ROOT / "agents/tiger/app.py").read_text()
-    assert "tiger-brain" not in source and "/v1/agents/tiger/chat/completions" not in source
+    assert "tiger-brain" not in source and "/v1/agents/tiger/" not in source
 
 
 @pytest.mark.parametrize("profile", [False, True])
@@ -81,7 +81,7 @@ def test_actual_compose_profile_model_excludes_optional_services_by_default(prof
 @pytest.mark.asyncio
 async def test_standby_health_has_no_task_api_or_model_path():
     standby = load("placeholder_tiger_standby", ROOT / "agents/_brain/standby.py")
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=standby.app), base_url="http://placeholder-brain") as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=standby.app), base_url="http://placeholder.invalid") as client:
         assert (await client.get("/health")).json() == {"ok": True, "room": "tiger", "hermes_version": "0.22.2"}
         assert (await client.post("/tasks", json={"tenant_id": str(TENANT)})).status_code == 404
     assert {route.path for route in standby.app.routes if "POST" in getattr(route, "methods", {})} == set()
@@ -117,7 +117,7 @@ def corridor(monkeypatch):
 
 async def chat(corridor, key="placeholder-tiger-key", region="us-east"):
     async with corridor.client(transport=httpx.ASGITransport(app=corridor.app), base_url="http://placeholder-tank") as client:
-        return await client.post("/v1/agents/tiger/chat/completions", json={"messages": [{"role": "user", "content": "placeholder request"}]},
+        return await client.post(corridor.app.url_path_for("chat", room="tiger"), json={"messages": [{"role": "user", "content": "placeholder request"}]},
             headers={"X-Tank-Key": key, "X-Tenant-ID": str(TENANT), "X-Task-ID": str(TASK), "X-Home-Region": region})
 
 
