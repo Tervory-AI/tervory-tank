@@ -1,0 +1,318 @@
+{
+  "provenance": "Synthetic Odoo JSON-RPC contract recording; generated locally, never captured from a live Odoo instance. All identities and credentials are fixtures.",
+  "exchanges": [
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "method": "call",
+        "id": 1,
+        "params": {
+          "service": "common",
+          "method": "version",
+          "args": []
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "server_version_info": [
+            17,
+            0,
+            0
+          ],
+          "server_version": "17.0"
+        }
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "method": "call",
+        "id": 1,
+        "params": {
+          "service": "common",
+          "method": "authenticate",
+          "args": [
+            "fixture-db",
+            "fixture-user",
+            "fixture-key",
+            {}
+          ]
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": 7
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "method": "call",
+        "id": 1,
+        "params": {
+          "service": "object",
+          "method": "execute_kw",
+          "args": [
+            "fixture-db",
+            7,
+            "fixture-key",
+            "sale.order",
+            "search",
+            [
+              [
+                [
+                  "client_order_ref",
+                  "=",
+                  "rig:11111111-1111-4111-8111-111111111111:quote-offline"
+                ]
+              ]
+            ],
+            {
+              "limit": 1
+            }
+          ]
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": []
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "method": "call",
+        "id": 1,
+        "params": {
+          "service": "object",
+          "method": "execute_kw",
+          "args": [
+            "fixture-db",
+            7,
+            "fixture-key",
+            "res.currency",
+            "search",
+            [
+              [
+                [
+                  "name",
+                  "=",
+                  "ZAR"
+                ]
+              ]
+            ],
+            {
+              "limit": 1
+            }
+          ]
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": [
+          1
+        ]
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "method": "call",
+        "id": 1,
+        "params": {
+          "service": "object",
+          "method": "execute_kw",
+          "args": [
+            "fixture-db",
+            7,
+            "fixture-key",
+            "product.pricelist",
+            "search",
+            [
+              [
+                [
+                  "currency_id",
+                  "=",
+                  1
+                ]
+              ]
+            ],
+            {
+              "limit": 1
+            }
+          ]
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": [
+          2
+        ]
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "method": "call",
+        "id": 1,
+        "params": {
+          "service": "object",
+          "method": "execute_kw",
+          "args": [
+            "fixture-db",
+            7,
+            "fixture-key",
+            "product.product",
+            "search",
+            [
+              [
+                [
+                  "default_code",
+                  "=",
+                  "MODEL-1"
+                ]
+              ]
+            ],
+            {
+              "limit": 2
+            }
+          ]
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": [
+          3
+        ]
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "method": "call",
+        "id": 1,
+        "params": {
+          "service": "object",
+          "method": "execute_kw",
+          "args": [
+            "fixture-db",
+            7,
+            "fixture-key",
+            "res.partner",
+            "search",
+            [
+              [
+                [
+                  "ref",
+                  "=",
+                  "rig:11111111-1111-4111-8111-111111111111:quote-offline"
+                ]
+              ]
+            ],
+            {
+              "limit": 2,
+              "context": {
+                "active_test": false
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": []
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "method": "call",
+        "id": 1,
+        "params": {
+          "service": "object",
+          "method": "execute_kw",
+          "args": [
+            "fixture-db",
+            7,
+            "fixture-key",
+            "res.partner",
+            "create",
+            [
+              {
+                "name": "Offline Shopper",
+                "email": "shopper@example.invalid",
+                "ref": "rig:11111111-1111-4111-8111-111111111111:quote-offline",
+                "comment": "from Rig, not verified"
+              }
+            ],
+            {}
+          ]
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": 4
+      }
+    },
+    {
+      "request": {
+        "jsonrpc": "2.0",
+        "method": "call",
+        "id": 1,
+        "params": {
+          "service": "object",
+          "method": "execute_kw",
+          "args": [
+            "fixture-db",
+            7,
+            "fixture-key",
+            "sale.order",
+            "create",
+            [
+              {
+                "client_order_ref": "rig:11111111-1111-4111-8111-111111111111:quote-offline",
+                "pricelist_id": 2,
+                "order_line": [
+                  [
+                    0,
+                    0,
+                    {
+                      "product_id": 3,
+                      "name": "Approved product",
+                      "product_uom_qty": 1,
+                      "price_unit": 120.0,
+                      "tax_id": [
+                        [
+                          6,
+                          0,
+                          []
+                        ]
+                      ]
+                    }
+                  ]
+                ],
+                "note": "Indicative quote from Rig. Retailer review required.",
+                "partner_id": 4
+              }
+            ],
+            {}
+          ]
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": 5
+      }
+    }
+  ]
+}
