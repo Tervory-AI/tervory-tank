@@ -16,5 +16,7 @@ def locked_state(path: Path):
         state = json.loads(path.read_text()) if path.exists() else {}
         if not isinstance(state, dict):
             raise ValueError('Invalid durable state')
+        before = json.dumps(state, sort_keys=True)
         yield state
-        _atomic_write_json(path, state)
+        if json.dumps(state, sort_keys=True) != before:
+            _atomic_write_json(path, state)
