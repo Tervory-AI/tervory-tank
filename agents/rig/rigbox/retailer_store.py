@@ -19,6 +19,14 @@ class ConnectionPool:
 
 
 class RetailerMemoryStore:
+    async def commerce_config(self, tenant_id: str) -> dict:
+        return copy.deepcopy(getattr(self, 'commerce_settings', {}).get(str(tenant_id), {'mode': 'quote'}))
+
+    async def save_commerce_config(self, tenant_id: str, config: dict) -> None:
+        if not hasattr(self, 'commerce_settings'):
+            self.commerce_settings = {}
+        self.commerce_settings[str(tenant_id)] = copy.deepcopy(config)
+
     async def watch_context(self, tenant_id: str, sku: str) -> dict | None:
         if sku in await self.deleted_skus(tenant_id):
             return None
@@ -124,6 +132,19 @@ class RetailerMemoryStore:
 
 
 class RetailerPgStore:
+    async def commerce_config(self, tenant_id: str) -> dict:
+        async with self.pool.acquire() as conn:
+            raw = await conn.fetchval('SELECT commerce FROM agent_rig.retailers WHERE tenant_id=$1', UUID(str(tenant_id)))
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        return data or {'mode': 'quote'}
+
+    async def save_commerce_config(self, tenant_id: str, config: dict) -> None:
+        async with self.pool.acquire() as conn:
+            result = await conn.execute('UPDATE agent_rig.retailers SET commerce=$2::jsonb WHERE tenant_id=$1',
+                                        UUID(str(tenant_id)), json.dumps(config))
+        if result != 'UPDATE 1':
+            raise ValueError('retailer_missing')
+
     async def watch_context(self, tenant_id: str, sku: str) -> dict | None:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow("""SELECT p.sku,p.name,p.url,p.active,

@@ -139,9 +139,11 @@ async def test_real_clean_template_passes_all_four_quality_gates(scaffold, tmp_p
     if proof_path:
         Path(proof_path).write_text(json.dumps(result, indent=2))
     assert result['ok'] is True, result.get('detail')
-    assert [row['name'] for row in result['checks']][-4:] == ['accessibility', 'lighthouse', 'links', 'secrets']
+    assert [row['name'] for row in result['checks']][-5:] == ['accessibility', 'lighthouse', 'links', 'secrets', 'k6']
+    assert {row['page'] for row in result['checks'][-1]['pages']} == {'/contact', '/privacy'}
+    assert all(row['status'] == 200 and row['p95_ms'] >= 0 for row in result['checks'][-1]['pages'])
     assert all(row['ok'] for row in result['checks'])
-    assert len(result['results']) == 4
+    assert len(result['results']) == 5
     assert not any('quality-secrets.fixture' in file for file in result['files'])
 
 

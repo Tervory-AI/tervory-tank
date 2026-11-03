@@ -53,7 +53,8 @@ class Fulfilment(Protocol):
     """Order placement after the store confirms receiving its own payment."""
 
     async def place_located_order(self, *, tenant_id: str, quote_id: str, located: dict[str, Any],
-                                  price: dict[str, Any], ship: dict[str, Any] | None = None) -> dict[str, Any]:
+                                  price: dict[str, Any], ship: dict[str, Any] | None = None,
+                                  quantity: int = 1) -> dict[str, Any]:
         """Record the order and its draft supplier PO. Idempotent per (tenant, quote)."""
         ...
 
@@ -97,8 +98,10 @@ class RigOrders:
 
     async def place_located_order(self, *, tenant_id: str, quote_id: str, located: dict[str, Any],
                                   price: dict[str, Any], ship: dict[str, Any] | None = None,
-                                  env: dict[str, str] | None = None) -> dict[str, Any]:
+                                  env: dict[str, str] | None = None, quantity: int = 1) -> dict[str, Any]:
         sandbox_orders(env)
+        if type(quantity) is not int or not 1 <= quantity <= 100:
+            raise DeliveryError("order_rejected")
         try:
             source, offer, live = located["source"], located["offer"], located["live"]
             product_id, source_id = str(located["product_sku"]), str(source["id"])
@@ -116,7 +119,7 @@ class RigOrders:
                     "vendor_name": str(source.get("vendor_name") or "").strip(),
                     "order_email": str(source.get("order_email") or "").strip(),
                     "item_sku": str(offer.get("sku") or ""), "item_url": str(offer.get("url") or ""),
-                    "quantity": 1, "unit_cost": _amount(live.get("price")),
+                    "quantity": quantity, "unit_cost": _amount(live.get("price")),
                     "currency": _currency(live.get("currency")), "ship_to": address,
                     "neutral_slip": neutral, "instructions": NEUTRAL_SLIP if neutral else "", "sent": None}
         try:

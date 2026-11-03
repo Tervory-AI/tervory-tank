@@ -142,7 +142,6 @@ export const homeCopy: Record<string, string> = {
   "170:2316": "Live availability",
   "170:2320": "Optional",
   "170:2331": "Off",
-  "170:2330": "Payment capture on Accept",
   "170:2334": "Optional",
   "170:2345": "Off",
   "170:2344": "Auto-order",
@@ -240,5 +239,18 @@ export const homeCopy: Record<string, string> = {
   "62:240": "Put an actual squad to work on your business, watch it learn your work week after week, and check every cent on your live receipt.",
   "I62:244;44:43": "Tervory",
   "I62:244;44:44": "AI",
-  "62:265": "© 2026 Tervory AI"
+  "62:265": "© 2026 Tervory AI",
+  // Existing approved Rig state labels, plus the founder's 3 Nov 13:06 PT cart ruling.
+  "127:2459": "Rig is pairing the accessories that fit",
+  "127:2498": "Rig is searching the market for the best prices",
+  "138:2284": "Search the market",
+  "138:2289": "Beat or match",
+  "127:2558": "$94",
+  "127:2570": "Your price e.g. $94",
+  "170:2311": "On",
+  "127:2652": "$99",
+  "127:2654": "$95",
+  "127:2656": "$112",
+  "founder:add-to-cart": "Add to cart",
+  "founder:cart-caption": "In the cart · everything that fits, at a price that beats or matches the market",
 };

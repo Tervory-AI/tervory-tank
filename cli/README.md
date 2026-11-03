@@ -59,13 +59,24 @@ The six local tools list files, read text, search text, inspect git status/diff,
 propose a unified diff, and run a command. File tools stay inside the selected
 folder, including symlink resolution, and exclude ignored files and secret paths.
 Reads are limited to 200 KB, listings to 2,000 entries and searches to 200 matches.
-Secret-looking lines are redacted before any local result leaves the machine.
-Edits show their diff and require an explicit `y`; a file changed since its read
-cannot be edited. Commands show the full command and require an explicit `y`, run
+Secret-looking lines and whole private-key PEM blocks are redacted before any local result leaves the machine. Hard-linked files are refused.
+An edit may contain one unified diff for up to 20 files (200,000 UTF-8 bytes
+across the patch). Every file is read first, including a missing-file read for a
+new file. The CLI validates all paths, current contents and hunks before showing
+every diff and asking once for an explicit `y`. A stale file or failing hunk
+writes nothing. Files are staged in their own directories and renamed, so a
+crash leaves each file entirely old or new.
+
+`/undo` keeps the last ten applied change sets in session memory. It restores the
+newest set only after an explicit `y` and only while every file still matches
+what the CLI wrote. New files are removed on undo. Undo is refused outside an
+interactive terminal and sends no command or file contents to Tank.
+
+Commands show the full command and require an explicit `y`, run
 in the selected folder, time out after 120 seconds and retain at most 64 KB of
 output. Non-interactive sessions cannot apply edits or run commands. Approved
-commands use the worker's existing Linux Bubblewrap (`bwrap`): only the selected
-folder is writable, secret paths and `.git` internals are hidden, the environment
+commands use Linux Bubblewrap (`bwrap`) or macOS `/usr/bin/sandbox-exec` with a
+deny-by-default Seatbelt policy: only the selected folder is writable, secret paths and `.git` internals are hidden, the environment
 is restricted, and networking is unavailable. For a leading Node, Python or
 pytest executable outside `/usr` and the selected folder, the CLI resolves its
 regular executable and its canonical executable. Node binds only that binary
@@ -75,14 +86,41 @@ installation. The installation parent and `bin` directory are never bound.
 General user launchers under `~/.local/bin` are refused, including pip-user
 pytest and uv Python links; use a dedicated venv or interpreter installation.
 The complete command and each read-only file/library path are shown before
-`Run [y/N]`. Intermediate interpreter symlinks are recreated in the empty sandbox;
-their host directories are not mounted. Secret paths inside runtimes are hidden.
+`Run [y/N]`. On Linux, intermediate interpreter symlinks are recreated in the
+empty sandbox; macOS allows only their selected executable targets and verified file aliases. Their host
+directories remain unavailable. Secret paths inside runtimes are hidden.
 `$HOME`, `~/.config`, `~/.ssh` and keychain directories are never mounted. Other
 host folders remain unavailable. Use a leading executable, rather than hiding
 an external runtime behind a shell wrapper or an environment assignment. There is no
 unsandboxed fallback. If Bubblewrap is unavailable or cannot create the sandbox,
-commands are refused. This command runner is currently Linux-only; the other
-existing CLI commands retain their current platform support.
+commands are refused. macOS probes its Seatbelt profile before executing a
+command and refuses a missing executable or invalid profile. Its temporary files
+stay inside the selected folder; system libraries and explicitly selected
+runtimes are read-only. Secret paths, home configuration, SSH and keychain/keyring paths
+remain inaccessible and networking is denied. The CLI kills the command's process
+group when it exits, including background children. A child calling `setsid()`
+can still escape that process-group cleanup on macOS and remain alive inside
+the sandbox; Seatbelt does not provide a die-with-parent guarantee. Windows
+commands remain refused.
+
+The unchanged Seatbelt base is from [OpenAI Codex, commit
+6b2a2757de696c2506ee460c49c66a8e2bed65e0](https://github.com/openai/codex/blob/6b2a2757de696c2506ee460c49c66a8e2bed65e0/codex-rs/sandboxing/src/seatbelt_base_policy.sbpl),
+under Apache-2.0 (`src/seatbelt.LICENSE`, with upstream `src/seatbelt.NOTICE`). Tervory adds selected-folder writes,
+read-only system/runtime paths, system Xcode lookup for Apple's git launcher,
+ancestor metadata traversal, and explicit secret-path and network denies. The
+upstream broad platform-default policy is not included; only its loader/container checks are adapted.
+
+Code mode can propose the signed-in tenant's Tervory and connected MCP tools
+through `tervory` requests. These actions use the existing Confirm cards, including
+reads. The CLI prints sanitized, redacted tool/arguments JSON before Confirm. They appear in the same thread in `/chats`. Cancellation returns no result;
+removing a plugin revokes its pending code cards at Confirm. Confirmed card results are redacted and returned as untrusted tool data.
+
+At session start, `AGENTS.md` at the selected folder's git root is read through
+the same bounded, secret-refusing file reader. Its redacted project notes travel
+with each prompt inside the 200,000-byte history budget. Conventions and test
+commands may guide the answer; credentials, URLs, providers, models, tenants and
+regions cannot come from project notes. Notes are not stored in threads, tasks
+or events.
 
 **Storage:** the Command thread and `/chats` retain user requests, steps, receipts
 and tool names/sizes, without tool-result file contents or proposed patches.
@@ -96,3 +134,8 @@ The model-call transcript follows Tank's existing handling for every chat turn:
 masked by `_preflight_mask` and `_storage_mask`, tenant-scoped and kept on the
 region's own box. CLI secret redaction runs before anything leaves the machine.
 Tank requests tools; it never executes them or touches the local folder.
+
+Unreadable project notes (a symlink, more than 200 KB, or invalid UTF-8) are
+skipped while the code session continues. The CLI notice is
+`AGENTS.md skipped: Code tool refused.` Repository notes are labeled as DATA,
+limited to conventions and test commands, never instructions or authority.
