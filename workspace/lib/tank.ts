@@ -1215,7 +1215,7 @@ export class CommandRequestError extends Error {
   code: string;
   constructor(status: number, code: string, message: string) { super(message); this.status = status; this.code = code; }
 }
-export async function commandRequest(identity: { tenantId: string; userId: string; tenantAdmin?: boolean }, path: string, init: RequestInit = {}): Promise<Response> {
+export async function commandRequest(identity: { tenantId: string; userId: string; tenantAdmin?: boolean }, path: string, init: RequestInit = {}, options: { passThroughErrors?: boolean } = {}): Promise<Response> {
   if (!TANK_API_KEY) throw new Error("The conversation service is not configured.");
   const url = new URL(`/v1/command/${path}`, TANK_URL);
   url.searchParams.delete("tenant_id");
@@ -1249,7 +1249,7 @@ export async function commandRequest(identity: { tenantId: string; userId: strin
   if (empty) upstream.body?.cancel().catch(() => undefined);
   const response = new Response(empty || !upstream.body ? null : boundedBody(upstream.body, limits, () => stop.abort()),
     { status: upstream.status, statusText: upstream.statusText, headers: upstream.headers });
-  if (!response.ok) {
+  if (!response.ok && !options.passThroughErrors) {
     const detail = await response.json().then(body => body.detail).catch(() => undefined);
     if (response.status === 409 && detail === "Pinned models await a router capability; choose Auto") throw new CommandRequestError(409, "pin_pending", "Choosing a specific answer option is not supported yet. Choose Auto to continue.");
     if (response.status === 422 && detail === "Model is not on the roster") throw new CommandRequestError(422, "pin_unavailable", "That answer option is no longer available. Choose Auto to continue.");
