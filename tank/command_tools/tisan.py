@@ -1,9 +1,11 @@
 """tisan command declarations; argument classes remain exported by command."""
+from tisan_requests import TOOLS as CLIENT
+
 TOOLS = {'tisan': ['tisan.scaffold']}
-FOUNDER_TOOLS = ['tisan.build', 'tisan.request', 'tisan.preview', 'tisan.feedback', 'tisan.handover']
-TENANT_ADMIN_TOOLS = ['tisan.request', 'tisan.preview', 'tisan.feedback', 'tisan.handover']
+FOUNDER_TOOLS = ['tisan.build', *CLIENT]
+TENANT_ADMIN_TOOLS = list(CLIENT)
 ADMIN_ONLY_TOOLS = frozenset([])
-REQUEST_BODY_TOOLS = frozenset(['tisan.feedback', 'tisan.handover', 'tisan.preview', 'tisan.request'])
+REQUEST_BODY_TOOLS = frozenset(CLIENT)
 CONFIRMED = frozenset(['tisan.feedback', 'tisan.handover', 'tisan.request'])
 
 def adapters(command):

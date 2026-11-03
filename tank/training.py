@@ -147,9 +147,14 @@ async def pair_from_gold(conn, row: dict[str, Any]) -> None:
     currency, unit = regional_labels(row)
     teacher = None
     if row.get("source") == "ledger":
-        teacher = await conn.fetchval(
-            "SELECT model FROM tank.ledger WHERE id::text=$1 AND tenant_id=$2 AND rung IN (1,2)",
-            str(row.get("source_ref") or ""), row["tenant_id"])
+        try:
+            ledger_id = uuid.UUID(str(row.get("source_ref") or ""))
+        except (ValueError, TypeError, AttributeError):
+            pass
+        else:
+            teacher = await conn.fetchval(
+                "SELECT model FROM tank.ledger WHERE id=$1 AND tenant_id=$2 AND rung IN (1,2)",
+                ledger_id, row["tenant_id"])
     await save_pair(conn, tenant=row["tenant_id"], agent=row["agent"], task=row["skill_id"],
                     value=obj(row["input"]), output=obj(row["expected"]), approved_by=row["checked_by"],
                     source="gold", ref=str(row["id"]), gold_id=row["id"], holdout=row["holdout"],
@@ -588,7 +593,7 @@ async def teachers(skill_id: str, actor: Reviewer = Depends(require_reviewer)) -
         ledger_id = await code_receipt(actor.tenant, "skala.teachers", agent="tank", conn=conn)
     return {"name": args.skill_id, "count": len(rows),
             "items": [{"name": row["version"], "task_type": row["task_type"],
-                       "model": row["teacher_model"] if row["teacher_model"] is not None else "null", "teacher_model": row["teacher_model"], "count": row["count"],
+                       "teacher_model": row["teacher_model"], "count": row["count"],
                        "newest_created_at": row["newest_created_at"].isoformat() if row["newest_created_at"] else None}
                       for row in rows], "ledger_id": str(ledger_id)}
 
