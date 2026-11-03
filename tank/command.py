@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 import command_repo
 from base_lists import FindArgs, SaveArgs, ListArgs, SendArgs
+from base_audit_commands import StartArgs as AuditStartArgs, CsvArgs as AuditCsvArgs, ReviewArgs as AuditReviewArgs
 from tenant_db import tenant_path
 from command_stream import AnswerText, TokenSink
 
@@ -46,7 +47,7 @@ TOOLS = {
 }
 TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
 
-FOUNDER_TOOLS = ["trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
+FOUNDER_TOOLS = ["base.audit.start", "base.audit.csv", "base.audit.review", "trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
                  "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
@@ -1205,6 +1206,9 @@ from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServ
 
 
 ADAPTERS = {
+    "base.audit.start": Adapter("POST", "/v1/command/base/audits/start", AuditStartArgs, "base.audit.start"),
+    "base.audit.csv": Adapter("GET", "/v1/command/base/audits/export", AuditCsvArgs, "base.audit.csv"),
+    "base.audit.review": Adapter("POST", "/v1/command/base/audits/review", AuditReviewArgs, "base.audit.review"),
     "mcp.servers.list": Adapter("GET", "/v1/command/mcp/servers/list", EmptyArgs, "mcp.servers.list"),
     "mcp.servers.approve": Adapter("POST", "/v1/command/mcp/servers/approve", MCPApproveArgs, "mcp.servers.approve"),
     "mcp.servers.remove": Adapter("POST", "/v1/command/mcp/servers/remove", MCPServerArgs, "mcp.servers.remove"),
@@ -1427,7 +1431,7 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, scope, None
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
-    if action.tool in {"base.list.save", "base.list.to_crm"}:
+    if action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review"}:
         return adapter.method, path, {}, args  # Actor headers supply identity, never body fields.
     if adapter.method == "GET":
         return adapter.method, path, {**args, **scope}, None
@@ -1488,6 +1492,13 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
                           "saved_usd": None if costs_pending or baseline_pending else task["saved_usd"],
                           "receipt_status": "pending" if costs_pending or baseline_pending else "recorded"})
         result = {"tenant_id": str(actor.tenant_id), "tasks": tasks, "window": result.get("window")}
+    if action.tool == "base.search" and 200 <= response.status_code < 300 and isinstance(result, list):
+        # Reuse Summary for product names; full sourced rows remain in the tool data.
+        result = [{**row, "summary": ", ".join(product["name"] for product in row["profile"]["products"]["value"][:50]
+                                                  if isinstance(product, dict) and isinstance(product.get("name"), str) and product["name"])}
+                  if isinstance(row, dict) and isinstance(row.get("profile"), dict)
+                  and isinstance(row["profile"].get("products"), dict) and row["profile"]["products"].get("value")
+                  else row for row in result]
     return response.status_code, result
 
 
@@ -1612,7 +1623,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if action.tool.startswith("mcp."):
                 from mcp_connections import dispatch
                 status, result = await dispatch(action, actor)
-            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "tiger.match", "tiger.match.confirm", "tiger.match.reject"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
