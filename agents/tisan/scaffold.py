@@ -471,6 +471,10 @@ async def _secret_check(project: Path, tenant_id: str | None, tank: Any = None) 
             continue  # The existing scanner accepts text, not binary assets.
         if len(text.encode("utf-8")) > 1_000_000:
             return {**check, "summary": "scan.secrets input exceeds the file limit", "file": name}
+        for line, value in enumerate(text.splitlines(), 1):
+            if len(value) > 5000:  # scan.secrets deliberately skips longer lines.
+                return {**check, "findings": [{"file": name, "line": line, "rule": "scan-input-limit"}],
+                        "summary": f"{name}:{line} exceeds scan.secrets line coverage"}
         files.append({"path": name, "text": text})
     if not files:
         return {**check, "summary": "no generated text files were scanned"}
