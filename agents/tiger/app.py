@@ -144,10 +144,19 @@ async def check(ctx: JobContext) -> dict:
     if watch is None or not watch.get("enabled"):
         return {"status": "skipped", "url": url, "alerts": []}
 
+    async with app.state.pool.acquire() as conn:
+        present = await conn.fetchval("SELECT to_regclass('agent_tiger.matches')")
+        catalogue = bool(present and await conn.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM agent_tiger.matches WHERE tenant_id=$1 AND url=$2 AND state='confirmed')",
+            UUID(str(ctx.tenant_id)), url))
+
     async def extract(html: str, page_url: str) -> dict[str, Any]:
-        return await ctx.tank.run_skill(ctx.tenant_id, "tiger.price_extract", {"html": html, "url": page_url})
+        reader = "tiger.price_structured" if catalogue else "tiger.price_extract"
+        return await ctx.tank.run_skill(ctx.tenant_id, reader, {"html": html, "url": page_url})
 
     async def ocr(png_base64: str, page_url: str) -> dict[str, Any]:
+        if catalogue:
+            return {"items": []}
         return await ctx.tank.run_skill(ctx.tenant_id, "tiger.price_ocr", {"png_base64": png_base64, "url": page_url})
 
     async def render(url, session, agent, tenant):
