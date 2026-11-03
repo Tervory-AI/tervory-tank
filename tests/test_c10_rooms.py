@@ -74,11 +74,23 @@ def test_agent_compose_is_one_corridor_with_a_limit_and_a_healthcheck(
     folder: str, service: str, corridor: str, role: str, key: str
 ) -> None:
     box = yaml.safe_load((ROOT / "agents" / folder / "docker-compose.yml").read_text(encoding="utf-8"))
-    assert list(box["networks"]) == ["gw"]
+    assert list(box["networks"]) == ["gw", "figma_internal", "egress"]
+    assert box["networks"]["figma_internal"] == {"internal": True}
+    assert box["networks"]["egress"] == {}
+    assert set(box["services"]) == {"agent-tisan", "figma-egress-proxy"}
+    proxy = box["services"]["figma-egress-proxy"]
+    assert proxy["networks"] == {"figma_internal": {"interface_name": "radix-link"}, "egress": {}}
+    assert proxy["build"] == {"context": "..", "dockerfile": "radix/Dockerfile"}
+    assert proxy["environment"] == {"PYTHONDONTWRITEBYTECODE": "1"}
+    assert proxy["read_only"] is True and proxy["cap_drop"] == ["ALL"]
+    assert proxy["security_opt"] == ["no-new-privileges:true"]
+    assert proxy["mem_limit"] == "128m" and proxy["cpus"] == 0.25
+    assert "allowed = 'api.figma.com'" in proxy["command"][-1]
+    assert "allow_storage=False, require_sni=True" in proxy["command"][-1]
     assert box["networks"]["gw"]["external"] is True
     assert box["networks"]["gw"]["name"] == corridor
     spec = box["services"][service]
-    assert spec["networks"] == ["gw"]
+    assert spec["networks"] == ["gw", "figma_internal"]
     # Founder, 14 Oct 2026: Tisan's room is 1g so a site build can finish. Radix stays 256m.
     assert spec["mem_limit"] == ("1g" if folder == "tisan" else "256m")
     assert spec["cpus"] in (0.25, "0.25")
