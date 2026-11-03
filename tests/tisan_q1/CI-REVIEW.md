@@ -34,4 +34,4 @@ TMPDIR=/workspace/codex-tisan-q1-tmp .git/venv/bin/python -m pytest -q tests/tes
 # 40 passed, 1 skipped in 2.14s.
 ```
 
-The complete suite is being rerun with the corrected temp location and a fresh disposable database. Final counts will follow. No production database is used.
+The corrected-temp rerun encountered a worker timeout/crash while another full suite was using the shared host. It was stopped rather than counted as passing. A lower-concurrency full rerun follows, with short tracebacks so failures can be diagnosed without expensive long traceback formatting. No application tests or timeouts are weakened. No production database is used.
