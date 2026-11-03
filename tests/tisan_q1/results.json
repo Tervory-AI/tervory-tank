@@ -1,5 +1,5 @@
 {
-  "context": "Local evidence, not founder browser acceptance. Tank approval transport is mocked; scanner engine is real scan.secrets 1.0.2.",
+  "context": "Local evidence, not founder browser acceptance. Tank approval transport is mocked; scanner engine is real scan.secrets 1.1.0.",
   "clean_template": {
     "ok": true,
     "checks": [
@@ -306,7 +306,7 @@
     }
   },
   "scanner": {
-    "version": "1.0.2",
+    "version": "1.1.0",
     "evals_passed": 6,
     "fake_key_test": "tests/test_tisan_quality.py::test_real_secret_scanner_via_approved_tank_contract[True]",
     "report_fields": [
