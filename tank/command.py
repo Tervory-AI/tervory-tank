@@ -40,7 +40,7 @@ from trigger_marketing_contract import TOOLS as MARKETING_TOOLS
 TOOLS = {
     "trigger": ["trigger.revise", "trigger.voice.learn", "trigger.write.batch", "trigger.scorecard", "trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
     "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.to_crm"],
-    "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.position", "tiger.alerts"],
+    "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.position", "tiger.alerts", "tiger.watches", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk"],
     "market_lab": ["market_lab.research"],
     "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment"],
     "tisan": ["tisan.scaffold"],
@@ -1015,6 +1015,7 @@ class UrlArgs(Body):
 
 class WatchArgs(UrlArgs):
     label: str = Field(default="", max_length=200)
+    every: Literal["15m", "1h", "6h", "12h", "1d"] = "1d"
 
 
 class QuestionArgs(Body):
@@ -1278,6 +1279,11 @@ ADAPTERS = {
     "base.list.to_crm": Adapter("POST", "/v1/command/base/lists/to-crm", SendArgs, "base.list.to_crm"),
     "tiger.watch": Adapter("POST", "/v1/tiger/watchlist", WatchArgs, "Start a price watch", True, "paid_run"),
     "tiger.read": Adapter("GET", "/v1/tiger/observations", UrlArgs, "Read price observations"),
+    "tiger.watches": Adapter("GET", "/v1/command/tiger/watches", EmptyArgs, "tiger.watches"),
+    "tiger.watch.pause": Adapter("POST", "/v1/command/tiger/watches/pause", UrlArgs, "tiger.watch.pause"),
+    "tiger.watch.resume": Adapter("POST", "/v1/command/tiger/watches/resume", UrlArgs, "tiger.watch.resume"),
+    "tiger.watch.remove": Adapter("POST", "/v1/command/tiger/watches/remove", UrlArgs, "tiger.watch.remove"),
+    "tiger.watch.bulk": Adapter("POST", "/v1/command/tiger/watches/bulk", __import__("tiger_watch_commands").BulkArgs, "tiger.watch.bulk", True, "paid_run"),
     "tiger.alerts": Adapter("GET", "/v1/command/tiger/alerts", __import__("tiger_alerts").AlertsArgs, "tiger.alerts"),
     "market_lab.research": Adapter("POST", "/v1/research", QuestionArgs, "Research a market question", True, "paid_run"),
     "rig.search": Adapter("GET", "/v1/rig/search", QueryArgs, "Search the product catalogue"),
@@ -1483,7 +1489,7 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, {}, {**args, **scope}
     if action.tool == "rig.quote.confirm_payment":
         return adapter.method, path, {}, {"data": args}
-    if action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", *TISAN_CLIENT_TOOLS}:
+    if action.tool in {"base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.audit.start", "base.audit.review", *TISAN_CLIENT_TOOLS}:
         if adapter.method == 'GET':
             return adapter.method, path, args, None
         return adapter.method, path, {}, args  # Actor headers supply identity, never body fields.
@@ -1677,7 +1683,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if action.tool.startswith("mcp."):
                 from mcp_connections import dispatch
                 status, result = await dispatch(action, actor)
-            elif action.tool.startswith("trigger.") or action.tool in {"rig.quote.confirm_payment", "base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
@@ -1850,6 +1856,14 @@ async def tiger_code_plan(actor: Actor, messages: list[dict], task_id):
     if last.get('role') != 'user':
         return None
     text = last.get('content', '').strip()
+    watch_command = re.fullmatch(r'(tiger\.watches|tiger\.watch\.(?:pause|resume|remove|bulk))(?:\s+(.+))?', text, re.DOTALL)
+    if watch_command:
+        tool, value = watch_command.groups()
+        args = {"pages": value.split()} if tool == "tiger.watch.bulk" and value else ({"url": value} if value else {})
+        actor = await authorized_actor(actor)
+        action = validate_action(PlannedAction(tool=tool, arguments=args), actor)
+        ledger = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent='tiger')
+        return SimpleNamespace(content=dump({'text': tool, 'actions': [action.model_dump(mode='json')]}), ledger_id=ledger)
     match = re.fullmatch(r'(tiger\.match(?:\.(?:confirm|reject))?|tiger\.position|tiger\.alerts)(?:\s+([0-9a-fA-F-]{36}))?', text)
     if not match:
         return None
