@@ -225,6 +225,8 @@ async def ask(bot, tenant, args, **session):
                 draft = uuid4()
                 data = {'product_id': args.quote_product_id, 'contact': args.contact.model_dump(exclude_none=True),
                         'notice_version': args.notice_version}
+                if args.quote_title is not None:
+                    data.update(title=args.quote_title, request=args.text, quantity=args.quote_quantity or 1)
                 await bot.pool.execute('''INSERT INTO tank.trigger_bot_drafts(tenant_id,id,conversation_id,kind,data)
                     VALUES($1,$2,$3,'quote',$4::jsonb)''', tenant, draft, UUID(result['conversation_id']), json.dumps(data))
                 result['quote_draft_id'] = str(draft)
