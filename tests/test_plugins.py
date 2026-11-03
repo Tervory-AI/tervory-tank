@@ -177,3 +177,16 @@ if(!pending.targets.some(x=>x.label==='Name'&&x.value==='github'))throw Error('M
 """
     result = subprocess.run(['node', '-e', script], cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
+
+@pytest.mark.asyncio
+async def test_code_plugin_connection_identity_includes_the_vault():
+    rows = [
+        {'vault': 'tisan.vault', 'name': IDENT, 'metadata': {'server_url': 'https://placeholder.example/mcp'}},
+        {'vault': 'radix.vault', 'name': IDENT, 'metadata': {'server_url': URL}},
+    ]
+    for vault, expected in [('tisan.vault', False), ('radix.vault', True)]:
+        conn = SimpleNamespace(fetch=AsyncMock(side_effect=[[{'plugin_id': 'github', 'version': '1.0.0'}], rows]))
+        tool = {'name': 'list_pull_requests', 'vault': vault, 'connection_id': IDENT, 'access': 'read'}
+        actor = command.Actor(TENANT, 'placeholder-founder', True, mcp_tools={'mcp.12345678.list_pull_requests': tool})
+        assert bool((await plugins.code_actor(actor, conn)).mcp_tools) is expected
+        assert all(call.args[1] == TENANT and 'tenant_id=$1' in call.args[0] for call in conn.fetch.call_args_list)
