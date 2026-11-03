@@ -186,6 +186,7 @@ def test_unset_settings_fixture_routes_unchanged(tmp_path, monkeypatch):
 @pytest.mark.parametrize('tool', ['list', 'create', 'destroy'])
 async def test_founder_only_tools_propose_confirm_without_model(tool, monkeypatch):
     monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(box_region=lambda: 'us-east'))
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
     actor = command.Actor(uuid.UUID(A), 'placeholder-founder', True)
     monkeypatch.setattr(command, 'authorized_actor', AsyncMock(side_effect=lambda a: a))
     monkeypatch.setattr(trigger_routes, 'code_receipt', AsyncMock(return_value=uuid.UUID(B)))
@@ -246,7 +247,7 @@ async def test_configured_room_uses_live_count_and_requires_room_key(tmp_path, m
         with TestClient(create_app()) as client:
             path = '/ghost/autumbra/enforce/'
             headers = {'X-Tank-Key': 'placeholder-room-key'}
-            assert client.get(path + 'list').status_code == 401
+            assert client.get(path + 'list').status_code == 404
             assert not api.calls
             result = client.post(path + 'plan-create', headers=headers,
                                  json={'tenant_id': A, 'existing_count': 999, 'execute': True})
