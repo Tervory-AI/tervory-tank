@@ -1,6 +1,9 @@
-# The model roster LiteLLM exposes to Tank.
-# Tank's policy table refers to models by the `model_name` on the left.
-# Provider keys come from the environment (see .env.example); nothing secret lives here.
+# Model roster for the South Africa Tank (docker-compose.za.yml).
+# Same roster as litellm/config.yaml.
+# No api_base points at a United States host. Provider keys come from the environment.
+#
+# A prompt that still contains a personal identifier may go only to a model with
+# hosted_in: za. None is active yet, so Tank refuses those prompts until one is.
 #
 # 14 Oct 2026: the funded providers (OpenAI, Google, xAI) carry the work over their APIs, never
 # OAuth sign-ins. A provider with no funds is skipped automatically; topping it up brings it back.
@@ -233,6 +236,21 @@ model_list:
       cache_read_input_token_cost: 0.0000002000
       cache_creation_input_token_cost: 0.0000050000
       output_cost_per_token: 0.00002
+
+  # ---------- South African hosted model (not configured) ----------
+  # Uncomment after the research in docs/cursor/prompts/RESEARCH-ZENAS.md.
+  # hosted_in: za is what Tank treats as running in South Africa.
+  # Point api_base at a model on this server, never at a US host.
+  # Then set ZA_HOSTED_MODELS=za-local on the ZA Tank.
+  # - model_name: za-local
+  #   litellm_params:
+  #     model: openai/za-local
+  #     api_base: http://za-local:8000/v1
+  #     api_key: os.environ/ZA_LOCAL_API_KEY
+  #   model_info:
+  #     hosted_in: za
+  #     input_cost_per_token: 0.0000001
+  #     output_cost_per_token: 0.0000005
 
   # ---------- MODELS-2: additional current flagship and cheaper text models ----------
   # Price checked 2026-10-21: https://developers.openai.com/api/docs/pricing
