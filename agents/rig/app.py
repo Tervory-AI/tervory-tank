@@ -342,7 +342,7 @@ async def _room_read(request: Request, kind: str) -> JSONResponse:
             row = indexed.get(str(item.get("id"))) if isinstance(item, dict) else None
             if row is None:
                 return item
-            return {**item, "source_record": {k: row[k] for k in
+            return {**item, "source_record": {k: str(row[k]) if k == "price" and row[k] is not None else row[k] for k in
                     ("id", "sku", "url", "name", "brand", "price", "currency") if k in row}}
         if kind == "search":
             result = {**result, "results": [enrich(item) for item in result.get("results", [])]}
