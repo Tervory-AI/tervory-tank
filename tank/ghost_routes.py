@@ -25,7 +25,22 @@ ROOMS = {name: f"http://agent-{name.replace('_', '-')}:8000" for name in
          ("base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas", "ghost")}
 TARGETS = frozenset((*ROOMS, "workspace", "site", "tank"))
 ROOM_METHODS = {("GET", "/v1/ghost/google/signing-keys"), ("POST", "/v1/ghost/check"), ("POST", "/v1/ghost/actions"),
-                ("POST", "/v1/ghost/radix"), ("GET", "/v1/ghost/radix")}
+                ("POST", "/v1/ghost/radix"), ("GET", "/v1/ghost/radix"),
+                ("GET", "/v1/ghost/autumbra/memory/records"),
+                ("POST", "/v1/ghost/autumbra/memory/memories"),
+                ("POST", "/v1/ghost/autumbra/blocks/withdraw")}
+
+
+def room_method(method: str, path: str) -> bool:
+    if (method, path) in ROOM_METHODS:
+        return True
+    prefix = "/v1/ghost/autumbra/memory/memories/"
+    if method != "DELETE" or not path.startswith(prefix):
+        return False
+    try:
+        return str(uuid.UUID(path[len(prefix):])) == path[len(prefix):]
+    except ValueError:
+        return False
 
 
 def runtime():
@@ -214,6 +229,65 @@ async def fix_approve(body: FixMatch, request: Request):
         return Response(response.content, status_code=response.status_code, media_type="application/json")
     return {**response.json(), "cost_usd": 0,
             "ledger_id": str(await code_receipt(actor.tenant_id, tool, agent="ghost"))}
+
+
+# Ghost's existing memory client reaches Hermes only through this same-box corridor.
+async def ghost_memory(method, path, *, body=None, params=None):
+    core = runtime()
+    if core._http is None:
+        raise HTTPException(503, "memory store unreachable")
+    response = await core._http.request(method, "http://hermes:8000" + path,
+        json=body, params=params, headers={"X-Tank-Key": os.environ.get("TANK_KEY_GHOST", "")},
+        follow_redirects=False, timeout=40)
+    if len(response.content) > 2_000_000 or response.status_code >= 300:
+        raise HTTPException(503, "memory store unreachable")
+    return response.json()
+
+
+@router.get("/autumbra/memory/records", dependencies=[Depends(require_ghost)])
+async def ghost_memory_records(tenant_id: uuid.UUID, tier: Literal["client", "platform"] = "client"):
+    return await ghost_memory("GET", "/records", params={"tenant_id": str(tenant_id), "tier": tier, "agent": "ghost"})
+
+
+@router.post("/autumbra/memory/memories", dependencies=[Depends(require_ghost)])
+async def ghost_memory_write(request: Request):
+    raw = await request.body()
+    if len(raw) > 16000:
+        raise HTTPException(413, "Request too large.")
+    try:
+        body = json.loads(raw)
+        uuid.UUID(body["tenant_id"])
+        if body.get("kind") != "blocked_address" or body.get("index") is not False:
+            raise ValueError()
+    except (ValueError, TypeError, KeyError):
+        raise HTTPException(422, "Invalid Autumbra Watch request.") from None
+    return await ghost_memory("POST", "/memories", body={**body, "agent": "ghost"})
+
+
+@router.delete("/autumbra/memory/memories/{id}", dependencies=[Depends(require_ghost)])
+async def ghost_memory_forget(id: uuid.UUID, tenant_id: uuid.UUID):
+    return await ghost_memory("DELETE", "/memories/" + str(id), params={"tenant_id": str(tenant_id)})
+
+
+class BlockWithdrawal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: uuid.UUID
+    source_row: uuid.UUID
+    published_row: uuid.UUID
+
+
+@router.post("/autumbra/blocks/withdraw", dependencies=[Depends(require_ghost)])
+async def ghost_block_withdrawal(body: BlockWithdrawal):
+    # A previous founder publication delegates its mandatory source-undo cleanup.
+    # The room cannot choose the founder or another agent's record.
+    row = await runtime().pool().fetchrow(
+        "SELECT actor FROM agent_ghost.memory_publish_log WHERE tenant_id=$1 AND source_row=$2 AND published_row=$3 AND result IN ('published','already_published') ORDER BY happened_at DESC LIMIT 1",
+        body.tenant_id, body.source_row, body.published_row)
+    if row is None or row["actor"] not in {p.strip() for p in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if p.strip()}:
+        raise HTTPException(404, "not found")
+    from memory_routes import hermes
+    return await hermes("POST", "/founder/records/" + str(body.published_row) + "/withdraw", row["actor"],
+                        body={"tenant_id": str(body.tenant_id), "agent": "ghost"})
 
 
 # ---------- Autumbra owner undo (public email link → workspace → Tank → Watch) ----------
