@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from tenant_db import tenant_scope
-from trigger_bot_api import authenticate, bounded_body, make_bot, obj, ask
+from trigger_bot_api import authenticate, bounded_body, make_bot, obj, ask, quote_draft
 from trigger_bot_contract import PublicMessage
 from trigger_bot_shared import PgRateLimits, proxy_configured
 
@@ -108,10 +108,14 @@ async def public_widget(operation: str, request: Request):
             if args.contact and not (settings.get('privacy_notice') and settings.get('notice_version') and
                                      args.notice_version == settings['notice_version']):
                 raise HTTPException(409)
-            if not available:
+            if not available or args.contact:
                 result = await handover(bot, tenant, args, peer, args.text)
-                if args.contact:
-                    await bot.lead_draft(tenant, UUID(result['conversation_id']), args.text, args.contact.model_dump(exclude_none=True))
+                if args.contact and not args.quote_product_id:
+                    draft = await bot.lead_draft(tenant, UUID(result['conversation_id']), args.text, args.contact.model_dump(exclude_none=True))
+                    if draft:
+                        result['lead_draft_id'] = str(draft)
+                if args.quote_product_id:
+                    result = await quote_draft(bot, tenant, args, result)
             else:
                 result = await ask(bot, tenant, args, conversation_id=args.conversation_id, visitor_id=args.visitor_id, address=peer)
             result = {k: v for k, v in result.items() if k in {'state', 'answer', 'sources', 'message_id', 'conversation_id', 'visitor_id', 'lead_draft_id', 'quote_draft_id'}}
