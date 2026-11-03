@@ -4,6 +4,8 @@ import { mkdtemp, writeFile, readFile, mkdir, symlink, rm, copyFile, chmod } fro
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createServer, createConnection } from 'node:net';
+import { once } from 'node:events';
 import { CodeFolder, LIMITS, redactSecrets, processOutput, applyDiff } from '../src/code-tools.mjs';
 import { run } from '../src/client.mjs';
 
@@ -313,7 +315,7 @@ test('external Node runtime is read-only, named before approval and cannot expos
   assert.equal(neighbor.code, 0, neighbor.output); assert(neighbor.output.includes('runner-ok'));
   assert(!neighbor.output.includes('neighbor-file-canary'));
   const write = await f.tool({ name: 'run_command', arguments: { command: `${node} -e 'require("fs").writeFileSync("${node}", "wrong")'` } }, io());
-  assert.notEqual(write.code, 0); assert.match(write.output, /EROFS|[Rr]ead-only/); await assert.rejects(readFile(join(runtime, 'bin/wrong')));
+  assert.notEqual(write.code, 0); assert.match(write.output, /EROFS|EPERM|EACCES|[Rr]ead-only|[Oo]peration not permitted/); await assert.rejects(readFile(join(runtime, 'bin/wrong')));
 });
 
 test('session history is bounded, redacted and transient; continuation rounds share one prompt id', async () => {
@@ -465,4 +467,134 @@ test('project notes use the git root and refuse oversized notes before sending',
   await assert.rejects(codeSession(tank, f.root, 'auto', io(), () => [], x => x));
   assert.equal(bodies.length, 1);
   await assert.rejects(codeSession(tank, f.root, 'auto', io('y', false), () => [], x => x));
+});
+
+async function changeSet() {
+  const f = await folder();
+  const names = ['file.txt', 'second.txt', 'third.txt'];
+  for (const name of names) { await writeFile(join(f.root, name), 'old\n'); await f.read(name); }
+  const diff = names.map(name => `--- a/${name}\n+++ b/${name}\n@@ -1 +1 @@\n-old\n+new\n`).join('');
+  return { f, names, diff };
+}
+
+test('three-file change set uses one approval; undo restores all files with one explicit y', async () => {
+  const { f, names, diff } = await changeSet(); let approvals = 0; let shown = '';
+  const applied = await f.edit(undefined, diff, { ...io(), write: text => { shown += text; }, prompt: async () => { approvals++; return 'y'; } });
+  assert(applied.applied); assert.equal(approvals, 1);
+  for (const name of names) { assert(shown.includes(`+++ b/${name}`)); assert.equal(await readFile(join(f.root, name), 'utf8'), 'new\n'); }
+  for (const answer of ['n', 'yes', null]) assert.equal((await f.undo(io(answer))).applied, false);
+  await assert.rejects(f.undo(io('y', false)));
+  await f.undo(io());
+  for (const name of names) assert.equal(await readFile(join(f.root, name), 'utf8'), 'old\n');
+  await assert.rejects(f.undo(io()));
+});
+
+test('stale files, failing hunks, duplicate paths, escapes and secrets refuse the whole set', async () => {
+  for (const reason of ['stale', 'hunk', 'escape', 'secret', 'duplicate']) {
+    const { f, names, diff } = await changeSet(); let approvals = 0;
+    let proposal = diff;
+    if (reason === 'stale') await writeFile(join(f.root, names[2]), 'changed\n');
+    if (reason === 'hunk') proposal = diff.replaceAll('--- a/third.txt\n+++ b/third.txt\n@@ -1 +1 @@\n-old', '--- a/third.txt\n+++ b/third.txt\n@@ -1 +1 @@\n-wrong');
+    if (reason === 'escape') proposal = diff.replaceAll('third.txt', '../placeholder-outside.txt');
+    if (reason === 'secret') proposal = diff.replaceAll('third.txt', '.env.placeholder');
+    if (reason === 'duplicate') proposal = diff + patch;
+    await assert.rejects(f.edit(undefined, proposal, { ...io(), prompt: async () => { approvals++; return 'y'; } }));
+    assert.equal(approvals, 0);
+    for (const name of names) assert.equal(await readFile(join(f.root, name), 'utf8'), reason === 'stale' && name === names[2] ? 'changed\n' : 'old\n');
+  }
+  const { f, names, diff } = await changeSet();
+  await assert.rejects(f.edit(undefined, diff, { ...io(), prompt: async () => {
+    await writeFile(join(f.root, names[2]), 'approval-change\n'); return 'y';
+  } }));
+  assert.equal(await readFile(join(f.root, names[0]), 'utf8'), 'old\n');
+  const twentyOne = Array.from({ length: 21 }, (_, i) => `--- /dev/null\n+++ b/placeholder-${i}.txt\n@@ -0,0 +1 @@\n+placeholder\n`).join('');
+  await assert.rejects(f.edit(undefined, twentyOne, io()));
+});
+
+test('undo refuses a later file change, including changes during approval, without changing others', async () => {
+  const { f, names, diff } = await changeSet();
+  await f.edit(undefined, diff, io());
+  await writeFile(join(f.root, names[1]), 'later\n');
+  await assert.rejects(f.undo(io()));
+  assert.equal(await readFile(join(f.root, names[0]), 'utf8'), 'new\n');
+  await writeFile(join(f.root, names[1]), 'new\n');
+  await assert.rejects(f.undo({ ...io(), prompt: async () => { await writeFile(join(f.root, names[2]), 'during-undo\n'); return 'y'; } }));
+  assert.equal(await readFile(join(f.root, names[0]), 'utf8'), 'new\n');
+});
+
+test('normal rename failure rolls back; a killed process leaves each file entirely old or new', async () => {
+  const { f, names, diff } = await changeSet();
+  const renameFile = f.renameFile.bind(f); let renames = 0;
+  f.renameFile = async (...args) => { if (++renames === 2) throw Error('placeholder disk error'); await renameFile(...args); };
+  await assert.rejects(f.edit(undefined, diff, io()));
+  for (const name of names) assert.equal(await readFile(join(f.root, name), 'utf8'), 'old\n');
+  for (const stop of [1, 2]) {
+    const fixture = await changeSet();
+    const source = `import { CodeFolder } from ${JSON.stringify(new URL('../src/code-tools.mjs', import.meta.url).href)};
+      const f = await CodeFolder.create(${JSON.stringify(fixture.f.root)});
+      for (const name of ${JSON.stringify(fixture.names)}) await f.read(name);
+      const rename = f.renameFile.bind(f); let n = 0;
+      f.renameFile = async (...args) => { await rename(...args); if (++n === ${stop}) process.kill(process.pid, 'SIGKILL'); };
+      await f.edit(undefined, ${JSON.stringify(fixture.diff)}, { interactive: true, write() {}, prompt: async () => 'y' });`;
+    assert.throws(() => execFileSync(process.execPath, ['--input-type=module', '-e', source]));
+    for (let i = 0; i < fixture.names.length; i++) assert.equal(await readFile(join(fixture.f.root, fixture.names[i]), 'utf8'), i < stop ? 'new\n' : 'old\n');
+  }
+});
+
+test('undo retains ten sets in memory and removes a newly created file', async () => {
+  const f = await folder();
+  await f.read('placeholder-new.txt');
+  await f.edit('placeholder-new.txt', '--- /dev/null\n+++ b/placeholder-new.txt\n@@ -0,0 +1 @@\n+placeholder\n', io());
+  await f.undo(io()); await assert.rejects(readFile(join(f.root, 'placeholder-new.txt')));
+  await f.read('file.txt');
+  let before = 'old';
+  for (let i = 0; i < 11; i++) {
+    const after = `placeholder-${i}`;
+    await f.edit('file.txt', `--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-${before}\n+${after}\n`, io());
+    before = after;
+  }
+  for (let i = 0; i < 10; i++) await f.undo(io());
+  assert.equal(await readFile(join(f.root, 'file.txt'), 'utf8'), 'placeholder-0\n');
+  await assert.rejects(f.undo(io()));
+});
+
+test('/undo is local and never sends its command or snapshot to Tank', async () => {
+  const f = await folder(); const prompts = ['placeholder edit', 'y', '/undo', 'y', '/exit']; let calls = 0;
+  const { codeSession } = await import('../src/code-mode.mjs');
+  await codeSession({ json: async (path, body) => {
+    if (path.endsWith('/threads')) return { thread_id: 'placeholder-thread' };
+    assert(!JSON.stringify(body).includes('/undo'));
+    calls++;
+    return { answer: '', requests: calls === 1 ? [{ name: 'read_file', arguments: { path: 'file.txt' } }] : calls === 2 ? [{ name: 'propose_edit', arguments: { path: 'file.txt', diff: patch } }] : [] };
+  } }, f.root, 'auto', { interactive: true, write() {}, prompt: async () => prompts.shift() }, () => [], x => x);
+  assert.equal(calls, 3);
+  assert.equal(await readFile(join(f.root, 'file.txt'), 'utf8'), 'old\n');
+});
+
+test('sandbox confines outside writes, secret reads and network while echo succeeds', async () => {
+  const f = await folder(); const outside = join(work, 'placeholder-outside-write');
+  await writeFile(join(f.root, '.env.placeholder'), 'placeholder-private-canary');
+  const server = createServer(socket => socket.end());
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  try {
+    const port = server.address().port;
+    const control = createConnection(port, '127.0.0.1'); await once(control, 'connect'); control.end();
+    const prepared = await f.prepareCommand(`node -e 'const fs=require("fs"),net=require("net");
+      try { fs.writeFileSync(${JSON.stringify(outside)}, "wrong"); process.exit(11); } catch {}
+      try { if(fs.readFileSync(".env.placeholder","utf8").includes("placeholder-private-canary")) process.exit(12); } catch {}
+      const s=net.connect(${port},"127.0.0.1"); s.on("connect",()=>process.exit(13)); s.on("error",()=>console.log("sandbox-ok"));'`);
+    const result = await f.command(prepared.command, io(), 10000, prepared.mounts);
+    assert.equal(result.code, 0, result.output); assert(result.output.includes('sandbox-ok'));
+    await assert.rejects(readFile(outside));
+    const echo = await f.command('echo sandbox-ok', io(), 10000);
+    assert.equal(echo.code, 0, echo.output); assert(echo.output.includes('sandbox-ok'));
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('Darwin never falls back when sandbox-exec is unavailable', { skip: process.platform !== 'linux' }, async () => {
+  const f = await folder(); const descriptor = Object.getOwnPropertyDescriptor(process, 'platform');
+  try {
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    await assert.rejects(f.command('echo wrong', io(), 1000));
+  } finally { Object.defineProperty(process, 'platform', descriptor); }
 });
