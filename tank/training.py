@@ -742,6 +742,15 @@ async def training_status(actor: Reviewer = Depends(require_reviewer)) -> dict[s
             items.append({"name": str(job["model_repo"]), "count": 1,
                           "status": "complete" if job["actual_usd"] is not None else "running",
                           "cost_usd": job["actual_usd"] if job["actual_usd"] is not None else job["estimated_usd"]})
+        evaluation = await conn.fetchrow(
+            """SELECT count(*) AS n,avg(agreement) AS agreement FROM tank.shadow
+            WHERE task_type='zenas.reasoning' AND candidate_model='tervory-own-zenas-za'
+              AND method='exact_outcome'""",
+        )
+        if evaluation and int(evaluation["n"] or 0):
+            agreement = float(evaluation["agreement"] or 0)
+            items.append({"name": "Zenas own model holdout", "count": int(evaluation["n"]),
+                          "status": f"{agreement:.2%} agreement"})
         if region == "za":
             stored = {row["source_id"]: int(row["count"]) for row in await conn.fetch(
                 """SELECT source_id,count(DISTINCT document_id) AS count FROM zenas_pool.documents
@@ -797,13 +806,19 @@ def exportable(row: dict[str, Any]) -> bool:
             and row.get("tenant_id") == PLATFORM_TENANT)
 
 
-async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: str, rows: list[dict], region: str = "us-east") -> None:
+async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: str, rows: list[dict], region: str = "us-east",
+                         holdouts: list[dict] | None = None) -> None:
     # Validate again at the network boundary, before any request is sent.
     if region not in ("us-east", "za") or region != runtime().box_region() or any(
         row.get("scope") != "platform" or "tenant_id" in row or row.get("region") != region
         or not exportable({**row, "tenant_id": PLATFORM_TENANT}) for row in rows
     ):
         raise ValueError("Unsafe training export")
+    if any(row.get("scope") != "platform" or "tenant_id" in row or row.get("region") != region
+           or row.get("holdout") is not True or row.get("active") is not True
+           or row.get("public") is not True or row.get("client_matter") is not False
+           for row in (holdouts or [])):
+        raise ValueError("Unsafe holdout export")
     data = "\n".join(encoded(row) for row in rows) + "\n"
     await archive_training_snapshot(agent, day, data.encode(), region=region)
     name = f"tervory-public-{agent}"
@@ -821,6 +836,12 @@ async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: s
         {"key": "file", "value": {"path": f"snapshots/{region}/{day}.jsonl", "encoding": "base64",
                                   "content": base64.b64encode(data.encode()).decode()}},
     ]
+    if holdouts:
+        held = "\n".join(encoded(row) for row in holdouts) + "\n"
+        operations.append(
+            {"key": "file", "value": {"path": f"holdouts/{region}/{day}.jsonl", "encoding": "base64",
+                                        "content": base64.b64encode(held.encode()).decode()}},
+        )
     response = await client.post(f"https://huggingface.co/api/datasets/{repo}/commit/main",
                                  content="\n".join(encoded(op) for op in operations),
                                  headers={"Content-Type": "application/x-ndjson"})
@@ -854,6 +875,7 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
                     if done:
                         continue
                     payload = []
+                    holdouts = []
                     scopes = await conn.fetch(
                         "SELECT DISTINCT tenant_id FROM tank.training_pairs WHERE region=$2 AND agent=$1 AND tenant_id=$3 AND public AND NOT client_matter", agent, region, PLATFORM_TENANT,
                     )
@@ -878,10 +900,22 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
                                 if row["unit"]:
                                     item["unit"] = row["unit"]
                                 payload.append(item)
+                        held_rows = await conn.fetch(
+                            """SELECT p.* FROM tank.training_pairs p
+                            WHERE p.tenant_id=$1 AND p.region=$3 AND p.agent=$2 AND p.active AND p.holdout
+                              AND p.public AND NOT p.client_matter""",
+                            scope["tenant_id"], agent, region,
+                        )
+                        for row in held_rows:
+                            if row["tenant_id"] == PLATFORM_TENANT and not await _batch_removed(conn, scope["tenant_id"], row["batch_id"]):
+                                holdouts.append({"region": region, "public": True, "client_matter": False,
+                                                 "scope": "platform", "holdout": True, "active": True,
+                                                 "task_type": row["task_type"], "input": obj(row["input"]),
+                                                 "output": obj(row["output"])})
                     if not payload:
                         continue
                     try:
-                        await upload_dataset(client, org, agent, day.isoformat(), payload, region)
+                        await upload_dataset(client, org, agent, day.isoformat(), payload, region, holdouts)
                     except StorageError:
                         # Leave this agent unrecorded so the slot retries it,
                         # while independent rooms can still finish their exports.

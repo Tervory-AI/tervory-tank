@@ -20,6 +20,20 @@
 # Without these keys LiteLLM bills cached tokens at the full input rate in x-litellm-response-cost.
 
 model_list:
+  # Private ZA CPU route. Candidate only until the existing 0.99/200 founder gate promotes it.
+  - model_name: tervory-own-zenas-za
+    litellm_params:
+      model: openai/tervory-own-zenas-za
+      api_base: http://zenas-own-model:8080/v1
+      api_key: none
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      open_weights: true
+      host: tervory-za
+
   # ---------- OpenAI (API key, Responses/Chat) ----------
   - model_name: luna            # cheap, fast workhorse: classify, extract, short drafts
     litellm_params:

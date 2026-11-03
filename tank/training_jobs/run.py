@@ -58,7 +58,7 @@ async def link_snapshot_batches(conn, job_id: str, model_repo: str, day: str) ->
         )
 
 
-async def record_receipt(conn, job_id: str, actual: Decimal):
+async def record_receipt(conn, job_id: str, actual: Decimal, evaluation: dict | None = None):
     """Append the provider's final billed amount once, including failed jobs."""
     if not actual.is_finite() or actual < 0:
         raise ValueError('Invalid billed amount')
@@ -70,6 +70,31 @@ async def record_receipt(conn, job_id: str, actual: Decimal):
             if Decimal(row['actual_usd']) != actual:
                 raise ValueError('Receipt conflicts with recorded bill')
             return row['ledger_id']
+        if evaluation is not None:
+            n = int(evaluation.get('n', 0))
+            passed = int(evaluation.get('passed', -1))
+            agreement = evaluation.get('agreement')
+            if (evaluation.get('gold_holdout') is not True or evaluation.get('method') != 'exact_outcome'
+                    or n < 0 or passed < 0 or passed > n or agreement != (passed / n if n else 0.0)):
+                raise ValueError('Invalid holdout evaluation')
+            await conn.execute("""INSERT INTO tank.policy
+                (task_type,rung,model,priority,cache_scope,max_tokens_out,eval_threshold,
+                 candidate_model,shadow_rate,min_shadow_samples,max_reject_rate,auto_promote)
+                VALUES ('zenas.reasoning',1,'luna','interactive','region',4096,.99,
+                        'tervory-own-zenas-za',0,200,.05,false)
+                ON CONFLICT DO NOTHING""")
+            await conn.execute("""UPDATE tank.policy
+                SET candidate_model='tervory-own-zenas-za', shadow_rate=0,
+                    eval_threshold=GREATEST(eval_threshold,.99),
+                    min_shadow_samples=GREATEST(min_shadow_samples,200), auto_promote=false
+                WHERE task_type='zenas.reasoning' AND tenant_id IS NULL""")
+            for item in evaluation.get('rows', []):
+                await conn.execute("""INSERT INTO tank.shadow
+                    (ledger_id,tenant_id,task_type,primary_model,candidate_model,
+                     primary_content,candidate_content,agreement,method)
+                    VALUES (gen_random_uuid(),$1,'zenas.reasoning','court-order',
+                            'tervory-own-zenas-za','',$2,$3,'exact_outcome')""",
+                    PLATFORM, str(item.get('predicted') or ''), 1 if item.get('passed') is True else 0)
         ident = await conn.fetchval("""INSERT INTO tank.ledger
             (tenant_id,region,agent,task_type,model,priority,cost_usd,outcome)
             VALUES ($1,$2,'tank','training.lora',$3,'batch',$4,'delivered') RETURNING id""",
@@ -109,7 +134,15 @@ async def run(args):
             return {'status': 'job has not finished'}
         conn = await asyncpg.connect(os.environ['DATABASE_URL'])
         try:
-            ledger_id = await record_receipt(conn, job_id, Decimal(args.billed_usd))
+            stored = await conn.fetchrow(
+                'SELECT model_repo FROM tank.training_jobs WHERE id=$1 AND tenant_id=$2', job_id, PLATFORM,
+            )
+            if not stored:
+                raise ValueError('Unknown training job')
+            from huggingface_hub import hf_hub_download
+            evaluation_path = hf_hub_download(repo_id=stored['model_repo'], filename='holdout.json')
+            evaluation = json.loads(Path(evaluation_path).read_text())
+            ledger_id = await record_receipt(conn, job_id, Decimal(args.billed_usd), evaluation)
         finally:
             await conn.close()
         return {'status': 'complete', 'name': job_id, 'cost_usd': Decimal(args.billed_usd),
@@ -131,7 +164,7 @@ async def run(args):
         try:
             if await conn.fetchval('SELECT EXISTS (SELECT 1 FROM tank.training_jobs WHERE tenant_id=$1 AND ledger_id IS NULL)', PLATFORM):
                 raise ValueError('Reconcile the previous training job before submitting another')
-            repo = f'{org}/tervory-squad-{uuid.uuid4().hex}'
+            repo = f'{org}/tervory-own-zenas-za' if agent == 'zenas' else f'{org}/tervory-squad-{uuid.uuid4().hex}'
             pending = f'pending-{uuid.uuid4().hex}'
             # Autocommit the reservation before contacting HF. An uncertain submit
             # must remain blocking, even after an exception or process crash.
