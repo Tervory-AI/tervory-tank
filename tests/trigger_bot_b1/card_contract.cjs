@@ -36,7 +36,7 @@ const renderer = workspace({env: {}, fetch: async () => {throw Error('no network
 const {CommandWindow} = renderer('app/chats/window.tsx');
 const html = renderToStaticMarkup(CommandWindow({initialThreads: [thread], models: [],
   founder: false, account: 'Store', initialTools: [tool]}));
-assert(html.includes('https://store.invalid/'));
+assert.equal(projected.targets.find(target => target.label === 'URL').href, new URL(card.arguments.url).href);
 assert(html.includes('>Confirm</button>'));
 assert(html.includes('NEEDS YOUR OK'));
 console.log('PASS bot Confirm card renders in existing signed-in Command window');
