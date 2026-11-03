@@ -72,10 +72,12 @@ class GoogleKeys:
         async with self.lock:
             fresh = bool(self.keys) and now < self.expires
             known = not kid or any(k['kid'] == kid for k in self.keys)
-            if fresh and (known or now < self.refresh_after):
+            if fresh and known:
                 return {'keys': [dict(k) for k in self.keys]}
             if self.task is not None and not self.task.done():
                 task = self.task
+            elif fresh and now < self.refresh_after:
+                return {'keys': [dict(k) for k in self.keys]}
             elif now >= self.refresh_after:
                 self.refresh_after = now + 60
                 task = self.task = asyncio.create_task(self.refresh())
