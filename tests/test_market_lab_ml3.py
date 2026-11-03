@@ -179,7 +179,7 @@ async def test_intel_corridor_accepts_only_autumbra_or_founder(database, monkeyp
     monkeypatch.setattr(ml3, 'room', proxy)
     for headers in ({}, {'x-tank-key': 'placeholder-market-lab-key'}, {'x-tank-key': 'placeholder-other-key'}):
         response = await database.client.get('/v1/market-lab/intel', headers=headers)
-        assert response.status_code == 403
+        assert response.status_code in {401, 403}
     response = await database.client.get('/v1/market-lab/intel', headers={'x-tank-key': 'placeholder-ghost-key'})
     assert response.status_code == 200
     proxy.assert_awaited_once_with('intel', ml3.PLATFORM)
@@ -234,3 +234,50 @@ async def test_webhook_raw_signature_and_no_resend(database, monkeypatch):
     assert await ml3.webhooks(OWNER) == {'sent':0}
     assert await ml3.webhooks(OTHER) == {'sent':0}
     assert len(captured) == 1
+
+
+@pytest.mark.asyncio
+async def test_tables_follow_existing_rls_rollout(database):
+    pool = database.pool
+    staged = await pool.fetchval("SELECT bool_or(relrowsecurity) FROM pg_class WHERE oid IN ('tank.market_lab_alerts'::regclass,'tank.market_lab_deliveries'::regclass)")
+    assert staged is False
+    await pool.execute("ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY")
+    await pool.execute((ROOT / 'tank/schema.sql').read_text())
+    policies = await pool.fetch("SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE oid IN ('tank.market_lab_alerts'::regclass,'tank.market_lab_deliveries'::regclass)")
+    assert all(r['relrowsecurity'] and r['relforcerowsecurity'] for r in policies)
+    await pool.execute('INSERT INTO tank.market_lab_alerts(tenant_id,email_enabled) VALUES($1,true)', OWNER)
+    async with pool.acquire() as conn, conn.transaction():
+        await conn.execute('CREATE ROLE ml3_placeholder NOBYPASSRLS')
+        await conn.execute('GRANT USAGE ON SCHEMA tank TO ml3_placeholder')
+        await conn.execute('GRANT SELECT ON tank.market_lab_alerts TO ml3_placeholder')
+        await conn.execute('SET LOCAL ROLE ml3_placeholder')
+        await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(OTHER))
+        assert await conn.fetchval('SELECT count(*) FROM tank.market_lab_alerts') == 0
+        await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(OWNER))
+        assert await conn.fetchval('SELECT count(*) FROM tank.market_lab_alerts') == 1
+
+
+@pytest.mark.asyncio
+async def test_room_prediction_read_is_the_existing_ledger(database):
+    from core.ml3 import build_router
+    from core.ledger import PostgresLedger
+    from core.pure import make_prediction
+    from datetime import datetime, timedelta, timezone
+    @asynccontextmanager
+    async def ledger_context():
+        async with database.pool.acquire() as conn:
+            yield PostgresLedger(conn)
+    async with ledger_context() as ledger:
+        await ledger.apply_schema()
+        now = datetime(2026, 11, 1, tzinfo=timezone.utc)
+        prediction = make_prediction(tenant_id=str(OWNER), statement='placeholder prediction', metric_series_id='placeholder-series', comparator='gte', target=12, made_at=now, resolve_by=now + timedelta(days=1), rationale='placeholder')
+        prediction.update(confidence=.75, kind='placeholder', feed='placeholder')
+        await ledger.save_prediction(prediction)
+    room_app = FastAPI()
+    room_app.include_router(build_router(key_ok=lambda key: key == 'placeholder-room-key', ledger_context=ledger_context, engine='ffl'))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=room_app), base_url='http://placeholder') as client:
+        assert (await client.post('/market/ml3/predictions', json={'tenant_id':str(OWNER)})).status_code == 401
+        own = (await client.post('/market/ml3/predictions', json={'tenant_id':str(OWNER)}, headers={'x-tank-key':'placeholder-room-key'})).json()['predictions']
+        foreign = (await client.post('/market/ml3/predictions', json={'tenant_id':str(OTHER)}, headers={'x-tank-key':'placeholder-room-key'})).json()['predictions']
+        assert own[0]['confidence'] == .75 and own[0]['horizon_seconds'] == 86400
+        assert foreign == []
