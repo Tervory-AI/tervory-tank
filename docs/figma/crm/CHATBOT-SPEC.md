@@ -36,7 +36,7 @@ One 240px Trigger menu and a wide desktop content area; one mobile drawer with a
 
 ## Shared controls
 
-Action family `266:3038`: Primary `266:3032`, Secondary `266:3034`, Destructive `266:3036`. Labels are centred. Confirm uses Primary; Disconnect and Delete use Destructive. Primary `266:3032`, Send reply, Confirm and Save settings bind to CRM navy color/text `42:14`. Navigation uses canonical white CRM menus (`180:8387` desktop, `180:8467` mobile) with Google posts and no Post detail entry. Scoped menu `266:3212` is hidden and marked Retired. Settings confirms highlight Settings; mobile buttons open Settings-specific drawers. Inputs use #848da3 at at least 3:1 contrast, field/menu padding follows 0/8/16/24, menu rows are at least 44px high, and `149:14873` uses radius/8. Client widget controls retain client-only colours. Native document `154:4349` and visible SPEC frame `210:6156` contain this same current document.
+Action family `266:3038`: Primary `266:3032`, Secondary `266:3034`, Destructive `266:3036`. Labels are centred. Confirm uses Primary; Disconnect uses Secondary with navy outline/text; Destructive red is reserved for Delete. Primary `266:3032`, Send reply, Confirm and Save settings bind to CRM navy color/text `42:14`. Navigation uses canonical white CRM menu family `180:8549`, with scrolled Active group states `483:39615` desktop and `483:39698` mobile; original Top states `180:8387` and `180:8467` remain with Google posts and no Post detail entry. Scoped menu `266:3212` is hidden and marked Retired. Settings confirms highlight Settings; mobile buttons open Settings-specific drawers. Inputs use #848da3 at at least 3:1 contrast, field/menu padding follows 0/8/16/24, menu rows are at least 44px high, and `149:14873` uses radius/8. Client widget controls retain client-only colours. Native document `154:4349` and visible SPEC frame `210:6156` contain this same current document.
 
 ## Store screen and field register
 
@@ -256,3 +256,13 @@ Canonical wording is Quote draft, Settings, Confirm · Settings and Confirm · H
 Checks cover light surfaces, navy positive actions, 20 confirm footers, 44px menu/widget controls, input contrast, compact-card corners, brand font bindings, source-chip URL actions and delayed Answer/No source paths. The widget body intentionally scrolls above a separate composer. Source link is a dynamic placeholder, not a verified external URL.
 
 Screenshots and the complete directly edited/created node list are in the [correction register](evidence/2026-11-03-corrections/REGISTER.md) and [machine-readable changes](evidence/2026-11-03-corrections/changes.json). Changed screens remain Changed after approval, awaiting founder. No production code, deployment, credentials or main-branch changes are included.
+
+## Follow-up geometry, naming and timing review · 3 November
+
+Every desktop screen and mobile drawer uses the canonical CRM menu scrolled to show the active Marketing/Chat bot group. All highlighted items fit the visible navigation viewport, including Settings on 151:11924 and both Settings drawers. Original screen/navigation roots and menu entry order remain. The existing menu family adds two authored scrolled view states; inherited variant-child ID changes are recorded.
+
+Content/* padding of 40/32 becomes 24. Compact card 149:14873 and its rows 209:9704 / 209:9705 hug the fields with gap 8 and padding 16; the card is 88px high. Existing product wording is unchanged. Stale layer names are corrected to Quote draft, Settings, Confirm · Settings and Confirm · Hand-over, including related menu/content metadata.
+
+No source delay is 1.2 seconds, replacing 1200 seconds, on components 274:14673 / 274:14699 and specimen instances 274:24343, 274:24360, 274:24377, 274:24394, 274:24411 and 274:24428. Their original Hand-over destinations remain. The widget keeps the client's brand; only prototype timing changes in this follow-up.
+
+Exact edited/created IDs, layer-name changes, timing evidence and screenshots: [follow-up register](evidence/2026-11-03-followup/REGISTER.md). No new product words, approval claims, production code, deployment or secrets. Changed designs remain Changed after approval, awaiting founder.
