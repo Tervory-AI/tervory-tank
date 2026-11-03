@@ -92,10 +92,9 @@ async def run(
                     UUID(tenant),
                     pair_key,
                 )
-                if (
-                    old
-                    and store.decoded(old["summary"]).get("fingerprint") == fingerprint
-                ):
+                previous = store.decoded(old["summary"]) if old else {}
+                changed = previous.get("fingerprint") != fingerprint
+                if not changed:
                     doc_id = str(old["document_id"])
                 else:
                     doc_id = await store.evidence(
@@ -113,6 +112,12 @@ async def run(
                     "href": source_link(doc_id),
                     "fingerprint": fingerprint,
                 }
+                pending_pattern = changed or previous.get("pattern_pending", False)
+                memory = getattr(ledger, "memory", None)
+                if pending_pattern and memory is not None:
+                    from core.patterns import remember
+                    pending_pattern = not await remember(memory, tenant, config, stats, doc_id)
+                summary["pattern_pending"] = pending_pattern
                 await ledger.conn.execute(
                     """INSERT INTO agent_market_lab.warning_pairs (tenant_id,pair_key,document_id,summary,updated_at)
                     VALUES ($1,$2,$3,$4::jsonb,$5) ON CONFLICT (tenant_id,pair_key) DO UPDATE
