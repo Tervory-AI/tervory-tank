@@ -1,0 +1,78 @@
+"""Private Market Lab reads and alert delivery through the existing Tank corridor."""
+from datetime import datetime, timezone
+from uuid import UUID
+
+from fastapi import APIRouter, Header, HTTPException
+from pydantic import BaseModel, ConfigDict
+
+from core.evidence import overview
+from core.intel import PLATFORM, latest
+from core.warnings import listing
+from core.warning_bridge import call
+from feeds.catalog import sources
+
+
+class Read(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: UUID
+
+
+def build_router(*, key_ok, ledger_context, engine):
+    router = APIRouter()
+
+    @router.post("/market/ml3/{operation}")
+    async def read(operation: str, body: Read, x_tank_key: str = Header(default="")):
+        if not key_ok(x_tank_key):
+            raise HTTPException(401, "Room key required")
+        tenant = str(body.tenant_id)
+        async with ledger_context() as ledger:
+            if operation == "intel":
+                if tenant != PLATFORM:
+                    raise HTTPException(404, "Not found")
+                result = await latest(ledger)
+                if result is None:
+                    raise HTTPException(503, "Market Lab is not connected")
+                return result
+            if operation == "warnings":
+                result = await listing(ledger, tenant)
+                dates = {str(r["id"]): r["created_at"] for r in await ledger.conn.fetch(
+                    "SELECT id,created_at FROM agent_market_lab.warnings WHERE tenant_id=$1 ORDER BY created_at DESC,id LIMIT 50", body.tenant_id)}
+                return {**result, "warnings": [{**w, "created_at": dates[w["id"]]} for w in result["warnings"]]}
+            if operation == "predictions":
+                return {"predictions": await ledger.predictions_for(tenant)}
+            if operation == "calibration":
+                rows = await ledger.predictions_for(tenant)
+                return {**(await ledger.calibration_for(tenant)),
+                        "hits": sum(r.get("outcome") == "hit" for r in rows),
+                        "misses": sum(r.get("outcome") == "miss" for r in rows)}
+            if operation == "feeds":
+                result = await overview(ledger, tenant, engine)
+                names = {s.id: s.key_name for s in sources(engine)}
+                # Bound-key URLs and configuration values never leave this read.
+                return {"feeds": [{**{k: f.get(k) for k in ("id", "name", "state", "rows", "checked_at", "document_id")},
+                                    "key_name": names.get(f["id"], "")} for f in result["feeds"]]}
+            if operation == "alerts":
+                from chassis.db import ensure_schedules
+                await ensure_schedules(ledger.conn, "agent_market_lab", [
+                    {"tenant_id": tenant, "cron": "* * * * *", "kind": "alerts", "input": {}}])
+                return {"status": "queued"}
+        raise HTTPException(404, "Not found")
+    return router
+
+
+class MailStore:
+    async def pending_mail(self, tenant, clock):
+        return (await call("alerts/pending", {"tenant_id": tenant}))["pending"]
+
+    async def claim_mail(self, tenant, ident, clock):
+        return (await call("alerts/claim", {"tenant_id": tenant, "warning_id": ident})).get("record")
+
+    async def finish_mail(self, tenant, ident, status, clock):
+        return await call("alerts/finish", {"tenant_id": tenant, "warning_id": ident, "status": status})
+
+
+async def deliver(tenant: str) -> dict:
+    from agents.tiger.alert_email import deliver_pending
+    mail = await deliver_pending(MailStore(), tenant, namespace="market_lab")
+    hooks = await call("alerts/webhooks", {"tenant_id": tenant})
+    return {"mail": mail, "webhooks": hooks}
