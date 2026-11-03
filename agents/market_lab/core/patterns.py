@@ -19,7 +19,9 @@ def claim(config: dict, stats: dict) -> dict:
         "downstream_source": config["downstream_source"],
         "lag_days": {"min": stats["lag_min"], "max": stats["lag_max"], "median": stats["lag_median"]},
         "episodes": stats["episode_count"], "hits": stats["hits"],
-        "hit_rate": stats["hit_rate"],
+        # Six decimals preserve the observed frequency without presenting a long
+        # decimal as a phone number to the existing publication scrubber.
+        "hit_rate": round(stats["hit_rate"], 6) if stats["hit_rate"] is not None else None,
     }
 
 
@@ -40,7 +42,8 @@ async def listing(memory: object, tenant: str, plan: dict) -> dict:
         seen = set()
         rows = await memory.records(tenant, tier=tier)
         for row in sorted(rows, key=lambda item: (str(item.get("created_at", "")), str(item.get("id", ""))), reverse=True):
-            if row.get("tier") != tier or (tier == "client" and str(row.get("tenant_id")) != tenant):
+            owner = tenant if tier == "client" else "00000000-0000-0000-0000-000000000001"
+            if row.get("tier") != tier or str(row.get("tenant_id")) != owner:
                 continue
             try:
                 value = json.loads(row["claim"])
