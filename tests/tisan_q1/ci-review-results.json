@@ -1,0 +1,121 @@
+{
+  "validated_branch_head": "0608cffe53989e72bacd300c68dcb8b6e458522e",
+  "proxy_fix_preserved": "0449ce49",
+  "scanner_version": "1.1.0",
+  "founder_approval": "Approve scan.secrets 1.1.0 in /skala",
+  "full_run": {
+    "passed": 6474,
+    "skipped": 52,
+    "failed_or_worker_crashed": 5,
+    "subtests_passed": 1805,
+    "green": false
+  },
+  "isolated_rechecks": {
+    "intake_passed": 3,
+    "browser_passed": 1,
+    "rung3_passed": 1,
+    "all_five_full_run_failures_passed": true
+  },
+  "postmerge_final": {
+    "passed": 398,
+    "skipped": 3,
+    "collection_errors_after_dependency_sync": 0,
+    "note": "379 passed in the combined batch; its two jwt collection errors were resolved by installing main-pinned PyJWT[crypto]==2.15.1, then 19 identity tests passed with full CI database settings."
+  },
+  "junit_counts": {
+    "main": {
+      "tests": 8250,
+      "failures": 3,
+      "errors": 2,
+      "skipped": 52
+    },
+    "tests_tiger_g5": {
+      "tests": 46,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "tests_zenas_regulation_alerts": {
+      "tests": 40,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "postmerge": {
+      "tests": 384,
+      "failures": 0,
+      "errors": 2,
+      "skipped": 3
+    },
+    "intake-recheck": {
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "browser-recheck": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "rung3-recheck": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "identity-ci-recheck": {
+      "tests": 19,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "followup_commands": [
+    {
+      "name": "postmerge",
+      "exit": 1,
+      "files": [
+        "tests/test_command_repo_tools.py",
+        "tests/test_identity_backup.py",
+        "tests/test_identity_stack.py",
+        "tests/test_identity_za.py",
+        "tests/test_mcp_client.py",
+        "tests/test_mcp_server_client_integration.py",
+        "tests/test_restore_drill.py",
+        "tests/test_trigger_w1.py",
+        "tests/test_trigger_x_length.py",
+        "tests/trigger_second_build/test_second.py",
+        "tests/test_skala_patch_code_unchanged.py",
+        "tests/test_skala_eval_contract.py",
+        "tests/trigger_gate2/test_gate2.py",
+        "tests/test_tisan_quality.py"
+      ]
+    },
+    {
+      "name": "intake-recheck",
+      "exit": 0,
+      "files": [
+        "tests/skala_intake/test_intake.py::test_each_package_meets_real_skala_gate[identity4]",
+        "tests/skala_intake/test_intake.py::test_each_package_meets_real_skala_gate[identity5]",
+        "tests/skala_intake/test_intake.py::test_each_package_meets_real_skala_gate[identity6]"
+      ]
+    },
+    {
+      "name": "browser-recheck",
+      "exit": 0,
+      "files": [
+        "tests/autumbra_public_bugs/test_page.py::test_public_host_and_direct_page_have_no_shell_admin_keeps_gate"
+      ]
+    },
+    {
+      "name": "rung3-recheck",
+      "exit": 0,
+      "files": [
+        "tests/test_skills_offline.py::test_rung3_offline_cases"
+      ]
+    }
+  ],
+  "limitations": "The full concurrent run was not green; separate passing rechecks do not replace that recorded result."
+}
