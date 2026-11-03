@@ -95,7 +95,8 @@ receipt. `plugins.install` and `plugins.remove` are offered only to tenant admin
 and the founder. Both use the existing durable Confirm cards and $0 code receipts.
 Install refuses an unapproved server, missing/mismatched allowed tool or unapproved
 skill before saving the card, and rechecks readiness on confirmation. Install
-records a tenant-scoped row only; remove deletes that row only. Neither approves
+accepts `{name, version}` (`name` is the manifest ID) and records a tenant-scoped
+row only; remove deletes that row only. Neither approves
 a server, connects an account, nor stores credentials. Account connection stays
 in the existing product Plugins panel. The new install screen awaits an approved
 Figma frame; no page or card label is added here. The existing `name`, `status`
