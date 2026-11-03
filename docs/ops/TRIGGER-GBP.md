@@ -156,7 +156,7 @@ A rate-limit rejection, failed token refresh (transport/5xx), or a connection
 failure before the publishing POST uses bounded code backoff (three attempts;
 60 then 120 seconds before the next attempts). After that it stops; a confirmed
 `trigger.post.retry` can explicitly reset a known failure after a fresh Confirm;
-it cannot reset an uncertain delivery. Length errors are terminal for automatic
+uncertain delivery first follows the reconciliation below. Length errors are terminal for automatic
 retry and do not enter backoff. Editing still returns the post to draft.
 
 Google's create endpoint has no documented request-id/idempotency field. A
