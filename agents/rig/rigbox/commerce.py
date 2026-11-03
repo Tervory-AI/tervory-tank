@@ -106,7 +106,11 @@ class Platform:
 
     async def connect(self):
         """Woo's hidden carrier is found by SKU; a reconnect never recreates it."""
-        if self.kind != 'woocommerce':
+        if self.kind == 'shopify':
+            await self.graphql('query{shop{id}}', {})
+            return
+        if self.kind == 'bigcommerce':
+            await self.request('GET', '/v2/store')
             return
         found = await self.request('GET', '/products', params={'sku': 'tervory-rig-line'})
         if not found:
@@ -114,6 +118,20 @@ class Platform:
                 'name': 'tervory-rig-line', 'sku': 'tervory-rig-line', 'type': 'simple',
                 'catalog_visibility': 'hidden', 'status': 'private', 'virtual': False,
                 'manage_stock': False, 'tax_status': 'taxable', 'regular_price': '0'})
+
+    async def product_mapping(self, sku):
+        """Match the store's exact SKU; never substitute a similarly named item."""
+        if self.kind == 'shopify':
+            data = await self.graphql('query($q:String!){productVariants(first:20,query:$q){nodes{id sku}}}',
+                                      {'q': 'sku:' + json.dumps(sku)})
+            found = [p for p in data['productVariants']['nodes'] if p.get('sku') == sku]
+            return {'variant_id': found[0]['id']} if len(found) == 1 else None
+        if self.kind == 'woocommerce':
+            found = [p for p in await self.request('GET', '/products', params={'sku': sku}) if p.get('sku') == sku]
+        else:
+            found = [p for p in (await self.request('GET', '/v3/catalog/products', params={'sku': sku}))['data']
+                     if p.get('sku') == sku]
+        return {'product_id': found[0]['id']} if len(found) == 1 else None
 
     async def stock(self, product: dict) -> dict:
         """Read the store's own product, including price and available quantity."""
@@ -263,7 +281,7 @@ class Platform:
             await self.request('DELETE', '/v3/carts/' + quote(remote['id'], safe=''))
 
     def verify(self, raw, headers, *, now=None):
-        signature(self.kind, raw, headers, self.credential['webhook_secret'], now=now)
+        signature(self.kind, raw, headers, self.credential.get('webhook_secret', ''), now=now)
         try:
             data = json.loads(raw)
             if not isinstance(data, dict):
