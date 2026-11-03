@@ -1,0 +1,6 @@
+#10 exporting manifest list sha256:574b25b8fde022006cc75c4b88c05c4300775ce69b3b8a397ef6a7e3e8d27008 0.0s done
+#10 naming to docker.io/library/codex-tiger-brain-proof:tg3
+#10 naming to docker.io/library/codex-tiger-brain-proof:tg3 done
+#10 unpacking to docker.io/library/codex-tiger-brain-proof:tg3
+#10 unpacking to docker.io/library/codex-tiger-brain-proof:tg3 19.9s done
+#10 DONE 69.4s
