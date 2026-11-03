@@ -139,9 +139,10 @@ async def test_actual_export_payload_cannot_contain_private_rows(database, monke
     assert [r['input'] for r in captured] == [{'n': 0}]
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('submit,cap,expected_jobs,agent', [
-    (False,'50',0,''), (True,'50',1,''), (True,'50',1,'zenas'), (True,'1',0,'zenas')])
-async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(monkeypatch, capsys, submit, cap, expected_jobs, agent):
+@pytest.mark.parametrize('submit,cap,expected_jobs,agent,region', [
+    (False,'50',0,'','us-east'), (True,'50',1,'','us-east'),
+    (True,'50',1,'zenas','za'), (True,'1',0,'zenas','za')])
+async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(monkeypatch, capsys, submit, cap, expected_jobs, agent, region):
     import secrets
     import sys
     from types import SimpleNamespace
@@ -150,7 +151,7 @@ async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(
     monkeypatch.setenv('HF_TOKEN', token)
     monkeypatch.setenv('HF_ORG', 'fixture')
     monkeypatch.setenv('HF_TRAIN_MAX_USD', cap)
-    monkeypatch.setenv('TANK_REGION', 'us-east')
+    monkeypatch.setenv('TANK_REGION', region)
     monkeypatch.setenv('DATABASE_URL', 'postgresql://fixture.invalid/fixture')
     jobs, repos = [], []
     def launch(script, **kwargs):

@@ -1,6 +1,7 @@
 """Submit explicitly, estimate by live HF hardware price, reconcile billed receipts.
 
-No production DB credential is ever sent to a GPU job. Run this on the US box.
+No production DB credential is ever sent to a GPU job. Shared training runs on
+the US box; the Zenas-only run stays with its source and holdout rows on ZA.
 """
 from __future__ import annotations
 import argparse
@@ -62,7 +63,7 @@ async def record_receipt(conn, job_id: str, actual: Decimal):
     if not actual.is_finite() or actual < 0:
         raise ValueError('Invalid billed amount')
     async with conn.transaction():
-        row = await conn.fetchrow('SELECT * FROM tank.training_jobs WHERE id=$1 AND tenant_id=$2 AND region=$3 FOR UPDATE', job_id, PLATFORM, 'us-east')
+        row = await conn.fetchrow('SELECT * FROM tank.training_jobs WHERE id=$1 AND tenant_id=$2 FOR UPDATE', job_id, PLATFORM)
         if not row:
             raise ValueError('Unknown training job')
         if row['ledger_id']:
@@ -71,16 +72,18 @@ async def record_receipt(conn, job_id: str, actual: Decimal):
             return row['ledger_id']
         ident = await conn.fetchval("""INSERT INTO tank.ledger
             (tenant_id,region,agent,task_type,model,priority,cost_usd,outcome)
-            VALUES ($1,'us-east','tank','training.lora',$2,'batch',$3,'delivered') RETURNING id""",
-            PLATFORM, row['model_repo'], actual)
-        await conn.execute('UPDATE tank.training_jobs SET actual_usd=$3,ledger_id=$4 WHERE id=$1 AND tenant_id=$2 AND region=$5', job_id, PLATFORM, actual, ident, 'us-east')
+            VALUES ($1,$2,'tank','training.lora',$3,'batch',$4,'delivered') RETURNING id""",
+            PLATFORM, row['region'], row['model_repo'], actual)
+        await conn.execute('UPDATE tank.training_jobs SET actual_usd=$3,ledger_id=$4 WHERE id=$1 AND tenant_id=$2', job_id, PLATFORM, actual, ident)
         return ident
 
 
 async def run(args):
     import asyncpg
     from huggingface_hub import HfApi
-    if os.environ.get('TANK_REGION', 'us-east') != 'us-east':
+    agent = getattr(args, 'agent', '')
+    region = os.environ.get('TANK_REGION', 'us-east')
+    if region != 'us-east' and not (region == 'za' and agent == 'zenas'):
         raise ValueError('Submit and reconcile training from the US box')
     org = validate_name(os.environ['HF_ORG'])
     api = HfApi(token=os.environ['HF_TOKEN'])
@@ -99,7 +102,7 @@ async def run(args):
             await conn.close()
         print('Billed cost recorded')
         return
-    flavor = training_hardware(getattr(args, 'agent', ''))
+    flavor = training_hardware(agent)
     if flavor not in HARDWARE:
         raise ValueError('Training hardware is not allowed')
     hardware = next(h for h in api.list_jobs_hardware() if h.name == flavor)
@@ -121,14 +124,14 @@ async def run(args):
             # Autocommit the reservation before contacting HF. An uncertain submit
             # must remain blocking, even after an exception or process crash.
             await conn.execute('INSERT INTO tank.training_jobs(id,tenant_id,region,model_repo,estimated_usd) VALUES ($1,$2,$3,$4,$5)',
-                               pending, PLATFORM, 'us-east', repo, amount)
+                               pending, PLATFORM, region, repo, amount)
             api.create_repo(repo_id=repo, private=True, repo_type='model')
             if api.model_info(repo).private is not True:
                 raise ValueError('Output repository must be private')
             job = api.run_uv_job(str(Path(__file__).with_name('train.py')), namespace=org,
                                 flavor=flavor, timeout=args.minutes * 60,
                                 env={'HF_ORG': org, 'TRAIN_DAY': args.day, 'OUTPUT_REPO': repo,
-                                     'TRAIN_AGENT': getattr(args, 'agent', '')},
+                                     'TRAIN_AGENT': agent},
                                 secrets={'HF_TOKEN': os.environ['HF_TOKEN']})
             await conn.execute('UPDATE tank.training_jobs SET id=$1 WHERE id=$2 AND tenant_id=$3', job.id, pending, PLATFORM)
             await link_snapshot_batches(conn, job.id, repo, args.day)

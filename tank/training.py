@@ -746,7 +746,7 @@ async def training_status(actor: Reviewer = Depends(require_reviewer)) -> dict[s
             ))
         job = await conn.fetchrow(
             """SELECT id,model_repo,estimated_usd,actual_usd,created_at FROM tank.training_jobs
-            WHERE tenant_id=$1 AND region=$2 ORDER BY created_at DESC LIMIT 1""", actor.tenant, region,
+            WHERE tenant_id=$1 AND region=$2 ORDER BY created_at DESC LIMIT 1""", PLATFORM_TENANT, region,
         )
         if job:
             items.append({"name": str(job["model_repo"]), "count": 1,
