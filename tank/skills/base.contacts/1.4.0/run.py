@@ -160,6 +160,12 @@ _LINE_TYPES = {
     phonenumbers.PhoneNumberType.FIXED_LINE_OR_MOBILE: "fixed-or-mobile",
     phonenumbers.PhoneNumberType.VOIP: "VoIP",
     phonenumbers.PhoneNumberType.TOLL_FREE: "toll-free",
+    phonenumbers.PhoneNumberType.PREMIUM_RATE: "premium-rate",
+    phonenumbers.PhoneNumberType.SHARED_COST: "shared-cost",
+    phonenumbers.PhoneNumberType.PERSONAL_NUMBER: "personal-number",
+    phonenumbers.PhoneNumberType.PAGER: "pager",
+    phonenumbers.PhoneNumberType.UAN: "uan",
+    phonenumbers.PhoneNumberType.VOICEMAIL: "voicemail",
 }
 _ATOM = r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+"
 _MAILBOX = re.compile(r'(' + _ATOM + r'(?:\.' + _ATOM + r')*|"(?:[\x20-\x21\x23-\x5b\x5d-\x7e]|\\[\x20-\x7e])*")@(.+)')
