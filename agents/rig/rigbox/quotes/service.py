@@ -265,6 +265,8 @@ class QuoteService(Service):
             await record(state="supplier_ordered" if supplied["purchase_order"]["state"] == "sent"
                          else "supplier_order_unconfirmed",
                          purchase_order_state=supplied["purchase_order"]["state"],
+                         supplier_order={key: supplied["supplier_order"].get(key)
+                                         for key in ("channel", "transport", "file", "duplicate")},
                          needs_review=supplied["purchase_order"]["state"] != "sent")
         else:
             await record(state="ordered")
