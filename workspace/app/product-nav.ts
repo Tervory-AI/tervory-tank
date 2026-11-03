@@ -77,6 +77,7 @@ export const SHELL_ROUTES: readonly string[] = [
 
 /** Clerk auth and Figma squad product roots that already render their own left panel. */
 const OWN_SHELL = [
+  "/trigger",
   "/sign-in",
   "/sign-up",
   "/autumbra",
@@ -92,7 +93,7 @@ const OWN_SHELL = [
 ] as const;
 
 /** Auth + Autumbra owner pages keep nested screens under the own-shell root (no workspace menu). */
-const OWN_SHELL_NESTED = new Set<string>(["/sign-in", "/sign-up", "/autumbra"]);
+const OWN_SHELL_NESTED = new Set<string>(["/trigger", "/sign-in", "/sign-up", "/autumbra"]);
 
 export function cleanPath(pathname: string): string {
   if (!pathname) return "/";
