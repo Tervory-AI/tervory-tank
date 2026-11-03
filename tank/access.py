@@ -1528,15 +1528,15 @@ async def tiger_position(actor: Actor = Depends(identity)):
         total = await conn.fetchval("SELECT count(DISTINCT sku) FROM agent_tiger.matches WHERE tenant_id=$1 AND state='confirmed' AND sku=ANY($2::text[])", actor.tenant_id, skus)
         selected = await conn.fetch("SELECT DISTINCT sku FROM agent_tiger.matches WHERE tenant_id=$1 AND state='confirmed' AND sku=ANY($2::text[]) ORDER BY sku LIMIT 100", actor.tenant_id, skus)
         selected = [r['sku'] for r in selected]
-        matches = [dict(r) for r in await conn.fetch("""SELECT sku,url,state FROM (
-            SELECT sku,url,state,row_number() OVER(PARTITION BY sku ORDER BY url) AS n
-            FROM agent_tiger.matches WHERE tenant_id=$1 AND state='confirmed' AND sku=ANY($2::text[])) ranked
-            WHERE n<=20 ORDER BY sku,url""", actor.tenant_id, selected)]
-        observations = {}
-        for match in matches:
-            row = await conn.fetchrow('SELECT price,currency,availability,ts,method FROM agent_tiger.observations WHERE tenant_id=$1 AND url=$2 ORDER BY ts DESC,id DESC LIMIT 1', actor.tenant_id, match['url'])
-            if row:
-                observations[match['url']] = {k: str(v) if isinstance(v, (Decimal,datetime)) else v for k,v in dict(row).items()}
+        readings = await conn.fetch("""SELECT m.sku,m.url,m.state,o.price,o.currency,o.availability,o.ts
+            FROM agent_tiger.matches m LEFT JOIN LATERAL (
+                SELECT price,currency,availability,ts FROM agent_tiger.observations
+                WHERE tenant_id=$1 AND url=m.url ORDER BY ts DESC,id DESC LIMIT 1
+            ) o ON true WHERE m.tenant_id=$1 AND m.state='confirmed' AND m.sku=ANY($2::text[])
+            ORDER BY m.sku,m.url""", actor.tenant_id, selected)
+        matches = [dict(row) for row in readings]
+        observations = {row['url']: {k: str(row[k]) if isinstance(row[k], (Decimal,datetime)) else row[k]
+                        for k in ('price','currency','availability','ts')} for row in readings}
     result = {'tenant_id': str(actor.tenant_id), 'products': tiger_positions(products, matches, observations),
               'ledger_id': str(ledger), 'cost_usd': 0, 'model_calls': 0}
     result.update(total=total, has_more=total > len(result['products']))
