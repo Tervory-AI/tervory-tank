@@ -10,9 +10,10 @@ import { join } from 'node:path';
 import { run } from '../src/client.mjs';
 
 const suffix = 'placeholder'.padEnd(43, 'x');
+const placeholderToken = (prefix, region) => `${prefix}.${region}.${'0'.repeat(32)}.${suffix}`;
 const grant = region => ({
-  access_token: `tv1.${region}.${'0'.repeat(32)}.${suffix}`,
-  refresh_token: `tvr1.${region}.${'0'.repeat(32)}.${suffix}`,
+  access_token: placeholderToken('tv1', region),
+  refresh_token: placeholderToken('tvr1', region),
   expires_at: new Date(Date.now() + 3600000).toISOString(),
   refresh_expires_at: new Date(Date.now() + 86400000).toISOString(),
 });
