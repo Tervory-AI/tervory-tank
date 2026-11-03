@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 import sys
 from uuid import UUID, uuid4
-from types import SimpleNamespace
 
 import asyncpg
 from fastapi import FastAPI, HTTPException
@@ -249,3 +248,27 @@ async def test_worker_busy_retry_and_txt_failure_terminal(pool):
         assert (await events.run_queued(pool, conn, execute_scan=txt))['count'] == 1
         assert await events.run_queued(pool, conn, execute_scan=txt) is None
     assert calls == ['busy','txt']
+
+
+@pytest.mark.asyncio
+async def test_notice_comparison_cannot_fix_full_scan_findings(pool):
+    store = await watched(pool)
+    full = await store.create(A, TARGET, watch_artifact(DOMAIN), watched=True)
+    finding = {'tool': 'placeholder', 'rule': 'placeholder', 'file': TARGET,
+               'line': 0, 'severity': 'medium'}
+    assert await store.running(A, full)
+    await store.complete(A, full, [finding])
+    await events.Queue(pool).enqueue(A, message())
+    async def notice_scan(s, body, **kwargs):
+        assert await s.running(A, kwargs['ident'])
+        await s.complete(A, kwargs['ident'], [])
+    async with pool.acquire() as conn:
+        await events.run_queued(pool, conn, execute_scan=notice_scan)
+    changes = await store.changes(A, DOMAIN)
+    assert changes['fixed'] == [] and changes['previous_scan_id'] is None
+    later = await store.create(A, TARGET, watch_artifact(DOMAIN), watched=True)
+    assert await store.running(A, later)
+    await store.complete(A, later, [finding])
+    changes = await store.changes(A, DOMAIN)
+    assert changes['previous_scan_id'] == str(full)
+    assert len(changes['unchanged']) == 1 and changes['new'] == changes['fixed'] == []
