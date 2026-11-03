@@ -109,6 +109,7 @@ def test_eval_refuses_unhanded_or_unsafe_files(files):
 async def test_room_eval_auth_and_exact_skill_version(monkeypatch):
     spec = importlib.util.spec_from_file_location('placeholder_radix_r5_app', ROOT / 'agents/radix/app.py')
     room = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, room)
     spec.loader.exec_module(room)
     monkeypatch.setenv('TANK_KEY', 'placeholder-room-auth')
     monkeypatch.setattr(iac, 'run_skill', lambda payload: {'status': 'run', 'critical': 0})
