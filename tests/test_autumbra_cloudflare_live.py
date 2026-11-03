@@ -4,7 +4,6 @@ import hmac
 import itertools
 import json
 import socket
-import threading
 import time
 from pathlib import Path
 
@@ -62,7 +61,7 @@ def test_bad_health_fails_closed(monkeypatch, tmp_path, mutation):
     assert health.read_health("tervory.com") is False
 
 
-@pytest.mark.parametrize("token,allowed,proxy,observer", itertools.product([False, True], repeat=4))
+@pytest.mark.parametrize("token,allowed,proxy,observer", list(itertools.product([False, True], repeat=4)))
 def test_all_four_gates(monkeypatch, token, allowed, proxy, observer):
     monkeypatch.setenv(cf.TOKEN_ENV, "offline-test-marker" if token else "")
     monkeypatch.setattr(cf, "proxy_answers", lambda: proxy)
@@ -78,7 +77,7 @@ def test_all_four_gates(monkeypatch, token, allowed, proxy, observer):
 
 def test_proxy_probe_dials_only_fixed_proxy(monkeypatch):
     calls = []
-    def fail(address, **kwargs):
+    def fail(address, *args, **kwargs):
         calls.append(address)
         raise OSError
     monkeypatch.setattr(cf.socket, "create_connection", fail)
@@ -88,7 +87,7 @@ def test_proxy_probe_dials_only_fixed_proxy(monkeypatch):
 
 def test_live_transport_has_no_direct_fallback(monkeypatch):
     calls = []
-    def fail(address, **kwargs):
+    def fail(address, *args, **kwargs):
         calls.append(address)
         raise OSError("offline")
     monkeypatch.setattr(socket, "create_connection", fail)
@@ -146,3 +145,50 @@ def test_compose_one_way_health_and_separate_networks():
         assert cf.TOKEN_ENV not in services[name]["environment"]
     assert set(services["egress-proxy"]["networks"]) == {"enforce_internal", "egress"}
     assert set(services["health-egress-proxy"]["networks"]) == {"health_internal", "health_egress"}
+
+
+def test_boot_restores_real_control_and_owned_rule(monkeypatch, tmp_path):
+    from fastapi import FastAPI
+    from agents.ghost import enforce_app as app_module
+    from agents.ghost.durable_shields import persist_control
+    from test_autumbra_cloudflare_hand import FakeCloudflare, edge, settings, REF
+    api = FakeCloudflare()
+    prior = edge(api)
+    row = prior.apply_rate_limit(site="tervory.com", path="/autumbra-check", ref=REF)
+    persist_control(tmp_path, prior)
+    monkeypatch.setenv("TENANT_ID", prior.tenant_id)
+    monkeypatch.setenv(cf.TOKEN_ENV, "offline-test-marker")
+    monkeypatch.setattr(cf, "proxy_answers", lambda: True)
+    monkeypatch.setattr(health, "health_configured", lambda: True)
+    monkeypatch.setattr(health, "read_health", lambda site: True)
+    monkeypatch.setattr(cf, "CloudflareProxyTransport", lambda: httpx.MockTransport(api))
+    monkeypatch.setattr(app_module, "data_dir_path", lambda: tmp_path)
+    monkeypatch.setattr(app_module, "load_enforce_client_settings", settings)
+    app = FastAPI()
+    assert app_module._boot_durable_control(app) == []
+    restored = app.state.control
+    assert isinstance(restored, cf.CloudflareEdgeControl)
+    assert restored.list_blocked() == [row]
+    restored.undo(row["rule_id"])
+    assert restored.list_blocked() == []
+
+
+@pytest.mark.parametrize("failure", ["stale", "unsigned", "failed", "missing"])
+def test_signed_health_failure_automatically_undoes(monkeypatch, tmp_path, failure):
+    from test_autumbra_cloudflare_hand import FakeCloudflare, edge, settings, payload
+    from agents.ghost.enforce_apply import apply_from_payload
+    path = signed_result(monkeypatch, tmp_path, **({"checked_at": 0} if failure == "stale" else {}))
+    if failure == "unsigned":
+        data = json.loads(path.read_text()); del data["signature"]
+        path.write_text(json.dumps(data))
+    if failure == "failed":
+        signed_result(monkeypatch, tmp_path, ok=False, status=503)
+    if failure == "missing":
+        path.unlink()
+    api = FakeCloudflare()
+    control = edge(api)
+    control._health_probe = lambda: health.read_health("tervory.com")
+    receipt = apply_from_payload(payload("rate_limit"), settings=settings(), control=control)
+    assert receipt["outcome"] == "auto_undone_health_failed"
+    assert receipt["control"] == "cloudflare"
+    assert control.list_blocked() == []
