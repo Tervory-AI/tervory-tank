@@ -251,3 +251,68 @@ Names containing the old word “refund” are historical test identifiers; rema
 No founder-browser test or screenshot is claimed. After the founder merges/deploys, he must accept a quote on the Custom Nation test page and see its store handoff without a payment step, then confirm through the authenticated retailer API and verify exactly one order/PO. API responses carry each item’s delivery time or back-order flag without supplier details. Widget display and a retailer confirmation button remain Figma items; this job adds no unapproved rendering or wording.
 
 The founder’s test screenshots must be added to the PR after that acceptance. Tests passing is not the founder’s DONE WHEN. Claude opens the PR; the founder’s review and merge remain pending.
+
+## PR #613 review fixes — 3 November 2026
+
+This section supersedes the earlier confirmation-error behavior and validation result for the review changes. CI's **tank** job is the full-suite test of record for the final pushed head; the older 735-pass local result above applies to the original implementation, not this final revision.
+
+| File and line | Review change |
+| --- | --- |
+| `agents/rig/rigbox/quotes/service.py:217` | A released confirmation lease can be retried immediately. |
+| `agents/rig/rigbox/quotes/service.py:247` | Only `order_mismatch` and `order_rejected` require a person; other placement failures retain `store_confirmed` and clear the lease. Stable order numbers and supplier outbox safeguards remain. |
+| `agents/rig/rigbox/retailer_api.py:55` | On a lost lease, re-read only the same tenant's quote and return its current state in the existing response shape. |
+| `tank/access.py:945` | Signed-in Rig admin corridor accepts strict `quote_id`, requires the existing Confirm binding, and writes a zero-cost code ledger receipt after success. Tenant identity is supplied by the account, never the body. |
+| `tank/command.py:44` | Register `rig.quote.confirm_payment` in Rig tools. |
+| `tank/command.py:118` | Expose the tool to tenant admins/founder, excluding ordinary members. |
+| `tank/command.py:1018` | Strict quote-ID-only argument model. |
+| `tank/command.py:1262` | Existing action-card adapter; label is exactly the tool name. |
+| `tank/command.py:1461` | Forward only `data: {quote_id}`; account headers supply tenant identity. |
+| `tank/command.py:1655` | Use durable confirmed dispatch, as Trigger tools do. |
+| `tests/test_rig_no_payments.py:34` | Placement retries before/after an insert; exactly one order/outbox message. |
+| `tests/test_rig_no_payments.py:62` | Both permanent errors remain `needs_person`. |
+| `tests/test_rig_no_payments.py:75` | HTTP lost-lease response and cross-tenant 404. New literal identities/contact values use `placeholder`. |
+| `tests/test_rig_confirmation_command.py:20` | Ordinary-member refusal, admin/founder exposure, strict arguments. |
+| `tests/test_rig_confirmation_command.py:40` | Pending card, Confirm gate, actual signed-in admin route, tenant 404, successful store confirmation and actual code-receipt SQL with zero cost. No model or external API calls. |
+| `tests/test_rig_optional_blind_ship.py:186` | Renamed `test_blind_order_failure_needs_person` to `test_blind_transient_order_failure_releases_lease`: the double raises transient `order_unavailable`, so verify release then successful placement instead of person review. |
+
+The earlier `test_blind_order_failure_refunds` → `test_blind_order_failure_needs_person` rename is historical; the final name is now `test_blind_transient_order_failure_releases_lease`. No supplier safety assertions were removed.
+
+### Founder settings after merge — names only
+
+* `RIG_LOCATE_ORDER_MODE`
+* `RIG_RETAILER_KEY`
+* `RIG_LOCATE_OUTBOX_DIR` for auto-order
+* The store's `delivery.min_days` / `delivery.max_days` range through the existing retailer settings operation.
+
+The founder supplies all setting values. This change adds no bank/card data and no new page or button. The existing `/chats` Confirm card is specifically authorized for `rig.quote.confirm_payment`. Rechecked `tank/main.py:_startup` at line 755: existing additive schema and administrative RLS rollout remain unchanged.
+
+### Exact review validation commands and results
+
+All commands below run from `/workspace/codex-rig-nopay`:
+
+```sh
+git status --short --branch
+git diff --check
+git add tank/command.py
+git commit -m 'feat(rig): add admin-only quote confirmation tool with existing Confirm card'
+git push origin codex/rig-no-payments
+PYTHONPATH=agents/_chassis:agents/rig /workspace/codex-tiger-t1/.venv/bin/python -m pytest tests/test_rig_no_payments.py tests/test_rig_confirmation_command.py -q --tb=short --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+PYTHONPATH=agents/_chassis:agents/rig /workspace/codex-tiger-t1/.venv/bin/python -m pytest tests/test_rig_no_payments.py tests/test_rig_confirmation_command.py tests/test_rig_optional_auto_order.py tests/test_rig_optional_blind_ship.py tests/test_rig_locate_checkout.py tests/test_command.py -q --tb=short --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+/workspace/codex-tiger-t1/.venv/bin/python -m ruff check tests/test_rig_no_payments.py tests/test_rig_confirmation_command.py tests/test_rig_optional_blind_ship.py tank/command.py tank/access.py agents/rig/rigbox/quotes/service.py agents/rig/rigbox/retailer_api.py --select E9,F
+```
+
+The focused run passed **22 tests, 1 skipped, 3 warnings in 11.67s**. The broader run initially found the obsolete blind-shipping transient-failure expectation (**1 failed, 113 passed, 52 skipped**). After updating that expectation, the same broader command passed: **114 passed, 52 skipped, 14 warnings in 7.03s**. Skips require local Postgres fixtures; no local Postgres/full-suite result is claimed for this revision. Lint passed; `git diff --check` passed. Every completed test file was committed and pushed separately, in sequence.
+
+Final integration commands (results and final head are recorded in the PR body):
+
+```sh
+git add docs/rig/optional-pay-on-accept-main-handoff.md
+git commit -m 'docs(rig): record confirmation review proof and founder setting names'
+git fetch origin && git merge origin/main
+git diff --check
+git push origin codex/rig-no-payments
+git rev-parse HEAD
+git status --short --branch
+```
+
+The GitHub PR body contains the removed/changed test inventory and final-head CI state. Founder-browser acceptance and screenshots remain outstanding; no acceptance is claimed from unit tests.
