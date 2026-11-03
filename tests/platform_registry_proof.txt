@@ -1,127 +1,73 @@
-PR #635: gates 2 and 3, independent-review corrections
+PR #635: current-main Tiger watch preservation and follow-up fixes
 
 Branch: codex/platform-registry
-Current-main freeze: d342b453ca30615680e23b290bfb6f3f310689d9
-First commit: 3baf190aeb609a35f4f0ebfca02cce395a9aa1ea
-That commit contains only tests/test_registry_frozen.py and the golden, generated
-on an untouched detached checkout of current main. Baseline test: 1 passed in
-5.47s. Registry move/serving commits were replayed after that first freeze.
-PR #625/codex/platform-w3 was not changed by this work.
+Fetched main: 4bbff070d70d39e02049c87433b82bcd64737ae8
+Authorized main merge performed once: a271edaa (retained on local refreeze backup).
+Then scripts/refreeze_platform_registry.py prepare replayed the branch on that
+main, with new first freeze commit 7f1e5419e5c50b555335eb7387c4cf7886e9fb61.
+That first commit adds only the golden and snapshot test before extraction.
+Prepare baseline test: 1 passed in 3.27s. Finish: 1 passed in 5.13s.
+Finish verified that all merged-main tools, adapters, schemas, permissions,
+dispatch branch indices, route ordering, lifecycle and comment-stripped SQL are
+unchanged after removing only skala.teachers and its required route/column.
 
-Main additions retained since the previous a870ade1 baseline
-- base.list.products between base.list.export and base.list.to_crm, GET adapter
-  with command.ListArgs.
-- market_lab.warnings, predictions, calibration, feeds and alerts.email,
-  alerts.webhook, alerts.off, with main's exact argument models, paths and order.
-- The three alerts tools are ADMIN_ONLY_TOOLS.
-- ADAPTER_ORDER exactly matches current main's interleaving, including the new
-  Base adapter and Market Lab reads/alerts between tiger.read and tiger.alerts.
-- route_turn calls market_lab_code_plan once. execute_card preserves main's
-  alerts prefix branch, once variable, confirmed call and result_card tail.
+Tiger / #629 retained
+- tank/command_tools/tiger.py:2: adds tiger.watches, pause, resume, remove and bulk.
+- tiger.py:6-7: pause/resume/remove/bulk in REQUEST_BODY_TOOLS and CONFIRMED.
+- tiger.py:17-21: adapters immediately after tiger.read in main order; bulk uses
+  tiger_watch_commands.BulkArgs, paid=True, kind=paid_run.
+- tank/command_tools/__init__.py:7: Tiger adapter segment has seven entries.
+- tank/routes_registry.py:28: early tiger_watch_commands.build_router() between
+  base_lists and tiger_alerts.
+- Main's WatchArgs.every and Tiger code planner additions are preserved unchanged.
 
-Review corrections
-1. Current-main golden records tools, schemas, permissions, planning, routing,
-   lifecycle, comment-stripped SQL AND each tool's first dispatch branch index.
-   Final golden adds only skala.teachers and its required route/column; all other
-   current-main snapshot sections match exactly. A mutation regression drops the
-   alerts prefix branch and verifies the dispatch snapshot detects that change.
-2. RouteLLM always requires at least DEFAULT_THRESHOLD (.99) and
-   DEFAULT_MIN_SAMPLES (200), even if policy overrides set .95 and 30.
-   Regression: 200 at .98 holds; 30 at 1 holds; 200 at .99 promotes.
-3. Tisan founder/admin/request-body declarations use tisan_requests.TOOLS (CLIENT).
-4. record_served UPDATE exceptions log only the exception class; a delivered,
-   charged response remains delivered. The real-database regression verifies it.
-5. Ledger-sourced gold parses source_ref as UUID, skips invalid lookup and uses
-   the indexed WHERE id=$1 AND tenant_id=$2 AND rung IN (1,2).
-6. Unauthorized skala.teachers code syntax returns None to the existing planner.
-7. Teacher aggregates retain teacher_model=None; no model="null" display alias.
-8. command.py names the preserved REQUEST_BODY_TOOLS/CONFIRMED difference:
-   tisan.preview only in the first; rig.quote.confirm_payment, tiger.match* and
-   radix.repo.scan only in the second.
+Other corrections
+- tank/training.py:561: teachers skill_id declares Query min_length=1,
+  max_length=100 and the exact TeachersArgs pattern. Invalid, empty and
+  200-character inputs are covered by 422 endpoint assertions.
+- tank/graduate.py:471: conditional serving models keep a rollback bar of at
+  least DEFAULT_THRESHOLD (.99), even if policy eval_threshold is .95. Tests
+  cover .98 rollback, .99 hold, a higher configured threshold, and unchanged
+  concrete-model threshold behavior.
+- scripts/refreeze_platform_registry.py:59: finish identifies the first freeze
+  by the snapshot helper's file-add history, rather than unrelated merged commits.
+- scripts/refreeze_platform_registry.py:98,110: prepare excludes commits already
+  on fetched main when replaying; superseded golden-only commits are omitted.
+  This avoids replaying upstream commits introduced by the authorized merge.
+
+Existing gate 3 behavior remains
+Founder-only .99/200 promotion with matching fingerprint; automatic promotion
+holds. Strong fallback for busy, slow, failed, urgent, drifted or refused weak
+routes; shared cap4 and 0.5s bounded scoring. Timed-out scoring retains its slot
+until the thread ends. Concrete answering-model receipts, safe annotation failure,
+both shadow paths suppressed, rollback/configure behavior and revalidation checks.
+One nullable additive teacher_model ALTER, no backfill. Same-tenant UUID ledger
+lookup; code/cache/nonledger teachers stay NULL. Founder zero-cost aggregate read,
+no pair content, private version tenant/region isolation. Unknown teacher_model
+stays NULL without a model="null" alias; known teachers use the existing Model label.
+newest_created_at remains API metadata needing an approved result label.
+No UI, compose, environment or workflow edits.
+Next shared files: workspace/lib/tank.ts and workspace/app/chats/presentation.ts.
 
 run_route change
-Only the two marked blocks differ from baseline: resolve promoted conditional
-policy before the router guard, then annotate its delivered ledger row (now
-containing the reviewed exception handling). Removing both blocks still gives:
-3f33cc4218d786327c064f68aaf2a93cd45675c8ad9d751c9ed0753394a6ebe9
-No other run_route lines change; the regression checks this exact hash.
-
-Serving / schema / read scope
-The shared helper scores the last user prompt in a thread under the existing
-cap4 and a 0.5-second timeout. This bounds added foreground latency to 500ms;
-background work retains its capacity slot until the thread really finishes.
-Busy/slow/error/urgent/fingerprint-drift/refused-weak cases serve strong.
-Founder promotion only, automatic hold, rollback to strong, no configure while
-promoted, both shadow paths suppressed, revalidation receipt checks retained.
-One nullable additive idempotent teacher_model ALTER in the platform region.
-No backfill. Code/cache/nonledger teacher stays NULL. Teacher reads expose only
-active positive counts (including active holdouts), not pair content, with
-private version tenant and region checks and a zero-cost code receipt.
-newest_created_at still needs an approved label; API metadata only, no UI changes.
-Next shared files: workspace/lib/tank.ts and workspace/app/chats/presentation.ts.
-No workspace, compose, environment, workflows or industry-specific changes.
-
-Repeatable final re-freeze (run only when Claude authorizes final rebase)
-  .venv312/bin/python scripts/refreeze_platform_registry.py prepare
-  # Resolve any ordinary rebase conflicts preserving current main; continue.
-  .venv312/bin/python scripts/refreeze_platform_registry.py finish
-prepare saves a backup branch, fetches main, snapshots in a detached checkout,
-commits the golden first, and replays the move commits. Old golden-only commits
-are superseded. finish refuses any current-main snapshot drift except the exact
-teacher addition and commits that addition. Neither step pushes. Final focused
-regressions and an explicit leased branch push follow. finish ran successfully
-in this review correction: frozen test 1 passed in 4.45s.
+Only the two marked serving-resolution and receipt-annotation blocks differ from
+main. Removing them yields SHA256
+3f33cc4218d786327c064f68aaf2a93cd45675c8ad9d751c9ed0753394a6ebe9.
+The annotation block catches UPDATE errors and logs only the exception class.
 
 Validation
-Local tests run serially, no retries or external provider/model calls. Disposable
-private PostgreSQL; model gateway and scoring stubbed by the existing fixture.
-Focused registry/extensions/RouteLLM: 37 passed in 9.39s.
-Serial private-PostgreSQL regression: 202 passed in 538.91s (before the last
-teacher display-alias adjustment). Covers integration, existing RouteLLM,
-graduation, Market Lab ML3, commands, Tisan, frozen/extension and boundary checks.
-Final targeted teacher check: 1 passed in 13.13s, including known-model labels,
-missing-teacher NULLs and private version tenant/region isolation.
-Final implementation head: 5de3261073e7e8a93a3abf4d9ee4969e6276f636.
-The following commit updates this report only.
-Command:
-.venv312/bin/python .platform-proof/with-pg.py tests/test_platform_registry_integration.py tests/test_tank_routellm.py tests/test_t6_graduate.py tests/test_chat_graduation.py tests/test_market_lab_ml3.py tests/test_command.py tests/test_tisan_requests.py tests/test_registry_frozen.py tests/test_registry_extensions.py tests/test_tank_one_door.py --timeout=120 --timeout-method=thread -o faulthandler_timeout=90 --durations=8
-All these local results overlap; do not add their counts.
 Ruff E9,F over changed Python and git diff --check passed.
-No prohibited parallel offline suite or 50-run loop.
-CI is the full-suite test of record. No CI or live acceptance pass claimed here.
-Founder product reads / promotion / scored weak+strong receipts / rollback /
-skala.teachers after merge and deploy remain the live acceptance checks.
+Requested serial local regression, no retries, disposable private PostgreSQL,
+stub gateway/scorer, no external provider calls:
+.venv312/bin/python .platform-proof/with-pg.py tests/test_tiger_watch_commands.py tests/test_command.py tests/test_personal_tokens.py tests/test_platform_routellm_serving.py tests/test_registry_frozen.py tests/test_registry_extensions.py tests/test_platform_registry_integration.py::test_teachers_sources_counts_receipt_and_tenant_isolation --timeout=120 --timeout-method=thread -o faulthandler_timeout=90 --durations=8
+The result and final-head CI ci-ok, tank (1-3), workspace statuses are recorded in
+the PR after execution. CI is the full-suite test of record. No prohibited
+parallel offline suite or 50-run loop was run locally. Founder live acceptance
+remains after merge/deploy; it is not claimed here.
 
-Current review-change line locations
-tank/command_tools/base.py:2 TOOLS = {'base': ['base.batch', 'base.search', 'base.find', 'base.list.save', 'base.lists', 'base.list.show', 'base.list.export', 'base.list.products', 'base.list.to_crm']}
-tank/command_tools/base.py:21 'base.list.products': command.Adapter('GET', '/v1/command/base/lists/products', command.ListArgs, 'base.list.products'),
-tank/command_tools/market_lab.py:2 TOOLS = {'market_lab': ['market_lab.research', 'market_lab.warnings', 'market_lab.predictions', 'market_lab.calibration', 'market_lab.feeds', 'market_lab.alerts.email', 'market_lab.alerts.webhook', 'market_lab.alerts.off']}
-tank/command_tools/market_lab.py:5 ADMIN_ONLY_TOOLS = frozenset(['market_lab.alerts.email', 'market_lab.alerts.webhook', 'market_lab.alerts.off'])
-tank/command_tools/market_lab.py:9 def adapters(command):
-tank/command_tools/__init__.py:7 ADAPTER_ORDER = (('tisan', 4), ('base', 3), ('mcp', 3), ('trigger', 11), ('worker', 3), ('base', 2), ('tiger', 4), ('base', 7), ('tiger', 2), ('market_lab', 7), ('tiger', 1), ('market_lab', 1), ('rig', 3), ('tisan', 1), ('radix', 3), ('tisan', 1), ('radix', 3), ('zenas', 7), ('skala', 6), ('trigger', 26))
-tank/command.py:45 # REQUEST_BODY_TOOLS alone includes tisan.preview; CONFIRMED alone includes
-tank/command.py:484 from market_lab_ml3 import code_plan as market_lab_code_plan
-tank/command.py:1604 once = None
-tank/command.py:1621 elif action.tool.startswith("market_lab.alerts."):
-tank/command.py:1685 result_card = public_card(unpack(row["state"])["cards"][card_id])
-tank/graduate.py:304 if str(policy.get("candidate_model") or "").startswith("routellm:"):
-tests/test_registry_frozen.py:21 ORIGIN_COMMIT = 'd342b453ca30615680e23b290bfb6f3f310689d9'
-tests/test_registry_frozen.py:36 def _dispatch(command, tools):
-tests/test_registry_frozen.py:87 'dispatch': _dispatch(command, set(command.ADAPTERS) | {tool for actor in actors.values() for tool in command.allowed_tools(actor)}),
-tank/command_tools/tisan.py:2 from tisan_requests import TOOLS as CLIENT
-tank/command_tools/tisan.py:5 FOUNDER_TOOLS = ['tisan.build', *CLIENT]
-tank/command_tools/tisan.py:6 TENANT_ADMIN_TOOLS = list(CLIENT)
-tank/command_tools/tisan.py:8 REQUEST_BODY_TOOLS = frozenset(CLIENT)
-tank/main.py:1514 # BEGIN ROUTELLM SERVING RECEIPT
-tank/training.py:141 ledger_id = uuid.UUID(str(row.get("source_ref") or ""))
-tank/training.py:146 "SELECT model FROM tank.ledger WHERE id=$1 AND tenant_id=$2 AND rung IN (1,2)",
-tank/training.py:561 async def teachers(skill_id: str, actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]:
-tank/training.py:584 "teacher_model": row["teacher_model"], "count": row["count"],
-tank/command_tools/skala.py:43 if "skala.teachers" not in allowed_tools(actor):
-scripts/refreeze_platform_registry.py:56 def finish():
-scripts/refreeze_platform_registry.py:74 def prepare():
-tests/test_platform_routellm_serving.py:227 def test_routellm_cannot_lower_founder_bar(samples, agreement, expected):
-tests/test_platform_routellm_serving.py:236 async def test_malformed_gold_ledger_reference_skips_lookup(monkeypatch, source_ref):
-tests/test_platform_routellm_serving.py:255 async def test_unauthorized_teacher_syntax_falls_through(monkeypatch):
-tests/test_platform_registry_integration.py:274 async def test_served_annotation_failure_keeps_delivered_answer(serving, monkeypatch, caplog):
-tests/test_registry_extensions.py:84 def test_dispatch_snapshot_detects_dropped_prefix(monkeypatch):
+Final re-freeze, only when authorized
+.venv312/bin/python scripts/refreeze_platform_registry.py prepare
+# Resolve any rebase conflicts preserving main and git rebase --continue.
+.venv312/bin/python scripts/refreeze_platform_registry.py finish
+Neither step pushes. Finish refuses every snapshot drift except the teacher
+addition. Run focused regressions and push with an explicit lease after rewriting.
