@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { lstat, realpath, open, readdir, writeFile, rename, unlink } from 'node:fs/promises';
+import { lstat, realpath, open, readdir, readFile, writeFile, rename, unlink, mkdtemp, rm } from 'node:fs/promises';
 import { resolve, relative, isAbsolute, sep, dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -86,7 +86,7 @@ export class CodeFolder {
     return processOutput('git', [...options, ...args], { cwd: this.root, input, outputBytes: ['ls-files', 'check-ignore'].includes(args[0]) ? 8_388_608 : LIMITS.outputBytes, delimiter: args.includes('-z') ? '\0' : '\n' });
   }
   async path(name, { missing = false } = {}) {
-    if (typeof name !== 'string' || !name || name.includes('\0') || name.includes('\\')) throw refused();
+    if (typeof name !== 'string' || !name || /[\x00-\x1f\x7f]/.test(name) || name.includes('\\')) throw refused();
     const path = resolve(this.root, name);
     if (!inside(this.root, path) || secretPath(relative(this.root, path))) throw refused();
     // Follow every ancestor, even when the final file does not exist yet.
@@ -189,7 +189,7 @@ export class CodeFolder {
       if (value === null || expected === null || digest(value.bytes) !== expected || redactSecrets(value.text) !== value.text) throw refused();
       return value.text;
     };
-    const before = await check(); const after = applyDiff(before, patch, name, expected === null);
+    const before = await check(); const after = await applyDiff(before, patch, name, expected === null, this.root);
     if (Buffer.byteLength(after) > LIMITS.fileBytes || redactSecrets(after) !== after) throw refused();
     io.write(patch + '\n');
     if (io.interactive !== true || (await io.prompt('Apply [y/N] '))?.trim().toLowerCase() !== 'y') return { applied: false };
@@ -244,31 +244,30 @@ export class CodeFolder {
   }
 }
 
-// Single-file unified diffs only; no git binary patch, rename, executable metadata,
-// guessed offsets or fuzzy contexts. New files require a prior missing-file read.
-export function applyDiff(before, patch, name, creating = false) {
-  const lines = patch.split('\n'); if (lines.at(-1) === '') lines.pop();
+// Use Git's existing unified-diff parser/applicator, not a second patch engine.
+// Stage against a fixed neutral filename in a fresh scratch repo. No caller path,
+// Git configuration, filter or hook can turn a patch into another file operation.
+export async function applyDiff(before, patch, name, creating = false, root = process.cwd()) {
+  const lines = patch.split('\n');
   if (lines[0] !== `--- ${creating ? '/dev/null' : 'a/' + name}` || lines[1] !== `+++ b/${name}`) throw refused();
-  const source = before === '' ? [] : before.split('\n'); if (before.endsWith('\n')) source.pop();
-  const out = []; let at = 0; let i = 2; let hunks = 0; let newline = true;
-  while (i < lines.length) {
-    const hunk = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?:.*)$/.exec(lines[i++]);
-    if (!hunk) throw refused(); hunks++;
-    const oldCount = Number(hunk[2] ?? 1), newCount = Number(hunk[4] ?? 1);
-    const start = Number(hunk[1]) - (oldCount ? 1 : 0);
-    if (start < at || start > source.length) throw refused();
-    out.push(...source.slice(at, start)); at = start;
-    if (Number(hunk[3]) !== out.length + (newCount ? 1 : 0)) throw refused();
-    let removed = 0, added = 0;
-    while (i < lines.length && !lines[i].startsWith('@@ ')) {
-      const line = lines[i++], type = line[0], text = line.slice(1);
-      if (line === '\\ No newline at end of file') { if (['+', ' '].includes(lines[i - 2]?.[0])) newline = false; continue; }
-      if (type === ' ' || type === '-') { if (source[at++] !== text) throw refused(); removed++; }
-      if (type === ' ' || type === '+') { out.push(text); added++; }
-      if (![' ', '-', '+'].includes(type)) throw refused();
-    }
-    if (removed !== oldCount || added !== newCount) throw refused();
-  }
-  if (!hunks) throw refused(); out.push(...source.slice(at));
-  return out.join('\n') + (out.length && newline ? '\n' : '');
+  lines[0] = `--- ${creating ? '/dev/null' : 'a/target'}`; lines[1] = '+++ b/target';
+  const input = lines.join('\n');
+  const scratch = await mkdtemp(resolve(root, '.tervory-edit-'));
+  const git = args => processOutput('git', ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null',
+    '-c', 'core.attributesFile=/dev/null', ...args], { cwd: scratch, input });
+  try {
+    if ((await git(['init', '--quiet'])).code !== 0) throw refused();
+    if (!creating) await writeFile(resolve(scratch, 'target'), before, { flag: 'wx', mode: 0o600 });
+    const parsed = await git(['apply', '--numstat', '-z', '--unidiff-zero', '--whitespace=nowarn']);
+    // The original patch may describe exactly one ordinary text file. Additional
+    // headers, binary patches, renames and deleted files cannot escape this check.
+    if (parsed.code !== 0 || !/^\d+\t\d+\ttarget\x00$/.test(parsed.output)) throw refused();
+    if ((await git(['apply', '--check', '--unidiff-zero', '--whitespace=nowarn'])).code !== 0) throw refused();
+    if ((await git(['apply', '--unidiff-zero', '--whitespace=nowarn'])).code !== 0) throw refused();
+    const target = resolve(scratch, 'target'); const stat = await lstat(target);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > LIMITS.fileBytes) throw refused();
+    const result = new TextDecoder('utf-8', { fatal: true }).decode(await readFile(target));
+    if (result.includes('\0')) throw refused();
+    return result;
+  } finally { await rm(scratch, { recursive: true, force: true }); }
 }
