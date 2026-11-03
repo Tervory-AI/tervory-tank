@@ -3,6 +3,7 @@
 import { boundedBody, boundedFetch } from "@/lib/tank";
 import { homeRegion } from "@/app/api/zenas/tank";
 import { approvalTank, type DeviceIdentity } from "@/lib/device-login";
+import { isIP } from "node:net";
 
 const PATHS = {
   mcp: "/mcp", token: "/oauth/token", register: "/oauth/register", revoke: "/oauth/revoke",
@@ -13,7 +14,9 @@ const PATHS = {
 const FORWARD = ["authorization", "mcp-session-id", "mcp-protocol-version", "accept", "content-type", "origin"];
 const RETURN = ["content-type", "mcp-session-id", "mcp-protocol-version", "www-authenticate", "allow", "retry-after"];
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
-const DEADLINE = 65_000;
+// Tank waits 60 seconds before returning the durable thread link. Leave time
+// for authentication, database work and delivery of that response.
+const DEADLINE = 90_000;
 
 async function body(request: Request): Promise<Uint8Array<ArrayBuffer> | undefined> {
   if (!request.body) return undefined;
@@ -43,7 +46,9 @@ async function body(request: Request): Promise<Uint8Array<ArrayBuffer> | undefin
   }
 }
 
-/** No Clerk cookies, service keys or user/tenant/region assertions cross here. */
+/** No caller-supplied identity crosses here. Registration alone authenticates
+ * Workspace's assertion of the proxy-derived source address, never a user.
+ */
 export async function mcpPublicRequest(request: Request, operation: keyof typeof PATHS): Promise<Response> {
   const refused = (status: number) => new Response(null, { status, headers: { "Cache-Control": "no-store" } });
   const host = (request.headers.get("host") ?? new URL(request.url).host).toLowerCase();
@@ -56,6 +61,16 @@ export async function mcpPublicRequest(request: Request, operation: keyof typeof
   } else if (!discovery) {
     // OAuth token/revocation/registration forwards only the body and media type.
     headers.set("content-type", request.headers.get("content-type") ?? "");
+    if (operation === "register") {
+      // Coolify's Traefik strips untrusted X-Real-IP and sets it from the peer.
+      // Do not read caller X-Forwarded-For or copy an incoming assertion/key.
+      const source = request.headers.get("x-real-ip") ?? "";
+      const tank = approvalTank("us-east");
+      if (!isIP(source)) return refused(400);
+      if (!tank?.key) return refused(503);
+      headers.set("x-tervory-oauth-source", source);
+      headers.set("x-tank-key", tank.key);
+    }
   }
   const stop = new AbortController();
   try {
