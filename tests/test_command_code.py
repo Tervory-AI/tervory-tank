@@ -94,6 +94,8 @@ async def test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_tr
     b = streaming
     monkeypatch.setenv('TANK_REGION', region)
     monkeypatch.setattr(b.tank, 'DEFAULT_REGION', region)
+    b.policy['cache_scope'] = await b.pool.fetchval("SELECT cache_scope FROM tank.policy WHERE task_type='command.code' AND tenant_id IS NULL")
+    assert b.policy['cache_scope'] == 'none'
     source = 'file content canary belongs only in the model transcript'
     b.gateway.parts = [json.dumps({'answer': 'done', 'requests': [{'name': 'read_file', 'arguments': {'path': 'test.py'}}]})]
     token = f'tv1.{region}.{TENANT.hex}.' + 'x' * 43
@@ -115,6 +117,7 @@ async def test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_tr
     assert transcript['task_type'] == ledger['task_type'] == 'command.code'
     assert transcript['tenant_id'] == ledger['tenant_id'] == TENANT
     assert source in transcript['messages'] and source not in saved
+    assert await b.pool.fetchval("SELECT count(*) FROM tank.route_cache WHERE tenant_id=$1 AND task_type='command.code'", TENANT) == 0
     assert float(ledger['cost_usd']) == 0.0024
     assert ledger['region'] == region
     snapshot = (await b.api.get(f'/v1/command/threads/{thread}')).json()
@@ -163,6 +166,9 @@ async def test_three_code_rounds_store_one_prompt_and_never_store_session_data(a
 
 @pytest.mark.parametrize('content,expected', [
     ('Here is the answer.', 'Here is the answer.'),
+    ('Set "name": "my-app" in package.json', 'Set "name": "my-app" in package.json'),
+    ('{"name":"my-app","version":"1.0.0"}', '{"name":"my-app","version":"1.0.0"}'),
+    ('Use "arguments": {} in configuration', 'Use "arguments": {} in configuration'),
     ('```json\n{"answer":"fenced answer","requests":[]}\n```', 'fenced answer'),
     ('```python\nprint("hello")\n```', '```python\nprint("hello")\n```'),
 ])
@@ -175,6 +181,8 @@ def test_code_prose_and_fenced_answers_are_successful(content, expected):
     '{"requests":[{"name":"shell","arguments":{}}]}',
     '```json\n{"requests":[{"name":"read_file","arguments":{"path":"x","extra":true}}]}\n```',
     '{"requests":[{"name":"read_file"',
+    'Use "name": "read_file", "arguments": {',
+    '{"name":"read_file","arguments":{"path":"x"}}',
     '[{"name":"run_command","arguments":{"command":"echo wrong"}}]',
 ])
 def test_code_tool_proposals_remain_strict(content):
