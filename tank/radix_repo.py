@@ -5,18 +5,25 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 
-async def scan(actor, body):
-    from command import db, MAX_ATTACHMENT_BYTES
+async def owned_attachment(actor, attachment_id):
+    from command import db
+
+    async with db().acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT name,content FROM tank.command_attachments WHERE attachment_id=$1 AND tenant_id=$2 AND user_id=$3",
+            attachment_id, actor.tenant_id, actor.user_id)
+    if row is None:
+        raise HTTPException(404, "Attachment not found")
+    return row
+
+
+async def scan(actor, body, *, attachment=None):
+    from command import MAX_ATTACHMENT_BYTES
     from ghost_routes import call_room
     from trigger_commands import confirmation
 
     confirmation(actor, "radix.repo.scan", body.model_dump(mode="json"))
-    async with db().acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT name,content FROM tank.command_attachments WHERE attachment_id=$1 AND tenant_id=$2 AND user_id=$3",
-            body.attachment_id, actor.tenant_id, actor.user_id)
-    if row is None:
-        raise HTTPException(404, "Attachment not found")
+    row = attachment if attachment is not None else await owned_attachment(actor, body.attachment_id)
     raw = bytes(row["content"])
     if len(raw) > MAX_ATTACHMENT_BYTES:
         raise HTTPException(413, "Attachment exceeds 5 MiB")
@@ -95,7 +102,8 @@ def build_router():
         require_tool(actor, "radix.repo.scan")
         from trigger_commands import confirmation
         confirmation(actor, "radix.repo.scan", body.model_dump(mode="json"))
-        return await with_receipt(actor, "radix.repo.scan", lambda: scan(actor, body))
+        attachment = await owned_attachment(actor, body.attachment_id)
+        return await with_receipt(actor, "radix.repo.scan", lambda: scan(actor, body, attachment=attachment))
 
     @router.get("/findings")
     async def read(scan_id: UUID, actor: Actor = Depends(identity)):
