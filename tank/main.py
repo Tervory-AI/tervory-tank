@@ -4191,6 +4191,7 @@ app.include_router(__import__("case_studies").router)
 app.include_router(__import__("event_bus").router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("base_lists").build_router())
 app.include_router(__import__("rig_brain_routes").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("moa").router)
 
