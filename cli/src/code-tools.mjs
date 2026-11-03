@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { lstat, realpath, open, readdir, readFile, writeFile, rename, unlink, mkdtemp, rm } from 'node:fs/promises';
+import { lstat, realpath, readlink, open, readdir, readFile, writeFile, rename, unlink, mkdtemp, rm } from 'node:fs/promises';
 import { resolve, relative, isAbsolute, sep, dirname, basename } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -255,6 +255,20 @@ export class CodeFolder {
       };
       mounts.push('--ro-bind', root, root);
       await scan(root);
+    }
+    // A venv may link via ~/.local/bin before reaching its base interpreter.
+    // Recreate only those intermediate links in the empty sandbox; never bind
+    // their parent directory (which could contain unrelated credentials).
+    let link = candidate;
+    const seen = new Set();
+    while ((await lstat(link)).isSymbolicLink()) {
+      if (seen.has(link)) throw refused();
+      seen.add(link);
+      if (!inside('/usr', link) && !roots.some(root => inside(root, link))) {
+        if (secretPath(link) || link.split(sep).some(part => ['.config', '.ssh', 'keychains', 'keyrings'].includes(part.toLowerCase()))) throw refused();
+        mounts.push('--symlink', resolved, link);
+      }
+      link = resolve(dirname(link), await readlink(link));
     }
     const quoted = "'" + candidate.replaceAll("'", "'\"'\"'") + "'";
     return { command: quoted + command.slice(match[0].length), mounts, runners: roots.filter(root => !inside('/usr', root) && !inside(this.root, root)) };
