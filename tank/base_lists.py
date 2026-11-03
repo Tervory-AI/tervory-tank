@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from base_evidence import field, public_url, row_fields
-from base_metrics import csv_text, export_records, obj
+from base_metrics import csv_text, export_records, list_costs, obj
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from tenant_db import tenant_transaction
@@ -245,6 +245,17 @@ class Store:
             raise HTTPException(404, "Not found")
         return {**dict(row), "records": obj(row["records"]), "filters": obj(row["filters"])}
 
+    async def ledger(self, tenant: UUID, records: list[dict]) -> list[dict]:
+        ids = list(dict.fromkeys(UUID(row["record_id"]) for row in records))
+        if not ids:
+            return []
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("""SELECT l.*,b.record_id FROM tank.ledger l
+                JOIN tank.base_ledger_links b ON b.tenant_id=$1 AND b.ledger_id=l.id
+                WHERE l.tenant_id=$1 AND l.agent='base' AND b.record_id=ANY($2::uuid[])
+                ORDER BY l.ts,l.id,b.record_id""", tenant, ids)
+        return [dict(row) for row in rows]
+
     async def lists(self, tenant: UUID) -> list[dict]:
         async with self.pool.acquire() as conn:
             rows = await conn.fetch("SELECT list_id,name,created_at,cardinality(record_ids) AS total "
@@ -281,7 +292,8 @@ def build_router() -> APIRouter:
         return Store(db())
 
     async def result(actor, tool, data):
-        return {**data, "ledger_id": await receipt(actor.tenant_id, tool), "cost_usd": 0}
+        return {**({"cost_usd": 0} if "actual_usd" not in data else {}),
+                **data, "ledger_id": await receipt(actor.tenant_id, tool)}
 
     @router.get("/find")
     async def find(args: Annotated[FindArgs, Depends()], actor: Annotated[Actor, Depends(identity)]):
@@ -305,13 +317,15 @@ def build_router() -> APIRouter:
     async def show(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.list.show")
         saved = await store().show(actor.tenant_id, list_id)
-        return await result(actor, "base.list.show", {"name": saved["name"], **preview(saved["records"])})
+        costs = list_costs(await store().ledger(actor.tenant_id, saved["records"]))
+        return await result(actor, "base.list.show", {"name": saved["name"], **preview(saved["records"]), **costs})
 
     @router.get("/export")
     async def export(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.list.export")
         saved = await store().show(actor.tenant_id, list_id)
-        return await result(actor, "base.list.export", {"total": len(saved["records"]),
+        costs = list_costs(await store().ledger(actor.tenant_id, saved["records"]))
+        return await result(actor, "base.list.export", {"total": len(saved["records"]), **costs,
                             "url": "https://app.tervory.com/base/download?list_id=" + str(list_id)})
 
     @router.get("/products")
@@ -332,7 +346,8 @@ def build_router() -> APIRouter:
     async def csv(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.list.export")
         saved = await store().show(actor.tenant_id, list_id)
-        return Response(export_records(saved["records"]), media_type="text/csv; charset=utf-8",
+        ledger = await store().ledger(actor.tenant_id, saved["records"])
+        return Response(export_records(saved["records"], ledger=ledger), media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition": 'attachment; filename="base-list.csv"', "Cache-Control": "private, no-store"})
 
     @router.post("/to-crm")
