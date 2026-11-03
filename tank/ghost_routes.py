@@ -124,6 +124,37 @@ async def shields_tap(shield: uuid.UUID, tap: Literal["raise", "undo"]):
     return Response(response.content, status_code=response.status_code, media_type="application/json")
 
 
+# ---------- Autumbra Enforce lifecycle: founder Confirm cards only ----------
+
+class EnforceTenant(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: uuid.UUID
+
+
+@router.get("/autumbra/enforce/list", dependencies=[Depends(admin.require_admin)])
+async def enforce_list(x_tervory_tenant: uuid.UUID = Header()):
+    response = await call_room("GET", "ghost", "/ghost/autumbra/enforce/list")
+    if response.status_code != 200:
+        return Response(response.content, status_code=response.status_code, media_type="application/json")
+    from trigger_routes import code_receipt
+    ledger_id = await code_receipt(x_tervory_tenant, "autumbra.enforce.list", agent="ghost")
+    return {**response.json(), "ledger_id": str(ledger_id), "cost_usd": 0}
+
+
+@router.post("/autumbra/enforce/create", dependencies=[Depends(admin.require_admin)])
+async def enforce_create(body: EnforceTenant):
+    response = await call_room("POST", "ghost", "/ghost/autumbra/enforce/plan-create",
+                               body={"tenant_id": str(body.tenant_id), "execute": True})
+    return Response(response.content, status_code=response.status_code, media_type="application/json")
+
+
+@router.post("/autumbra/enforce/destroy", dependencies=[Depends(admin.require_admin)])
+async def enforce_destroy(body: EnforceTenant):
+    response = await call_room("POST", "ghost", "/ghost/autumbra/enforce/plan-destroy",
+                               body={"tenant_id": str(body.tenant_id), "execute": True})
+    return Response(response.content, status_code=response.status_code, media_type="application/json")
+
+
 # ---------- Autumbra owner undo (public email link → workspace → Tank → Watch) ----------
 
 @router.post("/autumbra/queue/undo")
