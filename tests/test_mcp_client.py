@@ -470,12 +470,12 @@ async def test_vault_save_survives_unfinished_discovery(runtime, server, monkeyp
     else:
         server.page_bytes = 1_100_000  # Each page fits; their combined bytes do not.
     app = FastAPI()
-    app.include_router(build_router(SimpleNamespace(TANK_API_KEY='offline-service-key', pool=lambda: runtime.store,
+    app.include_router(build_router(SimpleNamespace(TANK_API_KEY='placeholder-service-key', pool=lambda: runtime.store,
                                                   box_region=lambda: 'us-east')))
     before = time.monotonic()
     async with server.original_client(transport=httpx.ASGITransport(app=app), base_url='http://tank.internal') as client:
         response = await client.post('/v1/vaults/lab.vault/connections',
-            headers={'x-tank-key': 'offline-service-key', 'x-tervory-user': 'client', 'x-tervory-squad': 'market_lab',
+            headers={'x-tank-key': 'placeholder-service-key', 'x-tervory-user': 'client', 'x-tervory-squad': 'market_lab',
                      'x-tervory-tenant': str(OWNER)},
             json={'tenant_id': str(OWNER), 'name': 'Offline MCP', 'server_url': URL, 'auth_type': 'none'})
     assert response.status_code == 200 and response.json() == {'ok': True}
