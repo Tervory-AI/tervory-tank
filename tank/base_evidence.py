@@ -211,7 +211,7 @@ def row_fields(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
     # Add quality only for the exact contact and observation that survived the
     # existing verification guards. Do not change existing evidence or order.
     for name, collection, identity, keys in (
-        ("phone", "phone_quality", "phone", ("phone_e164", "phone_valid", "phone_line_type")),
+        ("phone", "phone_quality", "phone", ("phone_e164", "phone_valid", "phone_line_type", "phone_region")),
         ("email", "email_quality", "email", ("email_syntax_ok", "email_disposable")),
     ):
         if not result[name].get("verified"):
