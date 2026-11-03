@@ -269,3 +269,22 @@ async def test_warning_run_remembers_changed_summaries_only_and_retries_same_rec
     assert len(writes) == 21
     await workflow.run(ledger, TENANT, 'ffl', now=NOW)
     assert len(writes) == 21
+
+
+@pytest.mark.asyncio
+async def test_pattern_listing_filters_foreign_wrong_pair_and_malformed_records():
+    config = warning_plan()['pairs'][0]
+    stats = {'lag_min': None, 'lag_max': None, 'lag_median': None, 'episode_count': 0, 'hits': 0, 'hit_rate': None}
+    value = patterns.claim(config, stats)
+    base = {'id': str(uuid4()), 'tenant_id': TENANT, 'tier': 'client', 'claim': json.dumps(value), 'evidence': ['placeholder_document']}
+    rows = [base, {**base, 'id': str(uuid4()), 'tenant_id': OTHER},
+            {**base, 'claim': json.dumps({**value, 'pair_id': []})},
+            {**base, 'claim': json.dumps({**value, 'lag_days': {'url': 'https://placeholder.invalid'}})},
+            {**base, 'claim': json.dumps({**value, 'episodes': -1})}]
+    class Memory:
+        async def records(self, tenant, *, tier):
+            assert tenant == TENANT
+            return rows if tier == 'client' else [{**base, 'tier': 'platform'}]
+    result = await patterns.listing(Memory(), TENANT, warning_plan())
+    assert len(result['patterns']) == 1 and result['patterns'][0]['id'] == base['id']
+    assert result['published'] == []  # A client cannot masquerade as a platform owner.
