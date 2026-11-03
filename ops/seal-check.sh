@@ -38,7 +38,7 @@ set -uo pipefail
 DOCKER="${DOCKER:-docker}"
 
 # Rooms whose compose files declare sealed services; each must be found and sealed.
-EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig agent-ghost autumbra-enforce)
+EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig agent-ghost)
 # Watch is confined to its declared corridor; each Enforce has exactly one internal network.
 
 # service name -> the one non-internal network it may also join
@@ -73,6 +73,7 @@ FORMAT='{{index .Config.Labels "coolify.applicationUuid"}}|{{index .Config.Label
 
 # Identify raw per-client Enforce projects before validating their proxy services.
 declare -A ENFORCE_PROJECTS=() CONTAINER_LINES=()
+enforce_present=0
 for id in $ids; do
   if ! line="$("$DOCKER" inspect -f "$FORMAT" "$id" 2>&1)"; then
     echo "seal-check: docker inspect $id failed: $line" >&2
@@ -80,8 +81,14 @@ for id in $ids; do
   fi
   IFS='|' read -r uuid resource service project name networks <<<"$line"
   CONTAINER_LINES[$id]="$line"
-  [[ "$service" == enforce ]] && ENFORCE_PROJECTS[$project]=1
+  if [[ "$service" == enforce ]]; then
+    ENFORCE_PROJECTS[$project]=1
+    enforce_present=1
+  fi
 done
+if (( enforce_present )); then
+  EXPECTED_SEALED+=(autumbra-enforce)
+fi
 
 FLAG=""
 internal_flag() {  # sets FLAG; no subshell, so the cache and exit 2 both hold
@@ -132,6 +139,12 @@ for id in $ids; do
       outward+=("$net")
     fi
   done
+  if [[ "$service" == "enforce" ]]; then
+    read -ra attached <<<"$networks"
+    if [[ "${#attached[@]}" -ne 1 ]] || (( ! on_internal )); then
+      APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }LEAK: $name must have exactly one internal network"
+    fi
+  fi
   if [[ -n "${ENFORCE_PROJECTS[$project]+set}" ]]; then
     logical_expected=""
     case "$service" in
@@ -209,12 +222,6 @@ for id in $ids; do
     fi
     continue
   fi
-  if [[ "$service" == "enforce" ]]; then
-    read -ra attached <<<"$networks"
-    if [[ "${#attached[@]}" -ne 1 ]]; then
-      APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }LEAK: $name must have exactly one internal network"
-    fi
-  fi
   (( on_internal )) || continue
   APP_SEALED[$uuid]=$(( APP_SEALED[$uuid] + 1 ))
   allowed="${CORRIDOR[$service]:-}"
@@ -249,6 +256,9 @@ for uuid in "${APPS[@]}"; do
     echo "${resource:-$uuid} ($uuid): not a room, skipped"
     continue
   fi
+  if [[ -n "${APP_SERVICES[$uuid/enforce]+set}" ]]; then
+    FOUND[autumbra-enforce]=1
+  fi
   ROOM_NAME[$uuid]="$room"
   FOUND[$room]=1
   ROOMS+=("$uuid")
@@ -264,15 +274,16 @@ is_expected() {
 
 for uuid in "${ROOMS[@]}"; do
   room="${ROOM_NAME[$uuid]}"
-  if [[ "$room" == "agent-ghost" || "$room" == "autumbra-enforce" ]]; then
-    required_services="enforce egress-proxy health-observer health-egress-proxy"
-    [[ "$room" == "agent-ghost" ]] && required_services="agent-ghost ghost-browser"
-    for required in $required_services; do
-      if [[ -z "${APP_SERVICES[$uuid/$required]+set}" ]]; then
-        APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }NOT FOUND: $required"
-      fi
-    done
+  required_services=""
+  [[ "$room" == "agent-ghost" ]] && required_services="agent-ghost ghost-browser"
+  if [[ "$room" == "autumbra-enforce" || -n "${APP_SERVICES[$uuid/enforce]+set}" ]]; then
+    required_services+=" enforce egress-proxy health-observer health-egress-proxy"
   fi
+  for required in $required_services; do
+    if [[ -z "${APP_SERVICES[$uuid/$required]+set}" ]]; then
+      APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }NOT FOUND: $required"
+    fi
+  done
   if [[ "$room" == "agent-rig" ]]; then
     for required in agent-rig rig-brain rig-sandbox rig-browser rig-browser-gateway rig-forge rig-forge-egress; do
       if [[ -z "${APP_SERVICES[$uuid/$required]+set}" ]]; then
