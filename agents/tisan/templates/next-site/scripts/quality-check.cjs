@@ -58,10 +58,18 @@ function proxyFor(origin) {
       res.end();
       return;
     }
-    const target = new URL(req.url, origin);
+    // Host and port come only from the fixed local origin; the request supplies the path.
+    const fixed = new URL(origin);
+    const { pathname, search } = new URL(req.url, origin);
     const upstream = http.request(
-      target,
-      { method: req.method, headers: { ...req.headers, host: target.host } },
+      {
+        protocol: fixed.protocol,
+        hostname: fixed.hostname,
+        port: fixed.port,
+        path: pathname + search,
+        method: req.method,
+        headers: { ...req.headers, host: fixed.host },
+      },
       (response) => {
         res.writeHead(response.statusCode, response.headers);
         response.pipe(res);
