@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 — 2026-11-03
+
+- One approval applies a validated unified diff across up to 20 files. Stale files or invalid hunks refuse the whole set; same-directory temporary files and renames preserve whole-file contents across a crash.
+- `/undo` restores the last of ten in-memory change sets after an explicit `y`, provided every file still matches. Undo stays local and never sends file contents to Tank.
+- Approved macOS commands use system sandbox-exec and the Apache-2.0 Codex Seatbelt base, with folder-only writes, restricted runtime reads, secret-path denial and no network. Missing sandboxes or invalid profiles refuse execution.
+- The CLI workflow runs the same test and confinement suite on Linux and macOS.
+
 ## 0.3.0 — 2026-11-03
 
 - Code mode proposes authorized Tervory and connected MCP tools through existing Confirm cards, and returns redacted card results as data.
