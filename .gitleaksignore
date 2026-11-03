@@ -55,6 +55,8 @@ a2f2eca3669fd496070eeaf3536f054b6054d5e3:tests/test_rig_locate_checkout.py:strip
 # PR #566: Docker network/trace ids inside a pasted offline-compose CI log (tests/autumbra_cloudflare_hand/EVIDENCE.txt), not a credential. Claude-reviewed 3 Nov 2026.
 6a5bc7145226eb9b960bde158f80c0e01fb763b8:tests/autumbra_cloudflare_hand/EVIDENCE.txt:generic-api-key:16061
 
+# PR #591: a Figma file key (public in every share link), not a credential; field renamed in e773434f. Claude-reviewed 3 Nov 2026.
+ce6839dc30c0562b4f5507ee241206fe4de7bbba:docs/figma/tisan/nov3-r2-audit.json:generic-api-key:3
 # PR #627: exact copies of the already Claude-reviewed Figma file identifiers above.
 # Identifiers grant no access; no new value, prefix or path exemption.
 d082af64f84517424619ff0027dae852429a1e00:tank/skills/tisan.figma/1.1.0/evals/cases.jsonl:generic-api-key:1

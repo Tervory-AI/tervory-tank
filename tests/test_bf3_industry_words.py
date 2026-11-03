@@ -200,6 +200,8 @@ async def test_the_call_site_passes_engine_lists_only_for_that_engine() -> None:
 
 
 CANDIDATES = {
+    ("base.contacts", "1.3.0"),
+    ("base.site_signals", "1.0.1"),
     ("base.find_site", "1.5.0"),
     ("base.find_site", "1.6.0"),
     ("base.find_site", "1.7.0"),

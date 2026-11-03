@@ -31,12 +31,21 @@ async def test_decorative_overflow_preserves_viewport(real_chromium, tmp_path, w
             await route.abort()
 
     await page.route('**/*', shipped_file)
-    await page.goto('http://rig.test/')
+    # Install and pause before navigation so page timers/RAF cannot advance
+    # between the geometry, accessibility and byte-exact screenshot checks.
+    await page.clock.install(time='2024-01-01T00:00:00Z')
+    await page.clock.pause_at('2024-01-02T00:00:00Z')
+    await page.goto('http://rig.test/', wait_until='networkidle')
+    await page.evaluate('document.fonts.ready')
     await page.evaluate('''view => {
       document.body.dataset.view = view;
       document.querySelector('#landing').hidden = view !== 'landing';
       document.querySelector('#idk').hidden = view !== 'idk';
     }''', view)
+    # Settle queued timers (including toast dismissal) and animation frames once,
+    # then leave the clock paused throughout both observations.
+    await page.clock.fast_forward(3500)
+    await page.clock.run_for(32)
     # Undo only the containment to reproduce the original shipped CSS, then
     # compare it to the repair in the same browser with identical fonts/assets.
     baseline = await page.add_style_tag(content='.landing, .idk { overflow-x: visible; }')
@@ -45,7 +54,7 @@ async def test_decorative_overflow_preserves_viewport(real_chromium, tmp_path, w
       return [e.tagName,e.id,r.x,r.y,r.width,r.height]; })'''
     before_geometry = await page.evaluate(geometry)
     before_accessible = await page.locator('body').aria_snapshot()
-    before = await page.screenshot(path=str(tmp_path / 'before.png'))
+    before = await page.screenshot(path=str(tmp_path / 'before.png'), animations='disabled', caret='hide')
     if width == 375:
         assert await page.evaluate('document.documentElement.scrollWidth > innerWidth')
     await baseline.evaluate('(e) => e.remove()')
@@ -53,7 +62,7 @@ async def test_decorative_overflow_preserves_viewport(real_chromium, tmp_path, w
     assert await page.evaluate('document.body.scrollWidth <= innerWidth')
     assert await page.evaluate(geometry) == before_geometry
     assert await page.locator('body').aria_snapshot() == before_accessible
-    after = await page.screenshot(path=str(tmp_path / 'after.png'))
+    after = await page.screenshot(path=str(tmp_path / 'after.png'), animations='disabled', caret='hide')
     # Keep exact equality while avoiding pytest's expensive binary sequence diff.
     # A mismatching PNG previously spent the entire test timeout in difflib.
     same_screenshot = after == before
