@@ -1,0 +1,7 @@
+{
+  "id": "ffl",
+  "skills": {"ingest": "ffl.ingest", "profile": "ffl.profile"},
+  "routes": {"module": "reference", "function": "register"},
+  "gold_lists": "gold_lists.json",
+  "profile_data_keys": ["generic_words", "blocked_hosts", "generic_locals"]
+}
