@@ -55,6 +55,8 @@ async def findings(actor, scan_id: UUID):
         if (not isinstance(result, dict) or result.get("tenant_id") != str(actor.tenant_id)
                 or result.get("scan_id") != str(scan_id)):
             raise HTTPException(404, "Radix results are unavailable.")
+        if not isinstance(result.get("findings"), list):
+            raise HTTPException(503, "Radix results are unavailable.")
         public.update({key: result.get(key) for key in
                        ("summary", "critical", "tools", "tool_status", "scan_complete")})
         public["findings"] = [
@@ -73,6 +75,8 @@ async def with_receipt(actor, tool, operation):
         result = await operation()
     except HTTPException as exc:
         status, result = exc.status_code, {"detail": exc.detail}
+    except (ValueError, TypeError, KeyError, AttributeError):
+        status, result = 503, {"detail": "Radix results are unavailable."}
     # Existing code receipt writer; no uploaded source or finding text is stored here.
     receipt = await _record_local(RouteRequest(tenant_id=actor.tenant_id, agent="radix", task_type=tool, messages=[{"role": "user", "content": tool}]),
                                   {}, model="code", rung=3, content="",
