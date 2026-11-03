@@ -2305,6 +2305,16 @@ CREATE TABLE IF NOT EXISTS agent_tiger.match_runs (
     ledger_id uuid NOT NULL,
     PRIMARY KEY (tenant_id,operation_id)
 );
+ALTER TABLE agent_tiger.match_runs ADD COLUMN IF NOT EXISTS progress jsonb;
+CREATE TABLE IF NOT EXISTS agent_tiger.match_sightings (
+    tenant_id uuid NOT NULL,
+    job_id uuid NOT NULL,
+    root_job_id uuid NOT NULL,
+    match_id uuid NOT NULL REFERENCES agent_tiger.matches(id),
+    evidence jsonb NOT NULL,
+    PRIMARY KEY (tenant_id,job_id,match_id)
+);
+CREATE INDEX IF NOT EXISTS tiger_sightings_run ON agent_tiger.match_sightings(tenant_id,root_job_id);
 -- Public host counters contain no catalogue, tenant identifiers or page content.
 -- A shared counter prevents concurrent jobs/tenants exceeding a site's allowance.
 CREATE TABLE IF NOT EXISTS agent_tiger.discovery_limits (
@@ -2318,7 +2328,7 @@ DO $$
 DECLARE tab text;
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
-        FOREACH tab IN ARRAY ARRAY['matches','match_runs'] LOOP
+        FOREACH tab IN ARRAY ARRAY['matches','match_runs','match_sightings'] LOOP
             EXECUTE format('ALTER TABLE agent_tiger.%I ENABLE ROW LEVEL SECURITY', tab);
             EXECUTE format('ALTER TABLE agent_tiger.%I FORCE ROW LEVEL SECURITY', tab);
             IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid=('agent_tiger.'||tab)::regclass AND polname='tenant_access') THEN
@@ -2328,6 +2338,18 @@ BEGIN
                 EXECUTE format('CREATE POLICY tenant_boundary ON agent_tiger.%I AS RESTRICTIVE FOR ALL TO PUBLIC USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid) WITH CHECK (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)',tab);
             END IF;
         END LOOP;
+    END IF;
+END
+$$;
+
+-- Existing role: Tank may create these tables after agent-roles has run.
+-- Fresh role created later: agent-roles._ownership takes all existing tables.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agent_tiger') THEN
+        GRANT USAGE ON SCHEMA agent_tiger TO agent_tiger;
+        GRANT SELECT,INSERT,UPDATE ON agent_tiger.matches,agent_tiger.match_runs,
+            agent_tiger.match_sightings,agent_tiger.discovery_limits TO agent_tiger;
     END IF;
 END
 $$;
