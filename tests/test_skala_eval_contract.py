@@ -239,7 +239,9 @@ async def test_room_backed_cases_run_inside_room(skill, monkeypatch, tmp_path):
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    async def checks(project):
+    tenant = uuid.uuid4()
+    async def checks(project, *, tenant_id):
+        assert tenant_id == str(tenant)
         assert (project / "package.json").is_file()
         return ([{"name": name, "ok": True} for name in
                  ["npm ci", "npm run lint", "npm run build", "npm test"]], "")
@@ -253,7 +255,7 @@ async def test_room_backed_cases_run_inside_room(skill, monkeypatch, tmp_path):
                 json={"skill_id": pkg.id, "version": pkg.version, "tenant_id": str(ctx.tenant_id), "input": payload})
             assert response.status_code == 200
             return response.json()
-        result = await skala.run_evals(pkg, lambda: context(pkg), execute=execute)
+        result = await skala.run_evals(pkg, lambda: replace(context(pkg), tenant_id=tenant), execute=execute)
     assert result["passed"] == len(pkg.cases), result["details"]
     assert result["eligible"]
 
