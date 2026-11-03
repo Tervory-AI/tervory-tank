@@ -79,9 +79,9 @@ async def poll(wrapped: str) -> JSONResponse:
                 # The status transition wins exactly once, including polls that
                 # overlapped while the provider was slow. Roll back on insert failure.
                 row = await conn.fetchrow(
-                    "UPDATE tank.device_authorizations SET status='consumed' "
+                    "UPDATE tank.device_authorizations SET status='consumed',tenant_id=$2,user_id=$3 "
                     "WHERE device_hash=$1 AND status='pending' AND region='za' "
-                    "AND provider='zitadel' AND expires_at > now() RETURNING *", pat.digest(wrapped))
+                    "AND provider='zitadel' AND expires_at > now() RETURNING *", pat.digest(wrapped), tenant, user)
                 if row is None:
                     return device.error('invalid_grant')
                 access, refresh = device.credential_pair('za', tenant)
