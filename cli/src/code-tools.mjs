@@ -71,7 +71,19 @@ export class CodeFolder {
   }
   constructor(root) { this.root = root; }
   async git(args, input) {
-    return processOutput('git', ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '--no-pager', ...args], { cwd: this.root, input, outputBytes: ['ls-files', 'check-ignore'].includes(args[0]) ? 8_388_608 : LIMITS.outputBytes, delimiter: args.includes('-z') ? '\0' : '\n' });
+    const options = ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-c', 'core.attributesFile=/dev/null', '--no-pager'];
+    if (['status', 'diff'].includes(args[0])) {
+      // Git can invoke clean/process filters even with --no-ext-diff and
+      // --no-textconv. Disable driver execution: read tools do not approve a
+      // repository-configured shell command. Ask for names only, never values.
+      const drivers = await processOutput('git', [...options, 'config', '--name-only', '--get-regexp', '^filter\\..*\\.(clean|process|required)$'], { cwd: this.root });
+      if (drivers.truncated || ![0, 1].includes(drivers.code)) throw refused();
+      for (const key of drivers.output.trim().split('\n').filter(Boolean)) {
+        if (!/^filter\.[A-Za-z0-9_.-]+\.(clean|process|required)$/.test(key)) throw refused();
+        options.push('-c', key + (key.endsWith('.required') ? '=false' : '='));
+      }
+    }
+    return processOutput('git', [...options, ...args], { cwd: this.root, input, outputBytes: ['ls-files', 'check-ignore'].includes(args[0]) ? 8_388_608 : LIMITS.outputBytes, delimiter: args.includes('-z') ? '\0' : '\n' });
   }
   async path(name, { missing = false } = {}) {
     if (typeof name !== 'string' || !name || name.includes('\0') || name.includes('\\')) throw refused();
