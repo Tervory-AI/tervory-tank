@@ -614,3 +614,11 @@ test('Darwin refuses an invalid Seatbelt profile before running the command', { 
     await assert.rejects(readFile(join(f.root, 'placeholder-marker')));
   } finally { fsPromises.readFile = read; syncBuiltinESMExports(); }
 });
+
+test('undo restores the exact UTF-8 bytes, including a byte-order mark', async () => {
+  const f = await folder(); const original = Buffer.from('\ufeffplaceholder-old\n');
+  await writeFile(join(f.root, 'file.txt'), original); await f.read('file.txt');
+  await f.edit('file.txt', '--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-\ufeffplaceholder-old\n+placeholder-new\n', io());
+  await f.undo(io());
+  assert.deepEqual(await readFile(join(f.root, 'file.txt')), original);
+});
