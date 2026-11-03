@@ -24,6 +24,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 import command_repo
+from base_lists import FindArgs, SaveArgs, ListArgs, SendArgs
 from tenant_db import tenant_path
 from command_stream import AnswerText, TokenSink
 
@@ -33,7 +34,7 @@ _background: set[asyncio.Task] = set()
 SQUADS = frozenset({"base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"})
 TOOLS = {
     "trigger": ["trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
-    "base": ["base.batch", "base.search"],
+    "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.to_crm"],
     "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.position"],
     "market_lab": ["market_lab.research"],
     "rig": ["rig.search", "rig.ask"],
@@ -891,6 +892,9 @@ ACTION_TIMEOUT = 180
 
 
 def action_timeout(tool: str | None) -> int:
+    if tool == "base.list.to_crm":
+        from base_list_crm import CRM_CARD_SECONDS
+        return CRM_CARD_SECONDS  # 60s discovery + 20 waves * 45s + 60s margin.
     return 390 if tool == "radix.passive.scan" else ACTION_TIMEOUT
 
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
@@ -1161,6 +1165,12 @@ ADAPTERS = {
     "tiger.match.confirm": Adapter("POST", "/v1/access/tiger/match/confirm", TigerMatchArgs, "tiger.match.confirm"),
     "tiger.match.reject": Adapter("POST", "/v1/access/tiger/match/reject", TigerMatchArgs, "tiger.match.reject"),
     "tiger.position": Adapter("GET", "/v1/access/tiger/position", EmptyArgs, "tiger.position"),
+    "base.find": Adapter("GET", "/v1/command/base/lists/find", FindArgs, "base.find"),
+    "base.list.save": Adapter("POST", "/v1/command/base/lists/save", SaveArgs, "base.list.save"),
+    "base.lists": Adapter("GET", "/v1/command/base/lists", Body, "base.lists"),
+    "base.list.show": Adapter("GET", "/v1/command/base/lists/show", ListArgs, "base.list.show"),
+    "base.list.export": Adapter("GET", "/v1/command/base/lists/export", ListArgs, "base.list.export"),
+    "base.list.to_crm": Adapter("POST", "/v1/command/base/lists/to-crm", SendArgs, "base.list.to_crm"),
     "tiger.watch": Adapter("POST", "/v1/tiger/watchlist", WatchArgs, "Start a price watch", True, "paid_run"),
     "tiger.read": Adapter("GET", "/v1/tiger/observations", UrlArgs, "Read price observations"),
     "market_lab.research": Adapter("POST", "/v1/research", QuestionArgs, "Research a market question", True, "paid_run"),
@@ -1317,6 +1327,8 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         args = {"start": (end - timedelta(days=args["days"])).isoformat(), "end": end.isoformat()}
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
+    if action.tool in {"base.list.save", "base.list.to_crm"}:
+        return adapter.method, path, {}, args  # Actor headers supply identity, never body fields.
     if adapter.method == "GET":
         return adapter.method, path, {**args, **scope}, None
     return adapter.method, path, scope, {**args, **scope}
@@ -1469,6 +1481,15 @@ async def refresh_action_receipts(thread_id: uuid.UUID, actor: Actor, card_id: s
         await event(conn, row, "card", public_card(card))
 
 
+def list_refusal_result(tool: str, status: int, result: Any) -> dict | None:
+    """Only expose our bounded-list count, never arbitrary failed-provider data."""
+    detail = result.get("detail") if isinstance(result, dict) else None
+    total = detail.get("total") if isinstance(detail, dict) else None
+    if tool == "base.list.save" and status == 422 and type(total) is int and total > 10000:
+        return {"total": total}
+    return None
+
+
 async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action: PlannedAction) -> dict:
     attempted = False
     try:
@@ -1482,7 +1503,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
         require_tool(current_actor(actor), action.tool)
         attempted = True
         async with asyncio.timeout(action_timeout(action.tool)):
-            if action.tool.startswith("trigger.") or action.tool in {"tiger.match", "tiger.match.confirm", "tiger.match.reject"}:
+            if action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "tiger.match", "tiger.match.confirm", "tiger.match.reject"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
@@ -1499,6 +1520,9 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if card["status"] == "confirmed":
                 card["result"] = result
             else:
+                refused = list_refusal_result(action.tool, status, result)
+                if refused is not None:
+                    card["result"] = refused
                 detail = result.get("detail") if isinstance(result, dict) else None
                 card["error"] = (detail if action.tool == "radix.passive.scan"
                                  and isinstance(detail, str) and detail in {"invalid artifact", "domain proof required"}
