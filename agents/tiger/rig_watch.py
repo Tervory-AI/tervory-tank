@@ -363,6 +363,13 @@ class DiscoveryLinks:
         return parser.links, parser.forms
 
 
+# Hints only decide whether to ask the existing browser human_check detector.
+# They never mark a host blocked by themselves.
+_DISCOVERY_CHALLENGE_HINT = re.compile(
+    r'captcha|turnstile|(?:verify|confirm|prove).{0,30}human|checking your browser|'
+    r'security check|cf-error-details|sorry.{0,20}blocked|your request.{0,20}blocked', re.I)
+
+
 def discovery_robots_allows(body, url, token='tervorytiger'):
     """Discovery-only RFC 9309 path/query matching; ordinary watches unchanged."""
     from urllib.parse import urlsplit
@@ -511,7 +518,7 @@ class CatalogueDiscovery:
                 active['robots'] = response.get('text', '') if response.get('status') == 200 else ''
                 maps = [urljoin(site + '/', m[1]) for m in re.finditer(r'^\s*Sitemap:\s*(\S+)', active['robots'], re.I | re.M)]
                 enqueue('map', maps[:500] + [site + '/sitemap.xml'])
-                if re.search(r'captcha|turnstile|verify.{0,20}human|checking your browser|security check|cf-error-details', active['robots'], re.I):
+                if _DISCOVERY_CHALLENGE_HINT.search(active['robots']):
                     enqueue('probe', [url])
                 active['queue'].append({'kind': 'home', 'url': site + '/'})
                 return state, False
@@ -520,8 +527,8 @@ class CatalogueDiscovery:
                 if response.get('status') != 200:
                     active['warnings'].append({'url': url, 'reason': 'sitemap_unavailable'})
                     return state, False
-                if re.search(r'<(?:!doctype\s+html|html|form)\b|captcha|turnstile|verify.{0,20}human|checking your browser|security check|cf-error-details', source, re.I):
-                    if re.search(r'captcha|turnstile|verify.{0,20}human|checking your browser|security check|cf-error-details', source, re.I):
+                if (re.search(r'<(?:!doctype\s+html|html|form)\b', source, re.I) or _DISCOVERY_CHALLENGE_HINT.search(source)):
+                    if _DISCOVERY_CHALLENGE_HINT.search(source):
                         enqueue('probe', [url])
                     else:
                         active['warnings'].append({'url': url, 'reason': 'sitemap_html'})
