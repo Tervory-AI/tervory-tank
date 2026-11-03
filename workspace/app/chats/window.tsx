@@ -59,6 +59,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
   const streamAbort = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
   const uncertainCards = useRef(new Set<string>());
+  const oneTimeResults = useRef(new Map<string, Card["results"]>());
   const active = useRef<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const workButton = useRef<HTMLButtonElement>(null);
@@ -91,11 +92,16 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
       if (generation.current !== version || active.current !== id) return;
       setAvailableTools(tools);
     }
+    // A one-time Confirm response stays in this mounted view only. Polling
+    // never retrieves it again, and switching chats discards the local value.
+    next.cards = next.cards.map(card => oneTimeResults.current.has(card.card_id)
+      ? { ...card, results: oneTimeResults.current.get(card.card_id) } : card);
     setSnapshot(next); setThreads(rows => upsert(rows, next.thread, "thread_id"));
   }
   async function choose(id: string) {
     if (sendingRef.current || cardBusy) return;
     setAttachments([]);
+    oneTimeResults.current.clear();
     const version = ++generation.current;
     active.current = id; setSelected(id); setSnapshot(null); setBusy(true); setError(""); setMenu(false); setRenaming(false);
     window.history.replaceState(null, "", `/chats?thread=${encodeURIComponent(id)}`);
@@ -163,6 +169,8 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     }
     try {
       const saved = await (await api(`cards/${encodeURIComponent(card.card_id)}`, { method: "POST", body: JSON.stringify({ action }) })).json() as Card;
+      if (saved.tool === "market_lab.alerts.webhook" && saved.status === "confirmed"
+        && saved.results?.some(row => row.label === "Response")) oneTimeResults.current.set(saved.card_id, saved.results);
       if (saved.card_id === card.card_id && saved.status && !["pending", "awaiting_confirmation"].includes(saved.status)) {
         rememberUncertain(card.card_id, false);
         setSnapshot(current => current && ({ ...current, cards: upsert(current.cards, saved, "card_id") }));
