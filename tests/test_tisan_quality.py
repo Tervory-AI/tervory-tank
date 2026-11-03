@@ -127,6 +127,7 @@ def test_browser_cache_environment_is_forwarded_without_tank_credentials(scaffol
 async def test_real_builder_passes_all_four_quality_gates(tmp_path):
     builder = load('q1_real_builder', ROOT / 'agents/tisan/builder.py')
     plan = {'nav': [{'href': '/contact'}], 'ui': {}, 'pages': [
+        {'name': 'home', 'path': '/', 'sections': []},
         {'name': 'contact', 'path': '/contact', 'sections': []},
         {'name': 'privacy', 'path': '/privacy', 'sections': []}]}
     payload = {'name': 'Quality fixture', 'slug': 'quality-fixture', 'pages': ['contact', 'privacy'],
