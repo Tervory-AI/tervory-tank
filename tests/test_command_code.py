@@ -86,34 +86,39 @@ async def test_code_uses_existing_router_with_new_task_region_and_founder_pin(ru
 
 
 @pytest.mark.asyncio
-async def test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_transcript(streaming):  # noqa: F811
+@pytest.mark.parametrize('region', ['us-east', 'za'])
+@pytest.mark.parametrize('model', ['auto', 'fixture-pin'])
+async def test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_transcript(streaming, monkeypatch, region, model):  # noqa: F811
     """Full run_route is exercised; only its HTTP upstream is a fake transport."""
     import personal_tokens as pat
     b = streaming
+    monkeypatch.setenv('TANK_REGION', region)
+    monkeypatch.setattr(b.tank, 'DEFAULT_REGION', region)
     source = 'file content canary belongs only in the model transcript'
     b.gateway.parts = [json.dumps({'answer': 'done', 'requests': [{'name': 'read_file', 'arguments': {'path': 'test.py'}}]})]
-    token = f'tv1.us-east.{TENANT.hex}.' + 'x' * 43
+    token = f'tv1.{region}.{TENANT.hex}.' + 'x' * 43
     async with b.pool.acquire() as conn:
         await conn.execute("INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,token_hash) "
-                           "VALUES($1,'founder','us-east','offline-code',$2)", TENANT, pat.digest(token))
+                           "VALUES($1,'founder',$2,'offline-code',$3)", TENANT, region, pat.digest(token))
     bearer = {'authorization': 'Bearer ' + token}
     thread = (await b.api.post('/v1/command/threads', json={}, headers=bearer)).json()['thread_id']
     answer = await b.api.post(f'/v1/command/threads/{thread}/code-turn', headers=bearer,
-        json={'text': 'add test', 'tool_results': [{'name': 'read_file', 'output': source}]})
+        json={'text': 'add test', 'model': model, 'tool_results': [{'name': 'read_file', 'output': source}]})
     assert answer.status_code == 200, answer.text
     assert answer.json()['requests'][0]['name'] == 'read_file'
     ledger_id = uuid.UUID(answer.json()['receipt']['rows'][0]['ledger_id'])
     assert len(b.gateway.calls) == 1
     async with b.pool.acquire() as conn:
         transcript = await conn.fetchrow('SELECT tenant_id,task_type,messages::text FROM tank.transcripts WHERE ledger_id=$1', ledger_id)
-        ledger = await conn.fetchrow('SELECT tenant_id,task_type,cost_usd FROM tank.ledger WHERE id=$1', ledger_id)
+        ledger = await conn.fetchrow('SELECT tenant_id,task_type,cost_usd,region FROM tank.ledger WHERE id=$1', ledger_id)
         saved = await conn.fetchval('SELECT state::text FROM tank.command_threads WHERE thread_id=$1', uuid.UUID(thread))
     assert transcript['task_type'] == ledger['task_type'] == 'command.code'
     assert transcript['tenant_id'] == ledger['tenant_id'] == TENANT
     assert source in transcript['messages'] and source not in saved
     assert float(ledger['cost_usd']) == 0.0024
+    assert ledger['region'] == region
     snapshot = (await b.api.get(f'/v1/command/threads/{thread}')).json()
     assert snapshot['receipts'][0]['ledger_id'] == str(ledger_id)
-    wrong_region = {'authorization': 'Bearer ' + token.replace('us-east', 'za')}
+    wrong_region = {'authorization': 'Bearer ' + token.replace(region, 'za' if region == 'us-east' else 'us-east')}
     assert (await b.api.post(f'/v1/command/threads/{thread}/code-turn', headers=wrong_region,
                             json={'text': 'no'})).status_code == 403
