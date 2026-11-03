@@ -1,8 +1,14 @@
 """Confirmed Base list -> existing BottleCRM corridor; no credential handling here."""
+import asyncio
 from urllib.parse import urlsplit
 
 from base_lists import verified
 from fastapi import HTTPException
+
+CRM_CONCURRENCY = 5
+CRM_WRITE_SECONDS = 45
+CRM_DISCOVERY_SECONDS = 60
+CRM_CARD_SECONDS = CRM_DISCOVERY_SECONDS + (100 // CRM_CONCURRENCY) * CRM_WRITE_SECONDS + 60
 
 
 def website_key(value):
@@ -85,38 +91,43 @@ async def send(actor, rows):
         return [{"record_id": row["record_id"], "name": row.get("name"), "status": "skipped",
                  "message": "CRM is not configured for this tenant"} for row in rows]
     try:
-        emails, websites = await existing(actor, upstream)
-    except HTTPException:
+        async with asyncio.timeout(CRM_DISCOVERY_SECONDS):
+            emails, websites = await existing(actor, upstream)
+    except (HTTPException, TimeoutError):
         return [{"record_id": row["record_id"], "name": row.get("name"), "status": "failed"} for row in rows]
-    results = []
-    for row in rows:
+    results = [None] * len(rows)
+    pending = []
+    # Reserve identities in list order before any concurrent write. A duplicate
+    # remains skipped even when the first write's outcome is ambiguous.
+    for index, row in enumerate(rows):
         result = {"record_id": row["record_id"], "name": row.get("name")}
         data = lead(row)
         if data is None:
-            results.append({**result, "status": "skipped"})
+            results[index] = {**result, "status": "skipped"}
             continue
         email = str(data.get("email") or "").strip().casefold()
         website = website_key(data.get("website") or "")
         if email and email in emails or website and website in websites:
-            results.append({**result, "status": "skipped", "summary": "duplicate"})
+            results[index] = {**result, "status": "skipped", "summary": "duplicate"}
             continue
-        try:
-            validate_data("leads", data)
-            written = await upstream(actor, "leads", method="POST", data=data)
-            item = written.get("lead_obj", written.get("lead"))
-            if not isinstance(item, dict) or not item.get("id"):
-                raise HTTPException(502, "Invalid CRM response")
-            results.append({**result, "status": "created", "id": str(item["id"])})
-            if email:
-                emails.add(email)
-            if website:
-                websites.add(website)
-        except (HTTPException, ValueError):
-            # Do not retry a write with an ambiguous outcome or expose upstream detail.
-            results.append({**result, "status": "failed"})
-            # Later records with the same identity must not repeat a possibly completed write.
-            if email:
-                emails.add(email)
-            if website:
-                websites.add(website)
+        if email:
+            emails.add(email)
+        if website:
+            websites.add(website)
+        pending.append((index, result, data))
+    semaphore = asyncio.Semaphore(CRM_CONCURRENCY)
+
+    async def write(index, result, data):
+        async with semaphore:
+            try:
+                async with asyncio.timeout(CRM_WRITE_SECONDS):
+                    validate_data("leads", data)
+                    written = await upstream(actor, "leads", method="POST", data=data)
+                    item = written.get("lead_obj", written.get("lead"))
+                    if not isinstance(item, dict) or not item.get("id"):
+                        raise HTTPException(502, "Invalid CRM response")
+                    results[index] = {**result, "status": "created", "id": str(item["id"])}
+            except (HTTPException, ValueError, TimeoutError):
+                results[index] = {**result, "status": "failed"}
+    await asyncio.gather(*(write(*item) for item in pending))
     return results
