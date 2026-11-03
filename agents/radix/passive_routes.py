@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import tempfile
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import UUID
@@ -58,13 +59,26 @@ async def execute(store, body: Scan, *, scanner=collect, http=None, watched=Fals
     lease = {'tenant_id': str(body.tenant_id), 'scan_id': str(ident)}
     async with httpx.AsyncClient(trust_env=False, timeout=15) if http is None else http as client:
         try:
-            async with asyncio.timeout(360):
+            started = time.monotonic()
+            async with asyncio.timeout(410 if watched else 360):
                 response = await client.post(GATEWAY + '/lease', json=lease)
                 if response.status_code != 200 or response.json().get('ready') is not True:
                     raise HTTPException(response.status_code if response.status_code in {403,409} else 503, 'scan not authorized')
                 with tempfile.TemporaryDirectory(prefix='radix-passive-') as directory:
+                    measurements = None
                     findings = await scanner(body.target, Path(directory))
-                await store.complete(body.tenant_id, ident, findings)
+                    if watched and scanner is collect:
+                        from passive_r6 import collect as collect_watch, Budget
+                        previous = await store.previous_hashes(body.tenant_id, target_url(body.target)[1])
+                        measurements = await collect_watch(body.target, Path(directory), previous=previous,
+                            budget=Budget(max(0, 400 - (time.monotonic() - started))))
+                        findings.extend(measurements['findings'])
+                    elif isinstance(findings, dict):
+                        measurements, findings = findings, findings['findings']
+                if measurements is None:
+                    await store.complete(body.tenant_id, ident, findings)
+                else:
+                    await store.complete(body.tenant_id, ident, findings, measurements=measurements)
                 if queued:
                     # Other events may already have later pending rows. A queued
                     # run reports its own completion, not the latest origin gate.
