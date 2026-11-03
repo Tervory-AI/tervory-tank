@@ -1,4 +1,5 @@
 Seal hardening verification — 3 November 2026
+Log trailing whitespace is normalized; commands and results are preserved.
 Code head for final full-suite rerun: 6bf2b719737980f17b90d3da2b70d667c279dc68
 
 Initialization (exit 0):
@@ -211,7 +212,7 @@ mode = 'preview'
         tenant = uuid.uuid4()
         task = uuid.uuid4()
         html = "<html><body>Routing Observatory public business contact hello@routing.example</body></html>"
-    
+
         def transport(request):
             seen.append(request)
             if request.method == "POST":
@@ -223,19 +224,19 @@ mode = 'preview'
                     assert request.headers["X-Task-ID"] == str(task)
                 return httpx.Response(200, json={"ok": True, "html": html, "text": "Routing Observatory", "title": "Routing Observatory", "final_url": "https://routing.example", "status": 200})
             return httpx.Response(200, text="<html><body></body></html>", headers={"content-type": "text/html"})
-    
+
         async def noop(*args, **kwargs):
             return None
-    
+
         async def state(*args):
             return "approved" if mode == "base" else "candidate"
-    
+
         async def policy(*args):
             return {"priority": "standard"}
-    
+
         async def receipt(*args, **kwargs):
             return SimpleNamespace(ledger_id=uuid.uuid4(), model_dump=lambda **kw: {})
-    
+
         monkeypatch.setenv("TANK_KEY_BASE", "offline-base-placeholder")
         monkeypatch.setattr(base_public_http, "HOST_INTERVAL", 0)
         monkeypatch.setattr(main, "SKILL_ENV", {"TIGER_URL": "http://tiger-ocr:3000"})
@@ -279,7 +280,7 @@ mode = 'evals'
         tenant = uuid.uuid4()
         task = uuid.uuid4()
         html = "<html><body>Routing Observatory public business contact hello@routing.example</body></html>"
-    
+
         def transport(request):
             seen.append(request)
             if request.method == "POST":
@@ -291,19 +292,19 @@ mode = 'evals'
                     assert request.headers["X-Task-ID"] == str(task)
                 return httpx.Response(200, json={"ok": True, "html": html, "text": "Routing Observatory", "title": "Routing Observatory", "final_url": "https://routing.example", "status": 200})
             return httpx.Response(200, text="<html><body></body></html>", headers={"content-type": "text/html"})
-    
+
         async def noop(*args, **kwargs):
             return None
-    
+
         async def state(*args):
             return "approved" if mode == "base" else "candidate"
-    
+
         async def policy(*args):
             return {"priority": "standard"}
-    
+
         async def receipt(*args, **kwargs):
             return SimpleNamespace(ledger_id=uuid.uuid4(), model_dump=lambda **kw: {})
-    
+
         monkeypatch.setenv("TANK_KEY_BASE", "offline-base-placeholder")
         monkeypatch.setattr(base_public_http, "HOST_INTERVAL", 0)
         monkeypatch.setattr(main, "SKILL_ENV", {"TIGER_URL": "http://tiger-ocr:3000"})
@@ -347,7 +348,7 @@ mode = 'base'
         tenant = uuid.uuid4()
         task = uuid.uuid4()
         html = "<html><body>Routing Observatory public business contact hello@routing.example</body></html>"
-    
+
         def transport(request):
             seen.append(request)
             if request.method == "POST":
@@ -359,19 +360,19 @@ mode = 'base'
                     assert request.headers["X-Task-ID"] == str(task)
                 return httpx.Response(200, json={"ok": True, "html": html, "text": "Routing Observatory", "title": "Routing Observatory", "final_url": "https://routing.example", "status": 200})
             return httpx.Response(200, text="<html><body></body></html>", headers={"content-type": "text/html"})
-    
+
         async def noop(*args, **kwargs):
             return None
-    
+
         async def state(*args):
             return "approved" if mode == "base" else "candidate"
-    
+
         async def policy(*args):
             return {"priority": "standard"}
-    
+
         async def receipt(*args, **kwargs):
             return SimpleNamespace(ledger_id=uuid.uuid4(), model_dump=lambda **kw: {})
-    
+
         monkeypatch.setenv("TANK_KEY_BASE", "offline-base-placeholder")
         monkeypatch.setattr(base_public_http, "HOST_INTERVAL", 0)
         monkeypatch.setattr(main, "SKILL_ENV", {"TIGER_URL": "http://tiger-ocr:3000"})
@@ -419,12 +420,12 @@ E       AssertionError: assert ([<Request('POST', 'http://tiger-ocr:3000/ocr')>]
 tests/test_seal_hardening_routes.py:108: AssertionError
 =============================== warnings summary ===============================
 tank/main.py:754
-  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723
@@ -432,21 +433,21 @@ tank/main.py:754
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723
-  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tank/main.py:814
-  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
@@ -462,39 +463,39 @@ tank/main.py:814
     warnings.warn(
 
 tank/agent_skills.py:537
-  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tank/skala_intake.py:71
-  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tank/skala_intake.py:77
-  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tank/skala_revalidation.py:192
-  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -510,12 +511,12 @@ LOG routes-final.txt
 .......                                                                  [100%]
 =============================== warnings summary ===============================
 tank/main.py:754
-  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723
@@ -523,21 +524,21 @@ tank/main.py:754
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723
-  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tank/main.py:814
-  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
@@ -553,39 +554,39 @@ tank/main.py:814
     warnings.warn(
 
 tank/agent_skills.py:537
-  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tank/skala_intake.py:71
-  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tank/skala_intake.py:77
-  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tank/skala_revalidation.py:192
-  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -616,7 +617,7 @@ ___________ test_room_is_wired_and_client_queries_are_tenant_scoped ____________
         assert services["tank"]["environment"]["BASE_AGENT_URL"] == "http://agent-base:8000"
         assert "AGENT_DB_PASSWORD_BASE" in services["agent-roles"]["environment"]
         assert corridor not in services["agent-roles"]["networks"]
-    
+
         box = yaml.safe_load((ROOT / "agents" / "base" / "docker-compose.yml").read_text(encoding="utf-8"))
         service = box["services"]["agent-base"]
         assert box["networks"]["gw"]["external"] is True
@@ -632,11 +633,11 @@ ___________ test_room_is_wired_and_client_queries_are_tenant_scoped ____________
         assert service["environment"]["BASE_BRAIN_URL"] == "http://base-brain:8001"
         assert service["environment"]["SEARXNG_URL"] == "http://searxng:8080"
         assert service["environment"]["HERMES_URL"] == "http://hermes:8000"
-    
+
         example = (ROOT / ".env.example").read_text(encoding="utf-8")
         assert "TANK_KEY_BASE=" in example
         assert "AGENT_DB_PASSWORD_BASE=" in example
-    
+
         script = (ROOT / "agents" / "check_isolation.sh").read_text(encoding="utf-8")
         subprocess.check_call(["sh", "-n", str(ROOT / "agents" / "check_isolation.sh")])
 >       assert 'if [ "$base_corridor" -eq 1 ] && [ "$host" = "tiger" ]' in script
@@ -645,12 +646,12 @@ E       assert 'if [ "$base_corridor" -eq 1 ] && [ "$host" = "tiger" ]' in '#!/b
 tests/test_b3_base_room.py:349: AssertionError
 =============================== warnings summary ===============================
 tests/test_b3_base_room.py::test_tank_proxies_base_and_does_not_keep_the_worker
-  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/test_b3_base_room.py::test_tank_proxies_base_and_does_not_keep_the_worker
@@ -658,21 +659,21 @@ tests/test_b3_base_room.py::test_tank_proxies_base_and_does_not_keep_the_worker
 tests/test_b3_base_room.py::test_tank_proxies_base_and_does_not_keep_the_worker
 tests/test_b3_base_room.py::test_tank_proxies_base_and_does_not_keep_the_worker
 tests/test_b3_base_room.py::test_tank_proxies_base_and_does_not_keep_the_worker
-  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tests/test_b3_base_room.py::test_tank_proxies_base_and_does_not_keep_the_worker
-  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tests/test_b3_base_room.py::test_tank_proxies_base_and_does_not_keep_the_worker
@@ -688,39 +689,39 @@ tests/test_b3_base_room.py::test_tank_proxies_base_and_does_not_keep_the_worker
     warnings.warn(
 
 tests/test_b3_base_room.py::test_tank_proxies_base_and_does_not_keep_the_worker
-  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tests/test_b3_base_room.py::test_tank_proxies_base_and_does_not_keep_the_worker
-  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/test_b3_base_room.py::test_tank_proxies_base_and_does_not_keep_the_worker
-  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tests/test_b3_base_room.py::test_tank_proxies_base_and_does_not_keep_the_worker
-  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -754,8 +755,8 @@ service = 'rig-sandbox'
 >       result = run_seal_check(tmp_path, str(path))
                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/test_room_seal.py:405: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_room_seal.py:405:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/test_room_seal.py:225: in run_seal_check
     return subprocess.run(["bash", str(SEAL_CHECK)], capture_output=True, text=True, env=env, timeout=30)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -767,7 +768,7 @@ tests/test_room_seal.py:225: in run_seal_check
                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 /home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/subprocess.py:2116: in _communicate
     self._check_timeout(endtime, orig_timeout, stdout, stderr)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = <Popen: returncode: -9 args: ['bash', '/workspace/codex-seal-hardening/ops/s...>
 endtime = 1469538.91037168, orig_timeout = 30, stdout_seq = [], stderr_seq = []
@@ -803,8 +804,8 @@ service = 'rig-brain'
 >       result = run_seal_check(tmp_path, str(path))
                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/test_room_seal.py:405: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_room_seal.py:405:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/test_room_seal.py:225: in run_seal_check
     return subprocess.run(["bash", str(SEAL_CHECK)], capture_output=True, text=True, env=env, timeout=30)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -816,7 +817,7 @@ tests/test_room_seal.py:225: in run_seal_check
                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 /home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/subprocess.py:2116: in _communicate
     self._check_timeout(endtime, orig_timeout, stdout, stderr)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = <Popen: returncode: -9 args: ['bash', '/workspace/codex-seal-hardening/ops/s...>
 endtime = 1469575.652941834, orig_timeout = 30, stdout_seq = [], stderr_seq = []
@@ -840,33 +841,33 @@ tank/main.py:754
 tank/main.py:754
 tank/main.py:754
 tank/main.py:754
-  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: 20 warnings
-  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tank/main.py:814
 tank/main.py:814
 tank/main.py:814
 tank/main.py:814
-  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
@@ -894,48 +895,48 @@ tank/agent_skills.py:537
 tank/agent_skills.py:537
 tank/agent_skills.py:537
 tank/agent_skills.py:537
-  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tank/skala_intake.py:71
 tank/skala_intake.py:71
 tank/skala_intake.py:71
 tank/skala_intake.py:71
-  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tank/skala_intake.py:77
 tank/skala_intake.py:77
 tank/skala_intake.py:77
 tank/skala_intake.py:77
-  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tank/skala_revalidation.py:192
 tank/skala_revalidation.py:192
 tank/skala_revalidation.py:192
 tank/skala_revalidation.py:192
-  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -959,12 +960,12 @@ LOG base-context-rerun.txt
 ........                                                                 [100%]
 =============================== warnings summary ===============================
 tank/main.py:754
-  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723
@@ -972,21 +973,21 @@ tank/main.py:754
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723
-  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tank/main.py:814
-  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
@@ -1003,39 +1004,39 @@ tank/main.py:814
 
 tank/agent_skills.py:537
 tests/test_base_public_http.py::test_approved_scrape_block_survives_into_pipeline_row_without_archive_retry
-  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tank/skala_intake.py:71
-  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tank/skala_intake.py:77
-  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tank/skala_revalidation.py:192
-  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -1202,16 +1203,16 @@ target_session_attrs = None, krbsrvname = None, gsslib = None
                       krbsrvname=None,
                       gsslib=None):
         r"""A coroutine to establish a connection to a PostgreSQL server.
-    
+
         The connection parameters may be specified either as a connection
         URI in *dsn*, or as specific keyword arguments, or both.
         If both *dsn* and keyword arguments are specified, the latter
         override the corresponding values parsed from the connection URI.
         The default values for the majority of arguments can be specified
         using `environment variables <postgres envvars_>`_.
-    
+
         Returns a new :class:`~asyncpg.connection.Connection` object.
-    
+
         :param dsn:
             Connection arguments specified using as a single string in the
             `libpq connection URI format`_:
@@ -1221,37 +1222,37 @@ target_session_attrs = None, krbsrvname = None, gsslib = None
             ``passfile``, ``sslmode``, ``sslcert``, ``sslkey``, ``sslrootcert``,
             and ``sslcrl``.  Unlike libpq, asyncpg will treat unrecognized
             options as `server settings`_ to be used for the connection.
-    
+
             .. note::
-    
+
                The URI must be *valid*, which means that all components must
                be properly quoted with :py:func:`urllib.parse.quote_plus`, and
                any literal IPv6 addresses must be enclosed in square brackets.
                For example:
-    
+
                .. code-block:: text
-    
+
                   postgres://dbuser@[fe80::1ff:fe23:4567:890a%25eth0]/dbname
-    
+
         :param host:
             Database host address as one of the following:
-    
+
             - an IP address or a domain name;
             - an absolute path to the directory containing the database
               server Unix-domain socket (not supported on Windows);
             - a sequence of any of the above, in which case the addresses
               will be tried in order, and the first successful connection
               will be returned.
-    
+
             If not specified, asyncpg will try the following, in order:
-    
+
             - host address(es) parsed from the *dsn* argument,
             - the value of the ``PGHOST`` environment variable,
             - on Unix, common directories used for PostgreSQL Unix-domain
               sockets: ``"/run/postgresql"``, ``"/var/run/postgresl"``,
               ``"/var/pgsql_socket"``, ``"/private/tmp"``, and ``"/tmp"``,
             - ``"localhost"``.
-    
+
         :param port:
             Port number to connect to at the server host
             (or Unix-domain socket file extension).  If multiple host
@@ -1259,25 +1260,25 @@ target_session_attrs = None, krbsrvname = None, gsslib = None
             sequence of port numbers of the same length as the host sequence,
             or it may specify a single port number to be used for all host
             addresses.
-    
+
             If not specified, the value parsed from the *dsn* argument is used,
             or the value of the ``PGPORT`` environment variable, or ``5432`` if
             neither is specified.
-    
+
         :param user:
             The name of the database role used for authentication.
-    
+
             If not specified, the value parsed from the *dsn* argument is used,
             or the value of the ``PGUSER`` environment variable, or the
             operating system name of the user running the application.
-    
+
         :param database:
             The name of the database to connect to.
-    
+
             If not specified, the value parsed from the *dsn* argument is used,
             or the value of the ``PGDATABASE`` environment variable, or the
             computed value of the *user* argument.
-    
+
         :param password:
             Password to be used for authentication, if the server requires
             one.  If not specified, the value parsed from the *dsn* argument
@@ -1285,47 +1286,47 @@ target_session_attrs = None, krbsrvname = None, gsslib = None
             Note that the use of the environment variable is discouraged as
             other users and applications may be able to read it without needing
             specific privileges.  It is recommended to use *passfile* instead.
-    
+
             Password may be either a string, or a callable that returns a string.
             If a callable is provided, it will be called each time a new connection
             is established.
-    
+
         :param passfile:
             The name of the file used to store passwords
             (defaults to ``~/.pgpass``, or ``%APPDATA%\postgresql\pgpass.conf``
             on Windows).
-    
+
         :param loop:
             An asyncio event loop instance.  If ``None``, the default
             event loop will be used.
-    
+
         :param float timeout:
             Connection timeout in seconds.
-    
+
         :param int statement_cache_size:
             The size of prepared statement LRU cache.  Pass ``0`` to
             disable the cache.
-    
+
         :param int max_cached_statement_lifetime:
             The maximum time in seconds a prepared statement will stay
             in the cache.  Pass ``0`` to allow statements be cached
             indefinitely.
-    
+
         :param int max_cacheable_statement_size:
             The maximum size of a statement that can be cached (15KiB by
             default).  Pass ``0`` to allow all statements to be cached
             regardless of their size.
-    
+
         :param float command_timeout:
             The default timeout for operations on this connection
             (the default is ``None``: no timeout).
-    
+
         :param ssl:
             Pass ``True`` or an `ssl.SSLContext <SSLContext_>`_ instance to
             require an SSL connection.  If ``True``, a default SSL context
             returned by `ssl.create_default_context() <create_default_context_>`_
             will be used.  The value can also be one of the following strings:
-    
+
             - ``'disable'`` - SSL is disabled (equivalent to ``False``)
             - ``'prefer'`` - try SSL first, fallback to non-SSL connection
               if SSL connection fails
@@ -1340,19 +1341,19 @@ target_session_attrs = None, krbsrvname = None, gsslib = None
               that the server certificate is issued by a trusted CA and
               that the requested server host name matches that in the
               certificate.
-    
+
             The default is ``'prefer'``: try an SSL connection and fallback to
             non-SSL connection if that fails.
-    
+
             .. note::
-    
+
                *ssl* is ignored for Unix domain socket communication.
-    
+
             Example of programmatic SSL context configuration that is equivalent
             to ``sslmode=verify-full&sslcert=..&sslkey=..&sslrootcert=..``:
-    
+
             .. code-block:: pycon
-    
+
                 >>> import asyncpg
                 >>> import asyncio
                 >>> import ssl
@@ -1375,12 +1376,12 @@ target_session_attrs = None, krbsrvname = None, gsslib = None
                 ...     con = await asyncpg.connect(user='postgres', ssl=sslctx)
                 ...     await con.close()
                 >>> asyncio.run(main())
-    
+
             Example of programmatic SSL context configuration that is equivalent
             to ``sslmode=require`` (no server certificate or host verification):
-    
+
             .. code-block:: pycon
-    
+
                 >>> import asyncpg
                 >>> import asyncio
                 >>> import ssl
@@ -1392,29 +1393,29 @@ target_session_attrs = None, krbsrvname = None, gsslib = None
                 ...     con = await asyncpg.connect(user='postgres', ssl=sslctx)
                 ...     await con.close()
                 >>> asyncio.run(main())
-    
+
         :param bool direct_tls:
             Pass ``True`` to skip PostgreSQL STARTTLS mode and perform a direct
             SSL connection. Must be used alongside ``ssl`` param.
-    
+
         :param dict server_settings:
             An optional dict of server runtime parameters.  Refer to
             PostgreSQL documentation for
             a `list of supported options <server settings_>`_.
-    
+
         :param type connection_class:
             Class of the returned connection object.  Must be a subclass of
             :class:`~asyncpg.connection.Connection`.
-    
+
         :param type record_class:
             If specified, the class to use for records returned by queries on
             this connection object.  Must be a subclass of
             :class:`~asyncpg.Record`.
-    
+
         :param SessionAttribute target_session_attrs:
             If specified, check that the host has the correct attribute.
             Can be one of:
-    
+
             - ``"any"`` - the first successfully connected host
             - ``"primary"`` - the host must NOT be in hot standby mode
             - ``"standby"`` - the host must be in hot standby mode
@@ -1423,25 +1424,25 @@ target_session_attrs = None, krbsrvname = None, gsslib = None
             - ``"prefer-standby"`` - first try to find a standby host, but if
               none of the listed hosts is a standby server,
               return any of them.
-    
+
             If not specified, the value parsed from the *dsn* argument is used,
             or the value of the ``PGTARGETSESSIONATTRS`` environment variable,
             or ``"any"`` if neither is specified.
-    
+
         :param str krbsrvname:
             Kerberos service name to use when authenticating with GSSAPI. This
             must match the server configuration. Defaults to 'postgres'.
-    
+
         :param str gsslib:
             GSS library to use for GSSAPI/SSPI authentication. Can be 'gssapi'
             or 'sspi'. Defaults to 'sspi' on Windows and 'gssapi' otherwise.
-    
+
         :return: A :class:`~asyncpg.connection.Connection` instance.
-    
+
         Example:
-    
+
         .. code-block:: pycon
-    
+
             >>> import asyncpg
             >>> import asyncio
             >>> async def run():
@@ -1451,62 +1452,62 @@ target_session_attrs = None, krbsrvname = None, gsslib = None
             ...
             >>> asyncio.run(run())
             [<Record typname='bool' typnamespace=11 ...
-    
+
         .. versionadded:: 0.10.0
            Added ``max_cached_statement_use_count`` parameter.
-    
+
         .. versionchanged:: 0.11.0
            Removed ability to pass arbitrary keyword arguments to set
            server settings.  Added a dedicated parameter ``server_settings``
            for that.
-    
+
         .. versionadded:: 0.11.0
            Added ``connection_class`` parameter.
-    
+
         .. versionadded:: 0.16.0
            Added ``passfile`` parameter
            (and support for password files in general).
-    
+
         .. versionadded:: 0.18.0
            Added ability to specify multiple hosts in the *dsn*
            and *host* arguments.
-    
+
         .. versionchanged:: 0.21.0
            The *password* argument now accepts a callable or an async function.
-    
+
         .. versionchanged:: 0.22.0
            Added the *record_class* parameter.
-    
+
         .. versionchanged:: 0.22.0
            The *ssl* argument now defaults to ``'prefer'``.
-    
+
         .. versionchanged:: 0.24.0
            The ``sslcert``, ``sslkey``, ``sslrootcert``, and ``sslcrl`` options
            are supported in the *dsn* argument.
-    
+
         .. versionchanged:: 0.25.0
            The ``sslpassword``, ``ssl_min_protocol_version``,
            and ``ssl_max_protocol_version`` options are supported in the *dsn*
            argument.
-    
+
         .. versionchanged:: 0.25.0
            Default system root CA certificates won't be loaded when specifying a
            particular sslmode, following the same behavior in libpq.
-    
+
         .. versionchanged:: 0.25.0
            The ``sslcert``, ``sslkey``, ``sslrootcert``, and ``sslcrl`` options
            in the *dsn* argument now have consistent default values of files under
            ``~/.postgresql/`` as libpq.
-    
+
         .. versionchanged:: 0.26.0
            Added the *direct_tls* parameter.
-    
+
         .. versionchanged:: 0.28.0
            Added the *target_session_attrs* parameter.
-    
+
         .. versionchanged:: 0.30.0
            Added the *krbsrvname* and *gsslib* parameters.
-    
+
         .. _SSLContext: https://docs.python.org/3/library/ssl.html#ssl.SSLContext
         .. _create_default_context:
             https://docs.python.org/3/library/ssl.html#ssl.create_default_context
@@ -1522,13 +1523,13 @@ target_session_attrs = None, krbsrvname = None, gsslib = None
             raise exceptions.InterfaceError(
                 'connection_class is expected to be a subclass of '
                 'asyncpg.Connection, got {!r}'.format(connection_class))
-    
+
         if record_class is not protocol.Record:
             _check_record_class(record_class)
-    
+
         if loop is None:
             loop = asyncio.get_event_loop()
-    
+
         async with compat.timeout(timeout):
 >           return await connect_utils._connect(
                 loop=loop,
@@ -1553,14 +1554,14 @@ target_session_attrs = None, krbsrvname = None, gsslib = None
                 gsslib=gsslib,
             )
 
-/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/asyncpg/connection.py:2421: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/asyncpg/connection.py:2421:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/asyncpg/connect_utils.py:1049: in _connect
     conn = await _connect_addr(
 /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/asyncpg/connect_utils.py:886: in _connect_addr
     return await __connect_addr(params, True, *args)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 params = ConnectionParameters(user='postgres', password=None, database='bot_b1_a8fdf9baaa104676', ssl=<ssl.SSLContext object at...postgres'>, server_settings=None, target_session_attrs=<SessionAttribute.any: 'any'>, krbsrvname=None, gsslib='gssapi')
 retry = True, addr = ('127.0.0.1', 32859)
@@ -1581,30 +1582,30 @@ params_input = ConnectionParameters(user='postgres', password=None, database='bo
         params_input,
     ):
         connected = _create_future(loop)
-    
+
         proto_factory = lambda: protocol.Protocol(
             addr, connected, params, record_class, loop)
-    
+
         if isinstance(addr, str):
             # UNIX socket
             connector = loop.create_unix_connection(proto_factory, addr)
-    
+
         elif params.ssl and params.ssl_negotiation is SSLNegotiation.direct:
             # if ssl and ssl_negotiation is `direct`, skip STARTTLS and perform
             # direct SSL connection
             connector = loop.create_connection(
                 proto_factory, *addr, ssl=params.ssl
             )
-    
+
         elif params.ssl:
             connector = _create_ssl_connection(
                 proto_factory, *addr, loop=loop, ssl_context=params.ssl,
                 ssl_is_advisory=params.sslmode == SSLMode.prefer)
         else:
             connector = loop.create_connection(proto_factory, *addr)
-    
+
         tr, pr = await connector
-    
+
         try:
 >           await connected
 E           asyncio.exceptions.CancelledError
@@ -1628,8 +1629,8 @@ self = <Coroutine test_queue_states_lease_and_removal_win>
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
     hook_result = yield
                   ^^^^^
@@ -1660,7 +1661,7 @@ tests/trigger_bot_b1/test_database.py:37: in database
 /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/asyncpg/connection.py:2420: in connect
     async with compat.timeout(timeout):
                ^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = <Timeout [expired]>
 exc_type = <class 'asyncio.exceptions.CancelledError'>
@@ -1673,14 +1674,14 @@ exc_val = CancelledError(), exc_tb = <traceback object at 0x7b967261f600>
         exc_tb: Optional[TracebackType],
     ) -> Optional[bool]:
         assert self._state in (_State.ENTERED, _State.EXPIRING)
-    
+
         if self._timeout_handler is not None:
             self._timeout_handler.cancel()
             self._timeout_handler = None
-    
+
         if self._state is _State.EXPIRING:
             self._state = _State.EXPIRED
-    
+
             if self._task.uncancel() <= self._cancelling and exc_type is exceptions.CancelledError:
                 # Since there are no new cancel requests, we're
                 # handling this.
@@ -1706,8 +1707,8 @@ service = 'rig-forge-egress'
 >       result = run_seal_check(tmp_path, str(path))
                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/test_room_seal.py:418: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_room_seal.py:418:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/test_room_seal.py:225: in run_seal_check
     return subprocess.run(["bash", str(SEAL_CHECK)], capture_output=True, text=True, env=env, timeout=30)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1719,7 +1720,7 @@ tests/test_room_seal.py:225: in run_seal_check
                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 /home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/subprocess.py:2116: in _communicate
     self._check_timeout(endtime, orig_timeout, stdout, stderr)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = <Popen: returncode: -9 args: ['bash', '/workspace/codex-seal-hardening/ops/s...>
 endtime = 1469782.653130028, orig_timeout = 30, stdout_seq = [], stderr_seq = []
@@ -1756,8 +1757,8 @@ cloaked = '<div style="opacity:0.09"><span style="opacity:1">HIDDEN-parent-opaci
 >       report = model_page(read_page('https://shop.example', await browser.rendered_source(page)))
                                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/test_read1_review.py:431: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_read1_review.py:431:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 agents/_brain/browser.py:188: in rendered_source
     return await page.evaluate(r"""() => {
 /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/playwright/async_api/_generated.py:16684: in evaluate
@@ -1769,7 +1770,7 @@ agents/_brain/browser.py:188: in rendered_source
     await self._channel.send(
 /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/playwright/_impl/_connection.py:78: in send
     return await self._connection.wrap_api_call(
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = <playwright._impl._connection.Connection object at 0x7b9672f3a570>
 cb = <function Channel.send.<locals>.<lambda> at 0x7b9672d4e840>
@@ -1837,8 +1838,8 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7dcb1d7b3d10>
 >       result = await run(b, 'Describe how rainfall develops.')
                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/test_tank_semantic_cache.py:347: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_tank_semantic_cache.py:347:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 tests/test_tank_semantic_cache.py:52: in run
     result = await b.tank.run_route(request(b, tenant or b.tenants[0], text=text, **kwargs))
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1847,7 +1848,7 @@ tank/tenant_db.py:136: in scoped
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 tank/main.py:1391: in run_route
     await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 paid = True, task = 'base.normalize', path = 'route'
 
@@ -1961,66 +1962,66 @@ worker 'gw0' crashed while running 'tests/skala_intake/test_intake.py::test_pers
     warnings.warn(
 
 tank/main.py:754: 12 warnings
-  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: 60 warnings
-  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tank/main.py:814: 12 warnings
-  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tank/agent_skills.py:537: 12 warnings
-  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tank/skala_intake.py:71: 12 warnings
-  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tank/skala_intake.py:77: 12 warnings
-  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tank/skala_revalidation.py:192: 12 warnings
-  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/test_autumbra_dogfood_hf.py:45
@@ -2105,81 +2106,81 @@ tank/main.py:754
 tank/main.py:754
 tank/main.py:754
 tank/main.py:754
-  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: 20 warnings
-  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tank/main.py:814
 tank/main.py:814
 tank/main.py:814
 tank/main.py:814
-  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tank/agent_skills.py:537
 tank/agent_skills.py:537
 tank/agent_skills.py:537
 tank/agent_skills.py:537
-  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tank/skala_intake.py:71
 tank/skala_intake.py:71
 tank/skala_intake.py:71
 tank/skala_intake.py:71
-  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tank/skala_intake.py:77
 tank/skala_intake.py:77
 tank/skala_intake.py:77
 tank/skala_intake.py:77
-  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tank/skala_revalidation.py:192
 tank/skala_revalidation.py:192
 tank/skala_revalidation.py:192
 tank/skala_revalidation.py:192
-  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -2209,12 +2210,12 @@ bringing up nodes...
 ........................................                                 [100%]
 =============================== warnings summary ===============================
 tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
-  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
@@ -2222,21 +2223,21 @@ tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_
 tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
 tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
 tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
-  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
-  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
@@ -2252,39 +2253,39 @@ tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_
     warnings.warn(
 
 tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
-  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
-  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
-  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tests/zenas_regulation_alerts/test_integrations.py::test_real_tank_proxy_allows_watch_and_supplies_room_auth
-  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -2392,12 +2393,12 @@ database = <asyncpg.pool.Pool object at 0x76c1ff172080>, tables_first = False
                     await conn.execute('DROP OWNED BY '+role)
 >                   await conn.execute('DROP ROLE '+role)
 
-tests/test_tiger_competitors.py:756: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_tiger_competitors.py:756:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.DependentObjectsStillExistError: role "agent_tiger" cannot be dropped because some objects depend on it
@@ -2419,12 +2420,12 @@ enforced = False
         async with database.acquire() as conn:
 >           await conn.execute('CREATE ROLE agent_tiger NOLOGIN NOSUPERUSER NOBYPASSRLS')
 
-tests/test_tiger_competitors.py:959: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_tiger_competitors.py:959:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists
@@ -2445,12 +2446,12 @@ enforced = True
         async with database.acquire() as conn:
 >           await conn.execute('CREATE ROLE agent_tiger NOLOGIN NOSUPERUSER NOBYPASSRLS')
 
-tests/test_tiger_competitors.py:959: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_tiger_competitors.py:959:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists
@@ -2466,12 +2467,12 @@ database = <asyncpg.pool.Pool object at 0x76c1feec3640>
         async with database.acquire() as conn:
 >           await conn.execute('CREATE ROLE agent_tiger NOLOGIN NOSUPERUSER NOBYPASSRLS')
 
-tests/test_tiger_competitors.py:995: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_tiger_competitors.py:995:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists
@@ -2489,36 +2490,36 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x76c1fe5dc8c0>
         monkeypatch.syspath_prepend(str(ROOT / "agents/base"))
         import pipeline
         import room
-    
+
         path = ROOT / "tank/skills/base.scrape_site/1.2.0"
         pkg = skala._parse_package(path / "skill.yaml", path)
         find_path = ROOT / "tank/skills/base.find_site/1.7.0"
         finder = skala._parse_package(find_path / "skill.yaml", find_path)
         calls: list[str] = []
-    
+
         def site(request: httpx.Request) -> httpx.Response:
             calls.append(str(request.url))
             if request.url.path == "/":
                 return httpx.Response(200, text='<a href="/contact">Contact</a>' + "Public business details. " * 50,
                                       headers={"content-type": "text/html"})
             return httpx.Response(403)
-    
+
         class Pool:
             @asynccontextmanager
             async def acquire(self) -> Any:
                 yield self
-    
+
             async def fetchrow(self, *_args: Any) -> None:
                 return None
-    
+
         async def approved(*_args: Any) -> str:
             return "approved"
-    
+
         async with httpx.AsyncClient(transport=httpx.MockTransport(site)) as upstream:
             app = FastAPI()
             tank = SimpleNamespace(app=app, pool=Pool, box_region=lambda: "us-east", skill_state=approved)
             app.include_router(agent_skills.build_router(tank))
-    
+
             @app.post("/v1/skala/{skill}/run")
             async def run(skill: str, body: dict[str, Any]) -> dict[str, Any]:
                 package = finder if skill == "base.find_site" else pkg
@@ -2526,14 +2527,14 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x76c1fe5dc8c0>
                 req = SimpleNamespace(tenant_id=uuid.UUID(body["tenant_id"]), home_region="us-east", preview=False, input=body["input"])
                 await agent_skills.guard_base_run(tank, package, req, ctx)
                 return await skala.run_skill(package, req.input, ctx)
-    
+
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tank") as api:
                 call = room.SkillClient(api, "http://tank", "offline-fixture").bind({"base.scrape_site": "1.2.0"}, False, str(uuid.uuid4()))
 >               result = await call("base.scrape_site", {"website": "https://shop.example/"})
                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/test_base_public_http.py:205: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_base_public_http.py:205:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 agents/base/room.py:236: in call
     return await scrape_with_archives(lambda: direct(skill_id, payload), self._http, self._base,
 agents/base/access_sources.py:30: in scrape_with_archives
@@ -2604,7 +2605,7 @@ tests/test_base_public_http.py:200: in run
     await agent_skills.guard_base_run(tank, package, req, ctx)
 tank/agent_skills.py:529: in guard_base_run
     bind_base_browser(ctx)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 ctx = namespace(http=<httpx.AsyncClient object at 0x76c1fe5a2060>, env={'TIGER_URL': 'http://base-browser-gateway:3000'}, task_id=None)
 
@@ -2639,80 +2640,80 @@ tank/main.py:754
 tank/main.py:754
 tank/main.py:754
 tank/main.py:754
-  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:754: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 ../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: 20 warnings
-  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tank/main.py:814
 tank/main.py:814
 tank/main.py:814
 tank/main.py:814
-  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/main.py:814: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tank/agent_skills.py:537: 4 warnings
 tests/test_base_public_http.py: 1 warning
 tests/test_agent1_brain_route.py: 12 warnings
-  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/agent_skills.py:537: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tank/skala_intake.py:71
 tank/skala_intake.py:71
 tank/skala_intake.py:71
 tank/skala_intake.py:71
-  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tank/skala_intake.py:77
 tank/skala_intake.py:77
 tank/skala_intake.py:77
 tank/skala_intake.py:77
-  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tank/skala_revalidation.py:192
 tank/skala_revalidation.py:192
 tank/skala_revalidation.py:192
 tank/skala_revalidation.py:192
-  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /workspace/codex-seal-hardening/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -2762,78 +2763,78 @@ bringing up nodes...
 
 
 LOG compose-initial.txt
- Network codex-seal-test-1019982_ocr Creating 
- Network codex-seal-test-1019982_ocr Creating 
- Network codex-seal-test-1019982_gw Creating 
- Network codex-seal-test-1019982_gw Creating 
- Network codex-seal-test-1019982_browser Creating 
- Network codex-seal-test-1019982_browser Creating 
- Network codex-seal-test-1019982_other Creating 
- Network codex-seal-test-1019982_other Creating 
- Network codex-seal-test-1019982_baseline Creating 
- Network codex-seal-test-1019982_baseline Creating 
- Network codex-seal-test-1019982_base Creating 
- Network codex-seal-test-1019982_base Creating 
- Network codex-seal-test-1019982_baseline Created 
- Network codex-seal-test-1019982_baseline Created 
- Container codex-seal-test-1019982-baseline-1 Creating 
- Network codex-seal-test-1019982_base Created 
- Network codex-seal-test-1019982_base Created 
- Container codex-seal-test-1019982-base-1 Creating 
- Network codex-seal-test-1019982_browser Created 
- Network codex-seal-test-1019982_browser Created 
- Container codex-seal-test-1019982-tiger-browser-1 Creating 
- Network codex-seal-test-1019982_ocr Created 
- Network codex-seal-test-1019982_ocr Created 
- Container codex-seal-test-1019982-tiger-ocr-1 Creating 
- Network codex-seal-test-1019982_gw Created 
- Network codex-seal-test-1019982_gw Created 
- Container codex-seal-test-1019982-agent-tiger-1 Creating 
- Container codex-seal-test-1019982-tiger-browser-gateway-1 Creating 
- Network codex-seal-test-1019982_other Created 
- Network codex-seal-test-1019982_other Created 
- Container codex-seal-test-1019982-other-1 Creating 
- Container codex-seal-test-1019982-tank-1 Creating 
- Container codex-seal-test-1019982-base-1 Created 
- Container codex-seal-test-1019982-tiger-browser-1 Created 
- Container codex-seal-test-1019982-baseline-1 Created 
- Container codex-seal-test-1019982-tiger-ocr-1 Created 
- Container codex-seal-test-1019982-tiger-browser-gateway-1 Created 
- Container codex-seal-test-1019982-agent-tiger-1 Created 
- Container codex-seal-test-1019982-other-1 Created 
- Container codex-seal-test-1019982-tank-1 Created 
- Container codex-seal-test-1019982-tank-1 Starting 
- Container codex-seal-test-1019982-tiger-browser-1 Starting 
- Container codex-seal-test-1019982-agent-tiger-1 Starting 
- Container codex-seal-test-1019982-other-1 Starting 
- Container codex-seal-test-1019982-baseline-1 Starting 
- Container codex-seal-test-1019982-base-1 Starting 
- Container codex-seal-test-1019982-tiger-browser-gateway-1 Starting 
- Container codex-seal-test-1019982-tiger-ocr-1 Starting 
- Container codex-seal-test-1019982-tank-1 Started 
- Container codex-seal-test-1019982-tiger-browser-1 Started 
- Container codex-seal-test-1019982-agent-tiger-1 Started 
- Container codex-seal-test-1019982-other-1 Started 
- Container codex-seal-test-1019982-baseline-1 Started 
- Container codex-seal-test-1019982-base-1 Started 
- Container codex-seal-test-1019982-tiger-browser-gateway-1 Started 
- Container codex-seal-test-1019982-tiger-ocr-1 Started 
- Container codex-seal-test-1019982-tank-1 Waiting 
- Container codex-seal-test-1019982-tiger-browser-gateway-1 Waiting 
- Container codex-seal-test-1019982-baseline-1 Waiting 
- Container codex-seal-test-1019982-base-1 Waiting 
- Container codex-seal-test-1019982-tiger-ocr-1 Waiting 
- Container codex-seal-test-1019982-other-1 Waiting 
- Container codex-seal-test-1019982-tiger-browser-1 Waiting 
- Container codex-seal-test-1019982-agent-tiger-1 Waiting 
- Container codex-seal-test-1019982-other-1 Healthy 
- Container codex-seal-test-1019982-tank-1 Healthy 
- Container codex-seal-test-1019982-agent-tiger-1 Healthy 
- Container codex-seal-test-1019982-tiger-browser-gateway-1 Healthy 
- Container codex-seal-test-1019982-tiger-browser-1 Healthy 
- Container codex-seal-test-1019982-base-1 Healthy 
- Container codex-seal-test-1019982-baseline-1 Healthy 
- Container codex-seal-test-1019982-tiger-ocr-1 Healthy 
+ Network codex-seal-test-1019982_ocr Creating
+ Network codex-seal-test-1019982_ocr Creating
+ Network codex-seal-test-1019982_gw Creating
+ Network codex-seal-test-1019982_gw Creating
+ Network codex-seal-test-1019982_browser Creating
+ Network codex-seal-test-1019982_browser Creating
+ Network codex-seal-test-1019982_other Creating
+ Network codex-seal-test-1019982_other Creating
+ Network codex-seal-test-1019982_baseline Creating
+ Network codex-seal-test-1019982_baseline Creating
+ Network codex-seal-test-1019982_base Creating
+ Network codex-seal-test-1019982_base Creating
+ Network codex-seal-test-1019982_baseline Created
+ Network codex-seal-test-1019982_baseline Created
+ Container codex-seal-test-1019982-baseline-1 Creating
+ Network codex-seal-test-1019982_base Created
+ Network codex-seal-test-1019982_base Created
+ Container codex-seal-test-1019982-base-1 Creating
+ Network codex-seal-test-1019982_browser Created
+ Network codex-seal-test-1019982_browser Created
+ Container codex-seal-test-1019982-tiger-browser-1 Creating
+ Network codex-seal-test-1019982_ocr Created
+ Network codex-seal-test-1019982_ocr Created
+ Container codex-seal-test-1019982-tiger-ocr-1 Creating
+ Network codex-seal-test-1019982_gw Created
+ Network codex-seal-test-1019982_gw Created
+ Container codex-seal-test-1019982-agent-tiger-1 Creating
+ Container codex-seal-test-1019982-tiger-browser-gateway-1 Creating
+ Network codex-seal-test-1019982_other Created
+ Network codex-seal-test-1019982_other Created
+ Container codex-seal-test-1019982-other-1 Creating
+ Container codex-seal-test-1019982-tank-1 Creating
+ Container codex-seal-test-1019982-base-1 Created
+ Container codex-seal-test-1019982-tiger-browser-1 Created
+ Container codex-seal-test-1019982-baseline-1 Created
+ Container codex-seal-test-1019982-tiger-ocr-1 Created
+ Container codex-seal-test-1019982-tiger-browser-gateway-1 Created
+ Container codex-seal-test-1019982-agent-tiger-1 Created
+ Container codex-seal-test-1019982-other-1 Created
+ Container codex-seal-test-1019982-tank-1 Created
+ Container codex-seal-test-1019982-tank-1 Starting
+ Container codex-seal-test-1019982-tiger-browser-1 Starting
+ Container codex-seal-test-1019982-agent-tiger-1 Starting
+ Container codex-seal-test-1019982-other-1 Starting
+ Container codex-seal-test-1019982-baseline-1 Starting
+ Container codex-seal-test-1019982-base-1 Starting
+ Container codex-seal-test-1019982-tiger-browser-gateway-1 Starting
+ Container codex-seal-test-1019982-tiger-ocr-1 Starting
+ Container codex-seal-test-1019982-tank-1 Started
+ Container codex-seal-test-1019982-tiger-browser-1 Started
+ Container codex-seal-test-1019982-agent-tiger-1 Started
+ Container codex-seal-test-1019982-other-1 Started
+ Container codex-seal-test-1019982-baseline-1 Started
+ Container codex-seal-test-1019982-base-1 Started
+ Container codex-seal-test-1019982-tiger-browser-gateway-1 Started
+ Container codex-seal-test-1019982-tiger-ocr-1 Started
+ Container codex-seal-test-1019982-tank-1 Waiting
+ Container codex-seal-test-1019982-tiger-browser-gateway-1 Waiting
+ Container codex-seal-test-1019982-baseline-1 Waiting
+ Container codex-seal-test-1019982-base-1 Waiting
+ Container codex-seal-test-1019982-tiger-ocr-1 Waiting
+ Container codex-seal-test-1019982-other-1 Waiting
+ Container codex-seal-test-1019982-tiger-browser-1 Waiting
+ Container codex-seal-test-1019982-agent-tiger-1 Waiting
+ Container codex-seal-test-1019982-other-1 Healthy
+ Container codex-seal-test-1019982-tank-1 Healthy
+ Container codex-seal-test-1019982-agent-tiger-1 Healthy
+ Container codex-seal-test-1019982-tiger-browser-gateway-1 Healthy
+ Container codex-seal-test-1019982-tiger-browser-1 Healthy
+ Container codex-seal-test-1019982-base-1 Healthy
+ Container codex-seal-test-1019982-baseline-1 Healthy
+ Container codex-seal-test-1019982-tiger-ocr-1 Healthy
 denied postgres redis qdrant litellm agent-tiger tiger-browser base other 1.1.1.1 8.8.8.8
 denied tiger-ocr 10.0.54.3
 denied tiger-ocr 10.0.54.3
@@ -2862,50 +2863,50 @@ Traceback (most recent call last):
   File "/source/tank/skills/tiger.price_extract/1.0.0/run.py", line 11, in <module>
     from selectolax.parser import HTMLParser
 ModuleNotFoundError: No module named 'selectolax'
- Container codex-seal-test-1019982-base-1 Stopping 
- Container codex-seal-test-1019982-tiger-ocr-1 Stopping 
- Container codex-seal-test-1019982-tank-1 Stopping 
- Container codex-seal-test-1019982-tiger-browser-1 Stopping 
- Container codex-seal-test-1019982-agent-tiger-1 Stopping 
- Container codex-seal-test-1019982-tiger-browser-gateway-1 Stopping 
- Container codex-seal-test-1019982-other-1 Stopping 
- Container codex-seal-test-1019982-baseline-1 Stopping 
- Container codex-seal-test-1019982-baseline-1 Stopped 
- Container codex-seal-test-1019982-baseline-1 Removing 
- Container codex-seal-test-1019982-tiger-ocr-1 Stopped 
- Container codex-seal-test-1019982-tiger-ocr-1 Removing 
- Container codex-seal-test-1019982-agent-tiger-1 Stopped 
- Container codex-seal-test-1019982-agent-tiger-1 Removing 
- Container codex-seal-test-1019982-other-1 Stopped 
- Container codex-seal-test-1019982-other-1 Removing 
- Container codex-seal-test-1019982-tiger-browser-1 Stopped 
- Container codex-seal-test-1019982-tiger-browser-1 Removing 
- Container codex-seal-test-1019982-base-1 Stopped 
- Container codex-seal-test-1019982-base-1 Removing 
- Container codex-seal-test-1019982-tiger-browser-gateway-1 Stopped 
- Container codex-seal-test-1019982-tiger-browser-gateway-1 Removing 
- Container codex-seal-test-1019982-tank-1 Stopped 
- Container codex-seal-test-1019982-tank-1 Removing 
- Container codex-seal-test-1019982-baseline-1 Removed 
- Container codex-seal-test-1019982-tiger-ocr-1 Removed 
- Container codex-seal-test-1019982-tank-1 Removed 
- Container codex-seal-test-1019982-tiger-browser-gateway-1 Removed 
- Container codex-seal-test-1019982-base-1 Removed 
- Container codex-seal-test-1019982-agent-tiger-1 Removed 
- Container codex-seal-test-1019982-other-1 Removed 
- Container codex-seal-test-1019982-tiger-browser-1 Removed 
- Network codex-seal-test-1019982_baseline Removing 
- Network codex-seal-test-1019982_ocr Removing 
- Network codex-seal-test-1019982_browser Removing 
- Network codex-seal-test-1019982_gw Removing 
- Network codex-seal-test-1019982_other Removing 
- Network codex-seal-test-1019982_base Removing 
- Network codex-seal-test-1019982_ocr Removed 
- Network codex-seal-test-1019982_other Removed 
- Network codex-seal-test-1019982_baseline Removed 
- Network codex-seal-test-1019982_gw Removed 
- Network codex-seal-test-1019982_browser Removed 
- Network codex-seal-test-1019982_base Removed 
+ Container codex-seal-test-1019982-base-1 Stopping
+ Container codex-seal-test-1019982-tiger-ocr-1 Stopping
+ Container codex-seal-test-1019982-tank-1 Stopping
+ Container codex-seal-test-1019982-tiger-browser-1 Stopping
+ Container codex-seal-test-1019982-agent-tiger-1 Stopping
+ Container codex-seal-test-1019982-tiger-browser-gateway-1 Stopping
+ Container codex-seal-test-1019982-other-1 Stopping
+ Container codex-seal-test-1019982-baseline-1 Stopping
+ Container codex-seal-test-1019982-baseline-1 Stopped
+ Container codex-seal-test-1019982-baseline-1 Removing
+ Container codex-seal-test-1019982-tiger-ocr-1 Stopped
+ Container codex-seal-test-1019982-tiger-ocr-1 Removing
+ Container codex-seal-test-1019982-agent-tiger-1 Stopped
+ Container codex-seal-test-1019982-agent-tiger-1 Removing
+ Container codex-seal-test-1019982-other-1 Stopped
+ Container codex-seal-test-1019982-other-1 Removing
+ Container codex-seal-test-1019982-tiger-browser-1 Stopped
+ Container codex-seal-test-1019982-tiger-browser-1 Removing
+ Container codex-seal-test-1019982-base-1 Stopped
+ Container codex-seal-test-1019982-base-1 Removing
+ Container codex-seal-test-1019982-tiger-browser-gateway-1 Stopped
+ Container codex-seal-test-1019982-tiger-browser-gateway-1 Removing
+ Container codex-seal-test-1019982-tank-1 Stopped
+ Container codex-seal-test-1019982-tank-1 Removing
+ Container codex-seal-test-1019982-baseline-1 Removed
+ Container codex-seal-test-1019982-tiger-ocr-1 Removed
+ Container codex-seal-test-1019982-tank-1 Removed
+ Container codex-seal-test-1019982-tiger-browser-gateway-1 Removed
+ Container codex-seal-test-1019982-base-1 Removed
+ Container codex-seal-test-1019982-agent-tiger-1 Removed
+ Container codex-seal-test-1019982-other-1 Removed
+ Container codex-seal-test-1019982-tiger-browser-1 Removed
+ Network codex-seal-test-1019982_baseline Removing
+ Network codex-seal-test-1019982_ocr Removing
+ Network codex-seal-test-1019982_browser Removing
+ Network codex-seal-test-1019982_gw Removing
+ Network codex-seal-test-1019982_other Removing
+ Network codex-seal-test-1019982_base Removing
+ Network codex-seal-test-1019982_ocr Removed
+ Network codex-seal-test-1019982_other Removed
+ Network codex-seal-test-1019982_baseline Removed
+ Network codex-seal-test-1019982_gw Removed
+ Network codex-seal-test-1019982_browser Removed
+ Network codex-seal-test-1019982_base Removed
 Traceback (most recent call last):
   File "/workspace/codex-seal-hardening/tests/seal_hardening/compose_probe.py", line 128, in <module>
     inside()
@@ -2928,78 +2929,78 @@ subprocess.CalledProcessError: Command '('docker', 'compose', '-p', 'codex-seal-
 
 
 LOG compose-final.txt
- Network codex-seal-test-1042072_base Creating 
- Network codex-seal-test-1042072_base Creating 
- Network codex-seal-test-1042072_browser Creating 
- Network codex-seal-test-1042072_browser Creating 
- Network codex-seal-test-1042072_gw Creating 
- Network codex-seal-test-1042072_gw Creating 
- Network codex-seal-test-1042072_other Creating 
- Network codex-seal-test-1042072_other Creating 
- Network codex-seal-test-1042072_baseline Creating 
- Network codex-seal-test-1042072_baseline Creating 
- Network codex-seal-test-1042072_ocr Creating 
- Network codex-seal-test-1042072_ocr Creating 
- Network codex-seal-test-1042072_other Created 
- Network codex-seal-test-1042072_other Created 
- Container codex-seal-test-1042072-other-1 Creating 
- Network codex-seal-test-1042072_browser Created 
- Network codex-seal-test-1042072_browser Created 
- Container codex-seal-test-1042072-tiger-browser-1 Creating 
- Network codex-seal-test-1042072_ocr Created 
- Network codex-seal-test-1042072_ocr Created 
- Container codex-seal-test-1042072-tiger-ocr-1 Creating 
- Network codex-seal-test-1042072_gw Created 
- Network codex-seal-test-1042072_gw Created 
- Container codex-seal-test-1042072-agent-tiger-1 Creating 
- Container codex-seal-test-1042072-tiger-browser-gateway-1 Creating 
- Network codex-seal-test-1042072_baseline Created 
- Network codex-seal-test-1042072_baseline Created 
- Container codex-seal-test-1042072-baseline-1 Creating 
- Network codex-seal-test-1042072_base Created 
- Network codex-seal-test-1042072_base Created 
- Container codex-seal-test-1042072-base-1 Creating 
- Container codex-seal-test-1042072-tank-1 Creating 
- Container codex-seal-test-1042072-base-1 Created 
- Container codex-seal-test-1042072-other-1 Created 
- Container codex-seal-test-1042072-tiger-ocr-1 Created 
- Container codex-seal-test-1042072-tiger-browser-gateway-1 Created 
- Container codex-seal-test-1042072-tiger-browser-1 Created 
- Container codex-seal-test-1042072-agent-tiger-1 Created 
- Container codex-seal-test-1042072-baseline-1 Created 
- Container codex-seal-test-1042072-tank-1 Created 
- Container codex-seal-test-1042072-base-1 Starting 
- Container codex-seal-test-1042072-tiger-browser-1 Starting 
- Container codex-seal-test-1042072-baseline-1 Starting 
- Container codex-seal-test-1042072-agent-tiger-1 Starting 
- Container codex-seal-test-1042072-tiger-browser-gateway-1 Starting 
- Container codex-seal-test-1042072-tiger-ocr-1 Starting 
- Container codex-seal-test-1042072-other-1 Starting 
- Container codex-seal-test-1042072-tank-1 Starting 
- Container codex-seal-test-1042072-base-1 Started 
- Container codex-seal-test-1042072-tiger-browser-1 Started 
- Container codex-seal-test-1042072-baseline-1 Started 
- Container codex-seal-test-1042072-agent-tiger-1 Started 
- Container codex-seal-test-1042072-tiger-browser-gateway-1 Started 
- Container codex-seal-test-1042072-tiger-ocr-1 Started 
- Container codex-seal-test-1042072-other-1 Started 
- Container codex-seal-test-1042072-tank-1 Started 
- Container codex-seal-test-1042072-baseline-1 Waiting 
- Container codex-seal-test-1042072-tank-1 Waiting 
- Container codex-seal-test-1042072-tiger-ocr-1 Waiting 
- Container codex-seal-test-1042072-tiger-browser-1 Waiting 
- Container codex-seal-test-1042072-base-1 Waiting 
- Container codex-seal-test-1042072-tiger-browser-gateway-1 Waiting 
- Container codex-seal-test-1042072-agent-tiger-1 Waiting 
- Container codex-seal-test-1042072-other-1 Waiting 
- Container codex-seal-test-1042072-base-1 Healthy 
- Container codex-seal-test-1042072-tank-1 Healthy 
- Container codex-seal-test-1042072-agent-tiger-1 Healthy 
- Container codex-seal-test-1042072-tiger-browser-1 Healthy 
- Container codex-seal-test-1042072-tiger-browser-gateway-1 Healthy 
- Container codex-seal-test-1042072-other-1 Healthy 
- Container codex-seal-test-1042072-baseline-1 Healthy 
- Container codex-seal-test-1042072-tiger-ocr-1 Healthy 
+ Network codex-seal-test-1042072_base Creating
+ Network codex-seal-test-1042072_base Creating
+ Network codex-seal-test-1042072_browser Creating
+ Network codex-seal-test-1042072_browser Creating
+ Network codex-seal-test-1042072_gw Creating
+ Network codex-seal-test-1042072_gw Creating
+ Network codex-seal-test-1042072_other Creating
+ Network codex-seal-test-1042072_other Creating
+ Network codex-seal-test-1042072_baseline Creating
+ Network codex-seal-test-1042072_baseline Creating
+ Network codex-seal-test-1042072_ocr Creating
+ Network codex-seal-test-1042072_ocr Creating
+ Network codex-seal-test-1042072_other Created
+ Network codex-seal-test-1042072_other Created
+ Container codex-seal-test-1042072-other-1 Creating
+ Network codex-seal-test-1042072_browser Created
+ Network codex-seal-test-1042072_browser Created
+ Container codex-seal-test-1042072-tiger-browser-1 Creating
+ Network codex-seal-test-1042072_ocr Created
+ Network codex-seal-test-1042072_ocr Created
+ Container codex-seal-test-1042072-tiger-ocr-1 Creating
+ Network codex-seal-test-1042072_gw Created
+ Network codex-seal-test-1042072_gw Created
+ Container codex-seal-test-1042072-agent-tiger-1 Creating
+ Container codex-seal-test-1042072-tiger-browser-gateway-1 Creating
+ Network codex-seal-test-1042072_baseline Created
+ Network codex-seal-test-1042072_baseline Created
+ Container codex-seal-test-1042072-baseline-1 Creating
+ Network codex-seal-test-1042072_base Created
+ Network codex-seal-test-1042072_base Created
+ Container codex-seal-test-1042072-base-1 Creating
+ Container codex-seal-test-1042072-tank-1 Creating
+ Container codex-seal-test-1042072-base-1 Created
+ Container codex-seal-test-1042072-other-1 Created
+ Container codex-seal-test-1042072-tiger-ocr-1 Created
+ Container codex-seal-test-1042072-tiger-browser-gateway-1 Created
+ Container codex-seal-test-1042072-tiger-browser-1 Created
+ Container codex-seal-test-1042072-agent-tiger-1 Created
+ Container codex-seal-test-1042072-baseline-1 Created
+ Container codex-seal-test-1042072-tank-1 Created
+ Container codex-seal-test-1042072-base-1 Starting
+ Container codex-seal-test-1042072-tiger-browser-1 Starting
+ Container codex-seal-test-1042072-baseline-1 Starting
+ Container codex-seal-test-1042072-agent-tiger-1 Starting
+ Container codex-seal-test-1042072-tiger-browser-gateway-1 Starting
+ Container codex-seal-test-1042072-tiger-ocr-1 Starting
+ Container codex-seal-test-1042072-other-1 Starting
+ Container codex-seal-test-1042072-tank-1 Starting
+ Container codex-seal-test-1042072-base-1 Started
+ Container codex-seal-test-1042072-tiger-browser-1 Started
+ Container codex-seal-test-1042072-baseline-1 Started
+ Container codex-seal-test-1042072-agent-tiger-1 Started
+ Container codex-seal-test-1042072-tiger-browser-gateway-1 Started
+ Container codex-seal-test-1042072-tiger-ocr-1 Started
+ Container codex-seal-test-1042072-other-1 Started
+ Container codex-seal-test-1042072-tank-1 Started
+ Container codex-seal-test-1042072-baseline-1 Waiting
+ Container codex-seal-test-1042072-tank-1 Waiting
+ Container codex-seal-test-1042072-tiger-ocr-1 Waiting
+ Container codex-seal-test-1042072-tiger-browser-1 Waiting
+ Container codex-seal-test-1042072-base-1 Waiting
+ Container codex-seal-test-1042072-tiger-browser-gateway-1 Waiting
+ Container codex-seal-test-1042072-agent-tiger-1 Waiting
+ Container codex-seal-test-1042072-other-1 Waiting
+ Container codex-seal-test-1042072-base-1 Healthy
+ Container codex-seal-test-1042072-tank-1 Healthy
+ Container codex-seal-test-1042072-agent-tiger-1 Healthy
+ Container codex-seal-test-1042072-tiger-browser-1 Healthy
+ Container codex-seal-test-1042072-tiger-browser-gateway-1 Healthy
+ Container codex-seal-test-1042072-other-1 Healthy
+ Container codex-seal-test-1042072-baseline-1 Healthy
+ Container codex-seal-test-1042072-tiger-ocr-1 Healthy
 denied postgres redis qdrant litellm agent-tiger tiger-browser base other 1.1.1.1 8.8.8.8
 denied tiger-ocr 10.0.62.2
 denied tiger-ocr 10.0.62.2
@@ -3032,50 +3033,50 @@ Traceback (most recent call last):
   File "/usr/lib/python3.10/socket.py", line 705, in readinto
     return self._sock.recv_into(b)
 TimeoutError: timed out
- Container codex-seal-test-1042072-baseline-1 Stopping 
- Container codex-seal-test-1042072-base-1 Stopping 
- Container codex-seal-test-1042072-tiger-browser-1 Stopping 
- Container codex-seal-test-1042072-tiger-browser-gateway-1 Stopping 
- Container codex-seal-test-1042072-tank-1 Stopping 
- Container codex-seal-test-1042072-agent-tiger-1 Stopping 
- Container codex-seal-test-1042072-tiger-ocr-1 Stopping 
- Container codex-seal-test-1042072-other-1 Stopping 
- Container codex-seal-test-1042072-base-1 Stopped 
- Container codex-seal-test-1042072-tiger-browser-1 Stopped 
- Container codex-seal-test-1042072-tiger-ocr-1 Stopped 
- Container codex-seal-test-1042072-tiger-ocr-1 Removing 
- Container codex-seal-test-1042072-tiger-browser-1 Removing 
- Container codex-seal-test-1042072-base-1 Removing 
- Container codex-seal-test-1042072-other-1 Stopped 
- Container codex-seal-test-1042072-other-1 Removing 
- Container codex-seal-test-1042072-agent-tiger-1 Stopped 
- Container codex-seal-test-1042072-agent-tiger-1 Removing 
- Container codex-seal-test-1042072-tiger-browser-gateway-1 Stopped 
- Container codex-seal-test-1042072-tiger-browser-gateway-1 Removing 
- Container codex-seal-test-1042072-baseline-1 Stopped 
- Container codex-seal-test-1042072-baseline-1 Removing 
- Container codex-seal-test-1042072-tank-1 Stopped 
- Container codex-seal-test-1042072-tank-1 Removing 
- Container codex-seal-test-1042072-base-1 Removed 
- Container codex-seal-test-1042072-baseline-1 Removed 
- Container codex-seal-test-1042072-other-1 Removed 
- Container codex-seal-test-1042072-tiger-ocr-1 Removed 
- Container codex-seal-test-1042072-tiger-browser-1 Removed 
- Container codex-seal-test-1042072-tank-1 Removed 
- Container codex-seal-test-1042072-agent-tiger-1 Removed 
- Container codex-seal-test-1042072-tiger-browser-gateway-1 Removed 
- Network codex-seal-test-1042072_baseline Removing 
- Network codex-seal-test-1042072_gw Removing 
- Network codex-seal-test-1042072_browser Removing 
- Network codex-seal-test-1042072_base Removing 
- Network codex-seal-test-1042072_other Removing 
- Network codex-seal-test-1042072_ocr Removing 
- Network codex-seal-test-1042072_browser Removed 
- Network codex-seal-test-1042072_ocr Removed 
- Network codex-seal-test-1042072_other Removed 
- Network codex-seal-test-1042072_base Removed 
- Network codex-seal-test-1042072_baseline Removed 
- Network codex-seal-test-1042072_gw Removed 
+ Container codex-seal-test-1042072-baseline-1 Stopping
+ Container codex-seal-test-1042072-base-1 Stopping
+ Container codex-seal-test-1042072-tiger-browser-1 Stopping
+ Container codex-seal-test-1042072-tiger-browser-gateway-1 Stopping
+ Container codex-seal-test-1042072-tank-1 Stopping
+ Container codex-seal-test-1042072-agent-tiger-1 Stopping
+ Container codex-seal-test-1042072-tiger-ocr-1 Stopping
+ Container codex-seal-test-1042072-other-1 Stopping
+ Container codex-seal-test-1042072-base-1 Stopped
+ Container codex-seal-test-1042072-tiger-browser-1 Stopped
+ Container codex-seal-test-1042072-tiger-ocr-1 Stopped
+ Container codex-seal-test-1042072-tiger-ocr-1 Removing
+ Container codex-seal-test-1042072-tiger-browser-1 Removing
+ Container codex-seal-test-1042072-base-1 Removing
+ Container codex-seal-test-1042072-other-1 Stopped
+ Container codex-seal-test-1042072-other-1 Removing
+ Container codex-seal-test-1042072-agent-tiger-1 Stopped
+ Container codex-seal-test-1042072-agent-tiger-1 Removing
+ Container codex-seal-test-1042072-tiger-browser-gateway-1 Stopped
+ Container codex-seal-test-1042072-tiger-browser-gateway-1 Removing
+ Container codex-seal-test-1042072-baseline-1 Stopped
+ Container codex-seal-test-1042072-baseline-1 Removing
+ Container codex-seal-test-1042072-tank-1 Stopped
+ Container codex-seal-test-1042072-tank-1 Removing
+ Container codex-seal-test-1042072-base-1 Removed
+ Container codex-seal-test-1042072-baseline-1 Removed
+ Container codex-seal-test-1042072-other-1 Removed
+ Container codex-seal-test-1042072-tiger-ocr-1 Removed
+ Container codex-seal-test-1042072-tiger-browser-1 Removed
+ Container codex-seal-test-1042072-tank-1 Removed
+ Container codex-seal-test-1042072-agent-tiger-1 Removed
+ Container codex-seal-test-1042072-tiger-browser-gateway-1 Removed
+ Network codex-seal-test-1042072_baseline Removing
+ Network codex-seal-test-1042072_gw Removing
+ Network codex-seal-test-1042072_browser Removing
+ Network codex-seal-test-1042072_base Removing
+ Network codex-seal-test-1042072_other Removing
+ Network codex-seal-test-1042072_ocr Removing
+ Network codex-seal-test-1042072_browser Removed
+ Network codex-seal-test-1042072_ocr Removed
+ Network codex-seal-test-1042072_other Removed
+ Network codex-seal-test-1042072_base Removed
+ Network codex-seal-test-1042072_baseline Removed
+ Network codex-seal-test-1042072_gw Removed
 Traceback (most recent call last):
   File "/workspace/codex-seal-hardening/tests/seal_hardening/compose_probe.py", line 130, in <module>
     run()
@@ -3094,121 +3095,121 @@ subprocess.CalledProcessError: Command '('docker', 'compose', '-p', 'codex-seal-
 
 
 LOG compose-rerun.txt
- Network codex-seal-test-1177514_gw Creating 
- Network codex-seal-test-1177514_browser Creating 
- Network codex-seal-test-1177514_other Creating 
- Network codex-seal-test-1177514_base Creating 
- Network codex-seal-test-1177514_baseline Creating 
- Network codex-seal-test-1177514_gw Creating 
- Network codex-seal-test-1177514_other Creating 
- Network codex-seal-test-1177514_browser Creating 
- Network codex-seal-test-1177514_base Creating 
- Network codex-seal-test-1177514_baseline Creating 
- Network codex-seal-test-1177514_ocr Creating 
- Network codex-seal-test-1177514_ocr Creating 
- Network codex-seal-test-1177514_base Created 
- Network codex-seal-test-1177514_base Created 
- Container codex-seal-test-1177514-base-1 Creating 
- Network codex-seal-test-1177514_browser Created 
- Network codex-seal-test-1177514_browser Created 
- Container codex-seal-test-1177514-tiger-browser-1 Creating 
- Network codex-seal-test-1177514_gw Created 
- Network codex-seal-test-1177514_gw Created 
- Container codex-seal-test-1177514-tiger-browser-gateway-1 Creating 
- Container codex-seal-test-1177514-agent-tiger-1 Creating 
- Network codex-seal-test-1177514_other Created 
- Network codex-seal-test-1177514_other Created 
- Network codex-seal-test-1177514_ocr Created 
- Network codex-seal-test-1177514_ocr Created 
- Container codex-seal-test-1177514-tiger-ocr-1 Creating 
- Container codex-seal-test-1177514-other-1 Creating 
- Network codex-seal-test-1177514_baseline Created 
- Network codex-seal-test-1177514_baseline Created 
- Container codex-seal-test-1177514-baseline-1 Creating 
- Container codex-seal-test-1177514-tank-1 Creating 
- Container codex-seal-test-1177514-agent-tiger-1 Created 
- Container codex-seal-test-1177514-tiger-ocr-1 Created 
- Container codex-seal-test-1177514-tank-1 Created 
- Container codex-seal-test-1177514-tiger-browser-gateway-1 Created 
- Container codex-seal-test-1177514-base-1 Created 
- Container codex-seal-test-1177514-other-1 Created 
- Container codex-seal-test-1177514-baseline-1 Created 
- Container codex-seal-test-1177514-tiger-browser-1 Created 
- Container codex-seal-test-1177514-other-1 Starting 
- Container codex-seal-test-1177514-baseline-1 Starting 
- Container codex-seal-test-1177514-base-1 Starting 
- Container codex-seal-test-1177514-tiger-ocr-1 Starting 
- Container codex-seal-test-1177514-tank-1 Starting 
- Container codex-seal-test-1177514-tiger-browser-1 Starting 
- Container codex-seal-test-1177514-agent-tiger-1 Starting 
- Container codex-seal-test-1177514-tiger-browser-gateway-1 Starting 
- Container codex-seal-test-1177514-other-1 Started 
- Container codex-seal-test-1177514-baseline-1 Started 
- Container codex-seal-test-1177514-base-1 Started 
- Container codex-seal-test-1177514-tiger-ocr-1 Started 
- Container codex-seal-test-1177514-tank-1 Started 
- Container codex-seal-test-1177514-tiger-browser-1 Started 
- Container codex-seal-test-1177514-agent-tiger-1 Started 
- Container codex-seal-test-1177514-tiger-browser-gateway-1 Started 
- Container codex-seal-test-1177514-agent-tiger-1 Waiting 
- Container codex-seal-test-1177514-tiger-ocr-1 Waiting 
- Container codex-seal-test-1177514-tiger-browser-gateway-1 Waiting 
- Container codex-seal-test-1177514-tiger-browser-1 Waiting 
- Container codex-seal-test-1177514-baseline-1 Waiting 
- Container codex-seal-test-1177514-tank-1 Waiting 
- Container codex-seal-test-1177514-other-1 Waiting 
- Container codex-seal-test-1177514-base-1 Waiting 
- Container codex-seal-test-1177514-tiger-browser-1 Healthy 
- Container codex-seal-test-1177514-agent-tiger-1 Healthy 
- Container codex-seal-test-1177514-tiger-browser-gateway-1 Healthy 
- Container codex-seal-test-1177514-tank-1 Healthy 
- Container codex-seal-test-1177514-base-1 Healthy 
- Container codex-seal-test-1177514-other-1 Healthy 
+ Network codex-seal-test-1177514_gw Creating
+ Network codex-seal-test-1177514_browser Creating
+ Network codex-seal-test-1177514_other Creating
+ Network codex-seal-test-1177514_base Creating
+ Network codex-seal-test-1177514_baseline Creating
+ Network codex-seal-test-1177514_gw Creating
+ Network codex-seal-test-1177514_other Creating
+ Network codex-seal-test-1177514_browser Creating
+ Network codex-seal-test-1177514_base Creating
+ Network codex-seal-test-1177514_baseline Creating
+ Network codex-seal-test-1177514_ocr Creating
+ Network codex-seal-test-1177514_ocr Creating
+ Network codex-seal-test-1177514_base Created
+ Network codex-seal-test-1177514_base Created
+ Container codex-seal-test-1177514-base-1 Creating
+ Network codex-seal-test-1177514_browser Created
+ Network codex-seal-test-1177514_browser Created
+ Container codex-seal-test-1177514-tiger-browser-1 Creating
+ Network codex-seal-test-1177514_gw Created
+ Network codex-seal-test-1177514_gw Created
+ Container codex-seal-test-1177514-tiger-browser-gateway-1 Creating
+ Container codex-seal-test-1177514-agent-tiger-1 Creating
+ Network codex-seal-test-1177514_other Created
+ Network codex-seal-test-1177514_other Created
+ Network codex-seal-test-1177514_ocr Created
+ Network codex-seal-test-1177514_ocr Created
+ Container codex-seal-test-1177514-tiger-ocr-1 Creating
+ Container codex-seal-test-1177514-other-1 Creating
+ Network codex-seal-test-1177514_baseline Created
+ Network codex-seal-test-1177514_baseline Created
+ Container codex-seal-test-1177514-baseline-1 Creating
+ Container codex-seal-test-1177514-tank-1 Creating
+ Container codex-seal-test-1177514-agent-tiger-1 Created
+ Container codex-seal-test-1177514-tiger-ocr-1 Created
+ Container codex-seal-test-1177514-tank-1 Created
+ Container codex-seal-test-1177514-tiger-browser-gateway-1 Created
+ Container codex-seal-test-1177514-base-1 Created
+ Container codex-seal-test-1177514-other-1 Created
+ Container codex-seal-test-1177514-baseline-1 Created
+ Container codex-seal-test-1177514-tiger-browser-1 Created
+ Container codex-seal-test-1177514-other-1 Starting
+ Container codex-seal-test-1177514-baseline-1 Starting
+ Container codex-seal-test-1177514-base-1 Starting
+ Container codex-seal-test-1177514-tiger-ocr-1 Starting
+ Container codex-seal-test-1177514-tank-1 Starting
+ Container codex-seal-test-1177514-tiger-browser-1 Starting
+ Container codex-seal-test-1177514-agent-tiger-1 Starting
+ Container codex-seal-test-1177514-tiger-browser-gateway-1 Starting
+ Container codex-seal-test-1177514-other-1 Started
+ Container codex-seal-test-1177514-baseline-1 Started
+ Container codex-seal-test-1177514-base-1 Started
+ Container codex-seal-test-1177514-tiger-ocr-1 Started
+ Container codex-seal-test-1177514-tank-1 Started
+ Container codex-seal-test-1177514-tiger-browser-1 Started
+ Container codex-seal-test-1177514-agent-tiger-1 Started
+ Container codex-seal-test-1177514-tiger-browser-gateway-1 Started
+ Container codex-seal-test-1177514-agent-tiger-1 Waiting
+ Container codex-seal-test-1177514-tiger-ocr-1 Waiting
+ Container codex-seal-test-1177514-tiger-browser-gateway-1 Waiting
+ Container codex-seal-test-1177514-tiger-browser-1 Waiting
+ Container codex-seal-test-1177514-baseline-1 Waiting
+ Container codex-seal-test-1177514-tank-1 Waiting
+ Container codex-seal-test-1177514-other-1 Waiting
+ Container codex-seal-test-1177514-base-1 Waiting
+ Container codex-seal-test-1177514-tiger-browser-1 Healthy
+ Container codex-seal-test-1177514-agent-tiger-1 Healthy
+ Container codex-seal-test-1177514-tiger-browser-gateway-1 Healthy
+ Container codex-seal-test-1177514-tank-1 Healthy
+ Container codex-seal-test-1177514-base-1 Healthy
+ Container codex-seal-test-1177514-other-1 Healthy
 container codex-seal-test-1177514-tiger-ocr-1 exited (3)
- Container codex-seal-test-1177514-agent-tiger-1 Stopping 
- Container codex-seal-test-1177514-tiger-browser-1 Stopping 
- Container codex-seal-test-1177514-tiger-browser-gateway-1 Stopping 
- Container codex-seal-test-1177514-tank-1 Stopping 
- Container codex-seal-test-1177514-other-1 Stopping 
- Container codex-seal-test-1177514-baseline-1 Stopping 
- Container codex-seal-test-1177514-tiger-ocr-1 Stopping 
- Container codex-seal-test-1177514-base-1 Stopping 
- Container codex-seal-test-1177514-baseline-1 Stopped 
- Container codex-seal-test-1177514-baseline-1 Removing 
- Container codex-seal-test-1177514-tiger-ocr-1 Stopped 
- Container codex-seal-test-1177514-tiger-ocr-1 Removing 
- Container codex-seal-test-1177514-tiger-browser-1 Stopped 
- Container codex-seal-test-1177514-tiger-browser-1 Removing 
- Container codex-seal-test-1177514-base-1 Stopped 
- Container codex-seal-test-1177514-base-1 Removing 
- Container codex-seal-test-1177514-other-1 Stopped 
- Container codex-seal-test-1177514-other-1 Removing 
- Container codex-seal-test-1177514-agent-tiger-1 Stopped 
- Container codex-seal-test-1177514-agent-tiger-1 Removing 
- Container codex-seal-test-1177514-tiger-browser-gateway-1 Stopped 
- Container codex-seal-test-1177514-tiger-browser-gateway-1 Removing 
- Container codex-seal-test-1177514-tank-1 Stopped 
- Container codex-seal-test-1177514-tank-1 Removing 
- Container codex-seal-test-1177514-tiger-ocr-1 Removed 
- Container codex-seal-test-1177514-baseline-1 Removed 
- Container codex-seal-test-1177514-other-1 Removed 
- Container codex-seal-test-1177514-tiger-browser-gateway-1 Removed 
- Container codex-seal-test-1177514-tank-1 Removed 
- Container codex-seal-test-1177514-base-1 Removed 
- Container codex-seal-test-1177514-tiger-browser-1 Removed 
- Container codex-seal-test-1177514-agent-tiger-1 Removed 
- Network codex-seal-test-1177514_baseline Removing 
- Network codex-seal-test-1177514_other Removing 
- Network codex-seal-test-1177514_gw Removing 
- Network codex-seal-test-1177514_ocr Removing 
- Network codex-seal-test-1177514_base Removing 
- Network codex-seal-test-1177514_browser Removing 
- Network codex-seal-test-1177514_base Removed 
- Network codex-seal-test-1177514_browser Removed 
- Network codex-seal-test-1177514_baseline Removed 
- Network codex-seal-test-1177514_ocr Removed 
- Network codex-seal-test-1177514_gw Removed 
- Network codex-seal-test-1177514_other Removed 
+ Container codex-seal-test-1177514-agent-tiger-1 Stopping
+ Container codex-seal-test-1177514-tiger-browser-1 Stopping
+ Container codex-seal-test-1177514-tiger-browser-gateway-1 Stopping
+ Container codex-seal-test-1177514-tank-1 Stopping
+ Container codex-seal-test-1177514-other-1 Stopping
+ Container codex-seal-test-1177514-baseline-1 Stopping
+ Container codex-seal-test-1177514-tiger-ocr-1 Stopping
+ Container codex-seal-test-1177514-base-1 Stopping
+ Container codex-seal-test-1177514-baseline-1 Stopped
+ Container codex-seal-test-1177514-baseline-1 Removing
+ Container codex-seal-test-1177514-tiger-ocr-1 Stopped
+ Container codex-seal-test-1177514-tiger-ocr-1 Removing
+ Container codex-seal-test-1177514-tiger-browser-1 Stopped
+ Container codex-seal-test-1177514-tiger-browser-1 Removing
+ Container codex-seal-test-1177514-base-1 Stopped
+ Container codex-seal-test-1177514-base-1 Removing
+ Container codex-seal-test-1177514-other-1 Stopped
+ Container codex-seal-test-1177514-other-1 Removing
+ Container codex-seal-test-1177514-agent-tiger-1 Stopped
+ Container codex-seal-test-1177514-agent-tiger-1 Removing
+ Container codex-seal-test-1177514-tiger-browser-gateway-1 Stopped
+ Container codex-seal-test-1177514-tiger-browser-gateway-1 Removing
+ Container codex-seal-test-1177514-tank-1 Stopped
+ Container codex-seal-test-1177514-tank-1 Removing
+ Container codex-seal-test-1177514-tiger-ocr-1 Removed
+ Container codex-seal-test-1177514-baseline-1 Removed
+ Container codex-seal-test-1177514-other-1 Removed
+ Container codex-seal-test-1177514-tiger-browser-gateway-1 Removed
+ Container codex-seal-test-1177514-tank-1 Removed
+ Container codex-seal-test-1177514-base-1 Removed
+ Container codex-seal-test-1177514-tiger-browser-1 Removed
+ Container codex-seal-test-1177514-agent-tiger-1 Removed
+ Network codex-seal-test-1177514_baseline Removing
+ Network codex-seal-test-1177514_other Removing
+ Network codex-seal-test-1177514_gw Removing
+ Network codex-seal-test-1177514_ocr Removing
+ Network codex-seal-test-1177514_base Removing
+ Network codex-seal-test-1177514_browser Removing
+ Network codex-seal-test-1177514_base Removed
+ Network codex-seal-test-1177514_browser Removed
+ Network codex-seal-test-1177514_baseline Removed
+ Network codex-seal-test-1177514_ocr Removed
+ Network codex-seal-test-1177514_gw Removed
+ Network codex-seal-test-1177514_other Removed
 Traceback (most recent call last):
   File "/workspace/codex-seal-hardening/tests/seal_hardening/compose_probe.py", line 130, in <module>
     if sys.argv[1] == "inside":
@@ -3221,78 +3222,78 @@ subprocess.CalledProcessError: Command '['docker', 'compose', '-p', 'codex-seal-
 
 
 LOG compose-diagnostic.txt
- Network codex-seal-test-1232843_base Creating 
- Network codex-seal-test-1232843_baseline Creating 
- Network codex-seal-test-1232843_base Creating 
- Network codex-seal-test-1232843_baseline Creating 
- Network codex-seal-test-1232843_gw Creating 
- Network codex-seal-test-1232843_gw Creating 
- Network codex-seal-test-1232843_browser Creating 
- Network codex-seal-test-1232843_browser Creating 
- Network codex-seal-test-1232843_ocr Creating 
- Network codex-seal-test-1232843_ocr Creating 
- Network codex-seal-test-1232843_other Creating 
- Network codex-seal-test-1232843_other Creating 
- Network codex-seal-test-1232843_gw Created 
- Network codex-seal-test-1232843_gw Created 
- Container codex-seal-test-1232843-agent-tiger-1 Creating 
- Network codex-seal-test-1232843_base Created 
- Network codex-seal-test-1232843_base Created 
- Container codex-seal-test-1232843-base-1 Creating 
- Network codex-seal-test-1232843_ocr Created 
- Network codex-seal-test-1232843_ocr Created 
- Container codex-seal-test-1232843-tiger-ocr-1 Creating 
- Network codex-seal-test-1232843_other Created 
- Network codex-seal-test-1232843_other Created 
- Container codex-seal-test-1232843-other-1 Creating 
- Network codex-seal-test-1232843_baseline Created 
- Network codex-seal-test-1232843_baseline Created 
- Container codex-seal-test-1232843-baseline-1 Creating 
- Container codex-seal-test-1232843-tank-1 Creating 
- Container codex-seal-test-1232843-tiger-ocr-1 Created 
- Container codex-seal-test-1232843-agent-tiger-1 Created 
- Container codex-seal-test-1232843-base-1 Created 
- Container codex-seal-test-1232843-other-1 Created 
- Network codex-seal-test-1232843_browser Created 
- Network codex-seal-test-1232843_browser Created 
- Container codex-seal-test-1232843-tiger-browser-1 Creating 
- Container codex-seal-test-1232843-tiger-browser-gateway-1 Creating 
- Container codex-seal-test-1232843-baseline-1 Created 
- Container codex-seal-test-1232843-tank-1 Created 
- Container codex-seal-test-1232843-tiger-browser-gateway-1 Created 
- Container codex-seal-test-1232843-tiger-browser-1 Created 
- Container codex-seal-test-1232843-base-1 Starting 
- Container codex-seal-test-1232843-agent-tiger-1 Starting 
- Container codex-seal-test-1232843-tiger-browser-1 Starting 
- Container codex-seal-test-1232843-tank-1 Starting 
- Container codex-seal-test-1232843-baseline-1 Starting 
- Container codex-seal-test-1232843-tiger-ocr-1 Starting 
- Container codex-seal-test-1232843-other-1 Starting 
- Container codex-seal-test-1232843-tiger-browser-gateway-1 Starting 
- Container codex-seal-test-1232843-base-1 Started 
- Container codex-seal-test-1232843-agent-tiger-1 Started 
- Container codex-seal-test-1232843-tiger-browser-1 Started 
- Container codex-seal-test-1232843-tank-1 Started 
- Container codex-seal-test-1232843-baseline-1 Started 
- Container codex-seal-test-1232843-tiger-ocr-1 Started 
- Container codex-seal-test-1232843-other-1 Started 
- Container codex-seal-test-1232843-tiger-browser-gateway-1 Started 
- Container codex-seal-test-1232843-tiger-browser-1 Waiting 
- Container codex-seal-test-1232843-agent-tiger-1 Waiting 
- Container codex-seal-test-1232843-tiger-ocr-1 Waiting 
- Container codex-seal-test-1232843-baseline-1 Waiting 
- Container codex-seal-test-1232843-tiger-browser-gateway-1 Waiting 
- Container codex-seal-test-1232843-tank-1 Waiting 
- Container codex-seal-test-1232843-base-1 Waiting 
- Container codex-seal-test-1232843-other-1 Waiting 
- Container codex-seal-test-1232843-tank-1 Healthy 
- Container codex-seal-test-1232843-tiger-browser-gateway-1 Healthy 
- Container codex-seal-test-1232843-other-1 Healthy 
- Container codex-seal-test-1232843-agent-tiger-1 Healthy 
- Container codex-seal-test-1232843-tiger-browser-1 Healthy 
- Container codex-seal-test-1232843-base-1 Healthy 
- Container codex-seal-test-1232843-baseline-1 Healthy 
- Container codex-seal-test-1232843-tiger-ocr-1 Healthy 
+ Network codex-seal-test-1232843_base Creating
+ Network codex-seal-test-1232843_baseline Creating
+ Network codex-seal-test-1232843_base Creating
+ Network codex-seal-test-1232843_baseline Creating
+ Network codex-seal-test-1232843_gw Creating
+ Network codex-seal-test-1232843_gw Creating
+ Network codex-seal-test-1232843_browser Creating
+ Network codex-seal-test-1232843_browser Creating
+ Network codex-seal-test-1232843_ocr Creating
+ Network codex-seal-test-1232843_ocr Creating
+ Network codex-seal-test-1232843_other Creating
+ Network codex-seal-test-1232843_other Creating
+ Network codex-seal-test-1232843_gw Created
+ Network codex-seal-test-1232843_gw Created
+ Container codex-seal-test-1232843-agent-tiger-1 Creating
+ Network codex-seal-test-1232843_base Created
+ Network codex-seal-test-1232843_base Created
+ Container codex-seal-test-1232843-base-1 Creating
+ Network codex-seal-test-1232843_ocr Created
+ Network codex-seal-test-1232843_ocr Created
+ Container codex-seal-test-1232843-tiger-ocr-1 Creating
+ Network codex-seal-test-1232843_other Created
+ Network codex-seal-test-1232843_other Created
+ Container codex-seal-test-1232843-other-1 Creating
+ Network codex-seal-test-1232843_baseline Created
+ Network codex-seal-test-1232843_baseline Created
+ Container codex-seal-test-1232843-baseline-1 Creating
+ Container codex-seal-test-1232843-tank-1 Creating
+ Container codex-seal-test-1232843-tiger-ocr-1 Created
+ Container codex-seal-test-1232843-agent-tiger-1 Created
+ Container codex-seal-test-1232843-base-1 Created
+ Container codex-seal-test-1232843-other-1 Created
+ Network codex-seal-test-1232843_browser Created
+ Network codex-seal-test-1232843_browser Created
+ Container codex-seal-test-1232843-tiger-browser-1 Creating
+ Container codex-seal-test-1232843-tiger-browser-gateway-1 Creating
+ Container codex-seal-test-1232843-baseline-1 Created
+ Container codex-seal-test-1232843-tank-1 Created
+ Container codex-seal-test-1232843-tiger-browser-gateway-1 Created
+ Container codex-seal-test-1232843-tiger-browser-1 Created
+ Container codex-seal-test-1232843-base-1 Starting
+ Container codex-seal-test-1232843-agent-tiger-1 Starting
+ Container codex-seal-test-1232843-tiger-browser-1 Starting
+ Container codex-seal-test-1232843-tank-1 Starting
+ Container codex-seal-test-1232843-baseline-1 Starting
+ Container codex-seal-test-1232843-tiger-ocr-1 Starting
+ Container codex-seal-test-1232843-other-1 Starting
+ Container codex-seal-test-1232843-tiger-browser-gateway-1 Starting
+ Container codex-seal-test-1232843-base-1 Started
+ Container codex-seal-test-1232843-agent-tiger-1 Started
+ Container codex-seal-test-1232843-tiger-browser-1 Started
+ Container codex-seal-test-1232843-tank-1 Started
+ Container codex-seal-test-1232843-baseline-1 Started
+ Container codex-seal-test-1232843-tiger-ocr-1 Started
+ Container codex-seal-test-1232843-other-1 Started
+ Container codex-seal-test-1232843-tiger-browser-gateway-1 Started
+ Container codex-seal-test-1232843-tiger-browser-1 Waiting
+ Container codex-seal-test-1232843-agent-tiger-1 Waiting
+ Container codex-seal-test-1232843-tiger-ocr-1 Waiting
+ Container codex-seal-test-1232843-baseline-1 Waiting
+ Container codex-seal-test-1232843-tiger-browser-gateway-1 Waiting
+ Container codex-seal-test-1232843-tank-1 Waiting
+ Container codex-seal-test-1232843-base-1 Waiting
+ Container codex-seal-test-1232843-other-1 Waiting
+ Container codex-seal-test-1232843-tank-1 Healthy
+ Container codex-seal-test-1232843-tiger-browser-gateway-1 Healthy
+ Container codex-seal-test-1232843-other-1 Healthy
+ Container codex-seal-test-1232843-agent-tiger-1 Healthy
+ Container codex-seal-test-1232843-tiger-browser-1 Healthy
+ Container codex-seal-test-1232843-base-1 Healthy
+ Container codex-seal-test-1232843-baseline-1 Healthy
+ Container codex-seal-test-1232843-tiger-ocr-1 Healthy
 denied postgres redis qdrant litellm agent-tiger tiger-browser base other 1.1.1.1 8.8.8.8
 denied tiger-ocr 10.0.54.3
 denied tiger-ocr 10.0.54.3
@@ -3357,23 +3358,23 @@ baseline-1   | Traceback (most recent call last):
 baseline-1   |   File "/usr/lib/python3.10/asyncio/streams.py", line 501, in _wait_for_data
 baseline-1   |     await self._waiter
 baseline-1   | asyncio.exceptions.CancelledError
-baseline-1   | 
+baseline-1   |
 baseline-1   | During handling of the above exception, another exception occurred:
-baseline-1   | 
+baseline-1   |
 baseline-1   | Traceback (most recent call last):
 baseline-1   |   File "/usr/lib/python3.10/asyncio/subprocess.py", line 195, in communicate
 baseline-1   |     stdin, stdout, stderr = await tasks.gather(stdin, stdout, stderr)
 baseline-1   | asyncio.exceptions.CancelledError
-baseline-1   | 
+baseline-1   |
 baseline-1   | During handling of the above exception, another exception occurred:
-baseline-1   | 
+baseline-1   |
 baseline-1   | Traceback (most recent call last):
 baseline-1   |   File "/usr/lib/python3.10/asyncio/tasks.py", line 456, in wait_for
 baseline-1   |     return fut.result()
 baseline-1   | asyncio.exceptions.CancelledError
-baseline-1   | 
+baseline-1   |
 baseline-1   | The above exception was the direct cause of the following exception:
-baseline-1   | 
+baseline-1   |
 baseline-1   | Traceback (most recent call last):
 baseline-1   |   File "/usr/local/lib/python3.10/dist-packages/uvicorn/protocols/http/httptools_impl.py", line 422, in run_asgi
 baseline-1   |     result = await app(  # type: ignore[func-returns-value]
@@ -3424,50 +3425,50 @@ baseline-1   |     out, _err = await asyncio.wait_for(proc.communicate(raw), tim
 baseline-1   |   File "/usr/lib/python3.10/asyncio/tasks.py", line 458, in wait_for
 baseline-1   |     raise exceptions.TimeoutError() from exc
 baseline-1   | asyncio.exceptions.TimeoutError
- Container codex-seal-test-1232843-tank-1 Stopping 
- Container codex-seal-test-1232843-tiger-ocr-1 Stopping 
- Container codex-seal-test-1232843-tiger-browser-gateway-1 Stopping 
- Container codex-seal-test-1232843-tiger-browser-1 Stopping 
- Container codex-seal-test-1232843-baseline-1 Stopping 
- Container codex-seal-test-1232843-base-1 Stopping 
- Container codex-seal-test-1232843-other-1 Stopping 
- Container codex-seal-test-1232843-agent-tiger-1 Stopping 
- Container codex-seal-test-1232843-tiger-ocr-1 Stopped 
- Container codex-seal-test-1232843-tiger-ocr-1 Removing 
- Container codex-seal-test-1232843-baseline-1 Stopped 
- Container codex-seal-test-1232843-baseline-1 Removing 
- Container codex-seal-test-1232843-tiger-browser-1 Stopped 
- Container codex-seal-test-1232843-tiger-browser-1 Removing 
- Container codex-seal-test-1232843-other-1 Stopped 
- Container codex-seal-test-1232843-other-1 Removing 
- Container codex-seal-test-1232843-agent-tiger-1 Stopped 
- Container codex-seal-test-1232843-agent-tiger-1 Removing 
- Container codex-seal-test-1232843-base-1 Stopped 
- Container codex-seal-test-1232843-base-1 Removing 
- Container codex-seal-test-1232843-tiger-browser-gateway-1 Stopped 
- Container codex-seal-test-1232843-tiger-browser-gateway-1 Removing 
- Container codex-seal-test-1232843-tank-1 Stopped 
- Container codex-seal-test-1232843-tank-1 Removing 
- Container codex-seal-test-1232843-baseline-1 Removed 
- Container codex-seal-test-1232843-tiger-ocr-1 Removed 
- Container codex-seal-test-1232843-other-1 Removed 
- Container codex-seal-test-1232843-tiger-browser-1 Removed 
- Container codex-seal-test-1232843-agent-tiger-1 Removed 
- Container codex-seal-test-1232843-tank-1 Removed 
- Container codex-seal-test-1232843-base-1 Removed 
- Container codex-seal-test-1232843-tiger-browser-gateway-1 Removed 
- Network codex-seal-test-1232843_browser Removing 
- Network codex-seal-test-1232843_baseline Removing 
- Network codex-seal-test-1232843_gw Removing 
- Network codex-seal-test-1232843_other Removing 
- Network codex-seal-test-1232843_ocr Removing 
- Network codex-seal-test-1232843_base Removing 
- Network codex-seal-test-1232843_ocr Removed 
- Network codex-seal-test-1232843_baseline Removed 
- Network codex-seal-test-1232843_browser Removed 
- Network codex-seal-test-1232843_other Removed 
- Network codex-seal-test-1232843_base Removed 
- Network codex-seal-test-1232843_gw Removed 
+ Container codex-seal-test-1232843-tank-1 Stopping
+ Container codex-seal-test-1232843-tiger-ocr-1 Stopping
+ Container codex-seal-test-1232843-tiger-browser-gateway-1 Stopping
+ Container codex-seal-test-1232843-tiger-browser-1 Stopping
+ Container codex-seal-test-1232843-baseline-1 Stopping
+ Container codex-seal-test-1232843-base-1 Stopping
+ Container codex-seal-test-1232843-other-1 Stopping
+ Container codex-seal-test-1232843-agent-tiger-1 Stopping
+ Container codex-seal-test-1232843-tiger-ocr-1 Stopped
+ Container codex-seal-test-1232843-tiger-ocr-1 Removing
+ Container codex-seal-test-1232843-baseline-1 Stopped
+ Container codex-seal-test-1232843-baseline-1 Removing
+ Container codex-seal-test-1232843-tiger-browser-1 Stopped
+ Container codex-seal-test-1232843-tiger-browser-1 Removing
+ Container codex-seal-test-1232843-other-1 Stopped
+ Container codex-seal-test-1232843-other-1 Removing
+ Container codex-seal-test-1232843-agent-tiger-1 Stopped
+ Container codex-seal-test-1232843-agent-tiger-1 Removing
+ Container codex-seal-test-1232843-base-1 Stopped
+ Container codex-seal-test-1232843-base-1 Removing
+ Container codex-seal-test-1232843-tiger-browser-gateway-1 Stopped
+ Container codex-seal-test-1232843-tiger-browser-gateway-1 Removing
+ Container codex-seal-test-1232843-tank-1 Stopped
+ Container codex-seal-test-1232843-tank-1 Removing
+ Container codex-seal-test-1232843-baseline-1 Removed
+ Container codex-seal-test-1232843-tiger-ocr-1 Removed
+ Container codex-seal-test-1232843-other-1 Removed
+ Container codex-seal-test-1232843-tiger-browser-1 Removed
+ Container codex-seal-test-1232843-agent-tiger-1 Removed
+ Container codex-seal-test-1232843-tank-1 Removed
+ Container codex-seal-test-1232843-base-1 Removed
+ Container codex-seal-test-1232843-tiger-browser-gateway-1 Removed
+ Network codex-seal-test-1232843_browser Removing
+ Network codex-seal-test-1232843_baseline Removing
+ Network codex-seal-test-1232843_gw Removing
+ Network codex-seal-test-1232843_other Removing
+ Network codex-seal-test-1232843_ocr Removing
+ Network codex-seal-test-1232843_base Removing
+ Network codex-seal-test-1232843_ocr Removed
+ Network codex-seal-test-1232843_baseline Removed
+ Network codex-seal-test-1232843_browser Removed
+ Network codex-seal-test-1232843_other Removed
+ Network codex-seal-test-1232843_base Removed
+ Network codex-seal-test-1232843_gw Removed
 Traceback (most recent call last):
   File "/workspace/codex-seal-hardening/tests/seal_hardening/compose_probe.py", line 133, in <module>
     run()
@@ -3486,78 +3487,78 @@ subprocess.CalledProcessError: Command '('docker', 'compose', '-p', 'codex-seal-
 
 
 LOG compose-parity.txt
- Network codex-seal-test-1277353_base Creating 
- Network codex-seal-test-1277353_base Creating 
- Network codex-seal-test-1277353_baseline Creating 
- Network codex-seal-test-1277353_baseline Creating 
- Network codex-seal-test-1277353_browser Creating 
- Network codex-seal-test-1277353_browser Creating 
- Network codex-seal-test-1277353_other Creating 
- Network codex-seal-test-1277353_other Creating 
- Network codex-seal-test-1277353_gw Creating 
- Network codex-seal-test-1277353_gw Creating 
- Network codex-seal-test-1277353_ocr Creating 
- Network codex-seal-test-1277353_ocr Creating 
- Network codex-seal-test-1277353_other Created 
- Network codex-seal-test-1277353_other Created 
- Container codex-seal-test-1277353-other-1 Creating 
- Network codex-seal-test-1277353_baseline Created 
- Network codex-seal-test-1277353_baseline Created 
- Container codex-seal-test-1277353-baseline-1 Creating 
- Network codex-seal-test-1277353_ocr Created 
- Network codex-seal-test-1277353_ocr Created 
- Container codex-seal-test-1277353-tiger-ocr-1 Creating 
- Network codex-seal-test-1277353_base Created 
- Network codex-seal-test-1277353_base Created 
- Container codex-seal-test-1277353-base-1 Creating 
- Network codex-seal-test-1277353_browser Created 
- Network codex-seal-test-1277353_browser Created 
- Container codex-seal-test-1277353-tiger-browser-1 Creating 
- Container codex-seal-test-1277353-other-1 Created 
- Container codex-seal-test-1277353-baseline-1 Created 
- Network codex-seal-test-1277353_gw Created 
- Network codex-seal-test-1277353_gw Created 
- Container codex-seal-test-1277353-agent-tiger-1 Creating 
- Container codex-seal-test-1277353-tiger-browser-gateway-1 Creating 
- Container codex-seal-test-1277353-tank-1 Creating 
- Container codex-seal-test-1277353-tiger-ocr-1 Created 
- Container codex-seal-test-1277353-base-1 Created 
- Container codex-seal-test-1277353-tiger-browser-1 Created 
- Container codex-seal-test-1277353-tiger-browser-gateway-1 Created 
- Container codex-seal-test-1277353-tank-1 Created 
- Container codex-seal-test-1277353-agent-tiger-1 Created 
- Container codex-seal-test-1277353-tiger-browser-gateway-1 Starting 
- Container codex-seal-test-1277353-tiger-browser-1 Starting 
- Container codex-seal-test-1277353-baseline-1 Starting 
- Container codex-seal-test-1277353-tiger-ocr-1 Starting 
- Container codex-seal-test-1277353-other-1 Starting 
- Container codex-seal-test-1277353-agent-tiger-1 Starting 
- Container codex-seal-test-1277353-tank-1 Starting 
- Container codex-seal-test-1277353-base-1 Starting 
- Container codex-seal-test-1277353-tiger-browser-gateway-1 Started 
- Container codex-seal-test-1277353-tiger-browser-1 Started 
- Container codex-seal-test-1277353-baseline-1 Started 
- Container codex-seal-test-1277353-tiger-ocr-1 Started 
- Container codex-seal-test-1277353-other-1 Started 
- Container codex-seal-test-1277353-agent-tiger-1 Started 
- Container codex-seal-test-1277353-tank-1 Started 
- Container codex-seal-test-1277353-base-1 Started 
- Container codex-seal-test-1277353-tiger-browser-gateway-1 Waiting 
- Container codex-seal-test-1277353-base-1 Waiting 
- Container codex-seal-test-1277353-tiger-browser-1 Waiting 
- Container codex-seal-test-1277353-agent-tiger-1 Waiting 
- Container codex-seal-test-1277353-other-1 Waiting 
- Container codex-seal-test-1277353-tank-1 Waiting 
- Container codex-seal-test-1277353-baseline-1 Waiting 
- Container codex-seal-test-1277353-tiger-ocr-1 Waiting 
- Container codex-seal-test-1277353-tank-1 Healthy 
- Container codex-seal-test-1277353-agent-tiger-1 Healthy 
- Container codex-seal-test-1277353-tiger-browser-gateway-1 Healthy 
- Container codex-seal-test-1277353-tiger-browser-1 Healthy 
- Container codex-seal-test-1277353-base-1 Healthy 
- Container codex-seal-test-1277353-other-1 Healthy 
- Container codex-seal-test-1277353-baseline-1 Healthy 
- Container codex-seal-test-1277353-tiger-ocr-1 Healthy 
+ Network codex-seal-test-1277353_base Creating
+ Network codex-seal-test-1277353_base Creating
+ Network codex-seal-test-1277353_baseline Creating
+ Network codex-seal-test-1277353_baseline Creating
+ Network codex-seal-test-1277353_browser Creating
+ Network codex-seal-test-1277353_browser Creating
+ Network codex-seal-test-1277353_other Creating
+ Network codex-seal-test-1277353_other Creating
+ Network codex-seal-test-1277353_gw Creating
+ Network codex-seal-test-1277353_gw Creating
+ Network codex-seal-test-1277353_ocr Creating
+ Network codex-seal-test-1277353_ocr Creating
+ Network codex-seal-test-1277353_other Created
+ Network codex-seal-test-1277353_other Created
+ Container codex-seal-test-1277353-other-1 Creating
+ Network codex-seal-test-1277353_baseline Created
+ Network codex-seal-test-1277353_baseline Created
+ Container codex-seal-test-1277353-baseline-1 Creating
+ Network codex-seal-test-1277353_ocr Created
+ Network codex-seal-test-1277353_ocr Created
+ Container codex-seal-test-1277353-tiger-ocr-1 Creating
+ Network codex-seal-test-1277353_base Created
+ Network codex-seal-test-1277353_base Created
+ Container codex-seal-test-1277353-base-1 Creating
+ Network codex-seal-test-1277353_browser Created
+ Network codex-seal-test-1277353_browser Created
+ Container codex-seal-test-1277353-tiger-browser-1 Creating
+ Container codex-seal-test-1277353-other-1 Created
+ Container codex-seal-test-1277353-baseline-1 Created
+ Network codex-seal-test-1277353_gw Created
+ Network codex-seal-test-1277353_gw Created
+ Container codex-seal-test-1277353-agent-tiger-1 Creating
+ Container codex-seal-test-1277353-tiger-browser-gateway-1 Creating
+ Container codex-seal-test-1277353-tank-1 Creating
+ Container codex-seal-test-1277353-tiger-ocr-1 Created
+ Container codex-seal-test-1277353-base-1 Created
+ Container codex-seal-test-1277353-tiger-browser-1 Created
+ Container codex-seal-test-1277353-tiger-browser-gateway-1 Created
+ Container codex-seal-test-1277353-tank-1 Created
+ Container codex-seal-test-1277353-agent-tiger-1 Created
+ Container codex-seal-test-1277353-tiger-browser-gateway-1 Starting
+ Container codex-seal-test-1277353-tiger-browser-1 Starting
+ Container codex-seal-test-1277353-baseline-1 Starting
+ Container codex-seal-test-1277353-tiger-ocr-1 Starting
+ Container codex-seal-test-1277353-other-1 Starting
+ Container codex-seal-test-1277353-agent-tiger-1 Starting
+ Container codex-seal-test-1277353-tank-1 Starting
+ Container codex-seal-test-1277353-base-1 Starting
+ Container codex-seal-test-1277353-tiger-browser-gateway-1 Started
+ Container codex-seal-test-1277353-tiger-browser-1 Started
+ Container codex-seal-test-1277353-baseline-1 Started
+ Container codex-seal-test-1277353-tiger-ocr-1 Started
+ Container codex-seal-test-1277353-other-1 Started
+ Container codex-seal-test-1277353-agent-tiger-1 Started
+ Container codex-seal-test-1277353-tank-1 Started
+ Container codex-seal-test-1277353-base-1 Started
+ Container codex-seal-test-1277353-tiger-browser-gateway-1 Waiting
+ Container codex-seal-test-1277353-base-1 Waiting
+ Container codex-seal-test-1277353-tiger-browser-1 Waiting
+ Container codex-seal-test-1277353-agent-tiger-1 Waiting
+ Container codex-seal-test-1277353-other-1 Waiting
+ Container codex-seal-test-1277353-tank-1 Waiting
+ Container codex-seal-test-1277353-baseline-1 Waiting
+ Container codex-seal-test-1277353-tiger-ocr-1 Waiting
+ Container codex-seal-test-1277353-tank-1 Healthy
+ Container codex-seal-test-1277353-agent-tiger-1 Healthy
+ Container codex-seal-test-1277353-tiger-browser-gateway-1 Healthy
+ Container codex-seal-test-1277353-tiger-browser-1 Healthy
+ Container codex-seal-test-1277353-base-1 Healthy
+ Container codex-seal-test-1277353-other-1 Healthy
+ Container codex-seal-test-1277353-baseline-1 Healthy
+ Container codex-seal-test-1277353-tiger-ocr-1 Healthy
 denied postgres redis qdrant litellm agent-tiger tiger-browser base other 1.1.1.1 8.8.8.8
 denied tiger-ocr 10.0.55.2
 denied tiger-ocr 10.0.55.2
@@ -3566,50 +3567,50 @@ denied tiger-ocr 10.0.55.2
 denied tiger-ocr 10.0.55.2
 Tank /ocr: 109 existing PNG cases produce identical items (44 with prices)
 tiger-ocr memory.peak=309702656 bytes; mem_limit=1g; shm_size=256m
- Container codex-seal-test-1277353-agent-tiger-1 Stopping 
- Container codex-seal-test-1277353-other-1 Stopping 
- Container codex-seal-test-1277353-base-1 Stopping 
- Container codex-seal-test-1277353-baseline-1 Stopping 
- Container codex-seal-test-1277353-tiger-browser-gateway-1 Stopping 
- Container codex-seal-test-1277353-tank-1 Stopping 
- Container codex-seal-test-1277353-tiger-ocr-1 Stopping 
- Container codex-seal-test-1277353-tiger-browser-1 Stopping 
- Container codex-seal-test-1277353-baseline-1 Stopped 
- Container codex-seal-test-1277353-tiger-ocr-1 Stopped 
- Container codex-seal-test-1277353-baseline-1 Removing 
- Container codex-seal-test-1277353-tiger-ocr-1 Removing 
- Container codex-seal-test-1277353-baseline-1 Removed 
- Container codex-seal-test-1277353-tiger-ocr-1 Removed 
- Container codex-seal-test-1277353-base-1 Stopped 
- Container codex-seal-test-1277353-base-1 Removing 
- Container codex-seal-test-1277353-tiger-browser-1 Stopped 
- Container codex-seal-test-1277353-tiger-browser-1 Removing 
- Container codex-seal-test-1277353-other-1 Stopped 
- Container codex-seal-test-1277353-other-1 Removing 
- Container codex-seal-test-1277353-tiger-browser-gateway-1 Stopped 
- Container codex-seal-test-1277353-tiger-browser-gateway-1 Removing 
- Container codex-seal-test-1277353-agent-tiger-1 Stopped 
- Container codex-seal-test-1277353-agent-tiger-1 Removing 
- Container codex-seal-test-1277353-tank-1 Stopped 
- Container codex-seal-test-1277353-tank-1 Removing 
- Container codex-seal-test-1277353-base-1 Removed 
- Container codex-seal-test-1277353-tiger-browser-1 Removed 
- Container codex-seal-test-1277353-other-1 Removed 
- Container codex-seal-test-1277353-agent-tiger-1 Removed 
- Container codex-seal-test-1277353-tiger-browser-gateway-1 Removed 
- Container codex-seal-test-1277353-tank-1 Removed 
- Network codex-seal-test-1277353_baseline Removing 
- Network codex-seal-test-1277353_other Removing 
- Network codex-seal-test-1277353_base Removing 
- Network codex-seal-test-1277353_browser Removing 
- Network codex-seal-test-1277353_ocr Removing 
- Network codex-seal-test-1277353_gw Removing 
- Network codex-seal-test-1277353_other Removed 
- Network codex-seal-test-1277353_browser Removed 
- Network codex-seal-test-1277353_ocr Removed 
- Network codex-seal-test-1277353_gw Removed 
- Network codex-seal-test-1277353_baseline Removed 
- Network codex-seal-test-1277353_base Removed 
+ Container codex-seal-test-1277353-agent-tiger-1 Stopping
+ Container codex-seal-test-1277353-other-1 Stopping
+ Container codex-seal-test-1277353-base-1 Stopping
+ Container codex-seal-test-1277353-baseline-1 Stopping
+ Container codex-seal-test-1277353-tiger-browser-gateway-1 Stopping
+ Container codex-seal-test-1277353-tank-1 Stopping
+ Container codex-seal-test-1277353-tiger-ocr-1 Stopping
+ Container codex-seal-test-1277353-tiger-browser-1 Stopping
+ Container codex-seal-test-1277353-baseline-1 Stopped
+ Container codex-seal-test-1277353-tiger-ocr-1 Stopped
+ Container codex-seal-test-1277353-baseline-1 Removing
+ Container codex-seal-test-1277353-tiger-ocr-1 Removing
+ Container codex-seal-test-1277353-baseline-1 Removed
+ Container codex-seal-test-1277353-tiger-ocr-1 Removed
+ Container codex-seal-test-1277353-base-1 Stopped
+ Container codex-seal-test-1277353-base-1 Removing
+ Container codex-seal-test-1277353-tiger-browser-1 Stopped
+ Container codex-seal-test-1277353-tiger-browser-1 Removing
+ Container codex-seal-test-1277353-other-1 Stopped
+ Container codex-seal-test-1277353-other-1 Removing
+ Container codex-seal-test-1277353-tiger-browser-gateway-1 Stopped
+ Container codex-seal-test-1277353-tiger-browser-gateway-1 Removing
+ Container codex-seal-test-1277353-agent-tiger-1 Stopped
+ Container codex-seal-test-1277353-agent-tiger-1 Removing
+ Container codex-seal-test-1277353-tank-1 Stopped
+ Container codex-seal-test-1277353-tank-1 Removing
+ Container codex-seal-test-1277353-base-1 Removed
+ Container codex-seal-test-1277353-tiger-browser-1 Removed
+ Container codex-seal-test-1277353-other-1 Removed
+ Container codex-seal-test-1277353-agent-tiger-1 Removed
+ Container codex-seal-test-1277353-tiger-browser-gateway-1 Removed
+ Container codex-seal-test-1277353-tank-1 Removed
+ Network codex-seal-test-1277353_baseline Removing
+ Network codex-seal-test-1277353_other Removing
+ Network codex-seal-test-1277353_base Removing
+ Network codex-seal-test-1277353_browser Removing
+ Network codex-seal-test-1277353_ocr Removing
+ Network codex-seal-test-1277353_gw Removing
+ Network codex-seal-test-1277353_other Removed
+ Network codex-seal-test-1277353_browser Removed
+ Network codex-seal-test-1277353_ocr Removed
+ Network codex-seal-test-1277353_gw Removed
+ Network codex-seal-test-1277353_baseline Removed
+ Network codex-seal-test-1277353_base Removed
 
 
 FINAL FULL SUITE
