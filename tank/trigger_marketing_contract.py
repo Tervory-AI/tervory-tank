@@ -31,6 +31,8 @@ class Create(Args):
 
 class Post(Args):
     post_id: UUID
+    connection_generation: UUID | None = None
+    location: str | None = Field(default=None, max_length=200)
     expected_revision: int = Field(default=0, ge=0)
     brief_markdown: str = Field(default='', max_length=25000)
 
