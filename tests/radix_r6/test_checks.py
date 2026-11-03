@@ -234,3 +234,35 @@ async def test_tool_severity_preserved_but_bus_vocabulary_respected(pool,monkeyp
     await store.complete(A,ident,[finding])
     assert (await store.findings(A,ident))[0]['severity']=='serious'
     assert publish.call_args.args[3]['severity']=='unknown'
+
+
+@pytest.mark.asyncio
+async def test_page_cap_does_not_falsely_mark_existing_page_gone(tmp_path):
+    root='<html>'+''.join('<a href="/placeholder-'+str(n)+'">placeholder</a>' for n in range(12))+'</html>'
+    content=b'<p>placeholder</p>'
+    old=TARGET+'placeholder-11'
+    async def request(req):
+        return httpx.Response(200,headers={'content-type':'text/html'},content=root.encode() if req.url.path=='/' else content)
+    result=await r6.collect(TARGET,tmp_path,run=tool,transport=httpx.MockTransport(request),
+        previous={old:hashlib.sha256(content).hexdigest()})
+    assert len(result['page_hashes'])==11 and old in result['page_hashes']
+    assert len(result['checks']['pages']['skipped'])==2
+    assert all(r['reason']=='page_limit' for r in result['checks']['pages']['skipped'])
+    assert not any(f['file']==old and f['tool']=='sha256' for f in result['findings'])
+
+
+@pytest.mark.asyncio
+async def test_linked_page_404_is_gone_but_500_is_incomplete(tmp_path):
+    gone=TARGET+'placeholder-gone'
+    for status in (404,500):
+        async def request(req):
+            return httpx.Response(200 if req.url.path=='/' else status,headers={'content-type':'text/html'},
+                text='<html><a href="/placeholder-gone">placeholder</a></html>')
+        result=await r6.collect(TARGET,tmp_path,run=tool,transport=httpx.MockTransport(request),previous={gone:'a'*64})
+        if status==404:
+            assert any(f['rule']=='gone' and f['facts']=={'url':gone,'old_sha256':'a'*64,'new_sha256':None}
+                       for f in result['findings'])
+            assert result['checks']['pages']['status']=='complete'
+        else:
+            assert result['page_hashes'] is None
+            assert not any(f['rule']=='gone' for f in result['findings'])
