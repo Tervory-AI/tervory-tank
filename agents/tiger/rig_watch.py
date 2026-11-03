@@ -280,3 +280,203 @@ class RigWatches:
                     WHERE tenant_id=$1 AND sku=$2 AND pending=$3::jsonb''', UUID(tenant), row['sku'], json.dumps(payload), accepted)
             sent += int(accepted)
         return sent
+
+# Competitor discovery deliberately shares the room's existing fetch/render path.
+# Public host accounting is durable and shared across all workers and tenants.
+class DiscoveryStopped(Exception):
+    pass
+
+
+class DiscoveryGate:
+    def __init__(self, pool):
+        self.pool = pool
+
+    async def call(self, url, operation):
+        from urllib.parse import urlsplit
+        from datetime import timezone
+        from watch import check_url
+        safe = check_url(url)
+        parsed = urlsplit(safe)
+        site = f'{parsed.scheme}://{parsed.netloc}'
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,1))', site)
+                row = await conn.fetchrow('''INSERT INTO agent_tiger.discovery_limits(site) VALUES($1)
+                    ON CONFLICT(site) DO UPDATE SET
+                    requests=CASE WHEN discovery_limits.day<>(now() AT TIME ZONE 'UTC')::date THEN 0 ELSE discovery_limits.requests END,
+                    human_check=CASE WHEN discovery_limits.day<>(now() AT TIME ZONE 'UTC')::date THEN false ELSE discovery_limits.human_check END,
+                    day=(now() AT TIME ZONE 'UTC')::date RETURNING *''', site)
+                if row['human_check']:
+                    raise DiscoveryStopped('human_check')
+                if row['requests'] >= 500:
+                    raise DiscoveryStopped('page_limit')
+                if row['last_at']:
+                    delay = 3 - (datetime.now(timezone.utc) - row['last_at']).total_seconds()
+                    if delay > 0:
+                        await asyncio.sleep(min(delay, 3))
+                # Commit accounting even if transport/processing fails. Every
+                # attempted outbound request counts and leaves its pacing stamp.
+                await conn.execute('UPDATE agent_tiger.discovery_limits SET requests=requests+1,last_at=clock_timestamp() WHERE site=$1', site)
+                try:
+                    result = await operation()
+                except Exception as exc:
+                    failure = exc
+                else:
+                    failure = None
+            if failure is not None:
+                raise failure
+            return result
+
+    async def block(self, site):
+        async with self.pool.acquire() as conn:
+            await conn.execute('UPDATE agent_tiger.discovery_limits SET human_check=true WHERE site=$1', site)
+
+
+class DiscoveryLinks:
+    """Bounded links and GET search forms; never submit credentials or a POST."""
+    @staticmethod
+    def parse(html, base):
+        from html.parser import HTMLParser
+        from urllib.parse import urljoin
+        class Parser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.links, self.forms, self.form = [], [], None
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == 'a' and attrs.get('href') and len(self.links) < 1000:
+                    self.links.append(urljoin(base, attrs['href']))
+                if tag == 'form' and attrs.get('method', 'get').lower() == 'get':
+                    self.form = {'action': urljoin(base, attrs.get('action') or base), 'fields': {}, 'query': None}
+                if tag == 'input' and self.form is not None:
+                    name = attrs.get('name', '')
+                    if attrs.get('type') == 'search' or name in {'q','s','search','query','search_query'}:
+                        self.form['query'] = name
+                    elif attrs.get('type') == 'hidden' and name:
+                        self.form['fields'][name] = attrs.get('value', '')
+            def handle_endtag(self, tag):
+                if tag == 'form' and self.form is not None:
+                    if self.form['query']:
+                        self.forms.append(self.form)
+                    self.form = None
+        parser = Parser()
+        parser.feed(html[:600000])
+        return parser.links, parser.forms
+
+
+class CatalogueDiscovery:
+    def __init__(self, fetch, render, gate, publish):
+        self.fetch, self.render, self.gate, self.publish = fetch, render, gate, publish
+
+    async def run(self, sites, products):
+        from urllib.parse import urlsplit, urljoin, urlencode, urlunsplit, parse_qsl
+        from xml.etree import ElementTree
+        from watch import robots_allows, check_url
+        outcomes = []
+        for site in sites:
+            fetched, maps, candidates, visited, confirmed = set(), [], [], set(), set()
+            robots = ''
+            def same(url):
+                try:
+                    parts = urlsplit(check_url(url))
+                    return parts.scheme == 'https' and f'{parts.scheme}://{parts.netloc}' == site
+                except (ValueError, BadWatch):
+                    return False
+            def permitted(url):
+                return same(url) and robots_allows(robots, url, 'tervorytiger') and robots_allows(robots, url, 'tervory')
+            async def human(url):
+                await self.gate.block(site)
+                await self.publish(site, url, '', True)
+                raise DiscoveryStopped('human_check')
+            async def text(url, *, policy=False):
+                if not same(url) or (not policy and not permitted(url)):
+                    return ''
+                for _ in range(5):
+                    response = await self.gate.call(url, lambda: self.fetch(url))
+                    if response.get('status') in {401,403,429}:
+                        await human(url)
+                    if response.get('status') in {301,302,303,307,308}:
+                        target = urljoin(url, response.get('location') or '')
+                        if not same(target) or (not policy and not permitted(target)):
+                            return ''
+                        url = target
+                        continue
+                    if response.get('status') == 404:
+                        return ''
+                    if response.get('status') != 200:
+                        raise DiscoveryStopped('unavailable')
+                    html = response.get('text') or ''
+                    if re.search(r'<(?:!doctype\s+html|html|form)\b', html, re.I):
+                        check = await self.gate.call(url, lambda: self.render(url))
+                        if check.get('challenge') or check.get('blocked_by_check'):
+                            await human(url)
+                        raise DiscoveryStopped('unavailable')
+                    return html
+                raise DiscoveryStopped('unavailable')
+            async def page(url):
+                if not permitted(url) or url in visited:
+                    return None
+                visited.add(url)
+                data = await self.gate.call(url, lambda: self.render(url))
+                if data.get('challenge') or data.get('blocked_by_check'):
+                    await human(url)
+                if not data.get('ok') or data.get('url', url).rstrip('/') != url.rstrip('/'):
+                    return None
+                html = data.get('html') or ''
+                matched = await self.publish(site, url, html, False)
+                confirmed.update(m['sku'] for m in matched.get('matches', []) if m.get('state') == 'confirmed')
+                return html
+            try:
+                robots = await text(site + '/robots.txt', policy=True)
+                maps = [urljoin(site + '/', m.group(1).strip()) for m in re.finditer(r'^\s*Sitemap:\s*(\S+)', robots, re.I | re.M)]
+                if site + '/sitemap.xml' not in maps:
+                    maps.append(site + '/sitemap.xml')
+                while maps:
+                    target = maps.pop(0)
+                    if target in fetched or not permitted(target):
+                        continue
+                    fetched.add(target)
+                    source = await text(target)
+                    if not source:
+                        continue
+                    try:
+                        root = ElementTree.fromstring(source)
+                    except (ElementTree.ParseError, ValueError):
+                        continue
+                    locations = [urljoin(target, (el.text or '').strip()) for el in root.iter() if el.tag.rsplit('}',1)[-1] == 'loc']
+                    if root.tag.rsplit('}',1)[-1] == 'sitemapindex':
+                        maps.extend(loc for loc in locations[:500] if loc not in fetched and permitted(loc))
+                    elif root.tag.rsplit('}',1)[-1] == 'urlset':
+                        candidates.extend(loc for loc in locations if permitted(loc))
+                for url in dict.fromkeys(candidates):
+                    await page(url)
+                # Search remains on this site; no external search/model/provider.
+                home = await page(site + '/')
+                _, forms = DiscoveryLinks.parse(home or '', site + '/')
+                for product in products:
+                    gtin = re.sub(r'[\s-]', '', str(product.get('gtin') or ''))
+                    if product['sku'] in confirmed or not re.fullmatch(r'[0-9]{8}|[0-9]{12,14}', gtin):
+                        continue
+                    searches = [site + '/search?' + urlencode({'q': gtin}), site + '/?' + urlencode({'s': gtin, 'post_type': 'product'})]
+                    for form in forms:
+                        parsed = urlsplit(form['action'])
+                        fields = {**dict(parse_qsl(parsed.query)), **form['fields'], form['query']: gtin}
+                        searches.append(urlunsplit(parsed._replace(query=urlencode(fields), fragment='')))
+                    for search in dict.fromkeys(searches):
+                        html = await page(search)
+                        if html:
+                            links, _ = DiscoveryLinks.parse(html, search)
+                            for candidate in dict.fromkeys(links):
+                                if permitted(candidate):
+                                    await page(candidate)
+                                    if product['sku'] in confirmed:
+                                        break
+                        if product['sku'] in confirmed:
+                            break
+                status = 'completed'
+            except DiscoveryStopped as exc:
+                status = str(exc)
+            except (httpx.HTTPError, OSError, ValueError):
+                status = 'unavailable'
+            outcomes.append({'site': site, 'status': status, 'pages': len(visited)})
+        return {'sites': outcomes, 'model_calls': 0}
