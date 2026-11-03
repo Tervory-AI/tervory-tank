@@ -139,6 +139,19 @@ async def calibration(ctx: JobContext) -> dict:
         return await ledger.calibration_for(ctx.tenant_id)
 
 
+async def intel(ctx: JobContext) -> dict:
+    if ctx.tenant_id != HEARTBEAT_TENANT:
+        raise ValueError("tenant_id is required")
+    from core.intel import refresh as refresh_intel
+    async with _ledger() as ledger:
+        return await refresh_intel(ledger)
+
+
+async def alerts(ctx: JobContext) -> dict:
+    from core.ml3 import deliver
+    return await deliver(ctx.tenant_id)
+
+
 class _SafeMemory:
     def __init__(self, inner: object) -> None:
         self.inner = inner
@@ -190,6 +203,7 @@ def _schedules() -> list[dict]:
             "input": {"heartbeat": True},
         }
     ]
+    rows.append({"tenant_id": HEARTBEAT_TENANT, "cron": "15 6 * * *", "kind": "intel", "input": {}})
     rows.extend(case_schedules())
     return rows
 
@@ -204,9 +218,11 @@ app = create_app(
         "resolve": resolve,
         "research": research,
         "calibration": calibration,
+        "intel": intel,
+        "alerts": alerts,
     },
     schedules=_schedules(),
-    job_timeouts={"refresh": 86400, "feed_links": 7200},
+    job_timeouts={"refresh": 86400, "feed_links": 7200, "intel": 86400},
 )
 
 
@@ -345,3 +361,8 @@ app.include_router(document_router(key_ok=_room_key_ok, ledger_context=_ledger))
 from core.feed_links import build_router as feed_router
 
 app.include_router(feed_router(key_ok=_room_key_ok, ledger_context=_ledger, engine=case_plan()["engine"]))
+
+
+from core.ml3 import build_router as ml3_router
+
+app.include_router(ml3_router(key_ok=_room_key_ok, ledger_context=_ledger, engine=case_plan()["engine"]))
