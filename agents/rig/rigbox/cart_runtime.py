@@ -36,7 +36,6 @@ def install(service, http, tank):
     async def sweep_tenant(tenant):
         with tenant_scope(tenant):
             try:
-                await service.cart.config(tenant)
                 await service.cart.sweep(tenant)
             except Exception:
                 # No remote body/exception/credential in logs. Durable rows keep
