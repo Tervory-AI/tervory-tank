@@ -495,10 +495,11 @@ def test_schema_is_additive_and_queries_are_tenant_scoped() -> None:
 
 def test_room_files_and_main_compose_add_the_corridor() -> None:
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "\n  tiger:\n" not in compose
     assert compose.count("TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}") == 2
     assert "AGENT_DB_PASSWORD_ZENAS: ${AGENT_DB_PASSWORD_ZENAS:-}" in compose
     assert "name: tervory-gw-zenas" in compose
-    for service in ("redis", "qdrant", "litellm", "searxng", "tiger", "workspace", "agent-roles"):
+    for service in ("redis", "qdrant", "litellm", "searxng", "workspace", "agent-roles"):
         assert "tervory-gw-zenas" not in _service_block(compose, service)
     for service in ("postgres", "hermes", "tank"):
         assert "tervory-gw-zenas" in _service_block(compose, service)
