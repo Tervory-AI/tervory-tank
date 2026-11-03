@@ -66,7 +66,7 @@ def records(operation: str, data: dict) -> list[dict]:
 async def confirmed(action, actor, thread_id, card_id):
     import command
     import vault
-    from main import pool
+    from main import pool, box_region
     from vault_routes import public_url
     actor = await command.authorized_actor(actor)
     command.require_tool(actor, action.tool)
@@ -97,10 +97,12 @@ async def confirmed(action, actor, thread_id, card_id):
             once = secrets.token_urlsafe(32)
             sealed = vault.seal({"value": once}, f"market_lab:webhook:v1:{actor.tenant_id}")
             await conn.execute("UPDATE tank.market_lab_alerts SET webhook_url=$2,webhook_sealed=$3,webhook_since=now(),updated_at=now() WHERE tenant_id=$1", actor.tenant_id, url, sealed)
+            await conn.execute("UPDATE tank.market_lab_deliveries SET status='suppressed',updated_at=now() WHERE tenant_id=$1 AND channel='webhook' AND status='pending'", actor.tenant_id)
         elif mode == "off":
             await conn.execute("UPDATE tank.market_lab_alerts SET email_enabled=false,email_since=NULL,webhook_url=NULL,webhook_sealed=NULL,webhook_since=NULL,updated_at=now() WHERE tenant_id=$1", actor.tenant_id)
             await conn.execute("UPDATE tank.market_lab_deliveries SET status='suppressed',updated_at=now() WHERE tenant_id=$1 AND status='pending'", actor.tenant_id)
-    result = {"status": mode}
+        ledger_id = await conn.fetchval("INSERT INTO tank.ledger(tenant_id,region,agent,task_type,rung,model,cost_usd,tokens_in,tokens_out) VALUES($1,$2,'market_lab',$3,3,'code',0,0,0) RETURNING id", actor.tenant_id, box_region(), action.tool)
+    result = {"status": mode, "ledger_id": str(ledger_id), "cost_usd": 0}
     if once is not None:
         result["_once"] = once
     return result
@@ -121,7 +123,10 @@ async def prime(tenant: UUID):
             since = settings["email_since"] if channel == "email" else settings["webhook_since"]
             if since is None or created < since:
                 continue
-            async with pool().acquire() as conn:
+            async with pool().acquire() as conn, conn.transaction():
+                current = await conn.fetchrow("SELECT email_since,webhook_since FROM tank.market_lab_alerts WHERE tenant_id=$1 FOR UPDATE", tenant)
+                if current is None or current["email_since" if channel == "email" else "webhook_since"] != since:
+                    continue
                 await conn.execute("INSERT INTO tank.market_lab_deliveries(tenant_id,warning_id,channel,status,letter) VALUES($1,$2,$3,'pending',$4::jsonb) ON CONFLICT (tenant_id,warning_id,channel) DO NOTHING", tenant, UUID(warning["id"]), channel, json.dumps(letter))
 
 
