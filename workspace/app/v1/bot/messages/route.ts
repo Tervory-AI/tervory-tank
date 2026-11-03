@@ -47,6 +47,7 @@ export async function POST(request: Request) {
         "x-forwarded-for": request.headers.get("x-forwarded-for") ?? "" },
     });
     if (!response.ok || response.headers.get("Access-Control-Allow-Origin") !== origin) return empty(response.ok ? 502 : response.status);
+    if (response.status === 204) return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": origin, "Vary": "Origin", "Cache-Control": "no-store" } });
     const result: unknown = await response.json();
     if (!result || typeof result !== "object" || Array.isArray(result)) return empty(502);
     return Response.json(result, { headers: { "Access-Control-Allow-Origin": origin, "Vary": "Origin", "Cache-Control": "no-store" } });

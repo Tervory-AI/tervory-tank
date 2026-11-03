@@ -42,7 +42,7 @@ def money(text):
 def numeric_evidence(answer, cited):
     source = ' '.join(p.text for p in cited)
     supported = {decimal(m.group()) for m in re.finditer(AMOUNT, source)}
-    if any(decimal(m.group()) not in supported for m in re.finditer(AMOUNT, answer)):
+    if any(decimal(m.group()) not in supported for m in re.finditer(AMOUNT, MONEY.sub('', answer))):
         return False
     supported_money = set()
     zar = False

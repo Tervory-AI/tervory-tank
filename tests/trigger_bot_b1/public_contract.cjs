@@ -14,13 +14,14 @@ const request = (region = 'us-east', overrides = {}) => new Request('https://wor
   method: 'POST', body: JSON.stringify({ text: 'Delivery?' }), ...overrides,
   headers: { 'content-type': 'application/json', origin, 'x-bot-key': key(region),
     authorization: 'must-not-forward', cookie: 'must-not-forward', 'x-tervory-user': 'forged',
-    'x-tervory-tenant': 'forged', ...overrides.headers },
+    'x-tervory-tenant': 'forged', 'x-forwarded-for': '198.51.100.1', ...overrides.headers },
 });
 (async () => {
   const route = load({ TANK_URL: 'http://tank.invalid', TANK_URL_ZA: 'http://za.invalid' });
   assert.equal((await route.POST(request())).status, 200);
   assert.equal(calls[0].url, 'http://tank.invalid/v1/bot/messages');
-  assert.deepEqual(Object.keys(calls[0].options.headers).sort(), ['content-type', 'origin', 'x-bot-key']);
+  assert.deepEqual(Object.keys(calls[0].options.headers).sort(), ['content-type', 'origin', 'x-bot-key', 'x-forwarded-for']);
+  assert.equal(calls[0].options.headers['x-forwarded-for'], '198.51.100.1');
   assert.equal(calls[0].options.cache, 'no-store');
   assert.equal(calls[0].options.redirect, 'error');
   assert.equal((await route.POST(request('za'))).status, 200);
