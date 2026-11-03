@@ -1,5 +1,6 @@
 """Bundled plugin validation and Command/RLS tests; isolated SQL, no external calls."""
 import json
+import subprocess
 import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -15,7 +16,7 @@ from test_command import api, runtime, command_pool, TENANT, OTHER  # noqa: F401
 
 PLUGIN = plugins.MANIFESTS['github', '1.0.0']
 URL = PLUGIN.servers[0].url
-ARGS = {'id': 'github', 'version': '1.0.0'}
+ARGS = {'name': 'github', 'version': '1.0.0'}
 IDENT = '12345678-abcd-4000-8000-000000000001'
 
 
@@ -43,7 +44,7 @@ async def test_list_install_remove_confirm_receipts_and_tenant_boundary(api, run
     actor = command.Actor(TENANT, 'founder', True)
     async with pool.acquire() as conn:
         before = await plugins.listing(conn, actor)
-    assert before['plugins'][0]['status'] == 'not_ready'
+    assert before['items'][0]['status'] == 'not_ready'
     thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
     path = f'/v1/command/threads/{thread}/actions'
     member_thread = (await client.post('/v1/command/threads', json={}, headers={'x-tervory-user': 'placeholder-member'})).json()['thread_id']
@@ -66,8 +67,8 @@ async def test_list_install_remove_confirm_receipts_and_tenant_boundary(api, run
         async with pool.acquire() as conn:
             own = await plugins.listing(conn, actor)
             foreign = await plugins.listing(conn, command.Actor(OTHER, 'founder', True))
-        assert own['plugins'][0]['installed'] == tool.endswith('install')
-        assert not foreign['plugins'][0]['installed']
+        assert own['items'][0]['installed'] == tool.endswith('install')
+        assert not foreign['items'][0]['installed']
     admin = command.Actor(TENANT, 'placeholder-admin', False, frozenset({'radix'}), True)
     member = command.Actor(TENANT, 'placeholder-member', False, frozenset({'radix'}))
     assert {'plugins.list', 'plugins.install', 'plugins.remove'} <= set(command.allowed_tools(admin))
@@ -86,14 +87,14 @@ async def test_skill_and_connection_status_and_no_credentials(api, monkeypatch):
     await pool.execute("INSERT INTO tank.vault_items(tenant_id,vault,kind,name,metadata,sealed,mcp_state) VALUES($1,'radix.vault','connections',$2,$3::jsonb,$4,'needs_sign_in')", TENANT, IDENT, json.dumps({'server_url': URL}), 'placeholder-never-returned')
     async with pool.acquire() as conn:
         listing = await plugins.listing(conn, actor)
-        assert listing['plugins'][0]['servers'][0]['connections'][0]['mcp_state'] == 'needs_sign_in'
-        assert listing['plugins'][0]['skills'] == [{'ref': 'placeholder@1.0.0', 'approved': False}]
+        assert listing['items'][0]['servers'][0]['connections'][0]['mcp_state'] == 'needs_sign_in'
+        assert listing['items'][0]['skills'] == [{'ref': 'placeholder@1.0.0', 'approved': False}]
         assert 'placeholder-never-returned' not in json.dumps(listing)
         with pytest.raises(HTTPException) as error:
             await plugins.prepare(command.PlannedAction(tool='plugins.install', arguments=ARGS), actor, conn)
         assert error.value.status_code == 422
         await conn.execute("INSERT INTO tank.skills(id,version,agent,state) VALUES('placeholder','1.0.0','placeholder','approved')")
-        assert (await plugins.listing(conn, actor))['plugins'][0]['skills'][0]['approved']
+        assert (await plugins.listing(conn, actor))['items'][0]['skills'][0]['approved']
         assert await plugins.prepare(command.PlannedAction(tool='plugins.install', arguments=ARGS), actor, conn)
 
 
@@ -109,7 +110,7 @@ async def test_code_mode_requires_install_and_never_offers_another_tenants_tools
         authorized = await command.authorized_actor(actor, conn, include_mcp=True)
         assert len(authorized.mcp_tools) == 1
         assert not (await plugins.code_actor(authorized, conn)).mcp_tools
-        assert (await plugins.listing(conn, actor))['plugins'][0]['status'] == 'ready'
+        assert (await plugins.listing(conn, actor))['items'][0]['status'] == 'ready'
         await conn.execute('INSERT INTO tank.plugin_installs(tenant_id,plugin_id,version,installed_by) VALUES($1,$2,$3,$4)', TENANT, 'github', '1.0.0', 'placeholder-founder')
         enabled = await plugins.code_actor(authorized, conn)
         assert list(enabled.mcp_tools) == ['mcp.12345678.list_pull_requests']
@@ -158,3 +159,21 @@ async def test_plugin_rls_follows_staged_and_enforced_rollout(command_pool):  # 
         finally:
             await conn.execute('DROP OWNED BY placeholder_plugin_role')
             await conn.execute('DROP ROLE placeholder_plugin_role')
+
+
+def test_plugin_results_project_through_existing_card_labels():
+    script = r"""
+const fs=require('node:fs'),ts=require('./workspace/node_modules/typescript');
+require.extensions['.ts']=(mod,file)=>mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);
+const {presentCard,visibleCard}=require('./workspace/app/chats/presentation.ts');
+const card={card_id:'placeholder-card',tool:'plugins.list',summary:'plugins.list',kind:'other',status:'confirmed',result:{count:1,items:[{name:'github',status:'ready'}]}};
+if(!visibleCard(card,false))throw Error('Plugin read is invisible');
+const labels=presentCard(card,false).results;
+if(!labels.some(x=>x.label==='Count'&&x.value==='1'))throw Error('Missing Count');
+if(!labels.some(x=>x.label==='Items 1 · Name'&&x.value==='github'))throw Error('Missing Name');
+if(!labels.some(x=>x.label==='Items 1 · Status'&&x.value==='ready'))throw Error('Missing Status');
+const pending=presentCard({...card,tool:'plugins.install',status:'pending',arguments:{name:'github',version:'1.0.0'}},false);
+if(!pending.targets.some(x=>x.label==='Name'&&x.value==='github'))throw Error('Missing pending plugin name');
+"""
+    result = subprocess.run(['node', '-e', script], cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
