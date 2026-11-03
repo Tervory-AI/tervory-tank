@@ -97,9 +97,10 @@ and an uncreated outbox directory), fixed before the passing run. The initial
 combined no-payment regression found forbidden internal-state vocabulary in the
 external platform adapter; external states are now normalized and Woo additionally
 requires processing/completed status. Existing quote tests were not edited.
-An attempted full glob run exited 120 with no output because `/tmp` writes hit
-`Disk quota exceeded`; a per-file runner now uses ignored `.rig-validation/` as
-TMPDIR and records each file independently. No full-suite success is claimed yet.
+An attempted full glob run exited 120 with no output. A separate `/tmp` write
+failed with `Disk quota exceeded`; the exit-120 cause was not independently
+proved. The per-file rerun uses ignored `.rig-validation/` as TMPDIR and records
+each file independently. Its completed results are recorded below.
 
 Figma access works in this continuation. Session
 `8e34b1cc-82bb-45e9-849f-139d94ec5aea` read Approved frame `291:9` and its screenshot.
@@ -177,3 +178,33 @@ git diff --check
 ```
 
 Ruff: all checks passed. Secrets tests: 2 passed. Whitespace: passed.
+
+
+### Completed backend regression evidence
+
+The already-started per-file pass completed after the required UI stop was
+identified. All **67** `tests/test_rig*.py` files exited 0: **766 passed,
+19 skipped**, with fake platform APIs and disposable local Postgres.
+`tests/rig_cart_gate1/verification.txt:1` records the exact per-file commands,
+exit codes and captured pytest summaries. The skips are reported, not treated
+as passed container/runtime checks. CI remains the full-suite test of record;
+there is no final-head tank/workspace CI result without the PR Claude opens.
+
+Runner command:
+
+```sh
+TMPDIR=/workspace/codex-rig-cart/.rig-validation PYTHONPATH=tank:agents/_chassis:agents/rig RIG_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32870/postgres /workspace/codex-tiger-t1/.venv/bin/python .rig-validation/run_rig.py
+```
+
+The runner sorts `glob.glob('tests/test_rig*.py')`, runs each pytest command
+shown in the committed verification file in a separate subprocess with a
+300-second limit, captures its output/exit code, and writes an ignored local
+results JSON. It does not change source, credentials, data or test expectations.
+The tested runtime/test tree is `f08033f6`; later commits contain handoff or
+verification evidence only. Every completed source/test file was committed and
+pushed individually to `codex/rig-cart-us`. No PR was opened, labelled or merged,
+no main push or additional main merge occurred, and no deployment was attempted.
+
+Additional changed evidence file: `tests/rig_cart_gate1/verification.txt:1`.
+The exact missing approved controls/wording remain those listed above. Gate 2
+implementation and gate 3 are unstarted; no founder-browser completion is claimed.
