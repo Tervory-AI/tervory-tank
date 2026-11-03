@@ -301,8 +301,8 @@ test('external Node runtime is read-only, named before approval and cannot expos
     ...io(), write: value => { shown += value; }, prompt: async () => { assert(shown.includes(node)); return 'y'; },
   });
   assert.equal(result.code, 0, result.output); assert(result.output.includes('# pass 1'));
-  const write = await f.tool({ name: 'run_command', arguments: { command: `${node} -e 'require("fs").writeFileSync("${runtime}/wrong", "wrong")'` } }, io());
-  assert.notEqual(write.code, 0); await assert.rejects(readFile(join(runtime, 'wrong')));
+  const write = await f.tool({ name: 'run_command', arguments: { command: `${node} -e 'require("fs").writeFileSync("${runtime}/bin/wrong", "wrong")'` } }, io());
+  assert.notEqual(write.code, 0); assert.match(write.output, /EROFS|[Rr]ead-only/); await assert.rejects(readFile(join(runtime, 'bin/wrong')));
 });
 
 test('session history is bounded, redacted and transient; continuation rounds share one prompt id', async () => {
@@ -326,4 +326,20 @@ test('session history is bounded, redacted and transient; continuation rounds sh
   assert(history.some(h => h.kind === 'assistant' && h.content === 'earlier answer'));
   assert(history.some(h => h.kind === 'tool' && h.content.includes('read_file') && h.content.includes('file.txt')));
   assert.equal(received[3].text, '[redacted]');
+});
+
+
+test('external Node intermediate links do not expose their host directory', async () => {
+  const f = await folder();
+  const install = await mkdtemp(join(work, 'node-install-'));
+  const middle = await mkdtemp(join(work, 'node-links-'));
+  await mkdir(join(install, 'bin'));
+  await symlink(process.execPath, join(middle, 'node'));
+  await symlink(join(middle, 'node'), join(install, 'bin/node'));
+  await writeFile(join(middle, 'private.txt'), 'unmounted-directory-canary');
+  const command = `${join(install, 'bin/node')} -e 'console.log("runtime-ok"); try { console.log(require("fs").readFileSync("${middle}/private.txt", "utf8")); } catch {}'`;
+  const result = await f.tool({ name: 'run_command', arguments: { command } }, io());
+  assert.equal(result.code, 0, result.output);
+  assert(result.output.includes('runtime-ok'));
+  assert(!result.output.includes('unmounted-directory-canary'));
 });
