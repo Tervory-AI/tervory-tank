@@ -31,3 +31,76 @@ PYTHONPATH=agents/_chassis:agents/rig /workspace/codex-tiger-t1/.venv/bin/python
 Main merged without conflicts (`fb80bd2b`); pending test commit pushed successfully (`d1b8bbd3`). The ancestry command returned exit 1, confirming the dependency is unmerged. The search found only the two cart callback references, at lines 179 and 244. Focused offline tests: **11 passed in 2.24s**. These are callback-contract tests, not proof of complete shared fulfilment. No fresh full-suite/Postgres result or founder screenshots are claimed in this resume.
 
 This handoff was checked with `git diff --check`, committed, then pushed after `git fetch origin && git merge origin/main`. Final head is reported in the task.
+
+## Wave 3 continuation — 3 November 2026
+
+The historical callback dependency above is superseded. PR #613 merged as
+`cf473a12f7ecd2c74100e4674e65bae8c37e31d4`. The single authorised main merge
+is `aa930a8dd42b700be5c40c7df7a8e31a2bdbe051`; main is not merged again.
+
+Paid carts now use `RigOrders.place_located_order` directly for Locate lines,
+with `quote_id = cart:<checkout id>:<line id>` and the line quantity. Stock
+requires no supplier placement; back-order status is recorded on its line.
+The existing quote default remains quantity 1. A persisted whole-row CAS lease
+claims `paid_pending -> placing -> placed`, expires after 15 minutes and releases
+on transient errors. Only `order_mismatch` and `order_rejected` require a person.
+Webhooks, shopper order read-back and the existing recovery sweep retry placement.
+Stable order/PO identifiers and the shared exclusive supplier outbox prevent
+additional durable orders or sends after an uncertain result or lease takeover.
+The cart exposes only its existing public projections.
+
+Tank accepts `commerce-connect`, `commerce-orders` and `store-delivery` through
+its signed-in admin corridor. Ordinary members are refused before dispatch.
+The account supplies the tenant. Connect strips credential data before forwarding
+and seals it into `rig.vault` using its existing tenant/name associated data.
+Store delivery saves integer `min_days`/`max_days`, 0–60, in commerce config.
+Existing ship_days configs remain readable. Schema startup remains
+`await store.apply_schema()` in `agents/rig/app.py`; the existing commerce DDL
+has been moved above generated memory, without adding a column or table.
+
+### Official sources for the platform fakes
+
+These are protocol fakes, not evidence of founder real-store acceptance.
+
+| Platform | Behaviour and official source | Credential used by this adapter |
+| --- | --- | --- |
+| Shopify | [draftOrderCreate](https://shopify.dev/docs/api/admin-graphql/latest/mutations/draftOrderCreate) accepts catalog variants and custom-priced lines; [DraftOrder.invoiceUrl](https://shopify.dev/docs/api/admin-graphql/latest/objects/draftorder#field-DraftOrder.fields.invoiceUrl) supplies the store checkout link; [draftOrderDelete](https://shopify.dev/docs/api/admin-graphql/latest/mutations/draftOrderDelete) removes the unpaid draft. | Admin API access token in `X-Shopify-Access-Token`, plus the app webhook signing secret. [Current own-organisation client credentials grant](https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/client-credentials-grant); [legacy admin-created apps](https://shopify.dev/docs/apps/build/authentication-authorization/legacy/admin-custom-apps) continue to work, but cannot be newly created. The adapter consumes a supplied token; no token provisioning or refresh is claimed. |
+| WooCommerce | [REST orders and authentication](https://woocommerce.github.io/woocommerce-rest-api-docs/#orders) defines pending order creation, product/SKU line references, quantities and totals, read-back and cancellation by status; the [official controller reference](https://woocommerce.github.io/code-reference/files/woocommerce-includes-rest-api-controllers-version2-class-wc-rest-orders-v2-controller.html) defines `payment_url` and resolves SKU carrier lines; [webhook headers](https://developer.woocommerce.com/docs/apis/rest-api/v2/webhooks) define `X-WC-Webhook-Signature` as base64 HMAC-SHA256 over the payload. | Consumer key and consumer secret via HTTPS Basic authentication; a separately configured webhook secret. The hidden/private taxable carrier is reused by SKU, never exposed as a storefront sample item. |
+| BigCommerce | [Create Cart Redirect URL](https://docs.bigcommerce.com/developer/api-reference/rest/admin/management/carts/redirects/create-cart-redirect-url) returns `checkout_url`; [Managing Carts](https://docs.bigcommerce.com/developer/docs/storefront/headless/cart-and-checkout/carts) covers Management API carts and custom items; [HTTPS webhooks](https://docs.bigcommerce.com/developer/docs/integrations/webhooks/https) documents Standard Webhooks signatures and timestamp verification. The callback hash alone is not authentication. | [API account access token](https://docs.bigcommerce.com/developer/docs/overview/api-fundamentals/api-accounts) in `X-Auth-Token`, with store hash; the app client secret is the webhook signing secret. Redirect hosts must be explicitly permitted for that store. |
+
+### Additional platform assessment — no unsupported adapter enabled
+
+| Platform | Evidence and remaining missing part of a safe equivalent flow |
+| --- | --- |
+| Wix | [Create Checkout](https://dev.wix.com/docs/api-reference/business-solutions/e-commerce/purchase-flow/checkout/checkout/create-checkout) supports custom lines. [Payment requests](https://dev.wix.com/docs/api-reference/business-solutions/e-commerce/orders/order-payment-requests/create-order-payment-request) return a payment URL but require a published Payment Request Page. [Cancel Order](https://dev.wix.com/docs/api-reference/business-solutions/e-commerce/orders/orders/cancel-order) cancels an existing order, not a pre-order checkout. The alternative [manual Create Order](https://dev.wix.com/docs/api-reference/business-solutions/e-commerce/orders/orders/create-order) requires line tax information and limits unpublished apps to five calls/hour/site. Missing in this integration: a verified pre-payment checkout invalidation path, or the tax inputs and published request page needed for the different manual-order flow. This is not a claim that Wix lacks those three primitives separately. No Wix adapter or fake has been added. |
+| Squarespace | [Orders API](https://developers.squarespace.com/commerce-apis/orders) creates imported third-party orders and lists/retrieves/fulfils orders, with API key or OAuth bearer authentication. Missing verified public APIs for a hosted payment link to such an unpaid order and for cancelling it. No adapter added. |
+| Adobe Commerce / Magento | [Cart custom prices](https://developer.adobe.com/commerce/webapi/rest/saas-integrations/cart-custom-price/) require admin/integration bearer authentication and a catalog SKU in Cloud Service. The [SaaS GraphQL schema](https://developer.adobe.com/commerce/webapi/includes/autogenerated/graphql-api-saas-mutations) includes `createPaymentLink`, and [order management](https://developer.adobe.com/commerce/webapi/rest/saas-integrations/order-management/) includes cancellation. The [PaaS order flow](https://developer.adobe.com/commerce/webapi/rest/tutorials/orders/order-create-order/) instead submits billing/payment information. Missing verification that a single supported Magento deployment exposes all three in the same flow, including hosted link invalidation before payment and custom non-catalog lines. Cloud Service capabilities are not assumed for arbitrary Magento stores. No adapter added. |
+| Ecwid | [Create order](https://docs.ecwid.com/api-reference/rest-api/orders/create-order) permits item prices; [Update order](https://docs.ecwid.com/api-reference/rest-api/orders/update-order) supports `CANCELLED`. Both use an app bearer token with order scopes. [Get order](https://docs.ecwid.com/api-reference/rest-api/orders/get-order) and Create do not document a hosted pay-existing-order URL. `paymentUrl` in the [payment app guide](https://docs.ecwid.com/guides/payments/process-online-payment-requests/step-1.-decode-and-parse-payment-request-from-ecwid) is the payment provider callback endpoint, which Rig must not become. Missing verified store-owned payment link for the newly created custom-priced order. No adapter added. |
+
+### Validation so far
+
+All commands run in `/workspace/codex-rig-cart`, offline with fake platform APIs.
+The new local disposable Postgres container uses trust authentication on loopback,
+not production data or credentials.
+
+```sh
+PYTHONPATH=agents/_chassis:agents/rig /workspace/codex-tiger-t1/.venv/bin/python -m pytest tests/test_rig_cart.py -q --tb=short --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+PYTHONPATH=tank:agents/_chassis:agents/rig /workspace/codex-tiger-t1/.venv/bin/python -m pytest tests/test_rig_cart_admin.py -q --tb=short --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+PYTHONPATH=tank:agents/_chassis:agents/rig RIG_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32870/postgres /workspace/codex-tiger-t1/.venv/bin/python -m pytest tests/test_rig_cart.py tests/test_rig_cart_admin.py tests/test_rig_cart_postgres.py tests/test_rig_no_payments.py tests/test_rig_optional_auto_order.py tests/test_rig_optional_blind_ship.py -q --tb=short --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+TMPDIR=/workspace/codex-rig-cart PYTHONPATH=tank:agents/_chassis:agents/rig RIG_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32870/postgres /workspace/codex-tiger-t1/.venv/bin/python -m pytest tests/test_rig_cart_postgres.py -q --tb=short --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+git diff --check
+```
+
+Results respectively: 17 passed; 5 passed; 85 passed; 2 passed; whitespace clean.
+The first cart run found two test-fixture mistakes (cost equal to shopper price,
+and an uncreated outbox directory), fixed before the passing run. The initial
+combined no-payment regression found forbidden internal-state vocabulary in the
+external platform adapter; external states are now normalized and Woo additionally
+requires processing/completed status. Existing quote tests were not edited.
+An attempted full glob run exited 120 with no output because `/tmp` writes hit
+`Disk quota exceeded`; a per-file runner now uses ignored `.rig-validation/` as
+TMPDIR and records each file independently. No full-suite success is claimed yet.
+
+Figma access works in this continuation. Session
+`8e34b1cc-82bb-45e9-849f-139d94ec5aea` read Approved frame `291:9` and its screenshot.
+No UI or browser acceptance proof is claimed by these backend tests.
