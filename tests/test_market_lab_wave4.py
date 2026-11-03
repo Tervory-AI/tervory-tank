@@ -2,7 +2,7 @@
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -136,3 +136,67 @@ async def test_warning_issues_and_returns_frozen_wilson_confidence(database, mon
         import market_lab_ml3
         displayed = market_lab_ml3.records('predictions', {'predictions': saved})
         assert json.loads(displayed[0]['summary'])['confidence'] == saved[0]['confidence']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('enabled', [(), ('NOAA_TOKEN',), ('LEGISCAN_API_KEY',), ('NOAA_TOKEN', 'LEGISCAN_API_KEY')])
+async def test_scored_events_require_keys_regions_exact_stage_and_owned_evidence(database, monkeypatch, enabled):
+    import json
+    from core.event_signals import series
+    from core.ledger import PostgresLedger
+    from engines.ffl.warnings import plan as warning_plan
+    for key in ('NOAA_TOKEN', 'LEGISCAN_API_KEY'):
+        monkeypatch.delenv(key, raising=False)
+    for key in enabled:
+        monkeypatch.setenv(key, 'placeholder-configured-only-in-offline-test')
+    owner, foreign = uuid4(), uuid4()
+    events = {
+        'noaa_alerts': [{'kind': 'severe_weather', 'date': '2026-10-01', 'geo': 'CA',
+                         'title': 'placeholder weather', 'body': 'placeholder', 'url': 'https://placeholder.example/weather'},
+                        {'kind': 'severe_weather', 'date': '2026-10-01', 'geo': 'TX',
+                         'title': 'placeholder outside region', 'url': 'https://placeholder.example/outside'}],
+        'legiscan': [{'kind': 'bill_status', 'date': '2026-10-01', 'geo': 'CA',
+                      'title': 'AB 1 Engrossed', 'body': 'placeholder bill', 'url': 'https://placeholder.example/bill'},
+                     {'kind': 'bill_status', 'date': '2026-10-01', 'geo': 'CA',
+                      'title': 'AB 2 Not Engrossed', 'body': 'placeholder non-stage', 'url': 'https://placeholder.example/not-stage'}]}
+    async with database.pool.acquire() as conn:
+        ledger = PostgresLedger(conn)
+        await ledger.apply_schema()
+        for source, rows in events.items():
+            for tenant in (owner, foreign):
+                for _ in range(2):  # Repeated snapshots must not inflate event counts.
+                    ident = uuid4()
+                    content = {'id': str(ident), 'source_id': source, 'events': rows, 'points': []}
+                    await conn.execute('INSERT INTO agent_market_lab.feed_documents(id,tenant_id,source_id,fetched_at,fixture,content) VALUES($1,$2,$3,$4,false,$5::jsonb)',
+                                       ident, tenant, source, NOW, json.dumps(content))
+        base = {'placeholder_supply': {'source': 'listing_counts', 'ref': 'count:state:CA',
+                                      'points': [{'date': '2026-10-01', 'value': 1}]}}
+        scored = await series(ledger, str(owner), warning_plan(), base, NOW)
+        assert len(scored) == len(enabled)
+        for row in scored.values():
+            assert row['points'][0]['value'] == '1'
+            assert row['points'][0]['event_title'] in ('placeholder weather', 'AB 1 Engrossed')
+            doc_id = row['points'][0]['document_id']
+            saved_owner = await conn.fetchval('SELECT tenant_id FROM agent_market_lab.feed_documents WHERE id=$1', UUID(doc_id))
+            assert saved_owner == owner
+        assert await series(ledger, str(owner), warning_plan(), {}, NOW) == {}
+
+
+def test_event_pairs_have_independent_measured_lag_histories():
+    from datetime import date, timedelta
+    from core.warning_stats import analyze
+    from engines.ffl.warnings import plan as warning_plan
+    start = date(2020, 1, 1)
+    triggers = [0, 126, 252, 378]
+    events = [{'date': (start + timedelta(days=t)).isoformat(), 'value': 1,
+               'event_title': 'placeholder recorded event'} for t in triggers]
+    measured_lags = []
+    for config, lag in zip([p for p in warning_plan()['pairs'] if p.get('trigger') == 'event'], (14, 35)):
+        outcomes = [{'date': (start + timedelta(days=d)).isoformat(),
+                     'value': 1 if any(t + lag <= d <= t + lag + 21 for t in triggers) else 2}
+                    for d in range(0, triggers[-1] + 8, 7)]
+        stats = analyze(events, outcomes, config, start + timedelta(days=triggers[-1] + 7))
+        assert stats['episode_count'] == stats['hits'] == 3
+        assert stats['lag_median'] == lag and stats['current'] is not None
+        measured_lags.append(stats['lag_median'])
+    assert measured_lags == [14, 35]
