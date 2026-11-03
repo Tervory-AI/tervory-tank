@@ -70,7 +70,7 @@ def config(filename):
 
 
 def rows(filename):
-    return {row["model_name"]: row for row in config(filename)["model_list"]}
+    return {row["model_name"]: row for row in reversed(config(filename)["model_list"])}
 
 
 def chains(filename):
@@ -281,8 +281,20 @@ def test_metadata_does_not_reuse_litellm_reserved_model_info_fields(filename):
 
 @pytest.mark.parametrize("filename", FILES)
 def test_only_the_open_weight_entries_use_the_inference_token_and_router(filename):
-    for name, row in rows(filename).items():
+    all_rows = config(filename)["model_list"]
+    from collections import Counter
+    counts = Counter(row["model_name"] for row in all_rows)
+    assert {name: n for name, n in counts.items() if n > 1} == {"kimi": 2, "kimi-lite": 2}
+    first = rows(filename)
+    for row in all_rows:
+        name = row["model_name"]
         params = row["litellm_params"]
         uses = params.get("api_key") == f"os.environ/{TOKEN}" or params.get("api_base") == HF_ROUTER
-        assert uses == (name in OPEN), name
+        second = row is not next(r for r in all_rows if r["model_name"] == name)
+        assert uses == (name in OPEN or second), name
         assert not str(params.get("model", "")).startswith("huggingface/"), name
+        if second:
+            source = "kimi-open" if name == "kimi" else "kimi-open-small"
+            assert params == first[source]["litellm_params"]
+            assert first[name]["litellm_params"]["model"].startswith("moonshot/")
+    assert config(filename)["router_settings"]["routing_strategy"] == "cost-based-routing"
