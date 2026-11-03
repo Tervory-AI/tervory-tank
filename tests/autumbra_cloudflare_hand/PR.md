@@ -1,7 +1,8 @@
 # Autumbra A3: the Cloudflare hand for tervory.com
 
 PR #566; branch `codex/autumbra-cloudflare-hand`. Claude's main merge
-`53814105` was retained. Latest main was merged cleanly as `e70638ee`.
+`53814105` was retained. Founder commit `b4db25f5` is retained, including its
+`.gitleaksignore` entry. Latest main `b2fa83bd` merged cleanly as `b835204b`.
 Founder merges; no merge to main or deployment was performed by this task.
 
 Enforce previously stayed on the fixture even with its Cloudflare setting
@@ -61,7 +62,7 @@ trust_env=False. Radix limits are unchanged.
   Every test network is internal; DNS/connect injection is confined to CI fake
   upstream routing. No outside network or credential is used during probes.
 - `tests/autumbra_cloudflare_hand/EVIDENCE.txt:1`: exact verification commands,
-  scripts and full results, including failures, rather than a green-suite claim.
+  exit codes, summaries and CI links; raw traces and infrastructure IDs removed.
 
 ## Proof and limits
 
@@ -75,7 +76,7 @@ fixture was added.
 
 Final Autumbra/Ghost/root boundary command: **446 passed, 3 skipped** (134.50 s).
 Final room-seal command: **89 passed** (80.71 s). Ruff E9/F, shell syntax and
-`git diff --check` pass. Full commands and outputs are in EVIDENCE.txt.
+`git diff --check` pass. Commands, exit codes and summary lines are in EVIDENCE.txt.
 
 CI Compose proof after the socket-binding review fix:
 [successful run on e1d64827](https://github.com/Tervory-AI/tervory-tank/actions/runs/41626330407).
@@ -84,21 +85,20 @@ other hosts, direct egress, Tank and another client's network. Fake upstream
 bindings were changed from wildcard to their exact private addresses in response
 to the CodeQL review comment. No review finding is disputed.
 
-The initial full Tank diagnostic was **not green**: its main pytest group
-reported **218 failed, 4992 passed, 638 skipped, 97 errors** in 965.09 seconds;
-its wrapper exited 143. This started before two A3 test/config fixes and used an
-incomplete local environment. The two isolated groups failed collection for
-missing `aiosmtpd`. All initial output is retained. A second full run using the existing CI environment completed with exit 1 in
-1176 seconds: main **27 failed, 3887 passed, 398 skipped, 69 errors**; Tiger G5
-**1 failed, 19 passed, 21 skipped, 1 error**; Zenas alerts **exit 124** after 180
-seconds. That older environment also lacked newly required `jsonschema`, `jwt`
-and `phonenumbers`, and browser failures/timeouts were recorded. All outputs
-are retained. These results are not passing full-suite proof.
+**CI's `tank` job is the full-suite test of record.** The result for the final
+pushed head is recorded in this PR's body with the exact head SHA and CI job
+link after the job completes. Updating that body does not create another head.
+Only failures absent from `origin/main` are eligible for A3 fixes.
+
+The local full-suite failures came from incomplete package installations on
+this box, including `jsonschema`, `aiosmtpd`, `playwright`, `numpy` and other
+required dependencies. Their compact diagnostic summaries remain in
+EVIDENCE.txt; they are not attributed to A3 and do not replace CI's tank result.
 
 After retaining the approved HTTPS_PROXY/NO_PROXY settings, the two Compose
 contract checks passed (46.34 seconds), and the [network CI proof on
 8b628518](https://github.com/Tervory-AI/tervory-tank/actions/runs/41628312785)
-passed. Final fetch confirmed origin/main is still 305b833b and A2 has not landed.
+passed. Current main has been merged; A2 production email remains outstanding.
 
 Read-only `bash ops/seal-check.sh` exited 1: existing Trigger network leaks;
 no deployed Autumbra Watch/Enforce rooms were present. Passing Compose tests do
