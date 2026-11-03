@@ -263,7 +263,6 @@ def _fit_key(row: dict[str, Any]) -> tuple[str, str, str]:
     )
 
 
-_OPEN_PAYMENT_STATES = frozenset({"payment_pending", "paid", "refund_due", "cancelling", "reconciling"})
 
 
 class MemoryStore(RetailerMemoryStore):
@@ -402,6 +401,7 @@ class MemoryStore(RetailerMemoryStore):
         locate_enabled: bool | None = None,
         blind_ship: bool | None = None,
         auto_order: bool | None = None,
+        delivery: dict[str, int] | None = None,
     ) -> None:
         previous = self.retailers.get(str(tenant_id), {})
         theme = theme if theme is not None else self.retailers.get(str(tenant_id), {}).get("theme", "neutral")
@@ -416,6 +416,7 @@ class MemoryStore(RetailerMemoryStore):
             "blind_ship": bool(blind_ship) if blind_ship is not None else bool(previous.get("blind_ship", False)),
             # Optional auto-order (sandbox outbox only). Off by default.
             "shop": copy.deepcopy(previous.get("shop", {})),
+            "delivery": copy.deepcopy(delivery if delivery is not None else previous.get("delivery", {})),
             "auto_order": bool(auto_order) if auto_order is not None else bool(previous.get("auto_order", False))}
 
 
@@ -489,26 +490,6 @@ class MemoryStore(RetailerMemoryStore):
                 return True
         return False
 
-    async def open_locate_payments(self, tenant_id: str, limit: int = 100, *,
-                                   flagged: bool = False) -> list[tuple[str, dict[str, Any]]]:
-        """Locate quotes at payment_pending, paid, refund_due, cancelling or reconciling.
-
-        Least recently tried first: ordered by the reconciler's last attempt
-        (locate_attempt), or creation for a quote never tried. A quote that
-        fails every run therefore moves behind quotes not tried yet; it does
-        not hold its place at the front.
-        flagged=False (default) leaves out quotes marked needs_review;
-        flagged=True lists only those. Each call has its own limit, so flagged
-        quotes can't fill the unflagged list. A backlog larger than limit is
-        still worked through over several runs, not in one.
-        """
-        found = [row for row in self.quotes
-                 if row["tenant_id"] == str(tenant_id)
-                 and (row["payload"].get("locate_state") or {}).get("state") in _OPEN_PAYMENT_STATES
-                 and ((row["payload"]["locate_state"].get("needs_review") is True) == bool(flagged))]
-        found.sort(key=self._attempt_order)
-        return [(row["id"], copy.deepcopy(row["payload"]["locate_state"]))
-                for row in found[:max(1, min(int(limit), 1000))]]
 
     @staticmethod
     def _attempt_order(row: dict[str, Any]) -> datetime:
@@ -527,16 +508,6 @@ class MemoryStore(RetailerMemoryStore):
                 if row["tenant_id"] == str(tenant_id) and row["id"] in wanted
                 and row["payload"].get("locate_state")]
 
-    async def payment_event(self, tenant_id: str, quote_id: str, event: dict[str, Any]) -> bool:
-        """Append a verified payment webhook event once per event id. Tenant scoped."""
-        for row in self.quotes:
-            if row["tenant_id"] == str(tenant_id) and row["id"] == quote_id:
-                seen = list(row["payload"].get("payment_events") or [])
-                if any(item.get("id") == event["id"] for item in seen):
-                    return False
-                row["payload"] = {**row["payload"], "payment_events": [*seen, event]}
-                return True
-        return False
 
     async def place_locate_order(self, tenant_id: str, order: dict[str, Any],
                                  purchase: dict[str, Any]) -> dict[str, Any]:
@@ -606,6 +577,10 @@ class MemoryStore(RetailerMemoryStore):
         for row in self.quotes:
             if row["tenant_id"] == str(tenant_id) and row["id"] == quote_id:
                 row["sent_at"] = "sent"
+
+    async def quote_for(self, tenant_id: str, quote_id: str) -> dict[str, Any] | None:
+        return next((copy.deepcopy(row) for row in self.quotes
+                     if row["tenant_id"] == str(tenant_id) and row["id"] == quote_id), None)
 
     async def quotes_for(self, tenant_id: str) -> list[dict[str, Any]]:
         return [row for row in self.quotes if row["tenant_id"] == str(tenant_id)]
@@ -1122,14 +1097,15 @@ class PgStore(RetailerPgStore):
         locate_enabled: bool | None = None,
         blind_ship: bool | None = None,
         auto_order: bool | None = None,
+        delivery: dict[str, int] | None = None,
     ) -> None:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
                 INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship,
-                                             auto_order)
+                                             auto_order, delivery)
                 VALUES ($1, $2, $3, $4, $5, coalesce($6, 'neutral'), $7::jsonb, coalesce($8, false), coalesce($9, false),
-                        coalesce($10, false))
+                        coalesce($10, false), coalesce($11::jsonb, '{}'::jsonb))
                 ON CONFLICT (tenant_id) DO UPDATE SET
                     slug = EXCLUDED.slug,
                     email = EXCLUDED.email,
@@ -1139,7 +1115,8 @@ class PgStore(RetailerPgStore):
                     quote_notice = coalesce($7::jsonb, agent_rig.retailers.quote_notice),
                     locate_enabled = coalesce($8, agent_rig.retailers.locate_enabled),
                     blind_ship = coalesce($9, agent_rig.retailers.blind_ship),
-                    auto_order = coalesce($10, agent_rig.retailers.auto_order)
+                    auto_order = coalesce($10, agent_rig.retailers.auto_order),
+                    delivery = coalesce($11::jsonb, agent_rig.retailers.delivery)
                 """,
                 _uuid(tenant_id),
                 str(slug),
@@ -1151,6 +1128,7 @@ class PgStore(RetailerPgStore):
                 None if locate_enabled is None else bool(locate_enabled),
                 None if blind_ship is None else bool(blind_ship),
                 None if auto_order is None else bool(auto_order),
+                None if delivery is None else _json(delivery),
             )
 
 
@@ -1163,7 +1141,7 @@ class PgStore(RetailerPgStore):
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship, auto_order, shop FROM agent_rig.retailers WHERE tenant_id = $1",
+                "SELECT slug, email, webhook, name, theme, quote_notice, locate_enabled, blind_ship, auto_order, shop, delivery FROM agent_rig.retailers WHERE tenant_id = $1",
                 _uuid(tenant_id),
             )
         if row is None:
@@ -1172,6 +1150,7 @@ class PgStore(RetailerPgStore):
                 "quote_notice": json.loads(row["quote_notice"]) if isinstance(row["quote_notice"], str) else row["quote_notice"],
                 "locate_enabled": bool(row["locate_enabled"]), "blind_ship": bool(row["blind_ship"]),
                 "auto_order": bool(row["auto_order"]),
+                "delivery": json.loads(row["delivery"]) if isinstance(row["delivery"], str) else row["delivery"],
                 "shop": json.loads(row["shop"]) if isinstance(row["shop"], str) else row["shop"]}
 
 
@@ -1301,28 +1280,6 @@ class PgStore(RetailerPgStore):
             )
         return result.endswith(" 1")
 
-    async def open_locate_payments(self, tenant_id: str, limit: int = 100, *,
-                                   flagged: bool = False) -> list[tuple[str, dict[str, Any]]]:
-        """Locate quotes at payment_pending, paid, refund_due, cancelling or reconciling.
-
-        Least recently tried first: ordered by the reconciler's last attempt
-        (locate_attempt), or creation for a quote never tried. A quote that
-        fails every run therefore moves behind quotes not tried yet; it does
-        not hold its place at the front.
-        flagged=False (default) leaves out quotes marked needs_review;
-        flagged=True lists only those. Each call has its own limit, so flagged
-        quotes can't fill the unflagged list. A backlog larger than limit is
-        still worked through over several runs, not in one.
-        """
-        async with self.pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT id, payload->'locate_state' AS state FROM agent_rig.quotes"
-                " WHERE tenant_id = $1 AND payload->'locate_state'->>'state' = ANY($2::text[])"
-                " AND coalesce(payload->'locate_state'->'needs_review' = 'true'::jsonb, false) = $4"
-                " ORDER BY coalesce(locate_attempt_at, created_at), created_at LIMIT $3",
-                _uuid(tenant_id), sorted(_OPEN_PAYMENT_STATES), max(1, min(int(limit), 1000)), bool(flagged),
-            )
-        return [(row["id"], json.loads(row["state"]) if isinstance(row["state"], str) else row["state"]) for row in rows]
 
     async def locate_states(self, tenant_id: str, quote_ids: list[str]) -> list[tuple[str, dict[str, Any]]]:
         """(quote id, locate_state) for these quotes, where one is recorded. Tenant scoped."""
@@ -1335,17 +1292,6 @@ class PgStore(RetailerPgStore):
             )
         return [(row["id"], json.loads(row["state"]) if isinstance(row["state"], str) else row["state"]) for row in rows]
 
-    async def payment_event(self, tenant_id: str, quote_id: str, event: dict[str, Any]) -> bool:
-        """Append a verified payment webhook event once per event id, in one statement."""
-        async with self.pool.acquire() as conn:
-            result = await conn.execute(
-                "UPDATE agent_rig.quotes SET payload = jsonb_set(payload, '{payment_events}',"
-                " COALESCE(payload->'payment_events', '[]'::jsonb) || jsonb_build_array($3::jsonb))"
-                " WHERE tenant_id = $1 AND id = $2"
-                " AND NOT COALESCE(payload->'payment_events', '[]'::jsonb) @> jsonb_build_array(jsonb_build_object('id', $4::text))",
-                _uuid(tenant_id), quote_id, _json(event), str(event["id"]),
-            )
-        return result.endswith(" 1")
 
     _ORDER_COLUMNS = "quote_id, number, state, product_id, price, currency, ship_to, cancel_reason"
     _PO_COLUMNS = ("quote_id, number, state, source_id, vendor_name, order_email, item_sku, item_url, quantity,"
@@ -1506,6 +1452,17 @@ class PgStore(RetailerPgStore):
                 _uuid(tenant_id),
                 quote_id,
             )
+
+    async def quote_for(self, tenant_id: str, quote_id: str) -> dict[str, Any] | None:
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT id, payload, contact FROM agent_rig.quotes WHERE tenant_id=$1 AND id=$2",
+                _uuid(tenant_id), quote_id)
+        if row is None:
+            return None
+        return {"id": row["id"], "tenant_id": str(tenant_id),
+                **{key: json.loads(row[key]) if isinstance(row[key], str) else row[key]
+                   for key in ("payload", "contact")}}
 
     async def quotes_for(self, tenant_id: str) -> list[dict[str, Any]]:
         async with self.pool.acquire() as conn:
