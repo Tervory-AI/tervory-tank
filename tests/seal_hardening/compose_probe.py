@@ -38,29 +38,19 @@ def inside():
         print("denied", *sys.argv[3:])
         return
     if mode == "gold":
-        import asyncio
-        from types import SimpleNamespace
-        spec = importlib.util.spec_from_file_location("price_ocr", "/source/tank/skills/tiger.price_ocr/1.0.1/run.py")
-        skill = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(skill)
-        class Client:
-            async def post(self, url, json, timeout):
-                request = urllib.request.Request(url, data=__import__("json").dumps(json).encode(), headers={"Content-Type": "application/json"})
-                with urllib.request.urlopen(request, timeout=timeout) as response:
-                    data = response.read()
-                return SimpleNamespace(status_code=200, json=lambda: __import__("json").loads(data))
+        rows = []
+        cases = sorted(Path("/source/tests/tiger_price_read/gold/shots").glob("*.png"))
+        assert cases
+        for png in cases:
+            payload = {"png_base64": base64.b64encode(png.read_bytes()).decode()}
+            texts = []
+            for service in ("baseline", "tiger-ocr"):
+                request = urllib.request.Request("http://" + service + ":3000/ocr", data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    texts.append(json.load(response)["text"])
+            rows.append([png.stem, *texts])
+        print(json.dumps(rows))
 
-        async def run():
-            cases = sorted(Path("/source/tests/tiger_price_read/gold/shots").glob("*.png"))
-            assert cases
-            client = Client()
-            for png in cases:
-                payload = {"png_base64": base64.b64encode(png.read_bytes()).decode(), "url": "https://example.test/" + png.stem}
-                before = await skill.run(payload, SimpleNamespace(env={"TIGER_URL": "http://baseline:3000"}, http=client))
-                after = await skill.run(payload, SimpleNamespace(env={"TIGER_URL": "http://tiger-ocr:3000"}, http=client))
-                assert before == after, png.name
-            print(f"Tank /ocr: {len(cases)} existing PNG cases produce identical items")
-        asyncio.run(run())
 
 
 def run():
@@ -114,7 +104,19 @@ def run():
             # address, but Tank holds no listener in this disposable proof.
             for service in ("agent-tiger", "tiger-browser", "tiger-browser-gateway", "base", "other"):
                 execute(service, "deny", "tiger-ocr", address)
-            execute("tank", "gold")
+            rows = json.loads(call(*cmd, "exec", "-T", "tank", "python", "/source/tests/seal_hardening/compose_probe.py", "inside", "gold"))
+            spec = importlib.util.spec_from_file_location("price_ocr", ROOT / "tank/skills/tiger.price_ocr/1.0.1/run.py")
+            skill = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(skill)
+            count = 0
+            for name, before, after in rows:
+                url = "https://example.test/" + name
+                old_items = skill.prices_from_text(before, url)
+                new_items = skill.prices_from_text(after, url)
+                assert old_items == new_items, name
+                count += bool(new_items)
+            assert count > 0, "PNG parity must include actual extracted prices"
+            print(f"Tank /ocr: {len(rows)} existing PNG cases produce identical items ({count} with prices)", flush=True)
             peak = call(*cmd, "exec", "-T", "tiger-ocr", "python", "-c", "from pathlib import Path; print(Path('/sys/fs/cgroup/memory.peak').read_text().strip())")
             print(f"tiger-ocr memory.peak={peak} bytes; mem_limit=1g; shm_size=256m", flush=True)
         finally:
