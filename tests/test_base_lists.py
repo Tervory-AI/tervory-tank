@@ -228,12 +228,16 @@ async def test_confirmation_tenant_binding_and_list_download_endpoint(monkeypatc
     async def show(self, tenant, list_id):
         assert tenant == TENANT
         return {"name": "Invented list", "records": [record()]}
+    async def ledger(self, tenant, records):
+        assert tenant == TENANT
+        return []
+    monkeypatch.setattr(lists.Store, "ledger", ledger)
     monkeypatch.setattr(lists.Store, "show", show)
     monkeypatch.setattr(command, "db", lambda: None)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://fixture") as client:
         response = await client.get("/v1/command/base/lists/csv", params={"list_id": str(uuid4())})
         assert response.status_code == 200
-        assert response.content == export_records([record()]).encode()
+        assert response.content == export_records([record()], ledger=[]).encode()
         response = await client.post("/v1/command/base/lists/to-crm", json={"list_id": str(uuid4()), "record_ids": [str(RECORD)]})
         assert response.status_code == 409
         response = await client.post("/v1/command/base/lists/to-crm", json={"list_id": str(uuid4()), "record_ids": [str(uuid4()) for _ in range(101)]})

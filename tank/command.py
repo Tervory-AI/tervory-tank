@@ -39,9 +39,9 @@ from trigger_marketing_contract import TOOLS as MARKETING_TOOLS
 
 TOOLS = {
     "trigger": ["trigger.revise", "trigger.voice.learn", "trigger.write.batch", "trigger.scorecard", "trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
-    "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.to_crm"],
+    "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.products", "base.list.to_crm"],
     "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.position", "tiger.alerts"],
-    "market_lab": ["market_lab.research"],
+    "market_lab": ["market_lab.research", "market_lab.warnings", "market_lab.predictions", "market_lab.calibration", "market_lab.feeds", "market_lab.alerts.email", "market_lab.alerts.webhook", "market_lab.alerts.off"],
     "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment"],
     "tisan": ["tisan.scaffold"],
     "radix": ["radix.scan", "radix.repo.scan", "radix.repo.findings"],
@@ -122,8 +122,14 @@ def allowed_tools(actor: Actor) -> list[str]:
     client_tools = TISAN_CLIENT_TOOLS if actor.tenant_admin and not actor.founder else []
     plugin_tools = (["plugins.list"] + (["plugins.install", "plugins.remove"] if actor.tenant_admin else [])) if not actor.founder and (actor.squads & SQUADS or actor.tenant_admin) else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]
+<<<<<<< HEAD
                    if tool != "rig.quote.confirm_payment" or actor.tenant_admin or actor.founder]
                   + founder_tools + voice_tools + client_tools + plugin_tools + list(actor.mcp_tools))
+=======
+                   if (tool != "rig.quote.confirm_payment" and not tool.startswith("market_lab.alerts."))
+                   or actor.tenant_admin or actor.founder]
+                  + founder_tools + voice_tools + client_tools + list(actor.mcp_tools))
+>>>>>>> origin/main
 
 
 def require_tool(actor: Actor, name: str) -> None:
@@ -489,6 +495,10 @@ async def events(thread_id: uuid.UUID, after: int = Query(default=0, ge=0), acto
 async def route_turn(actor: Actor, messages: list[dict], model: str | None = None,
                      *, task_id: uuid.UUID | None = None, on_token: TokenSink | None = None,
                      priority: str | None = None) -> Any:
+    from market_lab_ml3 import code_plan as market_lab_code_plan
+    planned = await market_lab_code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     from main import Message, RouteRequest, box_region, run_route
     from tisan_requests import code_plan as tisan_code_plan
     planned = await tisan_code_plan(actor, messages, task_id)
@@ -1226,6 +1236,15 @@ class BuildArgs(Body):
     brief_markdown: str = Field(min_length=1, max_length=30000)
 
 
+class MarketLabReadArgs(Body):
+    limit: int = Field(default=20, ge=1, le=100)
+    page: int = Field(default=0, ge=0, le=10000)
+
+
+class MarketLabWebhookArgs(Body):
+    url: str = Field(min_length=1, max_length=2000)
+
+
 @dataclass(frozen=True)
 class Adapter:
     method: str
@@ -1281,9 +1300,17 @@ ADAPTERS = {
     "base.lists": Adapter("GET", "/v1/command/base/lists", Body, "base.lists"),
     "base.list.show": Adapter("GET", "/v1/command/base/lists/show", ListArgs, "base.list.show"),
     "base.list.export": Adapter("GET", "/v1/command/base/lists/export", ListArgs, "base.list.export"),
+    "base.list.products": Adapter("GET", "/v1/command/base/lists/products", ListArgs, "base.list.products"),
     "base.list.to_crm": Adapter("POST", "/v1/command/base/lists/to-crm", SendArgs, "base.list.to_crm"),
     "tiger.watch": Adapter("POST", "/v1/tiger/watchlist", WatchArgs, "Start a price watch", True, "paid_run"),
     "tiger.read": Adapter("GET", "/v1/tiger/observations", UrlArgs, "Read price observations"),
+    "market_lab.warnings": Adapter("GET", "/v1/market-lab/reads/warnings", MarketLabReadArgs, "market_lab.warnings"),
+    "market_lab.predictions": Adapter("GET", "/v1/market-lab/reads/predictions", MarketLabReadArgs, "market_lab.predictions"),
+    "market_lab.calibration": Adapter("GET", "/v1/market-lab/reads/calibration", MarketLabReadArgs, "market_lab.calibration"),
+    "market_lab.feeds": Adapter("GET", "/v1/market-lab/reads/feeds", MarketLabReadArgs, "market_lab.feeds"),
+    "market_lab.alerts.email": Adapter("POST", "/v1/market-lab/alerts/email", EmptyArgs, "market_lab.alerts.email"),
+    "market_lab.alerts.webhook": Adapter("POST", "/v1/market-lab/alerts/webhook", MarketLabWebhookArgs, "market_lab.alerts.webhook"),
+    "market_lab.alerts.off": Adapter("POST", "/v1/market-lab/alerts/off", EmptyArgs, "market_lab.alerts.off"),
     "tiger.alerts": Adapter("GET", "/v1/command/tiger/alerts", __import__("tiger_alerts").AlertsArgs, "tiger.alerts"),
     "market_lab.research": Adapter("POST", "/v1/research", QuestionArgs, "Research a market question", True, "paid_run"),
     "rig.search": Adapter("GET", "/v1/rig/search", QueryArgs, "Search the product catalogue"),
@@ -1674,6 +1701,7 @@ def list_refusal_result(tool: str, status: int, result: Any) -> dict | None:
 
 async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action: PlannedAction) -> dict:
     attempted = False
+    once = None
     try:
         actor = await authorized_actor(actor, include_mcp=action.tool.startswith("mcp."))
         action = validate_action(action, actor)
@@ -1693,6 +1721,10 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             elif action.tool.startswith("mcp."):
                 from mcp_connections import dispatch
                 status, result = await dispatch(action, actor)
+            elif action.tool.startswith("market_lab.alerts."):
+                from market_lab_ml3 import confirmed
+                status, result = 200, await confirmed(action, actor, thread_id, card_id)
+                once = result.pop("_once", None)
             elif action.tool.startswith("trigger.") or action.tool in {"rig.quote.confirm_payment", "base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
@@ -1753,7 +1785,12 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             await event(conn, row, "error", {"message": card["error"]})
     async with db().acquire() as conn:
         row = await owned(conn, thread_id, actor)
-    return public_card(unpack(row["state"])["cards"][card_id])
+    result_card = public_card(unpack(row["state"])["cards"][card_id])
+    if once is not None and result_card.get("status") == "confirmed":
+        # This response alone carries the value. Durable state/events/model
+        # context contain only the non-secret preference status.
+        result_card["result"] = {**result_card.get("result", {}), "text": once}
+    return result_card
 
 
 @router.post("/threads/{thread_id}/attachments")
