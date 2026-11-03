@@ -15,10 +15,10 @@ origin, then loops through Tank's code proposals and the six local tools.
 | `cli/src/client.mjs:438,464` | Help fragment and code-session dispatch; existing auth/region/receipt helpers reused. |
 | `cli/bin/tervory.mjs:42` | Real stdin/stdout TTY state passed to the approval gate. |
 | `cli/src/code-mode.mjs:3` | Interactive loop, bounded transient result context, redaction before sending, no turn retries. |
-| `cli/src/code-tools.mjs:8,21,76` | Bounds, repository secret-pattern redaction, canonical path/secret-path checks. |
-| `cli/src/code-tools.mjs:90,130,137,164` | Git-ignore-aware file list (2,000), text read (200,000 bytes), search (200 matches), git diff. Regex work is isolated in a timed worker. |
-| `cli/src/code-tools.mjs:169` | Single-file unified diff; missing-file reads allow creation; exact context and read hash checked before and after approval. Only literal `y` applies. |
-| `cli/src/code-tools.mjs:193,214` | Approved commands use the worker's existing Linux Bubblewrap, a restricted environment and isolated process/network namespace. Host folders and secret paths are unavailable; no unsandboxed fallback. Output is redacted and shown locally; deadline 120 seconds, retained stdout/stderr at most 65,536 bytes. |
+| `cli/src/code-tools.mjs:8,21,88` | Bounds, repository secret-pattern redaction, canonical path/secret-path checks. |
+| `cli/src/code-tools.mjs:102,142,149,176` | Git-ignore-aware file list (2,000), text read (200,000 bytes), search (200 matches), git diff. Regex work is isolated in a timed worker. Git clean/process filters are disabled so read tools cannot execute repository commands without approval. |
+| `cli/src/code-tools.mjs:181` | Single-file unified diff using Git's existing applicator in an isolated scratch repository; only one neutral text target is permitted. Missing-file reads allow creation; read hash is checked before and after approval. Only literal `y` applies. |
+| `cli/src/code-tools.mjs:205,226` | Approved commands use the worker's existing Linux Bubblewrap, a restricted environment and isolated process/network namespace. Host folders and secret paths are unavailable; no unsandboxed fallback. Output is redacted and shown locally; deadline 120 seconds, retained stdout/stderr at most 65,536 bytes. |
 | `tank/command.py:1623,1697,1709` | Typed six-tool catalogue, `command.code` via existing `run_route`, metadata-only thread/task/event persistence, actual ledger receipts, founder-only pins. Tank does not execute any of the six tools. |
 | `tank/main.py:1006` | Add `command.code` to the existing model-override task allowlist **outside `run_route`**. The function itself is byte-identical to main. |
 | `tank/schema.sql:2286` | Additive/idempotent initial `command.code` policy copied from existing chat policies, including tenant-specific rows. Existing policies are not overwritten. No fixed new model/provider is selected. |
@@ -90,8 +90,8 @@ docker run -d --name cli-code-mode-tests -e POSTGRES_HOST_AUTH_METHOD=trust -e P
 # disposable loopback test service only, no production connection
 
 TMPDIR="$PWD/.task-tmp" npm test --prefix cli
-# 76 passed, zero failed, zero skipped; 16.208 seconds
-# Includes all 62 pre-existing CLI tests and 14 new code-mode cases.
+# 77 passed, zero failed, zero skipped; see final CLI log for elapsed time
+# Includes all 62 pre-existing CLI tests and 15 new code-mode cases.
 
 TMPDIR="$PWD/.task-tmp" PYTHONPATH=.task-tmp/deps:tank:tests POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55468/pooltest /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q tests/test_command.py tests/test_command_streaming.py tests/test_command_repo_tools.py tests/test_personal_tokens.py tests/test_pat_route_corridor.py tests/test_command_code.py
 # 205 passed, zero skipped; 14 deprecation/field warnings; 140.01 seconds
