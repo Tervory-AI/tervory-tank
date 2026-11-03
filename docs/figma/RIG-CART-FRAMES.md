@@ -342,3 +342,54 @@ git status --short --branch
 ```
 
 The first fetch/merge was already up to date. The register is the only repository deliverable; scripts/audits in `.git/rig-design` are untracked orchestration. Final push/remote-head results are reported in the task. No runtime code, credential, production data or deployment changed. Founder approval and merge remain outstanding.
+
+
+## Final seven corrections — 3 November 2026
+
+**Proposed, not approved.** This section supersedes the earlier sizing-round values for the listed roles. Existing node IDs are retained; shopper theme variables are unchanged.
+
+### 1. Admin field edges
+
+`cs/field-border` (`VariableID:452:499`), `#8b919a`, STROKE_COLOR, 3.17:1 on white. Separate from shopper `--rig-field-border`.
+
+Nodes: `289:13953`, `291:8064`, `291:8086`, `291:8108`, `291:8112`, `291:8116`, `291:8135`, `291:8139`, `291:8143`, `291:8162`, `291:8166`, `291:8170`, `291:8174`, `291:8193`, `291:8197`, `291:8201`, `291:8205`, `291:8224`, `291:8228`, `291:8232`, `291:8251`, `291:8255`, `291:8259`, `291:8278`, `291:8299`, `291:8320`, `291:8344`, `291:8368`, `291:8392`, `291:8455`, `318:48336`, `291:8514`, `318:48340`, `321:6393`, `321:6421`, `321:6406`, `321:6434`.
+
+### 2. Field geometry
+
+Stroke INSIDE; outer height 88; radius 8; padding 16 on every side.
+
+Nodes: `289:13953`, `291:8064`, `291:8086`, `291:8108`, `291:8112`, `291:8116`, `291:8135`, `291:8139`, `291:8143`, `291:8162`, `291:8166`, `291:8170`, `291:8174`, `291:8193`, `291:8197`, `291:8201`, `291:8205`, `291:8224`, `291:8228`, `291:8232`, `291:8251`, `291:8255`, `291:8259`, `291:8278`, `291:8299`, `291:8320`, `291:8344`, `291:8368`, `291:8392`, `291:8455`, `318:48336`, `291:8514`, `318:48340`, `321:6393`, `321:6421`.
+
+### 3. Chevrons
+
+No change, as directed: desktop centre y=135, mobile y=127. Representative closed/open frames retain x/y=1080/127 desktop and 295/119 mobile.
+
+Nodes: `354:18492`, `354:18494`, `321:6400`, `321:6428`.
+
+### 4. Order headings
+
+Inter Semi Bold 14/24; font size bound to CRM `VariableID:42:37`.
+
+Nodes: `291:8417`, `291:8422`, `291:8427`, `291:8432`, `291:8437`, `291:8476`, `291:8481`, `291:8486`, `291:8491`, `291:8496`, `321:6316`, `321:6321`, `321:6326`, `321:6331`, `321:6336`, `321:6355`, `321:6360`, `321:6365`, `321:6370`, `321:6375`.
+
+### 5. Metadata and helpers
+
+Inter Regular 14/24; size `VariableID:42:37`, secondary colour `VariableID:42:15` (`#3d4a66`).
+
+Nodes: `291:8120`, `291:8147`, `291:8178`, `291:8209`, `291:8236`, `291:8263`, `291:8419`, `291:8424`, `291:8429`, `291:8434`, `291:8439`, `291:8478`, `291:8483`, `291:8488`, `291:8493`, `291:8498`, `321:6318`, `321:6323`, `321:6328`, `321:6333`, `321:6338`, `321:6357`, `321:6362`, `321:6367`, `321:6372`, `321:6377`.
+
+### 6. Kickers and Rig section labels
+
+Inter Semi Bold 12/20; size `VariableID:42:35`, style `42:51`, secondary colour `42:15` (`#3d4a66`).
+
+Nodes: `291:8059`, `441:511`, `291:8081`, `291:8103`, `441:545`, `291:8130`, `291:8157`, `441:579`, `291:8188`, `291:8219`, `441:613`, `291:8246`, `291:8273`, `441:647`, `291:8294`, `291:8315`, `441:681`, `291:8339`, `291:8363`, `441:715`, `291:8387`, `291:8411`, `441:749`, `291:8470`, `291:8450`, `441:780`, `291:8509`, `321:6310`, `441:817`, `321:6349`, `321:6388`, `441:851`, `321:6416`.
+
+### 7. Action labels
+
+Inter Semi Bold 13/18; size `VariableID:42:36`, style `42:51`. Buttons remain 44 tall.
+
+Nodes: `289:13946`, `289:13948`, `I291:8073;289:13946`, `I291:8095;289:13946`, `I291:8122;289:13946`, `I291:8149;289:13946`, `I291:8180;289:13946`, `I291:8211;289:13946`, `I291:8238;289:13946`, `I291:8265;289:13946`, `I291:8286;289:13946`, `I291:8307;289:13946`, `I291:8329;289:13946`, `I291:8331;289:13948`, `I291:8353;289:13946`, `I291:8355;289:13948`, `I291:8377;289:13946`, `I291:8379;289:13948`, `I291:8401;289:13946`, `I291:8403;289:13948`, `I291:8441;289:13946`, `I291:8500;289:13946`, `I291:8462;289:13946`, `I291:8521;289:13946`, `I321:6340;289:13946`, `I321:6379;289:13946`, `I321:6399;289:13946`, `I321:6427;289:13946`.
+
+The larger text line boxes require height-only extensions: `291:8182` → 375 × 880; `291:8405` → 1440 × 906; `291:8464` → 375 × 1018; `321:6304` → 1440 × 906; `321:6343` → 375 × 1042. Other root dimensions stay unchanged. Desktop Shopify credentials (`291:8097`) and mobile late Orders (`321:6343`) screenshots were inspected: no cropped text or overlapping rows. These are design verification screenshots, not founder acceptance.
+
+Commands: `git fetch origin && git merge origin/main` completed successfully with a clean merge; `git diff --check` passed. The register was committed and pushed with `git add docs/figma/RIG-CART-FRAMES.md`, `git commit -m 'docs(figma): record final seven Rig cart corrections'`, `git fetch origin && git merge origin/main`, and `git push origin codex/rig-cart-figma`. No runtime tests apply to this documentation/design-only change. Founder approval remains outstanding.
