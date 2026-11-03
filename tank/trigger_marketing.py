@@ -9,6 +9,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from trigger_google import V4, Google, GoogleFailure
 from trigger_marketing_contract import FORMATS, schedulable, utc_now
+from trigger_meta import Meta
 
 
 def obj(value):
@@ -19,13 +20,17 @@ def public(row):
     keys = ('id', 'write_id', 'channel', 'format', 'text', 'report', 'voice_revision', 'revision',
             'approved_revision', 'state', 'planned_at', 'time_zone', 'location', 'platform_error',
             'platform_id', 'platform_url', 'published_at', 'ledger_id')
-    return {k: obj(row[k]) if k in {'report', 'voice_revision'} and row[k] is not None else row[k]
+    result = {k: obj(row[k]) if k in {'report', 'voice_revision'} and row[k] is not None else row[k]
             for k in keys if k in row}
+    if row.get('channel') == 'facebook':
+        result.update(status=row['state'], url=row.get('platform_url'))
+    return result
 
 
 class Marketing:
-    def __init__(self, pool, google=None):
+    def __init__(self, pool, google=None, meta=None):
         self.pool, self.google = pool, google or Google(pool)
+        self.meta = meta or Meta(pool)
 
     async def write(self, actor, brief, format=None, customer_review=None):
         from trigger_learning import guidance
@@ -107,8 +112,9 @@ class Marketing:
             elif operation == 'post.approve':
                 if state != 'draft' or not schedulable(obj(row['report']), row['channel']):
                     raise HTTPException(409)
-                if row['channel'] == 'gbp':
-                    current = await self.google.location(tenant)
+                if row['channel'] in {'gbp', 'facebook'}:
+                    provider = self.google if row['channel'] == 'gbp' else self.meta
+                    current = await provider.location(tenant)
                     target, generation = current['location'], current['generation']
                     if (args.location, args.connection_generation) != (target, generation):
                         raise HTTPException(409)
@@ -118,8 +124,9 @@ class Marketing:
             elif operation == 'post.schedule':
                 if state != 'approved' or row['approved_revision'] != row['revision'] or not schedulable(obj(row['report']), row['channel']) or args.planned_at <= utc_now():
                     raise HTTPException(409)
-                if row['channel'] == 'gbp':
-                    current = await self.google.location(tenant)
+                if row['channel'] in {'gbp', 'facebook'}:
+                    provider = self.google if row['channel'] == 'gbp' else self.meta
+                    current = await provider.location(tenant)
                     if (target, generation) != (current['location'], current['generation']):
                         raise HTTPException(409)
                 row = await conn.fetchrow('''UPDATE tank.trigger_posts SET state='scheduled',planned_at=$3,time_zone=$4,
@@ -145,13 +152,26 @@ class Marketing:
 
     async def reconcile(self, conn, row):
         tenant = row['tenant_id']
-        binding = await conn.fetchrow("SELECT generation,location FROM tank.trigger_gbp_connections WHERE tenant_id=$1 AND status='connected'", tenant)
+        if row['channel'] == 'facebook':
+            binding = await conn.fetchrow("SELECT generation,page_id AS location FROM tank.trigger_meta_connections WHERE tenant_id=$1 AND status='connected'", tenant)
+        else:
+            binding = await conn.fetchrow("SELECT generation,location FROM tank.trigger_gbp_connections WHERE tenant_id=$1 AND status='connected'", tenant)
         if not binding or (binding['generation'], binding['location']) != (row['connection_generation'], row['location']):
             raise HTTPException(409)
         # Pre-review claims persisted the same timestamp as a five-minute lease.
         claimed = row['claimed_at'] or (row['lease_until'] - timedelta(minutes=5) if row['lease_until'] else None)
         if claimed is None:
             raise HTTPException(409)
+        if row['channel'] == 'facebook':
+            posts = await self.meta.published(tenant, row['location'], claimed, conn=conn)
+            for post in posts:
+                if post['summary'] == row['text'] and post['created'] >= claimed.replace(microsecond=0):
+                    try:
+                        url = await self.meta.permalink(tenant, post['name'], conn=conn)
+                    except (GoogleFailure, HTTPException):
+                        url = None
+                    return {**post, 'searchUrl': url}
+            return None
         posts = await self.google.pages(tenant, V4+row['location']+'/localPosts', 'localPosts', conn=conn)
         for post in posts:
             if not isinstance(post, dict):
@@ -176,7 +196,20 @@ class Marketing:
             AND ($4::date IS NULL OR (planned_at AT TIME ZONE time_zone)::date >= $4)
             AND ($5::date IS NULL OR (planned_at AT TIME ZONE time_zone)::date < $5)
             ORDER BY planned_at NULLS LAST,created_at,id LIMIT 500''', tenant, args.state, args.channel, args.start, args.end)
-        return {'posts': [public(row) for row in rows]}
+        items = []
+        for row in rows:
+            if row['channel'] == 'facebook' and row['state'] == 'published' and row['platform_id'] and not row['platform_url']:
+                try:
+                    binding = await self.meta.location(tenant)
+                    if (binding['location'], binding['generation']) == (row['location'], row['connection_generation']):
+                        url = await self.meta.permalink(tenant, row['platform_id'])
+                        await self.pool.execute('''UPDATE tank.trigger_posts SET platform_url=$3,updated_at=now()
+                            WHERE tenant_id=$1 AND id=$2 AND platform_id=$4''', tenant, row['id'], url, row['platform_id'])
+                        row = {**dict(row), 'platform_url': url}
+                except (GoogleFailure, HTTPException):
+                    pass  # Recover only the link, never re-publish a known ID.
+            items.append(public(row))
+        return {'posts': items, 'items': items}
 
     async def calendar(self, tenant, args):
         start = args.start
@@ -187,7 +220,7 @@ class Marketing:
             end = start + timedelta(days=7)
         rows = await self.pool.fetch('''SELECT *, (planned_at AT TIME ZONE time_zone)::date AS local_day,
             (planned_at AT TIME ZONE time_zone)::time AS local_time,
-            channel<>'gbp' AND state='scheduled' AND planned_at<=now() AS due
+            channel NOT IN ('gbp','facebook') AND state='scheduled' AND planned_at<=now() AS due
             FROM tank.trigger_posts WHERE tenant_id=$1 AND planned_at IS NOT NULL
             AND (planned_at AT TIME ZONE time_zone)::date >= $2
             AND (planned_at AT TIME ZONE time_zone)::date < $3 ORDER BY planned_at,id''', tenant, start, end)
