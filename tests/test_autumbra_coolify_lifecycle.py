@@ -409,3 +409,21 @@ async def test_mutation_dispatch_uses_confirmed_card_path(verb, monkeypatch):
     assert result['status'] == 'confirmed'
     confirmed.assert_awaited_once_with(action, actor, thread, card_id)
     direct.assert_not_called()
+
+
+def test_isolated_service_seal():
+    from agents.ghost.enforce_api import create_app as create_control
+    compose = yaml.safe_load((ROOT / 'agents/ghost/docker-compose.yml').read_text())
+    service = compose['services']['enforce-lifecycle']
+    assert set(lifecycle.COOLIFY_SETTINGS) <= service['environment'].keys()
+    assert service['networks'] == ['enforce_control']
+    assert not service.get('ports') and not service.get('expose') and not service.get('volumes')
+    assert service['read_only'] and service['cap_drop'] == ['ALL']
+    assert service['security_opt'] == ['no-new-privileges:true']
+    assert service['mem_limit'] and service['cpus']
+    main = yaml.safe_load((ROOT / 'docker-compose.yml').read_text())
+    assert main['networks']['tervory-enforce-control']['internal'] is True
+    assert 'tervory-enforce-control' in main['services']['tank']['networks']
+    with TestClient(create_control()) as client:
+        assert client.get('/ghost/autumbra/enforce/list').status_code == 404
+        assert client.get('/ghost/autumbra/settings').status_code == 404
