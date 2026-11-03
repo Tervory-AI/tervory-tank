@@ -400,6 +400,9 @@ async def test_schema_applies_twice_and_preserves_policy(harness):
         before = await conn.fetch("SELECT * FROM tank.policy ORDER BY task_type,tenant_id")
         await conn.execute(schema)
         migrated = await conn.fetch("SELECT * FROM tank.policy ORDER BY task_type,tenant_id")
+        # A previous code-mode revision copied tenant caching. Reapplication
+        # must turn only that field off without replacing the rest of the row.
+        await conn.execute("UPDATE tank.policy SET cache_scope='tenant' WHERE task_type='command.code'")
         await conn.execute(schema)
         after = await conn.fetch("SELECT * FROM tank.policy ORDER BY task_type,tenant_id")
         # CORE-2 clears old baselines; ONE-DOOR seeds the authorized Base/Zenas
@@ -430,7 +433,7 @@ async def test_schema_applies_twice_and_preserves_policy(harness):
                 k: new[k] for k in old.keys() if k not in changed}
         copied = dict(current['command.code', None])
         source = dict(current['command.turn', None])
-        assert copied == {**source, 'task_type': 'command.code'}
+        assert copied == {**source, 'task_type': 'command.code', 'cache_scope': 'none'}
         assert migrated == after
         assert all(row["moa_enabled"] is False and json.loads(row["moa_config"]) == {} for row in after)
         rows = await conn.fetch("SELECT outcome_type,unit_price FROM tank.price_book WHERE tenant_id=$1 AND outcome_type LIKE 'perplexity.%'", main.PLATFORM_TENANT)
