@@ -3544,7 +3544,7 @@ async def base_proxy(path: str, request: Request) -> Response:
 
 _LOCAL_ZENAS_HOSTS = frozenset({"agent-zenas", "localhost", "127.0.0.1"})
 _ZENAS_PATH = re.compile(
-    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|cases/convert|rule-cards|worked|matches|training-pairs|drafts|tenants|answers|contract-reviews|moot/published)$"
+    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|cases/convert|rule-cards|worked|matches|training-pairs|drafts|playbooks|tenants|answers|contract-reviews|moot/published)$"
     r"|^(matters|documents|rule-cards|worked)/[0-9a-fA-F-]{36}$"
     r"|^matters/[0-9a-fA-F-]{36}/documents$"
     r"|^matters/[0-9a-fA-F-]{36}/release$"
@@ -4083,6 +4083,9 @@ async def tiger_alerts(request: Request) -> Response:
     url = _tiger_query(request, "url")
     if url:
         params.append(("url", url.strip()))
+    kind = _tiger_query(request, "kind")
+    if kind is not None:
+        params.append(("kind", kind))
     resp = await _tiger_call("GET", "/alerts", params, None)
     return _tiger_response(resp, tenant_id)
 
@@ -4202,6 +4205,9 @@ app.include_router(__import__("event_bus").router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_lists").build_router())
+app.include_router(__import__("tiger_watch_commands").build_router())
+app.include_router(__import__("tiger_alerts").build_router())
+app.include_router(__import__("tisan_requests").build_router())
 app.include_router(__import__("base_audit_commands").build_router())
 app.include_router(__import__("rig_brain_routes").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("moa").router)

@@ -936,12 +936,63 @@ class RigAdminAction(Body):
 
 @router.post("/rig/admin/{operation}")
 async def rig_admin_action(operation: str, request: Request, actor: Actor = Depends(identity)):
-    permit_feed(actor, "rig", "shopify")
-    if operation not in {"import", "delete-products", "connect", "refresh", "mapping", "confirm-mapping", "settings", "embed-keys", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"}:
+    if operation in {"commerce-connect", "commerce-orders", "store-delivery"}:
+        if not actor.founder and not actor.tenant_admin:
+            raise HTTPException(403, "Retailer administrator access is required.")
+    if operation != "confirm-store-payment":
+        permit_feed(actor, "rig", "shopify")
+    if operation not in {"commerce-connect", "commerce-orders", "store-delivery", "confirm-store-payment", "import", "delete-products", "connect", "refresh", "mapping", "confirm-mapping", "settings", "embed-keys", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"}:
         raise HTTPException(404, "Unknown retailer operation.")
     if operation == "exchange-rate" and not actor.founder:
         raise HTTPException(403, "Only the founder may set exchange rates.")
     body = await parse(request, RigAdminAction, 12_000_000 if operation in {"import", "mapping", "confirm-mapping", "delete-products"} else 16000)
+    if operation == "confirm-store-payment":
+        from command import RigConfirmPaymentArgs, require_tool
+        from trigger_commands import confirmation
+        from trigger_routes import code_receipt
+        require_tool(actor, "rig.quote.confirm_payment")
+        try:
+            data = RigConfirmPaymentArgs.model_validate(body.data).model_dump(mode="json")
+        except ValidationError:
+            raise HTTPException(422, "The action arguments are invalid") from None
+        confirmation(actor, "rig.quote.confirm_payment", data)
+        result = await rig_request(actor, operation, data)
+        return {**result, "ledger_id": str(await code_receipt(actor.tenant_id, "rig.quote.confirm_payment", agent="rig"))}
+    if operation == "commerce-connect":
+        data = dict(body.data)
+        credential = data.pop("credential", None)
+        if credential is not None:
+            fields = {"shopify": {"access_token", "webhook_secret"},
+                      "woocommerce": {"consumer_key", "consumer_secret", "webhook_secret"},
+                      "bigcommerce": {"access_token", "webhook_secret"}}.get(data.get("platform"))
+            name = data.get("vault_name")
+            if (fields is None or not isinstance(credential, dict) or not credential or set(credential) - fields
+                    or any(not isinstance(value, str) or not 1 <= len(value) <= 8000 for value in credential.values())
+                    or not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", name)):
+                raise HTTPException(422, "The action arguments are invalid")
+            context = f"plugins:v1:{actor.tenant_id}:rig.vault:secret:{name}"
+            # Approved forms omit signing inputs for now. Preserve an existing
+            # sealed signing value; future approved fields use this same path.
+            async with db().acquire() as conn:
+                previous = await conn.fetchval("SELECT sealed FROM tank.vault_items WHERE tenant_id=$1 AND vault='rig.vault' AND kind='secrets' AND name=$2",
+                                               actor.tenant_id, name)
+            if previous:
+                try:
+                    stored = json.loads(vault.open_seal(previous, context)["value"])
+                    credential = {**{key: value for key, value in stored.items() if key in fields}, **credential}
+                except Exception:
+                    raise HTTPException(422, "The action arguments are invalid") from None
+            if fields - {"webhook_secret"} - set(credential):
+                raise HTTPException(422, "The action arguments are invalid")
+            encrypted = vault.seal({"value": json.dumps(credential)}, context)
+            metadata = json.dumps({"name": name, "purpose": "commerce", "mask": "••••••••",
+                                   "saved_at": datetime.now(timezone.utc).isoformat()})
+            async with db().acquire() as conn:
+                await conn.execute("""INSERT INTO tank.vault_items(tenant_id,vault,kind,name,metadata,sealed)
+                    VALUES($1,'rig.vault','secrets',$2,$3::jsonb,$4)
+                    ON CONFLICT(tenant_id,vault,kind,name) DO UPDATE SET metadata=excluded.metadata,sealed=excluded.sealed""",
+                    actor.tenant_id, name, metadata, encrypted)
+        return await rig_request(actor, operation, data)
     if operation in {"mapping", "confirm-mapping"}:
         try:
             data = {**body.data, "target": "rig"}

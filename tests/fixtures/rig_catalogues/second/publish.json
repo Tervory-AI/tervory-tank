@@ -7,7 +7,96 @@
   "keys": [
     {
       "key": "rk_pub_secondtenant",
-      "origins": ["https://second.example"]
+      "origins": [
+        "https://second.example"
+      ]
     }
-  ]
+  ],
+  "shop": {
+    "search": true,
+    "centre_sku": "SECOND-LAMP-01",
+    "vocabulary": {
+      "attribute_key": "power_rating",
+      "carry_category": "shade",
+      "category_words": {
+        "lamp": "light",
+        "lamps": "light",
+        "shade": "shade",
+        "shades": "shade"
+      },
+      "centre_category": "light",
+      "colour_words": [],
+      "loose_words": "(?!)",
+      "model_words": {},
+      "modifier_words": [],
+      "part_categories": [
+        "shade"
+      ],
+      "part_tail": {},
+      "sentences": {
+        "and_list": "{0} and {1}",
+        "badges": "Exact match",
+        "badges_2": "Demo item",
+        "bare_colour": "{0} isn't a colour we list.",
+        "bare_colour_2": "{0} isn't a colour we list. We have {1}.",
+        "blocked_build": "Doesn't fit the {0}",
+        "build_block": "{0} does not fit the {1}.",
+        "cut_state": "Fits your {0} cut",
+        "cut_state_2": "Needs {0} cut",
+        "expand_label": "The {0} is {1} {2}",
+        "expand_prices": "R ",
+        "fit_answer": "Yes, with the {0} cut.",
+        "fit_decision": "That part",
+        "fit_decision_2": "{0} does not fit the {1}.{2}",
+        "fit_decision_3": "{0} does not fit the {1} cut.",
+        "fit_decision_4": "{0} does not fit the {1}.",
+        "fit_state": "Does not fit",
+        "fit_state_2": "Fits your {0} cut",
+        "fit_state_3": "Needs {0} cut",
+        "honesty_gap": "No exact match. Closest: {0}.",
+        "kilo": "{0}R {1}",
+        "no_hits": "We don't stock {0}.",
+        "no_hits_2": "We don't stock {0}.",
+        "no_hits_3": "No lamp or shade matches that yet.",
+        "pack_note": "We list lamps separately.",
+        "prepare_reservation": "That item is not in this catalogue.",
+        "prepare_reservation_2": "{0} is out of stock.",
+        "prepare_reservation_3": "{0} \u00b7 Fit to confirm",
+        "price_gap": "The {0} is {1}, which is over that.",
+        "price_gap_2": "The {0} is {1}, which is under that.",
+        "rand": "R {0}",
+        "refusal_message": "{0} does not fit the {1}.",
+        "refusal_message_2": "{0}. We don't list a {1} for the {2}.",
+        "rewrite_fit_question": "{0} for {1}",
+        "shop_search": "We don't stock {0}.",
+        "shop_search_2": "{0} is out of stock.",
+        "shop_search_3": "No exact match.",
+        "shop_search_4": "No exact match. Closest: {0}.",
+        "shop_search_5": "No exact match.",
+        "size_gap": "The {0} is {1}.",
+        "size_gap_2": "The {0} is {1}.",
+        "size_gap_3": "The {0} {1} are {2}.",
+        "size_miss": "No exact match for ",
+        "size_miss_2": "No exact match for ",
+        "unknown_choice": "{0} is not an option on {1}.",
+        "unknown_choice_2": "{0} is not an option on {1}.",
+        "unlink_message": "We don't list a {0} for the {1}. The {2} is for the {3}.",
+        "unlink_message_2": "No exact match. Closest: {0}.",
+        "unoffered_colour": "OD green isn't a colour on the {0}.",
+        "unoffered_colour_2": "{0} isn't a colour on the {1}.",
+        "unsold_note": " for the {0}",
+        "unsold_note_10": "We don't sell {0}.",
+        "unsold_note_11": "No exact match.",
+        "unsold_note_5": "We don't sell a case{0}.",
+        "unsold_note_6": "We don't sell a bundle{0}.",
+        "unsold_note_9": "We don't sell a cleaning kit.",
+        "variant_miss": "No exact match for ",
+        "variant_miss_2": "No exact match for "
+      },
+      "sight_words": [],
+      "size_patterns": {},
+      "spec_words": [],
+      "unsold": {}
+    }
+  }
 }

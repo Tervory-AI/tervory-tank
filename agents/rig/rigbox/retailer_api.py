@@ -12,9 +12,10 @@ from chassis.tenant_db import activate_tenant, tenant_scope
 
 from rigbox.retailer import Retailer
 from rigbox.service import RigError
+from rigbox.quotes.senders import DeliveryError
 
 router = APIRouter()
-OPERATIONS = {"panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger", "watch-tenants", "watch-products", "watch-context"}
+OPERATIONS = {"commerce-connect", "commerce-orders", "store-delivery", "confirm-store-payment", "panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger", "watch-tenants", "watch-products", "watch-context"}
 
 
 @router.post("/internal/retailer/{operation}")
@@ -42,7 +43,15 @@ async def retailer_operation(operation: str, request: Request) -> JSONResponse:
     service = request.app.state.rig
     retailer = Retailer(service)
     try:
-        if operation == "watch-tenants":
+        if operation in {"commerce-connect", "commerce-orders", "store-delivery"}:
+            from rigbox.cart_api import cart, commerce_operation
+            from rigbox.commerce import CommerceError
+            try:
+                result = await commerce_operation(cart(request), tenant,
+                    {"commerce-connect": "connect", "commerce-orders": "orders"}.get(operation, operation), data)
+            except CommerceError:
+                raise ValueError() from None
+        elif operation == "watch-tenants":
             if tenant != "00000000-0000-0000-0000-000000000001":
                 raise RigError("unauthorized", "Retailer control authentication required.", 403)
             with tenant_scope(None, administrative=True):
@@ -51,6 +60,23 @@ async def retailer_operation(operation: str, request: Request) -> JSONResponse:
             result = {"tenant_id": tenant, "products": await service.store.watch_products(tenant, **({"catalogue": True} if data.get("catalogue") is True else {}))}
         elif operation == "watch-context":
             result = {"tenant_id": tenant, "product": await service.store.watch_context(tenant, str(data["sku"]))}
+        elif operation == "confirm-store-payment":
+            if (set(data) != {"quote_id"} or not isinstance(data["quote_id"], str)
+                    or not 1 <= len(data["quote_id"]) <= 200):
+                raise ValueError()
+            from rigbox.quotes.privacy import shopper_body
+            try:
+                confirmation = await service.confirm_store_payment(tenant, data["quote_id"])
+            except DeliveryError:
+                # A worker may have lost its lease to a newer confirmation.
+                # Return only this tenant's durable state, never the stale one.
+                current = await service.store.quote_for(tenant, data["quote_id"])
+                if not current:
+                    raise RigError("not_found", "The request is not valid.", 404) from None
+                payload = current["payload"]
+                confirmation = {"request_id": data["quote_id"], "confirmed": True,
+                                "state": payload["locate_state"]["state"], "items": [payload["product"]]}
+            result = shopper_body(confirmation)
         elif operation == "panel":
             result = await retailer.panel(tenant)
         elif operation == "settings":

@@ -111,6 +111,7 @@ SQL_LIST_ALERTS = """
 SELECT id, tenant_id, url, ts, kind, before, after
 FROM {schema}.alerts
 WHERE tenant_id = $1 AND ($2::text IS NULL OR url = $2)
+  AND ($3::text IS NULL OR kind = $3)
 ORDER BY ts DESC
 LIMIT 200
 """
@@ -845,10 +846,10 @@ class PgStore(PgPlaybooks, PgAlerts):
                 WHERE tenant_id = $1 AND alert_id = $2 AND status = 'sending'
             """), uuid.UUID(str(tenant_id)), uuid.UUID(str(alert_id)), state, now)
 
-    async def list_alerts(self, tenant_id: str, url: str | None) -> list[dict[str, Any]]:
+    async def list_alerts(self, tenant_id: str, url: str | None, kind: str | None = None) -> list[dict[str, Any]]:
         async with self.pool.acquire() as conn:
             await ensure_tables(conn, self.schema)
-            rows = await conn.fetch(self._sql(SQL_LIST_ALERTS), uuid.UUID(str(tenant_id)), url)
+            rows = await conn.fetch(self._sql(SQL_LIST_ALERTS), uuid.UUID(str(tenant_id)), url, kind)
         return [_alert_out(row) for row in rows]
 
     async def check_open(self, tenant_id: str, url: str) -> bool:
@@ -1016,10 +1017,12 @@ class MemoryStore(MemoryPlaybooks, MemoryAlerts):
             if state == "sent":
                 row["sent_at"] = now
 
-    async def list_alerts(self, tenant_id: str, url: str | None) -> list[dict[str, Any]]:
+    async def list_alerts(self, tenant_id: str, url: str | None, kind: str | None = None) -> list[dict[str, Any]]:
         rows = [item for item in self.alerts if item["tenant_id"] == str(tenant_id)]
         if url is not None:
             rows = [item for item in rows if item["url"] == url]
+        if kind is not None:
+            rows = [item for item in rows if item["kind"] == kind]
         return [dict(item) for item in rows]
 
     async def check_open(self, tenant_id: str, url: str) -> bool:

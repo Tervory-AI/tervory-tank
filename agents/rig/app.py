@@ -122,6 +122,8 @@ app = create_app(
     ],
 )
 mount(app)
+from rigbox.cart_api import mount as mount_cart
+mount_cart(app)
 mount_quotes(app)
 mount_widget(app)
 
@@ -395,11 +397,13 @@ async def _lifespan(app: FastAPI):
         service = QuoteService(store, _TankModels(app.state.tank), RetailerHandoff(app.state.http),
                                PgQuotes(app.state.pool))
         # Locate confirm re-reads offers live: approved-source API or Tiger
-        # check-now. No payment provider is wired: Locate checkout refuses.
+        # check-now. Accept only hands the quote to the store.
         from rigbox.locate_live import product_checkers
 
         service.locate_checker = product_checkers(app.state.http)
         app.state.rig = service
+        from rigbox.cart_runtime import install as install_cart
+        cart_worker = install_cart(service, app.state.http, app.state.tank)
         with tenant_scope(None, administrative=True):
             tenants = await store.tenant_ids()
         nightly = [
@@ -418,6 +422,9 @@ async def _lifespan(app: FastAPI):
         finally:
             consumer.cancel()
             await asyncio.gather(consumer, return_exceptions=True)
+            if cart_worker is not None:
+                cart_worker.cancel()
+                await asyncio.gather(cart_worker, return_exceptions=True)
 
 
 app.router.lifespan_context = _lifespan

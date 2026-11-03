@@ -179,3 +179,84 @@ test("empty page lists and existing contact/privacy content remain contract-vali
   data.pages = [];
   expect(checkContent(data)).toEqual([]);
 });
+
+const sectionIndex = (type: string) => fixture.pages[0].sections.findIndex((s) => s.type === type);
+const sectionPath = (type: string, ...path: string[]) => [
+  "pages",
+  "0",
+  "sections",
+  String(sectionIndex(type)),
+  "props",
+  ...path,
+];
+const boundedText: [string[], number][] = [
+  [["nav", "0", "label"], 40],
+  [["footer", "links", "0", "label"], 40],
+  [["footer", "text"], 600],
+  ...Object.keys(manifest.sections).map((type): [string[], number] => [
+    sectionPath(type, "heading"),
+    80,
+  ]),
+  ...["hero", "image-text", "contact"].map((type): [string[], number] => [
+    sectionPath(type, "body"),
+    600,
+  ]),
+  ...["feature-grid", "steps"].map((type): [string[], number] => [
+    sectionPath(type, "items", "0", "title"),
+    80,
+  ]),
+  [sectionPath("product-grid", "items", "0", "name"), 80],
+  ...["feature-grid", "product-grid", "steps"].map((type): [string[], number] => [
+    sectionPath(type, "items", "0", "body"),
+    400,
+  ]),
+  [sectionPath("faq", "items", "0", "answer"), 800],
+];
+function setPath(data: unknown, path: string[], value: unknown) {
+  const parent = path
+    .slice(0, -1)
+    .reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], data);
+  (parent as Record<string, unknown>)[path[path.length - 1]] = value;
+}
+function withFooter() {
+  return { ...fresh(), footer: { text: "Footer", links: [{ label: "Link", href: "/" }] } };
+}
+test.each(boundedText)(
+  "accepts the 3 Nov text limit and refuses one character over: %j (%i)",
+  (path, limit) => {
+    const data = withFooter();
+    setPath(data, path, "x".repeat(limit));
+    expect(checkContent(data)).toEqual([]);
+    setPath(data, path, "x".repeat(limit + 1));
+    expect(checkContent(data).join("\n")).toContain(path.join("/"));
+  },
+);
+
+test.each([
+  ["product-grid", "items", 12],
+  ["faq", "items", 20],
+  ["gallery", "images", 12],
+  ["feature-grid", "items", 12],
+  ["steps", "items", 8],
+] as const)("enforces the 3 Nov %s item count at the limit and one over", (type, prop, count) => {
+  const data = fresh();
+  const section = data.pages[0].sections[sectionIndex(type)];
+  const sample = (section.props[prop] as unknown[])[0];
+  section.props[prop] = Array.from({ length: count }, () => structuredClone(sample));
+  expect(checkContent(data)).toEqual([]);
+  (section.props[prop] as unknown[]).push(structuredClone(sample));
+  expect(checkContent(data).join("\n")).toContain("too many items");
+});
+
+test.each([
+  ["nav", 8],
+  ["footer", 12],
+] as const)("retains the %s link count", (kind, count) => {
+  const data = withFooter();
+  const links = Array.from({ length: count }, () => ({ label: "Link", href: "/" }));
+  if (kind === "nav") data.nav = links;
+  else data.footer.links = links;
+  expect(checkContent(data)).toEqual([]);
+  links.push({ label: "Link", href: "/" });
+  expect(checkContent(data).join("\n")).toContain("too many items");
+});

@@ -1,0 +1,75 @@
+ML4 local verification. Working directory: /workspace/codex-market-lab-ml4
+No production database, external requests, provider calls or encoder downloads.
+Some files were overwritten by subsequent runs; this record preserves their final captured output.
+
+$ env -u DATABASE_URL -u TANK_ADMIN_DATABASE_URL /workspace/codex-market-lab-ml3/.venv/bin/python -m pytest tests/test_market_lab_gate2.py tests/test_market_lab_warning_stats.py tests/test_market_lab_evidence.py tests/test_market_lab.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q > /workspace/ml4-first-regression.txt 2>&1
+Exit: 0
+..........s...................................                           [100%]
+45 passed, 1 skipped in 9.73s
+
+$ env -u DATABASE_URL -u TANK_ADMIN_DATABASE_URL /workspace/codex-market-lab-ml3/.venv/bin/python -m pytest tests/test_market_lab_ml4.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q > /workspace/ml4-tests.txt 2>&1
+Exit: 0
+........................                                                 [100%]
+24 passed in 0.31s
+
+$ /workspace/codex-market-lab-ml3/.venv/bin/python -m pytest tests/test_market_lab_ml4_memory.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q > /workspace/ml4-memory-tests.txt 2>&1
+Exit: 0
+.......s                                                                 [100%]
+7 passed, 1 skipped in 4.87s
+
+$ env -u DATABASE_URL -u TANK_ADMIN_DATABASE_URL /workspace/codex-market-lab-ml3/.venv/bin/python -m pytest tests/test_market_lab*.py tests/market_lab_feeds/ tests/market_lab_keyless_feeds/ --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q > /workspace/ml4-market-lab-regression.txt 2>&1
+Exit: 1
+...................................s.....................s.............. [ 31%]
+.............s...............s...........................F.............. [ 62%]
+.......................s................................................ [ 93%]
+..............s                                                          [100%]
+=================================== FAILURES ===================================
+____________ test_core_contains_no_engine_name_and_defaults_to_none ____________
+
+    def test_core_contains_no_engine_name_and_defaults_to_none():
+        engines = {path.name for path in (ROOT / "agents/market_lab/engines").iterdir() if path.is_dir() and not path.name.startswith("_")}
+        for source in (ROOT / "agents/market_lab/core").glob("*.py"):
+>           assert all(name not in source.read_text() for name in engines), source.name
+E           AssertionError: warning_store.py
+E           assert False
+E            +  where False = all(<generator object test_core_contains_no_engine_name_and_defaults_to_none.<locals>.<genexpr> at 0x7b810d736ea0>)
+
+tests/test_market_lab_review.py:118: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_market_lab_review.py::test_core_contains_no_engine_name_and_defaults_to_none
+1 failed, 224 passed, 6 skipped in 26.05s
+
+$ env -u DATABASE_URL -u TANK_ADMIN_DATABASE_URL /workspace/codex-market-lab-ml3/.venv/bin/python -m pytest tests/test_market_lab_ml4.py tests/test_market_lab_ml4_memory.py tests/test_market_lab_review.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q > /workspace/ml4-final-targeted.txt 2>&1
+Exit: 0
+................................s....................................... [ 82%]
+...............                                                          [100%]
+86 passed, 1 skipped in 11.17s
+
+$ env -u DATABASE_URL -u TANK_ADMIN_DATABASE_URL /workspace/codex-market-lab-ml3/.venv/bin/python -m pytest tests/test_secrets.py tests/test_agent_memory_records.py tests/agent_memory/test_review.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q > /workspace/ml4-memory-regression.txt 2>&1
+Exit: 0
+...............ssssssss.ssss.sssssss                                     [100%]
+17 passed, 19 skipped in 25.01s
+
+$ env -u DATABASE_URL -u TANK_ADMIN_DATABASE_URL /workspace/codex-market-lab-ml3/.venv/bin/python -m pytest tests/test_market_lab_ml4.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q > /workspace/ml4-postcommit-pattern-tests.txt 2>&1
+Exit: 0
+.........................                                                [100%]
+25 passed in 0.61s
+
+$ /workspace/codex-market-lab-ml3/.venv/bin/python -m pytest tests/test_market_lab_ml4.py tests/test_market_lab_ml4_memory.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q > /workspace/ml4-final-new-tests.txt 2>&1
+Exit: 0
+.................................s                                       [100%]
+33 passed, 1 skipped in 6.35s
+
+$ env -u DATABASE_URL -u TANK_ADMIN_DATABASE_URL /workspace/codex-market-lab-ml3/.venv/bin/python -m pytest tests/test_market_lab*.py tests/market_lab_feeds/ tests/market_lab_keyless_feeds/ --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1 --timeout=300 -q > /workspace/ml4-market-lab-final.txt 2>&1
+Exit: 0
+...................................s.....................s.............. [ 29%]
+...................s...s...............s................................ [ 59%]
+.................................s...................................... [ 89%]
+........................s                                                [100%]
+234 passed, 7 skipped in 32.66s
+
+Earlier uncaptured iterations, from the tool transcript:
+- New ML4 tests: 7 failed, 17 passed (missing fixture client and foreign-document rejection).
+- Next new ML4 tests: 6 failed, 18 passed (fixture client must expose documents).
+- Targeted review run: 1 failed, 85 passed, 1 skipped (engine-name substring in a new comment).
+All three were corrected before the final runs above.

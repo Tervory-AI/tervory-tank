@@ -34,6 +34,8 @@ async def run(
     clock = now or datetime.now(timezone.utc)
     module = load_engine(engine)
     plan = module.warning_plan()
+    pending_patterns = []
+    memory = getattr(ledger, "memory", None)
     async with ledger.conn.transaction():
         await ledger.conn.execute(
             "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", tenant + ":warnings"
@@ -92,10 +94,9 @@ async def run(
                     UUID(tenant),
                     pair_key,
                 )
-                if (
-                    old
-                    and store.decoded(old["summary"]).get("fingerprint") == fingerprint
-                ):
+                previous = store.decoded(old["summary"]) if old else {}
+                changed = previous.get("fingerprint") != fingerprint
+                if not changed:
                     doc_id = str(old["document_id"])
                 else:
                     doc_id = await store.evidence(
@@ -113,6 +114,10 @@ async def run(
                     "href": source_link(doc_id),
                     "fingerprint": fingerprint,
                 }
+                pending_pattern = changed or previous.get("pattern_pending", True)
+                if pending_pattern and memory is not None:
+                    pending_patterns.append((pair_key, config, stats, doc_id))
+                summary["pattern_pending"] = pending_pattern
                 await ledger.conn.execute(
                     """INSERT INTO agent_market_lab.warning_pairs (tenant_id,pair_key,document_id,summary,updated_at)
                     VALUES ($1,$2,$3,$4::jsonb,$5) ON CONFLICT (tenant_id,pair_key) DO UPDATE
@@ -207,6 +212,17 @@ async def run(
                     clock,
                 )
         await resolve(ledger, tenant, series, clock)
+    # Immutable source documents must commit before a separate Hermes request.
+    # Stable memory IDs make concurrent or lost-response retries harmless.
+    for pair_key, config, stats, doc_id in pending_patterns:
+        from core.patterns import remember
+        if await remember(memory, tenant, config, stats, doc_id):
+            await ledger.conn.execute(
+                """UPDATE agent_market_lab.warning_pairs
+                SET summary=jsonb_set(summary,'{pattern_pending}','false'::jsonb)
+                WHERE tenant_id=$1 AND pair_key=$2 AND document_id=$3""",
+                UUID(tenant), pair_key, UUID(doc_id),
+            )
     return await listing(ledger, tenant)
 
 

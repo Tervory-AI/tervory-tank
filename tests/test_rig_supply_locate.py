@@ -297,7 +297,7 @@ async def test_http_locate_and_admin_ingestion_boundaries(monkeypatch):
         public_headers = {"X-Rig-Key": "public-test-role"}
         found = await http.post("/v1/rig/locate", headers=public_headers, json={"product_id": "desk"})
         assert found.status_code == 200 and found.json()["status"] == "available_to_order"
-        assert set(found.json()) == {"status", "eta", "price"}
+        assert set(found.json()) == {"status", "eta", "ship_days", "price"}
         other = {"X-Rig-Key": "other-test-role"}
         # Locate is off for the other store: refused before any lookup.
         assert (await http.post("/v1/rig/locate", headers=other, json={"product_id": "desk"})).status_code == 403
