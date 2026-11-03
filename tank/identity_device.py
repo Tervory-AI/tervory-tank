@@ -52,7 +52,7 @@ async def poll(wrapped: str) -> JSONResponse:
         return device.error('invalid_grant')
     with device.platform():
         async with command.db().acquire() as conn:
-            # Serialize provider polling and credential issuance for this code.
+            # Reserve the poll interval, then release the admin connection before HTTP.
             async with conn.transaction():
                 row = await conn.fetchrow(
                     "SELECT * FROM tank.device_authorizations WHERE device_hash=$1 AND region='za' "
@@ -64,14 +64,25 @@ async def poll(wrapped: str) -> JSONResponse:
                 if row['last_polled_at'] and device.now() - row['last_polled_at'] < timedelta(seconds=4):
                     return device.error('slow_down')
                 await conn.execute("UPDATE tank.device_authorizations SET last_polled_at=now() WHERE device_hash=$1", pat.digest(wrapped))
-                try:
-                    response = await oidc.poll(code)
-                    if response.get('error'):
-                        allowed = {'authorization_pending', 'slow_down', 'access_denied', 'expired_token'}
-                        return device.error(response['error'] if response['error'] in allowed else 'invalid_grant')
-                    claims = await oidc.verify(response.get('id_token'))
-                    tenant, user, tenant_admin = oidc.principal(claims)
-                except oidc.IdentityError:
+    try:
+        response = await oidc.poll(code)
+        if response.get('error'):
+            allowed = {'authorization_pending', 'slow_down', 'access_denied', 'expired_token'}
+            return device.error(response['error'] if response['error'] in allowed else 'invalid_grant')
+        claims = await oidc.verify(response.get('id_token'))
+        tenant, user, tenant_admin = oidc.principal(claims)
+    except oidc.IdentityError:
+        return device.error('invalid_grant')
+    with device.platform():
+        async with command.db().acquire() as conn:
+            async with conn.transaction():
+                # The status transition wins exactly once, including polls that
+                # overlapped while the provider was slow. Roll back on insert failure.
+                row = await conn.fetchrow(
+                    "UPDATE tank.device_authorizations SET status='consumed' "
+                    "WHERE device_hash=$1 AND status='pending' AND region='za' "
+                    "AND provider='zitadel' AND expires_at > now() RETURNING *", pat.digest(wrapped))
+                if row is None:
                     return device.error('invalid_grant')
                 access, refresh = device.credential_pair('za', tenant)
                 issued = device.now()
