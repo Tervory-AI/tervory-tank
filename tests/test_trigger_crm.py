@@ -25,6 +25,7 @@ def setup(monkeypatch):
     monkeypatch.setenv('TRIGGER_CRM_URL', 'http://trigger-crm-backend:8000')
     monkeypatch.setenv('TRIGGER_CRM_PAT_CONNECTOR', 'dummy-crm-token')
     monkeypatch.setenv('TRIGGER_CRM_TENANT_BINDINGS', json.dumps({str(T): {'organization_id': ORG, 'token_env': 'TRIGGER_CRM_PAT_CONNECTOR'}}))
+    monkeypatch.setitem(sys.modules, 'trigger_routes', SimpleNamespace(code_receipt=AsyncMock(return_value=RECORD)))
     app = FastAPI()
     app.include_router(crm.router)
     app.dependency_overrides[command.identity] = lambda: FOUNDER
@@ -59,7 +60,7 @@ async def test_read_projection_and_explicit_auth(setup, monkeypatch):
     fake_transport(monkeypatch, upstream)
     r = await request(setup)
     assert r.status_code == 200
-    assert r.json() == {'resource': 'contacts', 'items': [{'id': str(RECORD), 'first_name': 'Synthetic'}], 'page': 1, 'count': 1}
+    assert r.json() == {'resource': 'contacts', 'items': [{'id': str(RECORD), 'first_name': 'Synthetic'}], 'page': 1, 'count': 1, 'model_calls': 0, 'cost_usd': 0, 'ledger_id': str(RECORD)}
 
 
 @pytest.mark.asyncio
@@ -107,7 +108,7 @@ async def test_pinned_lead_pagination_and_detail(setup, monkeypatch):
     r = await request(setup,path='/v1/trigger/crm/leads?page=2&status=in%20process')
     assert r.json()['count'] == 1 and r.json()['page'] == 2
     r = await request(setup,path=f'/v1/trigger/crm/leads/{RECORD}')
-    assert r.json() == {'resource':'leads','item':{'id':str(RECORD),'title':'Synthetic'}}
+    assert r.json() == {'resource':'leads','record_id':str(RECORD),'item':{'id':str(RECORD),'title':'Synthetic'},'model_calls':0,'cost_usd':0,'ledger_id':str(RECORD)}
 
 
 @pytest.mark.asyncio
@@ -145,12 +146,14 @@ def test_strict_write_schema_rejects_hidden_authority(extra):
 
 @pytest.mark.parametrize('squads', [frozenset({squad}) for squad in command.TOOLS] + [frozenset(command.TOOLS)])
 @pytest.mark.parametrize('tenant_admin', [False, True])
-def test_no_client_squad_grant_exposes_crm_write(squads, tenant_admin):
-    actor = command.Actor(T, 'offline-client', False, squads, tenant_admin)
-    assert 'trigger.crm.write' not in command.allowed_tools(actor)
-    with pytest.raises(HTTPException) as exc:
-        command.require_tool(actor, 'trigger.crm.write')
-    assert exc.value.status_code == 403
+def test_crm_tools_require_admin_or_founder(squads, tenant_admin):
+    actor = command.Actor(T, 'placeholder-client', False, squads, tenant_admin)
+    for tool in ('trigger.crm.list', 'trigger.crm.get', 'trigger.crm.write'):
+        assert (tool in command.allowed_tools(actor)) == tenant_admin
+        if not tenant_admin:
+            with pytest.raises(HTTPException) as exc:
+                command.require_tool(actor, tool)
+            assert exc.value.status_code == 403
 
 
 def test_tool_requires_founder_and_estimate_sideeffects_denied():
@@ -239,11 +242,10 @@ def test_pinned_schema_property_names_are_not_stripped_as_annotations():
 
 @pytest.mark.parametrize('actor', [
     command.Actor(T, 'offline-client', False, frozenset({'trigger'})),
-    command.Actor(T, 'offline-admin', False, frozenset({'trigger'}), True),
     command.Actor(T, 'offline-member', False),
-], ids=['granted-client', 'tenant-admin', 'member'])
+], ids=['granted-client', 'member'])
 @pytest.mark.asyncio
-async def test_nonfounder_reads_and_writes_refused_even_with_grants(setup, monkeypatch, actor):
+async def test_members_reads_and_writes_refused_even_with_grants(setup, monkeypatch, actor):
     setup.dependency_overrides[command.identity] = lambda: actor
     monkeypatch.setattr(crm, 'authorized_actor', AsyncMock(return_value=actor))
     upstream = AsyncMock()
@@ -368,3 +370,92 @@ async def test_invoice_action_paths_are_not_proxied(setup,monkeypatch,suffix):
     response=await request(setup,'POST',f'/v1/trigger/crm/invoices/{RECORD}/{suffix}')
     assert response.status_code == 404
     transport.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('resource', ['leads', 'contacts', 'estimates', 'invoices'])
+async def test_admin_read_uses_only_actor_binding_and_receipts(setup, monkeypatch, resource):
+    admin = command.Actor(T, 'placeholder-admin', False, tenant_admin=True)
+    setup.dependency_overrides[command.identity] = lambda: admin
+    monkeypatch.setattr(crm, 'authorized_actor', AsyncMock(side_effect=lambda actor: actor))
+    monkeypatch.setenv('TRIGGER_CRM_PAT_OTHER', 'placeholder-other-token')
+    monkeypatch.setenv('TRIGGER_CRM_TENANT_BINDINGS', json.dumps({
+        str(T): {'token_env': 'TRIGGER_CRM_PAT_CONNECTOR', 'organization_id': ORG},
+        str(OTHER): {'token_env': 'TRIGGER_CRM_PAT_OTHER', 'organization_id': str(OTHER)},
+    }))
+    key = {'leads': 'lead_obj', 'contacts': 'contact_obj', 'estimates': 'estimate', 'invoices': 'invoice'}[resource]
+    calls = []
+    def upstream(req):
+        calls.append(req)
+        assert req.headers['authorization'] == 'Bearer dummy-crm-token'
+        assert req.headers['X-Tervory-CRM-Organization'] == ORG
+        item = {'id': str(RECORD), 'title': 'placeholder-record'}
+        return httpx.Response(200, json={key: item} if req.url.path.endswith(str(RECORD) + '/') else {'results': [item], 'count': 1})
+    fake_transport(monkeypatch, upstream)
+    for suffix, task in [('', 'trigger.crm.list'), ('/' + str(RECORD), 'trigger.crm.get')]:
+        response = await request(setup, path='/v1/trigger/crm/' + resource + suffix)
+        assert response.status_code == 200
+        assert response.json()['cost_usd'] == 0 and response.json()['model_calls'] == 0
+        sys.modules['trigger_routes'].code_receipt.assert_awaited_with(T, task)
+    assert len(calls) == 2
+    setup.dependency_overrides[command.identity] = lambda: command.Actor(RECORD, 'placeholder-unbound-admin', False, tenant_admin=True)
+    response = await request(setup, path='/v1/trigger/crm/' + resource)
+    assert response.status_code == 503 and response.json()['detail'] == 'CRM is not configured for this tenant'
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_admin_write_confirm_and_tenant_mismatch(setup, monkeypatch):
+    admin = command.Actor(T, 'placeholder-admin', False, tenant_admin=True)
+    setup.dependency_overrides[command.identity] = lambda: admin
+    monkeypatch.setattr(crm, 'authorized_actor', AsyncMock(side_effect=lambda actor: actor))
+    args = {'resource': 'contacts', 'data': {'first_name': 'placeholder', 'last_name': 'placeholder'}}
+    calls = []
+    def upstream(req):
+        calls.append(req.method)
+        assert req.headers['X-Tervory-CRM-Organization'] == ORG
+        return httpx.Response(200, json={'results': [], 'id': str(RECORD)})
+    fake_transport(monkeypatch, upstream)
+    assert (await request(setup, 'POST', '/v1/trigger/crm/write', json=args)).status_code == 409
+    assert calls == []
+    token = trigger_commands.CONFIRMED.set((T, admin.user_id, RECORD, 'trigger.crm.write', args))
+    try:
+        assert (await request(setup, 'POST', '/v1/trigger/crm/write', json={**args, 'tenant_id': str(OTHER)})).status_code == 403
+        assert calls == []
+        assert (await request(setup, 'POST', '/v1/trigger/crm/write', json=args)).status_code == 200
+        assert calls == ['GET', 'POST']
+    finally:
+        trigger_commands.CONFIRMED.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_crm_code_planning_and_read_adapter(monkeypatch):
+    admin = command.Actor(T, 'placeholder-admin', False, tenant_admin=True)
+    monkeypatch.setattr(command, 'authorized_actor', AsyncMock(side_effect=lambda actor: actor))
+    monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(box_region=lambda: 'us-east'))
+    for text, tool, path, query in [
+        ('trigger.crm.list leads', 'trigger.crm.list', '/v1/trigger/crm/leads', {'page': 1}),
+        ('trigger.crm.list contacts {"name":"placeholder"}', 'trigger.crm.list', '/v1/trigger/crm/contacts', {'page': 1, 'name': 'placeholder'}),
+        ('trigger.crm.get contacts ' + str(RECORD), 'trigger.crm.get', '/v1/trigger/crm/contacts/' + str(RECORD), {}),
+    ]:
+        planned = await trigger_commands.plan(admin, text, None)
+        action = command.PlannedAction(**planned['actions'][0])
+        assert action.tool == tool
+        assert command.adapter_request(action, admin) == ('GET', path, query, None)
+    planned = await trigger_commands.plan(admin, 'trigger.crm.write {"resource":"contacts","data":{"first_name":"placeholder","last_name":"placeholder"}}', None)
+    assert planned['actions'][0]['tool'] == 'trigger.crm.write'
+    for args in [{'resource': 'invoices', 'name': 'placeholder'}, {'resource': 'contacts', 'tenant_id': str(OTHER)}, {'resource': '../contacts'}]:
+        with pytest.raises(HTTPException):
+            command.validate_action(command.PlannedAction(tool='trigger.crm.list', arguments=args), admin)
+
+
+@pytest.mark.asyncio
+async def test_founder_base_list_capability_preserved(setup):
+    args = {'list_id': str(RECORD)}
+    token = trigger_commands.CONFIRMED.set((T, FOUNDER.user_id, RECORD, 'base.list.to_crm', args))
+    try:
+        assert await crm.authority(FOUNDER) == FOUNDER
+        with pytest.raises(HTTPException):
+            await crm.authority(command.Actor(OTHER, FOUNDER.user_id, True))
+    finally:
+        trigger_commands.CONFIRMED.reset(token)
