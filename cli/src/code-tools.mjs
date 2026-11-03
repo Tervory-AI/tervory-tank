@@ -1,0 +1,229 @@
+import { constants } from 'node:fs';
+import { lstat, realpath, open, readFile, writeFile, rename, unlink } from 'node:fs/promises';
+import { resolve, relative, isAbsolute, basename, sep, dirname } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { Worker } from 'node:worker_threads';
+
+export const LIMITS = Object.freeze({ files: 2000, fileBytes: 200_000, matches: 200, outputBytes: 65536, commandMs: 120_000 });
+// Kept in parity with tests/test_secrets.py _LIVE / _ASSIGNED. Do not exempt
+// placeholders here: local source sent to a model gets the stricter treatment.
+const LIVE = [
+  /-----BEGIN (?:RSA |OPENSSH |EC |DSA |PGP )?PRIVATE KEY-----/,
+  /\bAKIA[0-9A-Z]{16}\b/, /\bghp_[A-Za-z0-9]{20,}\b/, /\bgithub_pat_[A-Za-z0-9_]{20,}\b/,
+  /\bxox[baprs]-[A-Za-z0-9-]{10,}/, /\bsk-ant-[A-Za-z0-9_\-]{10,}/,
+  /(?<![A-Za-z0-9_])sk-[A-Za-z0-9]{20,}/, /\b[ spr]k_live_[A-Za-z0-9]{8,}/,
+  /\b(?:sk|pk|rk)_live_[A-Za-z0-9]{8,}/, /\bAIza[0-9A-Za-z0-9_\-]{30,}/,
+  /\beyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}/,
+  /(?:^|[^A-Za-z0-9])(?:api[_-]?key|secret[_-]?key|client[_-]?secret|password|passwd|access[_-]?token|auth[_-]?token)\s*[:=]\s*['"]?[^\s'"#]{12,}/i,
+  /tv[rd]?1\.(?:us-east|za)\.[A-Za-z0-9_.-]+/,
+];
+export function redactSecrets(value) {
+  return String(value).split('\n').map(line => LIVE.some(pattern => pattern.test(line)) ? '[redacted]' : line).join('\n');
+}
+const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+const refused = () => new Error('Code tool refused.');
+const inside = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel); };
+export function secretPath(path) {
+  return path.split(/[\\/]/).some(part => part === '.git' || /^\.env/i.test(part) || /^id_/i.test(part) || /\.(pem|key)$/i.test(part));
+}
+
+// The process output is collected, not streamed: redaction must see complete lines
+// even when a secret arrives split across stdout/stderr chunks.
+export async function processOutput(command, args, { cwd, shell = false, timeoutMs = LIMITS.commandMs, signal } = {}) {
+  return new Promise((resolveResult, reject) => {
+    let child; let timer; let killed = false; let size = 0; let total = 0; const chunks = [];
+    const stop = () => {
+      killed = true;
+      try { if (process.platform !== 'win32') process.kill(-child.pid, 'SIGKILL'); else child.kill('SIGKILL'); } catch { /* already ended */ }
+    };
+    if (signal?.aborted) return reject(refused());
+    try {
+      child = spawn(command, args, { cwd, shell, detached: process.platform !== 'win32', windowsHide: true,
+        env: { PATH: process.env.PATH, LANG: 'C.UTF-8', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' },
+        stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch { return reject(refused()); }
+    const collect = chunk => { total += chunk.length; const keep = chunk.subarray(0, Math.max(0, LIMITS.outputBytes - size)); size += keep.length; chunks.push(keep); };
+    child.stdout.on('data', collect); child.stderr.on('data', collect);
+    child.on('error', () => { clearTimeout(timer); signal?.removeEventListener('abort', stop); reject(refused()); });
+    timer = setTimeout(stop, timeoutMs); signal?.addEventListener('abort', stop, { once: true });
+    child.on('close', code => {
+      clearTimeout(timer); signal?.removeEventListener('abort', stop);
+      // An incomplete retained last line is omitted, so a secret whose suffix is
+      // beyond the cap cannot leak its prefix.
+      let output = Buffer.concat(chunks).toString('utf8');
+      if (total > size) output = output.slice(0, output.lastIndexOf('\n') + 1);
+      resolveResult({ code, timed_out: killed, truncated: total > size, output: redactSecrets(output) });
+    });
+  });
+}
+
+export class CodeFolder {
+  #reads = new Map();
+  static async create(folder = '.') {
+    const root = await realpath(resolve(folder));
+    if (!(await lstat(root)).isDirectory()) throw refused();
+    const tool = new CodeFolder(root);
+    const check = await tool.git(['rev-parse', '--show-toplevel']);
+    if (check.code !== 0) throw new Error('Code mode requires a git repository.');
+    return tool;
+  }
+  constructor(root) { this.root = root; }
+  async git(args) {
+    return processOutput('git', ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '--no-pager', ...args], { cwd: this.root });
+  }
+  async path(name, { missing = false } = {}) {
+    if (typeof name !== 'string' || !name || name.includes('\0') || name.includes('\\')) throw refused();
+    const path = resolve(this.root, name);
+    if (!inside(this.root, path) || secretPath(relative(this.root, path))) throw refused();
+    // Follow every ancestor, even when the final file does not exist yet.
+    const parent = await realpath(dirname(path));
+    if (!inside(this.root, parent)) throw refused();
+    try {
+      const canonical = await realpath(path);
+      if (!inside(this.root, canonical) || secretPath(relative(this.root, canonical))) throw refused();
+      if ((await lstat(path)).isSymbolicLink()) throw refused();
+    } catch (error) { if (!missing || error.code !== 'ENOENT') throw error; }
+    return path;
+  }
+  async files() {
+    // Git supplies ignore semantics, including nested .gitignore and info/exclude.
+    // Output is bounded; return only complete NUL-delimited names if truncated.
+    const result = await this.git(['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', '.']);
+    if (result.code !== 0) throw refused();
+    const names = result.output.split('\0'); names.pop();
+    const files = [];
+    for (const name of names) {
+      try {
+        const path = await this.path(name);
+        if ((await lstat(path)).isFile()) files.push(name);
+      } catch { /* ignored, secret, symlink or vanished */ }
+      if (files.length === LIMITS.files) break;
+    }
+    return { files, truncated: result.truncated || names.length > files.length && files.length === LIMITS.files };
+  }
+  async read(name) {
+    const path = await this.path(name, { missing: true });
+    let handle;
+    try {
+      handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+      const stat = await handle.stat();
+      if (!stat.isFile() || stat.size > LIMITS.fileBytes) throw refused();
+      // On Linux verify the opened descriptor before reading, closing ancestor
+      // symlink-swap races; other platforms recheck the canonical path below.
+      if (process.platform === 'linux' && !inside(this.root, await realpath(`/proc/self/fd/${handle.fd}`))) throw refused();
+      const bytes = Buffer.alloc(LIMITS.fileBytes + 1); const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
+      if (bytesRead > LIMITS.fileBytes) throw refused();
+      const raw = bytes.subarray(0, bytesRead); const text = new TextDecoder('utf-8', { fatal: true }).decode(raw);
+      if (text.includes('\0')) throw refused();
+      await this.path(name);
+      this.#reads.set(path, digest(raw));
+      return { exists: true, text: redactSecrets(text), size: bytesRead };
+    } catch (error) {
+      if (error.code === 'ENOENT') { this.#reads.set(path, null); return { exists: false, text: '', size: 0 }; }
+      throw refused();
+    } finally { await handle?.close(); }
+  }
+  async search(pattern, regex = false) {
+    if (typeof pattern !== 'string' || pattern.length > 500 || !pattern) throw refused();
+    const files = (await this.files()).files; const matches = [];
+    // Execute user/model regexes off the main thread with a hard bound; a
+    // catastrophic expression cannot pin the interactive CLI.
+    const worker = new Worker(`const {parentPort,workerData}=require('node:worker_threads');
+      let re; try { re=workerData.regex?new RegExp(workerData.pattern):null; } catch { parentPort.postMessage({invalid:true}); }
+      parentPort.on('message', ({text})=> {const lines=text.split('\\n');const rows=[];
+        for(let i=0;i<lines.length;i++) if(re?re.test(lines[i]):lines[i].includes(workerData.pattern)) {
+          rows.push({line:i+1,text:lines[i]});if(rows.length===200)break;}
+        parentPort.postMessage({rows});});`, { eval: true, workerData: { pattern, regex } });
+    try {
+      for (const file of files) {
+        let text; try { text = (await this.read(file)).text; } catch { continue; }
+        const result = await new Promise((resolveResult, reject) => {
+          const timer = setTimeout(() => reject(refused()), 1000);
+          const done = value => { clearTimeout(timer); worker.off('error', fail); resolveResult(value); };
+          const fail = () => { clearTimeout(timer); worker.off('message', done); reject(refused()); };
+          worker.once('message', done); worker.once('error', fail); worker.postMessage({ text });
+        });
+        if (result.invalid) throw refused();
+        matches.push(...result.rows.slice(0, LIMITS.matches - matches.length).map(row => ({ file, ...row })));
+        if (matches.length >= LIMITS.matches) break;
+      }
+      return { matches, truncated: matches.length === LIMITS.matches };
+    } finally { await worker.terminate(); }
+  }
+  async diff() {
+    const { files } = await this.files();
+    if (!files.length) return { output: '' };
+    return this.git(['diff', '--no-ext-diff', '--no-textconv', '--ignore-submodules', '--', ...files]);
+  }
+  async edit(name, patch, io) {
+    const path = await this.path(name, { missing: true });
+    if (!this.#reads.has(path) || typeof patch !== 'string' || Buffer.byteLength(patch) > LIMITS.fileBytes || redactSecrets(patch) !== patch) throw refused();
+    const expected = this.#reads.get(path);
+    const check = async () => {
+      await this.path(name, { missing: true });
+      try {
+        const value = await readFile(path);
+        if (expected === null || digest(value) !== expected || value.length > LIMITS.fileBytes) throw refused();
+        const text = value.toString('utf8'); if (redactSecrets(text) !== text) throw refused(); return text;
+      } catch (error) { if (error.code === 'ENOENT' && expected === null) return ''; throw refused(); }
+    };
+    const before = await check(); const after = applyDiff(before, patch, name, expected === null);
+    if (Buffer.byteLength(after) > LIMITS.fileBytes || redactSecrets(after) !== after) throw refused();
+    io.write(patch + '\n');
+    if (io.interactive !== true || (await io.prompt('Apply [y/N] '))?.trim().toLowerCase() !== 'y') return { applied: false };
+    await check();
+    const temporary = resolve(dirname(path), `.tervory-${randomUUID()}`);
+    try {
+      await writeFile(temporary, after, { flag: 'wx', mode: expected === null ? 0o600 : (await lstat(path)).mode & 0o777 });
+      await check(); await rename(temporary, path);
+    } finally { await unlink(temporary).catch(() => {}); }
+    this.#reads.set(path, digest(Buffer.from(after)));
+    return { applied: true };
+  }
+  async tool(request, io, { timeoutMs = LIMITS.commandMs } = {}) {
+    const args = request.arguments ?? {};
+    switch (request.name) {
+      case 'list_files': return this.files();
+      case 'read_file': return this.read(args.path);
+      case 'search': return this.search(args.pattern, args.regex === true);
+      case 'git': return args.action === 'status' ? this.git(['status', '--short', '--', '.']) : args.action === 'diff' ? this.diff() : Promise.reject(refused());
+      case 'propose_edit': return this.edit(args.path, args.diff, io);
+      case 'run_command':
+        if (typeof args.command !== 'string' || !args.command || args.command.length > 8000 || /[\x00-\x1f\x7f]/.test(args.command) || redactSecrets(args.command) !== args.command) throw refused();
+        io.write(args.command + '\n');
+        if (io.interactive !== true || (await io.prompt('Run [y/N] '))?.trim().toLowerCase() !== 'y') return { ran: false };
+        return { ran: true, ...await processOutput(args.command, [], { shell: true, cwd: this.root, timeoutMs, signal: io.signal }) };
+      default: throw refused();
+    }
+  }
+}
+
+// Single-file unified diffs only; no git binary patch, rename, executable metadata,
+// guessed offsets or fuzzy contexts. New files require a prior missing-file read.
+export function applyDiff(before, patch, name, creating = false) {
+  const lines = patch.split('\n'); if (lines.at(-1) === '') lines.pop();
+  if (lines[0] !== `--- ${creating ? '/dev/null' : 'a/' + name}` || lines[1] !== `+++ b/${name}`) throw refused();
+  const source = before === '' ? [] : before.split('\n'); if (before.endsWith('\n')) source.pop();
+  const out = []; let at = 0; let i = 2; let hunks = 0; let newline = true;
+  while (i < lines.length) {
+    const hunk = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?:.*)$/.exec(lines[i++]);
+    if (!hunk) throw refused(); hunks++;
+    const oldCount = Number(hunk[2] ?? 1), newCount = Number(hunk[4] ?? 1);
+    const start = Number(hunk[1]) - (oldCount ? 1 : 0);
+    if (start < at || start > source.length) throw refused();
+    out.push(...source.slice(at, start)); at = start;
+    if (Number(hunk[3]) !== out.length + (newCount ? 1 : 0)) throw refused();
+    let removed = 0, added = 0;
+    while (i < lines.length && !lines[i].startsWith('@@ ')) {
+      const line = lines[i++], type = line[0], text = line.slice(1);
+      if (line === '\\ No newline at end of file') { if (['+', ' '].includes(lines[i - 2]?.[0])) newline = false; continue; }
+      if (type === ' ' || type === '-') { if (source[at++] !== text) throw refused(); removed++; }
+      if (type === ' ' || type === '+') { out.push(text); added++; }
+      if (![' ', '-', '+'].includes(type)) throw refused();
+    }
+    if (removed !== oldCount || added !== newCount) throw refused();
+  }
+  if (!hunks) throw refused(); out.push(...source.slice(at));
+  return out.join('\n') + (out.length && newline ? '\n' : '');
+}
