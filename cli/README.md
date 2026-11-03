@@ -66,13 +66,26 @@ in the selected folder, time out after 120 seconds and retain at most 64 KB of
 output. Non-interactive sessions cannot apply edits or run commands. Approved
 commands use the worker's existing Linux Bubblewrap (`bwrap`): only the selected
 folder is writable, secret paths and `.git` internals are hidden, the environment
-is restricted, and host folders and networking are unavailable. There is no
+is restricted, and networking is unavailable. For a leading Node, Python or
+pytest executable outside `/usr` and the selected folder, the CLI resolves its
+existing installation and binds only that runner's own directory read-only
+(a Python venv also needs its base interpreter installation). The complete
+executable path and every read-only runner directory are shown before `Run
+[y/N]`. Intermediate interpreter symlinks are recreated in the empty sandbox;
+their host directories are not mounted. Secret paths inside runtimes are hidden.
+`$HOME`, `~/.config`, `~/.ssh` and keychain directories are never mounted. Other
+host folders remain unavailable. Use a leading executable, rather than hiding
+an external runtime behind a shell wrapper or an environment assignment. There is no
 unsandboxed fallback. If Bubblewrap is unavailable or cannot create the sandbox,
 commands are refused. This command runner is currently Linux-only; the other
 existing CLI commands retain their current platform support.
 
 **Storage:** the Command thread and `/chats` retain user requests, steps, receipts
 and tool names/sizes, without tool-result file contents or proposed patches.
+A prompt is stored once across its continuation rounds. Earlier prompts,
+answers, and tool names/arguments remain in a bounded, redacted CLI transcript
+(at most 40 entries and 200,000 UTF-8 bytes). It is sent as untrusted session data
+for model context and never stored in the Command thread, tasks or events.
 The model-call transcript follows Tank's existing handling for every chat turn:
 masked by `_preflight_mask` and `_storage_mask`, tenant-scoped and kept on the
 region's own box. CLI secret redaction runs before anything leaves the machine.
