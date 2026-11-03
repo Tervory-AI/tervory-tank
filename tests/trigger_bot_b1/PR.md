@@ -122,11 +122,32 @@ one-file push. No production SQL, deployment or model calls.
 | `tank/trigger_bot_grounding.py:18`, `:22` | Explicit ZAR/USD/EUR/GBP/NAD/BWP/AUD/CAD codes, case-insensitive, with existing symbols and currency words. Ordinary phrases reach the answer path; lowercase prices require live Rig. |
 | `tank/trigger_bot_grounding.py:27`, `:30`, `:143` | May requires an adjacent day/year in either order; remove now/soon/later. Normalize May date order while still verifying the digits. |
 | `tank/trigger_bot.py:138` | Return deleted message ledger IDs; delete only that tenant's matching transcripts in the same transaction; add transcript count to the counts-only $0 receipt. |
-| `tank/schema.sql:2507` | Delete legacy orphan counters, add table-scoped idempotent window FK with cascade and positive-hit check before the generated-memory block. |
+| `tank/schema.sql:2506` | Delete legacy orphan counters, add table-scoped idempotent window FK with cascade and positive-hit check before the generated-memory block. |
 | `tests/trigger_bot_b1/test_rereview.py:13`, `:68` | Each requested number form with and without support, ordinary phrases, all eight codes in both orders/cases, actual May dates and ordinary words, twice-applied constraints/orphan cleanup/cascade/other-tenant protection. |
 | `tests/trigger_bot_b1/test_retention.py:24`, `:37`, `:109` | Expired transcripts removed, fresh and foreign transcripts retained, receipt contents and rollback proved with real disposable PostgreSQL. |
 
 Exact commands, harness source and outcomes: [rereview-verification.txt](rereview-verification.txt).
+
+Main `ecef216b` subsequently merged. The single conflict in
+`tank/trigger_routes.py:20` preserves both main's `agent` argument and B1's
+transaction connection for `code_receipt`. The merged run adds the schema guard
+and Zenas receipt tests: **162 passed, zero skipped**, 14 warnings in 109.43s.
+Both actual schema-generator checks remain included and pass.
+
+Initial CI at `11543517`: **2 failed, 6746 passed, 42 skipped**,
+1799 subtests passed. [Tank job](https://github.com/Tervory-AI/tervory-tank/actions/runs/41644010519/job/125944654818).
+The real migration failure was the schema guard rejecting a standalone DELETE;
+cleanup now runs once inside the absent-FK DO guard, before adding the FK. The
+other failure was an exact screenshot mismatch in the untouched Rig landing test.
+All eight cases subsequently passed locally with cached Playwright headless
+Chromium; the system Chromium attempt crashed its GPU and is not a passing run.
+No Rig page or test was changed.
+
+CI's PostgreSQL isolation job at `11543517` passed **393 tests with zero skips**,
+including `tests/test_tenant_rls.py` (239 real tables across 13 schemas):
+[immutable isolation result](https://github.com/Tervory-AI/tervory-tank/actions/runs/41644011275/job/125944965071).
+This resolves the local `pg_trgm` gap for that head. Fresh final-head CI follows
+the main merge and schema correction; the final-head link below is authoritative.
 
 - `.venv/bin/python .git/run-rereview.py`: **153 passed, zero skipped**,
   14 warnings in 61.65s. Includes the full B1 directory and both generator tests.
