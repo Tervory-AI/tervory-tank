@@ -1,4 +1,5 @@
 """B4 offline contract tests. No provider, external network, database or real CRM."""
+import json
 from copy import deepcopy
 from datetime import date
 from types import SimpleNamespace
@@ -121,6 +122,12 @@ class Pool:
         self.seen = []
     def acquire(self):
         return self
+    def transaction(self, **kwargs):
+        return self
+    async def execute(self, sql, tenant, list_id, chunk):
+        assert "WHERE tenant_id=$1 AND list_id=$2" in sql
+        saved = self.saved[tenant, list_id]
+        saved["records"] = json.dumps(json.loads(saved["records"]) + json.loads(chunk))
     async def __aenter__(self):
         return self
     async def __aexit__(self, *args):
@@ -128,7 +135,8 @@ class Pool:
     async def fetchrow(self, sql, *args):
         self.seen.append((sql, args))
         if sql.startswith("INSERT"):
-            tenant, name, filters, ids, records = args
+            tenant, name, filters, ids = args
+            records = "[]"
             key = uuid4()
             self.saved[tenant, key] = {"list_id": key, "name": name, "filters": filters, "record_ids": ids,
                                        "records": records, "created_at": STAMP}
@@ -142,10 +150,11 @@ async def test_saved_list_is_fixed_tenant_snapshot_and_csv_identical():
     pool = Pool()
     store = lists.Store(pool)
     rows = [record()]
-    async def find(tenant, filters):
+    async def scan(conn, tenant, filters, ids=None):
         assert tenant == TENANT
-        return deepcopy(rows)
-    store.find = find
+        for row in deepcopy(rows):
+            yield row
+    store.scan = scan
     saved = await store.save(TENANT, "Invented list", lists.FindArgs(state="DC"))
     rows.clear()
     snapshot = await store.show(TENANT, saved["list_id"])
@@ -160,11 +169,13 @@ async def test_saved_list_is_fixed_tenant_snapshot_and_csv_identical():
 @pytest.mark.asyncio
 async def test_find_query_always_scopes_record_reads_to_tenant():
     class ReadPool(Pool):
-        async def fetch(self, sql, tenant):
+        async def cursor(self, sql, tenant, *args, **kwargs):
             assert "FROM agent_base.records" in sql and "WHERE tenant_id=$1" in sql
             assert tenant == TENANT
-            return []
-    assert await lists.Store(ReadPool()).find(TENANT, lists.FindArgs()) == []
+            assert kwargs["prefetch"] == 200
+            for row in []:
+                yield row
+    assert await lists.Store(ReadPool()).find(TENANT, lists.FindArgs()) == {"total": 0, "records": []}
 
 
 @pytest.mark.asyncio
@@ -251,7 +262,7 @@ async def test_find_get_returns_count_first_twenty_and_free_receipt(monkeypatch)
     app.dependency_overrides[command.identity] = lambda: actor
     async def find(self, tenant, filters):
         assert tenant == TENANT and filters.state == "DC"
-        return [record() for _ in range(27)]
+        return {**lists.preview([record() for _ in range(20)]), "total": 27}
     async def receipt(tenant, task):
         assert tenant == TENANT and task == "base.find"
         return str(uuid4())
@@ -300,9 +311,10 @@ async def test_saved_list_real_postgres_snapshot_and_rls(database):  # noqa: F81
     conn, runtime = database
     store = lists.Store(runtime.pool())
     rows = [record()]
-    async def find(tenant, filters):
-        return deepcopy(rows)
-    store.find = find
+    async def scan(conn, tenant, filters, ids=None):
+        for row in deepcopy(rows):
+            yield row
+    store.scan = scan
     saved = await store.save(TENANT, "Invented list", lists.FindArgs(state="DC"))
     rows.clear()
     assert (await store.show(TENANT, saved["list_id"]))["records"] == [record()]
@@ -311,11 +323,10 @@ async def test_saved_list_real_postgres_snapshot_and_rls(database):  # noqa: F81
     # Join a simulated existing rollout only inside this fixture transaction.
     await conn.execute("ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY")
     await conn.execute((Path(__file__).resolve().parents[1] / "tank/schema.sql").read_text())
-    role = "b4_" + uuid4().hex
-    await conn.execute(f'CREATE ROLE "{role}" NOLOGIN NOSUPERUSER NOBYPASSRLS')
-    await conn.execute(f'GRANT USAGE ON SCHEMA tank TO "{role}"')
-    await conn.execute(f'GRANT SELECT,INSERT ON tank.base_saved_lists TO "{role}"')
-    await conn.execute(f'SET LOCAL ROLE "{role}"')
+    await conn.execute("CREATE ROLE b4_lists_test_reader NOLOGIN NOSUPERUSER NOBYPASSRLS")
+    await conn.execute("GRANT USAGE ON SCHEMA tank TO b4_lists_test_reader")
+    await conn.execute("GRANT SELECT,INSERT ON tank.base_saved_lists TO b4_lists_test_reader")
+    await conn.execute("SET LOCAL ROLE b4_lists_test_reader")
     try:
         await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(OTHER))
         assert await conn.fetchval("SELECT count(*) FROM tank.base_saved_lists WHERE list_id=$1", saved["list_id"]) == 0
