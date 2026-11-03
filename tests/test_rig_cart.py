@@ -450,3 +450,26 @@ async def test_stolen_cart_lease_returns_current_row(monkeypatch):
         assert (await cart.rows.get(TENANT, row['id']))['state'] == 'placed'
     finally:
         await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_cart_preview_recheck_and_quantity_changes_are_atomic(monkeypatch):
+    cart, fake, _, _, _, client = await setup(monkeypatch)
+    try:
+        preview = await cart.view(TENANT, SESSION, product_id='stock')
+        assert preview['lines'] == [] and preview['product']['price'] == '10.00'
+        original = (await cart.add(TENANT, SESSION, 'stock', 1))['lines'][0]
+        with pytest.raises(CommerceError, match='stock'):
+            await cart.add(TENANT, SESSION, 'stock', 6, line_id=original['id'])
+        assert (await cart.view(TENANT, SESSION))['lines'] == [original]
+        changed = (await cart.add(TENANT, SESSION, 'stock', 2, line_id=original['id']))['lines'][0]
+        assert changed['quantity'] == 2
+        fake.products[1]['price'] = '12.00'
+        checked = await cart.view(TENANT, SESSION, recheck=True)
+        assert checked['recheck_state'] == 'changed'
+        assert checked['lines'][0]['price'] == '12.00'
+        assert checked['lines'][0]['previous']['price'] == '10.00'
+        text = json.dumps(checked)
+        assert all(hidden not in text for hidden in ('private-source', 'private-supplier', 'cost'))
+    finally:
+        await client.aclose()
