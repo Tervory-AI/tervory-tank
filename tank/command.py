@@ -47,7 +47,7 @@ TOOLS = {
 }
 TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
 
-FOUNDER_TOOLS = ["base.audit.start", "base.audit.csv", "base.audit.review", "trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
+FOUNDER_TOOLS = ["tank.policy", "tank.policy.fallbacks", "base.audit.start", "base.audit.csv", "base.audit.review", "trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
                  "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
@@ -1191,6 +1191,89 @@ class BuildArgs(Body):
     brief_markdown: str = Field(min_length=1, max_length=30000)
 
 
+class PolicyArgs(Body):
+    task_type: str = Field(min_length=1, max_length=200)
+    default: bool = False
+
+
+class PolicyFallbackArgs(PolicyArgs):
+    fallbacks: list[str] | None = Field(default=None, max_length=7)
+
+
+async def policy_fallbacks_prepare(conn: Any, args: dict, actor: Actor) -> dict:
+    import main
+    from routing_data import validate_fallbacks
+    target = None if args.get("default") else actor.tenant_id
+    row = await conn.fetchrow(
+        """SELECT * FROM tank.policy WHERE task_type=$1 AND (tenant_id=$2 OR tenant_id IS NULL)
+        ORDER BY (tenant_id IS NOT NULL) DESC LIMIT 1""", args["task_type"], target)
+    if row is None:
+        raise HTTPException(404)
+    await validate_fallbacks(main, row["model"], args.get("fallbacks"))
+    held = unpack(row["held_policy"])
+    if held:
+        await validate_fallbacks(main, held["model"], args.get("fallbacks"))
+    return dict(row)
+
+
+@router.get("/tank/policy")
+async def tank_policy(task_type: str = Query(min_length=1, max_length=200), default: bool = False,
+                      actor: Actor = Depends(identity)) -> dict:
+    require_tool(actor, "tank.policy")
+    target = None if default else actor.tenant_id
+    async with db().acquire() as conn:
+        row = await conn.fetchrow(
+            """SELECT task_type,tenant_id,model,fallbacks,held_policy,held_swap_id,held_at
+            FROM tank.policy WHERE task_type=$1 AND (tenant_id=$2 OR tenant_id IS NULL)
+            ORDER BY (tenant_id IS NOT NULL) DESC LIMIT 1""", task_type, target)
+        if row is None:
+            raise HTTPException(404)
+        result = {key: row[key] for key in ("task_type", "tenant_id", "model", "fallbacks")}
+        result["held"] = None
+        if row["held_swap_id"]:
+            jobs = await conn.fetchrow(
+                """SELECT count(*) AS total,count(completed_at) AS done
+                FROM tank.skill_revalidations WHERE tenant_id=$1 AND swap_id=$2
+                AND policy_tenant_id IS NOT DISTINCT FROM $3 AND task_type=$4""",
+                __import__("gold").PLATFORM_TENANT, row["held_swap_id"], row["tenant_id"], task_type)
+            held = unpack(row["held_policy"])
+            result["held"] = {"swap_id": str(row["held_swap_id"]), "model": held["model"],
+                              "held_at": row["held_at"], "done": jobs["done"], "total": jobs["total"]}
+    from trigger_routes import code_receipt
+    result["ledger_id"] = str(await code_receipt(actor.tenant_id, "tank.policy", agent="tank"))
+    return result
+
+
+@router.post("/tank/policy/fallbacks")
+async def tank_policy_fallbacks(body: PolicyFallbackArgs, actor: Actor = Depends(identity)) -> dict:
+    require_tool(actor, "tank.policy.fallbacks")
+    target = None if body.default else actor.tenant_id
+    async with db().acquire() as conn:
+        async with conn.transaction():
+            # Serialize with swaps/releases and revalidate the current primary.
+            await conn.fetchrow(
+                """SELECT task_type FROM tank.policy WHERE task_type=$1
+                AND (tenant_id=$2 OR tenant_id IS NULL) ORDER BY (tenant_id IS NOT NULL) DESC LIMIT 1 FOR UPDATE""",
+                body.task_type, target)
+            row = await policy_fallbacks_prepare(conn, body.model_dump(), actor)
+            if row["tenant_id"] != target:
+                # Existing copy-on-write path preserves all policy columns.
+                await conn.execute(
+                    """INSERT INTO tank.policy SELECT (jsonb_populate_record(NULL::tank.policy,
+                    to_jsonb(p) || jsonb_build_object('tenant_id',$2::uuid,'fallbacks',$3::text[],
+                    'held_policy',NULL,'held_swap_id',NULL,'held_at',NULL))).*
+                    FROM tank.policy p WHERE task_type=$1 AND tenant_id IS NULL
+                    ON CONFLICT DO NOTHING""", body.task_type, target, body.fallbacks)
+            await conn.execute(
+                """UPDATE tank.policy SET fallbacks=$3,
+                held_policy=CASE WHEN held_policy IS NULL THEN NULL
+                    ELSE held_policy || jsonb_build_object('fallbacks',$3::text[]) END,updated_at=now()
+                WHERE task_type=$1 AND tenant_id IS NOT DISTINCT FROM $2""",
+                body.task_type, target, body.fallbacks)
+    from trigger_routes import code_receipt
+    return {"ok": True, "ledger_id": str(await code_receipt(actor.tenant_id, "tank.policy.fallbacks", agent="tank"))}
+
+
 @dataclass(frozen=True)
 class Adapter:
     method: str
@@ -1206,6 +1289,8 @@ from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServ
 
 
 ADAPTERS = {
+    "tank.policy": Adapter("GET", "/v1/command/tank/policy", PolicyArgs, "tank.policy"),
+    "tank.policy.fallbacks": Adapter("POST", "/v1/command/tank/policy/fallbacks", PolicyFallbackArgs, "tank.policy.fallbacks"),
     "base.audit.start": Adapter("POST", "/v1/command/base/audits/start", AuditStartArgs, "base.audit.start"),
     "base.audit.csv": Adapter("GET", "/v1/command/base/audits/export", AuditCsvArgs, "base.audit.csv"),
     "base.audit.review": Adapter("POST", "/v1/command/base/audits/review", AuditReviewArgs, "base.audit.review"),
@@ -1351,6 +1436,9 @@ async def propose_tool(thread_id: uuid.UUID, body: PlannedAction, actor: Actor =
 
 
 async def propose_action(conn: Any, row: dict, state: dict, action: PlannedAction, actor: Actor | None = None) -> dict:
+    if action.tool == "tank.policy.fallbacks":
+        require_tool(actor, action.tool)
+        await policy_fallbacks_prepare(conn, action.arguments, actor)
     if action.tool.removeprefix("trigger.") in MARKETING_TOOLS:
         from trigger_marketing_api import prepare as marketing_prepare
         action = await marketing_prepare(action, await authorized_actor(actor or Actor(row["tenant_id"], row["user_id"], False), conn), conn)
@@ -1427,6 +1515,8 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
     if action.tool == "ledger.savings":
         end = datetime.now(timezone.utc)
         args = {"start": (end - timedelta(days=args["days"])).isoformat(), "end": end.isoformat()}
+    if action.tool.startswith("tank.policy"):
+        return adapter.method, path, args if adapter.method == "GET" else {}, None if adapter.method == "GET" else args
     if action.tool == "trigger.scorecard":
         return adapter.method, path, scope, None
     if action.tool.startswith("trigger."):
