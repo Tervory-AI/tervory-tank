@@ -411,3 +411,21 @@ def test_oversized_list_failure_only_exposes_count_on_existing_error_path():
         ("base.list.save", 422, {"detail": {"total": True}}),
     ):
         assert list_refusal_result(tool, status, result) is None
+
+
+@pytest.mark.asyncio
+async def test_fifty_thousand_matches_keep_twenty_previews_and_refuse_save():
+    from uuid import UUID
+    pool = Pool()
+    store = lists.Store(pool)
+    seed = record()
+    async def scan(conn, tenant, filters, ids=None):
+        for index in range(50000):
+            yield {**seed, "record_id": str(UUID(int=index + 1))}
+    store.scan = scan
+    found = await store.find(TENANT, lists.FindArgs())
+    assert found["total"] == 50000 and len(found["records"]) == 20
+    with pytest.raises(HTTPException) as error:
+        await store.save(TENANT, "invented", lists.FindArgs())
+    assert error.value.status_code == 422 and error.value.detail == {"total": 50000}
+    assert not pool.saved
