@@ -363,119 +363,191 @@ class DiscoveryLinks:
         return parser.links, parser.forms
 
 
+def discovery_robots_allows(body, url, token='tervorytiger'):
+    """Discovery-only RFC 9309 path/query matching; ordinary watches unchanged."""
+    from urllib.parse import urlsplit
+    from watch import _robot_groups, _rules_for
+    groups = _robot_groups(body)
+    rules = _rules_for(groups, token)
+    if rules is None:
+        rules = [rule for agents, group in groups if '*' in agents for rule in group]
+    def normalize(value):
+        def unescape(match):
+            char = chr(int(match[1], 16))
+            return char if char.isascii() and (char.isalnum() or char in '-._~') else match[0].upper()
+        return re.sub(r'%([0-9a-fA-F]{2})', unescape, value)
+    parsed = urlsplit(url)
+    target = normalize((parsed.path or '/') + ('?' + parsed.query if parsed.query else ''))
+    matched = []
+    for kind, rule in rules:
+        if not rule:
+            continue
+        rule = normalize(rule)
+        end = rule.endswith('$')
+        pattern = rule[:-1] if end else rule
+        if re.match('^' + '.*'.join(re.escape(part) for part in pattern.split('*')) + ('$' if end else ''), target):
+            matched.append((len(pattern.replace('*', '').encode()), kind == 'allow'))
+    return max(matched, default=(0, True))[1]
+
+
+def discovery_same(site, url):
+    """Syntactic filtering only. Transport validates public DNS at fetch time."""
+    from urllib.parse import urlsplit
+    try:
+        a, b = urlsplit(site), urlsplit(url)
+        return (b.scheme == 'https' and not b.username and not b.password
+                and (a.hostname.lower(), a.port or 443) == (b.hostname.lower(), b.port or 443)
+                and not b.path.lower().endswith('.pdf'))
+    except (ValueError, AttributeError):
+        return False
+
+
+def discovery_search_url(url):
+    from urllib.parse import urlsplit, parse_qsl
+    parsed = urlsplit(url)
+    return (parsed.path.rstrip('/').lower() == '/search'
+            or bool({'q', 's', 'search', 'query', 'search_query'} & {k for k, _ in parse_qsl(parsed.query)}))
+
+
+def discovery_sitemap(source, limit=10000):
+    from io import StringIO
+    from xml.etree import ElementTree
+    locations, kind, cut = [], '', False
+    try:
+        for event, element in ElementTree.iterparse(StringIO(source), events=('start', 'end')):
+            tag = element.tag.rsplit('}', 1)[-1]
+            if not kind:
+                kind = tag
+            if event == 'end':
+                if tag == 'loc' and element.text:
+                    locations.append(element.text.strip())
+                    if len(locations) >= limit:
+                        cut = True
+                        break
+                element.clear()
+    except ElementTree.ParseError:
+        cut = True
+    return kind, locations, cut
+
+
 class CatalogueDiscovery:
+    """One transport operation per durable slice; all traversal state is JSON."""
     def __init__(self, fetch, render, gate, publish):
         self.fetch, self.render, self.gate, self.publish = fetch, render, gate, publish
 
-    async def run(self, sites, products):
-        from urllib.parse import urlsplit, urljoin, urlencode, urlunsplit, parse_qsl
-        from xml.etree import ElementTree
-        from watch import robots_allows, check_url
-        outcomes = []
-        for site in sites:
-            fetched, maps, candidates, visited, confirmed = set(), [], [], set(), set()
-            robots = ''
-            def same(url):
-                try:
-                    parts = urlsplit(check_url(url))
-                    return parts.scheme == 'https' and f'{parts.scheme}://{parts.netloc}' == site
-                except (ValueError, BadWatch):
-                    return False
-            def permitted(url):
-                return same(url) and robots_allows(robots, url, 'tervorytiger') and robots_allows(robots, url, 'tervory')
-            async def human(url):
+    async def step(self, sites, products, cursor=None):
+        from urllib.parse import urljoin, urlencode, urlsplit, urlunsplit, parse_qsl
+        state = cursor or {'site_index': 0, 'sites': [], 'active': None}
+        if state['site_index'] >= len(sites):
+            return state, True
+        site = sites[state['site_index']]
+        if state['active'] is None:
+            state['active'] = {'robots': '', 'queue': [{'kind': 'robots', 'url': site + '/robots.txt'}],
+                               'visited': [], 'confirmed': [], 'forms': [], 'pages': 0, 'warnings': []}
+        active = state['active']
+        def allowed(url):
+            return (discovery_same(site, url)
+                    and all(discovery_robots_allows(active['robots'], url, token) for token in ('tervorytiger', 'tervory')))
+        def enqueue(kind, urls, **extra):
+            active['queue'][0:0] = [{'kind': kind, 'url': url, **extra} for url in dict.fromkeys(urls) if allowed(url)]
+        def finish(status):
+            state['sites'].append({'site': site, 'status': status, 'pages': active['pages'], 'warnings': active['warnings']})
+            state['site_index'] += 1
+            state['active'] = None
+        try:
+            # Skip bounded local work without occupying a worker for a request.
+            for _ in range(1000):
+                if not active['queue']:
+                    finish('completed')
+                    return state, state['site_index'] >= len(sites)
+                action = active['queue'].pop(0)
+                kind, url = action['kind'], action['url']
+                if kind != 'robots' and not allowed(url):
+                    continue
+                if action.get('sku') in active['confirmed']:
+                    continue
+                key = kind + ':' + url
+                if key in active['visited']:
+                    continue
+                active['visited'].append(key)
+                break
+            else:
+                return state, False
+            if kind == 'publish':
+                matched = await self.publish(site, url, action['html'], False)
+                active['confirmed'] = list(set(active['confirmed']) | {m['sku'] for m in matched.get('matches', []) if m.get('state') == 'confirmed'})
+                return state, False
+            response = await self.gate.call(url, lambda: self.fetch(url) if kind in {'robots', 'map'} else self.render(url))
+            if response.get('challenge') or response.get('status') in {401, 403, 429}:
                 await self.gate.block(site)
                 await self.publish(site, url, '', True)
-                raise DiscoveryStopped('human_check')
-            async def text(url, *, policy=False):
-                if not same(url) or (not policy and not permitted(url)):
-                    return ''
-                for _ in range(5):
-                    response = await self.gate.call(url, lambda: self.fetch(url))
-                    if response.get('status') in {401,403,429}:
-                        await human(url)
-                    if response.get('status') in {301,302,303,307,308}:
-                        target = urljoin(url, response.get('location') or '')
-                        if not same(target) or (not policy and not permitted(target)):
-                            return ''
-                        url = target
-                        continue
-                    if response.get('status') == 404:
-                        return ''
-                    if response.get('status') != 200:
-                        raise DiscoveryStopped('unavailable')
-                    html = response.get('text') or ''
-                    if re.search(r'<(?:!doctype\s+html|html|form)\b', html, re.I):
-                        check = await self.gate.call(url, lambda: self.render(url))
-                        if check.get('challenge') or check.get('blocked_by_check'):
-                            await human(url)
-                        raise DiscoveryStopped('unavailable')
-                    return html
-                raise DiscoveryStopped('unavailable')
-            async def page(url):
-                if not permitted(url) or url in visited:
-                    return None
-                visited.add(url)
-                data = await self.gate.call(url, lambda: self.render(url))
-                if data.get('challenge') or data.get('blocked_by_check'):
-                    await human(url)
-                if not data.get('ok') or data.get('url', url).rstrip('/') != url.rstrip('/'):
-                    return None
-                html = data.get('html') or ''
-                matched = await self.publish(site, url, html, False)
-                confirmed.update(m['sku'] for m in matched.get('matches', []) if m.get('state') == 'confirmed')
-                return html
-            try:
-                robots = await text(site + '/robots.txt', policy=True)
-                maps = [urljoin(site + '/', m.group(1).strip()) for m in re.finditer(r'^\s*Sitemap:\s*(\S+)', robots, re.I | re.M)]
-                if site + '/sitemap.xml' not in maps:
-                    maps.append(site + '/sitemap.xml')
-                while maps:
-                    target = maps.pop(0)
-                    if target in fetched or not permitted(target):
-                        continue
-                    fetched.add(target)
-                    source = await text(target)
-                    if not source:
-                        continue
-                    try:
-                        root = ElementTree.fromstring(source)
-                    except (ElementTree.ParseError, ValueError):
-                        continue
-                    locations = [urljoin(target, (el.text or '').strip()) for el in root.iter() if el.tag.rsplit('}',1)[-1] == 'loc']
-                    if root.tag.rsplit('}',1)[-1] == 'sitemapindex':
-                        maps.extend(loc for loc in locations[:500] if loc not in fetched and permitted(loc))
-                    elif root.tag.rsplit('}',1)[-1] == 'urlset':
-                        candidates.extend(loc for loc in locations if permitted(loc))
-                for url in dict.fromkeys(candidates):
-                    await page(url)
-                # Search remains on this site; no external search/model/provider.
-                home = await page(site + '/')
-                _, forms = DiscoveryLinks.parse(home or '', site + '/')
+                finish('human_check')
+                return state, state['site_index'] >= len(sites)
+            if kind == 'robots':
+                if response.get('status') not in {200, 404}:
+                    finish('unavailable')
+                    return state, state['site_index'] >= len(sites)
+                active['robots'] = response.get('text', '') if response.get('status') == 200 else ''
+                maps = [urljoin(site + '/', m[1]) for m in re.finditer(r'^\s*Sitemap:\s*(\S+)', active['robots'], re.I | re.M)]
+                enqueue('map', maps[:500] + [site + '/sitemap.xml'])
+                active['queue'].append({'kind': 'home', 'url': site + '/'})
+                return state, False
+            if kind == 'map':
+                source = response.get('text', '')
+                if response.get('status') != 200:
+                    active['warnings'].append({'url': url, 'reason': 'sitemap_unavailable'})
+                    return state, False
+                if re.search(r'<(?:!doctype\s+html|html|form)\b', source, re.I):
+                    if re.search(r'captcha|turnstile|verify.{0,20}human|checking your browser|security check|cf-error-details', source, re.I):
+                        enqueue('probe', [url])
+                    else:
+                        active['warnings'].append({'url': url, 'reason': 'sitemap_html'})
+                    return state, False
+                root, locations, cut = discovery_sitemap(source)
+                if cut or response.get('truncated'):
+                    active['warnings'].append({'url': url, 'reason': 'sitemap_cut'})
+                if root == 'sitemapindex':
+                    enqueue('map', [urljoin(url, loc) for loc in locations[:500]])
+                elif root == 'urlset':
+                    enqueue('product', [urljoin(url, loc) for loc in locations if not discovery_search_url(loc)])
+                return state, False
+            active['pages'] += 1
+            if response.get('reason') == 'redirect' or response.get('status') in {301, 302, 303, 307, 308}:
+                target = urljoin(url, response.get('location') or '')
+                if kind in {'search', 'product'} and target != url and not discovery_search_url(target):
+                    enqueue('product', [target], **({'sku': action['sku']} if action.get('sku') else {}))
+                return state, False
+            if not response.get('ok') or response.get('url', url).rstrip('/') != url.rstrip('/'):
+                return state, False
+            html = response.get('html', '')
+            if kind == 'product':
+                # Search and home responses never become identity evidence.
+                if not discovery_search_url(url):
+                    enqueue('publish', [url], html=html)
+            elif kind == 'home':
+                _, active['forms'] = DiscoveryLinks.parse(html, url)
                 for product in products:
                     gtin = re.sub(r'[\s-]', '', str(product.get('gtin') or ''))
-                    if product['sku'] in confirmed or not re.fullmatch(r'[0-9]{8}|[0-9]{12,14}', gtin):
+                    if not re.fullmatch(r'[0-9]{8}|[0-9]{12,14}', gtin) or not gtin.strip('0'):
                         continue
                     searches = [site + '/search?' + urlencode({'q': gtin}), site + '/?' + urlencode({'s': gtin, 'post_type': 'product'})]
-                    for form in forms:
+                    for form in active['forms']:
                         parsed = urlsplit(form['action'])
                         fields = {**dict(parse_qsl(parsed.query)), **form['fields'], form['query']: gtin}
                         searches.append(urlunsplit(parsed._replace(query=urlencode(fields), fragment='')))
-                    for search in dict.fromkeys(searches):
-                        html = await page(search)
-                        if html:
-                            links, _ = DiscoveryLinks.parse(html, search)
-                            for candidate in dict.fromkeys(links):
-                                if permitted(candidate):
-                                    await page(candidate)
-                                    if product['sku'] in confirmed:
-                                        break
-                        if product['sku'] in confirmed:
-                            break
-                status = 'completed'
-            except DiscoveryStopped as exc:
-                status = str(exc)
-            except (httpx.HTTPError, OSError, ValueError):
-                status = 'unavailable'
-            outcomes.append({'site': site, 'status': status, 'pages': len(visited)})
-        return {'sites': outcomes, 'model_calls': 0}
+                    active['queue'].extend({'kind': 'search', 'url': target, 'sku': product['sku']} for target in dict.fromkeys(searches) if allowed(target))
+            elif kind == 'search':
+                links, _ = DiscoveryLinks.parse(html, url)
+                enqueue('product', [link for link in links if not discovery_search_url(link)], sku=action['sku'])
+        except DiscoveryStopped as exc:
+            finish(str(exc))
+        except (httpx.HTTPError, OSError, ValueError):
+            finish('unavailable')
+        return state, state['site_index'] >= len(sites)
+
+    async def run(self, sites, products):
+        # Offline traversal convenience; the production handler calls step once.
+        state, done = None, False
+        while not done:
+            state, done = await self.step(sites, products, state)
+        return {'sites': state['sites'], 'model_calls': 0}
