@@ -1,0 +1,8 @@
+........................................................................ [ 80%]
+.............ssss.                                                       [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_rig_box_tank.py:18: Set TRAINING_SCHEMA_DATABASE_URL to a disposable Postgres
+SKIPPED [1] tests/test_rig_box_tank.py:45: Set TRAINING_SCHEMA_DATABASE_URL to a disposable Postgres
+SKIPPED [1] tests/test_rig_box_tank.py:94: Set TRAINING_SCHEMA_DATABASE_URL to a disposable Postgres
+SKIPPED [1] tests/test_rig_box_tank.py:106: Set TRAINING_SCHEMA_DATABASE_URL to a disposable Postgres
+86 passed, 4 skipped, 51 warnings in 43.64s
