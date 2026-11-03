@@ -131,3 +131,19 @@ PAGE_LINK = (
     "is not stored and no diff is stored. "
     f"Terms checked {CHECKED}."
 )
+
+# ML3: data licences, not the licences of the servers' source code.
+INTEL_CHECKED = "2026-11-03"
+CISA_KEV = (
+    "CC0-1.0: commercial reuse of KEV data is permitted. Third-party links "
+    "retain their own terms; no CISA/DHS endorsement or logo rights. "
+    "Checked 2026-11-03. "
+    "https://raw.githubusercontent.com/cisagov/kev-data/develop/LICENSE"
+)
+OSV_GHSA = (
+    "CC-BY-4.0: GitHub Advisory Database permits commercial reuse with "
+    "attribution and an indication of changes. Supplied through OSV; other "
+    "OSV upstream databases are not covered by this licence. Checked 2026-11-03. "
+    "https://github.com/github/advisory-database/blob/main/LICENSE.md "
+    "https://google.github.io/osv.dev/data/"
+)
