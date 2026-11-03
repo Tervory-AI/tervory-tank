@@ -225,7 +225,7 @@ def drain_once_for_enforce(
     if cap is None and target is not None:
         cap = getattr(target.state, "action_cap", None)
     if cap is None:
-        cap = ActionCap()
+        cap = ActionCap(data_dir=data_dir_path())
     data_dir = None
     if target is not None:
         data_dir = getattr(target.state, "data_dir", None)
@@ -307,7 +307,7 @@ def create_enforce_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         drop_receipts = _boot_durable_control(app)
-        app.state.action_cap = ActionCap()
+        app.state.action_cap = ActionCap(data_dir=data_dir_path())
         app.state.threat_queue = None
         app.state.drain_loop_running = False
         app.state.on_act_email = _default_on_act_email
@@ -340,7 +340,7 @@ def create_enforce_app() -> FastAPI:
         tenant_id=(os.environ.get("TENANT_ID") or "").strip()
         or "00000000-0000-0000-0000-0000000000ef"
     )
-    app.state.action_cap = ActionCap()
+    app.state.action_cap = ActionCap(data_dir=data_dir_path())
     app.state.threat_queue = None
     app.state.drain_loop_running = False
     app.state.data_dir = data_dir_path()

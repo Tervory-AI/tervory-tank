@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Isolation network test FROM INSIDE a fixture client's Enforce container.
-# Coolify TEST host only — never live Boston.
+# Builders: CI/test host only. Founder-only live use is documented in
+# docs/ops/AUTUMBRA-ENFORCE-ISOLATION.md after deployment.
 #
 # Usage:
 #   bash ops/autumbra-enforce-isolation-check.sh <enforce-container-name>
