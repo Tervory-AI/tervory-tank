@@ -24,6 +24,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 import command_repo
+from trigger_bot_contract import TOOLS as BOT_TOOLS
 from base_lists import FindArgs, SaveArgs, ListArgs, SendArgs
 from base_audit_commands import StartArgs as AuditStartArgs, CsvArgs as AuditCsvArgs, ReviewArgs as AuditReviewArgs
 from tenant_db import tenant_path
@@ -485,6 +486,10 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
     remembered = await remember_turn(actor, messages, task_id)
     if remembered is not None:
         return remembered
+    from trigger_bot_api import plan as bot_plan
+    bot_proposal = await bot_plan(actor, messages[-1].get("content", ""), task_id) if messages and messages[-1].get("role") == "user" else None
+    if bot_proposal is not None:
+        return bot_proposal
     from trigger_routes import code_plan
     planned = await code_plan(actor, messages, task_id)
     if planned is not None:
@@ -1202,6 +1207,7 @@ class Adapter:
     skill: str | None = None
 
 
+TOOLS["trigger"] += ["trigger.bot." + name for name in BOT_TOOLS]
 from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServerArgs
 
 
@@ -1263,6 +1269,9 @@ ADAPTERS = {
     "ledger.receipts": Adapter("GET", "/v1/proof", ProofArgs, "Read ledger receipts"),
     "ledger.savings": Adapter("GET", "/v1/proof", SavingsArgs, "Read recorded costs and savings"),
 }
+
+ADAPTERS.update({"trigger.bot." + name: Adapter("POST", "/v1/trigger/bot/" + name, schema, "trigger.bot." + name)
+                 for name, schema in BOT_TOOLS.items()})
 
 
 MARKETING_PAID_TOOLS = frozenset({'post.create', 'gbp.reply.draft'})
@@ -1351,7 +1360,10 @@ async def propose_tool(thread_id: uuid.UUID, body: PlannedAction, actor: Actor =
 
 
 async def propose_action(conn: Any, row: dict, state: dict, action: PlannedAction, actor: Actor | None = None) -> dict:
-    if action.tool.removeprefix("trigger.") in MARKETING_TOOLS:
+    if action.tool.startswith("trigger.bot."):
+        from trigger_bot_api import prepare as prepare_bot
+        action = await prepare_bot(action, await authorized_actor(actor or Actor(row["tenant_id"], row["user_id"], False), conn), {**state, "thread_id": str(row["thread_id"])}, conn=conn)
+    elif action.tool.removeprefix("trigger.") in MARKETING_TOOLS:
         from trigger_marketing_api import prepare as marketing_prepare
         action = await marketing_prepare(action, await authorized_actor(actor or Actor(row["tenant_id"], row["user_id"], False), conn), conn)
     elif action.tool.startswith("trigger."):

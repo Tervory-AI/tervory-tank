@@ -103,6 +103,7 @@ _pool: Any = None
 _admin_pool: asyncpg.Pool | None = None
 _background: set[asyncio.Task[None]] = set()
 _batch_task: asyncio.Task[None] | None = None
+_bot_task: asyncio.Task[None] | None = None
 _marketing_task: asyncio.Task[None] | None = None
 _http: httpx.AsyncClient | None = None
 _redis: aioredis.Redis | None = None
@@ -802,6 +803,9 @@ async def _startup() -> None:
     await _warn_unapproved_policy_pins()
     global _batch_task
     _batch_task = asyncio.create_task(_batch_loop())
+    global _bot_task
+    from trigger_bot import refresh_loop
+    _bot_task = asyncio.create_task(refresh_loop(__import__("sys").modules[__name__]))
     global _marketing_task
     from trigger_publisher import publish_loop
     _marketing_task = asyncio.create_task(publish_loop(__import__("sys").modules[__name__]))
@@ -809,6 +813,9 @@ async def _startup() -> None:
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
+    if _bot_task:
+        _bot_task.cancel()
+        await asyncio.gather(_bot_task, return_exceptions=True)
     if _marketing_task:
         _marketing_task.cancel()
         await asyncio.gather(_marketing_task, return_exceptions=True)
@@ -4684,6 +4691,7 @@ __import__("mcp_server").register(app)
 app.include_router(__import__("trigger_routes").router)
 app.include_router(__import__("trigger_marketing_api").router)
 app.include_router(__import__("trigger_crm").router)
+app.include_router(__import__("trigger_bot_api").router)
 
 # ACCESS-1: scoped connections and browser-only credential handoff.
 app.include_router(__import__("access").router)
