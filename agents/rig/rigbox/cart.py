@@ -65,7 +65,8 @@ class Cart:
         if set(config) - allowed or config.get('mode') not in ('quote', 'cart'):
             raise CommerceError('config')
         if config['mode'] == 'quote':
-            await self.store.save_commerce_config(tenant, {'mode': 'quote'})
+            previous = await self.store.commerce_config(tenant)
+            await self.store.save_commerce_config(tenant, {**previous, 'mode': 'quote'})
             return {'saved': True}
         if config.get('region') != 'US' or not config.get('vault_name') or not isinstance(config.get('products'), dict):
             raise CommerceError('config')
@@ -248,7 +249,9 @@ class Cart:
         row['state'] = 'paid'
 
     async def webhook(self, tenant, raw, headers):
-        config = await self.config(tenant)
+        config = await self.store.commerce_config(tenant)
+        if config.get('region') != 'US':
+            raise CommerceError('cart_disabled')
         platform = await self.platform(tenant, config)
         event = platform.verify(raw, headers, now=self.clock().timestamp())
         digest = event_digest(raw)
