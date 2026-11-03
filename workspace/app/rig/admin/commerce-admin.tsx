@@ -50,6 +50,7 @@ export function OrderRows({ orders, now }: { orders: CartOrder[]; now: number })
 }
 
 export function CommerceAdmin({ section, initial = {}, initialOrders = [], act = send, embedded = false }: { section: CommerceSection; initial?: CommerceResult; initialOrders?: CartOrder[]; act?: Act; embedded?: boolean }) {
+  const [open, setOpen] = useState(false);
   const [config, setConfig] = useState(initial);
   const [platform, setPlatform] = useState<Platform | "">(initial.platform && initial.platform in platforms ? initial.platform as Platform : "");
   const [status, setStatus] = useState<"edit" | "testing" | "connected" | "failed">(initial.platform ? "connected" : "edit");
@@ -115,9 +116,9 @@ export function CommerceAdmin({ section, initial = {}, initialOrders = [], act =
     <div className="rig-commerce-actions"><button className="rig-commerce-primary" disabled={saving}>Save delivery time</button></div>
   </form> : <form className="rig-commerce-card" onSubmit={connect}>
     <h2>Shop connection</h2>
-    <label className="rig-commerce-field">Shop platform<select value={platform} onChange={event => { setPlatform(event.target.value as Platform); setStatus("edit"); }} required>
-      <option value="" disabled>Choose a platform</option>{Object.entries(platforms).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-    </select></label>
+    <div className="rig-commerce-field rig-commerce-platform"><span id="rig-platform-label">Shop platform</span><button className="rig-platform-select" type="button" role="combobox" aria-labelledby="rig-platform-label" aria-controls="rig-platform-options" aria-expanded={open} aria-haspopup="listbox" onClick={() => setOpen(!open)} onKeyDown={event => { if (event.key === "Escape") setOpen(false); if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) { event.preventDefault(); setOpen(true); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>("#rig-platform-options button")?.focus()); } }}><span>{name || "Choose a platform"}</span><img src="/rig-cart/select-chevron.svg" alt="" width="16" height="16" /></button>
+      {open && <div id="rig-platform-options" role="listbox" aria-labelledby="rig-platform-label">{Object.entries(platforms).map(([key, label], index) => <button key={key} type="button" role="option" aria-selected={platform === key} onClick={() => { setPlatform(key as Platform); setStatus("edit"); setOpen(false); }} onKeyDown={event => { if (event.key === "Escape") { setOpen(false); document.querySelector<HTMLButtonElement>(".rig-platform-select")?.focus(); } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) { event.preventDefault(); const options = document.querySelectorAll<HTMLButtonElement>("#rig-platform-options button"); options[event.key === "Home" ? 0 : event.key === "End" ? 2 : (index + (event.key === "ArrowDown" ? 1 : 2)) % 3]?.focus(); } }}>{label}</button>)}</div>}
+    </div>
     {platform && status === "edit" && <>
       <label className="rig-commerce-field">{platform === "bigcommerce" ? "Store hash" : "Store address"}<input name={platform === "bigcommerce" ? "store_hash" : "site"} type={platform === "bigcommerce" ? "text" : "url"} defaultValue={platform === "bigcommerce" ? config.store_hash : config.site} required autoComplete="off" /></label>
       {(platform === "woocommerce" ? [["consumer_key", "Consumer key"], ["consumer_secret", "Consumer secret"]] : [["access_token", "Access token"]]).map(([key, label]) => <label className="rig-commerce-field" key={key}>{label}<input name={key} type="password" required autoComplete="new-password" defaultValue="" /></label>)}
