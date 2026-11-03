@@ -2414,3 +2414,4 @@ SELECT 'trigger.bot.answer',NULL,rung,model,priority,false,'none',max_tokens_out
 FROM tank.policy WHERE task_type='trigger.write' AND tenant_id IS NULL
 AND NOT EXISTS(SELECT 1 FROM tank.policy WHERE task_type='trigger.bot.answer' AND tenant_id IS NULL)
 LIMIT 1;
+ALTER TABLE tank.trigger_bot_passages ADD COLUMN IF NOT EXISTS checked_at timestamptz NOT NULL DEFAULT now();
