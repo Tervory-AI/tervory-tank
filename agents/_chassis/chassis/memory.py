@@ -85,10 +85,16 @@ class MemoryClient:
         from uuid import UUID
         if tier not in {"client", "platform"}:
             raise ValueError("Invalid memory tier")
-        result = await self._send("GET", "/records?tenant_id=" + str(UUID(tenant_id)) + "&tier=" + tier)
-        if not isinstance(result, dict) or not isinstance(result.get("memories"), list):
-            raise RuntimeError("hermes answer was not an object")
-        return result["memories"]
+        rows = []
+        for offset in range(0, 20000, 200):
+            result = await self._send("GET", "/records?tenant_id=" + str(UUID(tenant_id)) + "&tier=" + tier + "&limit=200&offset=" + str(offset))
+            if not isinstance(result, dict) or not isinstance(result.get("memories"), list):
+                raise RuntimeError("hermes answer was not an object")
+            page = result["memories"]
+            rows.extend(page)
+            if len(page) < 200:
+                return rows
+        raise RuntimeError("Memory record list exceeds the limit")
 
     async def forget(self, memory_id: str, tenant_id: str) -> None:
         from uuid import UUID
