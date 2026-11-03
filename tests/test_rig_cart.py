@@ -279,3 +279,66 @@ async def test_shopify_and_bigcommerce_create_native_and_custom_lines(kind):
         result = await adapter.create('co-offline', lines, 'USD')
         assert result['total'] == '60.00' and result['url'].startswith('https://')
         assert 'supplier' not in json.dumps(seen)
+
+
+@pytest.mark.asyncio
+async def test_backend_routes_origin_admin_boundary_and_no_new_wording(monkeypatch):
+    from fastapi import FastAPI
+    from rigbox.api import mount
+    from rigbox.cart_api import mount as mount_cart
+    from rigbox.service import Service, hash_key
+    cart, fake, _, _, _, client = await setup(monkeypatch)
+    try:
+        key = 'rk_pub_offline_cart'
+        await cart.store.put_key(TENANT, hash_key(key), 'publishable', ['https://widget.example'])
+        app = FastAPI()
+        app.state.rig = Service(cart.store)
+        app.state.rig.cart = cart
+        mount(app)
+        mount_cart(app)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='https://rig.example') as api:
+            headers = {'x-rig-key': key, 'origin': 'https://widget.example'}
+            result = await api.post('/v1/rig/cart/session', json={}, headers=headers)
+            assert result.status_code == 200
+            token = result.json()['session']
+            result = await api.post('/v1/rig/cart/add', json={'session': token, 'product_id': 'stock', 'quantity': 1}, headers=headers)
+            assert result.status_code == 200 and len(result.json()['lines']) == 1
+            assert result.headers['access-control-allow-origin'] == 'https://widget.example'
+            assert result.headers['cache-control'] == 'no-store'
+            result = await api.post('/v1/rig/cart/checkout', json={'session': token, 'card': 'forbidden-field'}, headers=headers)
+            assert result.status_code == 409 and result.json() == {'error': {'code': 'invalid'}}
+            assert not fake.orders
+            result = await api.post('/v1/rig/admin/commerce/orders', json={}, headers=headers)
+            assert result.status_code == 403
+            result = await api.post('/v1/rig/cart/view', json={'session': token}, headers={'x-rig-key': key})
+            assert result.status_code == 409 and result.json() == {'error': {'code': 'origin'}}
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_shared_confirmation_gate_paid_retry_and_quote_switch_recovery(monkeypatch):
+    cart, fake, _, calls, clock, client = await setup(monkeypatch)
+    try:
+        await cart.add(TENANT, SESSION, 'stock', 1)
+        shared = cart.service.store_confirms_payment
+        del cart.service.store_confirms_payment
+        with pytest.raises(CommerceError, match='store_confirmation_unavailable'):
+            await cart.checkout(TENANT, SESSION)
+        assert not fake.orders
+        cart.service.store_confirms_payment = shared
+        checkout = await cart.checkout(TENANT, SESSION)
+        await cart.connect(TENANT, {'mode': 'quote'})
+        clock[0] += timedelta(seconds=300)
+        await cart.sweep(TENANT)
+        assert fake.orders['1']['status'] == 'cancelled'
+        fake.orders['1'].update(status='processing', date_paid=clock[0].isoformat())
+        raw = b'{"id":1}'
+        await cart.webhook(TENANT, raw, signed(raw))
+        assert len(calls) == 1
+        config = await cart.store.commerce_config(TENANT)
+        await cart.store.save_commerce_config(TENANT, {**config, 'mode': 'cart'})
+        assert (await cart.checkout(TENANT, SESSION))['id'] == checkout['id']
+        assert len(fake.orders) == 1
+    finally:
+        await client.aclose()
