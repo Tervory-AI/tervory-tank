@@ -275,11 +275,11 @@ async function lighthouse(origin, paths, proxyUrl) {
 
 async function smoke(origin, paths) {
   const output = join(process.cwd(), ".k6-check.json");
-  rmSync(output, { force: true });
+  writeFileSync(output, "{}"); // Explicit empty config; never read a room user config.
   let timer;
   const code = await new Promise((resolve) => {
     // Do not inherit proxy, cloud, dashboard or telemetry settings.
-    const child = spawn("k6", ["run", "--no-usage-report", "--quiet", "scripts/smoke.k6.js"], {
+    const child = spawn("k6", ["run", "--config", output, "--address", "127.0.0.1:0", "--no-usage-report", "--quiet", "scripts/smoke.k6.js"], {
       env: { PATH: process.env.PATH, HOME: process.env.HOME,
         TISAN_CHECK_ORIGIN: origin, TISAN_CHECK_PAGES: JSON.stringify(paths),
         K6_WEB_DASHBOARD: "false" },
