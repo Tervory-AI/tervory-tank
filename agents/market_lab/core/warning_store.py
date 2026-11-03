@@ -39,10 +39,22 @@ async def series(ledger: PostgresLedger, tenant: str, now: datetime) -> dict[str
         now,
     )
     collected = {}
+    weather = {}
     for record in records:
         doc = decoded(record["content"])
         if doc.get("kind") == "warning_evidence":
             continue
+        if doc.get("source_id") == "noaa_alerts":
+            for index, event in enumerate(doc.get("events") or []):
+                stamp = str(event["date"])[:10]
+                if event.get("kind") != "severe_weather" or stamp > now.date().isoformat():
+                    continue
+                # One alert can have several state rows and appear in many snapshots.
+                identity = event.get("url") or (event.get("title"), event.get("body"))
+                weather.setdefault(stamp, {}).setdefault(identity, {
+                    "document_id": doc["id"], "row": index,
+                    "href": f"/market-lab/sources/{doc['id']}?row={index}&kind=event#event-{index}",
+                })
         current = current_revisions(doc["points"])
         for index, point in await usable_points(ledger, tenant, doc):
             if (
@@ -72,6 +84,20 @@ async def series(ledger: PostgresLedger, tenant: str, now: datetime) -> dict[str
                 "row": index,
                 "href": f"/market-lab/sources/{doc['id']}?row={index}#point-{index}",
             }
+    if weather:
+        # Missing collection days remain missing; no zero counts are invented.
+        from feeds.catalog import sources
+        title = next(spec.name for spec in sources("ffl") if spec.id == "noaa_alerts")
+        identity = "noaa_alerts:severe_weather:US"
+        collected[identity] = {
+            "id": identity, "source": "noaa_alerts", "ref": "severe_weather:US",
+            "name": title, "unit": "count", "points": {
+                stamp: {"date": stamp, "value": str(len(alerts)), "unit": "count",
+                        "title": title, **next(iter(alerts.values())),
+                        "evidence": list(alerts.values())}
+                for stamp, alerts in weather.items()
+            },
+        }
     return {
         key: {
             **value,
