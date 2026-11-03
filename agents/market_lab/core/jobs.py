@@ -223,18 +223,14 @@ async def perform_opportunities(
                 targets=spec.get("response_targets"),
             ),
         )
-    if found:
-        writeup = "; ".join(
-            f"{item['rank']}. {item['area']} / {item['segment']} / {item['product']}" for item in found
-        )
-    else:
-        writeup = "No product gap this month."
+    from core.brief_sources import claims as brief_claims
+    writeup, citations = await brief_claims(ledger, tenant_id, spec["bindings"], scored["ranked"], now=clock)
     from core.briefs import save as save_brief
     await save_brief(ledger, {
         "id": str(uuid.uuid4()), "tenant_id": tenant_id, "made_at": clock,
-        "question": "Where is demand outrunning supply?", "answer": writeup, "citations": [],
+        "question": "Where is demand outrunning supply?", "answer": writeup, "citations": citations,
     }, now=clock)
-    if memory is not None:
+    if memory is not None and writeup:
         await memory.remember(tenant_id, writeup, "report", "schedule:opportunities")
     return {
         "top_area": scored["top_area"],
