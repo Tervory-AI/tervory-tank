@@ -1,0 +1,4172 @@
+{
+  "branch": "codex/mcp-figma",
+  "fileKey": "ZnphBOJU6657tohGLD3IzS",
+  "pageId": "230:9",
+  "rule": "Founder rule 9 follow-up",
+  "frames": 68,
+  "changed": [
+    {
+      "id": "231:10302",
+      "name": "MCP action / approve",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:10302;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:10352",
+      "name": "MCP action / approve",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:10352;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:11798",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:11801",
+      "name": "CLI sign-ins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "239:102",
+      "name": "Proposed intro / Computers and connected apps",
+      "properties": [
+        "characters",
+        "y"
+      ]
+    },
+    {
+      "id": "231:11803",
+      "name": "Connected sign-ins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:11816",
+      "name": "[Computer]",
+      "properties": [
+        "name",
+        "characters"
+      ]
+    },
+    {
+      "id": "231:11818",
+      "name": "Computer",
+      "properties": [
+        "name",
+        "characters"
+      ]
+    },
+    {
+      "id": "231:11819",
+      "name": "Computer name as the computer reported it",
+      "properties": [
+        "name",
+        "characters"
+      ]
+    },
+    {
+      "id": "231:11836",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:11839",
+      "name": "CLI sign-ins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "239:110",
+      "name": "Proposed intro / Computers and connected apps",
+      "properties": [
+        "characters",
+        "y"
+      ]
+    },
+    {
+      "id": "231:11841",
+      "name": "Connected sign-ins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:11854",
+      "name": "[Computer]",
+      "properties": [
+        "name",
+        "characters"
+      ]
+    },
+    {
+      "id": "231:11856",
+      "name": "Computer",
+      "properties": [
+        "name",
+        "characters"
+      ]
+    },
+    {
+      "id": "231:11857",
+      "name": "Computer name as the computer reported it",
+      "properties": [
+        "name",
+        "characters"
+      ]
+    },
+    {
+      "id": "231:11874",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:11877",
+      "name": "Rig",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:11878",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:11879",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:11880",
+      "name": "Connections to outside tools and data servers that Rig can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:45828",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:45828;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:11881",
+      "name": "MCP connection / Saved with a token",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:11904",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:11907",
+      "name": "Rig",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:11908",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:11909",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:11910",
+      "name": "Connections to outside tools and data servers that Rig can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:45915",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:45915;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:11911",
+      "name": "MCP connection / Saved with a token",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:11934",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:11937",
+      "name": "Rig",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:11938",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:11939",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:11940",
+      "name": "Connections to outside tools and data servers that Rig can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:46003",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:46003;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:11941",
+      "name": "MCP connection / Needs sign-in",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:11956",
+      "name": "MCP action / provider-sign-in",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:11956;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:11962",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:11965",
+      "name": "Rig",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:11966",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:11967",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:11968",
+      "name": "Connections to outside tools and data servers that Rig can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:46090",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:46090;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:11969",
+      "name": "MCP connection / Needs sign-in",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:11984",
+      "name": "MCP action / provider-sign-in",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:11984;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:11990",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:11993",
+      "name": "Rig",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:11994",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:11995",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:11996",
+      "name": "Connections to outside tools and data servers that Rig can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:46179",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:46179;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:11997",
+      "name": "MCP connection / Connected",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12018",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12021",
+      "name": "Rig",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12022",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12023",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12024",
+      "name": "Connections to outside tools and data servers that Rig can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:46266",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:46266;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12025",
+      "name": "MCP connection / Connected",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12046",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12049",
+      "name": "Rig",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12050",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12051",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12052",
+      "name": "Connections to outside tools and data servers that Rig can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:46354",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:46354;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12053",
+      "name": "MCP connection / Sign-in failed",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12068",
+      "name": "MCP action / provider-sign-in",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:12068;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12074",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12077",
+      "name": "Rig",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12078",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12079",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12080",
+      "name": "Connections to outside tools and data servers that Rig can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:46442",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:46442;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12081",
+      "name": "MCP connection / Sign-in failed",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12096",
+      "name": "MCP action / provider-sign-in",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:12096;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12102",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12105",
+      "name": "Rig",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12106",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12107",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12108",
+      "name": "Connections to outside tools and data servers that Rig can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:47221",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:47221;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12109",
+      "name": "MCP connection / Server not approved by Tervory",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12128",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12131",
+      "name": "Rig",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12132",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12133",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12134",
+      "name": "Connections to outside tools and data servers that Rig can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:47311",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:47311;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12135",
+      "name": "MCP connection / Server not approved by Tervory",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12154",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12157",
+      "name": "Rig",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12158",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12159",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12160",
+      "name": "Connections to outside tools and data servers that Rig can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:47402",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:47402;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12161",
+      "name": "MCP connection / Expanded",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12191",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12194",
+      "name": "Rig",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12195",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12196",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12197",
+      "name": "Connections to outside tools and data servers that Rig can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:47489",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:47489;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12198",
+      "name": "MCP connection / Expanded",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12228",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12231",
+      "name": "Tisan",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12232",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12233",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12234",
+      "name": "Connections to outside tools that Tisan can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:47577",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:47577;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12235",
+      "name": "MCP connection / Saved with a token",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12258",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12261",
+      "name": "Tisan",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12262",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12263",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12264",
+      "name": "Connections to outside tools that Tisan can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:47664",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:47664;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12265",
+      "name": "MCP connection / Saved with a token",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12288",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12291",
+      "name": "Tisan",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12292",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12293",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12294",
+      "name": "Connections to outside tools that Tisan can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:47752",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:47752;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12295",
+      "name": "MCP connection / Needs sign-in",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12310",
+      "name": "MCP action / provider-sign-in",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:12310;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12316",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12319",
+      "name": "Tisan",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12320",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12321",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12322",
+      "name": "Connections to outside tools that Tisan can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:47839",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:47839;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12323",
+      "name": "MCP connection / Needs sign-in",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12338",
+      "name": "MCP action / provider-sign-in",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:12338;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12344",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12347",
+      "name": "Tisan",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12348",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12349",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12350",
+      "name": "Connections to outside tools that Tisan can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:47927",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:47927;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12351",
+      "name": "MCP connection / Connected",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12372",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12375",
+      "name": "Tisan",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12376",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12377",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12378",
+      "name": "Connections to outside tools that Tisan can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:48014",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:48014;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12379",
+      "name": "MCP connection / Connected",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12400",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12403",
+      "name": "Tisan",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12404",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12405",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12406",
+      "name": "Connections to outside tools that Tisan can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:48102",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:48102;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12407",
+      "name": "MCP connection / Sign-in failed",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12422",
+      "name": "MCP action / provider-sign-in",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:12422;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12428",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12431",
+      "name": "Tisan",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12432",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12433",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12434",
+      "name": "Connections to outside tools that Tisan can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:48190",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:48190;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12435",
+      "name": "MCP connection / Sign-in failed",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12450",
+      "name": "MCP action / provider-sign-in",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:12450;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12456",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12459",
+      "name": "Tisan",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12460",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12461",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12462",
+      "name": "Connections to outside tools that Tisan can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:48279",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:48279;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12463",
+      "name": "MCP connection / Server not approved by Tervory",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12482",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12485",
+      "name": "Tisan",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12486",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12487",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12488",
+      "name": "Connections to outside tools that Tisan can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:48369",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:48369;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12489",
+      "name": "MCP connection / Server not approved by Tervory",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12508",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12511",
+      "name": "Tisan",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12512",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12513",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12514",
+      "name": "Connections to outside tools that Tisan can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:48460",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:48460;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12515",
+      "name": "MCP connection / Expanded",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12545",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12548",
+      "name": "Tisan",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "231:12549",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12550",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12551",
+      "name": "Connections to outside tools that Tisan can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "465:48547",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I465:48547;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12552",
+      "name": "MCP connection / Expanded",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12582",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12585",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12586",
+      "name": "Status / Founder only",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "239:91",
+      "name": "MCP servers / Section",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12599",
+      "name": "MCP servers",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12627",
+      "name": "MCP action / add-server",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:12627;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12601",
+      "name": "[Approved server URL]",
+      "properties": [
+        "fontName",
+        "fontSize"
+      ]
+    },
+    {
+      "id": "I231:12607;60:10404",
+      "name": "Toggle track",
+      "properties": [
+        "height",
+        "fills",
+        "strokes"
+      ]
+    },
+    {
+      "id": "I231:12607;60:10405",
+      "name": "Ellipse",
+      "properties": [
+        "x",
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:12615;60:10404",
+      "name": "Toggle track",
+      "properties": [
+        "height",
+        "fills",
+        "strokes"
+      ]
+    },
+    {
+      "id": "I231:12615;60:10405",
+      "name": "Ellipse",
+      "properties": [
+        "x",
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:12623;60:10402",
+      "name": "Toggle track",
+      "properties": [
+        "height",
+        "fills",
+        "strokes"
+      ]
+    },
+    {
+      "id": "I231:12623;60:10403",
+      "name": "Ellipse",
+      "properties": [
+        "x",
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12633",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12636",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12637",
+      "name": "Status / Founder only",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "239:93",
+      "name": "MCP servers / Section",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12650",
+      "name": "MCP servers",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12678",
+      "name": "MCP action / add-server",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:12678;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12652",
+      "name": "[Approved server URL]",
+      "properties": [
+        "fontName",
+        "fontSize"
+      ]
+    },
+    {
+      "id": "I231:12658;60:10404",
+      "name": "Toggle track",
+      "properties": [
+        "height",
+        "fills",
+        "strokes"
+      ]
+    },
+    {
+      "id": "I231:12658;60:10405",
+      "name": "Ellipse",
+      "properties": [
+        "x",
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:12666;60:10404",
+      "name": "Toggle track",
+      "properties": [
+        "height",
+        "fills",
+        "strokes"
+      ]
+    },
+    {
+      "id": "I231:12666;60:10405",
+      "name": "Ellipse",
+      "properties": [
+        "x",
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:12674;60:10402",
+      "name": "Toggle track",
+      "properties": [
+        "height",
+        "fills",
+        "strokes"
+      ]
+    },
+    {
+      "id": "I231:12674;60:10403",
+      "name": "Ellipse",
+      "properties": [
+        "x",
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12680",
+      "name": "Founder MCP servers / Add server / Desktop / Changed after approval, awaiting founder",
+      "properties": [
+        "name"
+      ]
+    },
+    {
+      "id": "231:12682",
+      "name": "Proposed, not approved",
+      "properties": [
+        "characters"
+      ]
+    },
+    {
+      "id": "231:12684",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12687",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12688",
+      "name": "Status / Founder only",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12690",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12701",
+      "name": "MCP servers",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12708",
+      "name": "MCP action / save-server",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:12708;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12716",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12719",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12720",
+      "name": "Status / Founder only",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12722",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12733",
+      "name": "MCP servers",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12740",
+      "name": "MCP action / save-server",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I231:12740;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "231:12748",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12751",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12752",
+      "name": "Status / Founder only",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12754",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12778",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "231:12781",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12782",
+      "name": "Status / Founder only",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "231:12784",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26072",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:26075",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26078",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26178",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:26181",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26184",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26212",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:26215",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26218",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26318",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:26321",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26324",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26352",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:26355",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26358",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26460",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:26463",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26466",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26496",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:26499",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26502",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26604",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:26607",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:26610",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:27703",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:27706",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:27709",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:27714",
+      "name": "MCP action / save-server",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I468:27714;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:27809",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:27812",
+      "name": "Rig",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "468:27813",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:27814",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "468:27815",
+      "name": "Connections to outside tools and data servers that Rig can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:27816",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I468:27816;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:27817",
+      "name": "MCP connections / Empty",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:27924",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:27927",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:27930",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:27935",
+      "name": "MCP action / save-server",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I468:27935;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:27958",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:27961",
+      "name": "Rig",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "468:27962",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:27963",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "468:27964",
+      "name": "Connections to outside tools and data servers that Rig can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:27965",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I468:27965;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:27966",
+      "name": "MCP connections / Empty",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:28001",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:28004",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:28007",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:28012",
+      "name": "MCP action / save-server",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I468:28012;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:28107",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:28110",
+      "name": "Tisan",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "468:28111",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:28112",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "468:28113",
+      "name": "Connections to outside tools that Tisan can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:28114",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I468:28114;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:28115",
+      "name": "MCP connections / Empty",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:28222",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:28225",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:28228",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:28233",
+      "name": "MCP action / save-server",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I468:28233;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:28256",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:28259",
+      "name": "Tisan",
+      "properties": [
+        "parent",
+        "x",
+        "y",
+        "width"
+      ]
+    },
+    {
+      "id": "468:28260",
+      "name": "Plugins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:28261",
+      "name": "MCP connections",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "468:28262",
+      "name": "Connections to outside tools that Tisan can read from.",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:28263",
+      "name": "CRM / Action",
+      "properties": [
+        "y",
+        "fills"
+      ]
+    },
+    {
+      "id": "I468:28263;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:28264",
+      "name": "MCP connections / Empty",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:30894",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:30897",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:30898",
+      "name": "Status / Founder only",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:30900",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:30901",
+      "name": "MCP servers",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:30905",
+      "name": "MCP action / save-server",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I468:30905;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:31001",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:31004",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31005",
+      "name": "Status / Founder only",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31007",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31008",
+      "name": "MCP servers",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:31012",
+      "name": "MCP action / save-server",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I468:31012;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:31036",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:31039",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31040",
+      "name": "Status / Founder only",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31042",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31043",
+      "name": "MCP servers",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:31047",
+      "name": "MCP action / save-server",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I468:31047;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:31143",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:31146",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31147",
+      "name": "Status / Founder only",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31149",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31150",
+      "name": "MCP servers",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:31154",
+      "name": "MCP action / save-server",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I468:31154;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:31178",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:31181",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31182",
+      "name": "Status / Founder only",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31184",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31185",
+      "name": "MCP servers",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:31189",
+      "name": "MCP action / save-server",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I468:31189;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:31285",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:31288",
+      "name": "Control panel",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31289",
+      "name": "Status / Founder only",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31291",
+      "name": "Founder section / MCP servers",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31292",
+      "name": "MCP servers",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:31296",
+      "name": "MCP action / save-server",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "I468:31296;93:5",
+      "name": "label",
+      "properties": [
+        "fills"
+      ]
+    },
+    {
+      "id": "468:31320",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:31323",
+      "name": "CLI sign-ins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31324",
+      "name": "Proposed intro / Computers and connected apps",
+      "properties": [
+        "characters",
+        "y"
+      ]
+    },
+    {
+      "id": "468:31325",
+      "name": "Connected sign-ins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31432",
+      "name": "Content",
+      "properties": [
+        "height"
+      ]
+    },
+    {
+      "id": "468:31435",
+      "name": "CLI sign-ins",
+      "properties": [
+        "y"
+      ]
+    },
+    {
+      "id": "468:31436",
+      "name": "Proposed intro / Computers and connected apps",
+      "properties": [
+        "characters",
+        "y"
+      ]
+    },
+    {
+      "id": "468:31437",
+      "name": "Connected sign-ins",
+      "properties": [
+        "y"
+      ]
+    }
+  ],
+  "deleted": [
+    {
+      "id": "231:11799",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:11800",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:11837",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:11838",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:11875",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:11876",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:11905",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:11906",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:11935",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:11936",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:11963",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:11964",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:11991",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:11992",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12019",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12020",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12047",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12048",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12075",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12076",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12103",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12104",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12129",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12130",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12155",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12156",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12192",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12193",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12229",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12230",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12259",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12260",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12289",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12290",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12317",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12318",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12345",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12346",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12373",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12374",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12401",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12402",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12429",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12430",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12457",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12458",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12483",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12484",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12509",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12510",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12546",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12547",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12583",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12584",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12634",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12635",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12685",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12686",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12717",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12718",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12749",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12750",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "231:12779",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "231:12780",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:26073",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:26074",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:26179",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:26180",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:26213",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:26214",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:26319",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:26320",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:26353",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:26354",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:26461",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:26462",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:26497",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:26498",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:26605",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:26606",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:27704",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:27705",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:27810",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:27811",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:27925",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:27926",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:27959",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:27960",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:28002",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:28003",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:28108",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:28109",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:28223",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:28224",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:28257",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:28258",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:30895",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:30896",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:31002",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:31003",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:31037",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:31038",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:31144",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:31145",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:31179",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:31180",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:31286",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:31287",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:31321",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:31322",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    },
+    {
+      "id": "468:31433",
+      "name": "Tervory identity",
+      "type": "FRAME"
+    },
+    {
+      "id": "468:31434",
+      "name": "Asset · tervory-logo-on-white.png · approved source",
+      "type": "RECTANGLE"
+    }
+  ],
+  "created": [],
+  "wordChanges": [
+    {
+      "id": "239:102",
+      "before": "Every computer and connected app approved to use Tervory for you in this organization. Revoke any you do not recognise: it stops working at once.",
+      "after": "Every computer and connected app approved to use Tervory for you in this organization. Revoke any you do not recognize: it stops working at once."
+    },
+    {
+      "id": "231:11816",
+      "before": "[Device name]",
+      "after": "[Computer]"
+    },
+    {
+      "id": "231:11818",
+      "before": "CLI sign-in",
+      "after": "Computer"
+    },
+    {
+      "id": "231:11819",
+      "before": "Device name as the device reported it",
+      "after": "Computer name as the computer reported it"
+    },
+    {
+      "id": "239:110",
+      "before": "Every computer and connected app approved to use Tervory for you in this organization. Revoke any you do not recognise: it stops working at once.",
+      "after": "Every computer and connected app approved to use Tervory for you in this organization. Revoke any you do not recognize: it stops working at once."
+    },
+    {
+      "id": "231:11854",
+      "before": "[Device name]",
+      "after": "[Computer]"
+    },
+    {
+      "id": "231:11856",
+      "before": "CLI sign-in",
+      "after": "Computer"
+    },
+    {
+      "id": "231:11857",
+      "before": "Device name as the device reported it",
+      "after": "Computer name as the computer reported it"
+    },
+    {
+      "id": "231:12682",
+      "before": "Approved 3 Nov",
+      "after": "Changed after approval, awaiting founder"
+    },
+    {
+      "id": "468:31324",
+      "before": "Every computer and connected app approved to use Tervory for you in this organization. Revoke any you do not recognise: it stops working at once.",
+      "after": "Every computer and connected app approved to use Tervory for you in this organization. Revoke any you do not recognize: it stops working at once."
+    },
+    {
+      "id": "468:31436",
+      "before": "Every computer and connected app approved to use Tervory for you in this organization. Revoke any you do not recognise: it stops working at once.",
+      "after": "Every computer and connected app approved to use Tervory for you in this organization. Revoke any you do not recognize: it stops working at once."
+    }
+  ],
+  "explicitlyMutatedNodeIds": [
+    "231:10302",
+    "I231:10302;93:5",
+    "239:102",
+    "231:11816",
+    "231:11818",
+    "231:11819",
+    "239:110",
+    "231:11854",
+    "231:11856",
+    "231:11857",
+    "231:11879",
+    "465:45828",
+    "I465:45828;93:5",
+    "231:11877",
+    "231:11909",
+    "465:45915",
+    "I465:45915;93:5",
+    "231:11907",
+    "231:11939",
+    "465:46003",
+    "I465:46003;93:5",
+    "231:11956",
+    "I231:11956;93:5",
+    "231:11937",
+    "231:11967",
+    "465:46090",
+    "I465:46090;93:5",
+    "231:11984",
+    "I231:11984;93:5",
+    "231:11965",
+    "231:11995",
+    "465:46179",
+    "I465:46179;93:5",
+    "231:11993",
+    "231:12023",
+    "465:46266",
+    "I465:46266;93:5",
+    "231:12021",
+    "231:12051",
+    "465:46354",
+    "I465:46354;93:5",
+    "231:12068",
+    "I231:12068;93:5",
+    "231:12049",
+    "231:12079",
+    "465:46442",
+    "I465:46442;93:5",
+    "231:12096",
+    "I231:12096;93:5",
+    "231:12077",
+    "231:12107",
+    "465:47221",
+    "I465:47221;93:5",
+    "231:12105",
+    "231:12133",
+    "465:47311",
+    "I465:47311;93:5",
+    "231:12131",
+    "231:12159",
+    "465:47402",
+    "I465:47402;93:5",
+    "231:12157",
+    "231:12196",
+    "465:47489",
+    "I465:47489;93:5",
+    "231:12194",
+    "231:12233",
+    "465:47577",
+    "I465:47577;93:5",
+    "231:12231",
+    "231:12263",
+    "465:47664",
+    "I465:47664;93:5",
+    "231:12261",
+    "231:12293",
+    "465:47752",
+    "I465:47752;93:5",
+    "231:12310",
+    "I231:12310;93:5",
+    "231:12291",
+    "231:12321",
+    "465:47839",
+    "I465:47839;93:5",
+    "231:12338",
+    "I231:12338;93:5",
+    "231:12319",
+    "231:12349",
+    "465:47927",
+    "I465:47927;93:5",
+    "231:12347",
+    "231:12377",
+    "465:48014",
+    "I465:48014;93:5",
+    "231:12375",
+    "231:12405",
+    "465:48102",
+    "I465:48102;93:5",
+    "231:12422",
+    "I231:12422;93:5",
+    "231:12403",
+    "231:12433",
+    "465:48190",
+    "I465:48190;93:5",
+    "231:12450",
+    "I231:12450;93:5",
+    "231:12431",
+    "231:12461",
+    "465:48279",
+    "I465:48279;93:5",
+    "231:12459",
+    "231:12487",
+    "465:48369",
+    "I465:48369;93:5",
+    "231:12485",
+    "231:12513",
+    "465:48460",
+    "I465:48460;93:5",
+    "231:12511",
+    "231:12550",
+    "465:48547",
+    "I465:48547;93:5",
+    "231:12548",
+    "231:12599",
+    "231:12627",
+    "I231:12627;93:5",
+    "231:12650",
+    "231:12678",
+    "I231:12678;93:5",
+    "231:12701",
+    "231:12708",
+    "I231:12708;93:5",
+    "231:12733",
+    "231:12740",
+    "I231:12740;93:5",
+    "468:27714",
+    "I468:27714;93:5",
+    "468:27814",
+    "468:27816",
+    "I468:27816;93:5",
+    "468:27812",
+    "468:27935",
+    "I468:27935;93:5",
+    "468:27963",
+    "468:27965",
+    "I468:27965;93:5",
+    "468:27961",
+    "468:28012",
+    "I468:28012;93:5",
+    "468:28112",
+    "468:28114",
+    "I468:28114;93:5",
+    "468:28110",
+    "468:28233",
+    "I468:28233;93:5",
+    "468:28261",
+    "468:28263",
+    "I468:28263;93:5",
+    "468:28259",
+    "468:30901",
+    "468:30905",
+    "I468:30905;93:5",
+    "468:31008",
+    "468:31012",
+    "I468:31012;93:5",
+    "468:31043",
+    "468:31047",
+    "I468:31047;93:5",
+    "468:31150",
+    "468:31154",
+    "I468:31154;93:5",
+    "468:31185",
+    "468:31189",
+    "I468:31189;93:5",
+    "468:31292",
+    "468:31296",
+    "I468:31296;93:5",
+    "468:31324",
+    "468:31436",
+    "231:12680",
+    "231:12682",
+    "231:12601",
+    "231:12652",
+    "I231:12607;60:10404",
+    "I231:12607;60:10405",
+    "I231:12615;60:10404",
+    "I231:12615;60:10405",
+    "I231:12623;60:10402",
+    "I231:12623;60:10403",
+    "I231:12658;60:10404",
+    "I231:12658;60:10405",
+    "I231:12666;60:10404",
+    "I231:12666;60:10405",
+    "I231:12674;60:10402",
+    "I231:12674;60:10403",
+    "231:10352",
+    "I231:10352;93:5"
+  ],
+  "removedIdentityBlocks": [
+    {
+      "frame": "231:11794",
+      "block": "231:11799",
+      "retained": []
+    },
+    {
+      "frame": "231:11832",
+      "block": "231:11837",
+      "retained": []
+    },
+    {
+      "frame": "231:11870",
+      "block": "231:11875",
+      "retained": [
+        "231:11877"
+      ]
+    },
+    {
+      "frame": "231:11900",
+      "block": "231:11905",
+      "retained": [
+        "231:11907"
+      ]
+    },
+    {
+      "frame": "231:11930",
+      "block": "231:11935",
+      "retained": [
+        "231:11937"
+      ]
+    },
+    {
+      "frame": "231:11958",
+      "block": "231:11963",
+      "retained": [
+        "231:11965"
+      ]
+    },
+    {
+      "frame": "231:11986",
+      "block": "231:11991",
+      "retained": [
+        "231:11993"
+      ]
+    },
+    {
+      "frame": "231:12014",
+      "block": "231:12019",
+      "retained": [
+        "231:12021"
+      ]
+    },
+    {
+      "frame": "231:12042",
+      "block": "231:12047",
+      "retained": [
+        "231:12049"
+      ]
+    },
+    {
+      "frame": "231:12070",
+      "block": "231:12075",
+      "retained": [
+        "231:12077"
+      ]
+    },
+    {
+      "frame": "231:12098",
+      "block": "231:12103",
+      "retained": [
+        "231:12105"
+      ]
+    },
+    {
+      "frame": "231:12124",
+      "block": "231:12129",
+      "retained": [
+        "231:12131"
+      ]
+    },
+    {
+      "frame": "231:12150",
+      "block": "231:12155",
+      "retained": [
+        "231:12157"
+      ]
+    },
+    {
+      "frame": "231:12187",
+      "block": "231:12192",
+      "retained": [
+        "231:12194"
+      ]
+    },
+    {
+      "frame": "231:12224",
+      "block": "231:12229",
+      "retained": [
+        "231:12231"
+      ]
+    },
+    {
+      "frame": "231:12254",
+      "block": "231:12259",
+      "retained": [
+        "231:12261"
+      ]
+    },
+    {
+      "frame": "231:12284",
+      "block": "231:12289",
+      "retained": [
+        "231:12291"
+      ]
+    },
+    {
+      "frame": "231:12312",
+      "block": "231:12317",
+      "retained": [
+        "231:12319"
+      ]
+    },
+    {
+      "frame": "231:12340",
+      "block": "231:12345",
+      "retained": [
+        "231:12347"
+      ]
+    },
+    {
+      "frame": "231:12368",
+      "block": "231:12373",
+      "retained": [
+        "231:12375"
+      ]
+    },
+    {
+      "frame": "231:12396",
+      "block": "231:12401",
+      "retained": [
+        "231:12403"
+      ]
+    },
+    {
+      "frame": "231:12424",
+      "block": "231:12429",
+      "retained": [
+        "231:12431"
+      ]
+    },
+    {
+      "frame": "231:12452",
+      "block": "231:12457",
+      "retained": [
+        "231:12459"
+      ]
+    },
+    {
+      "frame": "231:12478",
+      "block": "231:12483",
+      "retained": [
+        "231:12485"
+      ]
+    },
+    {
+      "frame": "231:12504",
+      "block": "231:12509",
+      "retained": [
+        "231:12511"
+      ]
+    },
+    {
+      "frame": "231:12541",
+      "block": "231:12546",
+      "retained": [
+        "231:12548"
+      ]
+    },
+    {
+      "frame": "231:12578",
+      "block": "231:12583",
+      "retained": []
+    },
+    {
+      "frame": "231:12629",
+      "block": "231:12634",
+      "retained": []
+    },
+    {
+      "frame": "231:12680",
+      "block": "231:12685",
+      "retained": []
+    },
+    {
+      "frame": "231:12712",
+      "block": "231:12717",
+      "retained": []
+    },
+    {
+      "frame": "231:12744",
+      "block": "231:12749",
+      "retained": []
+    },
+    {
+      "frame": "231:12774",
+      "block": "231:12779",
+      "retained": []
+    },
+    {
+      "frame": "468:26067",
+      "block": "468:26073",
+      "retained": []
+    },
+    {
+      "frame": "468:26173",
+      "block": "468:26179",
+      "retained": []
+    },
+    {
+      "frame": "468:26207",
+      "block": "468:26213",
+      "retained": []
+    },
+    {
+      "frame": "468:26313",
+      "block": "468:26319",
+      "retained": []
+    },
+    {
+      "frame": "468:26347",
+      "block": "468:26353",
+      "retained": []
+    },
+    {
+      "frame": "468:26455",
+      "block": "468:26461",
+      "retained": []
+    },
+    {
+      "frame": "468:26491",
+      "block": "468:26497",
+      "retained": []
+    },
+    {
+      "frame": "468:26599",
+      "block": "468:26605",
+      "retained": []
+    },
+    {
+      "frame": "468:27698",
+      "block": "468:27704",
+      "retained": []
+    },
+    {
+      "frame": "468:27804",
+      "block": "468:27810",
+      "retained": [
+        "468:27812"
+      ]
+    },
+    {
+      "frame": "468:27919",
+      "block": "468:27925",
+      "retained": []
+    },
+    {
+      "frame": "468:27953",
+      "block": "468:27959",
+      "retained": [
+        "468:27961"
+      ]
+    },
+    {
+      "frame": "468:27996",
+      "block": "468:28002",
+      "retained": []
+    },
+    {
+      "frame": "468:28102",
+      "block": "468:28108",
+      "retained": [
+        "468:28110"
+      ]
+    },
+    {
+      "frame": "468:28217",
+      "block": "468:28223",
+      "retained": []
+    },
+    {
+      "frame": "468:28251",
+      "block": "468:28257",
+      "retained": [
+        "468:28259"
+      ]
+    },
+    {
+      "frame": "468:30889",
+      "block": "468:30895",
+      "retained": []
+    },
+    {
+      "frame": "468:30996",
+      "block": "468:31002",
+      "retained": []
+    },
+    {
+      "frame": "468:31031",
+      "block": "468:31037",
+      "retained": []
+    },
+    {
+      "frame": "468:31138",
+      "block": "468:31144",
+      "retained": []
+    },
+    {
+      "frame": "468:31173",
+      "block": "468:31179",
+      "retained": []
+    },
+    {
+      "frame": "468:31280",
+      "block": "468:31286",
+      "retained": []
+    },
+    {
+      "frame": "468:31315",
+      "block": "468:31321",
+      "retained": []
+    },
+    {
+      "frame": "468:31427",
+      "block": "468:31433",
+      "retained": []
+    }
+  ],
+  "sharedNavigationEdited": false,
+  "removeServerStylesPreserved": true,
+  "validation": "passed"
+}
