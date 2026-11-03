@@ -991,3 +991,46 @@ Commands: git clone https://github.com/Tervory-AI/tervory-tank.git /workspace/co
 Figma structural checks cover duplicate detail labels, hidden internals, column counts, confirmation context, required payment inputs, drawer clearance and canvas text. Screenshots are authoring evidence, not a founder browser acceptance test. Founder acceptance remains outstanding. No tests or screenshots are claimed as founder approval. Claude handles PR review and the founder merges.
 
 Verification results: all 94 original screen/drawer roots retained; zero visible duplicate detail labels; zero exposed Reference, Board order, Organisation or Acceptance IP address fields; all 16 desktop lists at 5–8 columns. Mobile payment scroll ends at y732, exactly above the footer; last input ends at y935 of 1039px content, leaving 104px clearance. Both drawers: bottom width240, one Settings, vertical scroll, end padding16. Visible canvas SPEC matches this document; both native SPEC copies match after Markdown whitespace normalization. Old canvas SPEC sections101:8245–101:8261 were deleted. Authoring screenshots inspected invoice list, mobile full-name cards, invoice/quote detail, payment forms, Send/Convert and isolated invoice tables. No founder-test screenshot exists yet.
+
+## Fix round 3 · Delete visibility and Contacts spacing
+
+All existing IDs are retained. The 18 Delete confirmations now render a solid destructive red Confirm with a white centred label. Their paint stores the resolved red colour as well as the existing Trigger variable binding; a white fallback paint is not accepted as visual proof of a red control. The ten non-destructive Confirm controls remain navy. The component specimen remains navy primary.
+
+### Delete confirmation frames and controls
+
+- Frame `98:8589`, Confirm `98:8601`: visible red fill and white label.
+- Frame `98:8621`, Confirm `98:8633`: visible red fill and white label.
+- Frame `98:8653`, Confirm `98:8665`: visible red fill and white label.
+- Frame `98:8685`, Confirm `98:8697`: visible red fill and white label.
+- Frame `98:8717`, Confirm `98:8729`: visible red fill and white label.
+- Frame `98:8749`, Confirm `98:8761`: visible red fill and white label.
+- Frame `98:8893`, Confirm `98:8905`: visible red fill and white label.
+- Frame `98:9087`, Confirm `98:9105`: visible red fill and white label.
+- Frame `98:9131`, Confirm `98:9152`: visible red fill and white label.
+- Frame `98:8605`, Confirm `98:8617`: visible red fill and white label.
+- Frame `98:8637`, Confirm `98:8649`: visible red fill and white label.
+- Frame `98:8669`, Confirm `98:8681`: visible red fill and white label.
+- Frame `98:8701`, Confirm `98:8713`: visible red fill and white label.
+- Frame `98:8733`, Confirm `98:8745`: visible red fill and white label.
+- Frame `98:8765`, Confirm `98:8777`: visible red fill and white label.
+- Frame `98:8909`, Confirm `98:8921`: visible red fill and white label.
+- Frame `98:9109`, Confirm `98:9127`: visible red fill and white label.
+- Frame `98:9156`, Confirm `98:9177`: visible red fill and white label.
+
+### Contacts source and scrolled layout
+
+Mobile source wrappers 97:3188 (97:3060) and 97:3331 (97:3200) are hidden, closing the 81px band left by hidden account_detail. The equivalent empty wrappers are hidden in all six mobile scrolled Contacts frames: 310:20624, 310:20763, 310:20902, 310:21041, 310:21183 and 310:21325. No field data or node was deleted. Client is followed directly by Linked clients.
+
+Desktop Client fields now span the full 1136px row and divider in source frames 97:2543 and 97:2800 and scrolled frames 310:20183 and 310:20402. Resized field IDs: 97:2787, 97:3047, 310:20233 and 310:20454. Linked clients retains its existing separate labelled field. Every one of the 29 visible fields per Contacts source remains fully reviewable in a top or scrolled view: 116/116 controls across the four source variants.
+
+### Canvas position and master footer
+
+Review frame 310:15307 moved to x13200, y32, with its existing caption 310:15588 at x13200, y8. It no longer intersects any screen or the Trigger menu master 180:8549 / mobile bar 180:8550. Both masters retain their positions.
+
+In master 180:8549, footer label nodes I180:8464;43:410 (desktop 180:8387) and I180:8546;43:410 (mobile 180:8467) now read Account settings. This matches the screens and navigation contract. No new wording is proposed in this round; Account settings is an existing label.
+
+### Round 3 verification
+
+git fetch origin codex/crm-design passed. git diff --check and git diff --check origin/main...HEAD passed. The SPEC change was committed and git push origin codex/crm-design passed. Figma checks: all 18 Delete Confirms have visible resolved red fills and white labels; all ten non-destructive Confirms remain navy; Contacts coverage is 116/116; the moved frame has zero frame/component overlaps; both menu master footer labels are Account settings.
+
+Authoring screenshots inspected Delete line item at 1440 and 375, Contacts lower fields at both sizes and the desktop menu master. These are design checks, not a founder-browser acceptance test. The founder's acceptance remains outstanding. No application code, API call, production record or deployment was changed.
