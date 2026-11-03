@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def signed_result(monkeypatch, tmp_path, **changes):
     # A public offline marker with no credential capability.
     monkeypatch.setenv(health.SECRET_ENV, "offline-test-marker")
+    monkeypatch.setenv("SITE_NAME", "tervory.com")
     monkeypatch.setattr(health, "HEALTH_DIR", tmp_path)
     result = dict(site="tervory.com", url="https://tervory.com/", ok=True,
                   status=200, ms=2, checked_at=time.time())
@@ -65,7 +66,7 @@ def test_bad_health_fails_closed(monkeypatch, tmp_path, mutation):
 def test_all_four_gates(monkeypatch, token, allowed, proxy, observer):
     monkeypatch.setenv(cf.TOKEN_ENV, "offline-test-marker" if token else "")
     monkeypatch.setattr(cf, "proxy_answers", lambda: proxy)
-    monkeypatch.setattr(health, "health_configured", lambda: observer)
+    monkeypatch.setattr(health, "health_configured", lambda *args: observer)
     monkeypatch.setattr(cf, "CloudflareProxyTransport", lambda: httpx.MockTransport(lambda r: pytest.fail("API called")))
     fixture = FixtureEdgeControl(tenant_id=TENANT)
     edge = select_control(site="tervory.com" if allowed else "example.com",
@@ -159,7 +160,7 @@ def test_boot_restores_real_control_and_owned_rule(monkeypatch, tmp_path):
     monkeypatch.setenv("TENANT_ID", prior.tenant_id)
     monkeypatch.setenv(cf.TOKEN_ENV, "offline-test-marker")
     monkeypatch.setattr(cf, "proxy_answers", lambda: True)
-    monkeypatch.setattr(health, "health_configured", lambda: True)
+    monkeypatch.setattr(health, "health_configured", lambda *args: True)
     monkeypatch.setattr(health, "read_health", lambda site: True)
     monkeypatch.setattr(cf, "CloudflareProxyTransport", lambda: httpx.MockTransport(api))
     monkeypatch.setattr(app_module, "data_dir_path", lambda: tmp_path)

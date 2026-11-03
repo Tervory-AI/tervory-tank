@@ -87,6 +87,7 @@ services:
     security_opt: [no-new-privileges:true]
     environment:
       AUTUMBRA_HEALTH_SECRET: ${AUTUMBRA_HEALTH_SECRET:-}
+      SITE_NAME: ${SITE_NAME:-}
       PYTHONDONTWRITEBYTECODE: "1"
     volumes:
       - health_results:/data

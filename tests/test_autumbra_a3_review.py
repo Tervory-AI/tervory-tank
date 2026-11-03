@@ -43,7 +43,7 @@ def test_health_probes_and_propose_approve_undo_at_six_tunnels(monkeypatch, tmp_
     edge = cf.CloudflareEdgeControl(tenant_id=settings().tenant_id, site="tervory.com",
                                    transport=transport, health_probe=lambda: True)
     monkeypatch.setenv(cf.TOKEN_ENV, "offline-test-marker")
-    monkeypatch.setattr('agents.ghost.site_health.health_configured', lambda: True)
+    monkeypatch.setattr('agents.ghost.site_health.health_configured', lambda *args: True)
     try:
         for _ in range(20):
             assert cf.proxy_answers()
@@ -178,3 +178,51 @@ def test_project_site_is_a_founder_setting():
     compose = yaml.safe_load((root/'agents/ghost/docker-compose.enforce.yml').read_text())
     assert compose['services']['enforce']['environment']['SITE_NAME'] == '${SITE_NAME:-}'
     assert '`SITE_NAME`' in (root/'docs/ops/AUTUMBRA-CLOUDFLARE-LIVE.md').read_text()
+
+
+class ObserverStopped(Exception):
+    pass
+
+
+@pytest.mark.parametrize('secret,site', [('', 'tervory.com'), ('   ', 'tervory.com'),
+    ('offline-test-marker', ''), ('offline-test-marker', 'example.com')])
+def test_unconfigured_observer_sleeps_without_requests(monkeypatch, capsys, tmp_path, secret, site):
+    from agents.ghost import site_health as health
+    monkeypatch.setenv(health.SECRET_ENV, secret)
+    monkeypatch.setenv('SITE_NAME', site)
+    monkeypatch.setattr(health, 'HEALTH_DIR', tmp_path)
+    assert not health.health_configured('tervory.com')
+    sleeps = []
+    def sleep(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) == 3:
+            raise ObserverStopped
+    monkeypatch.setattr(health.time, 'sleep', sleep)
+    monkeypatch.setattr(health.httpx, 'HTTPTransport', lambda **kwargs: pytest.fail('request transport created'))
+    with pytest.raises(ObserverStopped):
+        health.main()
+    assert sleeps == [15, 15, 15]
+    assert capsys.readouterr().out == 'Health observer is not configured.\n'
+
+
+def test_observer_only_fetches_this_projects_site(monkeypatch, tmp_path):
+    from agents.ghost import site_health as health
+    monkeypatch.setenv(health.SECRET_ENV, 'offline-test-marker')
+    monkeypatch.setenv('SITE_NAME', 'tervory.com')
+    monkeypatch.setattr(health, 'OUTPUT_DIR', tmp_path)
+    monkeypatch.setitem(health.HEALTH_URLS, 'other.example', 'https://other.example/')
+    seen = []
+    def respond(request):
+        seen.append(str(request.url))
+        return httpx.Response(200)
+    def transport(**kwargs):
+        assert kwargs == {'proxy': 'http://health-egress-proxy:8080'}
+        return httpx.MockTransport(respond)
+    monkeypatch.setattr(health.httpx, 'HTTPTransport', transport)
+    def stop(seconds):
+        raise ObserverStopped
+    monkeypatch.setattr(health.time, 'sleep', stop)
+    with pytest.raises(ObserverStopped):
+        health.main()
+    assert seen == ['https://tervory.com/']
+    assert sorted(p.name for p in tmp_path.iterdir()) == ['tervory.com.json']

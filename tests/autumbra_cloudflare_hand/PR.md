@@ -161,3 +161,14 @@ Enforce now reads `SITE_NAME: ${SITE_NAME:-}`. The operations guide lists
 `SITE_NAME` among the founder's Coolify setting names without supplying a value.
 Command: `/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python .proof/run_review.py tests/test_autumbra_a3_review.py::test_project_site_is_a_founder_setting`
 Exit 0: **1 passed**.
+
+## Review fix 4 — idle unconfigured observer and project-only requests
+
+With a blank/whitespace secret, blank SITE_NAME or unsupported site, the
+observer logs one fixed line and sleeps without creating a request transport,
+writing a result, or exiting. A configured observer fetches only this project's
+SITE_NAME. Compose passes the same site setting to Enforce and the observer;
+activation verifies that the observer is configured for the requested site.
+Command: `/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python .proof/run_review.py tests/test_autumbra_a3_review.py tests/test_autumbra_cloudflare_live.py`
+Exit 0: **69 passed in 21.25s**. Tests cover three sleep cycles with one log line
+and no request, unsupported/blank sites, and fetching only the selected site.

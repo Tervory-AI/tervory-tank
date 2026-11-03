@@ -13,6 +13,7 @@ import httpx
 
 HEALTH_URLS = {"tervory.com": "https://tervory.com/"}
 HEALTH_DIR = Path("/health")
+OUTPUT_DIR = Path("/data")
 SECRET_ENV = "AUTUMBRA_HEALTH_SECRET"
 
 
@@ -20,8 +21,15 @@ def canonical(result: dict) -> bytes:
     return json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
 
-def health_configured() -> bool:
-    return bool(os.environ.get(SECRET_ENV)) and HEALTH_DIR.is_dir()
+def observer_site() -> str | None:
+    site = os.environ.get("SITE_NAME", "").strip()
+    return site if site in HEALTH_URLS else None
+
+
+def health_configured(site: str | None = None) -> bool:
+    configured_site = observer_site()
+    return (bool(os.environ.get(SECRET_ENV, "").strip()) and HEALTH_DIR.is_dir()
+            and configured_site is not None and (site is None or site == configured_site))
 
 
 def read_health(site: str) -> bool:
@@ -68,22 +76,24 @@ def observe_once(client: httpx.Client, site: str) -> dict:
 
 
 def main() -> None:
-    secret = os.environ[SECRET_ENV]
-    if not secret:
-        raise RuntimeError("Health signing is not configured.")
-    output_dir = Path("/data")
+    secret = os.environ.get(SECRET_ENV, "")
+    site = observer_site()
+    if not secret.strip() or site is None:
+        print("Health observer is not configured.", flush=True)
+        while True:
+            time.sleep(15)
+    output_dir = OUTPUT_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
     transport = httpx.HTTPTransport(proxy="http://health-egress-proxy:8080")
     with httpx.Client(transport=transport, trust_env=False, timeout=5,
                       follow_redirects=False) as client:
         while True:
-            for site in HEALTH_URLS:
-                result = observe_once(client, site)
-                signature = hmac.new(secret.encode(), canonical(result), hashlib.sha256).hexdigest()
-                path = output_dir / (site + ".json")
-                temporary = path.with_suffix(".tmp")
-                temporary.write_text(json.dumps({"result": result, "signature": signature}))
-                temporary.replace(path)
+            result = observe_once(client, site)
+            signature = hmac.new(secret.encode(), canonical(result), hashlib.sha256).hexdigest()
+            path = output_dir / (site + ".json")
+            temporary = path.with_suffix(".tmp")
+            temporary.write_text(json.dumps({"result": result, "signature": signature}))
+            temporary.replace(path)
             time.sleep(15)
 
 

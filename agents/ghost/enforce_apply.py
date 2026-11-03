@@ -61,7 +61,7 @@ def select_control(*, site: str, settings: ClientAutumbraSettings,
         live.blocked.update(edge.blocked)
         return live
     configured = bool(os.environ.get(TOKEN_ENV, "").strip())
-    if not configured or zone_of(site) is None or not health_configured() or not proxy_answers():
+    if not configured or zone_of(site) is None or not health_configured(site) or not proxy_answers():
         if isinstance(edge, CloudflareEdgeControl):
             fixture = FixtureEdgeControl(tenant_id=settings.tenant_id, site=site)
             fixture.blocked.update(edge.blocked)
