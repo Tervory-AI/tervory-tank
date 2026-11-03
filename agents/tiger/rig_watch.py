@@ -298,34 +298,33 @@ class DiscoveryGate:
         safe = check_url(url)
         parsed = urlsplit(safe)
         site = f'{parsed.scheme}://{parsed.netloc}'
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,1))', site)
-                row = await conn.fetchrow('''INSERT INTO agent_tiger.discovery_limits(site) VALUES($1)
-                    ON CONFLICT(site) DO UPDATE SET
-                    requests=CASE WHEN discovery_limits.day<>(now() AT TIME ZONE 'UTC')::date THEN 0 ELSE discovery_limits.requests END,
-                    human_check=CASE WHEN discovery_limits.day<>(now() AT TIME ZONE 'UTC')::date THEN false ELSE discovery_limits.human_check END,
-                    day=(now() AT TIME ZONE 'UTC')::date RETURNING *''', site)
-                if row['human_check']:
-                    raise DiscoveryStopped('human_check')
-                if row['requests'] >= 500:
-                    raise DiscoveryStopped('page_limit')
-                if row['last_at']:
-                    delay = 3 - (datetime.now(timezone.utc) - row['last_at']).total_seconds()
-                    if delay > 0:
-                        await asyncio.sleep(min(delay, 3))
-                # Commit accounting even if transport/processing fails. Every
-                # attempted outbound request counts and leaves its pacing stamp.
-                await conn.execute('UPDATE agent_tiger.discovery_limits SET requests=requests+1,last_at=clock_timestamp() WHERE site=$1', site)
-                try:
-                    result = await operation()
-                except Exception as exc:
-                    failure = exc
-                else:
-                    failure = None
-            if failure is not None:
-                raise failure
-            return result
+        checkout = self.pool.acquire(autocommit=True) if hasattr(self.pool, 'raw') else self.pool.acquire()
+        async with checkout as conn:
+            await conn.execute('SELECT pg_advisory_lock(hashtextextended($1,1))', site)
+            try:
+                async with conn.transaction():
+                    row = await conn.fetchrow('''INSERT INTO agent_tiger.discovery_limits(site) VALUES($1)
+                        ON CONFLICT(site) DO UPDATE SET
+                        requests=CASE WHEN discovery_limits.day<>(now() AT TIME ZONE 'UTC')::date THEN 0 ELSE discovery_limits.requests END,
+                        human_check=CASE WHEN discovery_limits.day<>(now() AT TIME ZONE 'UTC')::date THEN false ELSE discovery_limits.human_check END,
+                        day=(now() AT TIME ZONE 'UTC')::date RETURNING *''', site)
+                    if row['human_check']:
+                        raise DiscoveryStopped('human_check')
+                    if row['requests'] >= 500:
+                        raise DiscoveryStopped('page_limit')
+                    if row['last_at']:
+                        delay = 3 - (datetime.now(timezone.utc) - row['last_at']).total_seconds()
+                        if delay > 0:
+                            await asyncio.sleep(min(delay, 3))
+                    await conn.execute('UPDATE agent_tiger.discovery_limits SET requests=requests+1,last_at=clock_timestamp() WHERE site=$1', site)
+                # The reservation committed before transport: cancellation or a
+                # crashed worker cannot refund an already-started public request.
+                result = await operation()
+                if isinstance(result, dict) and (result.get('challenge') or result.get('blocked_by_check') or result.get('status') in {401,403,429}):
+                    await conn.execute('UPDATE agent_tiger.discovery_limits SET human_check=true WHERE site=$1', site)
+                return result
+            finally:
+                await asyncio.shield(conn.execute('SELECT pg_advisory_unlock(hashtextextended($1,1))', site))
 
     async def block(self, site):
         async with self.pool.acquire() as conn:
