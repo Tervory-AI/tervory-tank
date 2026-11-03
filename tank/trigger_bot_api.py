@@ -70,6 +70,9 @@ async def prepare(action, actor, state, conn=None):
     operation = action.tool.removeprefix('trigger.bot.')
     await authority(actor, operation, conn)
     values = dict(action.arguments)
+    if operation in {'settings', 'handover', 'reply'}:
+        from trigger_console import prepare as prepare_console
+        return await prepare_console(action, actor, conn)
     pool = conn if conn is not None else runtime().pool()
     if operation == 'source.add' and values['kind'] == 'document':
         attachments = [a for m in state['messages'] if m['role'] == 'user'
@@ -126,6 +129,9 @@ async def key_for_site(bot, tenant, url, source_id):
 async def execute(operation, args, actor, operation_id):
     bot, tenant = make_bot(), actor.tenant_id
     pool = bot.pool
+    if operation in {'settings', 'handover', 'reply'}:
+        from trigger_console import execute as execute_console
+        return await execute_console(operation, args, actor, operation_id)
     if operation == 'source.add':
         content = ''
         if args.kind == 'document':
