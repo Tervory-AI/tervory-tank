@@ -19,6 +19,10 @@ async def tick(pool, *, execute_scan=None) -> dict:
         async with conn.transaction():
             if not await conn.fetchval('SELECT pg_try_advisory_xact_lock($1)', WATCH_LOCK):
                 return {'queued': True}
+            from regulation_events import run_queued
+            queued = await run_queued(pool, conn)
+            if queued is not None:
+                return queued
             # Administrative discovery only. Every operation below re-enters the
             # persisted owner's tenant scope and rechecks status/due time.
             owner = await conn.fetchrow("""SELECT tenant_id,domain FROM agent_radix.passive_watches
