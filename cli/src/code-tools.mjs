@@ -127,7 +127,8 @@ export class CodeFolder {
     for (const name of names) {
       try {
         const path = await this.path(name);
-        if (!excluded.has(name) && (await lstat(path)).isFile()) files.push(name);
+        const info = await lstat(path);
+        if (!excluded.has(name) && info.isFile() && info.nlink === 1) files.push(name);
       } catch { /* ignored, secret, symlink or vanished */ }
       if (files.length === LIMITS.files) break;
     }
