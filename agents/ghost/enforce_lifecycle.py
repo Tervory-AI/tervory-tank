@@ -156,7 +156,7 @@ def plan_destroy(tenant_id: str) -> dict[str, Any]:
         "threat_payload_queue": queue_name(tenant_id),
         "network": {"name": network_name(tenant_id), "internal": True},
         "volume": volume_name(tenant_id),
-        "note": "Destroy container, named secret binding, queue and internal network.",
+        "note": "Destroy container, named secret binding and internal network; keep volumes for founder cleanup.",
     }
 
 
@@ -306,9 +306,10 @@ class CoolifyEnforceBackend:
         for row in rows:
             if not isinstance(row, dict) or not isinstance(row.get("name"), str):
                 raise Refused("Coolify application list unavailable")
-            if row["name"].startswith(PROJECT_PREFIX):
+            if re.fullmatch(re.escape(PROJECT_PREFIX) + r"-[0-9a-fA-F-]{36}", row["name"]):
                 result.append({"name": row["name"], "uuid": identifier(row.get("uuid", "")),
-                               "status": str(row.get("status") or "unknown")})
+                               "status": str(row.get("status") or "unknown"),
+                               **{key: row.get(key) for key in ("description", "git_repository", "build_pack", "docker_compose_location")}})
         return result
 
     async def create_plan(self, tenant_id: str) -> dict[str, Any]:
@@ -341,15 +342,19 @@ class CoolifyEnforceBackend:
         receipt["founder_fills"] = self.founder_fills(plan)
         mutated = False
         try:
-            mutated = True
             created = await self.coolify.call("POST", "/applications/private-github-app", mutation=True,
                 json={"project_uuid": self.project, "server_uuid": self.server,
                       "environment_name": self.environment, "github_app_uuid": self.github_app,
                       "git_repository": "https://github.com/Tervory-AI/tervory-tank.git",
                       "git_branch": "main", "build_pack": "dockercompose", "name": plan["project"],
+                      "description": "autumbra-enforce:" + plan["tenant_id"],
                       "docker_compose_location": "/agents/ghost/docker-compose.enforce.yml",
                       "instant_deploy": False, "is_auto_deploy_enabled": False})
-            app_uuid = identifier(created.get("uuid", ""))
+            try:
+                app_uuid = identifier(created.get("uuid", ""))
+            except (ValueError, TypeError):
+                raise CoolifyUnknown("Coolify mutation outcome unknown") from None
+            mutated = True
             receipt["uuid"] = app_uuid
             await self.coolify.call("PATCH", f"/applications/{app_uuid}/envs/bulk",
                 mutation=True, discard_response=True,
@@ -361,7 +366,7 @@ class CoolifyEnforceBackend:
             receipt["outcome"] = "unknown"
         except Refused:
             # The resource may exist even when its four settings could not be written.
-            receipt["outcome"] = "unknown" if mutated else "refused"
+            receipt["outcome"] = "created_unconfigured" if mutated else "refused"
         return receipt
 
     async def destroy(self, plan: dict[str, Any]) -> dict[str, Any]:
@@ -375,12 +380,18 @@ class CoolifyEnforceBackend:
             raise Refused("Enforce project name is not unique")
         if not matches:
             return receipt_for(plan, outcome="absent")
+        target = matches[0]
+        if (target.get("description") != "autumbra-enforce:" + plan["tenant_id"]
+                or target.get("build_pack") != "dockercompose"
+                or target.get("docker_compose_location") != "/agents/ghost/docker-compose.enforce.yml"
+                or target.get("git_repository") != "https://github.com/Tervory-AI/tervory-tank.git"):
+            raise Refused("Enforce resource was not created by Autumbra")
         receipt = receipt_for(plan)
         receipt["uuid"] = matches[0]["uuid"]
         try:
             await self.coolify.call("DELETE", "/applications/" + matches[0]["uuid"],
                 mutation=True, discard_response=True,
-                params={"delete_configurations": "true", "delete_volumes": "true",
+                params={"delete_configurations": "true", "delete_volumes": "false",
                         "delete_connected_networks": "true", "docker_cleanup": "false"})
             receipt["outcome"] = "destroyed"
         except CoolifyUnknown:
