@@ -176,6 +176,10 @@ UUID, and the raw identifier is sealed under a tenant/conversation vault context
 for sending only. Existing retention deletes that sealed value and cascading
 webhook claims 12 calendar months after the conversation's last message.
 
+Conversation delivery is recorded in the additive `transport` column: `web`
+by default, or `whatsapp` for this corridor. The legacy `channel` column keeps
+its original web-only check. No existing constraint is removed or relaxed.
+
 ### Free-tier claim and hand-over behavior
 
 `tank.trigger_whatsapp_months` holds the tenant, business phone number, local
