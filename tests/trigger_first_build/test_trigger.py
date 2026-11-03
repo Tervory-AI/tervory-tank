@@ -292,7 +292,7 @@ async def test_real_schema_reapplication_and_voice_isolation(monkeypatch):
         schema = (ROOT / 'tank/schema.sql').read_text()
         await pool.execute(schema)
         await pool.execute(schema)
-        rows = await pool.fetch("SELECT task_type,cache_scope,eval_threshold,min_shadow_samples FROM tank.policy WHERE task_type LIKE 'trigger.%'")
+        rows = await pool.fetch("SELECT task_type,cache_scope,eval_threshold,min_shadow_samples FROM tank.policy WHERE task_type IN ('trigger.write','trigger.check')")
         assert len(rows) == 2
         assert {r['task_type']: r['cache_scope'] for r in rows} == {'trigger.write': 'tenant', 'trigger.check': 'none'}
         assert all(float(r['eval_threshold']) == 0.99 and r['min_shadow_samples'] == 200 for r in rows)

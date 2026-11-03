@@ -99,12 +99,13 @@ def binding(actor: Actor) -> tuple[str, str, str]:
 
 
 async def upstream(actor: Actor, resource: Resource, *, record_id: UUID | None = None,
-                   method: str = "GET", data: dict | None = None, params: dict | None = None) -> dict:
+                   method: str = "GET", data: dict | None = None, params: dict | None = None,
+                   _authorize=None) -> dict:
     url, token, organization = binding(actor)
     if method != "GET":
         # An old/unmodified CRM must fail before any write, not after a side effect.
         await upstream(actor, resource, params={"offset": 0, "limit": 1})
-        actor = await authority(actor)
+        actor = await (_authorize or authority)(actor)
     path = PATHS[resource] + (f"{record_id}/" if record_id else "")
     try:
         async with (
@@ -219,3 +220,25 @@ async def write(request: Request, actor: Annotated[Actor, Depends(identity)]):
         item = {"id": result.get("id", str(args.record_id) if args.record_id else None)}
     return {"resource": args.resource, "item": project(item), "model_calls": 0, "cost_usd": 0,
             "ledger_id": str(await code_receipt(actor.tenant_id, "trigger.crm.write"))}
+
+
+async def confirmed_bot_lead(actor: Actor, draft_id: UUID, data: dict, arguments: dict) -> dict:
+    """Narrow bot create-only capability; generic CRM access stays founder-only."""
+    from trigger_commands import confirmation
+
+    async def authorize(current):
+        current = await authorized_actor(current)
+        if not (current.founder or current.tenant_admin):
+            raise HTTPException(403, "This tool is not available to this user")
+        require_tool(current, "trigger.bot.lead.confirm")
+        confirmation(current, "trigger.bot.lead.confirm", arguments)
+        import hashlib
+        expected = hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        if arguments.get("draft_id") != str(draft_id) or arguments.get("expected_digest") != expected:
+            raise HTTPException(409, "Confirmed action required")
+        return current
+
+    actor = await authorize(actor)
+    validate_data("leads", data)
+    # binding() and authenticated organization preflight happen before any POST.
+    return await upstream(actor, "leads", method="POST", data=data, _authorize=authorize)
