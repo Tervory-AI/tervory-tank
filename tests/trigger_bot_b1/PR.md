@@ -52,7 +52,7 @@ The founder's explicit one-branch brief takes precedence over AGENTS.md's usual 
 
 Founder-supplied setting names only: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `TRIGGER_BOT_HANDOVER_ADDRESSES` (tenant UUID to recipient email map). Existing region/corridor and CRM tenant-binding settings remain prerequisites. Values were never inspected or supplied. Actual SMTP delivery, runtime bindings, local encoder/Qdrant availability and the store's approved source URLs are not certified by fake-based tests.
 
-Founder decision, 3 November 2026: conversation retention is **12 calendar months after the last message**. Daily maintenance deletes expired conversations, messages and unconfirmed drafts in tenant-scoped batches. Confirmed lead/quote drafts and their CRM/Rig records remain. Rate-limit counters retain Rig's existing short-lived windows. Ambiguous SMTP/CRM/quote execution is not automatically replayed. Privacy-notice wording remains the founder's unfilled slot.
+Founder decision, 3 November 2026: conversation retention is **12 calendar months after the last message**. Daily maintenance deletes expired conversations, messages and unconfirmed drafts in tenant-scoped batches. Confirmed lead/quote drafts and their CRM/Rig records remain. Rate-limit counters now reference the tenant's window with ON DELETE CASCADE, so deleting expired windows also deletes their counters; the legacy orphan cleanup and CHECK (hits>0) are idempotent. Ambiguous SMTP/CRM/quote execution is not automatically replayed. Privacy-notice wording remains the founder's unfilled slot.
 
 ## Verification and gaps
 
@@ -108,3 +108,47 @@ The skipped CRM WSGI module passed **4 tests** in its separate pinned Django
 runtime. The real Trigger room/LanguageTool-container check remains unrun.
 Earlier failing setup runs and their corrections remain in
 `retention-verification.txt`; no skipped or failed run is relabelled a pass.
+
+
+## PR #600 second review at c4b2201c
+
+Own isolated checkout: `/workspace/codex-trigger-b1-rereview`, same branch
+`codex/trigger-b1-bot`. Fetched and merged `origin/main` first and before every
+one-file push. No production SQL, deployment or model calls.
+
+| File and line | Review fix |
+|---|---|
+| `tank/trigger_bot_grounding.py:19`, `:47` | Extract digit runs beside letters from answers and cited evidence. Monetary amounts retain the existing separate decimal/currency validation. |
+| `tank/trigger_bot_grounding.py:18`, `:22` | Explicit ZAR/USD/EUR/GBP/NAD/BWP/AUD/CAD codes, case-insensitive, with existing symbols and currency words. Ordinary phrases reach the answer path; lowercase prices require live Rig. |
+| `tank/trigger_bot_grounding.py:27`, `:30`, `:143` | May requires an adjacent day/year in either order; remove now/soon/later. Normalize May date order while still verifying the digits. |
+| `tank/trigger_bot.py:138` | Return deleted message ledger IDs; delete only that tenant's matching transcripts in the same transaction; add transcript count to the counts-only $0 receipt. |
+| `tank/schema.sql:2507` | Delete legacy orphan counters, add table-scoped idempotent window FK with cascade and positive-hit check before the generated-memory block. |
+| `tests/trigger_bot_b1/test_rereview.py:13`, `:68` | Each requested number form with and without support, ordinary phrases, all eight codes in both orders/cases, actual May dates and ordinary words, twice-applied constraints/orphan cleanup/cascade/other-tenant protection. |
+| `tests/trigger_bot_b1/test_retention.py:24`, `:37`, `:109` | Expired transcripts removed, fresh and foreign transcripts retained, receipt contents and rollback proved with real disposable PostgreSQL. |
+
+Exact commands, harness source and outcomes: [rereview-verification.txt](rereview-verification.txt).
+
+- `.venv/bin/python .git/run-rereview.py`: **153 passed, zero skipped**,
+  14 warnings in 61.65s. Includes the full B1 directory and both generator tests.
+- `tests/test_tisan_builder_interfaces.py::test_policy_survives_actual_schema_generator`:
+  **PASS** in that run; actual generator leaves `tank/schema.sql` byte-identical.
+- `tests/test_agent_memory_records.py::test_all_agent_schema_files_use_one_generator`:
+  **PASS** in that run.
+- `.venv/bin/python .git/run-rls.py` invokes `tests/test_tenant_rls.py` with
+  disposable local PostgreSQL: **4 passed, 11 setup errors, interrupted** because
+  bundled pgserver lacks `pg_trgm`. No application assertion failed; the remaining
+  cases were not completed locally. CI's Postgres is the test of record for this module.
+- Targeted Ruff and `git diff --check`: **PASS**. Initial missing Node dependencies
+  and the pre-existing broader runtime import-order lint are recorded without
+  presenting either as a passing check.
+
+**Final-head CI Tank result (full-suite test of record):**
+[the current-head `tank` result on PR #600](https://github.com/Tervory-AI/tervory-tank/pull/600/checks).
+This link follows the final head, rather than an earlier green run. The final
+Tank counts and immutable job permalink are also recorded in the PR review
+evidence after that head finishes. CI includes `tests/test_tenant_rls.py` with
+Postgres and the tisan schema-generator test above.
+
+**Founder-browser test follows after merge**, in the founder's own Custom Nation
+`/chats` session. Founder alone merges. No browser acceptance or screenshots are
+claimed here; the acceptance steps already listed above remain outstanding.
