@@ -34,6 +34,9 @@ export const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/;
 const CLI = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const sha256 = file => createHash('sha256').update(readFileSync(file)).digest('hex');
+// Git for Windows' GNU tar/gzip are MSYS programs, not native Win32 tools.
+const archivePath = value => process.platform === 'win32'
+  ? value.replaceAll('\\', '/').replace(/^([A-Za-z]):\//, (_, drive) => `/${drive.toLowerCase()}/`) : value;
 const run = (command, args, cwd) => {
   // Windows .cmd launchers need a shell; invoke npm's JS entry with Node instead.
   if (command === 'npm' && process.platform === 'win32') {
@@ -42,6 +45,7 @@ const run = (command, args, cwd) => {
     if (!npm) throw new Error('npm CLI entry was not found');
     args = [npm, ...args]; command = process.execPath;
   }
+  if (command === 'tar') args = args.map(archivePath);
   return execFileSync(command, args, { cwd, stdio: ['ignore', 'pipe', 'inherit'] }).toString();
 };
 
@@ -79,7 +83,7 @@ export function buildRelease({ out, platforms = Object.keys(PLATFORMS), version 
       const file = `${top}-${name}.tar.gz`; const tarFile = join(work, `${file}.tar`);
       run('tar', ['--force-local', '--sort=name', '--mtime=@0', '--owner=0', '--group=0', '--numeric-owner', '--mode=u=rwX,go=rX', '--format=ustar',
                   '-cf', tarFile, '-C', stage, top]);
-      writeFileSync(join(releaseDir, file), execFileSync('gzip', ['-n', '-9', '-c', tarFile], { maxBuffer: 1 << 28 }));
+      writeFileSync(join(releaseDir, file), execFileSync('gzip', ['-n', '-9', '-c', archivePath(tarFile)], { maxBuffer: 1 << 28 }));
       artifacts[name] = { file, sha256: sha256(join(releaseDir, file)), size: statSync(join(releaseDir, file)).size };
     }
     const manifest = { name: 'tervory-cli', version, node: pkg.engines?.node ?? '>=22 <23', artifacts };

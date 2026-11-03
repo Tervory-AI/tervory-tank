@@ -127,7 +127,7 @@ test('offline exact output for US login and plugin commands', async () => {
     assert(url.endsWith('/placeholder-thread')); assert.equal(action, 'confirm');
     return Response.json({ steps: [{ step_id: 'placeholder-card', status: 'done', actor: 'Tank', label: tool }], receipts: [] });
   };
-  const command = async argv => { output += '$ tervory ' + argv.map(value => value.startsWith('{') ? `"${value.replaceAll('"', '\"')}"` : value).join(' ') + '\n'; await run(argv, { store, transport, io }); };
+  const command = async argv => { output += '$ tervory ' + argv.map(value => value.startsWith('{') ? "'" + value + "'" : value).join(' ') + '\n'; await run(argv, { store, transport, io }); };
   await command(['login', '--region', 'us-east']);
   await command(['run', 'plugins', 'list']);
   await command(['run', 'plugins', 'install', '--args', '{"name":"github","version":"1.0.0"}']);
