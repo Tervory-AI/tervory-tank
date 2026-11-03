@@ -44,8 +44,8 @@ def test_browser_and_sandbox_have_no_direct_egress_or_cross_room_network():
     assert sandbox["read_only"] is True and sandbox["cap_drop"] == ["ALL"]
     assert not sandbox.get("volumes") and any(str(m).startswith("/work:") for m in sandbox["tmpfs"])
     main = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
-    assert "tervory-gw-base" not in main["services"]["tiger"]["networks"]
-    assert "tervory-gw-tiger" in main["services"]["tiger"]["networks"]
+    assert "tiger" not in main["services"]
+    assert main["services"]["tank"]["environment"]["TIGER_URL"] == "http://tiger-ocr:3000"
     for item in compose["services"].values():
         assert not item.get("privileged") and not item.get("cap_add")
         assert item.get("network_mode") not in {"host"} and not str(item.get("network_mode", "")).startswith(("container:", "service:"))
