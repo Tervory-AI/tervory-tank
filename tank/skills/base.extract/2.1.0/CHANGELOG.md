@@ -1,6 +1,8 @@
 # base.extract
 
 ## 2.1.0
+- Review fixes: only ItemList members qualify as listing items; BreadcrumbList descendants and Service offers are excluded in JSON-LD and microdata. Products require a supplied page with both source URL and check time; legacy HTML is not a product source.
+- Adds four exclusion evals while retaining all prior cases byte-for-byte. Still unapproved.
 - Unapproved candidate. Retains structured Product/Offer and listing items from already fetched pages, including source URL and check time. No text inference, requests, or models. Bounded to 50 products and 200 characters per field.
 - Copies all 2.0.1 evals and fixtures unchanged; adds structured-product and instruction-as-data cases.
 
