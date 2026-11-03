@@ -104,3 +104,76 @@ TMPDIR and records each file independently. No full-suite success is claimed yet
 Figma access works in this continuation. Session
 `8e34b1cc-82bb-45e9-849f-139d94ec5aea` read Approved frame `291:9` and its screenshot.
 No UI or browser acceptance proof is claimed by these backend tests.
+
+### Required stop at gate 2: approved credential controls and paid-order wording
+
+Gate 2 says: “If a state needs text no frame has, stop and report it.” Welcome
+rules 2 and 9 also prohibit adding missing fields or wording or working around
+that absence. This stop follows those explicit instructions, not a request for
+permission or for any credential value.
+
+All 52 registered frames were read with `get_design_context`. The A08 and
+A08-late frames were also read with `get_screenshot` at both widths. Figma is
+accessible; access/export is not the blocker. No page, visible text or built
+widget was changed. The upstream widget was cloned and checked out at the
+existing pinned commit in ignored `.rig-validation/widget-source`, preserving
+the reviewed patch. Gate 3 has not started because the brief requires stopping
+at the missing-frame boundary.
+
+Exact missing approved design content:
+
+1. A07-shopify (`291:8097`, `291:8124`) contains Store address and Access token,
+   but no control/label/instruction for the webhook signing credential. Shopify
+   [documents](https://shopify.dev/docs/apps/build/webhooks/verify-deliveries)
+   that HTTPS HMAC uses the app client secret, not the Admin API access token.
+   A07-woo (`291:8151`, `291:8182`) contains Consumer key and Consumer secret,
+   but no separately configured Woo webhook secret. A07-big (`291:8213`,
+   `291:8240`) contains Store hash and Access token, but no app client secret
+   for the documented Standard Webhooks verification. Gate 1's vault input and
+   `Platform.verify` require `webhook_secret`. There is no approved field or
+   existing provisioned-name-only path specified to supply it on first connect.
+   No secret was generated, read, derived from an access token, or requested.
+2. A08 (`291:8405`, `291:8464`) and A08-late (`321:6304`, `321:6343`) have a
+   Needs a person row whose fixed third-line text is “Payment status could not
+   be confirmed”. The gate-1 permanent-placement tests reach needs_person
+   after a valid paid order is verified, when shared placement raises
+   `order_mismatch` or `order_rejected`. Applying that fixed payment-status
+   sentence to this state would be false. Missing: approved row wording for
+   confirmed payment with order placement requiring a person. The register's
+   data slots permit substituting order numbers/amounts, not this sentence.
+
+These are design gaps, not evidence that verification should be weakened.
+Founder browser screenshots, UI parity, widget vitest/build, Workspace build,
+L1 migration/golden equivalence and gate-3 acceptance remain unperformed.
+No open PR exists for `codex/rig-cart-us` according to the read-only GitHub
+pulls query; Claude opens it. Final-head CI tank/workspace results are therefore
+not available and no CI success is claimed.
+
+### Changed files and entry lines relative to step-0 head
+
+| File | Entry line | Change |
+| --- | ---: | --- |
+| `agents/rig/rigbox/cart.py` | 250 | Shared per-Locate placement, whole-cart lease, retries, back-order row state and quantity; callback removed; delivery-range compatibility. |
+| `agents/rig/rigbox/cart_store.py` | 57 | Tenant-scoped compare-and-swap under the existing advisory/memory lock. |
+| `agents/rig/rigbox/fulfilment.py` | 57, 101 | Optional keyword quantity, default 1; validated quantity used in PO. |
+| `agents/rig/rigbox/cart_api.py` | 79 | Shared admin dispatch and integer store-delivery validation. |
+| `agents/rig/rigbox/retailer_api.py` | 18, 46 | Three commerce operations in the private retailer corridor. |
+| `agents/rig/rigbox/commerce.py` | 231, 270 | Normalize external states; require paid Woo processing/completed status. |
+| `agents/rig/schema.sql` | 545 | Existing commerce DDL moved above generated memory; no new DDL. |
+| `tank/access.py` | 939, 961 | Explicit admin/founder requirement; account tenant; credentials sealed in existing vault and not forwarded. |
+| `workspace/app/rig/admin/api/route.ts` | 5 | Three operation names; no page edits. |
+| `workspace/app/rig/admin/types.ts` | 13 | Corresponding operation types. |
+| `tests/test_rig_cart.py` | 346 | Real placement tests, mixed cart, quantities, concurrent webhooks/read-back, post-insert retry, permanent errors, auto-order and lease takeover. |
+| `tests/test_rig_cart_admin.py` | 20 | Ordinary-member refusal for all three operations; sealed credential/tenant/response/log and delivery-range checks. |
+| `tests/test_rig_cart_postgres.py` | 72 | Real Postgres CAS/placement retry, durable quantities and quote default. |
+| `docs/rig/rig-cart-us-handoff.md` | 33 | Sources, commands, proof and this explicit missing-frame stop. |
+
+Additional final checks:
+
+```sh
+/workspace/codex-tiger-t1/.venv/bin/python -m ruff check agents/rig/rigbox/cart.py agents/rig/rigbox/cart_store.py agents/rig/rigbox/cart_api.py agents/rig/rigbox/retailer_api.py agents/rig/rigbox/fulfilment.py agents/rig/rigbox/commerce.py tank/access.py tests/test_rig_cart.py tests/test_rig_cart_admin.py tests/test_rig_cart_postgres.py --select E9,F
+TMPDIR=/workspace/codex-rig-cart/.rig-validation PYTHONPATH=tank:agents/_chassis:agents/rig /workspace/codex-tiger-t1/.venv/bin/python -m pytest tests/test_secrets.py -q --tb=short --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+git diff --check
+```
+
+Ruff: all checks passed. Secrets tests: 2 passed. Whitespace: passed.
