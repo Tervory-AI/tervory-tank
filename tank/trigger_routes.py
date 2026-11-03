@@ -132,10 +132,32 @@ async def accepted_copy(write_id: UUID, tenant_id: UUID, request: Request):
                         headers={"Cache-Control": "private, no-store"})
 
 
+@router.get('/scorecard')
+async def get_scorecard(tenant_id: UUID, actor: Annotated[Actor, Depends(identity)]):
+    require_tool(actor, 'trigger.scorecard')
+    if tenant_id != actor.tenant_id:
+        raise HTTPException(403, 'Tenant mismatch')
+    from trigger_learning import scorecard
+    data = await scorecard(actor)
+    return {**data, 'text': json.dumps(data, ensure_ascii=False, indent=2), 'model_calls': 0,
+            'ledger_id': str(await code_receipt(actor.tenant_id, 'trigger.scorecard')), 'cost_usd': 0}
+
+
+async def draft_and_record(actor, body, parent=None):
+    from trigger_learning import record
+    data = await room('write', {**body, 'tenant_id': str(actor.tenant_id)})
+    if data.get('delegate') == 'zenas.draft':
+        response = await zenas_draft(body, actor)
+        if response.status_code >= 400:
+            return response
+        data = json.loads(response.body)
+    return await record(actor, body['text'], data, context=body, parent_write_id=parent)
+
+
 @router.post("/{operation}")
 async def invoke(operation: str, request: Request, actor: Annotated[Actor, Depends(identity)]):
-    from command import TriggerCheckArgs, TriggerWriteArgs, TriggerVoiceShowArgs, TriggerVoiceSetArgs, TriggerVoiceRollbackArgs, TriggerFeedbackArgs
-    schemas = {"write": TriggerWriteArgs, "check": TriggerCheckArgs, "voice.show": TriggerVoiceShowArgs,
+    from command import TriggerCheckArgs, TriggerWriteArgs, TriggerVoiceShowArgs, TriggerVoiceSetArgs, TriggerVoiceRollbackArgs, TriggerFeedbackArgs, TriggerReviseArgs, TriggerVoiceLearnArgs, TriggerBatchArgs
+    schemas = {"revise": TriggerReviseArgs, "voice.learn": TriggerVoiceLearnArgs, "write.batch": TriggerBatchArgs, "write": TriggerWriteArgs, "check": TriggerCheckArgs, "voice.show": TriggerVoiceShowArgs,
                "voice.set": TriggerVoiceSetArgs, "voice.rollback": TriggerVoiceRollbackArgs, "feedback": TriggerFeedbackArgs}
     if operation not in schemas:
         raise HTTPException(404, "No such Trigger action")
@@ -157,7 +179,11 @@ async def invoke(operation: str, request: Request, actor: Annotated[Actor, Depen
             data = await room("voice/show", {**body, "tenant_id": str(actor.tenant_id)})
         else:
             operation_id = confirmation(actor, "trigger." + operation, body)
-            if operation == "feedback":
+            if operation == 'voice.learn':
+                data = await room('voice/commit', {'tenant_id': str(actor.tenant_id),
+                    'rules': body['rules'], 'expected_revision': body['expected_revision'],
+                    'preview_hash': body['preview_hash'], 'operation_id': str(operation_id)})
+            elif operation == "feedback":
                 from trigger_learning import feedback
                 data = await feedback(actor, UUID(body["write_id"]), body["status"], body["changes"], operation_id)
             else:
@@ -166,15 +192,29 @@ async def invoke(operation: str, request: Request, actor: Annotated[Actor, Depen
                 "ledger_id": str(await code_receipt(actor.tenant_id, "trigger." + operation)), "cost_usd": 0}
     from trigger_commands import confirmation
     confirmation(actor, "trigger." + operation, body)
-    data = await room(operation, {**body, "tenant_id": str(actor.tenant_id)})
-    if operation == "write" and data.get("delegate") == "zenas.draft":
-        response = await zenas_draft(body, actor)
-        if response.status_code >= 400:
-            return response
-        data = json.loads(response.body)
-    if operation == "write":
-        from trigger_learning import record
-        data = await record(actor, body["text"], data)
+    from trigger_learning import guidance, revision
+    if operation == 'write':
+        context = {**body, **await guidance(actor, body['text'], body.get('format'))}
+        return await draft_and_record(actor, context)
+    if operation == 'revise':
+        context, parent = await revision(actor, UUID(body['write_id']))
+        return await draft_and_record(actor, context, parent)
+    if operation == 'write.batch':
+        from trigger_batch import item_body
+        if not 1 <= len(body['products']) <= 25:
+            raise HTTPException(422, 'Invalid Trigger request')
+        items = []
+        for product in body['products']:
+            context = item_body(product)
+            context.update(await guidance(actor, json.dumps(product, ensure_ascii=False), context['format']))
+            result = await draft_and_record(actor, context)
+            if not isinstance(result, dict):
+                return result
+            items.append(result)
+        return {'items': items, 'text': json.dumps(items, ensure_ascii=False),
+                'item_count': len(items), 'cost_usd': sum(float(i.get('cost_usd') or 0) for i in items),
+                'ledger_ids': [i.get('ledger_id') for i in items]}
+    data = await room(operation, {**body, 'tenant_id': str(actor.tenant_id)})
     if operation == "check":
         data["ledger_id"] = str(await code_receipt(actor.tenant_id, "trigger.check"))
         data["cost_usd"] = 0
