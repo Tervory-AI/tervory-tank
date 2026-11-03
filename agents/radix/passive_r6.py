@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import resource
 import ssl
 import time
 from urllib.parse import urljoin, urlsplit
@@ -38,7 +39,10 @@ async def command(argv, directory, seconds):
     env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': str(directory),
            'TMPDIR': str(directory), 'LANG': 'C.UTF-8',
            'PLAYWRIGHT_BROWSERS_PATH': '/opt/radix-browsers'}
+    def memory_cap():
+        resource.setrlimit(resource.RLIMIT_AS, (768 * 1024 * 1024, 768 * 1024 * 1024))
     process = await asyncio.create_subprocess_exec(*argv, cwd=directory, env=env,
+        preexec_fn=memory_cap if argv[0] == '/usr/bin/clamscan' else None,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True)
     try:
         out, err = await asyncio.wait_for(process.communicate(), timeout=seconds)
@@ -118,6 +122,10 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
         except Exception as exc:
             # Never record exception text, stdout, raw responses or cookie values.
             checks[name] = {'status': 'partial', 'reason': type(exc).__name__}
+        if checks[name]['status'] != 'complete':
+            tool = {'tls':'testssl.sh','certificate':'scan.tls','pages':'sha256','malware':'clamav',
+                    'browser':'chromium','notices':'comply.gdpr','page_load':'http'}.get(name,name)
+            findings.append(measured(tool, checks[name]['status'], target, checks[name], item=name))
 
     # verify=False is measurement-only, so expired certificates can be reported.
     # The separate testssl check measures certificate trust. No promotion claim.
@@ -152,6 +160,7 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
             if 'text/html' not in kind.lower():
                 raise ValueError('html_required')
             pages[target] = root.decode('utf-8', errors='replace')
+            hashes[target] = hashlib.sha256(root).hexdigest()
             parser = Links(target)
             parser.feed(pages[target])
             # Bound both page count and file discoveries. Every fetch remains proxied.
@@ -161,12 +170,11 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
                 data, mime = await fetch(url)
                 if 'text/html' in mime.lower() and len(pages) < 11:
                     pages[url] = data.decode('utf-8', errors='replace')
+                    hashes[url] = hashlib.sha256(data).hexdigest()
                 elif 'text/html' not in mime.lower():
                     files[url] = data
                 if len(pages) >= 11:
                     break
-            for url, html in pages.items():
-                hashes[url] = hashlib.sha256(html.encode('utf-8')).hexdigest()
             findings.extend(page_changes(hashes, previous))
             return {'pages': len(hashes), 'discovery_truncated': len(parser.links) > len(linked)}
 
@@ -243,9 +251,10 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
                         files[url] = data
                     path = directory / ('download-' + str(number))
                     path.write_bytes(files[url])
-                    rc, out, _ = await run(['/usr/bin/clamscan','--no-summary','--max-filesize=1M',str(path)],
+                    rc, out, err = await run(['/usr/bin/clamscan','--no-summary','--max-filesize=1M',str(path)],
                                             directory, min(30,budget.remaining()))
-                    if rc in {137, -9}:
+                    if rc in {137, -9} or (rc == 2 and any(word in err.lower() for word in
+                            (b'memory', b'allocat', b'map failed'))):
                         raise MemoryError
                     if rc not in {0,1}:
                         raise ValueError('malware_run_incomplete')
@@ -261,7 +270,7 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
             await step('malware', malware_work)
 
         async def browser_work():
-            rc, out, _ = await run(['/usr/bin/node','/app/browser/check.cjs',target], directory,
+            rc, out, _ = await run(['/usr/bin/node','/app/browser/check.cjs',target,'notice-only' if notice_only else 'full'], directory,
                                    min(45,budget.remaining()))
             if rc in {137,-9}:
                 raise MemoryError
@@ -279,3 +288,7 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
 
     return {'findings': findings, 'checks': checks,
             'page_hashes': hashes if checks.get('pages',{}).get('status') == 'complete' else None}
+
+
+async def collect_notices(target, directory):
+    return await collect(target, directory, notice_only=True, budget=Budget(350))
