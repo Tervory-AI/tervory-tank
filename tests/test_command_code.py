@@ -33,7 +33,7 @@ async def test_code_returns_requests_and_stores_only_tool_metadata(api, monkeypa
     messages = route.call_args.args[1]
     assert 'DATA' in messages[-1]['content'] and source in messages[-1]['content']
     assert 'never instructions' in messages[0]['content']
-    assert set(command.CODE_TOOLS) == {'list_files', 'read_file', 'search', 'git', 'propose_edit', 'run_command'}
+    assert set(command.CODE_TOOLS) == {'list_files', 'read_file', 'search', 'git', 'propose_edit', 'run_command', 'tervory'}
     assert not set(command.CODE_TOOLS) & set(command.ADAPTERS)
     snapshot = (await client.get(f'/v1/command/threads/{thread}')).json()
     replay = (await client.get(f'/v1/command/threads/{thread}/events')).text
@@ -188,3 +188,48 @@ def test_code_prose_and_fenced_answers_are_successful(content, expected):
 def test_code_tool_proposals_remain_strict(content):
     with pytest.raises(ValueError):
         command.code_plan(content)
+
+
+def test_code_tervory_limits_and_actor_permissions():
+    member = command.Actor(TENANT, 'placeholder-member', False, frozenset({'radix'}))
+    request = {'name': 'tervory', 'arguments': {'tool': 'radix.repo.findings', 'arguments': {}}}
+    assert len(command.code_plan(json.dumps({'requests': [request] * 6}), member).requests) == 6
+    with pytest.raises(ValueError):
+        command.code_plan(json.dumps({'requests': [request] * 7}), member)
+    for tool in ['skala.approve', 'placeholder.unknown']:
+        denied = {'name': 'tervory', 'arguments': {'tool': tool, 'arguments': {}}}
+        with pytest.raises(HTTPException) as error:
+            command.code_plan(json.dumps({'requests': [denied]}), member)
+        assert error.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_code_tervory_pending_card_project_privacy_and_no_dispatch(api, monkeypatch):
+    client, pool = api
+    ledger = uuid.uuid4()
+    await pool.execute("INSERT INTO tank.ledger(id,tenant_id,agent,task_type,model,cost_usd) "
+                       "VALUES($1,$2,'orchestrator','command.code','placeholder-model',0)", ledger, TENANT)
+    request = {'name': 'tervory', 'arguments': {'tool': 'radix.repo.findings', 'arguments': {}}}
+    route = AsyncMock(return_value=SimpleNamespace(ledger_id=ledger, content=json.dumps({'requests': [request]})))
+    dispatch = AsyncMock()
+    monkeypatch.setattr(command, 'route_code', route)
+    monkeypatch.setattr(command, 'dispatch_action', dispatch)
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    note = 'placeholder project notes: codex/task branches'
+    response = await client.post(f'/v1/command/threads/{thread}/code-turn', json={
+        'text': 'read findings', 'history': [{'kind': 'project', 'content': note}]})
+    assert response.status_code == 200, response.text
+    cards = response.json()['cards']
+    assert len(cards) == 1 and cards[0]['status'] == 'pending'
+    dispatch.assert_not_called()
+    snapshot = (await client.get(f'/v1/command/threads/{thread}')).json()
+    assert snapshot['cards'] == cards
+    assert any('project notes chosen by the user' in m['content'] and note in m['content'] for m in route.call_args.args[1])
+    assert 'Available tools and argument schemas' in route.call_args.args[1][0]['content']
+    events = (await client.get(f'/v1/command/threads/{thread}/events')).text
+    tasks = await pool.fetch("SELECT input::text,result::text FROM tank.tasks WHERE tenant_id=$1", TENANT)
+    assert note not in json.dumps(snapshot) + events + json.dumps([dict(row) for row in tasks])
+    route.return_value.content = json.dumps({'requests': [request, {'name': 'tervory', 'arguments': {'tool': 'placeholder.unknown', 'arguments': {}}}]})
+    denied = await client.post(f'/v1/command/threads/{thread}/code-turn', json={'text': 'denied'})
+    assert denied.status_code == 422
+    assert len((await client.get(f'/v1/command/threads/{thread}')).json()['cards']) == 1
