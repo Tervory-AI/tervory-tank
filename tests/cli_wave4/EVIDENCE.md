@@ -32,6 +32,8 @@ TMPDIR=/workspace/codex-cli-w3/.tmp PYTHONPATH=/workspace/codex-cli-w3/.tmp/w4-p
 
 Disposable SQL must be recreated to rerun this command. No production SQL is involved.
 
+6. The assembled CLI → ZA Tank acceptance fixture now uses the same fake Zitadel discovery/JWKS provider and **real JWT verification**. Both US/ZA login-refresh-revoke cases passed (2 tests, 14.32 seconds); the complete cross-lane file passed **7 tests**, no skips (28.00 seconds). The verified `zitadel:20001` subject, mapped tenant, real SQL credential owner and receipts are asserted; ZA makes zero Workspace approval calls. This replaced the old Boston-only approval expectation exposed by broader CI.
+
 ## CI regressions fixed
 
 The first Windows runs found an illegal `*` filename, CRLF-sensitive fixture
@@ -84,6 +86,8 @@ New build/verification tool strings:
 | `cli/test/release.test.mjs:178` |
 | `cli/test/sign-release.test.mjs:1` |
 | `cli/test/wave4.test.mjs:1` |
+| `tests/command_acceptance_20261031/device_edge.cjs:70` |
+| `tests/command_acceptance_20261031/test_cross_lane.py:215` |
 
 Exact offline transcripts: [ZA and code](ZA-CODE-OUTPUT.txt), [US and plugins](US-PLUGIN-OUTPUT.txt).
 
