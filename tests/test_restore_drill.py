@@ -1,10 +1,12 @@
 """Real local backup/restore round trip. No production endpoints or credentials."""
 import asyncio
+from contextlib import contextmanager
 import os
 import shutil
 
 import pytest
 
+from ops import restore_drill as restore_module
 from ops.restore_drill import command, drill, newest, sandbox
 from r2_archive import PLATFORM_TENANT, archive_file
 
@@ -62,6 +64,18 @@ def test_offline_encrypted_roundtrip(tmp_path, monkeypatch, region, identity_fil
     recipient = command('age-keygen', '-y', str(identity)).decode().strip()
     store = ArchiveStore(region)
     public = region == 'za'
+    if region == 'za':
+        original_sandbox = restore_module.sandbox
+
+        @contextmanager
+        def check_restored_identity_data():
+            with original_sandbox() as restored:
+                yield restored
+                # Assert restored data as well as a schema/table count, before
+                # the disposable container is destroyed. Synthetic row only.
+                assert restored.sql('SELECT count(*) FROM public.synthetic_identity', 'identity_restore') == '1'
+
+        monkeypatch.setattr(restore_module, 'sandbox', check_restored_identity_data)
 
     async def prepare():
         with sandbox() as source:
@@ -95,11 +109,23 @@ def test_offline_encrypted_roundtrip(tmp_path, monkeypatch, region, identity_fil
             plain.unlink()
             await archive_file(store, encrypted, 'backups', tenant_id=PLATFORM_TENANT,
                                public=public, label='qdrant/offline.snapshot.age')
-        return await drill(region, identity, check_rls=True, store=store)
+            if region == 'za':
+                source.sql('CREATE DATABASE identity_source')
+                source.sql('CREATE TABLE public.synthetic_identity (id int); INSERT INTO public.synthetic_identity VALUES (1)', 'identity_source')
+                plain = tmp_path / 'identity.dump'
+                plain.write_bytes(command('docker', 'exec', source.pg, 'pg_dump', '-Fc', '-U', 'postgres', 'identity_source'))
+                encrypted = tmp_path / 'identity.dump.age'
+                command('age', '-r', recipient, '-o', str(encrypted), str(plain))
+                plain.unlink()
+                await archive_file(store, encrypted, 'backups', tenant_id=PLATFORM_TENANT,
+                                   public=public, label='identity/database.dump.age')
+        return await drill(region, identity, check_rls=True, store=store, include_identity=region == 'za')
 
     result = asyncio.run(prepare())
     assert result['tenant_table_rows'] == {'"tank"."ledger"': 2, '"tank"."tasks"': 2, '"base"."records"': 2}
     assert result['collection_points'] == {'offline': 2}
+    assert result['identity_database_restored'] is (region == 'za')
+    assert result['identity_table_count'] == (1 if region == 'za' else None)
     assert result['restore_seconds'] > 0
     assert result['rls_failures'] == [], result['rls_failures']
     # Altering ciphertext must be rejected by the real manifest verifier.
@@ -107,3 +133,16 @@ def test_offline_encrypted_roundtrip(tmp_path, monkeypatch, region, identity_fil
     store.data[key] = b'corrupt'
     with pytest.raises(Exception, match='integrity'):
         asyncio.run(drill(region, identity, store=store))
+
+
+def test_identity_archive_is_required_when_requested_and_not_a_qdrant_substitute():
+    root = 'za/platform/backups/'
+    stamp = '2026-11-01/120000-' + 'a' * 32 + '/'
+    rows = [{'key': root + stamp + name + '/manifest.json'} for name in
+            ['database.dump.age', 'qdrant/offline.snapshot.age']]
+    with pytest.raises(RuntimeError, match='identity backup'):
+        newest(rows, root, require_identity=True)
+    rows.append({'key': root + stamp + 'identity/database.dump.age/manifest.json'})
+    assert 'identity/database.dump.age' in newest(rows, root, require_identity=True)
+    with pytest.raises(RuntimeError, match='Qdrant'):
+        newest([row for row in rows if '/qdrant/' not in row['key']], root)

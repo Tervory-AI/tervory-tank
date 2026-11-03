@@ -1,0 +1,33 @@
+name: Autumbra Cloudflare hand isolation
+on:
+  pull_request:
+    paths:
+      - agents/ghost/**
+      - agents/radix/egress.py
+      - ops/seal-check.sh
+      - tests/autumbra_cloudflare_hand/**
+      - tests/test_autumbra_cloudflare_live.py
+      - .github/workflows/autumbra-cloudflare-hand.yml
+  push:
+    branches: [codex/autumbra-cloudflare-hand]
+permissions:
+  contents: read
+jobs:
+  offline-compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      # Production private NIC names require Engine >= 28.1.
+      - uses: docker/setup-docker-action@7ec28a010822b4626af4874f9448a4b05ac6f3e5 # v5
+        with:
+          version: v29.9.2
+      - name: Prepare existing free runtime
+        run: |
+          pip install PyYAML==6.0.3
+          docker pull python:3.12-slim
+      - name: Prove isolated Compose paths with no outside network
+        run: python tests/autumbra_cloudflare_hand/compose_probe.py run

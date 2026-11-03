@@ -230,7 +230,7 @@ async def locate(store: Any, tenant: str, product: dict, *, now: datetime | None
     if not ranked:
         return {"public": {"status": "check_with_store" if stale else "unavailable"}}
     _, offer, amount = min(ranked, key=lambda item: item[0])
-    public = {"status": "available_to_order", "eta": offer.get("eta"),
+    public = {"status": "available_to_order", "eta": offer.get("eta"), "ship_days": offer.get("ship_days"),
               "price": {"amount": str(amount), "currency": product["currency"]}}
     private = {key: (value.isoformat() if isinstance(value, datetime) else str(value) if isinstance(value, Decimal) else value)
                for key, value in offer.items() if key != "tenant_id"}

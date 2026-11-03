@@ -21,9 +21,9 @@ tervory version
 
 Development: `npm ci --prefix cli`, then `node cli/bin/tervory.mjs help`. Do not install anything on the founder's laptop as part of automated work.
 
-`tervory login [--region us-east|za]` signs in with a device approval; nothing is pasted. The CLI asks the region's public origin for a device code, opens one Workspace page, `https://app.tervory.com/cli/device?code=XXXX-XXXX&region=…` (it builds that URL itself and opens only that origin), and polls every 5 seconds (plus 5 s on `slow_down`) for up to 10 minutes. The page uses the existing Clerk sign-in. It shows the code, when the code was created, organization, region and "Device (the name the device reported)" (the requesting machine's own hostname claim, unverified), warns to deny any code the user did not just create, with **Approve** and **Deny** buttons. On approval, Tank issues an organization-scoped credential for the approving user into `tank.personal_tokens`. Only sha256 hashes are stored. The access token lasts 1 hour, and the refresh token lasts 30 days and rotates on every use. A reused, expired or revoked refresh token is refused. `last_used_at` is updated at most once a minute. The CLI saves one JSON entry in the OS keychain: `{version, region, access_token, refresh_token, expires_at, refresh_expires_at}`. It refreshes automatically when the access token is within 60 s of expiry. `tervory logout` revokes the credential on Tank and then removes the keychain entry. Each user can also see and revoke their CLI sign-ins in the Workspace at **CLI sign-ins** (`https://app.tervory.com/cli/sign-ins`, linked in the sidebar): one row per active sign-in with the device name the device reported, region, when it signed in and when it was last used, and a **Revoke** button that ends its access and refresh tokens at once. ZA rows are read and revoked on the ZA Tank with `TANK_DEVICE_APPROVAL_KEY_ZA`, which there may only list and revoke that user's own sign-ins (never create one, never for a founder). Older keychain entries holding a raw `tv1` personal token keep working until logout. The command accepts no token arguments or environment variables. Do not use a service key in this CLI.
+`tervory login [--region us-east|za] [--sign-in zitadel]` signs in with device approval; nothing is pasted. By default, the CLI asks the region's public origin for a device code and opens the Workspace page, `https://app.tervory.com/cli/device?code=XXXX-XXXX&region=…` (it builds that URL itself; an explicitly selected ZA Zitadel login instead opens only `https://auth-za.tervory.com`, as described below), and polls every 5 seconds (plus 5 s on `slow_down`) for up to 10 minutes. The page uses the existing Clerk sign-in. It shows the code, when the code was created, organization, region and "Device (the name the device reported)" (the requesting machine's own hostname claim, unverified), warns to deny any code the user did not just create, with **Approve** and **Deny** buttons. On approval, Tank issues an organization-scoped credential for the approving user into `tank.personal_tokens`. Only sha256 hashes are stored. The access token lasts 1 hour, and the refresh token lasts 30 days and rotates on every use. A reused, expired or revoked refresh token is refused. `last_used_at` is updated at most once a minute. The CLI saves one JSON entry in the OS keychain: `{version, region, access_token, refresh_token, expires_at, refresh_expires_at}`. It refreshes automatically when the access token is within 60 s of expiry. `tervory logout` revokes the credential on Tank and then removes the keychain entry. Each Clerk user can also see and revoke their Workspace-approved CLI sign-ins in the Workspace at **CLI sign-ins** (`https://app.tervory.com/cli/sign-ins`, linked in the sidebar): one row per active sign-in with the device name the device reported, region, when it signed in and when it was last used, and a **Revoke** button that ends its access and refresh tokens at once. ZA rows are read and revoked on the ZA Tank with `TANK_DEVICE_APPROVAL_KEY_ZA`, which there may only list and revoke that user's own sign-ins (never create one, never for a founder). Older keychain entries holding a raw `tv1` personal token keep working until logout. The command accepts no token arguments or environment variables. Do not use a service key in this CLI.
 
-Regions: **us-east** device calls go to `https://app.tervory.com/v1/command/device/{code,token,refresh,revoke}`, which the Workspace forwards to its local Tank. **ZA** has no Workspace: `za.tervory.com` is Tank only, so the CLI calls `https://za.tervory.com/v1/command/device/…` and every later chat turn goes straight to the ZA Tank. Approval still happens on the single Clerk-backed Workspace (`app.tervory.com/cli/device?region=za`), which records the decision on the ZA Tank at `TANK_URL_ZA` with the dedicated `TANK_DEVICE_APPROVAL_KEY_ZA` (the ZA Tank accepts it as `TANK_DEVICE_APPROVAL_KEY` for the two approval routes and for listing and revoking the user's own sign-ins only, and never for a founder; the ZA homes key in `TANK_API_KEY_ZA` cannot approve). **Founders cannot use the CLI on ZA.** There is no working approval path: za.tervory.com has no Workspace or Clerk sign-in, and the ZA Tank refuses founder accounts on the approval key Boston holds, so the page answers "Founder accounts cannot sign the CLI in to this region; there is no other place to approve it. Nothing was approved." Founders sign in with `--region us-east`. No Clerk dashboard change is needed: the page is an ordinary signed-in Workspace route protected by the existing middleware.
+Regions: **us-east** device calls go to `https://app.tervory.com/v1/command/device/{code,token,refresh,revoke}`, which the Workspace forwards to its local Tank. **ZA** has no Workspace: `za.tervory.com` is Tank only, so the CLI calls `https://za.tervory.com/v1/command/device/…` and every later chat turn goes straight to the ZA Tank. Approval still happens on the single Clerk-backed Workspace (`app.tervory.com/cli/device?region=za`), which records the decision on the ZA Tank at `TANK_URL_ZA` with the dedicated `TANK_DEVICE_APPROVAL_KEY_ZA` (the ZA Tank accepts it as `TANK_DEVICE_APPROVAL_KEY` for the two approval routes and for listing and revoking the user's own sign-ins only, and never for a founder; the ZA homes key in `TANK_API_KEY_ZA` cannot approve). **ZA Zitadel sign-in (optional):** when the ZA Tank has `IDENTITY_ISSUER=https://auth-za.tervory.com` and the configured public CLI client, `tervory login --region za --sign-in zitadel` explicitly requests Zitadel and opens Zitadel's verification URL at that fixed origin. Both the base and complete verification URL are checked; another origin is refused. Founders can use this flow when their `zitadel:<sub>` is in the ZA `TERVORY_ADMIN_USER_IDS` setting. Organisations map to tenant UUIDs through `IDENTITY_ORG_TENANTS`; email and editable metadata never grant identity or roles. Follow [IDENTITY-ZA.md](../docs/ops/IDENTITY-ZA.md) for the separate ZA identity resource and founder steps. Plain `tervory login --region za` and older CLIs keep the Boston approval path even when `IDENTITY_ISSUER` is set. Zitadel roles are snapshots until that Tank sign-in is revoked or expires, including through refresh; removing a role in Zitadel is not Tank revocation. Run `tervory logout` on each affected Zitadel CLI sign-in, then sign in again. The Clerk Workspace sign-in list does not list `zitadel:<sub>` identities. With `IDENTITY_ISSUER` unset, the Boston approval path above is unchanged and founders still cannot sign in to ZA through Boston's limited approval key; they use `--region us-east` until Zitadel is configured. No Clerk dashboard change is part of this step.
 
 ```
 tervory chat [thread]
@@ -46,3 +46,53 @@ The known-action `run` and owned task receipt endpoints are supplied by companio
 Interactive terminals show provisional answer text on a single stderr preview line; stdout receives the final answer once. Tank's `replace` event replaces the provisional answer, and duplicate sequence numbers are ignored. Non-interactive stdout receives only the validated final answer, avoiding stale previews in scripts.
 
 `npm test --prefix cli` runs fake-Tank tests with synthetic credentials and data only. No provider requests or live account changes occur. Evidence in `tests/cli_1_20261031/` is labeled offline fake-Tank proof and is not a founder-browser test.
+
+## Code mode
+
+`tervory code [folder]` opens an interactive session inside a git repository (the
+current folder by default). It uses the existing keychain credential and its region;
+there is no token argument, environment credential or URL override. Only Auto is
+available to customers; model pins remain founder-only. Receipts display Tank's
+amounts unchanged. An interrupted turn is never retried automatically.
+
+The six local tools list files, read text, search text, inspect git status/diff,
+propose a unified diff, and run a command. File tools stay inside the selected
+folder, including symlink resolution, and exclude ignored files and secret paths.
+Reads are limited to 200 KB, listings to 2,000 entries and searches to 200 matches.
+Secret-looking lines are redacted before any local result leaves the machine.
+Edits show their diff and require an explicit `y`; a file changed since its read
+cannot be edited. Commands show the full command and require an explicit `y`, run
+in the selected folder, time out after 120 seconds and retain at most 64 KB of
+output. Non-interactive sessions cannot apply edits or run commands. Approved
+commands use the worker's existing Linux Bubblewrap (`bwrap`): only the selected
+folder is writable, secret paths and `.git` internals are hidden, the environment
+is restricted, and networking is unavailable. For a leading Node, Python or
+pytest executable outside `/usr` and the selected folder, the CLI resolves its
+regular executable and its canonical executable. Node binds only that binary
+file. Python/pytest binds the executable, matching `lib/pythonX.Y`, venv
+`pyvenv.cfg` when present, and matching libpython files from its dedicated
+installation. The installation parent and `bin` directory are never bound.
+General user launchers under `~/.local/bin` are refused, including pip-user
+pytest and uv Python links; use a dedicated venv or interpreter installation.
+The complete command and each read-only file/library path are shown before
+`Run [y/N]`. Intermediate interpreter symlinks are recreated in the empty sandbox;
+their host directories are not mounted. Secret paths inside runtimes are hidden.
+`$HOME`, `~/.config`, `~/.ssh` and keychain directories are never mounted. Other
+host folders remain unavailable. Use a leading executable, rather than hiding
+an external runtime behind a shell wrapper or an environment assignment. There is no
+unsandboxed fallback. If Bubblewrap is unavailable or cannot create the sandbox,
+commands are refused. This command runner is currently Linux-only; the other
+existing CLI commands retain their current platform support.
+
+**Storage:** the Command thread and `/chats` retain user requests, steps, receipts
+and tool names/sizes, without tool-result file contents or proposed patches.
+A prompt is stored once across its continuation rounds. Earlier prompts,
+answers, and tool names/arguments remain in a bounded, redacted CLI transcript
+(at most 40 entries and 200,000 UTF-8 bytes). It is sent as untrusted session data
+for model context and never stored in the Command thread, tasks or events.
+The `command.code` policy uses `cache_scope='none'`; code turns neither read nor
+write the route cache, including its word-split `semantic_form`.
+The model-call transcript follows Tank's existing handling for every chat turn:
+masked by `_preflight_mask` and `_storage_mask`, tenant-scoped and kept on the
+region's own box. CLI secret redaction runs before anything leaves the machine.
+Tank requests tools; it never executes them or touches the local folder.

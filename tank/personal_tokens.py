@@ -118,7 +118,7 @@ async def device_approval_actor(request: Request) -> command.Actor:
 _UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 CLI_ROUTES = {
     "GET": re.compile(rf"/v1/command/(models|tools|threads|threads/{_UUID}(/events)?|tasks/{_UUID}/receipts)\Z"),
-    "POST": re.compile(rf"/v1/command/(threads|threads/{_UUID}/(turn|actions)|cards/{_UUID}|build)\Z"),
+    "POST": re.compile(rf"/v1/command/(threads|threads/{_UUID}/(turn|actions|code-turn)|cards/{_UUID}|build)\Z"),
     "PATCH": re.compile(rf"/v1/command/threads/{_UUID}\Z"),
 }
 
@@ -156,7 +156,7 @@ async def bearer_identity(request: Request, *, audience: str) -> tuple[command.A
     with tenant_scope(tenant):
         async with command.db().acquire() as conn:
             row = await conn.fetchrow(
-                """SELECT token_id,user_id,client_id,name,last_used_at < now() - interval '1 minute' AS stale FROM tank.personal_tokens
+                """SELECT token_id,user_id,client_id,name,identity_tenant_admin,last_used_at < now() - interval '1 minute' AS stale FROM tank.personal_tokens
                 WHERE tenant_id=$1 AND region=$2 AND token_hash=$3 AND revoked_at IS NULL
                 AND audience=$4 AND (expires_at IS NULL OR expires_at > now())""",
                 tenant, region, digest(token), audience,
@@ -169,7 +169,9 @@ async def bearer_identity(request: Request, *, audience: str) -> tuple[command.A
             raise HTTPException(401, "Personal token refused")
         # Headers for user, tenant, role and squad are never used on this path.
         # Existing Tank authorization re-reads founder membership and squad grants.
-        return await command.authorized_actor(command.Actor(tenant, row["user_id"], False)), row
+        tenant_admin = (region == "za" and row["user_id"].startswith("zitadel:")
+                        and row.get("identity_tenant_admin") is True)
+        return await command.authorized_actor(command.Actor(tenant, row["user_id"], False, tenant_admin=tenant_admin)), row
 
 
 @router.post("", status_code=201)

@@ -46,7 +46,7 @@ async def test_identity_roles_and_region(runtime, monkeypatch):
     headers = {'x-tank-key': runtime.TANK_API_KEY, 'x-tervory-tenant': str(TENANT),
                'x-tervory-user': 'client', 'x-tervory-squad': 'tiger'}
     actor = await command.identity(request(**headers))
-    assert command.allowed_tools(actor) == ['tiger.read', 'tiger.watch']
+    assert command.allowed_tools(actor) == ['tiger.alerts', 'tiger.match', 'tiger.match.confirm', 'tiger.match.reject', 'tiger.position', 'tiger.read', 'tiger.watch']
     with pytest.raises(HTTPException) as refused:
         command.require_tool(actor, 'worker.build')
     assert refused.value.status_code == 403
@@ -953,7 +953,7 @@ async def test_tenant_squad_grants_are_founder_only_isolated_and_logged(api, mon
     grants = (await client.get('/v1/command/squads')).json()
     assert len(grants) == 7
     assert next(g for g in grants if g['agent'] == 'tiger')['enabled_by'] == 'founder'
-    assert (await client.get('/v1/command/tools', headers=client_headers)).json() == ['tiger.read', 'tiger.watch']
+    assert (await client.get('/v1/command/tools', headers=client_headers)).json() == ['tiger.alerts', 'tiger.match', 'tiger.match.confirm', 'tiger.match.reject', 'tiger.position', 'tiger.read', 'tiger.watch']
     assert (await client.get('/v1/command/tools', headers={**client_headers, 'x-tervory-tenant': str(OTHER)})).json() == []
     assert (await client.get('/v1/command/squads/log', headers={'x-tervory-tenant': str(OTHER)})).json() == []
     assert (await client.put('/v1/command/squads/worker', json={'enabled': True})).status_code == 422
@@ -1403,3 +1403,100 @@ async def test_customer_lap_over_every_cli_corridor_route_names_no_model_price_o
             assert name not in text, (method, path, status, name)
     errors = await pool.fetch("SELECT error FROM tank.tasks WHERE created_by='customer' AND error IS NOT NULL")
     assert errors and all('fixture' not in row['error'] for row in errors)
+
+
+def test_rig_confirmation_tool_is_admin_and_founder_only(runtime):
+    tool = 'rig.quote.confirm_payment'
+    member = command.Actor(TENANT, 'placeholder-member', False, frozenset({'rig'}))
+    admin = command.Actor(TENANT, 'placeholder-admin', False, tenant_admin=True)
+    founder = command.Actor(TENANT, 'placeholder-founder', True)
+    assert tool not in command.allowed_tools(member)
+    assert tool in command.allowed_tools(admin)
+    assert tool in command.allowed_tools(founder)
+    assert tool in command.TOOLS['rig']
+    with pytest.raises(HTTPException) as denied:
+        command.require_tool(member, tool)
+    assert denied.value.status_code == 403
+    action = command.validate_action(command.PlannedAction(tool=tool, arguments={'quote_id': 'placeholder'}), admin)
+    assert command.adapter_request(action, admin) == (
+        'POST', '/v1/access/rig/admin/confirm-store-payment', {}, {'data': {'quote_id': 'placeholder'}})
+    for extra in ('tenant_id', 'founder', 'bank_details'):
+        with pytest.raises(HTTPException) as invalid:
+            command.validate_action(command.PlannedAction(tool=tool, arguments={'quote_id': 'placeholder', extra: 'placeholder'}), admin)
+        assert invalid.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_rig_confirmation_card_needs_confirm_and_records_zero_code_receipt(api, runtime, monkeypatch):
+    import access
+    client, pool = api
+    runtime.pool = lambda: pool
+    client._transport.app.include_router(access.router)
+    room = AsyncMock(return_value={'quote_id': 'placeholder', 'state': 'store_confirmed'})
+    monkeypatch.setattr(access, 'rig_request', room)
+    route = AsyncMock(side_effect=AssertionError('No model calls'))
+    monkeypatch.setattr(command, 'route_turn', route)
+    async def dispatch(action, actor):
+        method, path, _, body = command.adapter_request(action, actor)
+        response = await client.request(method, path, json=body)
+        return response.status_code, response.json()
+    monkeypatch.setattr(command, 'dispatch_action', dispatch)
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    action = {'tool': 'rig.quote.confirm_payment', 'arguments': {'quote_id': 'placeholder'}}
+    proposed = await client.post(f'/v1/command/threads/{thread}/actions', json=action)
+    assert proposed.status_code == 200
+    card = proposed.json()
+    assert card['status'] == 'pending' and card['kind'] == 'other'
+    assert card['summary'] == action['tool']
+    direct = await client.post('/v1/access/rig/admin/confirm-store-payment', json={'data': action['arguments']})
+    assert direct.status_code == 409
+    room.assert_not_awaited()
+    confirmed = await client.post(f"/v1/command/cards/{card['card_id']}", json={'action': 'confirm'})
+    assert confirmed.json()['status'] == 'confirmed'
+    room.assert_awaited_once()
+    actor, operation, arguments = room.call_args.args
+    assert actor.tenant_id == TENANT and operation == 'confirm-store-payment' and arguments == action['arguments']
+    saved = (await client.get(f'/v1/command/threads/{thread}')).json()
+    assert len(saved['receipts']) == 1
+    receipt = saved['receipts'][0]
+    assert receipt['cost_usd'] == 0 and receipt['model'] == 'code'
+    await client.post(f"/v1/command/cards/{card['card_id']}", json={'action': 'confirm'})
+    room.assert_awaited_once()
+    route.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_rig_confirmation_other_tenant_quote_is_404(api, runtime, monkeypatch, tmp_path):
+    import access
+    from test_rig_optional_auto_order import auto_shop
+    from test_rig_locate_checkout import TENANT as RIG_TENANT
+    from rigbox.service import RigError
+    client, pool = api
+    client.headers.update({"x-tervory-user": "placeholder-admin", "x-tervory-role": "org:admin"})
+    runtime.pool = lambda: pool
+    client._transport.app.include_router(access.router)
+    store, service, _, _, body = await auto_shop(monkeypatch, tmp_path)
+    accepted = await service.locate_accept(RIG_TENANT, body)
+    async def room(actor, operation, data):
+        assert actor.tenant_id == TENANT and str(TENANT) != str(RIG_TENANT)
+        try:
+            return await service.confirm_store_payment(str(actor.tenant_id), data['quote_id'])
+        except RigError as error:
+            raise HTTPException(error.status, 'placeholder unavailable') from None
+    monkeypatch.setattr(access, 'rig_request', room)
+    statuses = []
+    async def dispatch(action, actor):
+        method, path, _, body = command.adapter_request(action, actor)
+        response = await client.request(method, path, json=body)
+        statuses.append(response.status_code)
+        return response.status_code, response.json()
+    monkeypatch.setattr(command, 'dispatch_action', dispatch)
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    card = (await client.post(f'/v1/command/threads/{thread}/actions', json={
+        'tool': 'rig.quote.confirm_payment', 'arguments': {'quote_id': accepted['request_id']}})).json()
+    result = await client.post(f"/v1/command/cards/{card['card_id']}", json={'action': 'confirm'})
+    assert result.json()['status'] == 'failed'
+    assert statuses == [404]
+    assert not store.locate_orders
+    # The confirmed corridor preserves the room's 404 and writes no success receipt.
+    assert await pool.fetchval("SELECT count(*) FROM tank.ledger WHERE task_type='rig.quote.confirm_payment'") == 0

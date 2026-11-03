@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import hashlib
 import hmac
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -45,10 +47,12 @@ from .market_lab_intel import (
     receipt_for_bundle_consume,
     register_advisories_from_ioc_bundle,
 )
-from .webhooks import WebhookRejected, accept_signed, drop_counts
+from .webhooks import WebhookRejected, accept_webhook, drop_counts
 from .red_team import list_exercises, run_exercise
 from .enforce_lifecycle import FixtureComposeBackend, plan_create, plan_destroy, receipt_for
-from .owner_email import DEFAULT_FIXTURE_TRANSPORT, send_owner_update
+from .owner_email import send_owner_update
+from .smtp_email import smtp_available_since, transport_status
+from .durable_state import locked_state
 from .owner_email_jobs import (
     build_owner_update_from_receipts,
     default_receipt_url,
@@ -265,13 +269,72 @@ async def _weekly_owner_email_loop(app: "FastAPI") -> None:
             receipts_by_tenant = {
                 c.tenant_id: _receipts_for_tenant(c.tenant_id) for c in clients
             }
-            run_weekly_owner_updates(
-                clients,
-                receipts_by_tenant=receipts_by_tenant,
-                transport=DEFAULT_FIXTURE_TRANSPORT,
-            )
+            await asyncio.to_thread(run_weekly_owner_updates, clients,
+                                    receipts_by_tenant=receipts_by_tenant)
         except Exception:
             pass
+
+
+async def deliver_act_owner_updates(app: FastAPI) -> None:
+    """The closed Enforce box emits receipts; Watch alone owns real SMTP delivery."""
+    if transport_status() != "smtp":
+        return
+    from .owner_email_jobs import _parse_receipt_time, week_bounds
+    start, end = week_bounds()
+    available_since = smtp_available_since()
+    for settings in list_clients_with_owner(app.state.store):
+        receipts = _receipts_for_tenant(settings.tenant_id)
+        for receipt in receipts:
+            moment = _parse_receipt_time(receipt)
+            identity = str(receipt.get("id") or "")
+            if (not receipt.get("applied") or not identity or moment is None
+                    or moment.timestamp() <= available_since or not start <= moment <= end):
+                continue
+            email = build_owner_update_from_receipts(settings=settings, receipts=[receipt])
+            await asyncio.to_thread(send_owner_update, email, to=settings.owner_email,
+                                   tenant_id=settings.tenant_id, message_key="act:" + identity)
+
+
+async def _act_owner_email_loop(app: FastAPI) -> None:
+    while True:
+        try:
+            await deliver_act_owner_updates(app)
+        except Exception:
+            pass  # Durable SMTP claims remain sent/uncertain; never automatically resend.
+        await asyncio.sleep(30)
+
+
+async def refresh_market_lab_intel(app: FastAPI) -> dict:
+    """Fetch through Tank only; use the existing validator, catalog and receipts."""
+    from uuid import NAMESPACE_URL, uuid5
+    from .market_lab_intel import load_market_lab_advisories
+    raw = await Tank(app.state.http).call("GET", "/v1/market-lab/intel")
+    bundle = accept_ioc_bundle(raw)
+    load_market_lab_advisories([])
+    register_advisories_from_ioc_bundle(bundle)
+    tenants = {PLATFORM_TENANT}
+    tenants.update(str(row[0]) for row in app.state.store.db.execute(
+        "SELECT DISTINCT tenant FROM ghost_state WHERE key=$1", {"1": "autumbra_client_settings"}).fetchall())
+    if watch_queue_configured():
+        for tenant in tenants:
+            queue = watch_threat_queue(tenant)
+            ident = str(uuid5(NAMESPACE_URL, "market_lab.ioc.v1:" + tenant + ":" + bundle["bundle_id"]))
+            if any(str(r.get("id")) == ident for r in queue.list_receipts()):
+                continue
+            receipt = receipt_for_bundle_consume(bundle, tenant_id=tenant)
+            receipt["id"] = ident
+            queue.write_receipt(receipt)
+    return {"bundle_id": bundle["bundle_id"], "indicator_count": len(bundle["indicators"])}
+
+
+async def _market_lab_intel_loop(app: FastAPI) -> None:
+    while True:
+        try:
+            await refresh_market_lab_intel(app)
+            app.state.intel_status = "connected"
+        except Exception:
+            app.state.intel_status = "unavailable"  # Keep the previous catalog; no fixture on live screens.
+        await asyncio.sleep(3600)
 
 
 def create_app() -> FastAPI:
@@ -306,6 +369,8 @@ def create_app() -> FastAPI:
                 asyncio.create_task(nightly(app)),
                 asyncio.create_task(advisory_watch.watch(app)),
                 asyncio.create_task(_weekly_owner_email_loop(app)),
+                asyncio.create_task(_act_owner_email_loop(app)),
+                asyncio.create_task(_market_lab_intel_loop(app)),
             ]
             try:
                 yield
@@ -328,7 +393,9 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     async def health():
-        return {"ok": hasattr(app.state, "store"), "agent": "ghost"}
+        return {"ok": hasattr(app.state, "store"), "agent": "ghost",
+                "owner_email_transport": transport_status(),
+                "market_lab_intel": getattr(app.state, "intel_status", "unavailable")}
 
     @app.get("/incidents", dependencies=[Depends(require_tank)])
     async def incidents():
@@ -779,27 +846,37 @@ def create_app() -> FastAPI:
     async def autumbra_webhook(provider: str, request: Request):
         """Signature check FIRST — before any Tank auth that would 404.
 
-        Correctly signed webhook → never-block check → ThreatPayload → client's queue.
-        Replay refused (timestamp window + nonce). Body is never stored.
+        HMAC-authenticated webhook → never-block check → client's queue.
+        Native provider authentication records metadata only, never a tenant action.
+        Replay refused; raw bodies are never stored.
         """
         raw = await request.body()
         if len(raw) > 64_000:
             raise HTTPException(413, "Too large.")
-        signature = request.headers.get("x-autumbra-signature") or request.headers.get(
-            "cf-webhook-signature"
-        )
-        timestamp = request.headers.get("x-autumbra-timestamp")
-        nonce = request.headers.get("x-autumbra-nonce")
         try:
-            envelope = accept_signed(
-                provider, raw, signature=signature, timestamp=timestamp, nonce=nonce
+            envelope = await accept_webhook(
+                provider, raw, headers=request.headers,
+                tank=Tank(getattr(app.state, "http", None)),
             )
         except WebhookRejected:
             return JSONResponse(
                 {"accepted": False, "stored": False, "drops": drop_counts()},
                 status_code=401,
             )
-        # Parse working-memory JSON only after signature OK. Never persist raw body.
+        if envelope.get("authenticated_by") != "hmac":
+            # Provider authentication does not establish any client's authority.
+            # Retain only the latest verified event metadata per native provider.
+            path = Path(os.environ.get("DATA_DIR", "/data")) / "verified-webhook-events.json"
+            with locked_state(path) as events:
+                events[envelope["requested_provider"]] = {
+                    "provider": envelope["requested_provider"], "bytes": envelope["bytes"],
+                    "body_sha256": hashlib.sha256(raw).hexdigest(),
+                    "verified_at": datetime.now(timezone.utc).isoformat(),
+                }
+            return {"accepted": True, "stored": True, "provider": envelope["provider"],
+                    "bytes": envelope["bytes"], "queued": False, "queue_receipt": None,
+                    "action": "accepted_no_action"}
+        # Parse working-memory JSON only after HMAC OK. Never persist raw body.
         queued = False
         queue_receipt = None
         try:
@@ -1207,7 +1284,10 @@ def create_app() -> FastAPI:
             raise HTTPException(422, str(exc)) from None
         except Exception:
             raise HTTPException(422, "Owner update was not understood.") from None
-        sent = send_owner_update(email, to=to, transport=DEFAULT_FIXTURE_TRANSPORT)
+        from .owner_email_jobs import week_bounds
+        ident = hashlib.sha256(json.dumps(sorted(str(r.get("id") or "") for r in receipts)).encode()).hexdigest()
+        sent = await asyncio.to_thread(send_owner_update, email, to=to, tenant_id=tenant_id,
+                                       message_key="receipts:" + week_bounds()[0].isoformat() + ":" + ident)
         return {**email, **sent}
 
     @app.get("/ghost/autumbra/jobs", dependencies=[Depends(require_tank)])

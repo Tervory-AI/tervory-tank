@@ -3,6 +3,10 @@ name: ci
 # Security runs on every PR, including docs-only changes. Build jobs still use ci_scope.py.
 on:
   pull_request:
+  # Merge queue (3 Nov, founder): the queue tests each group of PRs merged onto main
+  # before it lands, so branches no longer merge main to stay current.
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [main]
 
@@ -40,17 +44,17 @@ jobs:
       - name: Gitleaks — PR commits or main push
         if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
         env:
-          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: python3 .github/scripts/security_scan.py gitleaks --base "$SECURITY_BASE" --output "$RUNNER_TEMP/security-results"
       - name: Semgrep — new high findings
         if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
         env:
-          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: python3 .github/scripts/security_scan.py semgrep --base "$SECURITY_BASE" --output "$RUNNER_TEMP/security-results"
       - name: OSV-Scanner — new vulnerable versions
         if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
         env:
-          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: python3 .github/scripts/security_scan.py osv --base "$SECURITY_BASE" --output "$RUNNER_TEMP/security-results"
       - name: Save security results
         if: always()
@@ -78,8 +82,8 @@ jobs:
         id: scope
         env:
           EVENT_NAME: ${{ github.event_name }}
-          DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-          DIFF_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          DIFF_HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
         run: python3 .github/scripts/ci_scope.py
 
   # Picks where the real jobs run. It only runs when the founder has switched the
@@ -144,7 +148,13 @@ jobs:
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
     # Full suite: about 14 minutes on the hosted 4-core runner (run 41229068797: 808 s of tests in
     # the main pass, 834 s for the whole suite, 15 min for the job); the per-test timeout is 5 minutes.
-    timeout-minutes: 30
+    # 3 Nov 2026: the main pass reached about 1065 s, so the job allows 36 minutes. The main pass
+    # is now split across three parallel shards (offline_suite.py, by collected test count).
+    timeout-minutes: 36
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     services:
       postgres:
         image: postgres:16
@@ -223,6 +233,8 @@ jobs:
         run: python3 .github/scripts/offline_suite.py
         env:
           PYTHONPATH: tank
+          SUITE_SHARD: ${{ matrix.shard }}
+          SUITE_SHARDS: 3
           # One Postgres service. tests/conftest.py gives each xdist worker its own
           # database cloned by name from this one (pooltest_gw0, ...).
           POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
@@ -430,3 +442,22 @@ jobs:
           name: savings-page-screenshots
           path: ${{ runner.temp }}/core2-screenshots
           if-no-files-found: warn
+
+  # The one required check for the merge queue (3 Nov). Matrix and path-skipped jobs report
+  # under changing names (tank (1)..(3), or plain "tank" when skipped), so the ruleset
+  # requires only this job. It passes when every job below passed or was skipped, and fails
+  # when any failed or was cancelled.
+  ci-ok:
+    if: always()
+    needs: [security, changes, tank, workspace, command-acceptance, savings-page]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Every CI job passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Results: $RESULTS"
+          for r in $RESULTS; do
+            case "$r" in success|skipped) ;; *) echo "A required CI job ended: $r"; exit 1 ;; esac
+          done

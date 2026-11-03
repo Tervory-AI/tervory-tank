@@ -42,9 +42,11 @@ ALONE = ["tests/tiger_g5", "tests/zenas_regulation_alerts"]
 ELSEWHERE = ["tests/ci_security", "tests/test_live_check.py"]
 # Provider keys and tokens must never reach the suite, even if a runner has them set.
 # Wall-clock seconds per run. Hosted-runner times on main, 31 Oct 2026: main 651-834s,
-# tests/tiger_g5 11-15s, tests/zenas_regulation_alerts 6-7s. All three budgets plus
-# about 1.5 minutes of job setup fit inside the tank job's 30-minute timeout.
-BUDGETS = {"main": 1080, "tests/tiger_g5": 180, "tests/zenas_regulation_alerts": 180}
+# tests/tiger_g5 11-15s, tests/zenas_regulation_alerts 6-7s. On 3 Nov 2026 main reached
+# 1060-1065s (runs on 1ad2c794 and c5afd368) against the old 1080s budget, and a PR run
+# was stopped over budget, so main gets 1560s. All three budgets plus about 1.5 minutes
+# of job setup fit inside the tank job's 36-minute timeout.
+BUDGETS = {"main": 1560, "tests/tiger_g5": 180, "tests/zenas_regulation_alerts": 180}
 OVER_BUDGET = 124  # the exit code timeout(1) uses
 KEY_HINTS = ("API_KEY", "TOKEN", "SECRET", "PASSWORD", "OPENAI", "ANTHROPIC", "OPENROUTER",
              "PERPLEXITY", "DEEPSEEK", "GROQ", "TOGETHER", "MISTRAL", "GEMINI", "XAI_", "HF_")
@@ -119,16 +121,60 @@ def _interrupt(signum, frame):
     raise KeyboardInterrupt
 
 
+def shard_of() -> tuple[int, int]:
+    """SUITE_SHARD/SUITE_SHARDS from the CI matrix; (1, 1) runs everything."""
+    count = int(os.environ.get("SUITE_SHARDS", "1") or "1")
+    index = int(os.environ.get("SUITE_SHARD", "1") or "1")
+    if count < 1 or not 1 <= index <= count:
+        raise SystemExit(f"invalid shard {index}/{count}")
+    return index, count
+
+
+def split_files(counts: dict[str, int], index: int, count: int) -> list[str]:
+    """Deterministic split by test count: largest files first, each to the lightest shard."""
+    loads = [0] * count
+    owned: list[list[str]] = [[] for _ in range(count)]
+    for path in sorted(counts, key=lambda f: (-counts[f], f)):
+        lightest = min(range(count), key=lambda i: (loads[i], i))
+        loads[lightest] += counts[path]
+        owned[lightest].append(path)
+    return sorted(owned[index - 1])
+
+
+def collected_files(ignores: list[str], env: dict[str, str]) -> dict[str, int]:
+    """Exactly the files the unsharded main run would collect, with their test counts."""
+    out = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider", *ignores],
+                         cwd=ROOT, env=env, capture_output=True, text=True, timeout=600)
+    if out.returncode != 0:
+        print(out.stdout[-4000:] + out.stderr[-4000:], flush=True)
+        raise SystemExit("collection failed; see output above")
+    counts: dict[str, int] = {}
+    for line in out.stdout.splitlines():
+        if "::" in line:
+            path = line.split("::", 1)[0]
+            counts[path] = counts.get(path, 0) + 1
+    return counts
+
+
 def main(extra: list[str]) -> int:
     signal.signal(signal.SIGTERM, _interrupt)
     common = pytest_args(os.environ.get("SUITE_WORKERS", "auto"), os.environ.get("SUITE_TEST_TIMEOUT", "300"))
     # A slower machine (fewer workers) can stretch the budgets, e.g. SUITE_BUDGET_SCALE=3.
     scale = float(os.environ.get("SUITE_BUDGET_SCALE", "1"))
-    runs = [
-        ("main", [*(f"--ignore={p}" for p in ALONE + ELSEWHERE)]),
-        *((p, [p]) for p in ALONE),
-    ]
+    index, count = shard_of()
+    ignores = [f"--ignore={p}" for p in ALONE + ELSEWHERE]
     env, failed = clean_env(), []
+    if count == 1:
+        main_args = ignores
+    else:
+        main_args = split_files(collected_files(ignores, env), index, count)
+        print(f"shard {index}/{count}: {len(main_args)} test files", flush=True)
+        if not main_args:
+            print("no files in this shard", flush=True)
+    # The two small isolated groups run once, on the first shard.
+    runs = [("main", main_args)] if main_args else []
+    if index == 1:
+        runs += [(p, [p]) for p in ALONE]
     started = time.monotonic()
     for name, args in runs:
         print(f"\n===== offline suite: {name} =====", flush=True)

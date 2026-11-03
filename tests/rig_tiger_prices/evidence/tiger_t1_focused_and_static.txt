@@ -1,0 +1,53 @@
+Final focused/static validation at production implementation 406fe08e (includes main cf95a07e).
+
+.venv/bin/python -m pytest tests/test_tiger_competitors.py -q --tb=short --timeout=300 --disable-socket --allow-unix-socket
+Exit status: 0
+
+..................................................................       [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+66 passed, 3 warnings in 169.00s (0:02:49)
+
+Shared browser fixture validation:
+.venv/bin/python -m pytest tests/test_agent1_browser.py -q --tb=short --timeout=300 --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1
+Exit status: 0
+
+.........                                                                [100%]
+9 passed in 2.90s
+
+Offline policy benchmark (exit 0, no network requests):
+PYTHONPATH=agents/tiger:agents/_chassis timeout 15s .venv/bin/python - <<'PY'
+from time import perf_counter
+from rig_watch import discovery_robots_allows
+body='User-agent: *\n'+''.join('Disallow: /excluded-'+str(i)+'\n' for i in range(1000))
+started=perf_counter()
+for i in range(10000):
+    for token in ('tervorytiger','tervory'):
+        assert discovery_robots_allows(body,'https://offline.example/products/'+str(i),token)
+print(f'10,000 URLs against 1,000 robots rules, both user agents: {perf_counter()-started:.3f}s')
+PY
+10,000 URLs against 1,000 robots rules, both user agents: 5.364s
+
+Before compilation was shared (5b6625f9), the same command with range(100) and one default user agent printed:
+100 URLs against 1,000 robots rules: 2.631s
+
+Static commands, all exit 0:
+.venv/bin/ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+.venv/bin/ruff check agents/tiger/app.py agents/tiger/rig_watch.py agents/_brain/browser.py --select E9,F
+git diff --check
+git diff origin/main --check
+
+All checks passed!
+All checks passed!
