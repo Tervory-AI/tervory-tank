@@ -4,15 +4,15 @@ This replaces the previous Chat bot SPEC in full. Historical proposals and raw b
 
 ## Client widget character and slots
 
-Component set `152:3622` contains 26 variants: 13 views × Zero/Filled. The widget uses only the client's accent, ink, paper and line variables: `VariableID:152:3601`, `152:3603`, `152:3605`, `152:3607`. It has no Tervory logo, Trigger menu, CRM colour, model name or technical binding path. Atkinson Hyperlegible body and Literata headings remain. Frame captions outside the client surface are approval metadata only.
+Component set `152:3622` contains 26 variants: 13 views × Zero/Filled. The widget uses only the client's accent, ink, paper and line variables: `VariableID:152:3601`, `152:3603`, `152:3605`, `152:3607`. It has no Tervory logo, Trigger menu, CRM colour, model name or technical binding path. Atkinson Hyperlegible body and Literata headings remain, bound to client/type/family/body and client/type/family/heading in the client brand collection. The default client line is RGB .48/.48/.52 (approximately #7a7a85), above 3:1 against paper. Every action and Close control is at least 44px high. Client accent and ink colours remain. Under the founder ruling of 3 Nov 11:37 PT, surfaces are light; dark backgrounds are reserved for homepages. Frame captions outside the client surface are approval metadata only.
 
-Every visitor slot uses plain words in brackets. These are design annotations, not actual client identities, messages, sources or records. Source chips repeat under each bot answer and contain a title and domain. Their link target is the returned Source link for that exact source record; a placeholder chip has no invented external URL and becomes a real link only when that source exists. The list must support any returned source count, not a fixed two sources. The two chips shown are repeated-slot specimens.
+Every visitor slot uses plain words in brackets. These are design annotations, not actual client identities, messages, sources or records. Source chips repeat under each bot answer and contain a title and domain. Every source chip has an open-in-new-tab URL action targeting the existing [Source link] slot for that source record. The placeholder remains unresolved until actual source data is supplied; no external source URL was invented. The list must support any returned source count, not a fixed two sources. The two chips shown are repeated-slot specimens.
 
 ## Widget state graph
 
 - Closed → Open → Conversation. Close is an × at the top right and returns to Closed.
 - Conversation `152:3613` shows the visitor message as Pending, without an answer. Sending is a separate new pending-message state. A successful reply moves to Answer `152:3615` and displays the bot bubble with its repeatable source chips.
-- Send on Answer goes to Sending with a New message pending, never back to the old Conversation state. Pending Send is disabled. Prototype delayed transitions demonstrate the next state; they do not call an answering service.
+- Send on Answer goes to Sending with a New message pending, never back to the old Conversation state. Pending Send is disabled. Conversation has a 0.8-second after-delay link to Answer. Sending has one 0.8-second conditional after-delay: client/reply-has-source=true opens Answer; false opens No source. Main components and 1440/390/375 Zero/Filled preview frames are linked. These transitions demonstrate the next state; they do not call an answering service.
 - With no eligible client evidence, show the configured No-source message, then hand over. No source never produces a bot answer or general-web fallback.
 - Offline and Outside hours each have their own state; they do not show a fabricated answer or staff availability.
 - Hand-over shows Connecting you to a person. A Person bubble contains the person's identity and reply and is visually distinct from the Bot and visitor bubbles.
@@ -28,15 +28,15 @@ One 240px Trigger menu and a wide desktop content area; one mobile drawer with a
 
 - Filled desktop Inbox rows open Conversation detail; header/row columns share widths. Mobile uses a two-line summary linked to full detail.
 - Conversation detail: visitor messages have Message only. Bot messages have Message, Who answered and Sources. Person messages have Message and a Person heading, not bot source/answer metadata.
-- Hand-over → Hand-over screen → Confirm → Conversation detail. The screen is the review/confirmation step. Older separate confirmation specimens retain their IDs but are not inserted into this flow.
+- Hand-over → Hand-over screen → Confirm · Hand-over → Conversation detail. All four confirmation frames remain and are used: 151:8132 / 151:8468 desktop Zero/Filled; 151:8804 / 151:9037 mobile Zero/Filled. Action 149:16937 routes through 151:8468. No Hand-over confirmation frame was removed.
 - Widget lead form, Lead draft and Confirm · Lead share First name, Last name and Notes, as well as Email and Phone. Submission is a draft until the store confirms it; visitor submission is not store consent.
 - Quote draft and Confirm · Quote include Title. Requests remain drafts; no amount, price, invoice or payment is invented.
 - Settings has one current-state On/Off toggle, Opening hours, Time zone, Greeting, Catalogue, FAQs, Documents, Hand-over rules, No-source message and Hand-over message. Confirm · Settings includes Time zone and both visitor-message fields, so those changes can be reviewed.
-- Every outgoing reply, lead activation, quote activation and settings save retains the founder confirmation gate. Confirm/Cancel are prototype navigation, with no live effect.
+- Every outgoing reply, lead activation, quote activation and settings save retains the founder confirmation gate. Fields come first in the scrolling work area; Cancel then Confirm occupy an 80px pinned footer, matching the CRM confirms. Confirm/Cancel are prototype navigation, with no live effect.
 
 ## Shared controls
 
-Action family `266:3038`: Primary `266:3032`, Secondary `266:3034`, Destructive `266:3036`. Labels are centred. Confirm uses Primary; Disconnect and Delete use Destructive. Store controls reuse the new scoped menu `266:3212`; client widget controls retain client-only colours. Native document `154:4349` and visible SPEC frame `210:6156` contain this same current document.
+Action family `266:3038`: Primary `266:3032`, Secondary `266:3034`, Destructive `266:3036`. Labels are centred. Confirm uses Primary; Disconnect and Delete use Destructive. Primary `266:3032`, Send reply, Confirm and Save settings bind to CRM navy color/text `42:14`. Navigation uses canonical white CRM menus (`180:8387` desktop, `180:8467` mobile) with Google posts and no Post detail entry. Scoped menu `266:3212` is hidden and marked Retired. Settings confirms highlight Settings; mobile buttons open Settings-specific drawers. Inputs use #848da3 at at least 3:1 contrast, field/menu padding follows 0/8/16/24, menu rows are at least 44px high, and `149:14873` uses radius/8. Client widget controls retain client-only colours. Native document `154:4349` and visible SPEC frame `210:6156` contain this same current document.
 
 ## Store screen and field register
 
@@ -72,14 +72,14 @@ Action family `266:3038`: Primary `266:3032`, Secondary `266:3034`, Destructive 
 - `151:8468` · confirm-handover|Desktop|Filled · Changed after approval, awaiting founder · Fields: Conversation; Person; Reason.
 - `151:8804` · confirm-handover|Mobile|Zero · Changed after approval, awaiting founder · Fields: Conversation; Person; Reason.
 - `151:9037` · confirm-handover|Mobile|Filled · Changed after approval, awaiting founder · Fields: Conversation; Person; Reason.
-- `151:9270` · confirm-lead|Desktop|Zero · Changed after approval, awaiting founder · Fields: Lead draft; Source conversation; First name; Email; Phone; Last name; Notes.
-- `151:9612` · confirm-lead|Desktop|Filled · Changed after approval, awaiting founder · Fields: Lead draft; Source conversation; First name; Email; Phone; Last name; Notes.
-- `151:9954` · confirm-lead|Mobile|Zero · Changed after approval, awaiting founder · Fields: Lead draft; Source conversation; First name; Email; Phone; Last name; Notes.
-- `151:10193` · confirm-lead|Mobile|Filled · Changed after approval, awaiting founder · Fields: Lead draft; Source conversation; First name; Email; Phone; Last name; Notes.
-- `151:10432` · confirm-quote|Desktop|Zero · Changed after approval, awaiting founder · Fields: Draft quote; Contact; Request; Line items; Title.
-- `151:10771` · confirm-quote|Desktop|Filled · Changed after approval, awaiting founder · Fields: Draft quote; Contact; Request; Line items; Title.
-- `151:11110` · confirm-quote|Mobile|Zero · Changed after approval, awaiting founder · Fields: Draft quote; Contact; Request; Line items; Title.
-- `151:11346` · confirm-quote|Mobile|Filled · Changed after approval, awaiting founder · Fields: Draft quote; Contact; Request; Line items; Title.
+- `151:9270` · confirm-lead|Desktop|Zero · Changed after approval, awaiting founder · Fields: First name; Last name; Email; Phone; Notes; Lead draft; Source conversation.
+- `151:9612` · confirm-lead|Desktop|Filled · Changed after approval, awaiting founder · Fields: First name; Last name; Email; Phone; Notes; Lead draft; Source conversation.
+- `151:9954` · confirm-lead|Mobile|Zero · Changed after approval, awaiting founder · Fields: First name; Last name; Email; Phone; Notes; Lead draft; Source conversation.
+- `151:10193` · confirm-lead|Mobile|Filled · Changed after approval, awaiting founder · Fields: First name; Last name; Email; Phone; Notes; Lead draft; Source conversation.
+- `151:10432` · confirm-quote|Desktop|Zero · Changed after approval, awaiting founder · Fields: Quote draft; Contact; Request; Line items; Title.
+- `151:10771` · confirm-quote|Desktop|Filled · Changed after approval, awaiting founder · Fields: Quote draft; Contact; Request; Line items; Title.
+- `151:11110` · confirm-quote|Mobile|Zero · Changed after approval, awaiting founder · Fields: Quote draft; Contact; Request; Line items; Title.
+- `151:11346` · confirm-quote|Mobile|Filled · Changed after approval, awaiting founder · Fields: Quote draft; Contact; Request; Line items; Title.
 - `151:11582` · confirm-settings|Desktop|Zero · Changed after approval, awaiting founder · Fields: Bot; Opening hours; Greeting; Sources; Hand-over rules; Time zone; No-source message; Hand-over message.
 - `151:11924` · confirm-settings|Desktop|Filled · Changed after approval, awaiting founder · Fields: Bot; Opening hours; Greeting; Sources; Hand-over rules; Time zone; No-source message; Hand-over message.
 - `151:12266` · confirm-settings|Mobile|Zero · Changed after approval, awaiting founder · Fields: Bot; Opening hours; Greeting; Sources; Hand-over rules; Time zone; No-source message; Hand-over message.
@@ -249,10 +249,10 @@ Answers may use only the active client's allowed catalogue, FAQs and documents, 
 Chatwoot is the existing/free inbox and widget engine from the brief, subject to the founder's adapter/branding decision. This design adds no backend, data write, deployment or model API call. Structure and authoring screenshot checks validate the proposal; the founder's visual acceptance is required before build.
 
 
-## Authoring verification · 3 November
+## Correction verification · 3 November
 
-Menu destinations were checked on both pages, including both mobile drawers and the new Google posts and Post detail entries. Same-page destinations navigate in the prototype; cross-page entries link to the corresponding Figma frame. Schedule confirmation returns to the approved Composer. Drawer scroll content ends with 16px clearance above the 240px-wide pinned block when scrolled to the end.
+Canonical wording is Quote draft, Settings, Confirm · Settings and Confirm · Hand-over. Draft quote / Bot settings / Confirm · Hand over are replaced in product labels, confirmation fields and headings. Original screen IDs and field content remain. All four Confirm · Lead screens begin First name, Last name, Email, Phone, Notes, followed by Lead draft and Source conversation context.
 
-Commands run in `/workspace/codex-crm-marketing-chat-design`: `git fetch origin` (passed); `git diff --check` (passed); `git status --short` (only these two SPEC documents); `git push origin codex/crm-marketing-chat-design` (passed after each documentation commit). Figma checks inspected frame bounds, field sets, prototype destinations and mirrored SPEC text. Authoring screenshots covered Channels 375, Google posts 1440, calendar 1440, review detail 1440, approved Composer 375, lead form 375, Answer and Sending. These are authoring checks, not screenshots of a founder acceptance test. Founder browser acceptance remains outstanding.
+Checks cover light surfaces, navy positive actions, 20 confirm footers, 44px menu/widget controls, input contrast, compact-card corners, brand font bindings, source-chip URL actions and delayed Answer/No source paths. The widget body intentionally scrolls above a separate composer. Source link is a dynamic placeholder, not a verified external URL.
 
-Shared changed controls: action family `266:3038` (primary `266:3032`, secondary `266:3034`, destructive `266:3036`); navigation family `266:3212` (desktop `266:3039`, mobile `266:3125`). Component variant words Primary, Secondary and Destructive are design metadata. The complete changed screen node register is above; original root IDs are retained. Approval captions are outside product screens.
+Screenshots and the complete directly edited/created node list are in the [correction register](evidence/2026-11-03-corrections/REGISTER.md) and [machine-readable changes](evidence/2026-11-03-corrections/changes.json). Changed screens remain Changed after approval, awaiting founder. No production code, deployment, credentials or main-branch changes are included.
