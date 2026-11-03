@@ -45,7 +45,7 @@ Each finished file was committed and pushed separately with `git add`,
 `git commit`, and `git push origin codex/tiger-brain`; the first push used `-u`.
 No push to main was made.
 
-## Exact missing input
+## Capacity evidence still required before enabling
 
 The brief says **Measure first**, assigns the Boston measurement to the
 founder's ops thread, and requires its dated numbers in the PR and ROOMS.md.
@@ -63,12 +63,12 @@ total/used/available bytes, each running container's use, and aggregate memory
 limits. It can then be recorded verbatim in the PR and `docs/cursor/ROOMS.md`.
 No measurement or capacity claim has been invented.
 
-The Tiger brain/sandbox Compose additions, Tank allowlist, isolation-check
-changes and their tests remain pending this prerequisite. No runtime config
-was changed or deployed. The eventual Compose change will redeploy the Tiger
-room under AGENTS.md rule 11. The intended brain remains optional, off by
-default, and has no caller: Tiger's three current extraction skills are code.
-No model call or new escalation was added.
+The founder subsequently authorized proceeding with the setup while keeping
+the runtime off. The branch now includes the optional Compose services, Tank
+allowlist, isolation checks and TG3 tests; see `tests/tiger_brain/PR.md` for the
+gate handoff. Both optional services remain behind the `brain` profile and the
+separate flag defaults to false. No deployment or caller was added. The dated
+Boston numbers are still required before enabling the profile.
 
 Final-head CI, Boston seal output, default-deploy proof and founder-browser
 acceptance/screenshots are not claimed for this prerequisite-only increment.
