@@ -1176,7 +1176,7 @@ def tiger_gtin(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     digits = re.sub(r'[\s-]', '', value)
-    if not re.fullmatch(r'(?:[0-9]{8}|[0-9]{12}|[0-9]{13}|[0-9]{14})', digits):
+    if not re.fullmatch(r'(?:[0-9]{8}|[0-9]{12}|[0-9]{13}|[0-9]{14})', digits) or not digits.strip('0'):
         return None
     total = sum(int(c) * (3 if i % 2 == 0 else 1) for i, c in enumerate(reversed(digits[:-1])))
     return digits.zfill(14) if (10 - total % 10) % 10 == int(digits[-1]) else None
@@ -1292,6 +1292,8 @@ class TigerMatchPage(Body):
     url: str = Field(max_length=2048)
     html: str = Field(default='', max_length=600000)
     human_check: bool = False
+    job_id: uuid.UUID | None = None
+    root_job_id: uuid.UUID | None = None
 
 
 async def tiger_link(tenant, match: dict) -> bool:
@@ -1328,8 +1330,22 @@ async def tiger_match_page(body: TigerMatchPage, request: Request):
             if site not in await tiger_sources(conn, body.tenant_id):
                 raise HTTPException(403, 'This room is not enabled for this account.')
             if body.human_check:
-                await enqueue(conn, body.tenant_id, 'tiger', site, 'captcha')
+                await conn.execute("""INSERT INTO tank.access_queue(tenant_id,room,site,reason)
+                    VALUES($1,'tiger',$2,'captcha') ON CONFLICT (tenant_id,room,site)
+                    WHERE status IN ('waiting','handling') DO NOTHING""", body.tenant_id, site)
                 return {'matches': [], 'human_check': True}
+        if body.job_id:
+            async with db().acquire() as conn:
+                valid = await conn.fetchval("""SELECT EXISTS(SELECT 1 FROM agent_tiger.jobs
+                    WHERE tenant_id=$1 AND id=$2 AND kind='competitor_match'
+                    AND COALESCE(input->>'root_job_id',id::text)=$3)""",
+                    body.tenant_id, body.job_id, str(body.root_job_id or body.job_id))
+            if not valid:
+                raise HTTPException(422, 'Check the fields. Nothing was changed.')
+        from urllib.parse import parse_qsl
+        parsed = urlsplit(body.url)
+        if parsed.path.rstrip('/').lower() == '/search' or {'q','s','search','query','search_query'} & {k for k,_ in parse_qsl(parsed.query)}:
+            return {'matches': []}
         products = await tiger_catalogue(body.tenant_id)
         matches = []
         facts = tiger_product_evidence(body.html, body.url)
@@ -1353,7 +1369,14 @@ async def tiger_match_page(body: TigerMatchPage, request: Request):
                 await tiger_link(body.tenant_id, dict(row))
             async with db().acquire() as conn:
                 current = await conn.fetchrow('SELECT * FROM agent_tiger.matches WHERE tenant_id=$1 AND id=$2', body.tenant_id, row['id'])
-            matches.append(tiger_match_out(current))
+            snapshot = tiger_match_out(current)
+            if body.job_id:
+                async with db().acquire() as conn:
+                    await conn.execute("""INSERT INTO agent_tiger.match_sightings(tenant_id,job_id,root_job_id,match_id,evidence)
+                        VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(tenant_id,job_id,match_id)
+                        DO UPDATE SET evidence=EXCLUDED.evidence""", body.tenant_id, body.job_id,
+                        body.root_job_id or body.job_id, current['id'], json.dumps(snapshot))
+            matches.append(snapshot)
         return {'matches': matches}
 
 
@@ -1462,6 +1485,8 @@ def tiger_positions(products: list[dict], matches: list[dict], observations: dic
             reading = observations.get(match['url']) or {}
             competitors.append({'url': match['url'], 'price': reading.get('price'), 'currency': reading.get('currency'),
                 'stock': reading.get('availability'), 'checked_at': reading.get('ts')})
+        if not competitors:
+            continue
         def money(value):
             try:
                 n = Decimal(str(value))
@@ -1485,7 +1510,14 @@ async def tiger_position(actor: Actor = Depends(identity)):
     ledger = await code_receipt(actor.tenant_id, 'tiger.position', agent='tiger')
     products = await tiger_catalogue(actor.tenant_id)
     async with db().acquire() as conn:
-        matches = [dict(r) for r in await conn.fetch("SELECT sku,url,state FROM agent_tiger.matches WHERE tenant_id=$1 AND state='confirmed' ORDER BY sku,url", actor.tenant_id)]
+        skus = [p['sku'] for p in products]
+        total = await conn.fetchval("SELECT count(DISTINCT sku) FROM agent_tiger.matches WHERE tenant_id=$1 AND state='confirmed' AND sku=ANY($2::text[])", actor.tenant_id, skus)
+        selected = await conn.fetch("SELECT DISTINCT sku FROM agent_tiger.matches WHERE tenant_id=$1 AND state='confirmed' AND sku=ANY($2::text[]) ORDER BY sku LIMIT 100", actor.tenant_id, skus)
+        selected = [r['sku'] for r in selected]
+        matches = [dict(r) for r in await conn.fetch("""SELECT sku,url,state FROM (
+            SELECT sku,url,state,row_number() OVER(PARTITION BY sku ORDER BY url) AS n
+            FROM agent_tiger.matches WHERE tenant_id=$1 AND state='confirmed' AND sku=ANY($2::text[])) ranked
+            WHERE n<=20 ORDER BY sku,url""", actor.tenant_id, selected)]
         observations = {}
         for match in matches:
             row = await conn.fetchrow('SELECT price,currency,availability,ts,method FROM agent_tiger.observations WHERE tenant_id=$1 AND url=$2 ORDER BY ts DESC,id DESC LIMIT 1', actor.tenant_id, match['url'])
@@ -1493,20 +1525,44 @@ async def tiger_position(actor: Actor = Depends(identity)):
                 observations[match['url']] = {k: str(v) if isinstance(v, (Decimal,datetime)) else v for k,v in dict(row).items()}
     result = {'tenant_id': str(actor.tenant_id), 'products': tiger_positions(products, matches, observations),
               'ledger_id': str(ledger), 'cost_usd': 0, 'model_calls': 0}
-    return {**result, 'text': json.dumps(result, ensure_ascii=False)}
+    result.update(total=total, has_more=total > len(result['products']))
+    return tiger_bounded_card(result, 'products')
+
+
+def tiger_bounded_card(result, field):
+    while len(json.dumps(result, ensure_ascii=False, default=str).encode()) > 110000 and result[field]:
+        result[field].pop()
+        result['has_more'] = True
+    return {**result, 'text': json.dumps(result, ensure_ascii=False, default=str)}
 
 
 async def tiger_card_result(tenant, result: dict) -> dict:
     if not result.get('job_id'):
         return result
+    try:
+        return await _tiger_card_result(tenant, result)
+    except Exception:
+        # A card read is optional enrichment; preserve the saved thread/card.
+        import logging
+        logging.getLogger(__name__).warning('Tiger match card enrichment unavailable')
+        return result
+
+
+async def _tiger_card_result(tenant, result):
+    root = uuid.UUID(result['job_id'])
     async with db().acquire() as conn:
-        job = await conn.fetchrow("SELECT status,result,created_at FROM agent_tiger.jobs WHERE tenant_id=$1 AND id=$2 AND kind='competitor_match'", tenant, uuid.UUID(result['job_id']))
+        job = await conn.fetchrow("SELECT status,result FROM agent_tiger.jobs WHERE tenant_id=$1 AND id=$2 AND kind='competitor_match'", tenant, root)
         if job is None:
             return result
-        matches = await conn.fetch('SELECT * FROM agent_tiger.matches WHERE tenant_id=$1 AND checked_at >= $2 ORDER BY checked_at,id LIMIT 100', tenant, job['created_at'])
-        count = await conn.fetchval('SELECT count(*) FROM agent_tiger.matches WHERE tenant_id=$1 AND checked_at >= $2', tenant, job['created_at'])
+        progress = await conn.fetchval('SELECT progress FROM agent_tiger.match_runs WHERE tenant_id=$1 AND job_id=$2', tenant, root)
+        matches = await conn.fetch("""SELECT DISTINCT ON (match_id) match_id,evidence
+            FROM agent_tiger.match_sightings WHERE tenant_id=$1 AND root_job_id=$2 ORDER BY match_id,job_id LIMIT 100""", tenant, root)
+        count = await conn.fetchval('SELECT count(DISTINCT match_id) FROM agent_tiger.match_sightings WHERE tenant_id=$1 AND root_job_id=$2', tenant, root)
+    discovery = progress or job['result'] or {}
+    if isinstance(discovery, str):
+        discovery = json.loads(discovery)
     update = {k:v for k,v in result.items() if k != 'text'}
-    update.update(status=job['status'], matches=[tiger_match_out(r) for r in matches], matches_count=count, has_more=count > len(matches))
-    if job['result']:
-        update['discovery'] = json.loads(job['result']) if isinstance(job['result'], str) else job['result']
-    return {**update, 'text': json.dumps(update, ensure_ascii=False, default=str)}
+    update.update(status=discovery.get('status', job['status']),
+                  matches=[json.loads(r['evidence']) if isinstance(r['evidence'], str) else r['evidence'] for r in matches],
+                  matches_count=count, has_more=count > len(matches), discovery=discovery)
+    return tiger_bounded_card(update, 'matches')
