@@ -45,8 +45,9 @@ async def test_list_install_remove_confirm_receipts_and_tenant_boundary(api, run
     assert before['plugins'][0]['status'] == 'not_ready'
     thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
     path = f'/v1/command/threads/{thread}/actions'
+    member_thread = (await client.post('/v1/command/threads', json={}, headers={'x-tervory-user': 'placeholder-member'})).json()['thread_id']
     for tool in ['plugins.install', 'plugins.remove']:
-        member = await client.post(path, json={'tool': tool, 'arguments': ARGS}, headers={'x-tervory-user': 'placeholder-member'})
+        member = await client.post(f'/v1/command/threads/{member_thread}/actions', json={'tool': tool, 'arguments': ARGS}, headers={'x-tervory-user': 'placeholder-member'})
         assert member.status_code == 403
     denied = await client.post(path, json={'tool': 'plugins.install', 'arguments': ARGS})
     assert denied.status_code == 422
@@ -108,7 +109,7 @@ async def test_code_mode_requires_install_and_never_offers_another_tenants_tools
         enabled = await plugins.code_actor(authorized, conn)
         assert list(enabled.mcp_tools) == ['mcp.12345678.list_pull_requests']
     ledger = uuid.uuid4()
-    await pool.execute("INSERT INTO tank.ledger(id,tenant_id,model,cost_usd) VALUES($1,$2,'code',0)", ledger, TENANT)
+    await pool.execute("INSERT INTO tank.ledger(id,tenant_id,agent,task_type,model,cost_usd) VALUES($1,$2,'orchestrator','command.code','code',0)", ledger, TENANT)
     route = AsyncMock(return_value=SimpleNamespace(ledger_id=ledger, content=json.dumps({'requests': [{'name': 'tervory', 'arguments': {'tool': 'mcp.12345678.list_pull_requests', 'arguments': {}}}]})))
     monkeypatch.setattr(command, 'route_code', route)
     thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
@@ -117,6 +118,8 @@ async def test_code_mode_requires_install_and_never_offers_another_tenants_tools
     assert response.json()['cards'][0]['status'] == 'pending'
     assert 'mcp.12345678.list_pull_requests' in route.call_args.args[1][0]['content']
     await pool.execute('DELETE FROM tank.plugin_installs WHERE tenant_id=$1', TENANT)
+    route.return_value.ledger_id = uuid.uuid4()
+    await pool.execute("INSERT INTO tank.ledger(id,tenant_id,agent,task_type,model,cost_usd) VALUES($1,$2,'orchestrator','command.code','code',0)", route.return_value.ledger_id, TENANT)
     response = await client.post(f'/v1/command/threads/{thread}/code-turn', json={'text': 'placeholder read PRs again'})
     assert response.status_code == 422
 
