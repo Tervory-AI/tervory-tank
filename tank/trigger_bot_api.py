@@ -14,7 +14,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from tenant_db import tenant_scope
-from trigger_bot import Bot, obj
 from trigger_bot_grounding import exact_origin
 from trigger_bot_shared import FailedKeyLimits, PgRateLimits, hash_key, issue_embed_key
 
@@ -115,6 +114,15 @@ def runtime():
     return main
 
 
+def obj(value):
+    return json.loads(value) if isinstance(value, str) else value
+
+
+def make_bot():
+    from trigger_bot import Bot
+    return Bot(runtime())
+
+
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
@@ -189,7 +197,7 @@ async def key_for_site(bot, tenant, url):
 
 
 async def execute(operation, args, actor, operation_id):
-    bot, tenant = Bot(runtime()), actor.tenant_id
+    bot, tenant = make_bot(), actor.tenant_id
     pool = bot.pool
     if operation == 'source.add':
         content = ''
@@ -319,7 +327,7 @@ async def command_bot(operation: str, request: Request, actor: command.Actor = D
     operation_id = confirmation(actor, 'trigger.bot.' + operation, args.model_dump(mode='json', exclude_none=True))
     result = await execute(operation, args, actor, operation_id)
     if 'ledger_id' not in result:
-        result['ledger_id'] = str(await Bot(runtime()).receipt(actor.tenant_id, 'trigger.bot.' + operation))
+        result['ledger_id'] = str(await make_bot().receipt(actor.tenant_id, 'trigger.bot.' + operation))
     return result
 
 
@@ -366,7 +374,7 @@ async def public_message(request: Request):
             args = PublicMessage.model_validate(await bounded_body(request, 16000))
         except (ValueError, TypeError):
             raise HTTPException(422) from None
-        result = await ask(Bot(runtime()), tenant, args, conversation_id=args.conversation_id, visitor_id=args.visitor_id)
+        result = await ask(make_bot(), tenant, args, conversation_id=args.conversation_id, visitor_id=args.visitor_id)
     # No model name, raw retrieval text, peer address or internal draft data.
     result = {k: v for k, v in result.items() if k not in {'retrieved', 'cited', 'outcome', 'notification'}}
     return JSONResponse(result, headers={'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'Cache-Control': 'no-store'})
