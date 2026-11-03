@@ -28,6 +28,8 @@ services:
       DATA_DIR: /data
       SITE_NAME: tervory.com
       CLOUDFLARE_API_TOKEN_ENFORCE: ${CLOUDFLARE_API_TOKEN_ENFORCE:-}
+      HTTPS_PROXY: http://egress-proxy:8080
+      NO_PROXY: localhost,127.0.0.1
       AUTUMBRA_HEALTH_SECRET: ${AUTUMBRA_HEALTH_SECRET:-}
       # Enforce never calls a model. No TANK_KEY here on purpose.
     volumes:
