@@ -85,6 +85,7 @@ class VoiceOperation(BaseModel):
     expected_revision: int = Field(default=0, ge=0)
     preview_hash: str = ""
     operation_id: UUID | None = None
+    rules: list[str] | None = Field(default=None, max_length=25)
     target: int | None = Field(default=None, ge=1)
     offset: int = Field(default=0, ge=0)
 
@@ -96,11 +97,11 @@ async def voice_operation(operation: str, body: VoiceOperation):
         if operation == "show":
             return await store.show(body.tenant_id, body.offset, body.target)
         if operation == "preview":
-            return await store.preview(body.tenant_id, body.text, body.target)
+            return await store.preview(body.tenant_id, body.text, body.target, body.rules)
         if operation == "commit" and body.operation_id:
             return {"voice": await store.commit(body.tenant_id, text=body.text,
                 expected_revision=body.expected_revision, digest=body.preview_hash,
-                operation_id=body.operation_id, target=body.target)}
+                operation_id=body.operation_id, target=body.target, rules=body.rules)}
         raise HTTPException(404, "Voice operation unavailable")
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from None

@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 _background: set[asyncio.Task] = set()
 SQUADS = frozenset({"base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"})
 TOOLS = {
-    "trigger": ["trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
+    "trigger": ["trigger.revise", "trigger.voice.learn", "trigger.write.batch", "trigger.scorecard", "trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
     "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.to_crm"],
     "tiger": ["tiger.watch", "tiger.read"],
     "market_lab": ["market_lab.research"],
@@ -885,6 +885,8 @@ ACTION_TIMEOUT = 180
 
 
 def action_timeout(tool: str | None) -> int:
+    if tool == "trigger.write.batch":
+        return 25 * 120 + ACTION_TIMEOUT
     if tool == "base.list.to_crm":
         from base_list_crm import CRM_CARD_SECONDS
         return CRM_CARD_SECONDS  # 60s discovery + 20 waves * 45s + 60s margin.
@@ -1053,7 +1055,13 @@ class ReviewArgs(Body):
     matter_id: uuid.UUID | None = None
 
 
+TriggerFormat = Literal['product description', 'Google Business Profile post', 'Facebook post',
+                        'Instagram caption', 'LinkedIn post', 'X post', 'email',
+                        'page meta description', 'article']
+
+
 class TriggerCheckArgs(Body):
+    format: TriggerFormat | None = None
     # The existing 32,000-byte action envelope remains authoritative.
     text: str = Field(min_length=1, max_length=32000)
 
@@ -1101,6 +1109,35 @@ class TriggerFeedbackArgs(Body):
         return self
 
 
+class TriggerReviseArgs(Body):
+    write_id: uuid.UUID
+
+
+class TriggerVoiceLearnArgs(Body):
+    write_ids: list[uuid.UUID] = Field(min_length=1, max_length=25)
+    rules: list[str] = Field(default_factory=list, max_length=25)
+    expected_revision: int = Field(default=0, ge=0)
+    preview_hash: str = Field(default='', max_length=64)
+    brief_markdown: str = Field(default='', max_length=24000)
+
+
+class TriggerBatchArgs(Body):
+    skus: list[str] = Field(default_factory=list, max_length=25)
+    attachment: str | None = Field(default=None, min_length=1, max_length=200)
+    products: list[dict[str, Any]] = Field(default_factory=list, max_length=25)
+    brief_markdown: str = Field(default='', max_length=24000)
+
+    @model_validator(mode='after')
+    def source(self):
+        if bool(self.skus) == bool(self.attachment) or any(not s.strip() or len(s) > 200 for s in self.skus):
+            raise ValueError('Invalid Trigger request')
+        return self
+
+
+class TriggerScorecardArgs(Body):
+    pass
+
+
 class TriggerCRMWriteArgs(Body):
     resource: Literal["leads", "contacts", "estimates", "invoices"]
     record_id: uuid.UUID | None = None
@@ -1143,6 +1180,10 @@ ADAPTERS = {
     "trigger.voice.set": Adapter("POST", "/v1/trigger/voice.set", TriggerVoiceSetArgs, "trigger.voice.set"),
     "trigger.voice.rollback": Adapter("POST", "/v1/trigger/voice.rollback", TriggerVoiceRollbackArgs, "trigger.voice.rollback"),
     "trigger.feedback": Adapter("POST", "/v1/trigger/feedback", TriggerFeedbackArgs, "trigger.feedback"),
+    "trigger.revise": Adapter("POST", "/v1/trigger/revise", TriggerReviseArgs, "trigger.revise", True, "paid_run"),
+    "trigger.voice.learn": Adapter("POST", "/v1/trigger/voice.learn", TriggerVoiceLearnArgs, "trigger.voice.learn"),
+    "trigger.write.batch": Adapter("POST", "/v1/trigger/write.batch", TriggerBatchArgs, "trigger.write.batch", True, "paid_run"),
+    "trigger.scorecard": Adapter("GET", "/v1/trigger/scorecard", TriggerScorecardArgs, "trigger.scorecard"),
     "trigger.write": Adapter("POST", "/v1/trigger/write", TriggerWriteArgs, "trigger.write", True, "paid_run"),
     "trigger.check": Adapter("POST", "/v1/trigger/check", TriggerCheckArgs, "trigger.check"),
     "repo.prs": Adapter("GET", "/v1/command/repo/prs", RepoPRsArgs, "open PRs on Tervory-AI/tervory-tank"),
@@ -1310,6 +1351,8 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
     if action.tool == "ledger.savings":
         end = datetime.now(timezone.utc)
         args = {"start": (end - timedelta(days=args["days"])).isoformat(), "end": end.isoformat()}
+    if action.tool == "trigger.scorecard":
+        return adapter.method, path, scope, None
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
     if action.tool in {"base.list.save", "base.list.to_crm"}:
@@ -1338,9 +1381,10 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     if current_actor(actor).founder:
         headers["X-Tervory-Admin"] = actor.user_id
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tank.internal",
-                                 follow_redirects=False, timeout=ACTION_TIMEOUT) as client:
+                                 follow_redirects=False, timeout=action_timeout(action.tool)) as client:
         response = await client.request(method, path, params=params, json=body, headers=headers)
-    if len(response.content) > 256000:
+    response_limit = 25 * 256000 * 2 if action.tool == "trigger.write.batch" else 256000
+    if len(response.content) > response_limit:
         raise ValueError("Tool response is too large; outcome needs reconciliation")
     result = response.json()
     if action.tool == "radix.domain.prove" and 200 <= response.status_code < 300:
@@ -1504,6 +1548,11 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             # On failures, raw provider detail is not exposed or stored.
             if card["status"] == "confirmed":
                 card["result"] = result
+                if action.tool == 'trigger.feedback' and result.get('status') == 'changes_requested':
+                    # Feedback is code-only. A new paid draft still needs its own Confirm.
+                    revision = validate_action(PlannedAction(tool='trigger.revise',
+                        arguments={'write_id': result['write_id']}), actor)
+                    await propose_action(conn, row, state, revision, actor)
             else:
                 refused = list_refusal_result(action.tool, status, result)
                 if refused is not None:
