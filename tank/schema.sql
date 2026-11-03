@@ -2773,8 +2773,8 @@ CREATE TABLE IF NOT EXISTS tank.trigger_meta_states (
 );
 DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
-  ALTER trigger_meta_connections tank.trigger_meta_connections ENABLE ROW LEVEL SECURITY;
-  ALTER trigger_meta_connections tank.trigger_meta_connections FORCE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_meta_connections ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_meta_connections FORCE ROW LEVEL SECURITY;
   IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_meta_connections'::regclass AND polname='tenant_access') THEN
    CREATE POLICY tenant_access ON tank.trigger_meta_connections FOR ALL TO PUBLIC
     USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
@@ -2789,8 +2789,8 @@ DO $$ BEGIN
 END $$;
 DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
-  ALTER trigger_meta_states tank.trigger_meta_states ENABLE ROW LEVEL SECURITY;
-  ALTER trigger_meta_states tank.trigger_meta_states FORCE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_meta_states ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.trigger_meta_states FORCE ROW LEVEL SECURITY;
   IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_meta_states'::regclass AND polname='tenant_access') THEN
    CREATE POLICY tenant_access ON tank.trigger_meta_states FOR ALL TO PUBLIC
     USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
