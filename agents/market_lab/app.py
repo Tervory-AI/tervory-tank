@@ -143,9 +143,9 @@ class _SafeMemory:
     def __init__(self, inner: object) -> None:
         self.inner = inner
 
-    async def remember(self, tenant_id: str, text: str, kind: str, source: str) -> dict:
+    async def remember(self, tenant_id: str, text: str, kind: str, source: str, **kwargs: object) -> dict:
         try:
-            saved = await self.inner.remember(tenant_id, text, kind, source)  # type: ignore[attr-defined]
+            saved = await self.inner.remember(tenant_id, text, kind, source, **kwargs)  # type: ignore[attr-defined]
         except Exception as exc:  # noqa: BLE001 — class name only, never the message
             log.warning("memory failed (%s)", type(exc).__name__)
             return {"seen": None}
@@ -165,6 +165,8 @@ class _ledger:
             raise RuntimeError("DATABASE_URL is not set")
         self.conn = await asyncpg.connect(url)
         self.ledger = PostgresLedger(self.conn)
+        from chassis.memory import MemoryClient
+        self.ledger.memory = _SafeMemory(MemoryClient())
         await self.ledger.apply_schema()
         return self.ledger
 
