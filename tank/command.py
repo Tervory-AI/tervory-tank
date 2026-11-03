@@ -36,7 +36,7 @@ TOOLS = {
     "trigger": ["trigger.revise", "trigger.voice.learn", "trigger.write.batch", "trigger.scorecard", "trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
     "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.to_crm"],
     "tiger": ["tiger.watch", "tiger.read"],
-    "market_lab": ["market_lab.research"],
+    "market_lab": ["market_lab.research", "market_lab.warnings", "market_lab.predictions", "market_lab.calibration", "market_lab.feeds", "market_lab.alerts.email", "market_lab.alerts.webhook", "market_lab.alerts.off"],
     "rig": ["rig.search", "rig.ask"],
     "tisan": ["tisan.scaffold"],
     "radix": ["radix.scan"],
@@ -110,7 +110,8 @@ def allowed_tools(actor: Actor) -> list[str]:
     founder_tools = [name for name in FOUNDER_TOOLS
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
     voice_tools = TOOLS["trigger"] if actor.tenant_admin and not actor.founder else []
-    return sorted([tool for squad in squads for tool in TOOLS[squad]] + founder_tools + voice_tools + list(actor.mcp_tools))
+    return sorted([tool for squad in squads for tool in TOOLS[squad]
+                   if not tool.startswith("market_lab.alerts.") or actor.founder or actor.tenant_admin] + founder_tools + voice_tools + list(actor.mcp_tools))
 
 
 def require_tool(actor: Actor, name: str) -> None:
@@ -1166,6 +1167,15 @@ class BuildArgs(Body):
     brief_markdown: str = Field(min_length=1, max_length=30000)
 
 
+class MarketLabReadArgs(Body):
+    limit: int = Field(default=20, ge=1, le=100)
+    page: int = Field(default=0, ge=0, le=10000)
+
+
+class MarketLabWebhookArgs(Body):
+    url: str = Field(min_length=1, max_length=2000)
+
+
 @dataclass(frozen=True)
 class Adapter:
     method: str
@@ -1208,6 +1218,13 @@ ADAPTERS = {
     "base.list.to_crm": Adapter("POST", "/v1/command/base/lists/to-crm", SendArgs, "base.list.to_crm"),
     "tiger.watch": Adapter("POST", "/v1/tiger/watchlist", WatchArgs, "Start a price watch", True, "paid_run"),
     "tiger.read": Adapter("GET", "/v1/tiger/observations", UrlArgs, "Read price observations"),
+    "market_lab.warnings": Adapter("GET", "/v1/market-lab/reads/warnings", MarketLabReadArgs, "market_lab.warnings"),
+    "market_lab.predictions": Adapter("GET", "/v1/market-lab/reads/predictions", MarketLabReadArgs, "market_lab.predictions"),
+    "market_lab.calibration": Adapter("GET", "/v1/market-lab/reads/calibration", MarketLabReadArgs, "market_lab.calibration"),
+    "market_lab.feeds": Adapter("GET", "/v1/market-lab/reads/feeds", MarketLabReadArgs, "market_lab.feeds"),
+    "market_lab.alerts.email": Adapter("POST", "/v1/market-lab/alerts/email", EmptyArgs, "market_lab.alerts.email"),
+    "market_lab.alerts.webhook": Adapter("POST", "/v1/market-lab/alerts/webhook", MarketLabWebhookArgs, "market_lab.alerts.webhook"),
+    "market_lab.alerts.off": Adapter("POST", "/v1/market-lab/alerts/off", EmptyArgs, "market_lab.alerts.off"),
     "market_lab.research": Adapter("POST", "/v1/research", QuestionArgs, "Research a market question", True, "paid_run"),
     "rig.search": Adapter("GET", "/v1/rig/search", QueryArgs, "Search the product catalogue"),
     "rig.ask": Adapter("POST", "/v1/rig/ask", RigAskArgs, "Ask about a product", True, "paid_run"),
@@ -1549,6 +1566,7 @@ def list_refusal_result(tool: str, status: int, result: Any) -> dict | None:
 
 async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action: PlannedAction) -> dict:
     attempted = False
+    once = None
     try:
         actor = await authorized_actor(actor, include_mcp=action.tool.startswith("mcp."))
         action = validate_action(action, actor)
@@ -1625,7 +1643,12 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             await event(conn, row, "error", {"message": card["error"]})
     async with db().acquire() as conn:
         row = await owned(conn, thread_id, actor)
-    return public_card(unpack(row["state"])["cards"][card_id])
+    result_card = public_card(unpack(row["state"])["cards"][card_id])
+    if once is not None and result_card.get("status") == "confirmed":
+        # This response alone carries the value. Durable state/events/model
+        # context contain only the non-secret preference status.
+        result_card["result"] = {**result_card.get("result", {}), "text": once}
+    return result_card
 
 
 @router.post("/threads/{thread_id}/attachments")
