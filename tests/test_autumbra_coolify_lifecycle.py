@@ -261,3 +261,30 @@ async def test_configured_room_uses_live_count_and_requires_room_key(tmp_path, m
             assert len([r for r in api.calls if r.method == 'POST']) == 1
             result = client.post(path + 'plan-destroy', headers=headers, json={'tenant_id': A, 'execute': True})
             assert result.json()['receipt']['outcome'] == 'destroyed'
+
+
+@pytest.mark.asyncio
+async def test_concurrent_create_same_tenant_is_refused_after_first():
+    import asyncio
+    api = FakeAPI()
+
+    async def yield_before_api(request):
+        await asyncio.sleep(0)
+        return api(request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(yield_before_api)) as http:
+        service = backend(http)
+        plan = lifecycle.plan_create(A, existing_count=0)
+        results = await asyncio.gather(service.create(plan), service.create(plan), return_exceptions=True)
+    assert sum(isinstance(r, dict) and r['outcome'] == 'created' for r in results) == 1
+    assert sum(isinstance(r, lifecycle.Refused) for r in results) == 1
+    assert len([r for r in api.calls if r.method == 'POST']) == 1
+
+
+def test_coolify_setting_messages_keep_tisan_defaults():
+    with httpx.Client() as unused:
+        with pytest.raises(lifecycle.Refused, match='TISAN_COOLIFY_URL'):
+            lifecycle.Coolify(unused, 'http://placeholder.invalid', TOKEN)
+        with pytest.raises(lifecycle.Refused, match='AUTUMBRA_COOLIFY_URL'):
+            lifecycle.Coolify(unused, 'http://placeholder.invalid', TOKEN,
+                             url_setting='AUTUMBRA_COOLIFY_URL', token_setting='AUTUMBRA_COOLIFY_TOKEN')
