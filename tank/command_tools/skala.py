@@ -37,10 +37,11 @@ async def code_plan(actor, messages, task_id):
     match = re.fullmatch(r"skala\.teachers\s+([A-Za-z0-9_.-]+)", messages[-1].get("content", "").strip())
     if not match:
         return None
-    from command import authorized_actor, require_tool
+    from command import authorized_actor, allowed_tools
     from trigger_routes import code_receipt
     actor = await authorized_actor(actor)
-    require_tool(actor, "skala.teachers")
+    if "skala.teachers" not in allowed_tools(actor):
+        return None
     args = TeachersArgs(skill_id=match[1])
     plan = {"text": "", "actions": [{"tool": "skala.teachers", "arguments": args.model_dump()}]}
     receipt = await code_receipt(actor.tenant_id, "command.turn", task_id=task_id, agent="tank")
