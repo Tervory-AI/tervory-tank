@@ -1,4 +1,5 @@
 """Founder-only Command adapters over the existing saved Base audit store."""
+import json
 from typing import Annotated
 from uuid import UUID
 
@@ -45,7 +46,8 @@ def build_router() -> APIRouter:
         return AuditStore(SimpleNamespace(pool=db))
 
     async def result(actor, tool, data):
-        return {**data, "ledger_id": await receipt(actor.tenant_id, tool), "cost_usd": 0}
+        return {**data, "summary": json.dumps(data, default=str, ensure_ascii=False),
+                "ledger_id": await receipt(actor.tenant_id, tool), "cost_usd": 0}
 
     @router.post("/start")
     async def start(args: StartArgs, actor: Annotated[Actor, Depends(founder)]):
