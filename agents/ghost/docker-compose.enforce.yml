@@ -56,7 +56,6 @@ services:
         from egress import Proxy, Server, private_bind_address, system_resolve;
         allowed = 'api.cloudflare.com';
         proxy = Proxy(verified_host=allowed, allow_storage=False,
-          max_requests_per_minute=120,
           resolve=lambda host: system_resolve(host, verified_host=allowed));
         Server(proxy, host=private_bind_address(), port=8080).serve_forever()
     restart: unless-stopped
@@ -101,7 +100,6 @@ services:
         from egress import Proxy, Server, private_bind_address, system_resolve;
         allowed = 'tervory.com';
         proxy = Proxy(verified_host=allowed, allow_storage=False,
-          max_requests_per_minute=120,
           resolve=lambda host: system_resolve(host, verified_host=allowed));
         Server(proxy, host=private_bind_address(), port=8080).serve_forever()
     restart: unless-stopped
