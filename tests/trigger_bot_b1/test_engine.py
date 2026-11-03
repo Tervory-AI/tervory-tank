@@ -189,7 +189,7 @@ async def test_no_crm_binding_fails_before_draft_claim_or_upstream(monkeypatch):
         CONFIRMED.reset(bound)
 
 
-@pytest.mark.parametrize('currency', ['USD', 'R', 'BRL'])
+@pytest.mark.parametrize('currency', ['USD', 'R', 'CAD'])
 def test_currency_attached_to_existing_amount_cannot_change_its_unit(currency):
     evidence = passage(text='Price ZAR3', kind='rig')
     assert grounded({'answer': f'Price {currency}3', 'passage_ids': [str(POINT)]}, [evidence]) is None
