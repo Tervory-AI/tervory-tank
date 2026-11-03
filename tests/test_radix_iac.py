@@ -80,6 +80,7 @@ def test_missing_checkov_qualifies_summary_and_never_claims_complete(monkeypatch
     assert result['tool_status'] == {'scan.iac': 'not run'}
     assert result['scan_complete'] is False
     assert result['summary'].endswith('scan.iac: not run.')
+    assert 'No findings' not in result['summary']
     assert 'scan.iac' in result['tools']
 
 
