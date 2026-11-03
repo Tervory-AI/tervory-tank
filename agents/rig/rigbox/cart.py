@@ -1,6 +1,7 @@
 """US cart state machine. Store checkout owns money; Rig owns price holds."""
 from __future__ import annotations
 
+import copy
 import hashlib
 import re
 import secrets
@@ -8,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from rigbox.cart_store import CartStore
+from rigbox.fulfilment import RigOrders
+from rigbox.quotes.senders import DeliveryError
 from rigbox.commerce import CommerceError, event_digest, money
 from rigbox.locate import locate, needs_supply, stamp
 from rigbox.locate_live import Holds, confirm, hold_secret
@@ -48,6 +51,7 @@ class Cart:
     def __init__(self, service, platforms, *, clock=lambda: datetime.now(timezone.utc)):
         self.service, self.store, self.platforms, self.clock = service, service.store, platforms, clock
         self.rows = CartStore(self.store)
+        self.fulfilment = RigOrders(self.store)
 
     async def config(self, tenant):
         config = await self.store.commerce_config(tenant)
@@ -176,8 +180,6 @@ class Cart:
 
     async def checkout(self, tenant, token):
         config = await self.config(tenant)
-        if not callable(getattr(self.service, 'store_confirms_payment', None)):
-            raise CommerceError('store_confirmation_unavailable')
         identity = session_id(token)
         async with self.rows.lock(tenant, identity) as rows:
             cart = await rows.get(tenant, identity)
@@ -229,6 +231,7 @@ class Cart:
         row = await self.rows.get(tenant, checkout_id)
         if not row or row['session'] != session_id(token):
             raise CommerceError('not_found')
+        row = await self._fulfil(tenant, row)
         return {**public_checkout(row), 'lines': [public_line(line) for line in row['lines']]}
 
     async def _paid(self, tenant, row, order):
@@ -240,16 +243,48 @@ class Cart:
                    late_payment=self.clock() >= stamp(row['expires_at']))
 
     async def _fulfil(self, tenant, row):
-        # Owned by the parallel no-payments branch. Never fork quote fulfilment.
-        callback = getattr(self.service, 'store_confirms_payment', None)
-        if callback is None:
-            return
-        for line in row['lines']:
-            await callback(tenant, {'reference': row['id'] + ':' + line['id'],
-                'platform_order_id': row['paid_order_id'], 'product_id': line['product_id'],
-                'quantity': line['quantity'], 'price': {'amount': line['price'], 'currency': line['currency']},
-                'kind': line['kind'], 'located': line.get('located')})
-        row['state'] = 'paid'
+        # One bounded CAS lease covers all lines. External work holds no DB lock.
+        now = self.clock()
+        if row['state'] == 'placing':
+            if stamp(row['attempted_at']) > now - timedelta(minutes=15):
+                return row
+        elif row['state'] != 'paid_pending':
+            return row
+        leased = {**row, 'state': 'placing', 'attempted_at': now.isoformat(),
+                  'attempt_id': secrets.token_hex(16)}
+        if not await self.rows.swap(tenant, row['id'], row, leased):
+            return await self.rows.get(tenant, row['id'])
+        finished = copy.deepcopy(leased)
+        try:
+            retailer = await self.store.retailer(tenant) or {}
+            for line in finished['lines']:
+                if line['kind'] == 'back_order':
+                    line['fulfilment_state'] = 'back_order'
+                elif line['kind'] == 'locate':
+                    reference = 'cart:' + row['id'] + ':' + line['id']
+                    order = await self.fulfilment.place_located_order(
+                        tenant_id=tenant, quote_id=reference, located=line['located'],
+                        price={'amount': line['price'], 'currency': line['currency']},
+                        quantity=line['quantity'])
+                    if retailer.get('auto_order') is True:
+                        sent = await self.fulfilment.send_supplier_order(
+                            tenant_id=tenant, quote_id=reference,
+                            store_name=retailer.get('name') or '', store_email=retailer.get('email'))
+                        if sent['purchase_order'].get('recorded') is False:
+                            raise DeliveryError('order_unavailable')
+                    line['order_number'] = order['order']['number']
+                    line['fulfilment_state'] = 'placed'
+            finished['state'] = 'placed'
+        except Exception as exc:
+            finished['state'] = ('needs_person' if isinstance(exc, DeliveryError)
+                                 and str(exc) in {'order_mismatch', 'order_rejected'} else 'paid_pending')
+        finished.update(attempt_id=None, attempted_at=None)
+        if not await self.rows.swap(tenant, row['id'], leased, finished):
+            # A slow worker never overwrites a newer lease or returns a 500.
+            return await self.rows.get(tenant, row['id'])
+        if finished['state'] == 'placed':
+            await self.rows.release(tenant, finished['lines'], self.clock())
+        return finished
 
     async def webhook(self, tenant, raw, headers):
         config = await self.store.commerce_config(tenant)
@@ -262,9 +297,15 @@ class Cart:
         for candidate in await self.rows.checkouts(tenant):
             if candidate['config']['platform'] != config['platform'] or not candidate.get('remote'):
                 continue
+            if candidate['state'] in {'paid_pending', 'placing'}:
+                await self._fulfil(tenant, candidate)
+                matched += 1
+                continue
             async with self.rows.lock(tenant, candidate['id']) as rows:
                 row = await rows.get(tenant, candidate['id'])
-                if row['state'] == 'paid':
+                if row['state'] in {'placed', 'needs_person'}:
+                    continue
+                if row['state'] in {'paid_pending', 'placing'}:
                     continue
                 if config['platform'] == 'woocommerce' and str(event.get('id')) != row['remote']['id']:
                     continue
@@ -277,24 +318,19 @@ class Cart:
                 # Persist paid evidence before fulfilment. Its shared idempotent
                 # step can be retried after a process crash, exactly once per line.
                 await rows.put(tenant, row['id'], row)
-            async with self.rows.lock(tenant, candidate['id']) as rows:
-                row = await rows.get(tenant, candidate['id'])
-                if row['state'] == 'paid_pending':
-                    await self._fulfil(tenant, row)
-                    await self.rows.release(tenant, row['lines'], self.clock())
-                    await rows.put(tenant, row['id'], row)
+            await self._fulfil(tenant, row)
             matched += 1
         return {'accepted': True, 'matched': matched}
 
     async def sweep(self, tenant):
         """Called every second on the US box; only tenant-scoped reads/writes."""
         for candidate in await self.rows.checkouts(tenant):
+            if candidate['state'] in {'paid_pending', 'placing'}:
+                await self._fulfil(tenant, candidate)
+                continue
             async with self.rows.lock(tenant, candidate['id']) as rows:
                 row = await rows.get(tenant, candidate['id'])
-                if row['state'] == 'paid_pending':
-                    await self._fulfil(tenant, row)
-                    await rows.put(tenant, row['id'], row)
-                elif row['state'] in ('pending', 'cancel_unknown') and self.clock() >= stamp(row['expires_at']):
+                if row['state'] in ('pending', 'cancel_unknown') and self.clock() >= stamp(row['expires_at']):
                     platform = await self.platform(tenant, row['config'])
                     try:
                         order = await platform.read(row['remote'])
