@@ -1,7 +1,8 @@
+# coolify: raw compose
 # Tisan, the developer and designer. Deploy this file as its own Coolify resource.
 # Build context is the repository root to reuse ops/live_check.mjs.
-# The only network is the external gateway. Coolify's own network for this resource
-# contains just this service, so it cannot see the main stack.
+# The room reaches Figma only through its dedicated internal proxy link.
+# Deploy as Raw Compose so Coolify adds no outbound app network.
 # Created once on the server: docker network create tervory-gw-tisan
 
 services:
@@ -14,6 +15,8 @@ services:
     cpus: 0.25
     environment:
       AGENT_NAME: tisan
+      FIGMA_TOKEN: ${FIGMA_TOKEN:-}
+      TISAN_FIGMA_FILES: ${TISAN_FIGMA_FILES:-}
       TISAN_COOLIFY_URL: ${TISAN_COOLIFY_URL:-}
       TISAN_COOLIFY_TOKEN: ${TISAN_COOLIFY_TOKEN:-}
       R2_BUCKET: tervory-tisan
@@ -33,6 +36,7 @@ services:
       - agent_tisan_data:/data
     networks:
       - gw
+      - figma_internal
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 10s
@@ -41,6 +45,33 @@ services:
     expose:
       - "8000"
 
+  figma-egress-proxy:
+    build:
+      context: ..
+      dockerfile: radix/Dockerfile
+    command:
+      - python
+      - -c
+      - >-
+        from egress import Proxy, Server, private_bind_address, system_resolve;
+        allowed = 'api.figma.com';
+        proxy = Proxy(verified_host=allowed, allow_storage=False, require_sni=True,
+          resolve=lambda host: system_resolve(host, verified_host=allowed));
+        Server(proxy, host=private_bind_address(), port=8080).serve_forever()
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    networks:
+      figma_internal:
+        interface_name: radix-link
+      egress: {}
+
 volumes:
   agent_tisan_data:
 
@@ -48,3 +79,6 @@ networks:
   gw:
     external: true
     name: tervory-gw-tisan
+  figma_internal:
+    internal: true
+  egress: {}
