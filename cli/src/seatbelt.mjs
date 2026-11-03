@@ -23,12 +23,12 @@ export async function seatbeltProfile(root, mounts = []) {
     else if (operation === '--tmpfs') { i++; }
     else throw new Error('Code tool refused.');
   }
-  const roots = [...new Set([root, '/bin', '/usr/bin', '/usr/lib', '/usr/share', '/System/Library', ...runtime])];
+  const roots = [...new Set([root, '/bin', '/usr', '/System/Library', '/Library/Developer/CommandLineTools/usr', '/Applications/Xcode.app/Contents/Developer/usr', ...runtime])];
   const paths = roots.map(path => `(subpath ${quote(path)})`).join('\n');
   return base + `
 ; Tervory additions: minimum system/runtime reads, selected-folder writes only.
 (allow file-read* file-map-executable ${paths})
-(allow file-read-metadata (path-ancestors ${quote(root)}))
+(allow file-read-metadata ${roots.map(path => `(path-ancestors ${quote(path)})`).join(' ')})
 (allow file-read-metadata (literal "/") (literal "/dev") (literal "/private") (literal "/private/var"))
 (allow file-read* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/random") (literal "/dev/urandom"))
 (allow file-read* file-write-data (subpath "/dev/fd"))
