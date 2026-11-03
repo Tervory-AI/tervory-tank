@@ -19,7 +19,7 @@ let calls = [], answer = () => new Response('{}',{headers:{'content-type':'appli
 global.fetch = async (url, init) => { calls.push({url:String(url),init}); return answer(); };
 const request = (path, init={}) => new Request('https://app.tervory.com'+path,init);
 (async()=>{
-  const sent = {authorization:'Bearer synthetic', 'mcp-session-id':'session', 'mcp-protocol-version':'2025-11-25', accept:'application/json, text/event-stream','content-type':'application/json',origin:'https://claude.ai',cookie:'must-not-forward','x-tank-key':'must-not-forward','x-tervory-user':'founder','x-tervory-tenant':'foreign'};
+  const sent = {authorization:'Bearer synthetic', 'mcp-session-id':'session', 'mcp-protocol-version':'2025-11-25', accept:'application/json, text/event-stream','content-type':'application/json',origin:'https://claude.ai',cookie:'must-not-forward','x-tank-key':'must-not-forward','x-tervory-user':'founder','x-tervory-tenant':'foreign','x-real-ip':'203.0.113.10','x-forwarded-for':'198.51.100.99','x-tervory-oauth-source':'198.51.100.99'};
   answer = ()=>new Response(null,{status:401,headers:{'www-authenticate':'Bearer resource_metadata="https://app.tervory.com/.well-known/oauth-protected-resource/mcp"','mcp-session-id':'reply-session','set-cookie':'must-not-return'}});
   let response = await mcpPublicRequest(request('/mcp',{method:'POST',headers:sent,body:'{}'}),'mcp');
   assert.equal(response.status,401);
@@ -36,7 +36,11 @@ const request = (path, init={}) => new Request('https://app.tervory.com'+path,in
     response=await mcpPublicRequest(request('/oauth/'+operation,{method:'POST',headers:sent,body}),operation);
     assert.equal(response.status,200);
     await response.text();
-    assert.deepEqual([...calls[0].init.headers.keys()],['content-type']);
+    if (operation==='register') {
+      assert.deepEqual([...calls[0].init.headers.keys()],['content-type','x-tank-key','x-tervory-oauth-source']);
+      assert.equal(calls[0].init.headers.get('x-tank-key'),'offline-approval-test');
+      assert.equal(calls[0].init.headers.get('x-tervory-oauth-source'),'203.0.113.10');
+    } else assert.deepEqual([...calls[0].init.headers.keys()],['content-type']);
     assert.equal(new TextDecoder().decode(calls[0].init.body),body);
   }
   for (const operation of ['resource','resourceMcp','authorization']) {
@@ -48,6 +52,10 @@ const request = (path, init={}) => new Request('https://app.tervory.com'+path,in
   calls=[];
   assert.equal((await mcpPublicRequest(new Request('https://za.tervory.com/mcp'),'mcp')).status,404);
   region='za';assert.equal((await mcpPublicRequest(request('/mcp'),'mcp')).status,404);region='us-east';
+  assert.equal(calls.length,0);
+  for (const patch of [{'x-real-ip':'bad'}, {'x-real-ip':'203.0.113.1,203.0.113.2'}, {'x-forwarded-for':'203.0.113.1'}]) {
+    assert.equal((await mcpPublicRequest(request('/oauth/register',{method:'POST',headers:patch,body:'{}'}),'register')).status,400);
+  }
   assert.equal(calls.length,0);
   response=await mcpPublicRequest(request('/mcp',{method:'POST',headers:sent,body:'x'.repeat(65537)}),'mcp');
   assert.equal(response.status,413);assert.equal(calls.length,0);
@@ -61,5 +69,22 @@ const request = (path, init={}) => new Request('https://app.tervory.com'+path,in
   assert.equal(calls[0].init.headers['x-tervory-tenant'],'tenant');
   assert.equal(calls[0].init.headers['x-tervory-home-region'],'us-east');
   assert(!('authorization' in calls[0].init.headers));
+  // Virtual time: a slow Tank read returns its durable link after 70 seconds.
+  // A 65-second proxy deadline would fire before it; >=75 seconds must survive.
+  const setTimer=global.setTimeout, clearTimer=global.clearTimeout;
+  let clock=0, next=0; const timers=new Map(), durations=[];
+  global.setTimeout=(fn,ms,...args)=>{const id=++next;durations.push(ms);timers.set(id,{at:clock+ms,fn:()=>fn(...args)});return id;};
+  global.clearTimeout=id=>timers.delete(id);
+  global.fetch=async()=>{
+    clock+=70_000;
+    for(const [id,timer] of timers) if(timer.at<=clock){timers.delete(id);timer.fn();}
+    return new Response(JSON.stringify({status:'running',thread_url:'https://app.tervory.com/chats?thread=offline'}),{headers:{'content-type':'application/json'}});
+  };
+  try {
+    const slow=await mcpPublicRequest(request('/mcp',{method:'POST',headers:sent,body:'{}'}),'mcp');
+    assert.equal(slow.status,200);
+    assert.equal((await slow.json()).status,'running');
+    assert(durations.some(ms=>ms>=75_000),'proxy leaves at least fifteen seconds after the sixty-second wait');
+  } finally {global.setTimeout=setTimer;global.clearTimeout=clearTimer;}
   console.log('MCP proxy: allowlisted headers, body-only OAuth, discovery, ZA refusal, body limit, empty DELETE and signed-in approval passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});
