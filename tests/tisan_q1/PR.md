@@ -10,7 +10,7 @@ Builds now run accessibility, mobile Lighthouse, local links/assets and Radix se
 - `agents/tisan/scaffold.py:455`: manifest/card rows and four quality results. `:461` submits `{files: [{path, text}]}` through the existing Tank client and `/v1/skala/scan.secrets/run`, with no version pin. Findings expose file, line and rule only. Missing approval, incomplete reports and unavailable scans fail closed. Inputs beyond the scanner's line coverage also fail closed. The canonical fake-key fixture is excluded from generated sites.
 - `agents/tisan/builder.py:253`: tenant-scoped checks, failed manifests and existing card results. Promotion's existing refusal of non-ok builds is preserved.
 - `agents/tisan/Dockerfile:59`: expose the existing image-installed browser cache to runtime. Installation already uses the template's pinned Playwright dependency; both axe and Lighthouse use it.
-- `tank/skills/scan.secrets/1.0.2/skill.yaml:4`: share the Radix skill with Tisan. Engine and runner are byte-identical to 1.0.1; previous versions are untouched. Includes changelog and six passing evals.
+- `tank/skills/scan.secrets/1.1.0/skill.yaml:4`: share the Radix skill with Tisan. Engine and runner are byte-identical to 1.0.1; previous versions are untouched. Includes changelog and six passing evals.
 - `tests/test_tisan_quality.py:47`: actual scanner engine behind a mocked Tank approval transport, clean/fake-key, no-approval, safe-error, manifest/card, browser-cache and coverage tests. `:127` is the separate real template integration.
 - `tests/test_tisan_builder.py:186`: a failed quality build saves its failed sidecar, returns its link location and creates no archive.
 - `tests/tisan_quality_card.test.cjs:1` and `tests/test_tisan_quality_card.py:6`: exercise the unchanged Workspace presenter for passing results and the named broken link.
@@ -42,13 +42,13 @@ git diff --check origin/main...HEAD
 # Exit 0.
 ```
 
-The six `scan.secrets/1.0.2/evals/cases.jsonl` cases were also run directly with the unchanged engine; every expected field matched. No secret values were printed:
+The six `scan.secrets/1.1.0/evals/cases.jsonl` cases were also run directly with the unchanged engine; every expected field matched. No secret values were printed:
 
 ```sh
 .git/venv/bin/python - <<'PY'
 import importlib.util,json
 from pathlib import Path
-root=Path('tank/skills/scan.secrets/1.0.2')
+root=Path('tank/skills/scan.secrets/1.1.0')
 spec=importlib.util.spec_from_file_location('scan_eval',root/'engine.py'); mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
 cases=[json.loads(line) for line in (root/'evals/cases.jsonl').read_text().splitlines()]
 for case in cases:
@@ -84,7 +84,7 @@ An obsolete intermediate image build was canceled when the lint-only source clea
 
 ## Founder acceptance still outstanding
 
-- The founder must approve the Tisan-shared `scan.secrets` version in `/skala`. Live approval state has not been queried or changed in this task. A mocked 409 test proves the build refuses an unapproved scan and names `/skala`.
+- The founder approves **`scan.secrets 1.1.0` in `/skala`**. Live approval state has not been queried or changed in this task. A mocked 409 test proves the build refuses an unapproved scan and names `/skala`.
 - The current section registry deliberately renders no visuals. A separate local Lighthouse probe of a planned empty home route fails `NO_FCP`; no text/design was fabricated to pass it. The successful clean-template test covers the existing contact/privacy routes. A full site's home page needs its separately approved renderer before that site can pass Lighthouse.
 - No founder `/chats` browser test or founder screenshots have been captured. After founder merge/deployment and scanner approval, record the passing four-check card and the failing build card naming the broken internal link. Local tests and presenter tests are evidence, not completion of that acceptance criterion.
 - Claude opens the PR from `codex/tisan-q1-quality-checks`; the founder merges. Every push was preceded by fetching and merging `origin/main`. No push to main or production data mutation was performed.
