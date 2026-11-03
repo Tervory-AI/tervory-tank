@@ -8,7 +8,6 @@ import json
 import os
 from pathlib import Path
 import signal
-import resource
 import ssl
 import time
 from urllib.parse import urljoin, urlsplit
@@ -39,10 +38,15 @@ async def command(argv, directory, seconds):
     env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': str(directory),
            'TMPDIR': str(directory), 'LANG': 'C.UTF-8',
            'PLAYWRIGHT_BROWSERS_PATH': '/opt/radix-browsers'}
-    def memory_cap():
-        resource.setrlimit(resource.RLIMIT_AS, (768 * 1024 * 1024, 768 * 1024 * 1024))
+    def prefer_child_oom():
+        # The existing room cgroup enforces 1 GiB. Make a large ClamAV child
+        # the OOM victim so the application can record the skip and continue.
+        try:
+            Path('/proc/self/oom_score_adj').write_text('1000')
+        except OSError:
+            os._exit(125)
     process = await asyncio.create_subprocess_exec(*argv, cwd=directory, env=env,
-        preexec_fn=memory_cap if argv[0] == '/usr/bin/clamscan' else None,
+        preexec_fn=prefer_child_oom if argv[0] == '/usr/bin/clamscan' else None,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, start_new_session=True)
     try:
         out, err = await asyncio.wait_for(process.communicate(), timeout=seconds)
@@ -146,9 +150,9 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
             safe = {'tool_output_limit','incomplete_response','html_required','response_limit',
                     'page_unavailable','certificate_unavailable','tls_report_unavailable',
                     'tls_report_incomplete','tls_run_incomplete','signature_database_unavailable',
-                    'malware_run_incomplete','browser_incomplete'}
+                    'malware_run_incomplete','browser_incomplete','memory_guard_unavailable'}
             reason = str(exc) if isinstance(exc, ValueError) and str(exc) in safe else type(exc).__name__
-            checks[name] = {'status': 'skipped' if reason == 'signature_database_unavailable' else 'partial',
+            checks[name] = {'status': 'skipped' if reason in {'signature_database_unavailable','memory_guard_unavailable'} else 'partial',
                             'reason': reason}
         if checks[name]['status'] != 'complete':
             tool = {'tls':'testssl.sh','certificate':'scan.tls','pages':'sha256','malware':'clamav',
@@ -265,6 +269,8 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
 
             async def malware_work():
                 rc, version, _ = await run(['/usr/bin/clamscan','--version'], directory, min(5,budget.remaining()))
+                if rc == 125:
+                    raise ValueError('memory_guard_unavailable')
                 if rc:
                     raise ValueError('signature_database_unavailable')
                 stamp = version.decode(errors='replace').strip().split('/')
@@ -290,6 +296,8 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
                     if rc in {137, -9} or (rc == 2 and any(word in err.lower() for word in
                             (b'memory', b'allocat', b'map failed'))):
                         raise MemoryError
+                    if rc == 125:
+                        raise ValueError('memory_guard_unavailable')
                     if rc not in {0,1}:
                         raise ValueError('malware_run_incomplete')
                     scanned += 1
