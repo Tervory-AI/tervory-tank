@@ -55,11 +55,22 @@ async def scan(ctx: JobContext) -> dict:
     return result
 
 
+async def watch_tick(ctx: JobContext) -> dict:
+    from passive_watch import tick
+    return await tick(app.state.pool)
+
+
 app = create_app(
     agent=AGENT,
-    handlers={"ping": ping, "scan": scan},
-    job_timeouts={"scan": 360},
+    handlers={"ping": ping, "scan": scan, "watch_tick": watch_tick},
+    job_timeouts={"scan": 360, "watch_tick": 420},
     schedules=[
+        {
+            "tenant_id": HEARTBEAT_TENANT,
+            "cron": "* * * * *",
+            "kind": "watch_tick",
+            "input": {},
+        },
         {
             "tenant_id": HEARTBEAT_TENANT,
             "cron": "*/5 * * * *",
