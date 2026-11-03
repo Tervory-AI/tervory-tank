@@ -648,7 +648,9 @@ def _structured_products(nodes: list[dict], page: dict, method: str) -> list[dic
             item = node.get("item")
             if isinstance(item, dict) and _kind(_leaves(item)) != "product":
                 products.append(_product(item, {}, page, method))
-            elif node.get("name") and item is None:
+            elif isinstance(item, str):
+                products.append(_product({**node, "url": node.get("url") or item}, {}, page, method))
+            elif item is None:
                 products.append(_product(node, {}, page, method))
     return [row for row in products if any(row[key] for key in ("name", "sku", "gtin", "mpn", "url"))]
 
