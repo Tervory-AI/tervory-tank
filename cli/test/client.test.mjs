@@ -14,6 +14,7 @@ const encode = (kind, data) => `event: ${kind}\ndata: ${JSON.stringify(data)}\n\
 function harness({ answers = [], token = TOKEN, refusal = false } = {}) {
   let saved = token; let output = ''; const calls = []; const stored = [];
   const io = {
+    interactive: true,
     write: value => { output += value; },
     prompt: async () => answers.shift() ?? null,
   };
