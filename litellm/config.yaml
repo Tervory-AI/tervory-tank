@@ -785,6 +785,8 @@ litellm_settings:
     - glm-small: ["luna", "haiku", "flash-lite", "grok", "flash"]
 
 router_settings:
+  # Balance replicas of the same alias; do not change model groups or providers.
+  routing_strategy: simple-shuffle
   allowed_fails: 1          # one refusal (no credit / bad key) and that model is skipped...
   cooldown_time: 300        # ...for five minutes, so empty providers do not slow every call
 
