@@ -792,7 +792,7 @@ export const CRM = {
 } as const;
 export type Resource = keyof typeof CRM;
 export const NAV = [
- ["Writing", [["Write","/chats"],["Voice","/trigger/voice"]]],
+ ["Writing", [["Write","/chats"],["Voice",null]]],
  ["CRM", [["Leads","/trigger/crm/leads"],["Clients",null],["Contacts","/trigger/crm/contacts"],["Opportunities",null],["Cases",null],["Tasks",null]]],
  ["Sales", [["Quotes","/trigger/crm/estimates"],["Invoices","/trigger/crm/invoices"]]],
  ["Marketing", [["Channels","/trigger/marketing/channels"],["Calendar","/trigger/marketing/calendar"],["Composer","/trigger/marketing/composer"],["Google posts","/trigger/marketing/posts"],["Google reviews","/trigger/marketing/reviews"]]],
@@ -804,7 +804,7 @@ export type Data = Record<string, unknown>;
 export function value(input: unknown): string {
  if (input === null || input === undefined || input === "") return DASH;
  if (Array.isArray(input)) return input.map(value).join(", ") || DASH;
- if (typeof input === "object") { const row=input as Data; return value(row.name ?? row.title ?? row.email ?? row.id); }
+ if (typeof input === "object") { const row=input as Data; if("quantity" in row||"unit_price" in row)return Object.entries(row).map(([key,item])=>`${key}: ${String(item??DASH)}`).join(" · "); return value(row.name ?? row.title ?? row.email ?? row.id ?? Object.entries(row).map(([key,item])=>`${key}: ${typeof item==="object"?JSON.stringify(item):String(item??DASH)}`).join("\n")); }
  return String(input);
 }
 
