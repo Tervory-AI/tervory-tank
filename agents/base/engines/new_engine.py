@@ -31,20 +31,19 @@ def scaffold(engine_id: str, repository: Path | None = None) -> list[Path]:
             if not source.is_file() or "__pycache__" in source.parts or source.suffix == ".pyc":
                 continue
             relative = source.relative_to(template.path)
-            destination = staging / str(relative).replace("template.", f"{engine_id}.")
+            if relative.parts[0] == "skills":
+                destination = staging / str(relative).replace("template.", f"{engine_id}.")
+            else:
+                destination = staging / "engine" / engine_id / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(source.read_text(encoding="utf-8").replace("template", engine_id), encoding="utf-8")
         # Skills belong only in Skala, not in the generated Base engine package.
         staged_skills = staging / "skills"
-        engine_staging = staging / "engine"
-        engine_staging.mkdir()
-        for source in list(staging.iterdir()):
-            if source not in (staged_skills, engine_staging):
-                shutil.move(str(source), engine_staging / source.name)
-        load_engine(_validation_folder(engine_staging, engine_id))
+        engine_staging = staging / "engine" / engine_id
+        load_engine(engine_staging)
         try:
             for source, destination in zip(
-                [engine_staging / engine_id, staged_skills / f"{engine_id}.ingest", staged_skills / f"{engine_id}.profile"],
+                [engine_staging, staged_skills / f"{engine_id}.ingest", staged_skills / f"{engine_id}.profile"],
                 destinations,
             ):
                 destination.parent.mkdir(parents=True, exist_ok=True)
@@ -55,16 +54,6 @@ def scaffold(engine_id: str, repository: Path | None = None) -> list[Path]:
                 shutil.rmtree(destination)
             raise
     return destinations
-
-
-def _validation_folder(staging: Path, engine_id: str) -> Path:
-    """Use the final folder name while validating the staged manifest."""
-    named = staging / engine_id
-    named.mkdir()
-    for source in list(staging.iterdir()):
-        if source != named:
-            shutil.move(str(source), named / source.name)
-    return named
 
 
 def main() -> None:
