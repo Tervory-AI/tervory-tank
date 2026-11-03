@@ -1,7 +1,11 @@
 # Autumbra Cloudflare live hand — tervory.com only
 
 Founder authorization: 3 November 2026, 02:47 America/Los_Angeles.
-The founder merges PR #566. This guide does not authorize other zones, client
+PR #566 is merged; follow-up work is reviewed in PR #607. The founder merges.
+**M24 LIVE TEST REMAINS HELD pending A2 real owner-email delivery.**
+The current brief authorizes code, docs and offline tests only, with no live
+Cloudflare writes or M24 run. The procedure below is for later founder acceptance
+after the hold is lifted. This guide does not authorize other zones, client
 tokens, page changes, model calls, or changes to the existing safety rules.
 
 ## Before deploying
