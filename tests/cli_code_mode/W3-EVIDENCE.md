@@ -1,3 +1,75 @@
+# CLI W3 — security review of PR #632
+
+Branch: `codex/cli-w3`, workspace `/workspace/codex-cli-w3`.
+Review baseline: `0b7a7e38ed734a6a772c76f8820f52719a8f157f`.
+The one authorized main merge is `4192f8a9`; its conflict resolution is
+`346b52f8`. Both permission filters were preserved. No second main merge,
+rebase, force push, main push, production data change or model request was made.
+
+The table below maps every review item to source and regression evidence.
+The exact final head and final-head CI run/job links are recorded in PR #632
+and the final handoff after this evidence commit, avoiding a self-referential SHA.
+GitHub reported new conflicts after the authorized merge when the Tiger lane
+expanded catalogue assertions in `tests/test_command.py` and
+`tests/test_personal_tokens.py`. Manual head runs use the same CI jobs without
+merging main again; these verify the branch head, not a new merge result.
+
+## Security review changes by file and line
+
+| Review | Source and regression evidence | Result |
+| --- | --- | --- |
+| 1(a) | `cli/src/code-tools.mjs:54`; `cli/test/code-mode.test.mjs:742` | Kill the process group at exit and again at close, including descendants holding pipes open. Darwin tests both inherited and redirected output. |
+| 1(b) | `cli/src/code-tools.mjs:141`; `cli/test/code-mode.test.mjs:657` | On non-Linux, recheck canonical containment, secret paths, device and inode after reading the opened descriptor. A vanished opened file refuses. |
+| 1(c), 7 | `cli/src/code-tools.mjs:209`; `cli/test/code-mode.test.mjs:678`, `:693` | Pin canonical parents and temp identity, build temp/target from that parent, verify before/after rename, then attempt every safe rollback independently and throw the existing refusal. |
+| 1(d) | `cli/README.md:101`; `cli/test/code-mode.test.mjs:742` | Disclose that a child calling setsid() can escape macOS process-group cleanup while retaining its sandbox. |
+| 2 | `.github/workflows/cli.yml:141` | macOS validates the actual profile and runs the complete CLI suite. Final-head CI is mandatory; see PR for final status and links. |
+| 3 | `cli/src/code-mode.mjs:62`; `cli/test/code-mode.test.mjs:421` | Print sanitized/redacted raw tool/arguments JSON before the existing Confirm. |
+| 4, 12 | `cli/src/seatbelt.mjs:50`, `:53`, `:39`, `:22` | Deny /usr/local/etc and /usr/local/var, including mapping and execution. Replace inherited broad execution with selected folder, system/runtime and Apple git paths. Only the literal root directory is readable for dyld startup; its descendants gain no permission. |
+| 5 | `cli/src/code-tools.mjs:142`; `cli/test/code-mode.test.mjs:650`, `:735` | Refuse multi-link reads; actual Darwin outside-file hard-link creation must fail. |
+| 6, 13 | `cli/src/code-tools.mjs:28`, `:439`; `cli/test/code-mode.test.mjs:708` | Mask/refuse SSH, keychains and keyrings. Deny home/.ssh/Keychains directory listing, .git/config and outside-file reads, and a host Unix socket inside the selected folder. Linux masks pathname sockets because bind mounts can otherwise expose them across network namespaces. |
+| 8 | `cli/src/client.mjs:360`; `cli/test/code-mode.test.mjs:637`; `cli/test/client.test.mjs:17` | Only interactive === true can prompt. Missing, false or non-boolean flags cancel without reading a yes. The interactive harness declares its intent. |
+| 9 | `tank/command.py:2104`; `tests/test_command_code.py:228` | Exact requested Repository project notes DATA label, including not-instructions and forbidden authority categories. |
+| 10 | `cli/src/code-mode.mjs:11`; `cli/test/code-mode.test.mjs:459` | Skip symlinked, oversized or non-UTF-8 notes with one notice and continue without sending project notes. |
+| 11 | `tank/command.py:777`, `:1453`, `:2121`; `tests/test_plugins.py:103` | Store origin=code before card events. Re-narrow the actor with current installed plugins at Confirm. A real plugins.remove Confirm revokes the earlier code card while ordinary chat retains its catalogue. |
+| 14 | `tank/plugins.py:56`, `:76`; `tests/test_plugins.py:220` | SafeLoader subclass rejects root/nested duplicate keys and merged duplicates; unsafe YAML objects remain rejected. |
+| 15 | `tests/test_plugins.py:20`, `:45`, `:87`, `:111`; `tests/test_command_code.py:18`, `:102`; `cli/test/code-mode.test.mjs:126`, `:320` | Explicit placeholder fixture values, including synthetic token suffixes and a placeholder-derived UUID. The runtime test compares SHA-256 before/after instead of broad error text. |
+| 16 | `cli/src/seatbelt.NOTICE:1`; `cli/README.md:108` | Ship the pinned upstream NOTICE beside seatbelt.LICENSE; both are included by the existing src/ package rule. |
+| 17 | `cli/src/code-tools.mjs:19`, `:22`; `cli/test/code-mode.test.mjs:752` | Redact AWS secret assignments, including quoted JSON keys, and entire private-key PEM blocks, including truncated blocks, before results leave. |
+| CI fixes | `tank/plugin_args.py:1`; `tank/command.py:1259`; `tank/plugins.py:13`; `tank/schema.sql:2842` | Separate lightweight card arguments from manifest initialization to remove the access-first import cycle; preserve the canonical schema-generator boundary. Existing Docker COPY *.py includes the new module. |
+| Head verification | `.github/workflows/cli.yml:3`; `.github/workflows/ci.yml:5`; `tests/test_ci_minutes_workflows.py:40` | Manual full-head CI while a newly conflicting PR cannot start pull_request jobs. Security compares against origin/main; no check is disabled. |
+
+## Current local verification
+
+All tests used `TMPDIR=/workspace/codex-cli-w3/.tmp`. The folder is excluded only
+in `.git/info/exclude`. No shared /tmp folder was deleted; no old code-mode
+folders were present when checked. No quota blockage remained.
+
+- Full Command/MCP/plugin/schema/secrets Python regression suite: **431 passed**.
+- Full CLI suite: **107 passed, 3 Darwin-only skips** on Linux.
+- Dedicated actual-plugin-removal and YAML suite: **11 passed**.
+- Workflow scope and manual-head tests: **67 passed**.
+- Schema-generator identity regression: **1 passed**.
+- Access-first module import, Ruff E9/F, node syntax, version guard and diff whitespace checks passed.
+- The owned disposable Postgres container was removed after tests.
+
+The CLI version guard accepts 0.2.0 -> 0.4.0. The upstream base stays byte-for-byte
+unchanged: SHA-256 `5103332ddb8885ee5e1926de6c0ef23a61f4e55e31297506ae05fa4e0b24ba74`.
+License and NOTICE come from openai/codex commit
+`6b2a2757de696c2506ee460c49c66a8e2bed65e0`.
+
+## Terminal wording for the founder
+
+New in this review: `AGENTS.md skipped: Code tool refused.` followed by newline.
+The original implementation also introduced `Undo [y/N] ` (one trailing space).
+Confirm arguments are raw JSON data, not new fixed copy. There are no new
+Workspace screens, labels or presentation components.
+
+## Original implementation evidence (historical)
+
+The following record predates this security review. Its old SHA, line references,
+Mac/CI limitations and original local counts are historical, superseded above and
+by the final-head CI links in PR #632.
+
 # CLI W3 — implementation handoff, 3 November 2026
 
 Branch: `codex/cli-w3`, in `/workspace/codex-cli-w3`.
