@@ -146,6 +146,9 @@ class Bot:
         return result
 
     async def lead_draft(self, tenant, conversation, text, contact):
+        enquiry = re.sub(r'(?im)^(?:Name|Email|Phone):[^\n]*(?:\n|$)', '', text).strip()
+        if not enquiry:
+            return None
         if not contact:
             # Explicit labels only; never infer a person's identity from prose.
             contact = {key.lower(): value.strip() for key, value in re.findall(r'(?im)^(Name|Email|Phone):\s*([^\n]+)', text)}
