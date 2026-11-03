@@ -1169,3 +1169,332 @@ async def social_page(request: Request, room: str = Depends(room_identity)):
     async with db().acquire() as conn:
         await receipt(conn, body.tenant_id, room, "https://graph.facebook.com", "room", "public_business_api")
     return {"enabled": True, "source": "Meta official API", "page": result}
+
+# Tiger T1. Product evidence is code-only; names and competitor SKUs are never
+# used as identifiers. The existing structured reader owns price parsing.
+def tiger_gtin(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    digits = re.sub(r'[\s-]', '', value)
+    if not re.fullmatch(r'(?:[0-9]{8}|[0-9]{12}|[0-9]{13}|[0-9]{14})', digits):
+        return None
+    total = sum(int(c) * (3 if i % 2 == 0 else 1) for i, c in enumerate(reversed(digits[:-1])))
+    return digits.zfill(14) if (10 - total % 10) % 10 == int(digits[-1]) else None
+
+
+def tiger_identity_match(own: dict, seen: dict) -> tuple[str, str] | None:
+    raw = seen.get('gtins') or []
+    gtins = [tiger_gtin(v) for v in raw]
+    if raw:
+        # A bad or conflicting barcode never falls back to a title/MPN match.
+        expected = tiger_gtin(own.get('gtin'))
+        if expected and all(gtins) and set(gtins) == {expected}:
+            return 'gtin', 'confirmed'
+        return None
+    brand, mpn = seen.get('brand'), seen.get('mpn')
+    if (isinstance(brand, str) and isinstance(mpn, str) and brand.strip() and mpn.strip()
+            and brand.strip().casefold() == str(own.get('brand') or '').strip().casefold()
+            and mpn.strip() == str(own.get('mpn') or '').strip()):
+        return 'brand_mpn', 'suggested'
+    return None
+
+
+def tiger_product_evidence(html: str, url: str) -> list[dict]:
+    import importlib.util
+    from pathlib import Path
+    from selectolax.parser import HTMLParser
+    # Reuse the published pure-code reader unchanged, without the model ladder.
+    module = globals().get('_tiger_structured_reader')
+    if module is None:
+        path = Path(__file__).parent / 'skills/tiger.price_structured/1.0.0/run.py'
+        spec = importlib.util.spec_from_file_location('tiger_t1_structured_reader', path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        globals()['_tiger_structured_reader'] = module
+    if not html or len(html) > 600_000:
+        return []
+    tree, nodes = HTMLParser(html), []
+    for script in tree.css('script[type="application/ld+json"]'):
+        try:
+            module._walk(json.loads(script.text()), nodes)
+        except (ValueError, RecursionError):
+            continue
+    result = []
+    for node in nodes:
+        stated_url = module._http_url(node.get('url'))
+        if stated_url and stated_url.rstrip('/') != url.rstrip('/'):
+            continue
+        # An unlocated Product on a multi-product listing is ambiguous.
+        if not stated_url and len(nodes) != 1:
+            continue
+        brand = node.get('brand')
+        if isinstance(brand, dict):
+            brand = brand.get('name')
+        facts = {'gtins': [node[k] for k in ('gtin','gtin8','gtin12','gtin13','gtin14') if node.get(k)],
+                 'brand': brand if isinstance(brand, str) else None,
+                 'mpn': node.get('mpn') if isinstance(node.get('mpn'), str) else None}
+        prices = module._from_product(node, url)
+        facts['readings'] = [{k: p.get(k) for k in ('price','currency','availability','method')} for p in prices]
+        result.append(facts)
+    if nodes:
+        return result
+    products = [p for p in tree.css('[itemscope]') if any(t in {'https://schema.org/Product','http://schema.org/Product'}
+                for t in (p.attributes.get('itemtype') or '').split())]
+    for product in products:
+        if len(products) != 1:
+            continue
+        fields = {}
+        for el in product.css('[itemprop]'):
+            owner = module._nearest_scope(el)
+            prop = el.attributes.get('itemprop')
+            if owner is not None and owner.mem_id == product.mem_id:
+                fields[prop] = module._prop_value(el)
+                if prop == 'brand' and 'itemscope' in el.attributes:
+                    names = [n for n in el.css('[itemprop="name"]') if module._nearest_scope(n).mem_id == el.mem_id]
+                    if len(names) == 1:
+                        fields['brand'] = module._prop_value(names[0])
+        if fields.get('url') and fields['url'].rstrip('/') != url.rstrip('/'):
+            continue
+        result.append({'gtins': [fields[k] for k in ('gtin','gtin8','gtin12','gtin13','gtin14') if fields.get(k)],
+                       'brand': fields.get('brand'), 'mpn': fields.get('mpn'),
+                       'readings': [{k: p.get(k) for k in ('price','currency','availability','method')}
+                                    for p in module.extract(product.html, url)['items']]})
+    return result
+
+
+async def tiger_catalogue(tenant) -> list[dict]:
+    result = await rig_request(Actor(uuid.UUID(str(tenant)), 'tiger-match', False), 'watch-products', {'catalogue': True})
+    if result.get('tenant_id') != str(tenant) or not isinstance(result.get('products'), list):
+        raise HTTPException(503, 'Rig returned an invalid response.')
+    return result['products']
+
+
+async def tiger_sources(conn, tenant) -> list[str]:
+    rows = await conn.fetch("SELECT metadata FROM tank.vault_items WHERE tenant_id=$1 AND vault='tiger.vault' AND kind='links' ORDER BY created_at,id", tenant)
+    sites = []
+    for row in rows:
+        meta = json.loads(row['metadata']) if isinstance(row['metadata'], str) else row['metadata']
+        try:
+            site = origin(meta.get('url', ''))
+        except HTTPException:
+            continue
+        if site not in sites:
+            sites.append(site)
+    return sites
+
+
+class TigerMatchPage(Body):
+    tenant_id: uuid.UUID
+    site: str = Field(max_length=2048)
+    url: str = Field(max_length=2048)
+    html: str = Field(default='', max_length=600000)
+    human_check: bool = False
+
+
+async def tiger_link(tenant, match: dict) -> None:
+    # URL uniqueness is the existing alert-context contract; never overwrite
+    # another SKU's explicit binding, even if the page claims several products.
+    async with db().acquire() as conn:
+        async with conn.transaction():
+            await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', str(tenant) + ':' + match['url'])
+            linked = await conn.fetchval('SELECT sku FROM tank.access_feed_links WHERE tenant_id=$1 AND url=$2', tenant, match['url'])
+            if linked is not None and linked != match['sku']:
+                return
+            await conn.execute('INSERT INTO tank.access_feed_links(tenant_id,url,sku) VALUES($1,$2,$3) ON CONFLICT(tenant_id,url) DO NOTHING', tenant, match['url'], match['sku'])
+    from main import _tiger_call
+    response = await _tiger_call('POST', '/watchlist', [], json.dumps({'tenant_id': str(tenant), 'url': match['url'], 'every': '6h',
+        'alert_price': True, 'alert_stock': True, 'alert_new_product': True, 'alert_below_cost': True, 'alert_market_gap': True}).encode())
+    if response.status_code not in {201,409}:
+        raise HTTPException(503, 'Tiger is unreachable')
+    async with db().acquire() as conn:
+        await conn.execute("UPDATE agent_tiger.matches SET state='confirmed' WHERE tenant_id=$1 AND id=$2 AND state<>'rejected'", tenant, match['id'])
+
+
+@router.post('/rig/tiger/match-page')
+async def tiger_match_page(body: TigerMatchPage, request: Request):
+    require_tiger(request)
+    from tenant_db import tenant_scope
+    with tenant_scope(str(body.tenant_id)):
+        site = origin(body.site)
+        if origin(body.url) != site:
+            raise HTTPException(422, 'Check the fields. Nothing was changed.')
+        async with db().acquire() as conn:
+            if site not in await tiger_sources(conn, body.tenant_id):
+                raise HTTPException(403, 'This room is not enabled for this account.')
+            if body.human_check:
+                await enqueue(conn, body.tenant_id, 'tiger', site, 'captcha')
+                return {'matches': [], 'human_check': True}
+        products = await tiger_catalogue(body.tenant_id)
+        matches = []
+        for seen in tiger_product_evidence(body.html, body.url):
+            candidates = [(p, tiger_identity_match(p, seen)) for p in products]
+            candidates = [(p, rule) for p, rule in candidates if rule]
+            # One URL cannot be auto-assigned to several catalogue SKUs.
+            if len(candidates) != 1:
+                continue
+            own, (method, state) = candidates[0]
+            evidence = {'own': {k: own.get(k) for k in ('gtin','brand','mpn')}, 'seen': seen}
+            async with db().acquire() as conn:
+                row = await conn.fetchrow("""INSERT INTO agent_tiger.matches(tenant_id,sku,url,method,identifiers,seen_on,state)
+                    VALUES($1,$2,$3,$4,$5::jsonb,$3,'suggested') ON CONFLICT(tenant_id,sku,url)
+                    DO UPDATE SET checked_at=now(),identifiers=EXCLUDED.identifiers,method=EXCLUDED.method
+                    RETURNING *""", body.tenant_id, own['sku'], body.url, method, json.dumps(evidence))
+            if state == 'confirmed' and row['state'] != 'rejected':
+                await tiger_link(body.tenant_id, dict(row))
+            async with db().acquire() as conn:
+                current = await conn.fetchrow('SELECT * FROM agent_tiger.matches WHERE tenant_id=$1 AND id=$2', body.tenant_id, row['id'])
+            matches.append(tiger_match_out(current))
+        return {'matches': matches}
+
+
+def tiger_match_out(row) -> dict:
+    data = dict(row)
+    data['id'], data['tenant_id'] = str(data['id']), str(data['tenant_id'])
+    data['checked_at'] = data['checked_at'].isoformat()
+    if isinstance(data.get('identifiers'), str):
+        data['identifiers'] = json.loads(data['identifiers'])
+    return data
+
+
+class TigerMatchAction(Body):
+    tenant_id: uuid.UUID | None = None
+    match_id: uuid.UUID | None = None
+
+
+async def tiger_actor(actor: Actor, tool: str) -> Actor:
+    from command import authorized_actor, require_tool
+    actor = await authorized_actor(actor)
+    require_tool(actor, tool)
+    return actor
+
+
+@router.post('/tiger/match')
+async def tiger_match_start(request: Request, actor: Actor = Depends(identity)):
+    from trigger_commands import confirmation
+    from trigger_routes import code_receipt
+    from main import _tiger_call
+    actor = await tiger_actor(actor, 'tiger.match')
+    body = await parse(request, TigerMatchAction)
+    if body.tenant_id not in {None, actor.tenant_id} or body.match_id is not None:
+        raise HTTPException(422, 'Check the fields. Nothing was changed.')
+    operation = confirmation(actor, 'tiger.match', {})
+    async with db().acquire() as conn:
+        sources = await tiger_sources(conn, actor.tenant_id)
+        existing = await conn.fetchrow('SELECT * FROM agent_tiger.match_runs WHERE tenant_id=$1 AND operation_id=$2', actor.tenant_id, operation)
+    if existing and existing['job_id']:
+        ledger, job_id = existing['ledger_id'], existing['job_id']
+    else:
+        ledger = existing['ledger_id'] if existing else await code_receipt(actor.tenant_id, 'tiger.match', agent='tiger')
+        async with db().acquire() as conn:
+            await conn.execute('INSERT INTO agent_tiger.match_runs(tenant_id,operation_id,ledger_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING', actor.tenant_id, operation, ledger)
+        products = await tiger_catalogue(actor.tenant_id)
+        response = await _tiger_call('POST', '/jobs', [], json.dumps({'tenant_id': str(actor.tenant_id), 'kind': 'competitor_match',
+            'input': {'sites': sources, 'products': products, 'operation_id': str(operation)}}).encode())
+        if response.status_code != 201:
+            raise HTTPException(503, 'Tiger is unreachable')
+        job = response.json()
+        if job.get('tenant_id') != str(actor.tenant_id):
+            raise HTTPException(503, 'Tiger is unreachable')
+        job_id = uuid.UUID(job['id'])
+        async with db().acquire() as conn:
+            await conn.execute('UPDATE agent_tiger.match_runs SET job_id=$3 WHERE tenant_id=$1 AND operation_id=$2', actor.tenant_id, operation, job_id)
+    result = {'tenant_id': str(actor.tenant_id), 'job_id': str(job_id), 'status': 'queued', 'matches': [],
+              'ledger_id': str(ledger), 'cost_usd': 0, 'model_calls': 0}
+    return {**result, 'text': json.dumps(result, ensure_ascii=False)}
+
+
+@router.post('/tiger/match/{decision}')
+async def tiger_match_decide(decision: str, request: Request, actor: Actor = Depends(identity)):
+    from trigger_commands import confirmation
+    from trigger_routes import code_receipt
+    if decision not in {'confirm','reject'}:
+        raise HTTPException(404, 'Not found')
+    tool = 'tiger.match.' + decision
+    actor = await tiger_actor(actor, tool)
+    body = await parse(request, TigerMatchAction)
+    if body.tenant_id not in {None, actor.tenant_id} or body.match_id is None:
+        raise HTTPException(422, 'Check the fields. Nothing was changed.')
+    confirmation(actor, tool, {'match_id': str(body.match_id)})
+    ledger = await code_receipt(actor.tenant_id, tool, agent='tiger')
+    async with db().acquire() as conn:
+        row = await conn.fetchrow('SELECT * FROM agent_tiger.matches WHERE tenant_id=$1 AND id=$2', actor.tenant_id, body.match_id)
+    if row is None:
+        raise HTTPException(404, 'Not found')
+    if row['state'] != 'suggested':
+        raise HTTPException(409, 'Confirmed action required')
+    if decision == 'confirm':
+        # Current catalogue identifiers and Source entitlement remain authoritative.
+        async with db().acquire() as conn:
+            if origin(row['url']) not in await tiger_sources(conn, actor.tenant_id):
+                raise HTTPException(403, 'This room is not enabled for this account.')
+        evidence = tiger_match_out(row)['identifiers']['seen']
+        own = next((p for p in await tiger_catalogue(actor.tenant_id) if p['sku'] == row['sku']), None)
+        if own is None or tiger_identity_match(own, evidence) is None:
+            raise HTTPException(409, 'Confirmed action required')
+        await tiger_link(actor.tenant_id, dict(row))
+    else:
+        async with db().acquire() as conn:
+            await conn.execute("UPDATE agent_tiger.matches SET state='rejected' WHERE tenant_id=$1 AND id=$2 AND state='suggested'", actor.tenant_id, body.match_id)
+    async with db().acquire() as conn:
+        current = await conn.fetchrow('SELECT * FROM agent_tiger.matches WHERE tenant_id=$1 AND id=$2', actor.tenant_id, body.match_id)
+    result = {'match': tiger_match_out(current), 'ledger_id': str(ledger), 'cost_usd': 0, 'model_calls': 0}
+    return {**result, 'text': json.dumps(result, ensure_ascii=False)}
+
+
+def tiger_positions(products: list[dict], matches: list[dict], observations: dict[str, dict]) -> list[dict]:
+    rows = []
+    for own in products:
+        competitors = []
+        for match in matches:
+            if match['sku'] != own['sku'] or match['state'] != 'confirmed':
+                continue
+            reading = observations.get(match['url']) or {}
+            competitors.append({'url': match['url'], 'price': reading.get('price'), 'currency': reading.get('currency'),
+                'stock': reading.get('availability'), 'checked_at': reading.get('ts')})
+        def money(value):
+            try:
+                n = Decimal(str(value))
+                return n if n.is_finite() and n >= 0 else None
+            except InvalidOperation:
+                return None
+        price = money(own.get('price'))
+        comparable = [(money(c['price']),c['url']) for c in competitors if c['currency'] == own.get('currency') and money(c['price']) is not None]
+        cheapest = min(comparable) if comparable else None
+        rows.append({'sku': own['sku'], 'own_price': own.get('price'), 'currency': own.get('currency'), 'competitors': competitors,
+            'cheapest': {'price': str(cheapest[0]), 'url': cheapest[1]} if cheapest else None,
+            'rank': 1 + sum(p < price for p,_ in comparable) if price is not None and comparable else None,
+            'difference': str(price - cheapest[0]) if price is not None and cheapest else None})
+    return rows
+
+
+@router.get('/tiger/position')
+async def tiger_position(actor: Actor = Depends(identity)):
+    from trigger_routes import code_receipt
+    actor = await tiger_actor(actor, 'tiger.position')
+    ledger = await code_receipt(actor.tenant_id, 'tiger.position', agent='tiger')
+    products = await tiger_catalogue(actor.tenant_id)
+    async with db().acquire() as conn:
+        matches = [dict(r) for r in await conn.fetch("SELECT sku,url,state FROM agent_tiger.matches WHERE tenant_id=$1 AND state='confirmed' ORDER BY sku,url", actor.tenant_id)]
+        observations = {}
+        for match in matches:
+            row = await conn.fetchrow('SELECT price,currency,availability,ts,method FROM agent_tiger.observations WHERE tenant_id=$1 AND url=$2 ORDER BY ts DESC,id DESC LIMIT 1', actor.tenant_id, match['url'])
+            if row:
+                observations[match['url']] = {k: str(v) if isinstance(v, (Decimal,datetime)) else v for k,v in dict(row).items()}
+    result = {'tenant_id': str(actor.tenant_id), 'products': tiger_positions(products, matches, observations),
+              'ledger_id': str(ledger), 'cost_usd': 0, 'model_calls': 0}
+    return {**result, 'text': json.dumps(result, ensure_ascii=False)}
+
+
+async def tiger_card_result(tenant, result: dict) -> dict:
+    if not result.get('job_id'):
+        return result
+    async with db().acquire() as conn:
+        job = await conn.fetchrow("SELECT status,result,created_at FROM agent_tiger.jobs WHERE tenant_id=$1 AND id=$2 AND kind='competitor_match'", tenant, uuid.UUID(result['job_id']))
+        if job is None:
+            return result
+        matches = await conn.fetch('SELECT * FROM agent_tiger.matches WHERE tenant_id=$1 AND checked_at >= $2 ORDER BY checked_at,id LIMIT 100', tenant, job['created_at'])
+    update = {k:v for k,v in result.items() if k != 'text'}
+    update.update(status=job['status'], matches=[tiger_match_out(r) for r in matches])
+    if job['result']:
+        update['discovery'] = json.loads(job['result']) if isinstance(job['result'], str) else job['result']
+    return {**update, 'text': json.dumps(update, ensure_ascii=False, default=str)}
