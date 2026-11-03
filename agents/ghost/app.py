@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -50,7 +51,8 @@ from .webhooks import WebhookRejected, accept_webhook, drop_counts
 from .red_team import list_exercises, run_exercise
 from .enforce_lifecycle import FixtureComposeBackend, plan_create, plan_destroy, receipt_for
 from .owner_email import send_owner_update
-from .smtp_email import transport_status
+from .smtp_email import smtp_available_since, transport_status
+from .durable_state import locked_state
 from .owner_email_jobs import (
     build_owner_update_from_receipts,
     default_receipt_url,
@@ -279,14 +281,16 @@ async def deliver_act_owner_updates(app: FastAPI) -> None:
         return
     from .owner_email_jobs import _parse_receipt_time, week_bounds
     start, end = week_bounds()
+    available_since = smtp_available_since()
     for settings in list_clients_with_owner(app.state.store):
         receipts = _receipts_for_tenant(settings.tenant_id)
         for receipt in receipts:
             moment = _parse_receipt_time(receipt)
             identity = str(receipt.get("id") or "")
-            if not receipt.get("applied") or not identity or moment is None or not start <= moment <= end:
+            if (not receipt.get("applied") or not identity or moment is None
+                    or moment.timestamp() <= available_since or not start <= moment <= end):
                 continue
-            email = build_owner_update_from_receipts(settings=settings, receipts=receipts)
+            email = build_owner_update_from_receipts(settings=settings, receipts=[receipt])
             await asyncio.to_thread(send_owner_update, email, to=settings.owner_email,
                                    tenant_id=settings.tenant_id, message_key="act:" + identity)
 
@@ -842,8 +846,9 @@ def create_app() -> FastAPI:
     async def autumbra_webhook(provider: str, request: Request):
         """Signature check FIRST — before any Tank auth that would 404.
 
-        Correctly signed webhook → never-block check → ThreatPayload → client's queue.
-        Replay refused (timestamp window + nonce). Body is never stored.
+        HMAC-authenticated webhook → never-block check → client's queue.
+        Native provider authentication records metadata only, never a tenant action.
+        Replay refused; raw bodies are never stored.
         """
         raw = await request.body()
         if len(raw) > 64_000:
@@ -858,7 +863,20 @@ def create_app() -> FastAPI:
                 {"accepted": False, "stored": False, "drops": drop_counts()},
                 status_code=401,
             )
-        # Parse working-memory JSON only after signature OK. Never persist raw body.
+        if envelope.get("authenticated_by") != "hmac":
+            # Provider authentication does not establish any client's authority.
+            # Retain only the latest verified event metadata per native provider.
+            path = Path(os.environ.get("DATA_DIR", "/data")) / "verified-webhook-events.json"
+            with locked_state(path) as events:
+                events[envelope["requested_provider"]] = {
+                    "provider": envelope["requested_provider"], "bytes": envelope["bytes"],
+                    "body_sha256": hashlib.sha256(raw).hexdigest(),
+                    "verified_at": datetime.now(timezone.utc).isoformat(),
+                }
+            return {"accepted": True, "stored": True, "provider": envelope["provider"],
+                    "bytes": envelope["bytes"], "queued": False, "queue_receipt": None,
+                    "action": "accepted_no_action"}
+        # Parse working-memory JSON only after HMAC OK. Never persist raw body.
         queued = False
         queue_receipt = None
         try:
