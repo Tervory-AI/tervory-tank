@@ -31,6 +31,7 @@ CORRIDOR = {
     ("GET", "/v1/command/models"), ("GET", "/v1/command/tools"), ("GET", "/v1/command/threads"),
     ("GET", "/v1/command/threads/{thread_id}"), ("GET", "/v1/command/threads/{thread_id}/events"),
     ("GET", "/v1/command/tasks/{task_id}/receipts"), ("POST", "/v1/command/threads"),
+    ("POST", "/v1/command/threads/{thread_id}/code-turn"),
     ("POST", "/v1/command/threads/{thread_id}/turn"), ("POST", "/v1/command/threads/{thread_id}/actions"),
     ("POST", "/v1/command/cards/{card_id}"), ("POST", "/v1/command/build"), ("PATCH", "/v1/command/threads/{thread_id}"),
 }
@@ -90,7 +91,7 @@ def lookups(monkeypatch):
 def test_corridor_list_matches_the_workspace_proxy_plus_founder_roster():
     source = open("workspace/lib/tank.ts").read()
     assert "GET: new RegExp(`^(tools|threads|threads/${id}(/events)?|tasks/${id}/receipts)$`)" in source
-    assert "POST: new RegExp(`^(threads|threads/${id}/(turn|actions)|cards/${id}|build)$`)" in source
+    assert "POST: new RegExp(`^(threads|threads/${id}/(turn|actions|code-turn)|cards/${id}|build)$`)" in source
     assert "PATCH: new RegExp(`^threads/${id}$`)" in source
     routes = set(endpoints())
     assert CORRIDOR <= routes

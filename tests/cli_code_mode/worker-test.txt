@@ -1,0 +1,19 @@
+Script started on 2026-11-03 11:19:13+00:00 [COMMAND="env TERVORY_NO_UPDATE_CHECK=1 CODE_PROOF_PYTHON=/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python node --import ./tests/cli_code_mode/worker-proof.mjs cli/bin/tervory.mjs code /workspace/codex-cli-code-mode" TERM="dumb" TTY="/dev/pts/0" COLUMNS="80" LINES="24"]
+Thread offline-worker-proof
+> Run the repository's schema test file.
+Receipt pending
+'/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python' -m pytest -q tests/test_schema.py
+Read-only runner: /home/ammosync/.codex/tervory-audit-20261101/venv312/pyvenv.cfg
+Read-only runner: /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12
+Read-only runner: /home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12
+Read-only runner: /home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/libpython3.12.so
+Read-only runner: /home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/libpython3.12.so.1.0
+Read-only runner: /home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/bin/python3.12
+Run [y/N] y
+..                                                                       [100%]
+2 passed in 0.19s
+Offline worker proof: the existing schema test file passed inside the sandbox.
+Receipt pending
+> /exit
+
+Script done on 2026-11-03 11:22:35+00:00 [COMMAND_EXIT_CODE="0"]

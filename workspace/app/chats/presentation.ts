@@ -1,3 +1,4 @@
+import { projectRadix } from "./radix-presentation";
 import { dollars, safeLink, type Card, type CardDetail, type Receipt, type Snapshot, type Thread } from "./contract";
 /** Apply only to generated interface labels, never conversation or result text. */
 export function clientLabel(text: string, modelNames: string[] = []): string {
@@ -36,7 +37,7 @@ export function presentCard(card: Card, founder: boolean, models: string[] = [])
   }
   if (typeof args.text === "string") targets.push({ label: "Document", value: `${args.text.length.toLocaleString("en-US")} characters` });
   const resultFields = { ok: "Success", success: "Success", status: "Status", message: "Message", answer_md: "Answer", summary: "Summary", answer: "Answer", text: "Response", title: "Title", name: "Name", url: "Result", pr_url: "Review", link: "Result", count: "Count", total: "Total", n: "Count", queued: "Queued", batch: "Batch", job_id: "Job", build_id: "Build", matter_id: "Matter", watch_id: "Watch", task_type: "Task", calls: "Calls", actual_usd: "Cost", cost_usd: "Cost", baseline_usd: "Would have cost", baseline_cost_usd: "Would have cost", saved_usd: "Saved", receipt_status: "Cost status", ...(founder ? { model: "Model", ledger_id: "Ledger entry" } : {}) };
-  const results = details(card.result, resultFields);
+  const results = card.tool?.startsWith("radix.repo.") ? [] : details(card.result, resultFields);
   const collection = (label: string, list: unknown[]) => {
     results.push({ label, value: `${list.length} items${list.length > 5 ? " (first 5 shown)" : ""}` });
     list.slice(0, 5).forEach((item, index) => results.push(...details(item, resultFields).map(detail => ({ ...detail, label: `${label} ${index + 1} · ${detail.label}` }))));
@@ -44,10 +45,11 @@ export function presentCard(card: Card, founder: boolean, models: string[] = [])
   if (Array.isArray(card.result)) collection("Results", card.result);
   if (card.result && typeof card.result === "object") for (const key of ["items", "results", "records", "pages", "findings", "tasks", "ledger"]) {
     const list = (card.result as Record<string, unknown>)[key];
+    if (key === "findings" && projectRadix(card)) continue;
     if (Array.isArray(list)) collection(key[0].toUpperCase() + key.slice(1), list);
   }
   return { card_id: card.card_id, tool: card.tool, kind: card.kind, summary: clean(card.summary), status: card.status, cost_estimate_usd: card.cost_estimate_usd, retry_safe: card.retry_safe === true, receipt_status: card.receipt_status,
-    targets, results, error: card.error ? clean(card.error) : undefined };
+    targets, results, radix: projectRadix(card), error: card.error ? clean(card.error) : undefined };
 }
 export function presentThread(thread: Thread): Thread { return { ...thread }; }
 export function presentSnapshot(snapshot: Snapshot, founder: boolean, models: string[] = []): Snapshot {

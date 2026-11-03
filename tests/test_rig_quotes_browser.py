@@ -67,6 +67,12 @@ async def test_built_widget_live_api_journey(real_chromium, widget_server, tmp_p
         assert await page.locator("tervory-rig").evaluate("el => el.shadowRoot.querySelector('.shell').scrollWidth <= el.clientWidth + 1")
 
     await page.goto(widget_server + "/widget/test")
+    # This journey deliberately exercises the existing Custom Nation skin over
+    # neutral products. The configured key now correctly defaults to neutral.
+    await page.locator("tervory-rig").evaluate("""el => {
+        el.setAttribute('fonts', '/widget/fonts/custom-nation.css');
+        el.setAttribute('theme', 'custom-nation');
+    }""")
     await expect(page.get_by_role("heading", name="Find it. We source it.")).to_be_visible()
     await capture("01-search")
     assert await page.evaluate("document.fonts.load('600 32px \"Barlow Condensed\"').then(fonts => fonts.length > 0)")

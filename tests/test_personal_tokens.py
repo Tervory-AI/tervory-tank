@@ -46,9 +46,9 @@ async def test_token_identity_ignores_all_assertion_headers(runtime):
                                         'x-tervory-role': 'org:admin', 'x-tervory-squad': 'base'}))
     assert actor.user_id == 'client' and actor.tenant_id == TENANT
     assert not actor.founder and not actor.tenant_admin
-    assert command.allowed_tools(actor) == ['tiger.read', 'tiger.watch']
+    assert command.allowed_tools(actor) == ['tiger.alerts', 'tiger.match', 'tiger.match.confirm', 'tiger.match.reject', 'tiger.position', 'tiger.read', 'tiger.watch', 'tiger.watch.bulk', 'tiger.watch.pause', 'tiger.watch.remove', 'tiger.watch.resume', 'tiger.watches']
     args = runtime.fetchrow.call_args.args
-    assert args[1:] == (TENANT, 'us-east', pat.digest(TOKEN))
+    assert args[1:] == (TENANT, 'us-east', pat.digest(TOKEN), 'cli')
     assert TOKEN not in repr(args)
 
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { SquadLinks, SQUAD_MEMBERS } from "../squad-links";
+import { RadixCard } from "./radix-card";
 import { clientLabel, visibleCard } from "./presentation";
 import { applyReceipt, canConfirm, dollars, readEvents, safeLink, upsert, type Attachment, type Card, type Event, type Message, type ModelOption, type Receipt, type Snapshot, type Step, type Thread } from "./contract";
 import doneDot from "./assets/done.svg";
@@ -58,6 +59,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
   const streamAbort = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
   const uncertainCards = useRef(new Set<string>());
+  const oneTimeResults = useRef(new Map<string, Card["results"]>());
   const active = useRef<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const workButton = useRef<HTMLButtonElement>(null);
@@ -90,11 +92,16 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
       if (generation.current !== version || active.current !== id) return;
       setAvailableTools(tools);
     }
+    // A one-time Confirm response stays in this mounted view only. Polling
+    // never retrieves it again, and switching chats discards the local value.
+    next.cards = next.cards.map(card => oneTimeResults.current.has(card.card_id)
+      ? { ...card, results: oneTimeResults.current.get(card.card_id) } : card);
     setSnapshot(next); setThreads(rows => upsert(rows, next.thread, "thread_id"));
   }
   async function choose(id: string) {
     if (sendingRef.current || cardBusy) return;
     setAttachments([]);
+    oneTimeResults.current.clear();
     const version = ++generation.current;
     active.current = id; setSelected(id); setSnapshot(null); setBusy(true); setError(""); setMenu(false); setRenaming(false);
     window.history.replaceState(null, "", `/chats?thread=${encodeURIComponent(id)}`);
@@ -162,6 +169,8 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     }
     try {
       const saved = await (await api(`cards/${encodeURIComponent(card.card_id)}`, { method: "POST", body: JSON.stringify({ action }) })).json() as Card;
+      if (saved.tool === "market_lab.alerts.webhook" && saved.status === "confirmed"
+        && saved.results?.some(row => row.label === "Response")) oneTimeResults.current.set(saved.card_id, saved.results);
       if (saved.card_id === card.card_id && saved.status && !["pending", "awaiting_confirmation"].includes(saved.status)) {
         rememberUncertain(card.card_id, false);
         setSnapshot(current => current && ({ ...current, cards: upsert(current.cards, saved, "card_id") }));
@@ -249,6 +258,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
   const confirmation = cards.map(card => <section className="cw-confirm" key={card.card_id} data-status={card.status ?? "pending"}><strong className="cw-eyebrow">{cardLabels[card.status ?? "pending"] ?? "STATUS UNAVAILABLE"}</strong><p>{clean(card.summary)}</p>
     {!!card.targets?.length && <dl className="cw-card-details">{card.targets.map((target, index) => <div key={index}><dt>{target.label}</dt><dd>{safeLink(target.href) ? <a href={safeLink(target.href)} target="_blank" rel="noreferrer">{target.value}</a> : target.value}</dd></div>)}</dl>}
     {card.cost_estimate_usd !== undefined && <p className="cw-meta">Estimated {dollars(card.cost_estimate_usd)}</p>}
+    {card.radix && <RadixCard view={card.radix} status={card.status} disabled={sending || busy || !!cardBusy} onPrepare={message => { setText(message); document.getElementById("cw-message")?.focus(); }} />}
     {!!card.results?.length && <dl className="cw-card-details" aria-label="Action result">{card.results.map((result, index) => <div key={index}><dt>{result.label}</dt><dd>{safeLink(result.href) ? <a href={safeLink(result.href)} target="_blank" rel="noreferrer">{result.value}</a> : result.value}</dd></div>)}</dl>}
     {card.error && ["failed", "unknown"].includes(card.status ?? "") && <p className="cw-note">{clean(card.error)}</p>}
     {card.status === "unknown" && <p className="cw-note">Do not repeat this action until its outcome is checked. Retrying is disabled.</p>}

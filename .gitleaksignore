@@ -52,3 +52,10 @@ b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/l
 
 # Rig Locate #463: dummy live-shaped string in a refusal test (fixed in the next commit); not a credential. Pending reviewer triage.
 a2f2eca3669fd496070eeaf3536f054b6054d5e3:tests/test_rig_locate_checkout.py:stripe-access-token:260
+# PR #566: Docker network/trace ids inside a pasted offline-compose CI log (tests/autumbra_cloudflare_hand/EVIDENCE.txt), not a credential. Claude-reviewed 3 Nov 2026.
+6a5bc7145226eb9b960bde158f80c0e01fb763b8:tests/autumbra_cloudflare_hand/EVIDENCE.txt:generic-api-key:16061
+
+# PR #591: a Figma file key (public in every share link), not a credential; field renamed in e773434f. Claude-reviewed 3 Nov 2026.
+ce6839dc30c0562b4f5507ee241206fe4de7bbba:docs/figma/tisan/nov3-r2-audit.json:generic-api-key:3
+00ae04d3258f89049d98422e66f1319dcb267877:docs/figma/mcp-evidence-20261103/changes.json:generic-api-key:2
+87fcb1bf714b7c519ea2b2b4f3db8e72387a7c8b:docs/figma/mcp-evidence-rule9-20261103/changes.json:generic-api-key:3

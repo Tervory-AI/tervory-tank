@@ -20,6 +20,7 @@ from .notice import notice, receipt
 _ADDRESS = {"name": 120, "street": 200, "street2": 200, "city": 120, "zip": 20, "state": 120,
             "country": 2, "phone": 40}
 _ADDRESS_REQUIRED = ("name", "street", "city", "zip", "country")
+log = logging.getLogger("agent")
 
 
 def ship_address(value: Any) -> dict[str, str]:
@@ -138,159 +139,148 @@ class QuoteService(Service):
                     body["portal_url"] = portal
             except DeliveryError:
                 pass  # Delivery state remains visible; never expose invalid URLs.
+        body["items"] = ([part["product"] for part in payload["setup"]["parts"]]
+                         if payload.get("kind") == "setup" else [payload["product"]]
+                         if payload.get("kind") == "product" else [])
         return body
 
     async def locate_accept(self, tenant_id: str, body: dict[str, Any]) -> dict[str, Any]:
-        """Shopper Accept on a held Locate price. Backend only, sandbox only.
-
-        hold -> stored quote (sent to the retailer) -> test-mode capture ->
-        Rig-owned order and draft supplier PO (rigbox.fulfilment, Rig's own
-        Postgres; Tervory no longer uses Odoo). A failed order is refunded.
-        Each step is recorded in the quote's payload as locate_state.
-        """
+        """Accept the held price and deliver the quote, without ordering anything."""
         from datetime import datetime, timezone
-
-        from rigbox import payments
         from rigbox.locate_live import Holds, LocateRefused, hold_secret, read_token
-        from rigbox.fulfilment import sandbox_orders
 
         row = await self._locate_row(tenant_id, str(body.get("product_id") or ""))
-        try:
-            sandbox_orders()
-            secret = hold_secret()
-            provider = payments.guard(self.payments)
-        except (DeliveryError, LocateRefused, payments.PaymentRefused):
-            raise RigError("unavailable", "Ordering from other stores is not available.", 503) from None
-        if self.fulfilment is None:
-            raise RigError("unavailable", "Ordering from other stores is not available.", 503)
         self._quote_fields(body.get("contact"))
-        token = str(body.get("payment_token") or "")
-        if not token or len(token) > 200:
-            raise RigError("invalid", "A payment is required.", 422)
-        # Blind ship (per store, off by default): validate the address before
-        # the hold is taken, so a bad address never burns the held price.
         retailer = await self.store.retailer(tenant_id) or {}
-        blind = retailer.get("blind_ship") is True
-        ship_to = ship_address(body.get("delivery")) if blind else None
-        # Optional auto-order (per store, off by default): sandbox outbox only.
-        auto = retailer.get("auto_order") is True
-        if auto:
-            from rigbox import supplier_orders
-            try:
-                supplier_orders.outbox()
-            except DeliveryError:
-                raise RigError("unavailable", "Ordering from other stores is not available.", 503) from None
-            if not (hasattr(self.fulfilment, "send_supplier_order") and hasattr(self.fulfilment, "cancel")):
-                raise RigError("unavailable", "Ordering from other stores is not available.", 503)
+        ship_to = ship_address(body.get("delivery")) if retailer.get("blind_ship") is True else None
         now = datetime.now(timezone.utc)
+        try:
+            secret = hold_secret()
+        except LocateRefused:
+            raise RigError("unavailable", "Ordering from other stores is not available.", 503) from None
         try:
             hold_id = read_token(secret, tenant_id, str(body.get("hold") or ""), now)
         except LocateRefused as exc:
-            raise RigError("hold", "That price has expired. Check availability again.", 410
-                           if str(exc) == "hold_expired" else 422) from None
-        holds = Holds(self.store)
-        if auto:
-            # No real vendor or order inbox for this source: refuse before the
-            # hold is taken (so the shopper's held price is not burned) and
-            # before any payment.
-            peeked = await holds.peek(tenant_id, hold_id, now)
-            if peeked is not None and not supplier_orders.supplier_ready(peeked["private"]["source"]):
-                raise RigError("unavailable", "Ordering from other stores is not available.", 503)
-        held = await holds.take(tenant_id, hold_id, now)
+            raise RigError("hold", "That price has expired. Check availability again.",
+                           410 if str(exc) == "hold_expired" else 422) from None
+        held = await Holds(self.store).take(tenant_id, hold_id, now)
         if held is None or held["product_id"] != row["sku"]:
             raise RigError("hold", "That price has expired. Check availability again.", 410)
-        if auto and not supplier_orders.supplier_ready(held["private"]["source"]):
-            raise RigError("unavailable", "Ordering from other stores is not available.", 503)
         price = held["public"]["price"]
         product = dict(await self.product(tenant_id, row["sku"]))
         product["price"] = dict(price)
-        state: dict[str, Any] = {"state": "confirmed", "hold_id": hold_id,
-                                 "located_at": held["private"]["offer"].get("seen_at"),
-                                 "confirmed_at": held["private"]["live"]["checked_at"],
-                                 "price": price}
+        product["delivery"] = {"ship_days": held["public"].get("ship_days"),
+                               "eta": held["public"].get("eta"), "back_order": False}
+        state = {"state": "accepted", "hold_id": hold_id, "price": price,
+                 "accepted_at": now.isoformat()}
         payload = {"kind": "product", "product": product, "locate_state": state,
                    "locate": [{"product_id": row["sku"], "public": held["public"], "store": held["private"]}]}
         if ship_to is not None:
-            state["blind_ship"] = True
             payload["ship_to"] = ship_to
+            state["blind_ship"] = True
         evidence = await self._notice_receipt(tenant_id, body.get("notice_version"))
         if evidence:
             payload["notice_receipt"] = evidence
         stored = await self._store_quote(tenant_id, payload, _contact(body.get("contact") or {}))
-        quote_id = stored["request_id"]
+        return {**stored, "state": "accepted", "price": price, "items": [product]}
+
+    async def confirm_store_payment(self, tenant_id: str, quote_id: str) -> dict[str, Any]:
+        """Record the retailer's confirmation; Rig never handles the money.
+
+        The quote CAS gives one caller a bounded placement lease. A retry after
+        a crash resumes the same order/PO numbers and exclusive supplier outbox
+        record. Historical provider states are never migrated or acted on.
+        """
+        from datetime import datetime, timedelta, timezone
+        from rigbox.fulfilment import sandbox_orders
+        from rigbox import supplier_orders
+
+        quote = await self.store.quote_for(tenant_id, quote_id)
+        old = quote["payload"].get("locate_state") if quote else None
+        if not isinstance(old, dict) or not old.get("accepted_at") or old.get("state") not in {
+            "accepted", "store_confirmed", "ordered", "supplier_ordered", "supplier_order_unconfirmed",
+            "supplier_order_failed", "needs_person"
+        }:
+            raise RigError("not_found", "The request is not valid.", 404)
+        payload = quote["payload"]
+
+        def response(state: dict[str, Any]) -> dict[str, Any]:
+            return {"request_id": quote_id, "confirmed": True, "state": state["state"],
+                    "items": [payload["product"]]}
+        if old["state"] in {"ordered", "supplier_ordered", "supplier_order_unconfirmed", "supplier_order_failed", "needs_person"}:
+            return response(old)
+        now = datetime.now(timezone.utc)
+        if old["state"] == "store_confirmed":
+            # An active worker owns this quote. A lost worker may be resumed
+            # only after the supplier operation's bounded timeout has elapsed.
+            if old.get("attempted_at") and datetime.fromisoformat(old["attempted_at"]) > now - timedelta(minutes=15):
+                return response(old)
+        retailer = await self.store.retailer(tenant_id) or {}
+        auto = old.get("auto_order", retailer.get("auto_order") is True)
+        located = payload["locate"][0]["store"]
+        try:
+            sandbox_orders()
+            if auto:
+                supplier_orders.outbox()
+                if not supplier_orders.supplier_ready(located["source"]):
+                    raise DeliveryError("order_rejected")
+        except DeliveryError:
+            raise RigError("unavailable", "Ordering from other stores is not available.", 503) from None
+        state = {**old, "state": "store_confirmed", "auto_order": auto,
+                 "store_confirmed_at": old.get("store_confirmed_at", now.isoformat()),
+                 "attempted_at": now.isoformat(), "attempt_id": uuid4().hex}
+        if not await self.store.swap_locate_state(tenant_id, quote_id, old, state):
+            current = await self.store.quote_for(tenant_id, quote_id)
+            return response(current["payload"]["locate_state"])
 
         async def record(**changes: Any) -> None:
-            state.update(changes)
-            await self.store.locate_state(tenant_id, quote_id, dict(state))
+            nonlocal state
+            new = {**state, **changes}
+            if not await self.store.swap_locate_state(tenant_id, quote_id, state, new):
+                raise DeliveryError("order_unavailable")
+            state = new
 
-        if stored.get("delivery") != "sent":
-            await record(state="confirmed", note="retailer_not_reached")
-            return {"request_id": quote_id, "state": "confirmed", "price": price,
-                    "message": "Your request is saved. No payment was taken."}
-        reference = f"rig:{tenant_id}:{quote_id}"
-        try:
-            charge = await payments.capture(provider, amount=price["amount"], currency=price["currency"],
-                                            token=token, reference=reference,
-                                            metadata={"quote_id": quote_id, "product_id": row["sku"]})
-        except payments.PaymentRefused:
-            await record(state="payment_refused")
-            raise RigError("payment", "The payment was not taken.", 402) from None
-        if charge.status != "captured":
-            await record(state="payment_failed")
-            raise RigError("payment", "The payment was not taken.", 402)
-        await record(state="paid", paid_at=datetime.now(timezone.utc).isoformat(),
-                     payment={"reference": charge.reference, "provider": provider.name, "test": charge.test})
         try:
             order = await self.fulfilment.place_located_order(
-                tenant_id=tenant_id, quote_id=quote_id, located=held["private"], price=price,
-                ship={"address": ship_to} if ship_to else None)
-        except DeliveryError as exc:
-            refunded = await payments.refund(provider, charge, "order_failed")
-            await record(state="order_failed_refunded", error=str(exc), refund={"status": refunded.status})
-            raise RigError("order", "The order could not be placed. The payment was refunded.", 502) from None
-        await record(state="ordered", ordered_at=datetime.now(timezone.utc).isoformat(),
-                     order=order["order"]["number"], purchase_order=order["purchase_order"]["number"])
+                tenant_id=tenant_id, quote_id=quote_id, located=located, price=state["price"],
+                ship={"address": payload["ship_to"]} if payload.get("ship_to") else None)
+        except Exception as exc:
+            # Stable order/PO numbers make placement safe to resume after a
+            # transient failure, including a response lost after the insert.
+            # Release only our own lease; a takeover is handled by the corridor.
+            if isinstance(exc, DeliveryError) and str(exc) in {"order_mismatch", "order_rejected"}:
+                await record(state="needs_person", needs_review=True)
+            else:
+                await record(attempted_at=None, attempt_id=None)
+            return response(state)
+        await record(order=order["order"]["number"], purchase_order=order["purchase_order"]["number"])
         if auto:
             try:
                 supplied = await self.fulfilment.send_supplier_order(
                     tenant_id=tenant_id, quote_id=quote_id, store_name=retailer.get("name") or "",
                     store_email=retailer.get("email"))
             except DeliveryError as exc:
-                # Cancel Rig's order and unsent PO, then refund. cancel refuses
-                # (returns "sent") when the supplier already has the PO: then
-                # the order stands and nothing is refunded.
-                # send_supplier_order checks order mode and the outbox before it
-                # writes anything, so those two refusals prove nothing was sent.
-                cancelled = await self.fulfilment.cancel(
-                    tenant_id, quote_id, f"supplier_order_failed:{exc}",
-                    unsent=str(exc) in ("outbox_not_configured", "order_mode"))
-                if cancelled == "unknown":
-                    # Rig can't tell whether the supplier has the PO, so it
-                    # neither cancels nor refunds. The order and payment stand
-                    # until a person or a later reconcile settles it.
-                    await record(state="supplier_order_unconfirmed", error=str(exc))
-                    body = {"request_id": quote_id, "state": "ordered", "price": price,
-                            "payment": {"reference": charge.reference, "test": True}}
-                    if ship_to is not None:
-                        body["ships_direct"] = True
-                    return body
-                if cancelled != "sent":
-                    refunded = await payments.refund(provider, charge, "supplier_order_failed")
-                    await record(state="supplier_order_failed_refunded", error=str(exc),
-                                 refund={"status": refunded.status})
-                    raise RigError("order", "The order could not be placed. The payment was refunded.", 502) from None
-                supplied = {"purchase_order": {"state": "sent"},
-                            "supplier_order": {"channel": "email", "transport": "sandbox_outbox",
-                                               "duplicate": True, "reconciled": True}}
-            sent = supplied["supplier_order"]
-            await record(state="supplier_ordered", supplier_ordered_at=datetime.now(timezone.utc).isoformat(),
+                # Preserve #578's strict send/cancel boundary. An existing or
+                # unreadable outbox is never treated as an unsent supplier PO.
+                cancelled = await self.fulfilment.cancel(tenant_id, quote_id,
+                    f"supplier_order_failed:{exc}", unsent=str(exc) in {"outbox_not_configured", "order_mode"})
+                if cancelled == "sent":
+                    await record(state="supplier_ordered", purchase_order_state="sent")
+                elif cancelled in {"cancelled", "missing"}:
+                    await record(state="supplier_order_failed", needs_review=True)
+                else:
+                    await record(state="supplier_order_unconfirmed", needs_review=True)
+                return response(state)
+            await record(state="supplier_ordered" if supplied["purchase_order"]["state"] == "sent"
+                         else "supplier_order_unconfirmed",
                          purchase_order_state=supplied["purchase_order"]["state"],
-                         supplier_order={key: sent.get(key) for key in ("channel", "transport", "file", "duplicate")})
-        body = {"request_id": quote_id, "state": "ordered", "price": price,
-                "payment": {"reference": charge.reference, "test": True}}
-        if ship_to is not None:
-            body["ships_direct"] = True
-        return body
+                         supplier_order={key: supplied["supplier_order"].get(key)
+                                         for key in ("channel", "transport", "file", "duplicate")},
+                         needs_review=supplied["purchase_order"]["state"] != "sent")
+        else:
+            await record(state="ordered")
+        return response(state)
+
 
     async def deliver(self, tenant: str, quote_id: str) -> None:
         quote = await self.quote_store.claim(tenant, quote_id)

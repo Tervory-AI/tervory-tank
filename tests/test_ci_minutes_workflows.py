@@ -36,7 +36,9 @@ def _triggers(workflow: dict) -> dict:
 @pytest.mark.parametrize("path", [CI], ids=lambda p: p.name)
 def test_docs_only_changes_skip_on_push_and_pull_request(path: Path) -> None:
     triggers = _triggers(_load(path))
-    assert set(triggers) == {"pull_request", "push"}
+    # merge_group (3 Nov): the merge queue runs CI on each queued group before it lands.
+    assert set(triggers) == {"pull_request", "merge_group", "push"}
+    assert triggers["merge_group"] == {"types": ["checks_requested"]}
     # The security job runs on every PR, docs-only included, so there is no
     # paths-ignore. Build jobs skip docs-only changes through ci_scope.py instead.
     for event in ("pull_request", "push"):
@@ -56,7 +58,10 @@ def test_no_workflow_uses_pull_request_target(path: Path) -> None:
 def test_ci_keeps_job_names_and_main_push_trigger() -> None:
     text = CI.read_text(encoding="utf-8")
     jobs = _load(CI)["jobs"]
-    assert set(jobs) == {"security", "changes", "runner", "tank", "workspace", "command-acceptance", "savings-page"}
+    assert set(jobs) == {"security", "changes", "runner", "tank", "workspace", "command-acceptance", "savings-page", "ci-ok"}
+    # ci-ok is the one check the merge queue requires: it waits for every other job.
+    assert jobs["ci-ok"]["if"] == "always()"
+    assert set(jobs["ci-ok"]["needs"]) == set(jobs) - {"runner", "ci-ok"}
     assert "push:" in text and "branches: [main]" in text
     assert _load(CI)["permissions"] == {"contents": "read"}
 
