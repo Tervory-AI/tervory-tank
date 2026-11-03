@@ -44,7 +44,7 @@ async def ping(ctx: JobContext) -> dict:
 
 async def refresh(ctx: JobContext) -> dict:
     fixtures = ctx.input.get("fixtures") or os.environ.get("FEEDS_FIXTURES") or None
-    async with _ledger() as ledger:
+    async with _ledger(memory=ctx.memory) as ledger:
         lock = ctx.tenant_id + ":market-collect"
         await ledger.conn.execute("SELECT pg_advisory_lock(hashtextextended($1, 0))", lock)
         try:
@@ -65,12 +65,12 @@ async def refresh(ctx: JobContext) -> dict:
 
 async def feed_links(ctx: JobContext) -> dict:
     from core.feed_links import refresh_links
-    async with _ledger() as ledger:
+    async with _ledger(memory=ctx.memory) as ledger:
         return await refresh_links(ledger, ctx.tenant_id, case_plan()["engine"])
 
 
 async def opportunities(ctx: JobContext) -> dict:
-    async with _ledger() as ledger:
+    async with _ledger(memory=ctx.memory) as ledger:
         result = await perform_opportunities(
             tenant_id=ctx.tenant_id,
             engine=str(ctx.input.get("engine") or ""),
@@ -85,7 +85,7 @@ async def opportunities(ctx: JobContext) -> dict:
 
 
 async def resolve(ctx: JobContext) -> dict:
-    async with _ledger() as ledger:
+    async with _ledger(memory=ctx.memory) as ledger:
         from core.warning_http import refresh as refresh_warnings
         warning_result = await refresh_warnings(ledger, ctx.tenant_id, str(ctx.input.get("engine") or ""))
         return {**(await perform_resolve(tenant_id=ctx.tenant_id, ledger=ledger)), "warnings": warning_result}
@@ -105,7 +105,7 @@ async def research(ctx: JobContext) -> dict:
             from core.evidence import answer as cited_answer
             from uuid import uuid4
             from datetime import datetime, timezone
-            async with _ledger() as ledger:
+            async with _ledger(memory=ctx.memory) as ledger:
                 saved = await cited_answer(ledger, ctx.tenant_id, question, engine=case_plan()["engine"])
                 facts = saved.get("facts") or []
                 if facts:
@@ -121,7 +121,7 @@ async def research(ctx: JobContext) -> dict:
         if result is not None:
             return result
         return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
-    async with _ledger() as ledger:
+    async with _ledger(memory=ctx.memory) as ledger:
         answer = await perform_research(
             tenant_id=ctx.tenant_id,
             ledger=ledger,
@@ -135,7 +135,7 @@ async def research(ctx: JobContext) -> dict:
 
 async def calibration(ctx: JobContext) -> dict:
     """Data only; a Workspace view requires its own approved Figma frame."""
-    async with _ledger() as ledger:
+    async with _ledger(memory=ctx.memory) as ledger:
         return await ledger.calibration_for(ctx.tenant_id)
 
 
@@ -153,7 +153,8 @@ class _SafeMemory:
 
 
 class _ledger:
-    def __init__(self) -> None:
+    def __init__(self, *, memory: object | None = None) -> None:
+        self.memory = memory
         self.conn = None
         self.ledger: PostgresLedger | None = None
 
@@ -165,8 +166,7 @@ class _ledger:
             raise RuntimeError("DATABASE_URL is not set")
         self.conn = await asyncpg.connect(url)
         self.ledger = PostgresLedger(self.conn)
-        from chassis.memory import MemoryClient
-        self.ledger.memory = _SafeMemory(MemoryClient())
+        self.ledger.memory = self.memory if self.memory is not None else getattr(app.state, "memory", None)
         await self.ledger.apply_schema()
         return self.ledger
 
