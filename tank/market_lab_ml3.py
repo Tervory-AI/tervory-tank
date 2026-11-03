@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict
 from tenant_db import tenant_path
 
 PLATFORM = "00000000-0000-0000-0000-000000000001"
-READS = {"warnings", "predictions", "calibration", "feeds"}
+READS = {"warnings", "predictions", "calibration", "feeds", "patterns", "gate"}
 
 
 def obj(raw):
@@ -45,6 +45,16 @@ def link(value: str) -> str:
 
 
 def records(operation: str, data: dict) -> list[dict]:
+    if operation == "patterns":
+        return [{"name": row["claim"]["pair_id"], "status": row["tier"],
+                 "count": row["claim"]["episodes"], "total": row["claim"]["hits"],
+                 "claim": row["claim"]}
+                for key in ("patterns", "published") for row in data.get(key, [])]
+    if operation == "gate":
+        return [{"name": " / ".join(str(row[key]) for key in ("kind", "feed", "horizon_seconds")),
+                 "status": "open" if row["open"] else "closed", "summary": row.get("opens_at"),
+                 "count": row["resolved_count"]}
+                for row in data.get("cohorts", [])]
     if operation == "warnings":
         rows = []
         for warning in data.get("warnings", []):
