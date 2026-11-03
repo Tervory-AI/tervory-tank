@@ -462,6 +462,21 @@ class CatalogueDiscovery:
             # Skip bounded local work without occupying a worker for a request.
             for _ in range(1000):
                 if not active['queue']:
+                    index = active.get('search_index', 0)
+                    if active.get('home_finished') and index < len(products):
+                        product = products[index]
+                        active['search_index'] = index + 1
+                        gtin = re.sub(r'[\s-]', '', str(product.get('gtin') or ''))
+                        if product['sku'] not in active['confirmed'] and re.fullmatch(r'[0-9]{8}|[0-9]{12,14}', gtin) and gtin.strip('0'):
+                            searches = [site + '/search?' + urlencode({'q': gtin}), site + '/?' + urlencode({'s': gtin, 'post_type': 'product'})]
+                            for form in active['forms'][:20]:
+                                parsed = urlsplit(form['action'])
+                                fields = {**dict(parse_qsl(parsed.query)), **form['fields'], form['query']: gtin}
+                                searches.append(urlunsplit(parsed._replace(query=urlencode(fields), fragment='')))
+                            active['queue'].extend({'kind': 'search', 'url': target, 'sku': product['sku']} for target in dict.fromkeys(searches) if allowed(target))
+                        # Persist the catalogue position even when this SKU has
+                        # no usable identifier. Local work is bounded as well.
+                        return state, False
                     finish('completed')
                     return state, state['site_index'] >= len(sites)
                 action = active['queue'].pop(0)
@@ -494,6 +509,8 @@ class CatalogueDiscovery:
                 active['robots'] = response.get('text', '') if response.get('status') == 200 else ''
                 maps = [urljoin(site + '/', m[1]) for m in re.finditer(r'^\s*Sitemap:\s*(\S+)', active['robots'], re.I | re.M)]
                 enqueue('map', maps[:500] + [site + '/sitemap.xml'])
+                if re.search(r'captcha|turnstile|verify.{0,20}human|checking your browser|security check|cf-error-details', active['robots'], re.I):
+                    enqueue('probe', [url])
                 active['queue'].append({'kind': 'home', 'url': site + '/'})
                 return state, False
             if kind == 'map':
@@ -530,16 +547,8 @@ class CatalogueDiscovery:
                     enqueue('publish', [url], html=html)
             elif kind == 'home':
                 _, active['forms'] = DiscoveryLinks.parse(html, url)
-                for product in products:
-                    gtin = re.sub(r'[\s-]', '', str(product.get('gtin') or ''))
-                    if not re.fullmatch(r'[0-9]{8}|[0-9]{12,14}', gtin) or not gtin.strip('0'):
-                        continue
-                    searches = [site + '/search?' + urlencode({'q': gtin}), site + '/?' + urlencode({'s': gtin, 'post_type': 'product'})]
-                    for form in active['forms']:
-                        parsed = urlsplit(form['action'])
-                        fields = {**dict(parse_qsl(parsed.query)), **form['fields'], form['query']: gtin}
-                        searches.append(urlunsplit(parsed._replace(query=urlencode(fields), fragment='')))
-                    active['queue'].extend({'kind': 'search', 'url': target, 'sku': product['sku']} for target in dict.fromkeys(searches) if allowed(target))
+                active['forms'] = active['forms'][:20]
+                active['home_finished'] = True
             elif kind == 'search':
                 links, _ = DiscoveryLinks.parse(html, url)
                 enqueue('product', [link for link in links if not discovery_search_url(link)], sku=action['sku'])
