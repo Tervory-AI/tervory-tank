@@ -2,8 +2,10 @@
 from decimal import Decimal
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 import uuid
 import pytest
+from fastapi import HTTPException
 import training
 from gold import PLATFORM_TENANT
 from test_train1 import database as _database
@@ -25,6 +27,64 @@ def test_refuses_bad_or_over_budget_job(rate, minutes, cap):
 
 def test_accepts_capped_estimate():
     assert load('run').estimate(Decimal('0.025'), 120, Decimal('50')) == Decimal('3')
+
+
+def test_zenas_uses_allowlisted_smallest_a10g_that_fits():
+    mod = load('run')
+    assert mod.HARDWARE == frozenset({'a10g-small', 'a10g-large'})
+    assert mod.training_hardware('zenas') == 'a10g-small'
+    with pytest.raises(ValueError, match='Unsupported training agent'):
+        mod.training_hardware('base')
+    trainer = load('train')
+    assert trainer.context_length('') == 1024
+    assert trainer.context_length('zenas') == 4096
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('values', 'configured', 'status'),
+    [
+        ([1999, 200], True, 'fewer than 2,000 public zenas training rows'),
+        ([2000, 199], True, 'fewer than 200 holdout rows'),
+        ([2000, 200, True], True, 'reconcile the previous training job'),
+        ([2000, 200, False], False, 'Hugging Face training is not configured'),
+    ],
+)
+async def test_zenas_training_run_plain_refusals(monkeypatch, values, configured, status):
+    from unittest.mock import AsyncMock
+    conn = SimpleNamespace(fetchval=AsyncMock(side_effect=values))
+    if configured:
+        monkeypatch.setenv('HF_TOKEN', 'placeholder-token')
+        monkeypatch.setenv('HF_ORG', 'placeholder-org')
+    else:
+        monkeypatch.delenv('HF_TOKEN', raising=False)
+        monkeypatch.delenv('HF_ORG', raising=False)
+    body = training.TrainingRunRequest(agent='zenas', minutes=120)
+    assert (await training._training_readiness(conn, body))['status'] == status
+
+
+@pytest.mark.asyncio
+async def test_training_run_and_receipt_refuse_tenant_admin_before_provider(monkeypatch):
+    actor = training.Reviewer('placeholder-admin', uuid.uuid4(), False)
+    with pytest.raises(HTTPException) as run_refused:
+        await training.training_run(training.TrainingRunRequest(agent='zenas', minutes=120), actor)
+    with pytest.raises(HTTPException) as receipt_refused:
+        await training.training_receipt(
+            training.TrainingReceiptRequest(job_id='placeholder-job', billed_usd=1), actor,
+        )
+    assert run_refused.value.status_code == receipt_refused.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_zenas_plan_reads_live_hf_price(monkeypatch):
+    import sys
+    hardware = SimpleNamespace(name='a10g-small', unit_label='minute', unit_cost_micro_usd=25000)
+    api = SimpleNamespace(list_jobs_hardware=lambda: [hardware])
+    monkeypatch.setenv('HF_TOKEN', 'placeholder-token')
+    monkeypatch.setenv('HF_TRAIN_MAX_USD', '50')
+    monkeypatch.setitem(sys.modules, 'huggingface_hub', SimpleNamespace(HfApi=lambda **_kwargs: api))
+    result = await training._training_quote(training.TrainingRunRequest(agent='zenas', minutes=120))
+    assert result == {'status': 'ready', 'cost_usd': Decimal('3'), 'name': 'a10g-small'}
 
 @pytest.mark.parametrize('change', [{'tenant_id': uuid.uuid4()}, {'public': False}, {'client_matter': True},
                                     {'region': 'za'}, {'holdout': True}, {'active': False}])
@@ -79,8 +139,9 @@ async def test_actual_export_payload_cannot_contain_private_rows(database, monke
     assert [r['input'] for r in captured] == [{'n': 0}]
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('submit,cap,expected_jobs', [(False,'50',0), (True,'50',1), (True,'1',0)])
-async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(monkeypatch, capsys, submit, cap, expected_jobs):
+@pytest.mark.parametrize('submit,cap,expected_jobs,agent', [
+    (False,'50',0,''), (True,'50',1,''), (True,'50',1,'zenas'), (True,'1',0,'zenas')])
+async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(monkeypatch, capsys, submit, cap, expected_jobs, agent):
     import secrets
     import sys
     from types import SimpleNamespace
@@ -98,6 +159,7 @@ async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(
         assert token not in str(kwargs['env'])
         assert 'DATABASE_URL' not in kwargs['secrets']
         assert Path(script).name == 'train.py'
+        assert kwargs['env']['TRAIN_AGENT'] == agent
         jobs.append(kwargs)
         return SimpleNamespace(id='fixture-job')
     api = SimpleNamespace(list_jobs_hardware=lambda: [SimpleNamespace(name='a10g-small',unit_label='minute',unit_cost_micro_usd=16667)],
@@ -106,7 +168,7 @@ async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(
     import asyncpg
     conn = SimpleNamespace(execute=AsyncMock(), fetchval=AsyncMock(return_value=False), fetch=AsyncMock(return_value=[]), close=AsyncMock())
     monkeypatch.setattr(asyncpg, 'connect', AsyncMock(return_value=conn))
-    args = SimpleNamespace(receipt=None, minutes=120, submit=submit, day='2026-10-20')
+    args = SimpleNamespace(receipt=None, minutes=120, submit=submit, day='2026-10-20', agent=agent)
     if cap == '1':
         with pytest.raises(ValueError):
             await load('run').run(args)

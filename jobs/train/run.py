@@ -14,6 +14,15 @@ import re
 import uuid
 
 PLATFORM = uuid.UUID('00000000-0000-0000-0000-000000000001')
+HARDWARE = frozenset({'a10g-small', 'a10g-large'})
+
+
+def training_hardware(agent: str) -> str:
+    if agent not in ('', 'zenas'):
+        raise ValueError('Unsupported training agent')
+    # Qwen3-4B bf16 LoRA with batch size one and gradient checkpointing fits
+    # the 24 GB A10G used by the small flavor, including Zenas at 4096 tokens.
+    return 'a10g-small'
 
 
 def estimate(rate: Decimal, minutes: int, cap: Decimal) -> Decimal:
@@ -48,7 +57,7 @@ async def link_snapshot_batches(conn, job_id: str, model_repo: str, day: str) ->
         )
 
 
-async def record_receipt(conn, job_id: str, actual: Decimal) -> None:
+async def record_receipt(conn, job_id: str, actual: Decimal):
     """Append the provider's final billed amount once, including failed jobs."""
     if not actual.is_finite() or actual < 0:
         raise ValueError('Invalid billed amount')
@@ -59,15 +68,16 @@ async def record_receipt(conn, job_id: str, actual: Decimal) -> None:
         if row['ledger_id']:
             if Decimal(row['actual_usd']) != actual:
                 raise ValueError('Receipt conflicts with recorded bill')
-            return
+            return row['ledger_id']
         ident = await conn.fetchval("""INSERT INTO tank.ledger
             (tenant_id,region,agent,task_type,model,priority,cost_usd,outcome)
             VALUES ($1,'us-east','tank','training.lora',$2,'batch',$3,'delivered') RETURNING id""",
             PLATFORM, row['model_repo'], actual)
         await conn.execute('UPDATE tank.training_jobs SET actual_usd=$3,ledger_id=$4 WHERE id=$1 AND tenant_id=$2 AND region=$5', job_id, PLATFORM, actual, ident, 'us-east')
+        return ident
 
 
-async def run(args) -> None:
+async def run(args):
     import asyncpg
     from huggingface_hub import HfApi
     if os.environ.get('TANK_REGION', 'us-east') != 'us-east':
@@ -89,14 +99,17 @@ async def run(args) -> None:
             await conn.close()
         print('Billed cost recorded')
         return
-    hardware = next(h for h in api.list_jobs_hardware() if h.name == 'a10g-small')
+    flavor = training_hardware(getattr(args, 'agent', ''))
+    if flavor not in HARDWARE:
+        raise ValueError('Training hardware is not allowed')
+    hardware = next(h for h in api.list_jobs_hardware() if h.name == flavor)
     if hardware.unit_label != 'minute':
         raise ValueError('Unknown billing unit')
     amount = estimate(Decimal(hardware.unit_cost_micro_usd) / 1_000_000, args.minutes,
                       Decimal(os.environ.get('HF_TRAIN_MAX_USD') or '50'))
     print(f'Maximum estimated compute cost: USD {amount:.4f}')
     if not args.submit:
-        return
+        return {'status': 'ready', 'cost_usd': amount, 'hardware': flavor}
     conn = await asyncpg.connect(os.environ['DATABASE_URL'])
     try:
         await conn.execute('SELECT pg_advisory_lock(871228)')
@@ -113,12 +126,14 @@ async def run(args) -> None:
             if api.model_info(repo).private is not True:
                 raise ValueError('Output repository must be private')
             job = api.run_uv_job(str(Path(__file__).with_name('train.py')), namespace=org,
-                                flavor='a10g-small', timeout=args.minutes * 60,
-                                env={'HF_ORG': org, 'TRAIN_DAY': args.day, 'OUTPUT_REPO': repo},
+                                flavor=flavor, timeout=args.minutes * 60,
+                                env={'HF_ORG': org, 'TRAIN_DAY': args.day, 'OUTPUT_REPO': repo,
+                                     'TRAIN_AGENT': getattr(args, 'agent', '')},
                                 secrets={'HF_TOKEN': os.environ['HF_TOKEN']})
             await conn.execute('UPDATE tank.training_jobs SET id=$1 WHERE id=$2 AND tenant_id=$3', job.id, pending, PLATFORM)
             await link_snapshot_batches(conn, job.id, repo, args.day)
             print(f'Training job: {job.id}')
+            return {'status': 'running', 'name': job.id, 'cost_usd': amount, 'hardware': flavor}
         finally:
             await conn.execute('SELECT pg_advisory_unlock(871228)')
     finally:
@@ -131,6 +146,7 @@ if __name__ == '__main__':
     parser.add_argument('--minutes', type=int, default=120)
     parser.add_argument('--day', default='')
     parser.add_argument('--submit', action='store_true')
+    parser.add_argument('--agent', choices=['zenas'], default='')
     parser.add_argument('--receipt', help='Local final HF billing receipt JSON; no credentials')
     args = parser.parse_args()
     if args.submit:

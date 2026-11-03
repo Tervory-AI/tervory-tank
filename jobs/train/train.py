@@ -61,11 +61,19 @@ def shared_rows(groups: list[list[dict]]) -> list[dict]:
     return rows
 
 
+def context_length(agent: str) -> int:
+    if agent not in ('', 'zenas'):
+        raise ValueError('Unsupported training agent')
+    return 4096 if agent == 'zenas' else 1024
+
+
 def load_snapshots(api, org: str, day: str) -> list[dict]:
     from huggingface_hub import hf_hub_download
     from huggingface_hub.errors import RepositoryNotFoundError, EntryNotFoundError
     rows = []
-    for agent in ('tank', 'base', 'tiger', 'market_lab', 'zenas', 'radix', 'tisan', 'rig'):
+    selected = os.environ.get('TRAIN_AGENT', '')
+    agents = (selected,) if selected else ('tank', 'base', 'tiger', 'market_lab', 'zenas', 'radix', 'tisan', 'rig')
+    for agent in agents:
         dataset = f'{org}/tervory-public-{agent}'
         try:
             info = api.dataset_info(dataset)
@@ -95,6 +103,8 @@ def main() -> None:
     org, repo, day = os.environ['HF_ORG'], os.environ['OUTPUT_REPO'], os.environ['TRAIN_DAY']
     if api.model_info(repo).private is not True:
         raise ValueError('Model repository is not private')
+    train_agent = os.environ.get('TRAIN_AGENT', '')
+    max_length = context_length(train_agent)
     rows = load_snapshots(api, org, day)
     train, validation, seen = [], [], set()
     for row in rows:
@@ -108,7 +118,7 @@ def main() -> None:
     if not train or not validation:
         raise ValueError('Training and validation examples are required')
     trainer = SFTTrainer(model='Qwen/Qwen3-4B',
-        args=SFTConfig(output_dir='/tmp/lora', num_train_epochs=1, max_length=1024,
+        args=SFTConfig(output_dir='/tmp/lora', num_train_epochs=1, max_length=max_length,
                        per_device_train_batch_size=1, gradient_accumulation_steps=8,
                        gradient_checkpointing=True, bf16=True, report_to='none',
                        logging_strategy='no', save_strategy='no', push_to_hub=False),

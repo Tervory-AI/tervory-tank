@@ -15,6 +15,7 @@ import re
 import uuid
 from contextlib import asynccontextmanager, suppress
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any
 
 import httpx
@@ -565,6 +566,120 @@ class CourtTextPair(BaseModel):
     reason: str = Field(default="", max_length=40)
     input: dict[str, str] | None = None
     output: dict[str, Any] | None = None
+
+
+class TrainingRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    agent: str = Field(pattern="^zenas$")
+    minutes: int = Field(ge=1, le=240)
+
+
+class TrainingReceiptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    job_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
+    billed_usd: Decimal = Field(ge=0)
+
+
+async def _training_readiness(conn: Any, body: TrainingRunRequest) -> dict[str, Any] | None:
+    ready = await conn.fetchval(
+        """SELECT count(*) FROM tank.training_pairs WHERE tenant_id=$1 AND agent=$2
+        AND active AND public AND NOT client_matter""",
+        PLATFORM_TENANT, body.agent,
+    )
+    holdout = await conn.fetchval(
+        """SELECT count(*) FROM tank.training_pairs WHERE tenant_id=$1 AND agent=$2
+        AND active AND public AND NOT client_matter AND holdout""",
+        PLATFORM_TENANT, body.agent,
+    )
+    if int(ready or 0) < 2000:
+        return {"status": "fewer than 2,000 public zenas training rows", "count": int(ready or 0)}
+    if int(holdout or 0) < 200:
+        return {"status": "fewer than 200 holdout rows", "count": int(holdout or 0)}
+    if await conn.fetchval(
+        "SELECT EXISTS (SELECT 1 FROM tank.training_jobs WHERE tenant_id=$1 AND ledger_id IS NULL)",
+        PLATFORM_TENANT,
+    ):
+        return {"status": "reconcile the previous training job"}
+    if not os.environ.get("HF_TOKEN") or not os.environ.get("HF_ORG"):
+        return {"status": "Hugging Face training is not configured"}
+    return None
+
+
+async def _training_quote(body: TrainingRunRequest) -> dict[str, Any]:
+    from huggingface_hub import HfApi
+    from jobs.train.run import estimate, training_hardware
+    flavor = training_hardware(body.agent)
+    api = HfApi(token=os.environ["HF_TOKEN"])
+    hardware = await asyncio.to_thread(
+        lambda: next(item for item in api.list_jobs_hardware() if item.name == flavor)
+    )
+    if hardware.unit_label != "minute":
+        raise HTTPException(503, "Unknown billing unit")
+    try:
+        amount = estimate(
+            Decimal(hardware.unit_cost_micro_usd) / 1_000_000,
+            body.minutes,
+            Decimal(os.environ.get("HF_TRAIN_MAX_USD") or "50"),
+        )
+    except ValueError as exc:
+        return {"status": str(exc)}
+    return {"status": "ready", "cost_usd": amount, "name": flavor}
+
+
+@router.post("/run/plan")
+async def training_run_plan(
+    body: TrainingRunRequest, actor: Reviewer = Depends(require_reviewer),
+) -> dict[str, Any]:
+    if not actor.founder:
+        raise HTTPException(403, "Founder access required")
+    async with runtime().pool().acquire() as conn:
+        refusal = await _training_readiness(conn, body)
+    return refusal or await _training_quote(body)
+
+
+@router.post("/run")
+async def training_run(
+    body: TrainingRunRequest, actor: Reviewer = Depends(require_reviewer),
+) -> dict[str, Any]:
+    if not actor.founder:
+        raise HTTPException(403, "Founder access required")
+    async with runtime().pool().acquire() as conn:
+        refusal = await _training_readiness(conn, body)
+    if refusal:
+        return refusal
+    quote = await _training_quote(body)
+    if quote.get("status") != "ready":
+        return quote
+    from jobs.train.run import run
+    from types import SimpleNamespace
+
+    return await run(SimpleNamespace(
+        receipt=None, minutes=body.minutes, submit=True,
+        day=datetime.now(timezone.utc).date().isoformat(), agent=body.agent,
+    ))
+
+
+@router.post("/receipt")
+async def training_receipt(
+    body: TrainingReceiptRequest, actor: Reviewer = Depends(require_reviewer),
+) -> dict[str, Any]:
+    if not actor.founder:
+        raise HTTPException(403, "Founder access required")
+    if not os.environ.get("HF_TOKEN") or not os.environ.get("HF_ORG"):
+        return {"status": "Hugging Face training is not configured"}
+    from huggingface_hub import HfApi
+    from jobs.train.run import record_receipt
+
+    api = HfApi(token=os.environ["HF_TOKEN"])
+    job = await asyncio.to_thread(
+        lambda: api.inspect_job(job_id=body.job_id, namespace=os.environ["HF_ORG"])
+    )
+    if job.status.stage not in ("COMPLETED", "ERROR", "CANCELED", "DELETED"):
+        return {"status": "job has not finished"}
+    async with runtime().pool().acquire() as conn:
+        ledger_id = await record_receipt(conn, body.job_id, body.billed_usd)
+    return {"status": "complete", "name": body.job_id, "cost_usd": body.billed_usd,
+            "ledger_id": str(ledger_id)}
 
 
 @router.post("/zenas/court-text")

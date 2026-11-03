@@ -55,7 +55,9 @@ async def test_identity_roles_and_region(runtime, monkeypatch):
     assert 'worker.build' in command.allowed_tools(founder)
     assert 'zenas.review' in command.allowed_tools(founder)
     assert 'training.status' in command.allowed_tools(founder)
+    assert {'training.run', 'training.receipt'} <= set(command.allowed_tools(founder))
     assert 'training.status' not in command.allowed_tools(command.Actor(TENANT, 'placeholder-admin', False, tenant_admin=True))
+    assert not {'training.run', 'training.receipt'} & set(command.allowed_tools(command.Actor(TENANT, 'placeholder-admin', False, tenant_admin=True)))
     headers['x-tervory-home-region'] = 'za'
     with pytest.raises(HTTPException) as refused:
         await command.identity(request(**headers))
