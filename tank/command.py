@@ -487,6 +487,10 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
     planned = await policy_code_plan(actor, messages, task_id)
     if planned is not None:
         return planned
+    from command_tools.skala import code_plan as teachers_code_plan
+    planned = await teachers_code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     from tisan_requests import code_plan as tisan_code_plan
     planned = await tisan_code_plan(actor, messages, task_id)
     if planned is not None:
