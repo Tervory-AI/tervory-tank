@@ -247,11 +247,10 @@ limits remain 2.5 GiB / 1.5 CPU; no ZA SSH target or credentials are available t
 builders, and none are requested. Keep both disabled defaults until the founder
 turns the brain on. No larger box is requested.
 
-Both room files use Raw Compose. Boston's existing `/data` volume was read from
-its deployed container. ZA's external `/data` name uses the existing Coolify
-resource ID and volume naming convention; it has not been read on ZA. The
-optional `ZENAS_ZA_DATA_VOLUME` name override lets ops retain its actual existing
-volume. External mode refuses a missing name instead of making empty room data.
+Both room files use Raw Compose. Existing room volume declarations and mounts
+remain unchanged from main on both boxes. The brain mounts only its own new
+`zenas_brain_data`; it never mounts room data. Any future room-data access must
+use the room's existing tools through Tank.
 After an authorized profile deployment, run `ops/seal-check.sh` on each host and
 require Zenas brain and sandbox sealed. The isolation checker takes three Zenas
 container names; Base/Tiger retain five. Hosted CI and both postdeploy host
