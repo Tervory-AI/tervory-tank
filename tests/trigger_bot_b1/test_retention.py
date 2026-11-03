@@ -108,6 +108,21 @@ async def test_counts_receipt_failure_rolls_back_deletion(database, monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_concurrent_message_writer_is_skipped_and_fresh_message_retains_conversation(database, monkeypatch):
+    service = bot(database, monkeypatch)
+    ident = await conversation(database, A)
+    async with database.acquire() as conn, conn.transaction():
+        await conn.fetchval('SELECT id FROM tank.trigger_bot_conversations WHERE tenant_id=$1 AND id=$2 FOR UPDATE', A, ident)
+        result = await service.retain_conversations(A)
+        assert result['conversations'] == 0 and not result['complete']
+        await conn.execute('''INSERT INTO tank.trigger_bot_messages(tenant_id,id,conversation_id,question,outcome)
+            VALUES($1,$2,$3,'placeholder concurrent message','faq')''', A, uuid4(), ident)
+    result = await service.retain_conversations(A)
+    assert result['complete'] and result['conversations'] == 0
+    assert await database.fetchval('SELECT count(*) FROM tank.trigger_bot_messages WHERE tenant_id=$1 AND conversation_id=$2', A, ident) == 2
+
+
+@pytest.mark.asyncio
 async def test_existing_loop_retention_scopes_each_tenant(database, monkeypatch):
     service = bot(database, monkeypatch)
     await conversation(database, A)
