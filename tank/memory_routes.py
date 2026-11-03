@@ -42,6 +42,10 @@ async def hermes(
                 headers={"X-Tank-Key": key, "X-Tervory-Admin": actor},
             )
         if response.status_code >= 400:
+            if response.status_code in (403, 409):
+                detail = response.json().get("detail")
+                if isinstance(detail, dict) and detail.get("result") in {"disabled", "missing", "refused"}:
+                    raise HTTPException(response.status_code, {"result": detail["result"], "published_row": None})
             if response.status_code == 422:
                 detail = response.json().get("detail")
                 if isinstance(detail, list):
