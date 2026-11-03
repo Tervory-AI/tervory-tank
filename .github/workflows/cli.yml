@@ -160,6 +160,10 @@ jobs:
           echo "TMPDIR=$RUNNER_TEMP/cli-w3-tests" >> "$GITHUB_ENV"
       - run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: cli
+      - name: Validate the Seatbelt profile on the macOS runner
+        run: |
+          node --input-type=module -e 'import {seatbeltProfile} from "./cli/src/seatbelt.mjs"; import {writeFile} from "node:fs/promises"; await writeFile(process.env.RUNNER_TEMP + "/cli-w3.sb", await seatbeltProfile(process.cwd()));'
+          /usr/bin/sandbox-exec -f "$RUNNER_TEMP/cli-w3.sb" /usr/bin/true
       - name: CLI tests including outside-write, secret-read and network confinement
         # The same code-mode suite runs in the Ubuntu job. It requires echo's
         # exit 0 and uses a reachable host listener as the network control.
