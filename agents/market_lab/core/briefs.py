@@ -14,6 +14,8 @@ async def result(value):
 
 
 async def gate_reason(ledger, tenant: str, report: dict, *, now: datetime | None = None) -> str | None:
+    if not report['answer'].strip():
+        return 'no_cited_claims'
     citations = report['citations']
     accepted = await gated_facts(ledger, tenant, citations, now=now)
     return 'closed_or_unavailable_citation' if len(accepted) != len(citations) else None
