@@ -1010,7 +1010,7 @@ def _choice_answer(data: dict[str, Any]) -> tuple[str, str]:
 
 # The shared override gate for Command and MoA. Never persist policy changes
 # to pin one call; MoA uses the parent task's policy limits.
-MODEL_OVERRIDE_TASK_TYPES = frozenset({"command.turn"})
+MODEL_OVERRIDE_TASK_TYPES = frozenset({"command.turn", "command.code"})
 MOA_SEAT_TASK = re.compile(r"[a-zA-Z0-9_.-]+#moa\.[a-z][a-z0-9_]{0,79}")
 
 
