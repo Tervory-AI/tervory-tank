@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -11,7 +10,7 @@ from decimal import Decimal
 from rigbox.cart_store import CartStore
 from rigbox.commerce import CommerceError, event_digest, money
 from rigbox.locate import locate, needs_supply, stamp
-from rigbox.locate_live import Holds, confirm
+from rigbox.locate_live import Holds, confirm, hold_secret
 
 WINDOW = 300
 
@@ -110,10 +109,10 @@ class Cart:
             available = await locate(self.store, tenant, product, now=moment)
             if available['public']['status'] == 'available_to_order':
                 # Supplier quantity is checked again at checkout as well.
-                if available['store'].get('quantity', 0) < quantity:
+                if Decimal(str(available['store'].get('quantity') or 0)) < quantity:
                     raise CommerceError('stock')
                 checked = await confirm(self.store, tenant, product, self.service.locate_checker,
-                                        secret=b'cart-internal-hold-not-a-card-token', now=moment, ttl=WINDOW)
+                                        secret=hold_secret(), now=moment, ttl=WINDOW)
                 if 'hold_id' not in checked:
                     raise CommerceError('stock')
                 private = checked['store']
@@ -253,7 +252,9 @@ class Cart:
                 continue
             async with self.rows.lock(tenant, candidate['id']) as rows:
                 row = await rows.get(tenant, candidate['id'])
-                if digest in row['events'] and row['state'] == 'paid':
+                if row['state'] == 'paid':
+                    continue
+                if config['platform'] == 'woocommerce' and str(event.get('id')) != row['remote']['id']:
                     continue
                 platform = await self.platform(tenant, row['config'])
                 order = await platform.read(row['remote'], event)
