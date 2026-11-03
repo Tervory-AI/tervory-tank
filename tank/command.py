@@ -886,7 +886,8 @@ ACTION_TIMEOUT = 180
 
 def action_timeout(tool: str | None) -> int:
     if tool == "base.list.to_crm":
-        return 4200  # At most 100 corridor writes, each with its existing 20s HTTP bound.
+        from base_list_crm import CRM_CARD_SECONDS
+        return CRM_CARD_SECONDS  # 60s discovery + 20 waves * 45s + 60s margin.
     return 390 if tool == "radix.passive.scan" else ACTION_TIMEOUT
 
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
