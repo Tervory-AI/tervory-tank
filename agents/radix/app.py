@@ -58,6 +58,7 @@ async def scan(ctx: JobContext) -> dict:
 app = create_app(
     agent=AGENT,
     handlers={"ping": ping, "scan": scan},
+    job_timeouts={"scan": 360},
     schedules=[
         {
             "tenant_id": HEARTBEAT_TENANT,
