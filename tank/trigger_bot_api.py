@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from tenant_db import tenant_scope
 from trigger_bot_contract import TOOLS, PublicMessage
 from trigger_bot_grounding import exact_origin
-from trigger_bot_shared import FailedKeyLimits, PgRateLimits, hash_key, issue_embed_key
+from trigger_bot_shared import FailedKeyLimits, PgRateLimits, hash_key, issue_embed_key, client_address, proxy_configured
 
 router = APIRouter()
 failed_keys = FailedKeyLimits()
@@ -263,7 +263,7 @@ async def bounded_body(request, cap):
 
 
 async def authenticate(request):
-    peer = request.client.host if request.client else 'unknown'
+    peer = client_address(request)
     reserved = failed_keys.reserve(peer)
     if reserved is None:
         raise HTTPException(429)
@@ -273,9 +273,13 @@ async def authenticate(request):
     if not match or match[1] != runtime().box_region() or not exact_origin(origin):
         raise HTTPException(403)
     tenant = UUID(hex=match[2])
-    with tenant_scope(tenant):
-        row = await runtime().pool().fetchrow('''SELECT origins FROM tank.trigger_bot_embed_keys
-            WHERE tenant_id=$1 AND key_hash=$2 AND region=$3 AND NOT revoked''', tenant, hash_key(match[3]), match[1])
+    try:
+        with tenant_scope(tenant):
+            row = await runtime().pool().fetchrow('''SELECT origins FROM tank.trigger_bot_embed_keys
+                WHERE tenant_id=$1 AND key_hash=$2 AND region=$3 AND NOT revoked''', tenant, hash_key(match[3]), match[1])
+    except Exception:
+        failed_keys.release(reserved)
+        raise
     if row is None or origin not in obj(row['origins']):
         raise HTTPException(403)
     failed_keys.release(reserved)
@@ -284,6 +288,8 @@ async def authenticate(request):
 
 @router.post('/v1/bot/messages')
 async def public_message(request: Request):
+    if not proxy_configured():
+        raise HTTPException(503)
     tenant, origin, peer = await authenticate(request)
     with tenant_scope(tenant):
         limited = await PgRateLimits(runtime().pool()).consume(str(tenant), peer, '/v1/rig/ask')

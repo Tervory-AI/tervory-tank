@@ -43,7 +43,8 @@ export async function POST(request: Request) {
     const response = await fetch(new URL("/v1/bot/messages", target), {
       method: "POST", body, redirect: "error", cache: "no-store",
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(90000)]),
-      headers: { "content-type": "application/json", "origin": origin, "x-bot-key": key },
+      headers: { "content-type": "application/json", "origin": origin, "x-bot-key": key,
+        "x-forwarded-for": request.headers.get("x-forwarded-for") ?? "" },
     });
     if (!response.ok || response.headers.get("Access-Control-Allow-Origin") !== origin) return empty(response.ok ? 502 : response.status);
     const result: unknown = await response.json();

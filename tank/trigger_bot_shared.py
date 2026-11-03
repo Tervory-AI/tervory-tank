@@ -17,12 +17,12 @@ from typing import Any
 from urllib.parse import urlsplit
 from uuid import UUID
 
-QUOTE_ROUTES = frozenset({"/v1/rig/quote", "/v1/rig/link-quote"})
+QUOTE_ROUTES = frozenset({"/v1/rig/quote", "/v1/rig/link-quote", "/v1/trigger/bot/handover"})
 
 
 def trusted_proxy_networks() -> list:
     networks = []
-    for value in os.environ.get("RIG_TRUSTED_PROXY_CIDRS", "").split(","):
+    for value in os.environ.get("TRIGGER_BOT_TRUSTED_PROXY_CIDRS", "").split(","):
         if value.strip():
             network = ipaddress.ip_network(value.strip(), strict=False)
             if network.prefixlen == 0:
