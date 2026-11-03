@@ -442,3 +442,22 @@ jobs:
           name: savings-page-screenshots
           path: ${{ runner.temp }}/core2-screenshots
           if-no-files-found: warn
+
+  # The one required check for the merge queue (3 Nov). Matrix and path-skipped jobs report
+  # under changing names (tank (1)..(3), or plain "tank" when skipped), so the ruleset
+  # requires only this job. It passes when every job below passed or was skipped, and fails
+  # when any failed or was cancelled.
+  ci-ok:
+    if: always()
+    needs: [security, changes, tank, workspace, command-acceptance, savings-page]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Every CI job passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Results: $RESULTS"
+          for r in $RESULTS; do
+            case "$r" in success|skipped) ;; *) echo "A required CI job ended: $r"; exit 1 ;; esac
+          done
