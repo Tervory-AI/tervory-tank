@@ -180,6 +180,42 @@ async def enforce_destroy(body: EnforceTenant, request: Request):
     return await enforce_write_result(response, actor, tool)
 
 
+# ---------- Autumbra code fixes: existing watcher matches, founder Confirm ----------
+
+class FixMatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    match_id: uuid.UUID
+
+
+@router.get("/autumbra/fixes", dependencies=[Depends(admin.require_admin)])
+async def fixes_list(request: Request):
+    from command import identity, require_tool
+    from trigger_routes import code_receipt
+    actor = await identity(request)
+    require_tool(actor, "autumbra.fixes")
+    response = await call_room("GET", "ghost", "/ghost/patch/fixes")
+    if response.status_code != 200:
+        return Response(response.content, status_code=response.status_code, media_type="application/json")
+    return {**response.json(), "cost_usd": 0,
+            "ledger_id": str(await code_receipt(actor.tenant_id, "autumbra.fixes", agent="ghost"))}
+
+
+@router.post("/autumbra/fix/approve", dependencies=[Depends(admin.require_admin)])
+async def fix_approve(body: FixMatch, request: Request):
+    from command import identity, require_tool
+    from trigger_commands import confirmation
+    from trigger_routes import code_receipt
+    actor = await identity(request)
+    tool = "autumbra.fix.approve"
+    require_tool(actor, tool)
+    confirmation(actor, tool, body.model_dump(mode="json"))
+    response = await call_room("POST", "ghost", "/ghost/patch/from-match", body=body.model_dump(mode="json"))
+    if response.status_code != 200:
+        return Response(response.content, status_code=response.status_code, media_type="application/json")
+    return {**response.json(), "cost_usd": 0,
+            "ledger_id": str(await code_receipt(actor.tenant_id, tool, agent="ghost"))}
+
+
 # ---------- Autumbra owner undo (public email link → workspace → Tank → Watch) ----------
 
 @router.post("/autumbra/queue/undo")
