@@ -1,8 +1,8 @@
 # CLI code mode — PR handoff, 3 November 2026
 
 Branch: `codex/cli-code-mode`. Work is isolated at
-`/workspace/codex-cli-code-mode`. Claude opens the PR; the founder merges.
-No PR has been opened by this job. No merge or deployment was performed.
+`/workspace/codex-cli-code-mode`. Claude opened PR #598; the founder merges.
+Main was merged into this branch as recorded below. No PR merge or deployment was performed.
 **Offline verification is not founder acceptance.**
 
 ## PR #598 review fixes — 3 November 2026
@@ -17,11 +17,11 @@ they are not a claim that founder acceptance has happened.
 | --- | --- | --- |
 | 1 | `cli/src/code-tools.mjs:33,78,112,340`; `cli/test/code-mode.test.mjs:201` | Every Git subprocess uses global literal pathspec mode, including scratch application. Ignored tracked names come from `ls-files`, because `check-ignore` rejects global literal mode. Tracked `.e*` cannot include tracked `.env` in a diff. |
 | 2 | `cli/src/code-tools.mjs:314`; `cli/test/code-mode.test.mjs:236` | Status uses `--ignore-submodules=all`. Registered/committed submodule has a distinct clean driver and a same-size edit: removing the flag was independently verified to execute its marker command. Fixed status and diff leave both markers absent. |
-| 3 | `cli/src/code-tools.mjs:27,94,196`; `cli/test/code-mode.test.mjs:261` | Missing-file canonical parent plus basename is checked both when resolving and immediately before rename. `.git` is case-insensitive. Tests cover direct `lnk -> .git` creation, approval-time ancestor swaps, and `.GIT`. |
-| 4 | `cli/src/code-tools.mjs:65,78`; `cli/test/code-mode.test.mjs:280` | Repository Git directory and work tree are pinned after discovery. An approved command creates a nested repository; subsequent list/status/diff still use the original one. Scratch Git has its own explicit directory/work-tree pair. |
+| 3 | `cli/src/code-tools.mjs:27,94,196`; `cli/test/code-mode.test.mjs:266` | Missing-file canonical parent plus basename is checked both when resolving and immediately before rename. `.git` is case-insensitive. Tests cover direct `lnk -> .git` creation, approval-time ancestor swaps, and `.GIT`. |
+| 4 | `cli/src/code-tools.mjs:65,78`; `cli/test/code-mode.test.mjs:285` | Repository Git directory and work tree are pinned after discovery. An approved command creates a nested repository; subsequent list/status/diff still use the original one. Scratch Git has its own explicit directory/work-tree pair. |
 | 5a | `cli/src/code-tools.mjs:33` | Removed the shell option; spawn uses literal `shell: false`. |
 | 5b | `.github/workflows/cli.yml:51`; `cli/src/code-tools.mjs:218` | Ephemeral Ubuntu runner enables unprivileged namespaces when its AppArmor knob exists, then requires a successful Bubblewrap probe. External hosted Node installation is bound read-only and named before approval. PR fake-tank passed (links below). |
-| 5c | `tests/test_perplexity_research.py:414,431` | Added command.code to the additive seed set and compared every copied policy field with command.turn. Targeted test passes; full offline suite is being run, without excluding this test. |
+| 5c | `tests/test_perplexity_research.py:414,431` | Added command.code to the additive seed set and compared every copied policy field with command.turn. Targeted test and the merged-tree Command group pass. The full offline script was run and failed outside this lane; complete output and unrun count are recorded below. |
 | 6 | `cli/test/code-mode.test.mjs:150` | Confinement command must return 0 and print `sandbox-ok`, as well as hide canaries. A failed sandbox cannot pass. |
 | 7 | `cli/src/code-tools.mjs:218,287`; `cli/README.md:50`; `tests/cli_code_mode/worker-proof.mjs:1` | Leading external Node/Python/pytest runner resolves to only its own read-only runtime directories. Venv base Python is included; intermediate links are recreated without mounting their host parent. No HOME/config/SSH/keychain directory is mounted. Actual worker terminal record runs the existing schema test file after y: 2 passed. |
 | 8 | `cli/src/code-mode.mjs:9,22,32`; `tank/command.py:1720,1791`; `tests/test_command_code.py:128` | Prompt UUID plus continuation flag stores the user message once. Bounded redacted history (40 entries / 200,000 UTF-8 bytes) includes earlier prompts, answers, names/arguments as DATA. Backend tests prove three rounds store one user message/three receipts and no history in state/events/tasks. CLI test exercises eviction across 60 offline prompts. |
@@ -67,6 +67,60 @@ The prior security run including Semgrep also
 [passed](https://github.com/Tervory-AI/tervory-tank/actions/runs/41616631339/job/125852066593).
 These links identify the tested revisions; current-head CI remains separately visible on the PR.
 
+### Final merged-tree results and exact full-suite blockers
+
+`TMPDIR="$PWD/.task-tmp" npm test --prefix cli` now passes with the standard
+parallel invocation: **82 passed, 0 failed**, 33.346 seconds. This supersedes the
+earlier host-load deadline failures without changing their timeouts.
+
+The following merged-tree check passed **235 tests**, including all code-mode
+routes, all Command tests, the policy-copy regression, schema and secret checks:
+
+```sh
+TMPDIR="$PWD/.task-tmp" PYTHONPATH=.task-tmp/deps:.task-tmp/forge-deps:tank:tests POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55468/pooltest /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q tests/test_command*.py tests/test_pat_route_corridor.py tests/test_perplexity_research.py::test_schema_applies_twice_and_preserves_policy tests/test_schema.py tests/test_secrets.py --timeout=150 --timeout-method=thread --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+```
+
+Result: exit 0, 235 passed in 500.52 seconds. Complete stdout is in `results.txt`.
+`TMPDIR="$PWD/.task-tmp" node cli/scripts/build-release.mjs --out "$PWD/.task-tmp/review-release"`
+also exited 0 and built all six release artifacts; hashes/sizes are in that file.
+`run_route` was rechecked after the MCP merge and remains byte-identical to main.
+
+The existing `.github/scripts/offline_suite.py` was run with all CI database
+opt-ins, loopback-only sockets, the pinned Forge requirements, existing Chromium,
+four workers, and the script's documented budget scale of 2 for this worker.
+Exact wrapper, preparation commands and full stdout/stderr: **`full-suite.txt`**.
+It completed normally with **exit 1 in 1182 seconds**:
+
+- Main pass: 2,088 passed, 4 failed, 4 skipped. Worker loss left **4,432 of 6,524
+  collected tests unrun**; this is explicitly not a passing full-suite claim.
+- Tiger separate pass: 46 passed, exit 0.
+- Zenas separate pass: 40 passed, exit 0.
+
+Exact main failures (these files are unchanged from origin/main):
+
+1. `tests/test_read1_review.py:367`,
+   `test_raw_text_containers_are_removed_before_serializing[noframes]`:
+   `Page.set_content: Timeout 30000ms exceeded`, waiting for load.
+2. `tests/test_moa_integration.py:245`,
+   `test_all_seven_bench_shapes_use_routed_receipts_and_never_enable`:
+   `assert (1 == 7)`; one failed shape returned instead of seven complete shapes.
+3. `tests/test_tiger_public_policy.py:230`,
+   `test_real_browser_document_and_asset_refusals[429]`: worker gw2 crashed after
+   the per-test timeout; the suite reports `Not properly terminated`.
+4. `tests/test_read1_review.py:428`,
+   `test_cumulative_opacity_below_point_one_is_hidden` (opacity 0.01): worker gw3
+   crashed after the per-test timeout, also `Not properly terminated`.
+
+A focused READ-1 browser diagnosis passed one case then stalled; it was
+interrupted after 295.86 seconds. No READ-1, MoA or Tiger implementation was
+changed to hide these failures. Earlier incomplete attempts and missing Forge
+setup are not counted as successful suite runs.
+
+PR CI on the code revision passed fake-tank, security/Semgrep, Command acceptance,
+Workspace, CodeQL, isolation, nonroot-services and rig-admin. Subsequent evidence
+commits retrigger CI; current-head status is available on the PR. No current-head
+Tank success is claimed without a completed job.
+
 ### Real worker terminal proof and acceptance boundary
 
 Exact recorded command (real stdin/stdout TTY):
@@ -86,7 +140,7 @@ is the actual offline display, not proof of a real receipt.
 
 The founder's live worker question, `/chats` receipt and screenshots are still
 missing. No offline test or rendered log is claimed as that founder test.
-No browser screenshot has been fabricated. No merge/deployment was performed.
+No browser screenshot has been fabricated. No PR merge/deployment was performed.
 Additional terminal wording introduced by the review: `Read-only runner: {path}`.
 The requested directory names are displayed before the existing Run prompt.
 
