@@ -146,3 +146,13 @@ async def test_real_builder_passes_all_four_quality_gates(tmp_path):
     assert all(row['ok'] for row in result['checks'])
     assert len(result['results']) == 4
     assert not any('quality-secrets.fixture' in file for file in result['files'])
+
+
+@pytest.mark.asyncio
+async def test_secret_scanner_line_limit_cannot_hide_unchecked_text(scaffold, tmp_path):
+    (tmp_path / 'long.ts').write_text('x' * 5001)
+    tank = type('Unused', (), {'approved_skill': AsyncMock()})()
+    result = await scaffold._secret_check(tmp_path, TENANT, tank)
+    assert result['ok'] is False
+    assert result['findings'] == [{'file': 'long.ts', 'line': 1, 'rule': 'scan-input-limit'}]
+    tank.approved_skill.assert_not_awaited()
