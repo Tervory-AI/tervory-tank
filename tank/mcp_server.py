@@ -186,7 +186,7 @@ async def endpoint(request: Request):
         if not row['initialized']:
             return rpc_error(ident, -32600, 'Session not initialized', 400)
         if method == 'tools/list':
-            if params:
+            if params.keys() - {'cursor', '_meta'}:
                 return rpc_error(ident, -32602, 'Invalid params')
             return rpc_result(ident, tools(actor))
         if method == 'tools/call':
