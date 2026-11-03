@@ -51,8 +51,7 @@ def room_text(room: str) -> str:
 
 def room_key(room: str, authorization: str = "", x_tank_key: str = "") -> None:
     """Only enabled rooms. Never accept the Workspace or another room's key."""
-    if room not in ROOMS:
-        raise HTTPException(403, "This room does not have a brain pilot.")
+    room = room_text(room)
     bearer = authorization.removeprefix("Bearer ") if authorization.startswith("Bearer ") else ""
     if bearer and x_tank_key and not hmac.compare_digest(bearer.encode(), x_tank_key.encode()):
         raise HTTPException(401, "Conflicting room keys.")
