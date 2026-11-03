@@ -84,7 +84,7 @@ def main() -> None:
                 temporary = path.with_suffix(".tmp")
                 temporary.write_text(json.dumps({"result": result, "signature": signature}))
                 temporary.replace(path)
-            time.sleep(5)
+            time.sleep(15)
 
 
 if __name__ == "__main__":
