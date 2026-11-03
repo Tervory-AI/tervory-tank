@@ -44,7 +44,7 @@ export async function processOutput(command, args, { cwd, shell = false, timeout
         stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
     } catch { return reject(refused()); }
     if (input !== undefined) { child.stdin.on('error', () => {}); child.stdin.end(input); }
-    const collect = chunk => { total += chunk.length; const keep = chunk.subarray(0, Math.max(0, outputBytes - size)); size += keep.length; chunks.push(keep); };
+    const collect = chunk => { total += chunk.length; const keep = chunk.subarray(0, Math.max(0, outputBytes - size)); size += keep.length; if (keep.length) chunks.push(Buffer.from(keep)); };
     child.stdout.on('data', collect); child.stderr.on('data', collect);
     child.on('error', () => { clearTimeout(timer); signal?.removeEventListener('abort', stop); reject(refused()); });
     timer = setTimeout(stop, timeoutMs); signal?.addEventListener('abort', stop, { once: true });
