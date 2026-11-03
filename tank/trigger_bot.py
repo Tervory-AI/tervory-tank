@@ -30,7 +30,7 @@ class Bot:
 
     async def rig_read(self, tenant, product_id=None, question=''):
         if not await self.has_rig(tenant):
-            raise HTTPException(403, 'Rig is not available for this tenant')
+            raise HTTPException(403)
         if product_id and not re.fullmatch(r'[A-Za-z0-9._-]{1,64}', product_id):
             raise ValueError('product_id')
         path = '/v1/rig/products/' + product_id if product_id else '/v1/rig/search'
@@ -106,13 +106,13 @@ class Bot:
         conversation_id = conversation_id or uuid4()
         config = await self.pool.fetchrow('SELECT * FROM tank.trigger_bot_config WHERE tenant_id=$1', tenant)
         if not config or not config['enabled']:
-            raise HTTPException(409, 'Bot is not configured for this tenant')
+            raise HTTPException(409)
         await self.pool.execute('''INSERT INTO tank.trigger_bot_conversations(tenant_id,id,visitor_id)
             VALUES($1,$2,$3) ON CONFLICT DO NOTHING''', tenant, conversation_id, visitor_id)
         conversation = await self.pool.fetchrow('''SELECT * FROM tank.trigger_bot_conversations
             WHERE tenant_id=$1 AND id=$2 AND visitor_id=$3''', tenant, conversation_id, visitor_id)
         if conversation is None:
-            raise HTTPException(404, 'Conversation unavailable')
+            raise HTTPException(404)
         result = None
         if conversation['status'] == 'bot':
             try:
