@@ -115,7 +115,7 @@ async def run_queued(pool, conn, *, execute_scan=None):
     from fastapi import HTTPException
     from passive_routes import Scan, execute
     from passive_store import Store
-    from passive_notices import collect
+    from passive_r6 import collect_notices as collect
     execute_scan = execute_scan or execute
     owner = await conn.fetchrow("""SELECT r.tenant_id,r.domain,r.scan_id FROM agent_radix.regulation_runs r
       JOIN agent_radix.passive_scans s ON s.tenant_id=r.tenant_id AND s.id=r.scan_id
