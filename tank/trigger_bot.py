@@ -136,14 +136,17 @@ class Bot:
             drafts = await conn.fetch('''DELETE FROM tank.trigger_bot_drafts
                 WHERE tenant_id=$1 AND conversation_id=ANY($2::uuid[]) RETURNING id''', tenant, identities)
             messages = await conn.fetch('''DELETE FROM tank.trigger_bot_messages
-                WHERE tenant_id=$1 AND conversation_id=ANY($2::uuid[]) RETURNING id''', tenant, identities)
+                WHERE tenant_id=$1 AND conversation_id=ANY($2::uuid[]) RETURNING id,ledger_id''', tenant, identities)
+            transcripts = await conn.fetch('''DELETE FROM tank.transcripts
+                WHERE tenant_id=$1 AND ledger_id=ANY($2::uuid[]) RETURNING ledger_id''',
+                tenant, [r['ledger_id'] for r in messages if r['ledger_id'] is not None])
             conversations = await conn.fetch('''DELETE FROM tank.trigger_bot_conversations
                 WHERE tenant_id=$1 AND id=ANY($2::uuid[]) RETURNING id''', tenant, identities)
             remaining = await conn.fetchval('''SELECT 1 FROM tank.trigger_bot_conversations c
                 WHERE c.tenant_id=$1 AND COALESCE((SELECT max(m.created_at)
                     FROM tank.trigger_bot_messages m WHERE m.tenant_id=$1 AND m.conversation_id=c.id),c.created_at)
                     <=now()-interval '12 months' LIMIT 1''', tenant)
-            counts = {'conversations': len(conversations), 'messages': len(messages),
+            counts = {'conversations': len(conversations), 'messages': len(messages), 'transcripts': len(transcripts),
                       'drafts': len(drafts), 'confirmed_drafts_kept': len(kept), 'complete': not remaining}
             ledger = await code_receipt(tenant, 'trigger.bot.retention', conn=conn)
             await conn.execute('''INSERT INTO tank.agent_receipts(ledger_id,tenant_id,room,receipt)
