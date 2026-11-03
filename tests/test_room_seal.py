@@ -155,6 +155,13 @@ def test_raw_compose_files_need_nothing_from_coolify(path: Path) -> None:
         for key, value in (service.get("environment") or {}).items():
             assert isinstance(value, (str, int, float)), f"{name}.{key} must be explicit"
     for key, spec in (compose.get("volumes") or {}).items():
+        if path.parent.name == "zenas":
+            # Existing Zenas room volumes must retain main's declarations.
+            # Its new brain volume still requires its own explicit name below.
+            room_data = "za_agent_data" if path.name == "docker-compose.za.yml" else "agent_zenas_data"
+            if key == room_data:
+                assert spec is None, f"volume {key} must stay unchanged from main"
+                continue
         # The live name, so the data survives the switch from normal mode.
         assert spec and spec.get("name"), f"volume {key} must keep its live name"
 
