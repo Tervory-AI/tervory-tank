@@ -1,3 +1,4 @@
+import asyncio
 """Tiger — watches pages and keeps a price history. It knows no industry."""
 
 from __future__ import annotations
@@ -63,11 +64,11 @@ async def ping(ctx: JobContext) -> dict:
 async def _render(url: str, session: str, agent: str, tenant: str, task: str = "", *, catalogue_match: bool = False) -> dict[str, Any]:
     response = await app.state.http.post(
         f"{TIGER_URL.rstrip('/')}/render",
-        json={"url": url, "catalogue_match": catalogue_match, "screenshot": True, "settle_ms": 10000, "max_ms": 25000,
-              "request_timeout_ms": 45000, "price_reader": True},
+        json={"url": url, "catalogue_match": catalogue_match, "screenshot": not catalogue_match, "settle_ms": 0 if catalogue_match else 10000, "max_ms": 10000 if catalogue_match else 25000,
+              "request_timeout_ms": 15000 if catalogue_match else 45000, "price_reader": True},
         headers={"X-Tank-Key": os.environ.get("TANK_KEY", ""), "X-Tenant-ID": tenant,
                  "X-Home-Region": os.environ.get("TANK_REGION", "us-east"), "X-Task-ID": task},
-        timeout=50,
+        timeout=20 if catalogue_match else 50,
     )
     if response.status_code >= 400:
         return {"ok": False, "url": url, "challenge": response.status_code in {401, 403, 429},
@@ -87,16 +88,18 @@ async def _render(url: str, session: str, agent: str, tenant: str, task: str = "
 
 
 async def _fetch_text(url: str, *, catalogue: bool = False):
+    from urllib.parse import urlsplit
     if catalogue:
-        check_url(url)
+        await asyncio.to_thread(check_url, url)
+        cap = 100_000 if urlsplit(url).path == "/robots.txt" else 4_000_000
         async with app.state.http.stream("GET", url, timeout=8, headers={"User-Agent": ROBOTS_UA}, follow_redirects=False) as response:
             raw = bytearray()
             async for chunk in response.aiter_bytes():
-                raw.extend(chunk[:100_000 - len(raw)])
-                if len(raw) >= 100_000:
+                raw.extend(chunk[:cap - len(raw)])
+                if len(raw) >= cap:
                     break
             return {"status": response.status_code, "location": response.headers.get("location"),
-                    "text": raw.decode("utf-8-sig", errors="replace")}
+                    "text": raw.decode("utf-8-sig", errors="replace"), "truncated": len(raw) >= cap}
     response = await app.state.http.get(
         url,
         timeout=8,
@@ -144,19 +147,10 @@ async def check(ctx: JobContext) -> dict:
     if watch is None or not watch.get("enabled"):
         return {"status": "skipped", "url": url, "alerts": []}
 
-    async with app.state.pool.acquire() as conn:
-        present = await conn.fetchval("SELECT to_regclass('agent_tiger.matches')")
-        catalogue = bool(present and await conn.fetchval(
-            "SELECT EXISTS(SELECT 1 FROM agent_tiger.matches WHERE tenant_id=$1 AND url=$2 AND state='confirmed')",
-            UUID(str(ctx.tenant_id)), url))
-
     async def extract(html: str, page_url: str) -> dict[str, Any]:
-        reader = "tiger.price_structured" if catalogue else "tiger.price_extract"
-        return await ctx.tank.run_skill(ctx.tenant_id, reader, {"html": html, "url": page_url})
+        return await ctx.tank.run_skill(ctx.tenant_id, "tiger.price_extract", {"html": html, "url": page_url})
 
     async def ocr(png_base64: str, page_url: str) -> dict[str, Any]:
-        if catalogue:
-            return {"items": []}
         return await ctx.tank.run_skill(ctx.tenant_id, "tiger.price_ocr", {"png_base64": png_base64, "url": page_url})
 
     async def render(url, session, agent, tenant):
@@ -203,6 +197,14 @@ async def rig_discover(ctx: JobContext) -> dict:
 
 
 async def competitor_match(ctx: JobContext) -> dict:
+    from uuid import uuid5, NAMESPACE_URL
+    root = str(ctx.input.get('root_job_id') or ctx.job_id)
+    async with app.state.pool.acquire() as conn:
+        previous = await conn.fetchval('SELECT result FROM agent_tiger.jobs WHERE tenant_id=$1 AND id=$2', UUID(str(ctx.tenant_id)), UUID(str(ctx.job_id)))
+    if isinstance(previous, str):
+        previous = json.loads(previous)
+    if previous and previous.get('slice_saved'):
+        return previous
     corridor = TankRig(app.state.http)
     async def fetch(url):
         return await _fetch_text(url, catalogue=True)
@@ -211,15 +213,29 @@ async def competitor_match(ctx: JobContext) -> dict:
     async def publish(site, url, html, human_check):
         return await corridor.request('POST', '/match-page', json={
             'tenant_id': str(ctx.tenant_id), 'site': site, 'url': url,
+            'job_id': str(ctx.job_id), 'root_job_id': root,
             'html': html, 'human_check': human_check})
-    return await CatalogueDiscovery(fetch, render, DiscoveryGate(app.state.pool), publish).run(
-        ctx.input.get('sites', []), ctx.input.get('products', []))
+    cursor, done = await CatalogueDiscovery(fetch, render, DiscoveryGate(app.state.pool), publish).step(
+        ctx.input.get('sites', []), ctx.input.get('products', []), ctx.input.get('cursor'))
+    continuation = None if done else uuid5(NAMESPACE_URL, str(ctx.job_id) + ':continuation')
+    result = {'slice_saved': True, 'status': 'completed' if done else 'running',
+              'sites': cursor['sites'], 'model_calls': 0, 'continuation_id': str(continuation) if continuation else None}
+    async with app.state.pool.acquire() as conn:
+        async with conn.transaction():
+            if continuation:
+                payload = {**ctx.input, 'root_job_id': root, 'cursor': cursor}
+                await conn.execute("""INSERT INTO agent_tiger.jobs(id,tenant_id,kind,input,timeout_s,run_at)
+                    VALUES($1,$2,'competitor_match',$3::jsonb,45,now()+interval '1 second') ON CONFLICT(id) DO NOTHING""",
+                    continuation, UUID(str(ctx.tenant_id)), json.dumps(payload))
+            await conn.execute('UPDATE agent_tiger.jobs SET result=$3::jsonb WHERE tenant_id=$1 AND id=$2', UUID(str(ctx.tenant_id)), UUID(str(ctx.job_id)), json.dumps(result))
+            await conn.execute('UPDATE agent_tiger.match_runs SET progress=$3::jsonb WHERE tenant_id=$1 AND job_id=$2', UUID(str(ctx.tenant_id)), UUID(root), json.dumps(result))
+    return result
 
 
 app = create_app(
     agent=AGENT,
     handlers={"ping": ping, "check": check, "dispatch": dispatch, "rig_discover": rig_discover, "competitor_match": competitor_match},
-    job_timeouts={"competitor_match": 86400},
+    job_timeouts={"competitor_match": 45},
     schedules=[
         {"tenant_id": HEARTBEAT_TENANT, "cron": "* * * * *", "kind": "rig_discover", "input": {}},
         {
