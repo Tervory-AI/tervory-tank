@@ -5,6 +5,64 @@ Branch: `codex/cli-code-mode`. Work is isolated at
 Main was merged into this branch as recorded below. No PR merge or deployment was performed.
 **Offline verification is not founder acceptance.**
 
+## PR #598 round 2 — current review result
+
+Round 1 items 1–6 and 8 were verified by the review; the founder reports CI green
+on `9610a5d9`. The older local full-suite failure record below is historical,
+not a claim that CI on that revision is red. This round's pushes retrigger CI.
+
+Main `305b833b` was merged at `77060457`, retaining both sides of all five
+conflicted files. `cli/CHANGELOG.md` retains main's 0.1.2 entry and code mode's
+0.2.0 entry; package.json and both lockfile version fields are 0.2.0.
+The code policy remains at `tank/schema.sql:2286`, above the generated-memory
+marker at line 2444. No PR merge or production migration was performed.
+
+| Item | File and line | Fix and proof |
+| --- | --- | --- |
+| 1a | `cli/src/code-tools.mjs:233,247`; `cli/test/code-mode.test.mjs:371` | Candidate and canonical target must both be regular executable files. Directory runners, directory symlinks, nonexecutables and their symlinks refuse before approval. Node binds only its binary file, never bin or its parent. A valid Node runner works, cannot read neighboring .npmrc data and cannot overwrite the bound executable. |
+| 1b | `cli/src/code-tools.mjs:252,293`; `cli/test/code-mode.test.mjs:394` | pip-user/uv launchers under .local/bin are refused. Dedicated Python installs bind only executable files, matching lib/pythonX.Y, pyvenv.cfg and matching libpython files. Their installation parent is never bound. User-data canaries in .local/share/python_keyring and .local/share/fish remain inaccessible. Actual worker venv test still passes with these specific mounts. |
+| 2 | `tank/command.py:1801`; `tests/test_command_code.py:169,175` | Only requests keys or names equal to one of the six tools trigger strict proposal handling. Both requested my-app examples, ordinary arguments prose and fenced answers succeed. Tool envelopes, known tool names and malformed requests retain strict validation. |
+| 3 | `cli/CHANGELOG.md:3`, `cli/package.json:4`, `cli/package-lock.json:3`, `cli/src/client.mjs:456`, `tank/schema.sql:2286` | Kept main's release/help/schema changes and code mode. Version guard explicitly passes 0.1.2 -> 0.2.0. |
+| 4 | `tank/schema.sql:2286`; `tests/test_command_code.py:97,120`; `tests/test_perplexity_research.py:405,436` | Copied policy overrides only task_type and cache_scope='none'. Reapplication repairs an older tenant-cache code policy without replacing other fields. Full row comparison differs from command.turn only by task/cache scope. Real run_route tests in both regions, Auto and pin, use the seeded cache scope and assert zero command.code route_cache rows. run_route itself is unchanged. |
+
+Exact current command output and build hashes: **results.txt**.
+
+```sh
+TMPDIR="$PWD/.task-tmp" npm test --prefix cli
+# exit 0: 89 passed, 0 failed, 27.866 seconds
+
+TMPDIR="$PWD/.task-tmp" node --test --test-name-pattern='external' cli/test/code-mode.test.mjs
+# exit 0: 4 passed, including both reported mount exploits
+
+TMPDIR="$PWD/.task-tmp" PYTHONPATH=.task-tmp/deps:.task-tmp/forge-deps:tank:tests POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55468/pooltest /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q tests/test_command_code.py tests/test_perplexity_research.py::test_schema_applies_twice_and_preserves_policy tests/test_schema.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+# exit 0: 23 passed, 32.05 seconds; actual HTTP/router/SQL, mocked upstream only
+
+sh .github/scripts/cli_version_guard.sh origin/main
+# exit 0: CLI changed and the version moved 0.1.2 -> 0.2.0 with a CHANGELOG entry.
+
+/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+# exit 0: All checks passed!
+
+git diff --check origin/main
+# exit 0
+
+TMPDIR="$PWD/.task-tmp" node cli/scripts/build-release.mjs --out "$PWD/.task-tmp/round2-release"
+# exit 0: all six artifacts built
+```
+
+The owned PostgreSQL container uses loopback port 55468, trust authentication and
+only disposable test data. No SQL was run against production. No live model was
+called to check work, and no real credential was read or created.
+
+The real CLI worker proof was rerun with the existing venv after the mount fix:
+**worker-test.txt** records the exact entrypoint command, real TTY inputs,
+specific bound paths shown before y, **2 passed in 0.19s**, and CLI exit 0.
+Keychain/HTTP are explicitly offline stubs. This does not claim a live founder
+receipt, /chats browser acceptance or screenshot; those are still missing.
+No page/UI/copy was added; no new terminal wording was introduced in round 2.
+`cli/README.md` documents the narrower mounts and the no-cache policy, retaining
+the founder's existing transcript masking/tenant/region storage clarification.
+
 ## PR #598 review fixes — 3 November 2026
 
 The existing PR is <https://github.com/Tervory-AI/tervory-tank/pull/598>.
