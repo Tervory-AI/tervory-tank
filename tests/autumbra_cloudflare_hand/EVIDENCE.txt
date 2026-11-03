@@ -1,0 +1,114 @@
+Autumbra A3 — compact verification evidence
+Working directory: /workspace/codex-autumbra-a3
+CI tank is the full-suite test of record. Its final-head result is recorded in
+https://github.com/Tervory-AI/tervory-tank/pull/566
+Local full-suite runs used incomplete package installations and are diagnostic
+only. They are not evidence of an A3 regression.
+
+SETUP AND SYNCHRONIZATION
+Command: git merge --abort; git fetch origin && git checkout -B codex/autumbra-cloudflare-hand origin/codex/autumbra-cloudflare-hand
+Exit: 0. Summary: reset to Claude's merged branch at 53814105.
+Command: git config user.name 'Codex'
+Exit: 0. Summary: repository-local author configured.
+Command: git config user.email 'codex@users.noreply.github.com'
+Exit: 0. Summary: repository-local email configured.
+Command: git fetch origin main codex/autumbra-a2-hardening
+Exit: 0. Summary: main and A2 fetched; A2 had not landed.
+Command: git merge origin/main
+Exit: 0. Summary: main merged cleanly; repeated before every push.
+Command: git push origin codex/autumbra-cloudflare-hand
+Exit: 0 for every push. Summary: only this branch was pushed.
+Command: git fetch origin && git merge origin/codex/autumbra-cloudflare-hand
+Exit: 0. Summary: retained founder's b4db25f5 .gitleaksignore change.
+Command: git merge origin/main
+Exit: 0. Summary: merged current main b2fa83bd cleanly at b835204b.
+
+LOCAL TEST TOOLING
+Command: TMPDIR=/workspace/codex-autumbra-a3/.proof/tmp /tmp/base-reliability-venv/bin/python -m pip install --no-deps --target .proof/python pytest-socket==0.8.1 starlette==1.7.0 pytest==9.1.1 pytest-asyncio==1.4.1 ruff==0.17.2
+Exit: 0. Summary: checkout-local pinned tooling installed.
+Command: TMPDIR=/workspace/codex-autumbra-a3/.proof/tmp /tmp/base-reliability-venv/bin/python -m pip install --target .proof/python jsonschema pytest-xdist pytest-timeout
+Exit: 0. Summary: missing test packages installed locally.
+Command: printf '\n.proof/\n' >> .git/info/exclude
+Exit: 0. Summary: local tooling excluded from Git's source-file scan.
+
+LOCAL REGRESSION CHECKS
+Command: PYTHONPATH=.proof/python /tmp/base-reliability-venv/bin/python .proof/run_autumbra.py
+Exit: 0. Summary: 446 passed, 3 skipped, 16 warnings in 134.50s.
+This wrapper uses offline_suite.clean_env, removes database settings, and runs
+pytest -q --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+for test_ghost_*.py, test_autumbra_*.py and tests/test_tank_one_door.py.
+Earlier iterations: exit 4 (pytest-socket absent), exit 2 (jsonschema absent),
+then exit 1 (433 passed, 3 skipped, 2 failed). The socket stub and inclusion of
+local tooling in the source scan were corrected before the passing run.
+Command: PYTHONPATH=tank:.proof/python TMPDIR=/workspace/codex-autumbra-a3/.proof/tmp /tmp/base-reliability-venv/bin/python -m pytest -q --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 tests/test_room_seal.py
+Exit: 0. Summary: 89 passed in 80.71s.
+Earlier combined seal/boundary iteration: exit 1; 154 passed, 2 failed. Stable
+health-volume naming and reuse of inspection results preceded the passing run.
+Command: PYTHONPATH=tank:.proof/python TMPDIR=/workspace/codex-autumbra-a3/.proof/tmp /tmp/base-reliability-venv/bin/python -m pytest -q --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 tests/test_autumbra_cloudflare_live.py::test_compose_one_way_health_and_separate_networks tests/test_autumbra_enforce_infra.py::test_enforce_compose_internal_no_model_key
+Exit: 0. Summary: 2 passed in 46.34s after final proxy environment alignment.
+
+LOCAL FULL-SUITE DIAGNOSTICS — NOT THE TEST OF RECORD
+These wrappers strip provider credentials and database settings and invoke the
+repository's offline suite with sockets restricted to loopback.
+Command: PYTHONPATH=.proof/python /tmp/base-reliability-venv/bin/python .proof/run_full.py
+Exit: 143 (wrapper). Summary: its main pytest child completed with 218 failed,
+4992 passed, 638 skipped, 97 errors, 1799 subtests passed in 965.09s.
+Command: PYTHONPATH=.proof/python /tmp/base-reliability-venv/bin/python .proof/run_remaining.py
+Exit: 1. Summary: both isolated groups failed collection; aiosmtpd absent.
+Command: /tmp/base-reliability-venv/bin/python -m pytest -q -p no:cacheprovider -rfEs -n 2 --dist loadfile --max-worker-restart 0 --timeout 300 --timeout-method thread -o faulthandler_timeout=240 --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --durations 15 tests/tiger_g5
+Exit: 1. Summary: collection errors; aiosmtpd absent.
+Command: /tmp/base-reliability-venv/bin/python -m pytest -q -p no:cacheprovider -rfEs -n 2 --dist loadfile --max-worker-restart 0 --timeout 300 --timeout-method thread -o faulthandler_timeout=240 --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --durations 15 tests/zenas_regulation_alerts
+Exit: 4. Summary: conftest import failed; aiosmtpd absent.
+Command: /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python .proof/full_complete_env.py > .proof/full-complete-env.txt 2>&1
+Exit: 1. Summary: runner finished in 1176s; main 27 failed, 3887 passed,
+398 skipped, 69 errors, 277 subtests passed; Tiger G5 1 failed, 19 passed,
+21 skipped, 1 error; Zenas alerts exit 124 after 180s. This older environment
+also lacked jsonschema, jwt and phonenumbers. CI supplies the required packages.
+Underlying full-suite command: python3 .github/scripts/offline_suite.py
+
+STATIC AND READ-ONLY CHECKS
+Command: PYTHONPATH=.proof/python /tmp/base-reliability-venv/bin/python -m ruff check agents/ghost/site_health.py agents/ghost/cloudflare_edge.py agents/ghost/enforce_apply.py agents/ghost/enforce_app.py tests/test_autumbra_cloudflare_live.py tests/autumbra_cloudflare_hand/compose_probe.py --select E9,F
+Exit: 0. Summary: All checks passed!
+Command: bash -n ops/seal-check.sh
+Exit: 0. Summary: shell syntax valid.
+Command: git diff --check
+Exit: 0. Summary: clean diff.
+Command: git diff origin/main -- agents/ghost/shields.py agents/ghost/never_block.py agents/ghost/client_settings.py
+Exit: 0. Summary: no protected-file changes.
+Command: bash ops/seal-check.sh
+Exit: 1. Summary: existing Trigger network leaks; no deployed Autumbra rooms.
+No deployed Autumbra seal is claimed.
+
+CI COMPOSE ISOLATION
+Command: python tests/autumbra_cloudflare_hand/compose_probe.py run
+Exit: 0 in the successful runs below. Summary: allowed tunnels work; forbidden
+hosts, direct egress, Tank and the other client are refused from both viewpoints.
+https://github.com/Tervory-AI/tervory-tank/actions/runs/41625079306
+https://github.com/Tervory-AI/tervory-tank/actions/runs/41626330407
+https://github.com/Tervory-AI/tervory-tank/actions/runs/41628312785
+First CI iteration: exit 1; runner Docker engine lacked interface_name support.
+The workflow now supplies a compatible engine. The CodeQL wildcard-bind finding
+was fixed by binding fake upstreams to their exact private interfaces.
+Final-head checks: https://github.com/Tervory-AI/tervory-tank/pull/566/checks
+
+PR RECORD
+Command: gh pr edit 566 --body-file tests/autumbra_cloudflare_hand/PR.md
+Exit: 1. Summary: gh encountered the deprecated projectCards GraphQL field.
+Command: gh api repos/Tervory-AI/tervory-tank/pulls/566 --method PATCH --input .proof/pr-body.json --jq .html_url
+Exit: 0. Summary: updated the same PR from JSON generated from the Markdown.
+Command: gh run list --workflow ci.yml --branch codex/autumbra-cloudflare-hand --json databaseId,headSha,status,conclusion,url
+Exit: 0. Summary: CI run and head identities inspected; final tank outcome is
+recorded in the PR body without another source push.
+
+FOUNDER ITEMS STILL OUTSTANDING
+A2 production email, founder-managed Coolify setting values, a clean deployed
+seal, and the founder's M24 browser screenshots remain outstanding. No live
+Cloudflare mutation, inbox delivery or founder browser acceptance is claimed.
+
+REVIEW FIXES AT THE NEW HEAD
+Command: /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python .proof/run_review.py tests/test_autumbra_a3_review.py tests/test_autumbra_cloudflare_hand.py tests/test_autumbra_cloudflare_live.py tests/test_bucket1_radix.py tests/test_radix_passive.py
+Exit: 0. Summary: 182 passed, 6 skipped in 37.91s. Quota-free probes, pinned
+control/retry, exact opt-in SNI, project-only idle observer, and post-apply
+signed health with a virtual 60-second deadline are covered. Commands/results
+for each independently pushed fix are recorded in PR.md. CI tank on the final
+review-fix head is recorded in the GitHub PR body after completion.
