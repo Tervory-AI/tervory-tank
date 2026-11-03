@@ -183,6 +183,51 @@ async def decision(system, match_id, decision='confirm', tenant=TENANT):
 
 
 @pytest.mark.asyncio
+async def test_review_read_is_tenant_scoped_newest_first_bounded_and_receipted(corridor):
+    for tenant in (TENANT, OTHER):
+        await corridor.pool.execute("""INSERT INTO agent_tiger.matches
+            (tenant_id,sku,url,method,identifiers,seen_on,state,checked_at)
+            SELECT $1,'own',$2 || n,'brand_mpn','{"seen":{"brand":"Offline brand","mpn":"ABC-1"}}'::jsonb,
+                $2 || n,CASE WHEN n % 2=0 THEN 'suggested' ELSE 'rejected' END,
+                now() - make_interval(secs => n) FROM generate_series(1,105) n""", tenant, SITE + '/item-')
+    await publish(corridor, markup())  # Confirmed matches are excluded.
+    response = await corridor.client.get('/v1/access/tiger/matches')
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert len(result['matches']) == 100
+    assert [row['url'] for row in result['matches']] == [SITE + '/item-' + str(n) for n in range(1,101)]
+    assert all(row['tenant_id'] == str(TENANT) for row in result['matches'])
+    assert all(row['identifiers']['seen']['mpn'] == 'ABC-1' and row['seen_on'] == row['url'] for row in result['matches'])
+    receipt = await corridor.pool.fetchrow('SELECT * FROM tank.ledger WHERE id=$1', UUID(result['ledger_id']))
+    assert receipt['tenant_id'] == TENANT and receipt['agent'] == 'tiger'
+    assert receipt['task_type'] == 'tiger.matches' and receipt['cost_usd'] == 0
+    assert command.ADAPTERS['tiger.matches'].method == 'GET'
+
+
+@pytest.mark.asyncio
+async def test_review_undo_requires_confirmation_and_only_changes_own_rejection(corridor):
+    row = (await publish(corridor, markup(gtin13=None)))['matches'][0]
+    match_id = row['id']
+    assert (await decision(corridor, match_id, 'undo')).status_code == 409
+    assert (await decision(corridor, match_id, 'reject')).status_code == 200
+    response = await corridor.client.post('/v1/access/tiger/match/undo', json={'match_id': match_id})
+    assert response.status_code == 409
+    assert (await decision(corridor, match_id, 'undo', OTHER)).status_code == 404
+    response = await decision(corridor, match_id, 'undo')
+    assert response.status_code == 200 and response.json()['match']['state'] == 'suggested'
+    assert response.json()['match']['identifiers'] == row['identifiers']
+    assert (await decision(corridor, match_id, 'confirm')).status_code == 200
+    assert (await decision(corridor, match_id, 'undo')).status_code == 409
+    assert await corridor.pool.fetchval('SELECT state FROM agent_tiger.matches WHERE id=$1', UUID(match_id)) == 'confirmed'
+
+
+@pytest.mark.asyncio
+async def test_review_read_requires_tiger_entitlement(corridor):
+    await corridor.pool.execute("DELETE FROM tank.tenant_squad WHERE tenant_id=$1 AND agent='tiger'", TENANT)
+    assert (await corridor.client.get('/v1/access/tiger/matches')).status_code == 403
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('html', [markup(gtin13='5012345678900'), markup(gtin13=None, brand=None, mpn=None, name='own')])
 async def test_mismatch_and_title_only_never_write_links_or_watches(corridor, html):
     assert (await publish(corridor, html))['matches'] == []
@@ -375,7 +420,7 @@ async def test_explicit_planning_requires_tiger_squad_and_never_uses_a_model(mon
     monkeypatch.setattr(command,'authorized_actor',same)
     monkeypatch.setattr(trigger_routes,'code_receipt',AsyncMock(return_value=TENANT))
     actor = command.Actor(TENANT,'offline',False,frozenset({'tiger'}))
-    for text in ('tiger.match','tiger.position','tiger.match.confirm '+str(OTHER),'tiger.match.reject '+str(OTHER)):
+    for text in ('tiger.match','tiger.position','tiger.matches','tiger.match.confirm '+str(OTHER),'tiger.match.reject '+str(OTHER),'tiger.match.undo '+str(OTHER)):
         plan = await command.tiger_code_plan(actor,[{'role':'user','content':text}],None)
         assert json.loads(plan.content)['actions'][0]['tool'] == text.split()[0]
     with pytest.raises(HTTPException) as exc:
