@@ -100,7 +100,7 @@ def test_sealed_rooms_are_marked_raw_compose(room: str) -> None:
 
 @pytest.mark.parametrize("room, sealed", [
     ("base", {"base-sandbox", "base-browser"}),
-    ("tiger", {"tiger-browser"}),
+    ("tiger", {"tiger-browser", "tiger-sandbox"}),
     ("rig", {"rig-sandbox", "rig-browser", "rig-forge"}),
     # Radix is sealed on the live host today; this keeps it so.
     ("radix", {"agent-radix"}),
