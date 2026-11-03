@@ -159,24 +159,33 @@ class Sources:
             raise
 
     async def search(self, tenant: UUID, question: str) -> list[Passage]:
-        sql = '''SELECT p.* FROM tank.trigger_bot_passages p JOIN tank.trigger_bot_sources s
+        rows = await self.pool.fetch('''SELECT p.* FROM tank.trigger_bot_passages p JOIN tank.trigger_bot_sources s
                  ON s.tenant_id=p.tenant_id AND s.id=p.source_id WHERE p.tenant_id=$1
                  AND s.status='ready' AND s.checked_at>now()-interval '7 days'
                  AND (p.kind<>'faq' OR NOT EXISTS(SELECT 1 FROM tank.trigger_bot_sources newer
                    WHERE newer.tenant_id=p.tenant_id AND newer.kind='faq' AND newer.status<>'removed'
                    AND lower(trim(newer.content::jsonb->>'question'))=lower(trim(p.question))
-                   AND (newer.created_at,newer.id)>(s.created_at,s.id))) '''
-        rows = await self.pool.fetch(sql + '''AND p.search @@ plainto_tsquery('english',$2)
+                   AND (newer.created_at,newer.id)>(s.created_at,s.id))) AND p.search @@ plainto_tsquery('english',$2)
             ORDER BY ts_rank_cd(p.search,plainto_tsquery('english',$2)) DESC LIMIT 24''', tenant, question)
         terms = set(re.findall(r'\w+', question.casefold()))
-        lexical = [{**dict(r), 'score': len(terms & set(re.findall(r'\w+', r['text'].casefold()))) / max(1, len(terms))} for r in rows]
+        def score(row):
+            other = set(re.findall(r'\w+', row['text'].casefold()))
+            denominator = len(terms | other) if row['kind'] == 'faq' else len(terms)
+            return len(terms & other) / max(1, denominator)
+        lexical = [{**dict(r), 'score': score(r)} for r in rows]
         try:
             points = await self.index.query(tenant, self.region, question)
         except Exception as exc:  # noqa: BLE001 — fail closed at service boundary
             logging.getLogger(__name__).warning('Bot vector lookup unavailable (%s)', type(exc).__name__)
             points = []  # Full-text evidence stays authoritative; never query another tenant.
         scores = dict(points)
-        vector_rows = await self.pool.fetch(sql + 'AND p.id=ANY($2::uuid[])', tenant, list(scores)) if scores else []
-        vectors = [{**dict(r), 'score': scores[r['id']]} for r in vector_rows]
+        vector_rows = await self.pool.fetch('''SELECT p.* FROM tank.trigger_bot_passages p JOIN tank.trigger_bot_sources s
+                 ON s.tenant_id=p.tenant_id AND s.id=p.source_id WHERE p.tenant_id=$1
+                 AND s.status='ready' AND s.checked_at>now()-interval '7 days'
+                 AND (p.kind<>'faq' OR NOT EXISTS(SELECT 1 FROM tank.trigger_bot_sources newer
+                   WHERE newer.tenant_id=p.tenant_id AND newer.kind='faq' AND newer.status<>'removed'
+                   AND lower(trim(newer.content::jsonb->>'question'))=lower(trim(p.question))
+                   AND (newer.created_at,newer.id)>(s.created_at,s.id))) AND p.id=ANY($2::uuid[])''', tenant, list(scores)) if scores else []
+        vectors = [{**dict(r), 'score': score(r) if r['kind'] == 'faq' else scores[r['id']]} for r in vector_rows]
         return [Passage(r['id'], tenant, r['source_id'], r['text'], r['url'], r['title'], r['kind'],
                         r['score'], r.get('sku'), r.get('approved_answer')) for r in fuse(tenant, lexical, vectors)]

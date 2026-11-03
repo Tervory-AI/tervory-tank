@@ -29,7 +29,7 @@ async def respond(tenant: UUID, question: str, *, retrieve, route, live_rig, rec
             current = await live_rig(tenant, passage)
             if current is not None and current.tenant_id == tenant:
                 safe.append(current)
-        elif not price_question and not PRICE_OR_STOCK.search(passage.text + (passage.approved_answer or '')):
+        elif passage.kind == 'faq' or (not price_question and not PRICE_OR_STOCK.search(passage.text)):
             safe.append(passage)
     for passage in safe:
         if (passage.kind == 'faq' and passage.approved_answer and passage.score >= FAQ_THRESHOLD
@@ -51,7 +51,7 @@ async def respond(tenant: UUID, question: str, *, retrieve, route, live_rig, rec
             verified = grounded(result.content, context)
             if verified:
                 candidate, used = verified
-                if not PRICE_OR_STOCK.search(candidate) or all(p.kind == 'rig' for p in used):
+                if not PRICE_OR_STOCK.search(candidate) or all(p.kind in {'rig', 'faq'} for p in used):
                     answer, cited, outcome = candidate, used, 'sources'
         except Exception as exc:  # noqa: BLE001 — fail closed at service boundary
             logging.getLogger(__name__).warning('Bot route unavailable (%s)', type(exc).__name__)
