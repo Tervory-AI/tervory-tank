@@ -218,7 +218,8 @@ async def test_worker_only_notice_cookie_and_shared_watch_lock(pool):
     async def execute_scan(s, body, **kwargs):
         calls.append(kwargs)
         assert body.tenant_id == A and body.target == TARGET and kwargs['watched']
-        assert kwargs['scanner'] is notices.collect
+        from passive_r6 import collect_notices
+        assert kwargs['scanner'] is collect_notices
         assert await s.running(A, kwargs['ident'])
         await s.complete(A, kwargs['ident'], [])
     async with pool.acquire() as conn:
