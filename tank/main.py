@@ -1416,8 +1416,9 @@ async def run_route(
                     headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
                     json={"model": model, "messages": messages, **dispatched_settings, **routing},
                 )
-        if routing.get("model") and r.headers.get("x-litellm-model-group") == routing["model"]:
-            r.headers["x-litellm-model-group"] = model
+        answered_group = r.headers.get("x-litellm-model-group")
+        if answered_group in routing.aliases:
+            r.headers["x-litellm-model-group"] = routing.aliases[answered_group]
     except StreamFailure as exc:
         ledger_id = uuid.uuid4()
         async with pool().acquire() as conn:
