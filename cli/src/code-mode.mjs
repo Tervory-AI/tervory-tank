@@ -8,7 +8,9 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
   const thread = (await tank.json('/v1/command/threads', {})).thread_id;
   io.write(`Thread ${sanitize(thread)}\n`);
   const notesFolder = await CodeFolder.create(local.gitWorkTree);
-  const notes = await notesFolder.read('AGENTS.md');
+  let notes = { exists: false };
+  try { notes = await notesFolder.read('AGENTS.md'); }
+  catch { io.write('AGENTS.md skipped: Code tool refused.\n'); }
   const project = notes.exists ? { kind: 'project', content: notes.text } : null;
   const history = [];
   const remember = (kind, content) => {
@@ -57,6 +59,7 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
             const index = plan.requests.slice(0, plan.requests.indexOf(request)).filter(item => item.name === 'tervory').length;
             const card = plan.cards?.[index];
             if (!card || card.tool !== request.arguments.tool || card.status !== 'pending') throw new Error('Tank sent an invalid answer.');
+            io.write(sanitize(redactSecrets(JSON.stringify({ tool: card.tool, arguments: card.arguments ?? {} }))) + '\n');
             const confirmed = await confirmCard(tank, card, io);
             if (confirmed.status === 'cancelled') result = { tool: card.tool, status: 'cancelled' };
             else {
