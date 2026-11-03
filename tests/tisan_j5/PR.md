@@ -15,6 +15,7 @@ The one authorized `git fetch origin && git merge origin/main` completed as `3aa
 - `.github/workflows/ci.yml:192`: install the same Dockerfile-pinned, checksum-verified binary during CI setup, so all real k6 tests run in the offline Tank suite rather than skipping for a missing executable. No duplicate version/checksum constants.
 - `.gitleaksignore:58`: eight exact historical fingerprints for the copied 1.1.0 Figma eval identifiers. The current first six cases remain byte-identical to 1.0.1 as required by the review. These are the same already-reviewed file identifiers (which grant no access), not credentials. No rule, prefix or path-wide exception was added. The full branch scan is clean.
 - `tests/tisan_j5/results.json:1`: actual clean-template checks and existing presenter result rows.
+- `tests/tisan_j5/image.json:1`: measured image delta and a runtime smoke with Docker networking disabled; source hashes match the current files.
 - `tests/tisan_j5/PR.md:1`: gate evidence and founder acceptance boundary.
 
 ## Local validation
@@ -60,7 +61,26 @@ The CI setup step was also executed directly from the parsed workflow. It downlo
 
 ## Image measurement and CI
 
-The baseline is the merged pre-J5 context (`3aadec73`). Docker's uncompressed image size is **3,711,284,276 bytes**. Final measurement and final-head CI results are recorded in the gate handoff comment on PR #627 once available. CI's `tank (1)`, `tank (2)`, `tank (3)` and `workspace` jobs are the full-suite test of record; local focused checks do not substitute for those results.
+The baseline is the merged pre-J5 context (`3aadec73`). Docker's uncompressed image size is **3,711,284,276 bytes**. The final image is **3,815,972,011 bytes**, a change of **+104,687,735 bytes** (about 99.84 MiB). The final image runtime context is `78d3a084`; later commits only change tests, CI and evidence, and all Docker COPY inputs are unchanged. [image.json](image.json) records image IDs, exact sizes, source hashes and the actual network-disabled smoke. Final-head CI results are recorded in the gate handoff comment on PR #627. CI's `tank (1)`, `tank (2)`, `tank (3)` and `workspace` jobs are the full-suite test of record; local focused checks do not substitute for those results.
+
+```sh
+mkdir -p .venv/j5
+# Baseline context exported before J5 changes:
+git archive 3aadec73 | tar -xf - -C .venv/j5
+docker build -f agents/tisan/Dockerfile -t codex-tisan-w3-j5:before .venv/j5
+# Exit 0.
+git archive 78d3a084 | tar -xf - -C .venv/j5-final
+docker build -f agents/tisan/Dockerfile -t codex-tisan-w3-j5:final .venv/j5-final
+# Exit 0.
+docker image inspect codex-tisan-w3-j5:before codex-tisan-w3-j5:final --format '{{.RepoTags}} {{.Size}}'
+# before: 3711284276; final: 3815972011.
+docker run --rm --network none --memory 512m --cpus 0.5 --entrypoint python -i codex-tisan-w3-j5:final - < .venv/j5-image-proof.py
+# Exit 0. The stdlib loopback fixture returned 200 on all 45 clean requests;
+# all 45 requests to the isolated 500 fixture failed the check as required.
+# Actual installed k6 1.8.2; no Docker network; current source hashes verified.
+```
+
+The final image was rebuilt after formatting/name-only script changes so its source hashes match the current branch exactly. An earlier completed intermediate image was not used for the final measurement. The disposable Postgres container was stopped and automatically removed after the regression run.
 
 ## Founder acceptance after merge/deploy
 
