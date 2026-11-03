@@ -105,7 +105,7 @@ async def test_once_per_channel_saved_body_and_signature(database, ledger, catch
 
 
 @pytest.mark.asyncio
-async def test_alerts_off_and_pre_opt_in_reports_send_nothing(database, ledger, catcher, receiver):
+async def test_alerts_off_sends_nothing(database, ledger, catcher, receiver):
     await opt_in(database, email=False, webhook=False)
     await briefs.save(ledger, report(), now=NOW)
     async def call(operation, payload): return await corridor(database, operation, payload)
@@ -189,7 +189,7 @@ async def test_last_twelve_briefs_are_tenant_scoped_zero_cost_code_read(database
 
 
 @pytest.mark.asyncio
-async def test_recheck_gate_before_claim_and_atomic_claim_race():
+async def test_memory_claim_allows_only_one_transition():
     ledger = MemoryLedger()
     saved = report(citations=[])
     await briefs.save(ledger, saved, now=NOW)
@@ -211,3 +211,20 @@ async def test_gate_is_rechecked_when_a_queued_report_is_claimed():
     assert await store.pending(str(OWNER), 'email') == []
     assert ledger.brief_deliveries[(str(OWNER), saved['id'], 'email')]['status'] == 'held'
     corridor.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sql_claim_race_schema_reapply_and_report_queue_rollback(database, ledger):
+    import asyncpg
+    await ledger.apply_schema()  # Additive room schema is safe to apply again.
+    saved = report(citations=[])
+    await briefs.save(ledger, saved, now=NOW)
+    async def claim():
+        async with database.pool.acquire() as conn:
+            return await PostgresLedger(conn).update_brief(str(OWNER), saved['id'], 'email', 'sending', expected='pending')
+    winners = await asyncio.gather(claim(), claim())
+    assert sorted(winners) == [False, True]
+    broken = report(citations=[])
+    with pytest.raises(asyncpg.CheckViolationError):
+        await ledger.save_brief(broken, 'placeholder_invalid_status', None)
+    assert await database.pool.fetchval('SELECT count(*) FROM agent_market_lab.reports WHERE id=$1', UUID(broken['id'])) == 0
