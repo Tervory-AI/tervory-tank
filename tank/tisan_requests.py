@@ -13,12 +13,12 @@ from tenant_db import tenant_path, tenant_transaction
 
 TOOLS = ['tisan.request', 'tisan.preview', 'tisan.feedback', 'tisan.handover']
 MOVES = {'requested': {'changes_requested', 'accepted'},
-         'changes_requested': {'accepted'}, 'accepted': set()}
+         'changes_requested': {'changes_requested', 'accepted'}, 'accepted': set()}
 
 
 class RequestIdArgs(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    request_id: UUID
+    slug: str = Field(min_length=1, max_length=60, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 class FeedbackArgs(RequestIdArgs):
@@ -90,23 +90,32 @@ class Store:
             refused('not_found', 404)
         return dict(row)
 
-    @tenant_path('tenant')
-    async def preview(self, tenant, request):
-        async with tenant_transaction(self.pool) as conn:
-            row = await self.get(conn, tenant, request)
-            data = obj(row['data'])
-            return {'request_id': str(request), **await latest(tenant, data['slug'])}
+    async def open_request(self, conn, tenant, slug):
+        row = await conn.fetchrow("SELECT * FROM tank.tisan_requests WHERE tenant_id=$1 AND data->>'slug'=$2 "
+                                  "AND state IN ('requested','changes_requested') "
+                                  "ORDER BY created_at DESC,request_id DESC LIMIT 1 FOR UPDATE", tenant, slug)
+        if row is None:
+            refused('not_found', 404)
+        return dict(row)
 
     @tenant_path('tenant')
-    async def move(self, tenant, actor, operation, request, target, text=None):
+    async def preview(self, tenant, slug):
         async with tenant_transaction(self.pool) as conn:
-            row = await self.get(conn, tenant, request)
+            row = await self.open_request(conn, tenant, slug)
+            published = await latest(tenant, slug)
+            return evidence(row['request_id'], row['state'], published)
+
+    @tenant_path('tenant')
+    async def move(self, tenant, actor, operation, slug, target, text=None):
+        async with tenant_transaction(self.pool) as conn:
+            row = await self.open_request(conn, tenant, slug)
+            request = row['request_id']
             prior = await conn.fetchrow("SELECT request_id,kind,actor,build,\"commit\",text FROM tank.tisan_request_events "
                                         "WHERE tenant_id=$1 AND event_id=$2", tenant, operation)
             if prior:
                 if (prior['request_id'], prior['kind'], prior['actor'], prior['text']) != (request, target, actor, text):
                     refused('operation_changed')
-                return {'request_id': str(request), 'status': prior['kind'], 'build': prior['build'], 'commit': prior['commit']}
+                return evidence(request, prior['kind'], dict(prior))
             if target not in MOVES.get(row['state'], set()):
                 refused('invalid_transition')
             published = await latest(tenant, obj(row['data'])['slug'])
@@ -118,7 +127,16 @@ class Store:
                                published['build'], published['commit'], text)
             await conn.execute("UPDATE tank.tisan_requests SET state=$3,build=$4,\"commit\"=$5,updated_at=now() "
                                "WHERE tenant_id=$1 AND request_id=$2", tenant, request, target, published['build'], published['commit'])
-        return {'request_id': str(request), 'status': target, 'build': published['build'], 'commit': published['commit']}
+        return evidence(request, target, published)
+
+
+def evidence(request, state, published):
+    result = {'request_id': str(request), 'status': state}
+    if published.get('build') is not None:
+        result.update(build=published['build'], build_id=published['build'], commit=published['commit'])
+    if published.get('url'):
+        result['url'] = published['url']
+    return result
 
 
 def obj(value):
@@ -137,8 +155,10 @@ async def code_plan(actor, messages, task_id):
     actor = await authorized_actor(actor)
     tool, raw = 'tisan.' + match[1].lower(), match[2]
     try:
-        args = {'request_id': str(UUID(raw.strip()))} if tool in ('tisan.preview', 'tisan.handover') and not raw.lstrip().startswith('{') else json.loads(raw)
+        args = {'slug': raw.strip()} if tool in ('tisan.preview', 'tisan.handover') and re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', raw.strip()) else json.loads(raw)
     except ValueError:
+        refused('invalid_arguments', 422)
+    if not isinstance(args, dict):
         refused('invalid_arguments', 422)
     action = validate_action(PlannedAction(tool=tool, arguments=args), actor)
     return SimpleNamespace(content=json.dumps({'text': '', 'actions': [action.model_dump(mode='json')]}),
@@ -165,23 +185,23 @@ def build_router():
         return await result(actor, 'tisan.request', await Store(db()).create(actor.tenant_id, actor.user_id, operation, data))
 
     @router.get('/preview')
-    async def preview(request_id: UUID, actor: Annotated[Actor, Depends(identity)]):
+    async def preview(slug: Annotated[str, Field(min_length=1, max_length=60, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")], actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, 'tisan.preview')
-        return await result(actor, 'tisan.preview', await Store(db()).preview(actor.tenant_id, request_id))
+        return await result(actor, 'tisan.preview', await Store(db()).preview(actor.tenant_id, slug))
 
     @router.post('/feedback')
     async def feedback(args: FeedbackArgs, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, 'tisan.feedback')
         operation = confirmation(actor, 'tisan.feedback', args.model_dump(mode='json', exclude_none=True))
         return await result(actor, 'tisan.feedback', await Store(db()).move(actor.tenant_id, actor.user_id, operation,
-                            args.request_id, 'changes_requested', args.text))
+                            args.slug, 'changes_requested', args.text))
 
     @router.post('/handover')
     async def handover(args: RequestIdArgs, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, 'tisan.handover')
         operation = confirmation(actor, 'tisan.handover', args.model_dump(mode='json', exclude_none=True))
         return await result(actor, 'tisan.handover', await Store(db()).move(actor.tenant_id, actor.user_id, operation,
-                            args.request_id, 'accepted'))
+                            args.slug, 'accepted'))
     return router
 
 
