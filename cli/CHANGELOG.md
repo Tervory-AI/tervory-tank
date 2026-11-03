@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0 — 2026-11-03
+
+- Code mode proposes authorized Tervory and connected MCP tools through existing Confirm cards, and returns redacted card results as data.
+- Bounded, redacted git-root AGENTS.md project notes accompany every prompt without entering thread, task or event storage.
+
 ## 0.2.0 — 2026-11-03
 
 - Interactive `tervory code [folder]` sessions use the existing regional token corridor and Tank's ladder with the new `command.code` task.
