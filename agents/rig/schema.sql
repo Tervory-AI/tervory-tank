@@ -542,6 +542,15 @@ ALTER TABLE agent_rig.supplier_purchase_orders ADD COLUMN IF NOT EXISTS sent_at 
 -- to the back instead of blocking newer ones.
 ALTER TABLE agent_rig.quotes ADD COLUMN IF NOT EXISTS locate_attempt_at timestamptz;
 
+-- Store-owned US checkout. Existing retailers remain in quote mode.
+ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS commerce jsonb NOT NULL DEFAULT '{}';
+CREATE TABLE IF NOT EXISTS agent_rig.commerce_state (
+    tenant_id uuid NOT NULL,
+    id text NOT NULL,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (tenant_id, id)
+);
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE TABLE IF NOT EXISTS agent_rig.memory_records (
     id uuid PRIMARY KEY,
@@ -592,11 +601,3 @@ CREATE TABLE IF NOT EXISTS agent_rig.memory_publish_log (
 );
 -- END GENERATED AGENT MEMORY
 
--- Store-owned US checkout. Existing retailers remain in quote mode.
-ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS commerce jsonb NOT NULL DEFAULT '{}';
-CREATE TABLE IF NOT EXISTS agent_rig.commerce_state (
-    tenant_id uuid NOT NULL,
-    id text NOT NULL,
-    payload jsonb NOT NULL,
-    PRIMARY KEY (tenant_id, id)
-);
