@@ -75,8 +75,9 @@ and **1,799 subtests passed**; separate Tiger and Zenas runs passed **46** and
 **40** tests. The ten failures all pass on focused retries after correcting
 scratch/dependency setup. The original full command's exit 1 remains recorded;
 it is not relabelled green. Earlier incomplete/timed-out runs and the corrected
-case-study regression are also recorded. A final current-head Trigger/Command
-run is finishing; its exact completion will be appended to the evidence.
+case-study regression are also recorded. The final current-head Trigger/Command/M1 selection passed **489 tests, with
+2 skips**. The skipped CRM WSGI module then passed **4 tests** in its pinned
+Django runtime. The real Trigger room/LanguageTool integration remains unrun.
 
 **Founder test and screenshots: not performed or available.** The required test
 is Custom Nation in its own browser: connect its actual profile, approve and
