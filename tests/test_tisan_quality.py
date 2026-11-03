@@ -28,12 +28,12 @@ def scaffold():
 
 
 def transport(calls, approved=True):
-    engine = load('q1_scanner', ROOT / 'tank/skills/scan.secrets/1.0.2/engine.py')
+    engine = load('q1_scanner', ROOT / 'tank/skills/scan.secrets/1.1.0/engine.py')
     def respond(request):
         calls.append((request.method, request.url.path))
         assert request.url.path == '/v1/skala/scan.secrets/run'
         if request.method == 'GET':
-            return httpx.Response(200, json={'version': '1.0.2'}) if approved else httpx.Response(409, json={'detail': 'scan.secrets has no approved version'})
+            return httpx.Response(200, json={'version': '1.1.0'}) if approved else httpx.Response(409, json={'detail': 'scan.secrets has no approved version'})
         body = json.loads(request.content)
         assert body['tenant_id'] == TENANT and 'version' not in body
         assert set(body['input']) == {'files'}
@@ -109,7 +109,7 @@ async def test_baseline_failure_never_starts_browser_checks(scaffold, monkeypatc
 
 def test_new_version_changes_sharing_without_rewriting_scanner():
     old = ROOT / 'tank/skills/scan.secrets/1.0.1'
-    new = old.with_name('1.0.2')
+    new = old.with_name('1.1.0')
     for name in ('engine.py', 'run.py'):
         assert (old / name).read_bytes() == (new / name).read_bytes()
     assert 'shared_with: [tisan]' in (new / 'skill.yaml').read_text()
