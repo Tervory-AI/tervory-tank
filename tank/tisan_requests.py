@@ -227,6 +227,8 @@ async def build_result(tenant: UUID, result: dict) -> dict:
         measured = {k: v for k, v in job['result'].items() if k in {
             'slug', 'name', 'ok', 'checks', 'detail', 'archive', 'build', 'memory_id', 'refused',
             'copy_needed', 'media_needed', 'token_set', 'files'}}
+        if 'build' in measured:
+            measured['build_id'] = measured['build']
         return {**result, **measured, 'status': 'done'}
     except (httpx.HTTPError, ValueError, TypeError, KeyError):
         return result
