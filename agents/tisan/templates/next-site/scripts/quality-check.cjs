@@ -174,12 +174,12 @@ async function browserChecks(origin, paths, proxyUrl) {
                 continue;
               let status = 0;
               try {
-                const answer = await context.request.get(url.href, {
-                  maxRedirects: 0,
-                  timeout: 10000,
+                const answer = await fetch(url.href, {
+                  redirect: "manual",
+                  signal: AbortSignal.timeout(10000),
                 });
-                status = answer.status();
-                await answer.dispose();
+                status = answer.status;
+                await answer.body?.cancel();
               } catch {
                 /* status 0 fails closed */
               }
