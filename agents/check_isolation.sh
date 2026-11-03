@@ -252,9 +252,9 @@ for net in $nets; do
         unexpected="$unexpected $short"
       done
       if [ "$net" = "tervory-gw-tiger" ]; then
-        label="gateway $net holds only this agent, tank, postgres, hermes, and tiger"
+        label="gateway $net holds only this agent, tank, postgres, hermes, and the Tiger browser gateway"
       elif [ "$net" = "tervory-gw-base" ]; then
-        label="gateway $net holds only this agent, tank, postgres, hermes, tiger, and searxng"
+        label="gateway $net holds only this agent, tank, postgres, hermes, and searxng"
       elif [ "$net" = "tervory-gw-ghost" ]; then
         label="gateway $net holds only this agent, tank, postgres, ghost-browser, and coolify-proxy"
       else
