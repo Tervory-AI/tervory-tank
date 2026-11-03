@@ -258,8 +258,7 @@ export class CodeFolder {
           if (secretPath(entry.name) || ['.config', '.ssh', 'keychains', 'keyrings'].includes(entry.name.toLowerCase())) {
             const path = resolve(directory, entry.name);
             mounts.push(...(entry.isDirectory() ? ['--tmpfs', path] : ['--ro-bind', '/dev/null', path]));
-          } else
-          if (entry.isDirectory()) await scan(resolve(directory, entry.name));
+          } else if (entry.isDirectory()) await scan(resolve(directory, entry.name));
         }
       };
       mounts.push('--ro-bind', root, root);
@@ -273,12 +272,12 @@ export class CodeFolder {
       const target = await realpath(executable);
       const seen = new Set();
       while ((await lstat(link)).isSymbolicLink()) {
-      if (seen.has(link)) throw refused();
-      seen.add(link);
-      if (!inside('/usr', link) && !roots.some(root => inside(root, link))) {
-        if (secretPath(link) || link.split(sep).some(part => ['.config', '.ssh', 'keychains', 'keyrings'].includes(part.toLowerCase()))) throw refused();
-        mounts.push('--symlink', target, link);
-      }
+        if (seen.has(link)) throw refused();
+        seen.add(link);
+        if (!inside('/usr', link) && !roots.some(root => inside(root, link))) {
+          if (secretPath(link) || link.split(sep).some(part => ['.config', '.ssh', 'keychains', 'keyrings'].includes(part.toLowerCase()))) throw refused();
+          mounts.push('--symlink', target, link);
+        }
         link = resolve(dirname(link), await readlink(link));
       }
     }
