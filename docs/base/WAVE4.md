@@ -35,7 +35,7 @@ No main merge, force push, PR creation, label change or merge was performed.
 | `tank/skills/base.contacts/1.4.0/data/disposable_email_blocklist.conf:1` | Existing pinned disposable-email data copied unchanged. |
 | `tank/base_evidence.py:214` | Region follows the same exact observed-contact source/date guard as phone quality. |
 | `tank/base_compare.py:16` | Saved-list and attachment arguments; bounded UTF-8 Apollo CSV parsing, exact unique matching, both unmatched groups and field agreement. Owned tenant/user upload and tenant list checks precede the $0 receipt. |
-| `tank/command.py:42` | Expose `base.compare.apollo` to Base; GET adapter at line 1468, outside confirmed-dispatch mutation sets. At line 2102, stored-upload IDs reach the internal planner without file bytes. |
+| `tank/command.py:42` | Expose `base.compare.apollo` to Base; GET adapter at line 1468, outside confirmed-dispatch mutation sets. At line 2103, stored-upload IDs reach the internal planner without file bytes. |
 | `tank/main.py:4245` | Register the comparison read router. No routing/model/queue/cache behavior changed. |
 | `agents/base/engines/ffl/__init__.py:1` | Explicit FFL package boundary. |
 | `agents/base/engines/ffl/manifest.json:1` | Existing entrypoints, versioned Skala assets and byte hashes; existing code/data remains in place. Empty SOT/compliance flags. |
@@ -53,10 +53,10 @@ All checks use synthetic/recorded evidence, no paid feeds, real model calls or l
 writes. PostgreSQL proofs use disposable loopback databases with separate worker
 copies; no production database or credentials are accessed.
 
-- Full Base: `python -m pytest -q tests/test_base*.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --timeout=300 --timeout-method=thread -n 4 --dist loadfile --max-worker-restart=0 -rs`, with `BASE_TEST_DATABASE_URL` and `POOL_SCHEMA_DATABASE_URL` pointing to the isolated local fixture.
-- Command/token: same options, selecting `tests/test_command.py tests/test_command_code.py tests/test_personal_tokens.py`, with the isolated local fixture.
+- Full Base: **495 passed**, 57 warnings, 95.36s. `python -m pytest -q tests/test_base*.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --timeout=300 --timeout-method=thread -n 4 --dist loadfile --max-worker-restart=0 -rs`, with `BASE_TEST_DATABASE_URL` and `POOL_SCHEMA_DATABASE_URL` pointing to the isolated local fixture.
+- Command/token: **117 passed**, 34 warnings, 143.27s. Same options, selecting `tests/test_command.py tests/test_command_code.py tests/test_personal_tokens.py`, with the isolated local fixture.
 - Phone candidate: Skala `run_evals`, offline HTTP stub and a model function that raises on any call: **25/25, eligible=true, cost_usd=0**.
-- Final parser/card/scaffold focused run: **17 passed**, 3 warnings.
+- Final upload/card/scaffold run, after adding the internal planner reference: **19 passed**, 12 warnings, 11.30s. Includes every wave-4 test plus `tests/test_command.py::test_binary_attachments_are_owned_bounded_and_not_given_to_text_model`, with a disposable local PostgreSQL fixture.
 - Earlier broad focused run: **173 passed, 31 skipped**, 3 warnings. The skips required the optional local PostgreSQL fixture, subsequently supplied to the full Base run.
 
 CI tank/workspace results are pending Claude opening the new branch's PR. No PR
@@ -70,3 +70,8 @@ normalization and verified Base fields only; absent observations stay absent.
 The read takes `list_id` and the owned uploaded CSV's `attachment_id`. No Apollo
 API, account, vendor lookup, upload-content model call or comparison write occurs.
 The existing card shows counts/agreement in Summary and row statuses in Records.
+
+A preliminary command run was interrupted by local test-harness database reuse;
+the final 117-pass run used a separate disposable database. This was a harness
+error, not counted as a pass or attributed to product code. The final Base run
+preceded the planner-reference addition; the 19-test final run covers that change.
