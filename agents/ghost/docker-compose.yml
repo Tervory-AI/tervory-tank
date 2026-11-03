@@ -32,6 +32,9 @@ services:
       # GHOST-2 inventory: read-only Coolify API token, by name only. Empty = not connected.
       COOLIFY_TOKEN_GHOST: ${COOLIFY_TOKEN_GHOST:-}
       COOLIFY_URL_GHOST: ${COOLIFY_URL_GHOST:-}
+      # Existing draft-only dogfood PR path; founder fills the existing scoped token.
+      GHOST_PATCH_PR_ENABLED: ${GHOST_PATCH_PR_ENABLED:-0}
+      GHOST_GITHUB_TOKEN: ${GHOST_GITHUB_TOKEN:-}
       # Air gap: Watch has NO edge write credential. Per-client Enforce holds
       # Edge credential names held until a real connected edge client (agnostic).
     volumes:
