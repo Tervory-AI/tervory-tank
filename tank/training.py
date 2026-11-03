@@ -652,7 +652,8 @@ async def training_status(actor: Reviewer = Depends(require_reviewer)) -> dict[s
             pairs = {row["source_id"]: int(row["count"]) for row in await conn.fetch(
                 """SELECT split_part(source_ref,':',1) AS source_id,count(*) AS count
                 FROM tank.training_pairs WHERE tenant_id=$1 AND region='za' AND agent='zenas'
-                  AND source='court_text' AND active GROUP BY split_part(source_ref,':',1)""", PLATFORM_TENANT,
+                  AND source='court_text' AND active AND public AND NOT client_matter AND NOT holdout
+                GROUP BY split_part(source_ref,':',1)""", PLATFORM_TENANT,
             )}
             for source in sorted(OFFICIAL_ZA_CASE_SOURCES):
                 items.extend((
