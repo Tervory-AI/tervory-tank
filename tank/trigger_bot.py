@@ -11,7 +11,7 @@ from uuid import UUID, uuid4, uuid5
 from fastapi import HTTPException
 from tenant_db import tenant_scope
 from trigger_bot_engine import respond
-from trigger_bot_shared import SmtpMailer
+from trigger_bot_shared import SmtpMailer, PgRateLimits
 from trigger_bot_sources import Sources
 
 
@@ -101,7 +101,7 @@ class Bot:
         from trigger_routes import code_receipt
         return await code_receipt(tenant, task)
 
-    async def ask(self, tenant, text, *, conversation_id=None, visitor_id=None, contact=None):
+    async def ask(self, tenant, text, *, conversation_id=None, visitor_id=None, contact=None, address="command"):
         visitor_id = visitor_id or uuid4()
         conversation_id = conversation_id or uuid4()
         config = await self.pool.fetchrow('SELECT * FROM tank.trigger_bot_config WHERE tenant_id=$1', tenant)
@@ -142,7 +142,7 @@ class Bot:
         if draft:
             result['lead_draft_id'] = str(draft)
         if result['state'] == 'handed_over':
-            result['notification'] = await self.notify(tenant, conversation_id, config['handover_email'], text)
+            result['notification'] = await self.notify(tenant, conversation_id, config['handover_email'], text, address=address)
         return result
 
     async def lead_draft(self, tenant, conversation, text, contact):
@@ -161,7 +161,7 @@ class Bot:
             VALUES($1,$2,$3,'lead',$4::jsonb)''', tenant, draft, conversation, json.dumps({k: v for k, v in values.items() if v is not None}))
         return draft
 
-    async def notify(self, tenant, conversation, recipient, text):
+    async def notify(self, tenant, conversation, recipient, text, *, address="command"):
         # Claim before SMTP. Interrupted/uncertain sends are never automatically replayed.
         marker = uuid5(conversation, 'handover-mail')
         claimed = await self.pool.fetchval('''INSERT INTO tank.trigger_bot_drafts
@@ -169,6 +169,10 @@ class Bot:
             ON CONFLICT DO NOTHING RETURNING id''', tenant, marker, conversation)
         if claimed is None:
             return 'already_claimed'
+        decision = await PgRateLimits(self.pool).consume(str(tenant), address, '/v1/trigger/bot/handover')
+        if decision.hold or decision.retry_after:
+            await self.pool.execute('UPDATE tank.trigger_bot_drafts SET state=$3 WHERE tenant_id=$1 AND id=$2', tenant, marker, 'held')
+            return 'held'
         status = 'unconfigured'
         if not recipient:
             import os

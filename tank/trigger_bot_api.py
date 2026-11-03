@@ -326,7 +326,7 @@ async def public_message(request: Request):
             args = PublicMessage.model_validate(await bounded_body(request, 16000))
         except (ValueError, TypeError):
             raise HTTPException(422) from None
-        result = await ask(make_bot(), tenant, args, conversation_id=args.conversation_id, visitor_id=args.visitor_id)
+        result = await ask(make_bot(), tenant, args, conversation_id=args.conversation_id, visitor_id=args.visitor_id, address=peer)
     # No model name, raw retrieval text, peer address or internal draft data.
-    result = {k: v for k, v in result.items() if k not in {'retrieved', 'cited', 'outcome', 'notification'}}
+    result = {k: v for k, v in result.items() if k in {'state', 'answer', 'sources', 'message_id', 'conversation_id', 'visitor_id'}}
     return JSONResponse(result, headers={'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'Cache-Control': 'no-store'})
