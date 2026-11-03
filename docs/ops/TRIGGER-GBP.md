@@ -73,13 +73,18 @@ GBP API approval and OAuth consent/app verification are separate prerequisites.
   are returned.
 - Disconnect is confirmed, generation-bound and locked against publication.
   It posts the refresh token to Google's revocation endpoint in the request
-  body, then removes the local ciphertext and pending states on success.
+  body, then removes the local ciphertext and pending states on success. An
+  explicit HTTP 400 `invalid_token` is already revoked; other failures preserve
+  local state. Reconnecting revokes the old grant at confirmed connect, before
+  new consent. The callback refuses to overwrite a still-installed token.
   [Official revocation documentation](https://developers.google.com/identity/protocols/oauth2/web-server#tokenrevoke).
 
 ## Existing-card workflow
 
 Explicit commands are parsed in code. Arguments use the existing card's Brief;
-no new button, label, empty-state copy or settings page is introduced. Tools
+no new button, label, empty-state copy or settings page is introduced.
+`trigger.post.create` and `trigger.gbp.reply.draft` are model-capable paid-run
+cards, using the existing paid guard at Confirm. Other M1 tools use code only. Tools
 require the founder or the active tenant's verified admin. Every mutation and
 paid draft is behind the existing durable Confirm dispatcher.
 
@@ -147,32 +152,45 @@ worker cannot send the same claim. Publication and disconnect/cancel are
 serialized by row locks. Returned platform IDs/URLs are stored with the code
 receipt. Non-GBP channels never enter the send queue in M1.
 
-A confirmed rate-limit rejection uses bounded code backoff (three attempts;
+A rate-limit rejection, failed token refresh (transport/5xx), or a connection
+failure before the publishing POST uses bounded code backoff (three attempts;
 60 then 120 seconds before the next attempts). After that it stops; a confirmed
 `trigger.post.retry` can explicitly reset a known failure after a fresh Confirm;
 it cannot reset an uncertain delivery. Length errors are terminal for automatic
 retry and do not enter backoff. Editing still returns the post to draft.
 
 Google's create endpoint has no documented request-id/idempotency field. A
-transport error, 5xx, malformed success or crashed in-flight attempt therefore
-cannot be safely replayed as a POST. Such an attempt becomes failed/uncertain
-and is excluded from automatic retry and ordinary retry/edit. This prevents a
-restart from double-posting after an unrecorded Google success; it does not
-claim an atomic transaction spanning Google and Postgres or guarantee eventual
-delivery after an ambiguous failure. Failed uncertainty needs reconciliation
-against the Google profile before any further publication decision. No
-reconciliation bypass, duplicate-content marker or unapproved wording is added.
+publishing POST's read timeout, dropped response, 5xx or unreadable body may
+have reached Google; it becomes failed/uncertain without automatic POST replay.
+Token-refresh failures and POST connection failures are not uncertain: no post
+was sent. Google rejections other than 429 do not automatically retry.
+
+An uncertain post may be cancelled before it is marked published. A confirmed
+`trigger.post.retry` first lists all pages of the selected location's local
+posts. An exact summary match created after the durable claim is adopted as
+published with its returned name and search URL, without a second POST. A
+complete read with no match allows the confirmed retry. Failed/incomplete reads
+or a changed connection/profile leave the post uncertain. The claim timestamp
+is stored explicitly; pre-review claims retain their original five-minute
+lease timestamp as a compatibility fallback.
+[Official list reference](https://developers.google.com/my-business/reference/rest/v4/accounts.locations.localPosts/list),
+[official LocalPost fields](https://developers.google.com/my-business/reference/rest/v4/accounts.locations.localPosts)
+were checked on 3 November 2026 for pagination, summary and createTime.
 
 The case study counts actual published posts and distinct replied-to reviews,
 scoped by tenant, receipt region and first publication/send date. It reads no
 post/review text for those figures.
 
-## Acceptance still requires the founder's browser
+## After-merge acceptance
 
-After the founder configures the project/access/settings, Custom Nation's own
+After merge and the founder configures the project/access/settings, Custom Nation's own
 `/chats` test must connect its account/location, create and approve three real
 GBP posts, schedule them and inspect the calendar; one must appear on Google
 at its time with its returned link. A draft reply to a real review must appear
 on Google only after Confirm. Founder screenshots and live delivery proof are
 required. Offline fake-Google tests are not that acceptance, and no live Google
 write is made by those tests.
+
+The real Trigger room/internal LanguageTool check also follows after merge,
+as directed in the founder review. CI's `tank` job on the final PR head is the
+full-suite test of record; local focused tests do not replace it.
