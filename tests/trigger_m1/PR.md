@@ -66,12 +66,17 @@ in `agents/trigger/formats.py:26`:
 
 ## Validation and acceptance
 
-Exact commands/results will be recorded in `verification.txt` after the running
-full suite finishes. Current code/test head: **25 M1 tests passed** with outside
-sockets blocked. Actual callback contract, TypeScript, Ruff and secret regression
-checks passed. Earlier full runs were interrupted/timed out, not green; shared
-`/tmp` quota and test dependency/browser setup were corrected. The current full
-run uses private scratch, isolated PostgreSQL and four workers.
+Exact commands and captured results are in `verification.txt`. Current code/test
+head: **25 M1 tests passed**, with outside sockets blocked. Actual callback
+contract, TypeScript, Ruff and secret regressions passed.
+
+The full repository command completed with **6,612 passed, 10 failed, 42 skipped**
+and **1,799 subtests passed**; separate Tiger and Zenas runs passed **46** and
+**40** tests. The ten failures all pass on focused retries after correcting
+scratch/dependency setup. The original full command's exit 1 remains recorded;
+it is not relabelled green. Earlier incomplete/timed-out runs and the corrected
+case-study regression are also recorded. A final current-head Trigger/Command
+run is finishing; its exact completion will be appended to the evidence.
 
 **Founder test and screenshots: not performed or available.** The required test
 is Custom Nation in its own browser: connect its actual profile, approve and
