@@ -145,7 +145,11 @@ async def serve(tank: Any, policy: dict, messages: list[dict], *, tenant_id: uui
     if (config is None or policy.get("model") != config.candidate
             or not policy.get("promoted_at") or priority == "urgent"):
         return decision
-    sent = "\n".join(str(message.get("content") or "") for message in messages)
+    refusal_messages = list(messages)
+    system = policy.get("system_prompt")
+    if system and (not messages or messages[0] != {"role": "system", "content": system}):
+        refusal_messages.insert(0, {"role": "system", "content": system})
+    sent = "\n".join(str(message.get("content") or "") for message in refusal_messages)
     if tank.model_call_refusal(sent, config.weak, box=tank.box_region(), tenant_id=str(tenant_id),
                                task_type=task_type, skill=skill, caller=caller, pool_read=pool_read):
         return decision
