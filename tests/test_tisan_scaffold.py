@@ -49,8 +49,9 @@ def _brief(**overrides: object) -> dict:
 
 def test_template_has_the_pages_and_no_analytics() -> None:
     for rel in (
-        "app/page.tsx",
-        "app/about/page.tsx",
+        "app/[[...path]]/page.tsx",
+        "scripts/content-check.cjs",
+        "sections/registry.tsx",
         "app/contact/page.tsx",
         "app/privacy/page.tsx",
         "app/not-found.tsx",
@@ -227,7 +228,8 @@ async def test_two_brands_write_different_tokens_for_their_own_tenants(tmp_path:
     assert "Jost" in css
     assert "#001840" not in tsx
     assert "#E80008" not in tsx
-    assert "alt={`${site.name} logo`}" in tsx
+    assert "site.name" not in tsx
+    assert "site.pages" not in tsx
     with tarfile.open(north["archive"], "r:gz") as tar:
         contact_spec = tar.extractfile("e2e/contact.spec.ts")
         assert contact_spec is not None
@@ -335,3 +337,27 @@ def test_saved_canvas_reader_output_selects_real_page_and_rejects_duplicates():
         canvas = {**saved["document"], "children": saved["document"]["children"] + [duplicate]}
         with pytest.raises(scaffold.ScaffoldError, match="frame data incomplete"):
             scaffold.select_visual_frames({"visual": figma.visual_frames(canvas, saved["variables"])}, "3:1", "/about")
+
+
+@pytest.mark.parametrize("page", ["home", "about"])
+def test_missing_template_page_copy_requires_tisan_build(page: str, tmp_path: Path) -> None:
+    scaffold = _load()
+    brief = scaffold.validate(_brief(pages=[{"name": page, "copy": TENANT_A}]))
+    brief["resolved_copy"] = {page: "Accepted test-only copy."}
+    target = tmp_path / "project"
+    with pytest.raises(scaffold.ScaffoldError, match=rf"{page}.*tisan\.build"):
+        scaffold.write_project(brief, target)
+    assert not (target / "app/page.tsx").exists()
+    assert not (target / "app/about/page.tsx").exists()
+    assert not (target / "content/site.json").exists()
+
+
+def test_missing_template_pages_without_copy_do_not_create_default_content(tmp_path: Path) -> None:
+    scaffold = _load()
+    target = tmp_path / "project"
+    scaffold.write_project(scaffold.validate(_brief()), target)
+    assert not (target / "app/page.tsx").exists()
+    assert not (target / "app/about/page.tsx").exists()
+    assert not (target / "content/site.json").exists()
+    for page in ("contact", "privacy"):
+        assert (target / f"app/{page}/page.tsx").read_bytes() == (TEMPLATE / f"app/{page}/page.tsx").read_bytes()

@@ -1,0 +1,649 @@
+{
+  "schema": "tisan.sections/1",
+  "$schema_dialect": "https://json-schema.org/draft/2020-12/schema",
+  "site": {
+    "props": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "logo": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "src": {
+              "type": "string",
+              "pattern": "^(https://[^\\s]+|/media/[A-Za-z0-9._/-]+)$",
+              "maxLength": 1000
+            },
+            "alt": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "src",
+            "alt"
+          ]
+        },
+        "nav": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "href": {
+                "type": "string",
+                "pattern": "^(/[A-Za-z0-9/_-]*|https://[^\\s]+|mailto:[^\\s]+|tel:[+0-9 ()-]+)$",
+                "maxLength": 500
+              }
+            },
+            "required": [
+              "label",
+              "href"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "footer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "links": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "href": {
+                    "type": "string",
+                    "pattern": "^(/[A-Za-z0-9/_-]*|https://[^\\s]+|mailto:[^\\s]+|tel:[+0-9 ()-]+)$",
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "label",
+                  "href"
+                ]
+              },
+              "minItems": 0,
+              "maxItems": 12
+            }
+          },
+          "required": []
+        },
+        "ui": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "menu_open": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "menu_close": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "skip_link": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "menu_open",
+            "menu_close",
+            "skip_link"
+          ]
+        }
+      },
+      "required": [
+        "nav",
+        "ui"
+      ]
+    },
+    "text_slots": [
+      "logo.alt",
+      "nav[].label",
+      "footer.text",
+      "footer.links[].label",
+      "ui.menu_open",
+      "ui.menu_close",
+      "ui.skip_link"
+    ],
+    "image_slots": [
+      "logo.src"
+    ],
+    "purpose": {
+      "logo.alt": "what the logo shows",
+      "nav[].label": "one menu item",
+      "footer.text": "one short line at the foot of every page",
+      "footer.links[].label": "one footer link",
+      "ui.menu_open": "label of the button that opens the mobile menu",
+      "ui.menu_close": "label of the button that closes it",
+      "ui.skip_link": "label of the skip-to-content link"
+    }
+  },
+  "sections": {
+    "hero": {
+      "props": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "heading": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "image": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "src": {
+                "type": "string",
+                "pattern": "^(https://[^\\s]+|/media/[A-Za-z0-9._/-]+)$",
+                "maxLength": 1000
+              },
+              "alt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "src",
+              "alt"
+            ]
+          },
+          "cta": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "href": {
+                "type": "string",
+                "pattern": "^(/[A-Za-z0-9/_-]*|https://[^\\s]+|mailto:[^\\s]+|tel:[+0-9 ()-]+)$",
+                "maxLength": 500
+              }
+            },
+            "required": [
+              "label",
+              "href"
+            ]
+          }
+        },
+        "required": [
+          "heading"
+        ]
+      },
+      "text_slots": [
+        "heading",
+        "body",
+        "image.alt",
+        "cta.label"
+      ],
+      "image_slots": [
+        "image.src"
+      ],
+      "purpose": {
+        "heading": "the section's heading",
+        "body": "the section's paragraph",
+        "image.alt": "what the image shows",
+        "cta.label": "the button's words"
+      }
+    },
+    "feature-grid": {
+      "props": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "heading": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "body": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "title",
+                "body"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 12
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "text_slots": [
+        "heading",
+        "items[].title",
+        "items[].body"
+      ],
+      "image_slots": [],
+      "purpose": {
+        "heading": "the section's heading",
+        "items[].title": "one item's title",
+        "items[].body": "one item's description"
+      }
+    },
+    "product-grid": {
+      "props": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "heading": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "body": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                "image": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "src": {
+                      "type": "string",
+                      "pattern": "^(https://[^\\s]+|/media/[A-Za-z0-9._/-]+)$",
+                      "maxLength": 1000
+                    },
+                    "alt": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  },
+                  "required": [
+                    "src",
+                    "alt"
+                  ]
+                },
+                "href": {
+                  "type": "string",
+                  "pattern": "^(/[A-Za-z0-9/_-]*|https://[^\\s]+|mailto:[^\\s]+|tel:[+0-9 ()-]+)$",
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "name",
+                "image"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 24
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "text_slots": [
+        "heading",
+        "items[].name",
+        "items[].body",
+        "items[].image.alt"
+      ],
+      "image_slots": [
+        "items[].image.src"
+      ],
+      "purpose": {
+        "heading": "the section's heading",
+        "items[].name": "one product or service name",
+        "items[].body": "one item's description",
+        "items[].image.alt": "what the item's image shows"
+      }
+    },
+    "image-text": {
+      "props": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "heading": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "image": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "src": {
+                "type": "string",
+                "pattern": "^(https://[^\\s]+|/media/[A-Za-z0-9._/-]+)$",
+                "maxLength": 1000
+              },
+              "alt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "src",
+              "alt"
+            ]
+          },
+          "side": {
+            "enum": [
+              "left",
+              "right"
+            ]
+          }
+        },
+        "required": [
+          "heading",
+          "body",
+          "image",
+          "side"
+        ]
+      },
+      "text_slots": [
+        "heading",
+        "body",
+        "image.alt"
+      ],
+      "image_slots": [
+        "image.src"
+      ],
+      "purpose": {
+        "heading": "the section's heading",
+        "body": "the section's paragraph",
+        "image.alt": "what the image shows"
+      }
+    },
+    "steps": {
+      "props": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "heading": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "body": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "title",
+                "body"
+              ]
+            },
+            "minItems": 2,
+            "maxItems": 8
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "text_slots": [
+        "heading",
+        "items[].title",
+        "items[].body"
+      ],
+      "image_slots": [],
+      "purpose": {
+        "heading": "the section's heading",
+        "items[].title": "one item's title",
+        "items[].body": "one item's description"
+      }
+    },
+    "faq": {
+      "props": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "heading": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "question": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "answer": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "question",
+                "answer"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 30
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "text_slots": [
+        "heading",
+        "items[].question",
+        "items[].answer"
+      ],
+      "image_slots": [],
+      "purpose": {
+        "heading": "the section's heading",
+        "items[].question": "one question",
+        "items[].answer": "its answer"
+      }
+    },
+    "cta-band": {
+      "props": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "heading": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "cta": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "href": {
+                "type": "string",
+                "pattern": "^(/[A-Za-z0-9/_-]*|https://[^\\s]+|mailto:[^\\s]+|tel:[+0-9 ()-]+)$",
+                "maxLength": 500
+              }
+            },
+            "required": [
+              "label",
+              "href"
+            ]
+          }
+        },
+        "required": [
+          "heading",
+          "cta"
+        ]
+      },
+      "text_slots": [
+        "heading",
+        "cta.label"
+      ],
+      "image_slots": [],
+      "purpose": {
+        "heading": "the section's heading",
+        "cta.label": "the button's words"
+      }
+    },
+    "contact": {
+      "props": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "heading": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": []
+      },
+      "text_slots": [
+        "heading",
+        "body"
+      ],
+      "image_slots": [],
+      "purpose": {
+        "heading": "the section's heading",
+        "body": "the section's paragraph"
+      }
+    },
+    "gallery": {
+      "props": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "heading": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "src": {
+                  "type": "string",
+                  "pattern": "^(https://[^\\s]+|/media/[A-Za-z0-9._/-]+)$",
+                  "maxLength": 1000
+                },
+                "alt": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "src",
+                "alt"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 24
+          }
+        },
+        "required": [
+          "images"
+        ]
+      },
+      "text_slots": [
+        "heading",
+        "images[].alt"
+      ],
+      "image_slots": [
+        "images[].src"
+      ],
+      "purpose": {
+        "heading": "the section's heading",
+        "images[].alt": "what each image shows"
+      }
+    }
+  }
+}

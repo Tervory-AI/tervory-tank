@@ -315,6 +315,8 @@ def write_project(brief: dict[str, Any], dest: Path) -> None:
         if page in _STANDARD_PAGES:
             if copy is not None:
                 file = dest / "app" / ("page.tsx" if page == "home" else page + "/page.tsx")
+                if not file.is_file():
+                    raise ScaffoldError(f"Copy for page {page} requires tisan.build; the scaffold template has no page file")
                 source = file.read_text(encoding="utf-8")
                 body = '<p className="mt-3">' + _jsx_text(copy) + '</p>'
                 if re.search(r'<p className="mt-3">.*?</p>', source, re.DOTALL):

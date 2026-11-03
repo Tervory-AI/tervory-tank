@@ -352,6 +352,46 @@ async def test_supplier_failure_after_the_outbox_write_keeps_the_order_and_does_
 
 
 @pytest.mark.asyncio
+async def test_written_po_and_reconcile_database_outage_never_refunds(monkeypatch, tmp_path):
+    store, service, _, _, body = await auto_shop(monkeypatch, tmp_path)
+    real_send = RigOrders.send_supplier_order
+
+    async def lookup_failed(*args):
+        raise RuntimeError("database unavailable during send reconciliation")
+
+    async def written_then_database_lost(self, **kwargs):
+        await real_send(self, **kwargs)
+        # The supplier's outbox record exists, but its database receipt was lost.
+        store.locate_orders[(TENANT, kwargs["quote_id"])]["purchase_order"].update(state="draft", sent=None)
+        monkeypatch.setattr(store, "locate_order", lookup_failed)
+        raise DeliveryError("order_unavailable")
+
+    monkeypatch.setattr(RigOrders, "send_supplier_order", written_then_database_lost)
+    accepted = await service.locate_accept(TENANT, body)
+    assert accepted["state"] == "ordered" and service.payments.refunded == []
+    state = store.quotes[-1]["payload"]["locate_state"]
+    assert state["state"] == "supplier_order_unconfirmed" and "refund" not in state
+    [row] = store.locate_orders.values()
+    assert row["order"]["state"] == "placed" and row["purchase_order"]["state"] == "draft"
+    assert len(list(tmp_path.glob("*.eml"))) == 1
+
+
+@pytest.mark.asyncio
+async def test_known_unsent_po_cancel_record_failure_still_reports_unrecorded(monkeypatch, tmp_path):
+    from rigbox.store import MemoryStore
+    store = MemoryStore()
+    await placed(store)
+    values = {**SANDBOX, "RIG_LOCATE_OUTBOX_DIR": str(tmp_path)}
+
+    async def cancel_failed(*args):
+        raise RuntimeError("database unavailable while recording cancellation")
+
+    monkeypatch.setattr(store, "cancel_locate_order", cancel_failed)
+    assert await RigOrders(store).cancel(TENANT, "q1", "test", env=values) == "unrecorded"
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.asyncio
 async def test_outbox_unavailable_on_cancel_never_refunds(monkeypatch, tmp_path):
     """The send fails and the outbox can't be read: Rig can't tell whether the
     supplier has the PO, so it neither cancels nor refunds."""

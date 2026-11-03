@@ -205,9 +205,10 @@ def test_ping_schedules_are_the_template_heartbeat() -> None:
         if folder == "radix":
             assert handlers == {"ping", "scan"}
         else:
-            assert handlers == {"ping", "scaffold", "figma"}
+            # Tisan builder (#571) adds build, with the same 10-minute allowance.
+            assert handlers == {"ping", "scaffold", "figma", "build"}
             # Founder, 14 Oct 2026: a site build is allowed 10 minutes.
-            assert module.app.state.job_timeouts == {"scaffold": 600}
+            assert module.app.state.job_timeouts == {"scaffold": 600, "build": 600}
         assert module.app.state.schedules == [
             {
                 "tenant_id": "00000000-0000-0000-0000-000000000001",
