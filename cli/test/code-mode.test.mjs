@@ -137,3 +137,47 @@ test('fake Tank code loop uses existing region/token, redacts results and never 
     transport: async url => { if (url.endsWith('/threads')) return Response.json({ thread_id: 'thread' }); calls++; throw Error('offline'); } }));
   assert.equal(calls, 1);
 });
+
+test('list caps at 2000 entries, including repositories with more than 64 KB of names', async () => {
+  const f = await folder();
+  await mkdir(join(f.root, 'many'));
+  await Promise.all(Array.from({ length: 2010 }, (_, i) => writeFile(join(f.root, 'many', `${'long-name-'.repeat(4)}${i}.txt`), '')));
+  const result = await f.files();
+  assert.equal(result.files.length, 2000); assert(result.truncated);
+});
+
+test('approved command cannot read secret paths, outside symlinks or inherited host credentials', async () => {
+  const f = await folder();
+  await writeFile(join(f.root, '.env'), 'private-file-canary');
+  await writeFile(join(work, 'host-private.txt'), 'outside-file-canary');
+  await symlink(join(work, 'host-private.txt'), join(f.root, 'outside-link'));
+  const result = await f.tool({ name: 'run_command', arguments: {
+    command: `cat .env; cat outside-link; cat ${join(work, 'host-private.txt')}; printenv`,
+  } }, io());
+  assert(!result.output.includes('private-file-canary'));
+  assert(!result.output.includes('outside-file-canary'));
+  assert(!result.output.includes('TANK_API_KEY='));
+  await assert.rejects(f.edit('.env', patch, io()));
+});
+
+test('fake Tank can request a missing-file read, explicit edit and explicit test run without a new sign-in', async () => {
+  const f = await folder();
+  const token = 'tv1.us-east.' + '1'.repeat(32) + '.' + 'x'.repeat(43);
+  const requests = [
+    { name: 'read_file', arguments: { path: 'small.test.mjs' } },
+    { name: 'propose_edit', arguments: { path: 'small.test.mjs', diff: '--- /dev/null\n+++ b/small.test.mjs\n@@ -0,0 +1,2 @@\n+import test from "node:test";\n+test("small test", () => {});\n' } },
+    { name: 'run_command', arguments: { command: 'node --test small.test.mjs' } },
+  ];
+  let count = 0; let prompts = ['add a small test', 'y', 'y', '/exit']; const results = [];
+  await run(['code', f.root], { store: { get: async () => token }, io: {
+    interactive: true, prompt: async () => prompts.shift(), write() {},
+  }, transport: async (url, init) => {
+    if (url.endsWith('/threads')) return Response.json({ thread_id: 'thread' });
+    const body = JSON.parse(init.body); results.push(body.tool_results);
+    assert.equal(new URL(url).origin, 'https://app.tervory.com');
+    return Response.json({ answer: '', requests: count < requests.length ? [requests[count++]] : [] });
+  } });
+  assert((await readFile(join(f.root, 'small.test.mjs'), 'utf8')).includes('small test'));
+  const execution = JSON.parse(results.at(-1).find(r => r.name === 'run_command').output).result;
+  assert.equal(execution.code, 0); assert(execution.output.includes('# pass 1'));
+});
