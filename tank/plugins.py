@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from mcp_connections import ServerArgs, VAULTS, unpack
+from plugin_args import PluginArgs
 
 ROOT = Path(__file__).with_name('plugin_packages')
 
@@ -85,12 +86,6 @@ def load_manifests(root: Path = ROOT) -> dict[tuple[str, str], Manifest]:
 
 
 MANIFESTS = load_manifests()
-
-
-class PluginArgs(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    name: str = Field(min_length=1, max_length=64)
-    version: str = Field(min_length=1, max_length=30)
 
 
 def visible(actor, manifest):
