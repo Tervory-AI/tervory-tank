@@ -414,7 +414,7 @@ async def test_schema_applies_twice_and_preserves_policy(harness):
         current = {(row["task_type"], row["tenant_id"]): row for row in after}
         # Later additive seeds: base.normalize, Trigger's first build (trigger.write, trigger.check),
         # and the Tisan builder's plan step (tisan.plan, #571).
-        added = {("base.normalize", None), ("trigger.write", None), ("trigger.check", None), ("tisan.plan", None), ("command.code", None)}
+        added = {("base.normalize", None), ("trigger.write", None), ("trigger.check", None), ("tisan.plan", None), ("command.code", None), ("trigger.bot.answer", None)}
         assert set(current) == {(r["task_type"], r["tenant_id"]) for r in before} | added
         for old in before:
             new = current[old["task_type"], old["tenant_id"]]
