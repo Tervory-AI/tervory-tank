@@ -64,7 +64,7 @@ def test_only_list_csv_appends_costs_and_keeps_all_existing_columns_and_cells():
     assert new[2][-2:] == ["", ""]
     empty = list(csv.reader(io.StringIO(metrics.export_records([first], ledger=[]).lstrip("\ufeff"))))
     assert empty[1][-2:] == ["0", "0"]
-    assert list(csv.reader(io.StringIO(metrics.export_records([first]).lstrip("\ufeff"))))[0] == old[0]
+    assert next(csv.reader(io.StringIO(metrics.export_records([first]).lstrip("\ufeff")))) == old[0]
 
 
 @pytest.mark.asyncio
