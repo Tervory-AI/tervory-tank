@@ -184,19 +184,7 @@ def build_owner_update(
         return True
 
     mode = settings.fix_mode
-    if mode is ApplyMode.auto_when_checks_pass:
-        # Auto-fix paragraph only when a code fix was applied, with its PR link.
-        # An IP block is described as a block in the shield paragraph — never as a patch.
-        if _is_real_pr_url(pr_url) and undo_fix_url:
-            body_lines.append(
-                f"You chose to let us fix this kind of problem automatically, so we did. "
-                f"{stack_list} are now on patched versions and your site passed its own "
-                f"checks afterwards. Here is the report; you can send it to your IT manager, "
-                f"who can reverse our change with one click. "
-                f"{_link('Fix report', pr_url)} "
-                f"{_link('Undo', undo_fix_url)}"
-            )
-    elif mode is ApplyMode.approve_each:
+    if mode is ApplyMode.approve_each:
         # "we built the fix" only when a real fix PR exists with its link.
         if _is_real_pr_url(pr_url):
             body_lines.append(
