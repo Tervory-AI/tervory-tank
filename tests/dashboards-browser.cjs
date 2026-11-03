@@ -27,7 +27,7 @@ const root = path.resolve(__dirname, '..');
         sharedShellVisible:getComputedStyle(document.querySelector('.shell-side')).display !== 'none',
       }));
       assert(rendered.documentWidth <= width, 'horizontal overflow');
-      assert(!rendered.sharedShellVisible, 'shared shell duplicates the dashboard navigation');
+      assert.equal(rendered.sharedShellVisible, screen === 'client', 'client uses shared shell; founder retains its own navigation');
       assert(rendered.images.every(i=>i.loaded), 'asset did not load');
       assert(rendered.images.every(i=>Math.abs(i.width/i.height-i.naturalWidth/i.naturalHeight)<.25), 'logo distorted');
       await page.screenshot({path:path.join(root,`tests/artifacts/dash-1/${screen}-${width}.png`),fullPage:true});

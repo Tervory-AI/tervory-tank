@@ -457,6 +457,8 @@ async def test_postgres_atomic_receipt_and_restart(catcher):
     try:
         async with pool.acquire() as conn:
             await conn.execute(f"CREATE SCHEMA {schema}")
+            # tiger/schema.sql always writes agent_tiger.memory_* (the room schema exists in production).
+            await conn.execute("CREATE SCHEMA IF NOT EXISTS agent_tiger")
             await ensure_tables(conn, schema)
         store = PgStore(pool, schema)
         # No jobs/scheduler schema is needed for this focused store integration.

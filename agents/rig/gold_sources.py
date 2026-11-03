@@ -1,144 +1,63 @@
-"""Public gold candidates from catalogue compatibility lists.
+"""Tenant-scoped gold candidates from uploaded products and approved database fits.
 
-Each part that has its own compatibility list labels ``rig.search`` and
-``rig.fit_suggest``. The list is catalogue data shipped with the room.
-Publish keys, shopper mail, and webhooks are not copied.
-
-A folder is emitted only when its publish file marks it ``gold: public``
-(or ``catalogue_kind: public``) and names a region this server is running
-(``us-east`` or ``za``). A missing marker or a missing or unknown region
-skips the folder. A catalogue from the other region is skipped too.
+Store rows remain private. The platform-wide room collector receives an empty
+list unless it explicitly supplies a tenant; it cannot promote store data to
+public training examples.
 """
-
 from __future__ import annotations
 
+import hashlib
 import json
-from pathlib import Path
 from typing import Any
+from uuid import UUID
 
-from rigbox.catalogue import families_from, load_folder
+from rigbox.catalogue import families_from
+from rigbox.shopper_attributes import shopper_rows
 
 MAX_CANDIDATES = 200
 _REGIONS = {"us-east", "za"}
-# A public catalogue with no observed_on is the sealed fixture set. Its family
-# month does not follow the clock. A published observed_on, as_of, or updated
-# date replaces it, so two months are two families.
-SEALED_CATALOGUE_MONTH = "2026-10"
 
 
-def candidates(limit: int = 200, *, region: str = "us-east", root: Path | None = None) -> list[dict[str, Any]]:
-    """Up to ``limit`` candidates, search and fit alternating, stable by catalogue and part."""
-    if region not in _REGIONS or limit <= 0:
+async def candidates(store: Any, tenant_id: str | None, limit: int = 200, *, region: str = "us-east") -> list[dict[str, Any]]:
+    if region not in _REGIONS or limit <= 0 or tenant_id is None:
         return []
-    cap = min(limit, MAX_CANDIDATES)
-    folder = root or Path(__file__).resolve().parent / "catalogues"
-    if not folder.is_dir():
+    tenant = str(UUID(str(tenant_id)))
+    if await store.retailer(tenant) is None:
         return []
-    rows: list[dict[str, Any]] = []
-    for path in sorted(item for item in folder.iterdir() if item.is_dir() and not item.name.startswith(".")):
-        for search_row, fit_row in _pairs(path, region):
-            rows.append(search_row)
-            rows.append(fit_row)
-            if len(rows) >= cap:
-                return rows[:cap]
-    return rows[:cap]
-
-
-def _month(value: Any) -> str | None:
-    if value is None or isinstance(value, bool):
-        return None
-    text = value.isoformat() if hasattr(value, "isoformat") else str(value).strip()
-    if len(text) < 7 or text[4] != "-" or not (text[:4].isdigit() and text[5:7].isdigit()):
-        return None
-    if not 1 <= int(text[5:7]) <= 12:
-        return None
-    return text[:7]
-
-
-def _catalogue_month(publish: dict[str, Any]) -> str:
-    for key in ("observed_on", "as_of", "updated"):
-        month = _month(publish.get(key))
-        if month:
-            return month
-    return SEALED_CATALOGUE_MONTH
-
-
-def _family(slug: str, publish: dict[str, Any]) -> str:
-    family = f"fitment:{slug}:{_catalogue_month(publish)}"
-    if publish.get("synthetic") is True:
-        return family.replace(":", "-synthetic:", 1)
-    return family
-
-
-def _marked_public(publish: dict[str, Any]) -> bool:
-    """The room marks a non-client catalogue. Anything else is skipped."""
-    if "gold" in publish:
-        return publish.get("gold") == "public"
-    return publish.get("catalogue_kind") == "public"
-
-
-def _catalogue_region(publish: dict[str, Any]) -> str:
-    raw = publish.get("region")
-    if not isinstance(raw, str):
-        return ""
-    region = raw.strip().lower()
-    if region not in _REGIONS:
-        return ""
-    return region
-
-
-def _pairs(path: Path, region: str) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    try:
-        loaded = load_folder(path)
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        return []
-    publish = loaded.get("publish")
-    if not isinstance(publish, dict) or not _marked_public(publish):
-        return []
-    catalogue_region = _catalogue_region(publish)
-    if catalogue_region != region:
-        return []
-    if loaded["products"]["rejected"] or loaded["fits"]["rejected"] or not loaded["tenant_id"]:
-        return []
-    products = [row for row in loaded["products"]["rows"] if row.get("active")]
+    products = []
+    for row in await store.products(tenant):
+        attrs = row.get("attributes") or {}
+        if (row.get("active") and not attrs.get("sample") and not attrs.get("demo")
+                and await store.is_feed_product(tenant, row["sku"])):
+            products.append(row)
+    products = shopper_rows(products)
     by_sku = {str(row["sku"]): row for row in products}
     families = families_from(products)
     grouped: dict[str, list[dict[str, Any]]] = {}
-    for fit in loaded["fits"]["rows"]:
-        labelled = _label_fit(fit, by_sku, families)
-        if labelled is None:
+    for fit in await store.fits(tenant):
+        if fit.get("approved") is not True:
             continue
-        grouped.setdefault(labelled["part_sku"], []).append(labelled)
-    tenant = str(loaded["tenant_id"])
-    slim = [_product(row, tenant) for row in products]
-    catalogue_fits = [_copy_fit(row) for part in grouped for row in grouped[part]]
-    pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        labelled = _label_fit(fit, by_sku, families)
+        if labelled is not None:
+            grouped.setdefault(labelled["part_sku"], []).append(labelled)
+    slim = [_product(row, tenant) for row in sorted(products, key=lambda p: p["sku"])]
+    fits = [_copy_fit(row) for part in sorted(grouped) for row in _ordered(grouped[part])]
+    revision = hashlib.sha256(json.dumps([slim, fits], sort_keys=True, default=str).encode()).hexdigest()[:16]
+    rows = []
     for part in sorted(grouped):
-        compatibility = _ordered(grouped[part])
-        source = f"{loaded['slug']}:{part}"
-        common = {
-            "label_source": source,
-            "label_family": _family(str(loaded["slug"]), publish),
-            "region": catalogue_region,
-            "public": True,
-        }
-        pairs.append(
-            (
-                {
-                    **common,
-                    "skill_id": "rig.search",
-                    "input": {"q": part, "limit": 1, "tenant_id": tenant, "products": slim},
-                    "expected": {"ids": [part]},
-                },
-                {
-                    **common,
-                    "skill_id": "rig.fit_suggest",
-                    "input": {"part_sku": part, "products": slim, "fits": list(catalogue_fits)},
-                    "expected": {"fits": compatibility},
-                },
-            )
-        )
-    return pairs
+        common = {"label_source": f"{tenant}:{part}", "label_family": f"fitment:{tenant}:{revision}",
+                  "tenant_id": tenant, "region": region, "public": False}
+        rows.extend([
+            {**common, "skill_id": "rig.search",
+             "input": {"q": part, "limit": 1, "tenant_id": tenant, "products": slim},
+             "expected": {"ids": [part]}},
+            {**common, "skill_id": "rig.fit_suggest",
+             "input": {"tenant_id": tenant, "part_sku": part, "products": slim, "fits": fits},
+             "expected": {"fits": _ordered(grouped[part])}},
+        ])
+        if len(rows) >= min(limit, MAX_CANDIDATES):
+            break
+    return rows[:min(limit, MAX_CANDIDATES)]
 
 
 def _label_fit(

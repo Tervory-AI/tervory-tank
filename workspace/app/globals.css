@@ -313,9 +313,10 @@ nav.squad-nav > .squad-trigger[aria-expanded="true"] { color: #fff; font-weight:
   color: #f4f6fb;
   overflow-x: hidden;
   overflow-y: auto;
+  visibility: hidden;
   transform: translateX(-105%);
 }
-.shell-side.open { transform: none; }
+.shell-side.open { visibility: visible; transform: none; }
 .shell-brand { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .shell-brand img, .shell-member img {
   display: block;
@@ -324,6 +325,10 @@ nav.squad-nav > .squad-trigger[aria-expanded="true"] { color: #fff; font-weight:
   max-width: 100%;
   object-fit: contain;
   object-position: left center;
+}
+@media (max-width: 800px) {
+  .shell-brand img { max-width: calc(100% - 76px); }
+  .shell-side-close { flex-shrink: 0; }
 }
 .shell-side-close { background: transparent; color: #f4f6fb; border-color: rgba(255, 255, 255, 0.45); }
 .shell-account {
@@ -416,7 +421,7 @@ nav.squad-nav > .squad-trigger[aria-expanded="true"] { color: #fff; font-weight:
 
 @media (min-width: 801px) {
   .shell-mobile, .shell-side-close, .shell-dim { display: none; }
-  .shell-side { width: 256px; transform: none; }
+  .shell-side { visibility: visible; width: 256px; transform: none; }
   .app-shell .shell-main { margin-left: 256px; padding-top: 0; max-width: calc(100vw - 256px); }
   .shell-pop, .squad-pop {
     left: 256px;

@@ -4,7 +4,7 @@ import { useId, useState, type FormEvent } from "react";
 
 type Status = "idle" | "saving" | "saved" | "failed";
 
-export function ReleaseForm() {
+export function ReleaseForm({ hero = false }: { hero?: boolean }) {
   const fieldId = useId();
   const [status, setStatus] = useState<Status>("idle");
 
@@ -26,8 +26,8 @@ export function ReleaseForm() {
   }
 
   return (
-    <form className="release" action="/api/release-notice" method="post" onSubmit={onSubmit}>
-      <label htmlFor={fieldId}>Get early access</label>
+    <form className={`release${hero ? " release-hero" : ""}`} action="/api/release-notice" method="post" onSubmit={onSubmit}>
+      <label htmlFor={fieldId} className={hero ? "visually-hidden" : undefined}>{hero ? "Work email" : "Get early access"}</label>
       <div className="release-row">
         <input
           id={fieldId}
@@ -36,12 +36,13 @@ export function ReleaseForm() {
           autoComplete="email"
           inputMode="email"
           required
-          placeholder="you@company.com"
+          placeholder={hero ? "Work email" : "you@company.com"}
           disabled={status === "saving"}
         />
         <button className="btn-primary" type="submit" disabled={status === "saving"}>
-          Join the list
+          {hero ? "Request early access" : "Join the list"}
         </button>
+        {hero ? <span className="hero-form-note">In build · opening to a small group first</span> : null}
       </div>
       <p className="release-status" role="status">
         {status === "saved" ? "Saved. We'll email this address when we release." : null}

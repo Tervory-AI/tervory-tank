@@ -62,7 +62,7 @@ async def test_http_separate_budgets_cors_and_spoofed_forwarding():
     from fastapi import FastAPI
     from rigbox.api import mount
     from test_rig_quotes import service, CONTACT
-    from rigbox.quotes.sample import KEY
+    from fixtures.rig_quote_sample import KEY
 
     app = FastAPI()
     app.state.rig = await service()
@@ -92,7 +92,7 @@ async def test_two_shoppers_behind_proxy_and_ipv6_rotation(monkeypatch):
     from fastapi import FastAPI
     from rigbox.api import mount
     from test_rig_quotes import service, CONTACT
-    from rigbox.quotes.sample import KEY
+    from fixtures.rig_quote_sample import KEY
 
     monkeypatch.setenv("RIG_TRUSTED_PROXY_CIDRS", "10.20.0.0/24")
     app = FastAPI()
@@ -127,7 +127,7 @@ async def test_tenant_ceiling_holds_and_alerts_without_blocking_shoppers(caplog)
     from rigbox.api import mount
     from rigbox.quotes.api import mount as mount_admin
     from test_rig_quotes import service, CONTACT, OTHER
-    from rigbox.quotes.sample import KEY
+    from fixtures.rig_quote_sample import KEY
     from rigbox.service import hash_key
 
     app = FastAPI()
@@ -171,7 +171,7 @@ async def test_tenant_ceiling_holds_and_alerts_without_blocking_shoppers(caplog)
 async def test_failed_key_lookups_are_bounded_before_database_access(monkeypatch):
     import asyncio
     from rigbox.quotes.limits import FailedKeyLimits
-    from rigbox.quotes.sample import KEY
+    from fixtures.rig_quote_sample import KEY
     from rigbox.service import RigError
     from test_rig_quotes import service
 
@@ -203,7 +203,7 @@ async def test_failed_key_lookups_are_bounded_before_database_access(monkeypatch
 @pytest.mark.asyncio
 async def test_failed_key_flood_from_10000_ipv6_subnets_does_not_lock_out_stores():
     from rigbox.quotes.limits import FailedKeyLimits
-    from rigbox.quotes.sample import KEY
+    from fixtures.rig_quote_sample import KEY
     from rigbox.service import RigError, hash_key
     from test_rig_quotes import service, OTHER
 
@@ -224,7 +224,7 @@ async def test_failed_key_flood_from_10000_ipv6_subnets_does_not_lock_out_stores
 async def test_full_failed_key_table_evicts_oldest_and_only_that_guard_fails_open():
     from ipaddress import IPv4Address
     from rigbox.quotes.limits import FailedKeyLimits
-    from rigbox.quotes.sample import KEY
+    from fixtures.rig_quote_sample import KEY
     from rigbox.service import RigError
     from test_rig_quotes import service
 

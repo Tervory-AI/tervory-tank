@@ -7,6 +7,8 @@ was not stored is ranked in code. Another retailer's search is not reused.
 
 from __future__ import annotations
 
+from rig_fixture_loader import load_catalogue
+
 import sys
 from pathlib import Path
 
@@ -20,7 +22,7 @@ import rigbox.service as service_mod  # noqa: E402
 from rigbox.service import Service  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
-CATALOGUES = ROOT / "agents" / "rig" / "catalogues"
+CATALOGUES = ROOT / "tests" / "fixtures" / "rig_catalogues"
 CN = "33333333-3333-4333-8333-333333333333"
 EXAMPLE = "11111111-1111-4111-8111-111111111111"
 
@@ -38,8 +40,8 @@ class Models:
 async def _service() -> tuple[Service, Models]:
     models = Models()
     service = Service(MemoryStore(), models)
-    for name in ("customnation", "example", "second"):
-        report = await service.load_folder(CATALOGUES / name)
+    for name in ("lumaworks", "example", "second"):
+        report = await load_catalogue(service, CATALOGUES / name)
         assert report["products"]["rejected"] == []
     return service, models
 
@@ -59,15 +61,15 @@ async def test_the_same_search_is_reused_for_nothing(monkeypatch: pytest.MonkeyP
         return original(payload)
 
     monkeypatch.setattr(service_mod, "rank_room", tracking)
-    first = await service.search(CN, "optic for staccato", 12)
+    first = await service.search(CN, "optic for lumaworks", 12)
     assert _ids(first) 
     assert first["exact_match"] is True
     assert first["parts"][0]["reused"] is False
     assert first["parts"][0]["rung"] == "code"
     assert first["parts"][0]["cost"] == 0
-    assert calls == ["optic for staccato"]
-    again = await service.search(CN, "optic for staccato", 12)
-    assert calls == ["optic for staccato"]
+    assert calls == ["optic for lumaworks"]
+    again = await service.search(CN, "optic for lumaworks", 12)
+    assert calls == ["optic for lumaworks"]
     assert _ids(again) == _ids(first)
     assert again["parts"][0]["reused"] is True
     assert again["parts"][0]["cost"] == 0
@@ -87,10 +89,10 @@ async def test_a_new_part_is_ranked_and_the_known_part_is_not(monkeypatch: pytes
         return original(payload)
 
     monkeypatch.setattr(service_mod, "rank_room", tracking)
-    first = await service.search(CN, "optic for staccato", 12)
+    first = await service.search(CN, "optic for lumaworks", 12)
     calls.clear()
-    second = await service.search(CN, "optic and holster for staccato", 12)
-    assert calls == ["holster for staccato"]
+    second = await service.search(CN, "optic and holster for lumaworks", 12)
+    assert calls == ["holster for lumaworks"]
     assert _ids(first) == [item for item in _ids(second) if item in set(_ids(first))]
     by_part = {row["part"]: row for row in second["parts"]}
     assert by_part["optic"]["reused"] is True
@@ -98,7 +100,7 @@ async def test_a_new_part_is_ranked_and_the_known_part_is_not(monkeypatch: pytes
     assert by_part["holster"]["reused"] is False
     assert by_part["holster"]["rung"] == "code"
     calls.clear()
-    third = await service.search(CN, "optic and holster for staccato", 12)
+    third = await service.search(CN, "optic and holster for lumaworks", 12)
     assert calls == []
     assert _ids(third) == _ids(second)
     assert all(row["reused"] is True and row["cost"] == 0 for row in third["parts"])
@@ -134,12 +136,12 @@ async def test_removing_the_search_ranks_it_again(monkeypatch: pytest.MonkeyPatc
         return original(payload)
 
     monkeypatch.setattr(service_mod, "rank_room", tracking)
-    await service.search(CN, "optic for staccato", 12)
-    await service.search(CN, "optic for staccato", 12)
-    assert calls == ["optic for staccato"]
+    await service.search(CN, "optic for lumaworks", 12)
+    await service.search(CN, "optic for lumaworks", 12)
+    assert calls == ["optic for lumaworks"]
     await service.store.drop_searches(CN)
-    await service.search(CN, "optic for staccato", 12)
-    assert calls == ["optic for staccato", "optic for staccato"]
+    await service.search(CN, "optic for lumaworks", 12)
+    assert calls == ["optic for lumaworks", "optic for lumaworks"]
     assert models.calls == []
 
 
@@ -154,10 +156,10 @@ async def test_a_changed_catalogue_is_not_reused(monkeypatch: pytest.MonkeyPatch
         return original(payload)
 
     monkeypatch.setattr(service_mod, "rank_room", tracking)
-    await service.search(CN, "Staccato P", 12)
+    await service.search(CN, "LumaWorks P", 12)
     await service.store.update_price(CN, "STI-P-9", {"price": 10})
-    again = await service.search(CN, "Staccato P", 12)
-    assert calls == ["Staccato P", "Staccato P"]
+    again = await service.search(CN, "LumaWorks P", 12)
+    assert calls == ["LumaWorks P", "LumaWorks P"]
     assert again["parts"][0]["reused"] is False
 
 

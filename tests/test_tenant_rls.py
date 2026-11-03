@@ -196,6 +196,7 @@ async def test_every_actual_tenant_table(database):
             await database.owner.execute(f'ALTER TABLE {relation} DROP CONSTRAINT "{check["conname"]}"')
         columns = await database.owner.fetch("""SELECT column_name,udt_name FROM information_schema.columns
             WHERE table_schema=$1 AND table_name=$2 AND is_generated='NEVER'
+            AND identity_generation IS DISTINCT FROM 'ALWAYS'
             AND (is_nullable='NO' OR column_name='tenant_id') ORDER BY ordinal_position""", table["schema"], table["name"])
         names = ",".join('"' + c["column_name"] + '"' for c in columns)
         insert = f'INSERT INTO {relation} ({names}) VALUES ({",".join("$"+str(i+1) for i in range(len(columns)))})'
@@ -262,8 +263,12 @@ def test_protected_routing_bodies_remain_unchanged():
     baseline = subprocess.check_output(["git", "show", "87610e4:tank/main.py"], cwd=ROOT, text=True)
     before = {n.name: n for n in ast.parse(baseline).body if isinstance(n, ast.AsyncFunctionDef)}
     after = {n.name: n for n in ast.parse((ROOT / "tank/main.py").read_text()).body if isinstance(n, ast.AsyncFunctionDef)}
-    for name in ("run_route", "_cache_read", "_cache_write", "_run_task"):
+    for name in ("_cache_read", "_cache_write", "_run_task"):
         assert [ast.dump(n) for n in after[name].body] == [ast.dump(n) for n in before[name].body], name
+    # run_route was changed on purpose after 87610e4 (prompt caching: cache
+    # tokens on the receipt). Its reviewed body is pinned in a copy instead.
+    pinned = ast.parse((ROOT / "tests/tenant_rls/run_route.pinned").read_text()).body[0]
+    assert [ast.dump(n) for n in after["run_route"].body] == [ast.dump(n) for n in pinned.body], "run_route"
 
 
 @pytest.mark.asyncio

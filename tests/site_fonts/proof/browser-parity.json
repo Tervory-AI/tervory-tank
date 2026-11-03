@@ -1,0 +1,3203 @@
+{
+  "viewports": [
+    {
+      "width": 1440,
+      "identicalGeometryAndFontMetrics": true,
+      "identicalPixels": true,
+      "sha256": "36861ffb10d4fc404323c22e605873ee0a86aa5c6019ea8b12aff3b6a547bd07",
+      "snapshot": {
+        "geometry": [
+          {
+            "tag": "A",
+            "text": "Skip to content",
+            "rect": [
+              12,
+              -40,
+              140,
+              40
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "HEADER",
+            "text": "",
+            "rect": [
+              0,
+              0,
+              1440,
+              73
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              0,
+              0,
+              1440,
+              72
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "A",
+            "text": "",
+            "rect": [
+              40,
+              19,
+              186,
+              34
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              40,
+              19,
+              186,
+              34
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "NAV",
+            "text": "",
+            "rect": [
+              254,
+              24.75,
+              160,
+              22.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "500",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "A",
+            "text": "The work",
+            "rect": [
+              254,
+              24.75,
+              67,
+              22.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "500",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "A",
+            "text": "Products",
+            "rect": [
+              349,
+              24.75,
+              65,
+              22.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "500",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "MAIN",
+            "text": "",
+            "rect": [
+              0,
+              73,
+              1440,
+              2997.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "SECTION",
+            "text": "",
+            "rect": [
+              0,
+              73,
+              1440,
+              607.234375
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Tervory AI · In build",
+            "rect": [
+              40,
+              169,
+              167.171875,
+              16.796875
+            ],
+            "family": "\"JetBrains Mono\", \"JetBrains Mono Fallback\", \"JetBrains Mono\", ui-monospace, monospace",
+            "weight": "400",
+            "size": "12px",
+            "style": "normal",
+            "lineHeight": "16.8px",
+            "letterSpacing": "0.96px",
+            "variation": "normal"
+          },
+          {
+            "tag": "H1",
+            "text": "Specialist AI for the work that runs a business.",
+            "rect": [
+              40,
+              201.796875,
+              784,
+              120.9375
+            ],
+            "family": "Jost, \"Jost Fallback\", Jost, sans-serif",
+            "weight": "300",
+            "size": "56px",
+            "style": "normal",
+            "lineHeight": "60.48px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Tervory is a squad of specialist AI agents for data, pricing, markets, legal, security and the web. Ask in plain language. The right specialist does the work, shows its sources, and tells you which model ran it and what it cost.",
+            "rect": [
+              40,
+              338.734375,
+              720,
+              81
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "18px",
+            "style": "normal",
+            "lineHeight": "27px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "FORM",
+            "text": "",
+            "rect": [
+              40,
+              443.734375,
+              520,
+              103.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "LABEL",
+            "text": "Get early access",
+            "rect": [
+              40,
+              443.734375,
+              520,
+              22.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "600",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              40,
+              474.234375,
+              520,
+              44
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "INPUT",
+            "text": "",
+            "rect": [
+              40,
+              474.234375,
+              386,
+              44
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "BUTTON",
+            "text": "Join the list",
+            "rect": [
+              438,
+              474.234375,
+              122,
+              44
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "600",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "",
+            "rect": [
+              40,
+              526.234375,
+              520,
+              21
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "14px",
+            "style": "normal",
+            "lineHeight": "21px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "We are opening to a small group of businesses first.",
+            "rect": [
+              40,
+              563.234375,
+              343,
+              21
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "14px",
+            "style": "normal",
+            "lineHeight": "21px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "SECTION",
+            "text": "",
+            "rect": [
+              0,
+              680.234375,
+              1440,
+              386.390625
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              40,
+              776.234375,
+              1360,
+              50.59375
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H2",
+            "text": "How it works",
+            "rect": [
+              40,
+              776.234375,
+              704,
+              50.59375
+            ],
+            "family": "Jost, \"Jost Fallback\", Jost, sans-serif",
+            "weight": "300",
+            "size": "44px",
+            "style": "normal",
+            "lineHeight": "50.6px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              40,
+              854.828125,
+              1360,
+              115.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              40,
+              854.828125,
+              442.65625,
+              115.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H3",
+            "text": "Ask.",
+            "rect": [
+              61,
+              875.828125,
+              34,
+              20.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "600",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "20.8px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Describe the job the way you would brief a colleague.",
+            "rect": [
+              61,
+              904.625,
+              369,
+              22.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              498.65625,
+              854.828125,
+              442.671875,
+              115.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H3",
+            "text": "Routed.",
+            "rect": [
+              519.65625,
+              875.828125,
+              60,
+              20.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "600",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "20.8px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Tank sends it to the specialist built for that job, on the best-value route that still gets it right.",
+            "rect": [
+              519.65625,
+              904.625,
+              400.671875,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              957.328125,
+              854.828125,
+              442.65625,
+              115.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H3",
+            "text": "Answered.",
+            "rect": [
+              978.328125,
+              875.828125,
+              85,
+              20.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "600",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "20.8px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Every answer comes with its sources, the model that produced it, and the cost.",
+            "rect": [
+              978.328125,
+              904.625,
+              400.65625,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "SECTION",
+            "text": "",
+            "rect": [
+              0,
+              1066.625,
+              1440,
+              378.59375
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              40,
+              1162.625,
+              1360,
+              50.59375
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H2",
+            "text": "It gets cheaper the more it works",
+            "rect": [
+              40,
+              1162.625,
+              704,
+              50.59375
+            ],
+            "family": "Jost, \"Jost Fallback\", Jost, sans-serif",
+            "weight": "300",
+            "size": "44px",
+            "style": "normal",
+            "lineHeight": "50.6px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Most AI charges the same for the hundredth question as the first. Tervory learns. When a cheaper model, or plain code, proves it gives the same answer, it takes over the task, automatically and only after it has been tested. The work stays right. The cost keeps falling.",
+            "rect": [
+              40,
+              1241.21875,
+              720,
+              108
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "18px",
+            "style": "normal",
+            "lineHeight": "27px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "SECTION",
+            "text": "",
+            "rect": [
+              0,
+              1445.21875,
+              1440,
+              864.59375
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              40,
+              1541.21875,
+              1360,
+              89.59375
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H2",
+            "text": "The squad",
+            "rect": [
+              40,
+              1541.21875,
+              704,
+              50.59375
+            ],
+            "family": "Jost, \"Jost Fallback\", Jost, sans-serif",
+            "weight": "300",
+            "size": "44px",
+            "style": "normal",
+            "lineHeight": "50.6px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Nine specialists. Each one built for a single job.",
+            "rect": [
+              40,
+              1603.8125,
+              720,
+              27
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "18px",
+            "style": "normal",
+            "lineHeight": "27px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              40,
+              1658.8125,
+              1360,
+              555
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              40,
+              1658.8125,
+              442.65625,
+              137
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              40,
+              1658.8125,
+              278.28125,
+              72
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Turns a raw list into verified businesses: websites, contacts and licences, each with a source.",
+            "rect": [
+              40,
+              1750.8125,
+              442.65625,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              498.65625,
+              1658.8125,
+              442.671875,
+              137
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              498.65625,
+              1658.8125,
+              234.328125,
+              72
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Watches prices and competitors, and tells you the moment a rival moves.",
+            "rect": [
+              498.65625,
+              1750.8125,
+              442.671875,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              957.328125,
+              1658.8125,
+              442.65625,
+              137
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              957.328125,
+              1658.8125,
+              436.375,
+              72
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Market research with every number sourced: demand, gaps, and shifts before they show.",
+            "rect": [
+              957.328125,
+              1750.8125,
+              442.65625,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              40,
+              1867.8125,
+              442.65625,
+              137
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              40,
+              1867.8125,
+              129.71875,
+              72
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Finds the right product, and every part that fits it, in a retailer's own catalogue.",
+            "rect": [
+              40,
+              1959.8125,
+              442.65625,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              498.65625,
+              1867.8125,
+              442.671875,
+              137
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              498.65625,
+              1867.8125,
+              288.203125,
+              72
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Builds websites and apps from a short brief, tested before they go live.",
+            "rect": [
+              498.65625,
+              1959.8125,
+              442.671875,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              957.328125,
+              1867.8125,
+              442.65625,
+              137
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              957.328125,
+              1867.8125,
+              209.359375,
+              72
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Finds what your systems and sites expose, before someone else does.",
+            "rect": [
+              957.328125,
+              1959.8125,
+              442.65625,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              40,
+              2076.8125,
+              442.65625,
+              137
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              40,
+              2076.8125,
+              202.328125,
+              72
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Legal research and drafting for US and South African business law, reviewed by licensed lawyers.",
+            "rect": [
+              40,
+              2168.8125,
+              442.65625,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              498.65625,
+              2076.8125,
+              442.671875,
+              137
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              498.65625,
+              2076.8125,
+              301.890625,
+              72
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "The skills library. Every skill is tested before a specialist may use it.",
+            "rect": [
+              498.65625,
+              2168.8125,
+              442.671875,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              957.328125,
+              2076.8125,
+              442.65625,
+              137
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              957.328125,
+              2076.8125,
+              295.421875,
+              72
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "The engine underneath. It routes every task to the best-value model and keeps the receipts.",
+            "rect": [
+              957.328125,
+              2168.8125,
+              442.65625,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "SECTION",
+            "text": "",
+            "rect": [
+              0,
+              2309.8125,
+              1440,
+              324.59375
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              40,
+              2405.8125,
+              1360,
+              50.59375
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H2",
+            "text": "Measured, not promised",
+            "rect": [
+              40,
+              2405.8125,
+              704,
+              50.59375
+            ],
+            "family": "Jost, \"Jost Fallback\", Jost, sans-serif",
+            "weight": "300",
+            "size": "44px",
+            "style": "normal",
+            "lineHeight": "50.6px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Every skill passes a test set before it goes live. A cheaper route only takes over once it matches the results. If we cannot measure it, we do not claim it.",
+            "rect": [
+              40,
+              2484.40625,
+              720,
+              54
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "18px",
+            "style": "normal",
+            "lineHeight": "27px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "SECTION",
+            "text": "",
+            "rect": [
+              0,
+              2634.40625,
+              1440,
+              436.09375
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              40,
+              2730.40625,
+              1360,
+              50.59375
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H2",
+            "text": "Be first in",
+            "rect": [
+              40,
+              2730.40625,
+              704,
+              50.59375
+            ],
+            "family": "Jost, \"Jost Fallback\", Jost, sans-serif",
+            "weight": "300",
+            "size": "44px",
+            "style": "normal",
+            "lineHeight": "50.6px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "We are opening Tervory to a small group of businesses first. Leave your email and we will tell you when your seat is ready.",
+            "rect": [
+              40,
+              2809,
+              720,
+              54
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "18px",
+            "style": "normal",
+            "lineHeight": "27px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "FORM",
+            "text": "",
+            "rect": [
+              40,
+              2871,
+              520,
+              103.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "LABEL",
+            "text": "Get early access",
+            "rect": [
+              40,
+              2871,
+              520,
+              22.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "600",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              40,
+              2901.5,
+              520,
+              44
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "INPUT",
+            "text": "",
+            "rect": [
+              40,
+              2901.5,
+              386,
+              44
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "BUTTON",
+            "text": "Join the list",
+            "rect": [
+              438,
+              2901.5,
+              122,
+              44
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "600",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "",
+            "rect": [
+              40,
+              2953.5,
+              520,
+              21
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "14px",
+            "style": "normal",
+            "lineHeight": "21px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "FOOTER",
+            "text": "",
+            "rect": [
+              0,
+              3070.5,
+              1440,
+              247
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              40,
+              3126.5,
+              169.578125,
+              31
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Every answer shows its sources, the model that ran it, and what it cost.",
+            "rect": [
+              40,
+              3173.5,
+              448,
+              48
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "© 2026 Tervory AI",
+            "rect": [
+              40,
+              3237.5,
+              170,
+              24
+            ],
+            "family": "\"JetBrains Mono\", \"JetBrains Mono Fallback\", \"JetBrains Mono\", ui-monospace, monospace",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          }
+        ],
+        "glyphs": [
+          {
+            "family": "Jost",
+            "weight": 300,
+            "width": 735.71875,
+            "ascent": 24,
+            "descent": 7
+          },
+          {
+            "family": "Jost",
+            "weight": 400,
+            "width": 750.71875,
+            "ascent": 24,
+            "descent": 7
+          },
+          {
+            "family": "Inter",
+            "weight": 400,
+            "width": 816,
+            "ascent": 25,
+            "descent": 7
+          },
+          {
+            "family": "Inter",
+            "weight": 500,
+            "width": 823,
+            "ascent": 25,
+            "descent": 7
+          },
+          {
+            "family": "Inter",
+            "weight": 600,
+            "width": 831,
+            "ascent": 25,
+            "descent": 7
+          },
+          {
+            "family": "JetBrains Mono",
+            "weight": 400,
+            "width": 912,
+            "ascent": 26,
+            "descent": 6
+          }
+        ],
+        "scrollWidth": 1440
+      }
+    },
+    {
+      "width": 375,
+      "identicalGeometryAndFontMetrics": true,
+      "identicalPixels": true,
+      "sha256": "12a02efc9c8a054fb9f475aba552622d5790b47a7d8e54a85aa6b442416541ce",
+      "snapshot": {
+        "geometry": [
+          {
+            "tag": "A",
+            "text": "Skip to content",
+            "rect": [
+              12,
+              -40,
+              140,
+              40
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "HEADER",
+            "text": "",
+            "rect": [
+              0,
+              0,
+              375,
+              73
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              0,
+              0,
+              375,
+              72
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "A",
+            "text": "",
+            "rect": [
+              16,
+              22.5,
+              147.703125,
+              27
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              16,
+              22.5,
+              147.703125,
+              27
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "BUTTON",
+            "text": "",
+            "rect": [
+              319,
+              18,
+              40,
+              36
+            ],
+            "family": "Arial",
+            "weight": "400",
+            "size": "13.3333px",
+            "style": "normal",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "SPAN",
+            "text": "",
+            "rect": [
+              330,
+              29,
+              18,
+              2
+            ],
+            "family": "Arial",
+            "weight": "400",
+            "size": "13.3333px",
+            "style": "normal",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "SPAN",
+            "text": "",
+            "rect": [
+              330,
+              35,
+              18,
+              2
+            ],
+            "family": "Arial",
+            "weight": "400",
+            "size": "13.3333px",
+            "style": "normal",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "SPAN",
+            "text": "",
+            "rect": [
+              330,
+              41,
+              18,
+              2
+            ],
+            "family": "Arial",
+            "weight": "400",
+            "size": "13.3333px",
+            "style": "normal",
+            "lineHeight": "normal",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "MAIN",
+            "text": "",
+            "rect": [
+              0,
+              73,
+              375,
+              4285.03125
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "SECTION",
+            "text": "",
+            "rect": [
+              0,
+              73,
+              375,
+              688.859375
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Tervory AI · In build",
+            "rect": [
+              16,
+              137,
+              167.171875,
+              16.796875
+            ],
+            "family": "\"JetBrains Mono\", \"JetBrains Mono Fallback\", \"JetBrains Mono\", ui-monospace, monospace",
+            "weight": "400",
+            "size": "12px",
+            "style": "normal",
+            "lineHeight": "16.8px",
+            "letterSpacing": "0.96px",
+            "variation": "normal"
+          },
+          {
+            "tag": "H1",
+            "text": "Specialist AI for the work that runs a business.",
+            "rect": [
+              16,
+              169.796875,
+              343,
+              129.5625
+            ],
+            "family": "Jost, \"Jost Fallback\", Jost, sans-serif",
+            "weight": "300",
+            "size": "40px",
+            "style": "normal",
+            "lineHeight": "43.2px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Tervory is a squad of specialist AI agents for data, pricing, markets, legal, security and the web. Ask in plain language. The right specialist does the work, shows its sources, and tells you which model ran it and what it cost.",
+            "rect": [
+              16,
+              315.359375,
+              343,
+              162
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "18px",
+            "style": "normal",
+            "lineHeight": "27px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "FORM",
+            "text": "",
+            "rect": [
+              16,
+              501.359375,
+              343,
+              159.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "LABEL",
+            "text": "Get early access",
+            "rect": [
+              16,
+              501.359375,
+              343,
+              22.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "600",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              16,
+              531.859375,
+              343,
+              100
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "INPUT",
+            "text": "",
+            "rect": [
+              16,
+              531.859375,
+              343,
+              44
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "BUTTON",
+            "text": "Join the list",
+            "rect": [
+              16,
+              587.859375,
+              343,
+              44
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "600",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "",
+            "rect": [
+              16,
+              639.859375,
+              343,
+              21
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "14px",
+            "style": "normal",
+            "lineHeight": "21px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "We are opening to a small group of businesses first.",
+            "rect": [
+              16,
+              676.859375,
+              343,
+              21
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "14px",
+            "style": "normal",
+            "lineHeight": "21px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "SECTION",
+            "text": "",
+            "rect": [
+              0,
+              761.859375,
+              375,
+              594.6875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              16,
+              825.859375,
+              343,
+              36.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H2",
+            "text": "How it works",
+            "rect": [
+              16,
+              825.859375,
+              343,
+              36.796875
+            ],
+            "family": "Jost, \"Jost Fallback\", Jost, sans-serif",
+            "weight": "300",
+            "size": "32px",
+            "style": "normal",
+            "lineHeight": "36.8px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              16,
+              890.65625,
+              343,
+              401.890625
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              16,
+              890.65625,
+              343,
+              115.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H3",
+            "text": "Ask.",
+            "rect": [
+              37,
+              911.65625,
+              34,
+              20.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "600",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "20.8px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Describe the job the way you would brief a colleague.",
+            "rect": [
+              37,
+              940.453125,
+              301,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              16,
+              1022.453125,
+              343,
+              138.296875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H3",
+            "text": "Routed.",
+            "rect": [
+              37,
+              1043.453125,
+              60,
+              20.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "600",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "20.8px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Tank sends it to the specialist built for that job, on the best-value route that still gets it right.",
+            "rect": [
+              37,
+              1072.25,
+              301,
+              67.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              16,
+              1176.75,
+              343,
+              115.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H3",
+            "text": "Answered.",
+            "rect": [
+              37,
+              1197.75,
+              85,
+              20.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "600",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "20.8px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Every answer comes with its sources, the model that produced it, and the cost.",
+            "rect": [
+              37,
+              1226.546875,
+              301,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "SECTION",
+            "text": "",
+            "rect": [
+              0,
+              1356.546875,
+              375,
+              418.59375
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              16,
+              1420.546875,
+              343,
+              73.59375
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H2",
+            "text": "It gets cheaper the more it works",
+            "rect": [
+              16,
+              1420.546875,
+              343,
+              73.59375
+            ],
+            "family": "Jost, \"Jost Fallback\", Jost, sans-serif",
+            "weight": "300",
+            "size": "32px",
+            "style": "normal",
+            "lineHeight": "36.8px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Most AI charges the same for the hundredth question as the first. Tervory learns. When a cheaper model, or plain code, proves it gives the same answer, it takes over the task, automatically and only after it has been tested. The work stays right. The cost keeps falling.",
+            "rect": [
+              16,
+              1522.140625,
+              343,
+              189
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "18px",
+            "style": "normal",
+            "lineHeight": "27px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "SECTION",
+            "text": "",
+            "rect": [
+              0,
+              1775.140625,
+              375,
+              1840.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              16,
+              1839.140625,
+              343,
+              102.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H2",
+            "text": "The squad",
+            "rect": [
+              16,
+              1839.140625,
+              343,
+              36.796875
+            ],
+            "family": "Jost, \"Jost Fallback\", Jost, sans-serif",
+            "weight": "300",
+            "size": "32px",
+            "style": "normal",
+            "lineHeight": "36.8px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Nine specialists. Each one built for a single job.",
+            "rect": [
+              16,
+              1887.9375,
+              343,
+              54
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "18px",
+            "style": "normal",
+            "lineHeight": "27px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              16,
+              1969.9375,
+              343,
+              1582
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              16,
+              1969.9375,
+              343,
+              143.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              16,
+              1969.9375,
+              216.4375,
+              56
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Turns a raw list into verified businesses: websites, contacts and licences, each with a source.",
+            "rect": [
+              16,
+              2045.9375,
+              343,
+              67.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              16,
+              2169.4375,
+              343,
+              121
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              16,
+              2169.4375,
+              182.25,
+              56
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Watches prices and competitors, and tells you the moment a rival moves.",
+            "rect": [
+              16,
+              2245.4375,
+              343,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              16,
+              2346.4375,
+              343,
+              121
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              16,
+              2346.4375,
+              339.40625,
+              56
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Market research with every number sourced: demand, gaps, and shifts before they show.",
+            "rect": [
+              16,
+              2422.4375,
+              343,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              16,
+              2523.4375,
+              343,
+              121
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              16,
+              2523.4375,
+              100.890625,
+              56
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Finds the right product, and every part that fits it, in a retailer's own catalogue.",
+            "rect": [
+              16,
+              2599.4375,
+              343,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              16,
+              2700.4375,
+              343,
+              121
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              16,
+              2700.4375,
+              224.15625,
+              56
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Builds websites and apps from a short brief, tested before they go live.",
+            "rect": [
+              16,
+              2776.4375,
+              343,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              16,
+              2877.4375,
+              343,
+              121
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              16,
+              2877.4375,
+              162.828125,
+              56
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Finds what your systems and sites expose, before someone else does.",
+            "rect": [
+              16,
+              2953.4375,
+              343,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              16,
+              3054.4375,
+              343,
+              143.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              16,
+              3054.4375,
+              157.375,
+              56
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Legal research and drafting for US and South African business law, reviewed by licensed lawyers.",
+            "rect": [
+              16,
+              3130.4375,
+              343,
+              67.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              16,
+              3253.9375,
+              343,
+              121
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              16,
+              3253.9375,
+              234.8125,
+              56
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "The skills library. Every skill is tested before a specialist may use it.",
+            "rect": [
+              16,
+              3329.9375,
+              343,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "ARTICLE",
+            "text": "",
+            "rect": [
+              16,
+              3430.9375,
+              343,
+              121
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              16,
+              3430.9375,
+              229.765625,
+              56
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "The engine underneath. It routes every task to the best-value model and keeps the receipts.",
+            "rect": [
+              16,
+              3506.9375,
+              343,
+              45
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "SECTION",
+            "text": "",
+            "rect": [
+              0,
+              3615.9375,
+              375,
+              300.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              16,
+              3679.9375,
+              343,
+              36.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H2",
+            "text": "Measured, not promised",
+            "rect": [
+              16,
+              3679.9375,
+              343,
+              36.796875
+            ],
+            "family": "Jost, \"Jost Fallback\", Jost, sans-serif",
+            "weight": "300",
+            "size": "32px",
+            "style": "normal",
+            "lineHeight": "36.8px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Every skill passes a test set before it goes live. A cheaper route only takes over once it matches the results. If we cannot measure it, we do not claim it.",
+            "rect": [
+              16,
+              3744.734375,
+              343,
+              108
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "18px",
+            "style": "normal",
+            "lineHeight": "27px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "SECTION",
+            "text": "",
+            "rect": [
+              0,
+              3916.734375,
+              375,
+              441.296875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              16,
+              3980.734375,
+              343,
+              36.796875
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "H2",
+            "text": "Be first in",
+            "rect": [
+              16,
+              3980.734375,
+              343,
+              36.796875
+            ],
+            "family": "Jost, \"Jost Fallback\", Jost, sans-serif",
+            "weight": "300",
+            "size": "32px",
+            "style": "normal",
+            "lineHeight": "36.8px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "We are opening Tervory to a small group of businesses first. Leave your email and we will tell you when your seat is ready.",
+            "rect": [
+              16,
+              4045.53125,
+              343,
+              81
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "18px",
+            "style": "normal",
+            "lineHeight": "27px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "FORM",
+            "text": "",
+            "rect": [
+              16,
+              4134.53125,
+              343,
+              159.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "LABEL",
+            "text": "Get early access",
+            "rect": [
+              16,
+              4134.53125,
+              343,
+              22.5
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "600",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "DIV",
+            "text": "",
+            "rect": [
+              16,
+              4165.03125,
+              343,
+              100
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "INPUT",
+            "text": "",
+            "rect": [
+              16,
+              4165.03125,
+              343,
+              44
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "BUTTON",
+            "text": "Join the list",
+            "rect": [
+              16,
+              4221.03125,
+              343,
+              44
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "600",
+            "size": "15px",
+            "style": "normal",
+            "lineHeight": "22.5px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "",
+            "rect": [
+              16,
+              4273.03125,
+              343,
+              21
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "14px",
+            "style": "normal",
+            "lineHeight": "21px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "FOOTER",
+            "text": "",
+            "rect": [
+              0,
+              4358.03125,
+              375,
+              247
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "IMG",
+            "text": "",
+            "rect": [
+              16,
+              4414.03125,
+              169.578125,
+              31
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "Every answer shows its sources, the model that ran it, and what it cost.",
+            "rect": [
+              16,
+              4461.03125,
+              343,
+              48
+            ],
+            "family": "Inter, \"Inter Fallback\", Inter, sans-serif",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          },
+          {
+            "tag": "P",
+            "text": "© 2026 Tervory AI",
+            "rect": [
+              16,
+              4525.03125,
+              170,
+              24
+            ],
+            "family": "\"JetBrains Mono\", \"JetBrains Mono Fallback\", \"JetBrains Mono\", ui-monospace, monospace",
+            "weight": "400",
+            "size": "16px",
+            "style": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "variation": "normal"
+          }
+        ],
+        "glyphs": [
+          {
+            "family": "Jost",
+            "weight": 300,
+            "width": 735.71875,
+            "ascent": 24,
+            "descent": 7
+          },
+          {
+            "family": "Jost",
+            "weight": 400,
+            "width": 750.71875,
+            "ascent": 24,
+            "descent": 7
+          },
+          {
+            "family": "Inter",
+            "weight": 400,
+            "width": 816,
+            "ascent": 25,
+            "descent": 7
+          },
+          {
+            "family": "Inter",
+            "weight": 500,
+            "width": 823,
+            "ascent": 25,
+            "descent": 7
+          },
+          {
+            "family": "Inter",
+            "weight": 600,
+            "width": 831,
+            "ascent": 25,
+            "descent": 7
+          },
+          {
+            "family": "JetBrains Mono",
+            "weight": 400,
+            "width": 912,
+            "ascent": 26,
+            "descent": 6
+          }
+        ],
+        "scrollWidth": 375
+      }
+    }
+  ],
+  "assets": [
+    {
+      "name": "19cfc7226ec3afaa-s.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "46dd4cdca58c26ae87cc6927657bf83b2e8abfc39ffd0ab176e301a8d28d22bf"
+    },
+    {
+      "name": "1f424c9580f97313-s.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "d5f407e28185790518c49ec8738fa89916ddc99f793010d249165d0e2c2452cc"
+    },
+    {
+      "name": "21350d82a1f187e9-s.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "aebf2ab4a4ce6810d73c1ac7be7cafb4e5ec4cee2d6db5fb3e09691747ec4bd6"
+    },
+    {
+      "name": "2f186ab49059fbbb-s.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "d2c25018631e008514b0cc05121554b51038987a10744515553d312de5cd2047"
+    },
+    {
+      "name": "427e4a37d3642943-s.p.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "d3dcdccdaba31643defe2317942155d4af3ee03951d058adbe8bc02b13e61b0a"
+    },
+    {
+      "name": "5bbac197f803cc34-s.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "b2a539cd1f2bbf123e66bafa988bbd32249a7ba3335aec377a9fc1b37734b1ed"
+    },
+    {
+      "name": "6760c1b492207d80-s.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "61f80dfe8d21d3f79252bafe3805c49de2ea80391c8e707bbf4a454026ae3ee4"
+    },
+    {
+      "name": "7be269dd6123b082-s.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "4188276a58108d04eb0c6f5b8c9e4b5ac2d9e31e81b2b4fa7da263b92f1b35c3"
+    },
+    {
+      "name": "8e9860b6e62d6359-s.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "a28eb6d3ccb534ae0c94ca999371df024aab60b08c3c8a5720ee9e32fa0faaa2"
+    },
+    {
+      "name": "9dd75fadc5b3df29-s.p.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "235d8f8964bfdf105fc0c3e4c77b5e70f31bee1dad611d59318b5f2a5cb64d90"
+    },
+    {
+      "name": "b8c37bb59076c047-s.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "184c3af415cddd52af31cf70166bf351adb70b09e64fdb1948109192a26c2c0d"
+    },
+    {
+      "name": "ba9851c3c22cd980-s.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "fccca918fea40089dacadc7045861314d1a6bc91f1f323cc1eeb22ebcdb321b5"
+    },
+    {
+      "name": "c5fe6dc8356a8c31-s.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "a2e2c783ca6f9c20486e81e72a279203e86730bbf8f01ff6a5ee9dbd09e1c271"
+    },
+    {
+      "name": "db5568a2cfd831e2-s.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "0164d0c055dced93435b1d6c2986db2fb7d068ce21950c85b776695f56238b8a"
+    },
+    {
+      "name": "df0a9ae256c0569c-s.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "8db00ff46c67b22cda8bed865acf7077651cac8d2841d5b40980556b48961931"
+    },
+    {
+      "name": "e4af272ccee01ff0-s.p.woff2",
+      "status": 200,
+      "contentType": "font/woff2",
+      "cacheControl": null,
+      "sha256": "c940764593d0fe5d596be327ca7558855e018039fb78509aa21921fd3644c3e4"
+    }
+  ]
+}

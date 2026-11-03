@@ -1,0 +1,124 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 794B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:22-alpine
+#2 DONE 0.1s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [build 1/6] FROM docker.io/library/node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914
+#4 resolve docker.io/library/node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914 0.0s done
+#4 DONE 0.0s
+
+#5 [build 2/6] WORKDIR /app
+#5 CACHED
+
+#6 [internal] load build context
+#6 transferring context: 1.53MB 0.0s done
+#6 DONE 0.0s
+
+#7 [build 3/6] COPY package.json package-lock.json ./
+#7 CACHED
+
+#8 [build 4/6] RUN npm ci
+#8 ...
+
+#9 [stage-1 3/6] RUN apk add --no-cache wget && mkdir -p /data && chown node:node /data
+#9 0.797 (1/4) Installing libunistring (1.4.2-r0)
+#9 0.810 (2/4) Installing libidn2 (2.3.8-r0)
+#9 0.814 (3/4) Installing pcre2 (10.49-r0)
+#9 0.824 (4/4) Installing wget (1.25.0-r3)
+#9 0.832 Executing busybox-1.37.0-r31.trigger
+#9 0.856 OK: 14.1 MiB in 23 packages
+#9 DONE 1.1s
+
+#8 [build 4/6] RUN npm ci
+#8 16.09 
+#8 16.09 added 32 packages, and audited 33 packages in 16s
+#8 16.09 
+#8 16.09 8 packages are looking for funding
+#8 16.09   run `npm fund` for details
+#8 16.09 
+#8 16.09 found 0 vulnerabilities
+#8 16.10 npm notice
+#8 16.10 npm notice New major version of npm available! 10.9.9 -> 12.2.1
+#8 16.10 npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+#8 16.10 npm notice To update run: npm install -g npm@12.2.1
+#8 16.10 npm notice
+#8 DONE 16.4s
+
+#10 [build 5/6] COPY . .
+#10 DONE 0.2s
+
+#11 [build 6/6] RUN --network=none npm run build
+#11 0.306 
+#11 0.306 > tervory-site@0.1.0 build
+#11 0.306 > next build
+#11 0.306 
+#11 1.739 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+#11 1.739 This information is used to shape Next.js' roadmap and prioritize features.
+#11 1.739 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+#11 1.739 https://nextjs.org/telemetry
+#11 1.739 
+#11 1.909    ▲ Next.js 15.5.28
+#11 1.909 
+#11 2.030    Creating an optimized production build ...
+#11 23.03  ✓ Compiled successfully in 14.0s
+#11 23.04    Linting and checking validity of types ...
+#11 29.62    Collecting page data ...
+#11 32.26    Generating static pages (0/11) ...
+#11 33.51    Generating static pages (2/11) 
+#11 33.51    Generating static pages (5/11) 
+#11 33.51    Generating static pages (8/11) 
+#11 33.51  ✓ Generating static pages (11/11)
+#11 34.53    Finalizing page optimization ...
+#11 34.53    Collecting build traces ...
+#11 45.52    Exporting (0/2) ...
+#11 46.07  ✓ Exporting (2/2)
+#11 60.20 
+#11 60.21 Route (app)                                 Size  First Load JS
+#11 60.21 ┌ ○ /                                    1.12 kB         104 kB
+#11 60.21 ├ ○ /_not-found                            991 B         104 kB
+#11 60.21 ├ ● /internal/[slug]                       133 B         103 kB
+#11 60.21 ├   ├ /internal/ammosync
+#11 60.21 ├   ├ /internal/lokd-security
+#11 60.21 ├   ├ /internal/custom-nation
+#11 60.21 ├   └ [+2 more paths]
+#11 60.21 ├ ○ /robots.txt                            133 B         103 kB
+#11 60.21 └ ○ /sitemap.xml                           133 B         103 kB
+#11 60.21 + First Load JS shared by all             103 kB
+#11 60.21   ├ chunks/255-2005b055456c798b.js       46.7 kB
+#11 60.21   ├ chunks/4bd1b696-c023c6e3521b1417.js  54.2 kB
+#11 60.21   └ other shared chunks (total)           1.9 kB
+#11 60.21 
+#11 60.21 
+#11 60.21 ○  (Static)  prerendered as static content
+#11 60.21 ●  (SSG)     prerendered as static HTML (uses generateStaticParams)
+#11 60.21 
+#11 DONE 60.5s
+
+#12 [stage-1 4/6] COPY --from=build --chown=node:node /app/out ./out
+#12 DONE 0.1s
+
+#13 [stage-1 5/6] COPY --from=build --chown=node:node /app/server.mjs ./server.mjs
+#13 DONE 0.1s
+
+#14 [stage-1 6/6] COPY --from=build --chown=node:node /app/release-store.mjs ./release-store.mjs
+#14 DONE 0.1s
+
+#15 exporting to image
+#15 exporting layers
+#15 exporting layers 0.4s done
+#15 exporting manifest sha256:30e09ff265828638b4000e7876a64bba9f8715cd8465b7b6f33b170a6d07e2f4 0.0s done
+#15 exporting config sha256:352eb86a13375ace9c2919535fabfdd249fc42c3be73d3b58e50f82d3a587c6e 0.0s done
+#15 exporting attestation manifest sha256:a15f9ee2dae47eb7c33a08effef85050e1db92c4af321efe76f77e9c42cce191 0.0s done
+#15 exporting manifest list sha256:584868e8a7aa68baffb4a22200b3f3b0cd4578458aab2b9dc26eafba713a8104 0.0s done
+#15 naming to docker.io/library/tervory-site-font-local:test done
+#15 unpacking to docker.io/library/tervory-site-font-local:test
+#15 unpacking to docker.io/library/tervory-site-font-local:test 0.2s done
+#15 DONE 0.7s

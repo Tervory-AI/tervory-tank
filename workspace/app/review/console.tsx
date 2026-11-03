@@ -7,8 +7,8 @@ import { ReviewDesk } from "./desk";
 import { WORKED_EXAMPLE } from "./example";
 
 const TOP_LINKS = [
-  { href: "/ledger", label: "Dashboard" },
-  { href: "/tasks", label: "Projects" },
+  { href: "https://app.tervory.com/", label: "Dashboard" },
+  { href: "/matters", label: "Projects" },
 ] as const;
 
 const PAGE_LINKS = [
@@ -21,7 +21,7 @@ const PANEL_LABELS = ["Plugins", "Draft", "Court bundles", "Deadlines", "Library
 
 const BOTTOM_LINKS = [
   { href: "/onboarding", label: "Settings" },
-  { href: "/", label: "Support" },
+  { href: "https://tervory.com", label: "Support" },
 ] as const;
 
 export function ReviewConsole({
@@ -64,7 +64,7 @@ export function ReviewConsole({
                 {link.label}
               </Link>
             ))}
-            <span className="zr-item">Chats</span>
+            <Link href="/chats" onClick={() => setMenu(false)}>Chats</Link>
           </nav>
           <div className="zr-rule" />
           <nav className="zr-nav" aria-label="Zenas">

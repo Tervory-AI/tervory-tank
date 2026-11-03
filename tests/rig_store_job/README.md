@@ -37,7 +37,7 @@ its env files, keys, raw snippets or browser-result JSON. The checked-in screens
 mask the public key and snippet fields. The current job does not deploy anything.
 
 The widget's upstream source is pinned in
-`agents/rig/rigbox/quotes/rebuild-widget.sh`; the adjacent `widget-source.patch`
+`agents/rig/rigbox/quotes/rebuild-widget.sh`; `docs/rig/widget-source.patch`
 contains the source and test changes. Running the script rebuilds the shopper
 UMD and the 3D frontend assets. It leaves the 3D engine and forge unchanged.
 

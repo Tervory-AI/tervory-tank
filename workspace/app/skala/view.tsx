@@ -22,14 +22,14 @@ import {
 import { ApproveAllReady } from "./approve-all";
 
 const TOP_LINKS = [
-  { href: "/ledger", label: "Dashboard" },
-  { href: "/tasks", label: "Projects" },
-  { href: "/", label: "Chats" },
+  { href: "https://app.tervory.com/", label: "Dashboard" },
+  { href: "/matters", label: "Projects" },
+  { href: "/chats", label: "Chats" },
 ] as const;
 
 const BOTTOM_LINKS = [
   { href: "/onboarding", label: "Settings" },
-  { href: "/", label: "Support" },
+  { href: "https://tervory.com", label: "Support" },
 ] as const;
 
 const SKALA_LOGO = { src: "/brand/skala-on-dark.png", width: 185, height: 44 };

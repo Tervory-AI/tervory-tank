@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { goldIdentity } from "../skala/gold/access";
+import { rejectUnlessFounder } from "@/app/review/access";
+import { notFound } from "next/navigation";
 import { GraduationPanel } from "./graduation-panel";
 import { trainingGraduation, listRoster } from "@/lib/tank";
 import { activeTenant } from "@/lib/tenant";
@@ -17,6 +19,10 @@ export const metadata: Metadata = {
 };
 
 export default async function TankPage() {
+  // Gold also admits reviewers; the global Tank console is founder-only.
+  // Admit before reading the workspace, model roster or worker feed.
+  if (await rejectUnlessFounder()) notFound();
+  const identity = await goldIdentity("platform");
   let workspaceName: string | null = null;
   try {
     const tenant = await activeTenant();
@@ -37,7 +43,6 @@ export default async function TankPage() {
   } catch {
     workers = { available: false, tasks: [] };
   }
-  const identity = await goldIdentity("platform");
   const graduation = identity.role === "founder" ? await trainingGraduation(identity).catch(() => null) : null;
   return <TankView graduation={<GraduationPanel rows={graduation}/>} workspaceName={workspaceName} models={models} modelsUnavailable={modelsUnavailable} workers={workers} />;
 }

@@ -16,11 +16,11 @@ def test_docker_cmd_preserves_public_api_health_and_private_brain(tmp_path):
     admin, name = _admin_url(), 'rig3d_boot_' + uuid4().hex
     asyncio.run(_create_database(admin, name))
     script = r'''
-import importlib, json, os, re, secrets
+import importlib, inspect, json, os, re, secrets
 from pathlib import Path
 from fastapi.testclient import TestClient
 from uvicorn.importer import import_from_string
-from rigbox.three_d.sample import seed, PUBLIC_KEY
+from fixtures.rig_three_d.sample import seed, PUBLIC_KEY
 
 root = Path.cwd()
 base = importlib.import_module('app').app
@@ -42,7 +42,9 @@ cmd = json.loads(next(line[4:] for line in (root/'agents/rig/Dockerfile').read_t
 assert cmd == ['uvicorn', 'rigbox.three_d.asgi:app', '--host', '0.0.0.0', '--port', '8000', '--no-proxy-headers', '--no-access-log']
 deployed = import_from_string(cmd[1])
 assert deployed is base
-assert all(any(r.path == path and r.methods == methods and r.endpoint is endpoint
+# The chassis lifespan wraps each endpoint for tenant scoping (#428, functools.wraps),
+# so compare the handlers underneath, not the wrapper objects.
+assert all(any(r.path == path and r.methods == methods and inspect.unwrap(r.endpoint) is inspect.unwrap(endpoint)
                for r in deployed.routes if hasattr(r, 'methods')) for path, methods, endpoint in routes)
 with TestClient(deployed) as client:
     assert protected_surface(client) == before
@@ -67,7 +69,7 @@ with TestClient(deployed) as client:
     assert client.get('/health').status_code == 503
     deployed.state.pool = pool
 '''
-    env = {**os.environ, 'PYTHONPATH': 'agents/rig:agents/_chassis', 'AGENT_NAME': 'rig',
+    env = {**os.environ, 'PYTHONPATH': 'tests:agents/rig:agents/_chassis', 'AGENT_NAME': 'rig',
            'DATABASE_URL': _database_url(admin, name), 'DATA_DIR': str(tmp_path),
            'TANK_KEY': uuid4().hex, 'CATALOGUE_DIR': str(tmp_path / 'empty-catalogues'),
            # RIG-4 (#247): /health is 503 unless a trusted proxy range is configured.

@@ -111,12 +111,18 @@ def test_radix_reaches_one_host_only_through_the_proxy() -> None:
     assert agent["networks"] == ["gw", "proxy-link"]
     assert "egress" not in agent["networks"]
     on_egress = [name for name, spec in box["services"].items() if "egress" in spec.get("networks", [])]
-    assert on_egress == ["egress-proxy"]
-    assert proxy["networks"] == ["proxy-link", "egress"]
+    # #426 added passive-egress (DNS checks and single-host scan tunnels) beside the
+    # proxy; the scan CLIs stay in agent-radix, which still has no internet route.
+    assert on_egress == ["egress-proxy", "passive-egress"]
+    assert list(proxy["networks"]) == ["proxy-link", "egress"]
+    passive = box["services"]["passive-egress"]
     assert "ports" not in agent
     assert "ports" not in proxy
+    assert "ports" not in passive
+    assert passive["read_only"] is True and passive["cap_drop"] == ["ALL"] and passive["mem_limit"] == "128m"
 
-    assert agent["mem_limit"] == "256m"
+    # ZAP's JVM is capped at 512 MiB inside a 1 GiB room (#426).
+    assert agent["mem_limit"] == "1g"
     assert agent["cpus"] in (0.25, "0.25")
     assert "health" in str(agent["healthcheck"]["test"])
     env = agent["environment"]
@@ -199,9 +205,10 @@ def test_ping_schedules_are_the_template_heartbeat() -> None:
         if folder == "radix":
             assert handlers == {"ping", "scan"}
         else:
-            assert handlers == {"ping", "scaffold", "figma"}
+            # Tisan builder (#571) adds build, with the same 10-minute allowance.
+            assert handlers == {"ping", "scaffold", "figma", "build"}
             # Founder, 14 Oct 2026: a site build is allowed 10 minutes.
-            assert module.app.state.job_timeouts == {"scaffold": 600}
+            assert module.app.state.job_timeouts == {"scaffold": 600, "build": 600}
         assert module.app.state.schedules == [
             {
                 "tenant_id": "00000000-0000-0000-0000-000000000001",
