@@ -212,3 +212,51 @@ async def test_pattern_claim_whitelist_stable_retry_and_sql_listing_only():
         assert await memory.records(TENANT, tier='platform') == []
     assert json.loads(requests[0].content)['id'] == json.loads(requests[1].content)['id']
     assert all(request.url.path != '/recall' for request in requests)
+
+
+@pytest.mark.asyncio
+async def test_warning_run_remembers_changed_summaries_only_and_retries_same_record(monkeypatch):
+    from core import warnings as workflow
+    from contextlib import asynccontextmanager
+    states, documents, writes = {}, set(), []
+    class Connection:
+        @asynccontextmanager
+        async def transaction(self): yield
+        async def execute(self, query, *args):
+            if 'INSERT INTO agent_market_lab.warning_pairs' in query:
+                states[args[1]] = {'summary': json.loads(args[3]), 'document_id': args[2]}
+        async def fetchrow(self, query, *args): return states.get(args[1])
+    class Memory:
+        pending = False
+        async def remember(self, tenant, text, kind, source, **kwargs):
+            writes.append((tenant, json.loads(text), kind, source, kwargs))
+            return {'seen': None} if self.pending else {'id': kwargs['record_id']}
+    async def stored(*args): return {}
+    async def evidence(*args):
+        ident = str(uuid4()); documents.add(ident); return ident
+    async def no_resolve(*args): return None
+    async def no_listing(*args): return {}
+    monkeypatch.setattr(workflow.store, 'series', stored)
+    monkeypatch.setattr(workflow.store, 'evidence', evidence)
+    monkeypatch.setattr(workflow, 'resolve', no_resolve)
+    monkeypatch.setattr(workflow, 'listing', no_listing)
+    memory = Memory()
+    ledger = SimpleNamespace(conn=Connection(), memory=memory)
+    await workflow.run(ledger, TENANT, 'ffl', now=NOW)
+    assert len(writes) == len(warning_plan()['pairs'])
+    assert all(row[0] == TENANT and row[2] == 'warning_pattern' and row[3] in documents for row in writes)
+    assert all(set(row[1]) == patterns.FIELDS for row in writes)
+    await workflow.run(ledger, TENANT, 'ffl', now=NOW)
+    assert len(writes) == 7  # Unchanged summaries do not create another record.
+    original_analyze = workflow.analyze
+    def changed(*args): return {**original_analyze(*args), 'episode_count': 1, 'hit_rate': 0}
+    monkeypatch.setattr(workflow, 'analyze', changed)
+    memory.pending = True
+    await workflow.run(ledger, TENANT, 'ffl', now=NOW)
+    failed_ids = [row[4]['record_id'] for row in writes[-7:]]
+    memory.pending = False
+    await workflow.run(ledger, TENANT, 'ffl', now=NOW)
+    assert [row[4]['record_id'] for row in writes[-7:]] == failed_ids
+    assert len(writes) == 21
+    await workflow.run(ledger, TENANT, 'ffl', now=NOW)
+    assert len(writes) == 21
