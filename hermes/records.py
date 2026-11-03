@@ -126,10 +126,11 @@ class Records:
             uuid.UUID(tenant),
             uuid.UUID(row_id) if row_id else uuid.uuid4(),
         )
-        try:
-            await asyncio.to_thread(self.encoder.validate, claim)
-        except ValueError as exc:
-            raise ClaimTooLong(str(exc)) from None
+        if index:
+            try:
+                await asyncio.to_thread(self.encoder.validate, claim)
+            except ValueError as exc:
+                raise ClaimTooLong(str(exc)) from None
         async with self.pool.acquire() as conn, conn.transaction():
             await self.lock(conn, s, identity)
             row = await conn.fetchrow(
