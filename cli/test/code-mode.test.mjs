@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, readFile, mkdir, symlink, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, mkdir, symlink, rm, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -105,7 +105,8 @@ test('commands show in full, require y and cannot run non-interactively; cwd and
   }
   await assert.rejects(readFile(join(f.root, 'marker')));
   assert(shown.includes(command));
-  assert.equal((await f.tool(request, io())).ran, true);
+  const executed = await f.tool(request, io());
+  assert.equal(executed.ran, true); assert.equal(executed.code, 0, executed.output);
   assert.equal(await readFile(join(f.root, 'marker'), 'utf8'), 'done');
   const output = await processOutput(process.execPath, ['-e', 'process.stdout.write("x".repeat(100000))'], { cwd: f.root });
   assert(output.truncated); assert(Buffer.byteLength(output.output) <= LIMITS.outputBytes);
@@ -152,8 +153,10 @@ test('approved command cannot read secret paths, outside symlinks or inherited h
   await writeFile(join(work, 'host-private.txt'), 'outside-file-canary');
   await symlink(join(work, 'host-private.txt'), join(f.root, 'outside-link'));
   const result = await f.tool({ name: 'run_command', arguments: {
-    command: `cat .env; cat outside-link; cat ${join(work, 'host-private.txt')}; printenv`,
+    command: `cat .env; cat outside-link; cat ${join(work, 'host-private.txt')}; printenv; echo sandbox-ok`,
   } }, io());
+  assert.equal(result.code, 0, result.output);
+  assert(result.output.includes('sandbox-ok'), result.output);
   assert(!result.output.includes('private-file-canary'));
   assert(!result.output.includes('outside-file-canary'));
   assert(!result.output.includes('TANK_API_KEY='));
@@ -199,11 +202,17 @@ test('git status and diff work without exposing secret-file contents', async () 
   const f = await folder();
   execFileSync('git', ['add', 'file.txt'], { cwd: f.root });
   await writeFile(join(f.root, 'file.txt'), 'changed\n');
+  await writeFile(join(f.root, '.e*'), 'old glob file\n');
+  await writeFile(join(f.root, '.env'), 'old private file\n');
+  execFileSync('git', ['--literal-pathspecs', 'add', '.e*', '.env'], { cwd: f.root });
+  await writeFile(join(f.root, '.e*'), 'changed glob file\n');
   await writeFile(join(f.root, '.env'), 'private-git-canary');
   const status = await f.tool({ name: 'git', arguments: { action: 'status' } }, io());
   const diff = await f.tool({ name: 'git', arguments: { action: 'diff' } }, io());
   assert(status.output.includes('file.txt')); assert(diff.output.includes('+changed'));
+  assert(diff.output.includes('+changed glob file'));
   assert(!diff.output.includes('private-git-canary'));
+  assert(!diff.output.includes('old private file'));
 });
 
 test('cancelling at command approval stops execution and any following model turn', async () => {
@@ -226,6 +235,15 @@ test('cancelling at command approval stops execution and any following model tur
 
 test('git read tools cannot execute repository clean/process filters without approval', async () => {
   const f = await folder();
+  const sub = join(f.root, 'sub'); await mkdir(sub);
+  execFileSync('git', ['init', '-q', sub]);
+  await writeFile(join(sub, 'file.txt'), 'sub original\n');
+  execFileSync('git', ['add', 'file.txt'], { cwd: sub });
+  execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'sub'], { cwd: sub });
+  execFileSync('git', ['add', 'sub'], { cwd: f.root, stdio: 'pipe' });
+  execFileSync('git', ['config', 'filter.guard.clean', 'sh -c "printf wrong > sub-filter-marker; cat"'], { cwd: sub });
+  await writeFile(join(sub, '.gitattributes'), 'file.txt filter=guard\n');
+  await writeFile(join(sub, 'file.txt'), 'sub changed\n');
   execFileSync('git', ['add', 'file.txt'], { cwd: f.root });
   execFileSync('git', ['config', 'filter.guard.clean', 'sh -c "printf wrong > filter-marker; cat"'], { cwd: f.root });
   await writeFile(join(f.root, '.gitattributes'), 'file.txt filter=guard\n');
@@ -234,4 +252,78 @@ test('git read tools cannot execute repository clean/process filters without app
   await f.tool({ name: 'git', arguments: { action: 'status' } }, io());
   assert(diff.output.includes('+changed'));
   await assert.rejects(readFile(join(f.root, 'filter-marker')));
+  await assert.rejects(readFile(join(sub, 'sub-filter-marker')));
+});
+
+
+test('missing files and approval-time ancestor swaps cannot create Git hooks', async () => {
+  const f = await folder();
+  const add = '--- /dev/null\n+++ b/lnk/hooks/post-checkout\n@@ -0,0 +1 @@\n+wrong\n';
+  await symlink('.git', join(f.root, 'lnk'));
+  await assert.rejects(f.read('lnk/hooks/post-checkout'));
+  await assert.rejects(f.edit('lnk/hooks/post-checkout', add, io()));
+  await assert.rejects(readFile(join(f.root, '.git/hooks/post-checkout')));
+  await rm(join(f.root, 'lnk'));
+  await mkdir(join(f.root, 'lnk/hooks'), { recursive: true });
+  await f.read('lnk/hooks/post-checkout');
+  await assert.rejects(f.edit('lnk/hooks/post-checkout', add, { ...io(), prompt: async () => {
+    await rm(join(f.root, 'lnk'), { recursive: true });
+    await symlink('.git', join(f.root, 'lnk')); return 'y';
+  } }));
+  await assert.rejects(readFile(join(f.root, '.git/hooks/post-checkout')));
+  await mkdir(join(f.root, '.GIT/hooks'), { recursive: true });
+  await assert.rejects(f.read('.GIT/hooks/new'));
+});
+
+test('Git reads remain pinned when an approved command creates a nested repository', async () => {
+  const f = await folder();
+  await mkdir(join(f.root, 'selected'));
+  await writeFile(join(f.root, 'selected/original.txt'), 'parent tracked\n');
+  execFileSync('git', ['add', 'selected/original.txt'], { cwd: f.root });
+  const selected = await CodeFolder.create(join(f.root, 'selected'));
+  const initialized = await selected.tool({ name: 'run_command', arguments: { command: 'git init -q' } }, io());
+  assert.equal(initialized.code, 0, initialized.output);
+  await writeFile(join(selected.root, 'original.txt'), 'changed parent\n');
+  const status = await selected.tool({ name: 'git', arguments: { action: 'status' } }, io());
+  assert(status.output.includes('AM original.txt'), status.output);
+  assert((await selected.diff()).output.includes('+changed parent'));
+  assert((await selected.files()).files.includes('original.txt'));
+});
+
+test('external Node runtime is read-only, named before approval and cannot expose HOME', async () => {
+  const f = await folder();
+  const runtime = await mkdtemp(join(work, 'runtime-'));
+  await mkdir(join(runtime, 'bin'));
+  const node = join(runtime, 'bin/node'); await copyFile(process.execPath, node);
+  await writeFile(join(f.root, 'real.test.mjs'), 'import test from "node:test"; test("external runner", () => {});\n');
+  let shown = '';
+  const result = await f.tool({ name: 'run_command', arguments: { command: `${node} --test real.test.mjs` } }, {
+    ...io(), write: value => { shown += value; }, prompt: async () => { assert(shown.includes(node)); return 'y'; },
+  });
+  assert.equal(result.code, 0, result.output); assert(result.output.includes('# pass 1'));
+  const write = await f.tool({ name: 'run_command', arguments: { command: `${node} -e 'require("fs").writeFileSync("${runtime}/wrong", "wrong")'` } }, io());
+  assert.notEqual(write.code, 0); await assert.rejects(readFile(join(runtime, 'wrong')));
+});
+
+test('session history is bounded, redacted and transient; continuation rounds share one prompt id', async () => {
+  const f = await folder();
+  const token = 'tv1.za.' + '1'.repeat(32) + '.' + 'x'.repeat(43);
+  const secret = 'ghp_' + 'C'.repeat(24);
+  const received = []; const prompts = ['first prompt', `second prompt ${secret}`, '/exit'];
+  await run(['code', f.root], { store: { get: async () => token }, io: {
+    interactive: true, prompt: async () => prompts.shift(), write() {},
+  }, transport: async (url, init) => {
+    if (url.endsWith('/threads')) return Response.json({ thread_id: 'thread' });
+    const body = JSON.parse(init.body); received.push(body);
+    assert(!init.body.includes(secret));
+    return Response.json({ answer: 'earlier answer', requests: received.length < 3 ? [{ name: 'read_file', arguments: { path: 'file.txt' } }] : [] });
+  } });
+  assert.deepEqual(received.map(r => r.continuation), [false, true, true, false]);
+  assert.equal(new Set(received.slice(0, 3).map(r => r.prompt_id)).size, 1);
+  assert.notEqual(received[0].prompt_id, received[3].prompt_id);
+  const history = received[3].history;
+  assert(history.some(h => h.kind === 'user' && h.content === 'first prompt'));
+  assert(history.some(h => h.kind === 'assistant' && h.content === 'earlier answer'));
+  assert(history.some(h => h.kind === 'tool' && h.content.includes('read_file') && h.content.includes('file.txt')));
+  assert.equal(received[3].text, '[redacted]');
 });
