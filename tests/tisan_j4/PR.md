@@ -356,3 +356,115 @@ completed before committing/pushing `f2e7b89f` to the same PR branch. This repor
 is the only subsequent change. The named disposable container is removed after
 verification. Hosted checks on the new head remain pending. No production
 mutation, merge or founder browser acceptance is claimed.
+
+## W3 gate 2 — designed quote fields (3 Nov 2026)
+
+Current work: `/workspace/codex-tisan-w3`, branch `codex/tisan-w3`, continuing
+from gate-1 head `bb0338f9bd517b4e48610838f2d29a457a02a38b`. No main merge.
+The field register was read with:
+
+```sh
+git show origin/codex/tisan-quote-design:docs/figma/tisan/SPEC.md
+```
+
+That remote ref resolves to `d08ed785647c23cf0a1dea108cb5a592cdb92008`.
+The draft spec was not copied or changed. No page, email, payment field,
+Workspace file, or visible product wording was built. QUOTE-EMAILS.md remains
+absent; the existing approved_letter() gate and founder guard are unchanged.
+
+| File and line | Gate-2 change |
+| --- | --- |
+| `agents/tisan/quotes.py:41` | Required contact name/reply method, optional phone/company, conditional phone validation; existing email check retained. |
+| `agents/tisan/quotes.py:81` | Product/service type, required description and quantity, optional notes and existing UUID product reference. |
+| `agents/tisan/quotes.py:109` | Move accepts the four quote fields; any supplied field on another move, even null or malformed data, is refused with the existing 409. |
+| `agents/tisan/quotes.py:124` | Positive exact Decimal with at most two decimal places, Rig-equivalent uppercase currency check, aware future expiry and required quote message. |
+| `agents/tisan/quotes.py:162` | Legacy missing quote fields stay absent; amounts are returned as exact decimal text instead of lossy JSON floats. No missing contact/item fields are filled. |
+| `agents/tisan/quotes.py:230` | Locked acknowledged-to-quoted snapshot and audit event in one transaction. No later move changes the quote; accepted/declined remain final. |
+| `agents/tisan/schema.sql:1` | Updated retained-fields comment. `:36` adds nullable checked columns; `:54` installs the immutable-snapshot trigger idempotently, including room-owner reapplication. RLS/grants and generated EOF block are byte-for-byte unchanged. |
+| `tests/test_tisan_quotes.py:24` | Existing 94 quote cases use the expanded request and quote inputs; the SQL double retains snapshot values. |
+| `tests/test_tisan_quotes_postgres.py:14` | Existing six real PostgreSQL cases retain lifecycle, isolation, rollback and startup/rollout coverage. |
+| `tests/test_tisan_quotes_designed.py:1` | 117 additional real PostgreSQL cases: all field edges, quote completeness, forbidden quote fields on other moves, immutable data, legacy reads, actual founder routes and actual quote lifespan reapplication. |
+| `tests/tisan_j4/PR.md:360` | This gate's commands, results, scope and remaining deployment evidence. |
+
+### Founder-route acceptance evidence in disposable PostgreSQL
+
+`test_founder_routes_complete_designed_request_to_accepted_with_real_history`
+(`tests/test_tisan_quotes_designed.py:188`) mounts the real quote routes with
+`gold_sources.founder`, and binds tenant context with the existing chassis helper.
+It uses a real non-bypass room role against a fresh local test database.
+The request has contact name/email/phone/company/reply method, a product with
+its existing UUID reference/quantity/description/notes, and a service with
+quantity/description/notes and no product reference. Text values contain
+`placeholder`; no sample is added to a live screen.
+
+Verified by passing assertions: creation returns 201/submitted; acknowledge,
+quote and accept each return 200 with the corresponding state. The quote is
+12.34 USD, with a timezone-aware expiry generated as now plus one day and a
+placeholder quote message. The request fields roundtrip unchanged. History is
+exactly draft, submitted, acknowledged, quoted, accepted; every timestamp is
+aware and every actor is the verified founder. All later moves are refused.
+Missing room key returns 401, a non-founder returns 404, and another tenant
+cannot see the request or events, including unqualified SELECTs under RLS.
+An email attempt returns wording_missing before SMTP configuration; nothing is sent.
+
+Separate passing cases mutate each quote column directly in this disposable
+Postgres and receive a database CHECK violation without changing the snapshot.
+Legacy submitted and quoted rows remain readable with their original JSON and
+without invented fields. The actual mounted quote lifespan runs twice after
+room provisioning and confirms all four new columns are present.
+
+### Exact gate-2 commands and results
+
+```sh
+docker run --detach --rm --name codex-tisan-w3-j4-postgres --network bridge --publish 127.0.0.1::5432 --env POSTGRES_HOST_AUTH_METHOD=trust --tmpfs /var/lib/postgresql/data --memory 512m --cpus 0.5 postgres:16
+docker port codex-tisan-w3-j4-postgres 5432
+# Local disposable container; 127.0.0.1:32869. No production DB setting is read.
+
+.venv/bin/python -m py_compile agents/tisan/quotes.py
+# Exit 0.
+
+.venv/bin/python -m pytest tests/test_tisan_quotes.py -q --disable-socket --allow-hosts=127.0.0.1,localhost
+# 94 passed, 1 existing warning, 2.16s.
+
+J4_TEST_POSTGRES_PORT=32869 .venv/bin/python -m pytest tests/test_tisan_quotes_postgres.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --maxfail=1
+# 6 passed, 1 existing warning, 3.01s.
+
+J4_TEST_POSTGRES_PORT=32869 .venv/bin/python -m pytest tests/test_tisan_quotes_designed.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --maxfail=3
+# 117 passed, 1 existing warning, 43.03s.
+
+J4_TEST_POSTGRES_PORT=32869 POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32869/postgres TISAN_TEST_PLAYWRIGHT=/workspace/codex-tisan-w3/.venv/tisan-browser/node_modules/playwright PLAYWRIGHT_BROWSERS_PATH=/home/ammosync/.cache/ms-playwright .venv/bin/python -m pytest tests/test_tisan_*.py tests/tisan_promotion/ tests/test_c10_rooms.py tests/test_secrets.py -q -rs --disable-socket --allow-hosts=127.0.0.1,localhost --maxfail=3
+# 415 passed, 2 skipped, 15 existing warnings, 140.86s.
+# Only the two explicitly opt-in npm build cases were skipped. PostgreSQL and
+# existing real Chromium promotion tests were enabled.
+
+J4_TEST_POSTGRES_PORT=32869 .venv/bin/python -m pytest tests/test_tisan_quotes.py tests/test_tisan_quotes_postgres.py tests/test_tisan_quotes_designed.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --maxfail=1
+# Final focused rerun after the decimal JSON refinement: 217 passed, 1 existing
+# warning, 41.85s. Includes 9007199254740993.01 returned without rounding.
+
+.venv/bin/ruff check agents/tisan/quotes.py tests/test_tisan_quotes.py tests/test_tisan_quotes_postgres.py tests/test_tisan_quotes_designed.py --select E9,F
+# All checks passed.
+
+git diff --check origin/main...HEAD
+# Exit 0.
+
+docker stop codex-tisan-w3-j4-postgres
+# Stopped and automatically removed this gate's disposable container/tmpfs.
+```
+
+The broad run preceded only the exact-decimal response refinement, which the
+final 217-case rerun covers. No model, live SMTP, deployed room job, live schema
+change, or deployment was used to check the work. Ruff was installed only into
+the existing ignored `.venv/`; tracked dependency manifests did not change.
+
+The standalone memory-generator pytest node could not collect because the
+local environment lacks qdrant_client. Instead the actual hermes.record_schema
+generator was run against temporary copies of all 11 schemas: each had exactly
+one generated block at EOF, and update_files() left every copy byte-for-byte
+unchanged. A comparison against gate-1 head also verified the existing Tisan
+RLS/grant section and generated block are unchanged. This direct check exited 0;
+it does not claim that the wider memory-record test module ran.
+
+Pending after merge: the live deploy log must show successful schema startup
+and a healthy room. Local owner-role lifespan checks are not that deployment
+proof. Final-head hosted Tank/Workspace CI and founder-browser screenshots remain
+pending; no PR was opened or merged by this builder. Gate 3 has not been supplied.
