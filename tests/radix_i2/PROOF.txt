@@ -1,0 +1,172 @@
+Radix I2 offline delivery evidence
+Source/test checkpoint 202247642fee15dc7aae49612256c3355034fe5f.
+Run from /workspace/codex-radix-w3, branch codex/radix-w4.
+
+
+Broad regression, exit 0
+................................................................... [ 15%]
+........................................................................ [ 32%]
+........................................................................ [ 48%]
+........................................................................ [ 65%]
+........................................................................ [ 82%]
+........................................................................ [ 99%]
+....                                                                     [100%]
+=============================== warnings summary ===============================
+tank/main.py:754: 1 warning
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/main.py:754: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/fastapi/applications.py:4723: 5 warnings
+tests/test_command_radix_repo.py: 105 warnings
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tank/main.py:814: 1 warning
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/main.py:814: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tank/agent_skills.py:531: 1 warning
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/agent_skills.py:531: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tank/skala_intake.py:71: 1 warning
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/skala_intake.py:71: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tank/skala_intake.py:77: 1 warning
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/skala_intake.py:77: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tank/skala_revalidation.py:192: 1 warning
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/skala_revalidation.py:192: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+431 passed, 245 warnings, 437 subtests passed in 92.09s (0:01:32)
+
+Additional explicit planner case, exit 0
+.                                                                        [100%]
+=============================== warnings summary ===============================
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 3 deselected, 3 warnings in 1.69s
+
+Focused selection, exit 0
+.......................................                                  [100%]
+=============================== warnings summary ===============================
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+39 passed, 3 warnings in 13.96s
+
+Final native completed active scan, exit 0
+{"mode": "complete", "checks": {"active": {"status": "complete"}}, "coverage": {"requests": 23, "responses": 23, "active_requests": 19, "active_responses": 19, "spider_urls": 2, "capped": false, "blocked": false, "refused": 0}, "findings": 6, "proxy_dials": 23, "site_requests": 23}
+PASS: actual ZAP with exact-host active proxy and unchanged passive bounds
+
+Final native blocked scan, exit 0
+{"mode": "blocked", "checks": {"active": {"status": "partial", "reason": "scanner_incomplete"}}, "coverage": {"requests": 1, "responses": 1, "active_requests": 0, "active_responses": 0, "spider_urls": 0, "capped": false, "blocked": true, "refused": 0}, "findings": 0, "proxy_dials": 1, "site_requests": 1}
+PASS: actual ZAP with exact-host active proxy and unchanged passive bounds
+
+Final native runtime source hashes, all nine match host
+{"active-domains.json": "cdccb0224f2553e26538c9f397a94733f03ab3e20ac3b21e97e60bac3ff79bea", "active_guard.js": "eae6621bb223ecc4fa80138d0c0b31aa24f416e45ca9fe061a6c1c71f44cd7cf", "active_policy.py": "612d96a913b4927de26c828ffd36212922b4bd4830b15632868ab936941c30cd", "active_routes.py": "0ea3e033d6cdc3b66c966ef70c8dd6d9a4aa054430f6c8d539f4ca6a87571c56", "active_tools.py": "49e789dc62cbc2ddde269e9350b2762fcff3bb36ff94ec4bb09987414762ea9d", "passive_gateway.py": "872c5fdb2dbb9e4f074c8bb5f0c98ef548b43653cb39608f6cdb9f83e2ba7903", "passive_routes.py": "d04b5d7792000e348b3ee0b8d430d718e73667ec3c3422d27cc32a89bf3b6f72", "passive_store.py": "107900affc5592233b27ce88f9f6b4563d1bf0084f002bbdae57796315df4bd3", "schema.sql": "ca2da070bcb3dc7f8055679c877dc10bad253b1565037025207928641d66a61e"}
+
+Repository CI lint selection, exit 0
+All checks passed!
+
+Earlier native spider-cap result (before final response counters/context change):
+{"mode": "cap", "checks": {"active": {"status": "partial", "reason": "coverage_unconfirmed"}}, "coverage": {"requests": 52, "active_requests": 0, "spider_urls": 50, "capped": true, "blocked": false, "refused": 16}, "findings": 6, "proxy_dials": 52, "site_requests": 52}
+
+Commands:
+TMPDIR=/workspace/codex-radix-w3/.test-data/tmp RADIX_OSV_REAL=/workspace/codex-radix-w3/.test-data/osv.sqlite RADIX_PASSIVE_TEST_DATABASE_URL=postgresql://placeholder@127.0.0.1:56483/radix_passive_test RADIX_I8_TEST_DATABASE_URL=postgresql://placeholder@127.0.0.1:56483/radix_passive_test POOL_SCHEMA_DATABASE_URL=postgresql://placeholder@127.0.0.1:56483/postgres TENANT_BUS_REDIS_URL=redis://127.0.0.1:56484/0 DATABASE_URL=postgresql://placeholder@127.0.0.1:56483/postgres LITELLM_MASTER_KEY=placeholder TANK_API_KEY=placeholder PYTHONPATH=agents/_chassis /workspace/codex-radix-r4-py312/bin/python -m pytest -q --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 tests/test_radix_*.py tests/test_rx1_scans.py tests/test_rx4_compliance.py tests/test_command_radix*.py tests/test_bucket1_radix.py tests/test_skala_radix_region_evals.py agents/radix/tests/ tests/tenant_bus/ tests/radix_i8/ tests/radix_r6/ tests/radix_i2/
+PYTHONPATH=agents/_chassis /workspace/codex-radix-r4-py312/bin/python -m pytest -q tests/test_command_radix_active.py -k explicit
+DOCKER_HOST=unix:///var/run/docker.sock docker build --pull=false --progress=plain -f agents/radix/Dockerfile -t codex-radix-w3:i2 agents
+docker --host=unix:///var/run/docker.sock run --rm --network none --memory 1g --cpus .25 --cap-drop ALL --security-opt no-new-privileges:true --add-host radix-passive-proxy:127.0.0.1 -v /workspace/codex-radix-w3/tests/radix_i2/image_smoke.py:/tmp/placeholder-i2.py:ro codex-radix-w3:i2 python /tmp/placeholder-i2.py
+# Repeat preceding native command with argument blocked for non-200 proof.
+node --check agents/radix/active_guard.js
+git diff --check
+git diff ca662ce6 -- agents/radix/egress.py agents/radix/egress-policy.json agents/radix/passive_tools.py agents/radix/docker-compose.yml
+Result: no differences to passive limits, command, policy or compose.
+
+The native container has no external network. Its fixture DNS/dial seams map a pinned public placeholder address to synthetic loopback TLS. No production target override, credential, private key material, live scan, deploy or merge is part of this proof.
+
+Room/seal selection: python -m pytest -q tests/test_c10_rooms.py tests/test_room_seal.py -k "radix or template"
+.........................                                                [100%]
+25 passed, 88 deselected in 31.08s
+
+Secret scan: python -m pytest -q tests/test_secrets.py
+..                                                                       [100%]
+2 passed in 13.41s
