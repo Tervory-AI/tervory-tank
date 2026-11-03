@@ -73,3 +73,45 @@ Sources: [Coolify's Traefik configuration](https://coolify.io/docs/core/networki
 ## Acceptance still required
 
 The founder completes the live Claude sign-in, verified FFL lookup, pending batch/Confirm check, matching `/chats` receipt and grant revocation. Founder screenshots and deployed connector acceptance have not been produced by synthetic tests. No live tokens, production SQL, production data changes or model calls were used to implement or test this gate.
+
+## First-party plugins
+
+A bundled plugin lives at `plugins/<id>/<version>/plugin.yaml`. `plugins` points
+to `tank/plugin_packages`, keeping one source inside Tank's existing Docker build
+context. The image copies that directory; Compose and settings do not change.
+`tank/plugins.py` loads every manifest at import with `yaml.safe_load` and strict
+validation. Offline tests reject malformed manifests and mismatched folder names.
+Only repository-bundled first-party manifests can be installed. Third-party
+packages, connection creation and credential storage are outside this format.
+
+Required fields are `id`, semantic `version`, `name`, `products` (squad IDs from
+`VAULTS`), `servers` (each with `url` and a `tools` mapping of exact names to
+`read` or `write`), `skills` (`id@version` references, possibly empty), and the
+boolean `code_mode`.
+
+`plugins.list` returns the tenant's installs, founder server/tool approval state,
+existing vault connection states, and each skill's approval state, with a $0 code
+receipt. `plugins.install` and `plugins.remove` are offered only to tenant admins
+and the founder. Both use the existing durable Confirm cards and $0 code receipts.
+Install refuses an unapproved server, missing/mismatched allowed tool or unapproved
+skill before saving the card, and rechecks readiness on confirmation. Install
+accepts `{name, version}` (`name` is the manifest ID) and records a tenant-scoped
+row only; remove deletes that row only. Neither approves
+a server, connects an account, nor stores credentials. Account connection stays
+in the existing product Plugins panel. The new install screen awaits an approved
+Figma frame; no page or card label is added here. The existing `name`, `status`
+and `count` labels present the supported top-level fields. Dedicated connection,
+version, install and skill detail labels await Figma approval.
+
+Code mode offers only installed plugins' enabled read tools, intersected with the
+actor's existing connected MCP catalogue, product grants and founder allow-list.
+General chat catalogue behavior is unchanged. A plugin never grants access to
+another tenant's vault or enables a write tool in code mode.
+
+The first manifest is `github@1.0.0`, for Radix with code mode enabled, using
+`https://api.githubcopilot.com/mcp/` and the existing bearer-token connection.
+Its exact read tools are `list_issues`, `issue_read`, `list_pull_requests`,
+`pull_request_read`, `actions_list`, and `actions_get`. These names and the server
+address were checked against [GitHub's official MCP server documentation](https://github.com/github/github-mcp-server#tools)
+on **3 November 2026**. The consolidated Actions tools cover workflow-run lists
+and details; no workflow trigger or other write tool is bundled.
