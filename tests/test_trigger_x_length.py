@@ -51,6 +51,7 @@ def test_published_weight_range_boundaries(point, expected):
     ('http://-example.com', 19),
     ('https://domain_with_underscore.com', 34),
     ('https://example.com/👨‍👩‍👧‍👦', 23),
+    ('https://' + 'ß' * 50 + '.de', 23),
     ('🇿🇦', 2),
     ('1️⃣', 2),
     ('🐱\u200d🐱', 5),
