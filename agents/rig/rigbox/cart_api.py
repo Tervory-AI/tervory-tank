@@ -51,15 +51,16 @@ async def shopper_cart(operation: str, request: Request):
         tenant = _tenant(request)
         await service.config(tenant)
         data = await body(request)
-        allowed = {'session': set(), 'view': {'session'}, 'add': {'session', 'product_id', 'quantity', 'back_order'},
+        allowed = {'session': set(), 'view': {'session', 'product_id', 'recheck'}, 'add': {'session', 'product_id', 'quantity', 'back_order'},
                    'remove': {'session', 'line_id'}, 'checkout': {'session'}, 'order': {'session', 'checkout_id'}}
         if operation not in allowed or set(data) - allowed[operation]:
             raise CommerceError('invalid')
         token = data.get('session')
         if operation == 'session':
-            result = {'session': secrets.token_urlsafe(32)}
+            result = {'session': secrets.token_urlsafe(32), 'mode': 'cart',
+                      'store_name': (await service.store.retailer(tenant) or {}).get('name', '')}
         elif operation == 'view':
-            result = await service.view(tenant, token)
+            result = await service.view(tenant, token, product_id=data.get('product_id'), recheck=data.get('recheck') is True)
         elif operation == 'add':
             result = await service.add(tenant, token, data.get('product_id'), data.get('quantity'),
                                         back_order=data.get('back_order') is True)
@@ -77,7 +78,11 @@ async def shopper_cart(operation: str, request: Request):
 
 
 async def commerce_operation(service, tenant, operation, data):
+    if operation == 'connect' and not data:
+        config = await service.store.commerce_config(tenant)
+        return {key: config[key] for key in ('platform', 'site', 'store_hash', 'delivery') if key in config}
     if operation == 'connect':
+        data = {'mode': 'cart', 'region': 'US', 'vault_name': 'rig-commerce-' + str(data.get('platform', '')), **data}
         return await service.connect(tenant, data)
     if operation == 'orders' and not data:
         from rigbox.cart import public_checkout, public_line
