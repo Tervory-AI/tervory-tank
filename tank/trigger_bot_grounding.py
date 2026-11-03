@@ -47,8 +47,7 @@ def chunks(text: str, words: int = 160) -> list[str]:
 
 def eligible(tenant: UUID, candidates: list[Passage]) -> list[Passage]:
     # Recheck identity after both stores: a vector-filter bug must never leak a row.
-    return sorted((p for p in candidates if p.tenant_id == tenant and p.score >= PASSAGE_THRESHOLD),
-                  key=lambda p: (-p.score, str(p.id)))[:MAX_PASSAGES]
+    return [p for p in candidates if p.tenant_id == tenant and p.score >= PASSAGE_THRESHOLD][:MAX_PASSAGES]
 
 
 def exact_origin(value: str) -> bool:
@@ -78,6 +77,13 @@ def grounded(output: Any, passages: list[Passage]) -> tuple[str, list[Passage]] 
         supported = {v.casefold() for v in NUMBER.findall(" ".join(p.text for p in cited))}
         if any(v.casefold() not in supported for v in NUMBER.findall(answer)):
             return None
+        dates = re.compile(r"\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|today|tomorrow|yesterday|January|February|March|April|May|June|July|August|September|October|November|December)\b", re.I)
+        source_text = ' '.join(p.text for p in cited).casefold()
+        if any(token.casefold() not in source_text for token in dates.findall(answer)):
+            return None
+        currencies = re.compile(r"[$£€]|\b(?:USD|GBP|EUR|ZAR)\b")
+        if any(token not in ' '.join(p.text for p in cited) for token in currencies.findall(answer)):
+            return None
         # The engine owns links. A model cannot introduce a destination or a raw citation URL.
         if re.search(r"https?://|\]\(", answer, re.I):
             return None
@@ -96,4 +102,5 @@ def fuse(tenant: UUID, lexical: list[dict], vectors: list[dict]) -> list[dict]:
             key = str(row["id"])
             item = results.setdefault(key, {**row, "fusion": 0.0})
             item["fusion"] += 1 / (20 + rank)
+            item["score"] = max(item.get("score", 0), row.get("score", 0))
     return sorted(results.values(), key=lambda row: (-row["fusion"], str(row["id"])))
