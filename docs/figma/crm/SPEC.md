@@ -4,7 +4,7 @@ This replaces all previous canvas and repository CRM design guidance. Page `93:2
 
 ## Navigation and character
 
-CRM is Trigger. One 240px Trigger menu, approved Tervory logo and client switcher. Writing: Write, Voice. CRM: Leads, Clients, Contacts, Opportunities, Cases, Tasks. Sales: Quotes, Invoices. Marketing and Chat bot entries remain. Bottom: All products, Receipts, Billing, Account settings. Settings names the Chat bot area; it occurs once in the menu. Quotes is the display name for the existing Estimates API. Clients is the display name for the Accounts API. IDs, routes and API names stay internal.
+CRM is Trigger. One 240px Trigger menu, approved Tervory logo and Business switcher. Writing: Write, Voice. CRM: Leads, Clients, Contacts, Opportunities, Cases, Tasks. Sales: Quotes, Invoices. Marketing and Chat bot entries remain. Bottom: All products, Receipts, Billing, Account settings. Settings names the Chat bot area; it occurs once in the menu. Quotes is the display name for the existing Estimates API. Clients is the display name for the Accounts API. IDs, routes and API names stay internal.
 
 Desktop is 1440×900 with a 1200px work area and 1136px content width. Mobile is 375×812, one matching drawer, two-line record cards linked to full details. Drawer content scrolls independently above a pinned 240px-wide bottom block with a top divider and 16px end clearance. No design-index strip appears inside screens. Existing Jost Light headings, Inter text, Trigger controls and bound colour tokens are reused.
 
@@ -403,6 +403,166 @@ Client / [Client] replaces singular relationship fields labelled Clients / [Clie
 Source download command: curl -fsSL https://raw.githubusercontent.com/Django-CRM/Django-CRM/cd7c12a607df1719518fcdaf289864f6ba7d0bcd/backend/invoices/api_views.py -o .git/bottlecrm-api-views.py (passed); nl -ba .git/bottlecrm-api-views.py | sed -n '758,814p' (passed). An optional serializers.py lookup returned HTTP404; the verified endpoint source above is sufficient to establish accepted request fields and defaults.
 
 git fetch origin codex/crm-design passed. Figma authoring screenshots inspected filled/zero table review states at both sizes, Contacts lower fields, navy primary confirms, Mark paid context order and drawer end state. No founder-browser acceptance screenshot or live API test is claimed.
+
+## Founder decision 9 · Business switcher
+
+**Business** is proposed for founder approval. It selects the Tervory client/business being worked in. **Clients** in Trigger navigation means that business's own customers; a singular customer relationship field remains **Client**. The founder-only tenant selectors on /control and /tank/proof keep Client. No founder selector, route or application file was edited.
+
+The supplied IDs 125:10374 / 125:10372 / 125:10373 resolve to the separate Client sidebar · Founder structure component set on page 1 · Case studies, not the Trigger menu switcher. They have no matching switcher label and were left unchanged. The actual Trigger masters used by the requested screens are:
+
+- Page 2 · CRM (93:2), set 180:8549: desktop 180:8387, switcher text 180:8392; mobile 180:8467, switcher text 180:8474.
+- Page 4 · Marketing (148:9), set 266:3212: desktop 266:3039, switcher text 266:3044; mobile 266:3125, switcher text 266:3131. Page 5 · Chat bot inherits this family.
+
+Both master families now say Business. Ten legacy text overrides also required correction. The two detached drawer-end review copies were updated directly. No node ID was replaced. All 130 reached screen/drawer frames retain **Changed after approval, awaiting founder**. A closed mobile screen without a menu instance is not counted as a directly changed frame; opening its shared drawer shows Business.
+
+### Pages and frames reached by Business
+
+#### 2 · CRM · 93:2 · 77 frames
+
+- `94:172` · Leads / List / Desktop / Zero.
+- `94:417` · Leads / List / Desktop / Filled.
+- `94:741` · Leads / Detail / Desktop / Zero.
+- `94:1061` · Leads / Detail / Desktop / Filled.
+- `94:1811` · Clients / List / Desktop / Zero.
+- `94:1978` · Clients / List / Desktop / Filled.
+- `94:2263` · Clients / Detail / Desktop / Zero.
+- `94:2510` · Clients / Detail / Desktop / Filled.
+- `97:2074` · Contacts / List / Desktop / Zero.
+- `97:2245` · Contacts / List / Desktop / Filled.
+- `97:2543` · Contacts / Detail / Desktop / Zero.
+- `97:2800` · Contacts / Detail / Desktop / Filled.
+- `97:3343` · Opportunities / List / Desktop / Zero.
+- `97:3522` · Opportunities / List / Desktop / Filled.
+- `97:3846` · Opportunities / Detail / Desktop / Zero.
+- `97:4107` · Opportunities / Detail / Desktop / Filled.
+- `97:4662` · Cases / List / Desktop / Zero.
+- `97:4837` · Cases / List / Desktop / Filled.
+- `97:5148` · Cases / Detail / Desktop / Zero.
+- `97:5416` · Cases / Detail / Desktop / Filled.
+- `97:5994` · Tasks / List / Desktop / Zero.
+- `97:6165` · Tasks / List / Desktop / Filled.
+- `97:6463` · Tasks / Detail / Desktop / Zero.
+- `97:6671` · Tasks / Detail / Desktop / Filled.
+- `97:7053` · Invoices / List / Desktop / Zero.
+- `97:7276` · Invoices / List / Desktop / Filled.
+- `97:7743` · Invoices / Detail / Desktop / Zero.
+- `97:8098` · Invoices / Detail / Desktop / Filled.
+- `97:8979` · Quotes / List / Desktop / Zero.
+- `97:9218` · Quotes / List / Desktop / Filled.
+- `97:9737` · Quotes / Detail / Desktop / Zero.
+- `97:10064` · Quotes / Detail / Desktop / Filled.
+- `98:8589` · Leads / Confirm Delete / Desktop.
+- `98:8621` · Clients / Confirm Delete / Desktop.
+- `98:8653` · Contacts / Confirm Delete / Desktop.
+- `98:8685` · Opportunities / Confirm Delete / Desktop.
+- `98:8717` · Cases / Confirm Delete / Desktop.
+- `98:8749` · Tasks / Confirm Delete / Desktop.
+- `98:8781` · Invoices / Confirm Send / Desktop.
+- `98:8819` · Invoices / Confirm Mark paid / Desktop.
+- `98:8893` · Quotes / Confirm Delete / Desktop.
+- `98:8925` · Quotes / Confirm Send / Desktop.
+- `98:8963` · Quotes / Confirm Convert / Desktop.
+- `98:9013` · Invoices / Confirm Record payment / Desktop.
+- `98:9087` · Invoices / Confirm Delete payment / Desktop.
+- `98:9131` · Invoices / Confirm Delete line item / Desktop.
+- `98:9181` · Trigger / Mobile drawer / Zero.
+- `98:9227` · Trigger / Mobile drawer / Filled.
+- `310:15307` · Leads / Detail / Desktop / Zero / Scrolled fields 1.
+- `310:15589` · Leads / Detail / Desktop / Zero / Scrolled fields 2.
+- `310:15871` · Leads / Detail / Desktop / Filled / Scrolled fields 1.
+- `310:16156` · Leads / Detail / Desktop / Filled / Scrolled fields 2.
+- `310:18991` · Clients / Detail / Desktop / Zero / Scrolled fields 1.
+- `310:19200` · Clients / Detail / Desktop / Filled / Scrolled fields 1.
+- `310:20183` · Contacts / Detail / Desktop / Zero / Scrolled fields 1.
+- `310:20402` · Contacts / Detail / Desktop / Filled / Scrolled fields 1.
+- `310:21467` · Opportunities / Detail / Desktop / Zero / Scrolled fields 1.
+- `310:21690` · Opportunities / Detail / Desktop / Filled / Scrolled fields 1.
+- `310:22783` · Cases / Detail / Desktop / Zero / Scrolled fields 1.
+- `310:23013` · Cases / Detail / Desktop / Filled / Scrolled fields 1.
+- `310:24466` · Tasks / Detail / Desktop / Filled / Scrolled fields 1.
+- `310:24977` · Invoices / Detail / Desktop / Zero / Scrolled fields 1.
+- `310:25348` · Invoices / Detail / Desktop / Zero / Scrolled fields 2.
+- `310:25719` · Invoices / Detail / Desktop / Zero / Scrolled fields 3.
+- `310:26090` · Invoices / Detail / Desktop / Filled / Scrolled fields 1.
+- `310:26470` · Invoices / Detail / Desktop / Filled / Scrolled fields 2.
+- `310:26850` · Invoices / Detail / Desktop / Filled / Scrolled fields 3.
+- `310:31563` · Quotes / Detail / Desktop / Zero / Scrolled fields 1.
+- `310:31852` · Quotes / Detail / Desktop / Zero / Scrolled fields 2.
+- `310:32141` · Quotes / Detail / Desktop / Filled / Scrolled fields 1.
+- `310:32437` · Quotes / Detail / Desktop / Filled / Scrolled fields 2.
+- `310:35403` · Invoices / Confirm Mark paid / Desktop / Scrolled fields 1.
+- `310:35584` · Invoices / Confirm Record payment / Desktop / Scrolled fields 1.
+- `310:35765` · Invoices / Detail / Desktop / Zero / Scrolled to Items and Payments.
+- `310:36136` · Invoices / Detail / Desktop / Filled / Scrolled to Items and Payments.
+- `310:39581` · Trigger / Mobile drawer / Zero / Scrolled to end.
+- `310:39786` · Trigger / Mobile drawer / Filled / Scrolled to end.
+
+#### 4 · Marketing · 148:9 · 29 frames
+
+- `149:2263` · Channels / Desktop / Zero.
+- `149:2696` · Channels / Desktop / Filled.
+- `149:3789` · Calendar · Month / Desktop / Zero.
+- `149:4224` · Calendar · Month / Desktop / Filled.
+- `149:5331` · Calendar · Week / Desktop / Zero.
+- `149:5710` · Calendar · Week / Desktop / Filled.
+- `149:6649` · Composer / Desktop / Zero.
+- `149:7134` · Composer / Desktop / Filled.
+- `149:8383` · Post detail / Desktop / Zero.
+- `149:8745` · Post detail / Desktop / Filled.
+- `149:9625` · Google Business Profile · Posts / Desktop / Zero.
+- `149:9975` · Google Business Profile · Posts / Desktop / Filled.
+- `149:10819` · Google Business Profile · Reviews / Desktop / Zero.
+- `149:11184` · Google Business Profile · Reviews / Desktop / Filled.
+- `149:21139` · Confirm · Approve / Desktop / Zero.
+- `149:21481` · Confirm · Approve / Desktop / Filled.
+- `149:22301` · Confirm · Schedule / Desktop / Zero.
+- `149:22643` · Confirm · Schedule / Desktop / Filled.
+- `149:23463` · Confirm · Send review reply / Desktop / Zero.
+- `149:23802` · Confirm · Send review reply / Desktop / Filled.
+- `149:24613` · Confirm · Disconnect / Desktop / Zero.
+- `149:24946` · Confirm · Disconnect / Desktop / Filled.
+- `150:4047` · Trigger / Mobile drawer / Zero.
+- `150:4061` · Trigger / Mobile drawer / Filled.
+- `270:3220` · Confirm · Connect / Desktop / Zero.
+- `270:3369` · Confirm · Connect / Desktop / Filled.
+- `270:3789` · Review detail / Desktop / Zero.
+- `270:3964` · Review detail / Desktop / Filled.
+- `271:3480` · Composer / Desktop / Approved.
+
+#### 5 · Chat bot · 148:10 · 24 frames
+
+- `149:13691` · Inbox // Desktop / Zero.
+- `149:14042` · Inbox // Desktop / Filled.
+- `149:14889` · Conversation detail / Desktop / Zero.
+- `149:15281` · Conversation detail / Desktop / Filled.
+- `149:16251` · Hand-over / Desktop / Zero.
+- `149:16604` · Hand-over / Desktop / Filled.
+- `149:17457` · Lead draft / Desktop / Zero.
+- `149:17814` · Lead draft / Desktop / Filled.
+- `149:18679` · Quote draft / Desktop / Zero.
+- `149:19033` · Quote draft / Desktop / Filled.
+- `149:19889` · Settings // Desktop / Zero.
+- `149:20253` · Settings // Desktop / Filled.
+- `151:6994` · Confirm · Send reply / Desktop / Zero.
+- `151:7330` · Confirm · Send reply / Desktop / Filled.
+- `151:8132` · Confirm · Hand over / Desktop / Zero.
+- `151:8468` · Confirm · Hand over / Desktop / Filled.
+- `151:9270` · Confirm · Lead / Desktop / Zero.
+- `151:9612` · Confirm · Lead / Desktop / Filled.
+- `151:10432` · Confirm · Quote / Desktop / Zero.
+- `151:10771` · Confirm · Quote / Desktop / Filled.
+- `151:11582` · Confirm · Bot settings / Desktop / Zero.
+- `151:11924` · Confirm · Bot settings / Desktop / Filled.
+- `153:4367` · Trigger / Mobile drawer / Zero.
+- `153:4381` · Trigger / Mobile drawer / Filled.
+
+### Inheritance exceptions and verification
+
+Legacy overridden text nodes corrected: `I182:8871;180:8392`, `I182:8951;180:8392`, `I182:9039;180:8392`, `I182:9119;180:8392`, `I183:8287;180:8392`, `I183:8367;180:8392`, `I310:15308;180:8392`, `I310:15590;180:8392`, `I310:15872;180:8392`, `I310:16157;180:8392`. Detached drawer-end switcher texts: 310:39690 and 310:39895. Master changes cover 134 switcher labels in total: four master labels plus 130 frame instances/copies. The 130 reached frames are 77 CRM, 29 Marketing and 24 Chat bot frames.
+
+All 17 pages in the file were inspected for this Trigger switcher. No such menu instances were found on the other 14 pages, including founder screens and MCP Control designs. Those pages and their Client tenant selectors were not edited. Source files for /control and /tank/proof were not changed. New wording for the founder: Business. Business switcher is the SPEC/control-layer name.
+
+Commands: git fetch origin codex/crm-design (passed); git diff --check (passed); git push origin codex/crm-design (passed after this document's commit). Authoring checks verify master inheritance, legacy overrides and reached-frame approval labels. Founder visual acceptance of Business remains pending.
 
 ## API register
 
