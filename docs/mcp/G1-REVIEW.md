@@ -1,5 +1,7 @@
 # MCP G1 review handoff
 
+This is the initial G1 implementation snapshot, before PR #587's review fixes. Its line numbers, proxy description and test totals are historical. For the current review changes and validation, see [PR #587 review evidence](PR587-REVIEW.md) and the PR checks. Registration now authenticates a proxy-derived source address, while token/revocation forwarding remains body/media-type only.
+
 Branch: `codex/mcp-server`. This is the backend and public transport portion of the founder's Gate G1 brief. **Do not mark G1 done:** the approved Figma source and approval for page “7 · MCP”, frame 1 have not been supplied to this task. `/oauth/authorize` has Tank validation/decision handlers and a server-side Workspace approval helper, but no new Workspace consent page or page words were created. Founder connector/browser acceptance and its screenshots remain absent. Claude opens the PR; the founder merges.
 
 ## Changed code (current file and line)
