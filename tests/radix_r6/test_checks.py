@@ -309,3 +309,20 @@ def test_ccpa_notice_uses_existing_checker_without_new_wording(label):
     from scanlib.comply import scan_html
     result=scan_html('<html><a href="/placeholder-ccpa">'+label+'</a></html>',name='placeholder.html',page_host=DOMAIN)
     assert not any(f['rule']=='missing-privacy-notice' for f in result['findings'])
+
+
+def test_changes_card_displays_states_items_and_fixed_findings_without_new_labels():
+    from command import public_card
+    original={'tool':'radix.changes','arguments':{'domain':DOMAIN},'result':{'status':'complete',
+        'new':[{'rule':'cookie','item':'placeholder-cookie','file':TARGET,'severity':'unknown'}],
+        'fixed':[{'rule':'placeholder-fixed','file':TARGET,'severity':'medium'}],
+        'unchanged':[{'rule':'placeholder-unchanged','file':TARGET,'severity':'low'}],
+        'findings':[]}}
+    card=public_card(original)
+    assert card['tool']=='radix.findings'
+    assert [r['rule'] for r in card['result']['findings']]==[
+        'new · cookie · placeholder-cookie','fixed · placeholder-fixed','unchanged · placeholder-unchanged']
+    assert card['result']['new']==original['result']['new']
+    assert original['result']['findings']==[] and original['tool']=='radix.changes'
+    assert public_card({'tool':'placeholder','result':original['result']})['result']==original['result']
+    assert public_card({'tool':'radix.changes','result':{'new':[],'fixed':3}})['result']['findings']==[]
