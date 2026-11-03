@@ -13,7 +13,7 @@ VOICE_PREFIX = re.compile(r'\s*trigger(?:\.voice\.|[, ]+voice[ .]+)(show|set|rol
 
 async def plan(actor, text: str, task_id):
     from command import authorized_actor, require_tool, db, unpack
-    crm = re.fullmatch(r'\s*trigger\.crm\.(list|get|write)\b\s*:?[ \t]*(.*)', text, re.I | re.S)
+    crm = re.fullmatch(r'\s*trigger\.crm\.(list|get|write)\b\s*:?[ \t]*(.*)', text, re.IGNORECASE | re.DOTALL)
     if crm:
         from command import PlannedAction, validate_action
         actor = await authorized_actor(actor)
