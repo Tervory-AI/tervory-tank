@@ -1611,8 +1611,8 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 if refused is not None:
                     card["result"] = refused
                 detail = result.get("detail") if isinstance(result, dict) else None
-                card["error"] = (detail if action.tool == "radix.passive.scan"
-                                 and isinstance(detail, str) and detail in {"invalid artifact", "domain proof required"}
+                card["error"] = (detail if isinstance(detail, str) and (action.tool.startswith("zenas.watch.")
+                                 or (action.tool == "radix.passive.scan" and detail in {"invalid artifact", "domain proof required"}))
                                  else "The action was refused or failed. It has not been retried.")
             await step(conn, row, state, {"step_id": card_id, "label": adapter.label,
                                           "actor": action.tool.split('.')[0],
