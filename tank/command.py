@@ -1446,8 +1446,9 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
                           "receipt_status": "pending" if costs_pending or baseline_pending else "recorded"})
         result = {"tenant_id": str(actor.tenant_id), "tasks": tasks, "window": result.get("window")}
     if action.tool == "base.search" and 200 <= response.status_code < 300 and isinstance(result, list):
-        # The existing card's Summary field presents sourced product data, without new UI labels.
-        result = [{**row, "summary": dump(row["profile"]["products"]["value"])}
+        # Reuse Summary for product names; full sourced rows remain in the tool data.
+        result = [{**row, "summary": ", ".join(product["name"] for product in row["profile"]["products"]["value"][:50]
+                                                  if isinstance(product, dict) and isinstance(product.get("name"), str) and product["name"])}
                   if isinstance(row, dict) and isinstance(row.get("profile"), dict)
                   and isinstance(row["profile"].get("products"), dict) and row["profile"]["products"].get("value")
                   else row for row in result]
