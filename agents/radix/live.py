@@ -342,7 +342,14 @@ def tls_findings(cert: dict[str, Any] | None, protocol: str | None, url: str = H
         for kind, value in cert.get("subjectAltName", ())
         if kind == "DNS"
     }
-    if host not in names:
+    name_matches = host in names
+    if not name_matches:
+        try:
+            ssl.match_hostname(cert, host)
+            name_matches = True
+        except (ssl.CertificateError, ValueError):
+            pass
+    if not name_matches:
         findings.append(
             _finding(
                 "scan.tls",
