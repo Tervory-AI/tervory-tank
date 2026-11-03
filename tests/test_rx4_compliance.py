@@ -212,9 +212,9 @@ def test_checker_source_does_not_fetch() -> None:
         assert banned not in text
 
 
-def test_code_scan_still_runs_only_the_three_rx1_tools() -> None:
+def test_code_scan_runs_four_tools_without_live_compliance_fetches() -> None:
     text = (ROOT / "agents" / "radix" / "scanlib" / "orchestrate.py").read_text(encoding="utf-8")
-    assert '["scan.secrets", "scan.dependencies", "scan.static"]' in text
+    assert '["scan.secrets", "scan.dependencies", "scan.static", "scan.iac"]' in text
     assert "comply" not in text
 
 

@@ -103,6 +103,8 @@ _pool: Any = None
 _admin_pool: asyncpg.Pool | None = None
 _background: set[asyncio.Task[None]] = set()
 _batch_task: asyncio.Task[None] | None = None
+_bot_task: asyncio.Task[None] | None = None
+_marketing_task: asyncio.Task[None] | None = None
 _http: httpx.AsyncClient | None = None
 _redis: aioredis.Redis | None = None
 REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
@@ -801,10 +803,22 @@ async def _startup() -> None:
     await _warn_unapproved_policy_pins()
     global _batch_task
     _batch_task = asyncio.create_task(_batch_loop())
+    global _bot_task
+    from trigger_bot import refresh_loop
+    _bot_task = asyncio.create_task(refresh_loop(__import__("sys").modules[__name__]))
+    global _marketing_task
+    from trigger_publisher import publish_loop
+    _marketing_task = asyncio.create_task(publish_loop(__import__("sys").modules[__name__]))
 
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
+    if _bot_task:
+        _bot_task.cancel()
+        await asyncio.gather(_bot_task, return_exceptions=True)
+    if _marketing_task:
+        _marketing_task.cancel()
+        await asyncio.gather(_marketing_task, return_exceptions=True)
     if _batch_task:
         _batch_task.cancel()
         await asyncio.gather(_batch_task, return_exceptions=True)
@@ -3260,11 +3274,12 @@ class EvalRun(BaseModel):
 
 
 async def run_room_eval(pkg: skala.SkillPackage, payload: dict[str, Any], ctx: skala.SkillContext) -> dict[str, Any]:
-    key = os.environ.get("TANK_KEY_TISAN", "")
-    if pkg.id not in {"tisan.figma", "tisan.scaffold", "tisan.build"} or not key or _http is None:
+    room = "radix" if pkg.id == "scan.iac" else "tisan"
+    key = os.environ.get(f"TANK_KEY_{room.upper()}", "")
+    if pkg.id not in {"tisan.figma", "tisan.scaffold", "tisan.build", "scan.iac"} or not key or _http is None:
         raise RuntimeError("eval room is unavailable")
     response = await _http.post(
-        "http://agent-tisan:8000/evals/run",
+        f"http://agent-{room}:8000/evals/run",
         headers={"X-Tank-Key": key},
         json={"skill_id": pkg.id, "version": pkg.version, "tenant_id": str(ctx.tenant_id), "input": payload},
         timeout=660,
@@ -3288,7 +3303,7 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
         pkg, lambda: __import__("skala_revalidation").eval_context(
             __import__("sys").modules[__name__], pkg,
             make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here)),
-        execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold", "tisan.build"} else None,
+        execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold", "tisan.build", "scan.iac"} else None,
     )
     if __import__("skala_revalidation").ACTIVE.get() is not None:
         return await __import__("skala_revalidation").record(
@@ -4187,6 +4202,7 @@ app.include_router(__import__("event_bus").router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_lists").build_router())
+app.include_router(__import__("base_audit_commands").build_router())
 app.include_router(__import__("rig_brain_routes").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("moa").router)
 
@@ -4674,7 +4690,9 @@ app.include_router(__import__("command").router)
 __import__("personal_tokens").register(app)
 __import__("mcp_server").register(app)
 app.include_router(__import__("trigger_routes").router)
+app.include_router(__import__("trigger_marketing_api").router)
 app.include_router(__import__("trigger_crm").router)
+app.include_router(__import__("trigger_bot_api").router)
 
 # ACCESS-1: scoped connections and browser-only credential handoff.
 app.include_router(__import__("access").router)
