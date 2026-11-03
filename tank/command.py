@@ -469,6 +469,10 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
     remembered = await remember_turn(actor, messages, task_id)
     if remembered is not None:
         return remembered
+    from trigger_bot_api import plan as bot_plan
+    bot_proposal = await bot_plan(actor, messages[-1].get("content", ""), task_id) if messages and messages[-1].get("role") == "user" else None
+    if bot_proposal is not None:
+        return bot_proposal
     from trigger_routes import code_plan
     planned = await code_plan(actor, messages, task_id)
     if planned is not None:
@@ -1114,6 +1118,9 @@ class Adapter:
     skill: str | None = None
 
 
+from trigger_bot_api import TOOLS as BOT_TOOLS
+TOOLS["trigger"] += ["trigger.bot." + name for name in BOT_TOOLS]
+
 ADAPTERS = {
     "trigger.crm.write": Adapter("POST", "/v1/trigger/crm/write", TriggerCRMWriteArgs, "trigger.crm.write"),
     "trigger.voice.show": Adapter("POST", "/v1/trigger/voice.show", TriggerVoiceShowArgs, "trigger.voice.show"),
@@ -1145,6 +1152,9 @@ ADAPTERS = {
     "ledger.receipts": Adapter("GET", "/v1/proof", ProofArgs, "Read ledger receipts"),
     "ledger.savings": Adapter("GET", "/v1/proof", SavingsArgs, "Read recorded costs and savings"),
 }
+
+ADAPTERS.update({"trigger.bot." + name: Adapter("POST", "/v1/trigger/bot/" + name, schema, "trigger.bot." + name)
+                 for name, schema in BOT_TOOLS.items()})
 
 
 class PlannedAction(Body):
@@ -1215,7 +1225,10 @@ async def propose_tool(thread_id: uuid.UUID, body: PlannedAction, actor: Actor =
 
 
 async def propose_action(conn: Any, row: dict, state: dict, action: PlannedAction, actor: Actor | None = None) -> dict:
-    if action.tool.startswith("trigger."):
+    if action.tool.startswith("trigger.bot."):
+        from trigger_bot_api import prepare as prepare_bot
+        action = await prepare_bot(action, await authorized_actor(actor or Actor(row["tenant_id"], row["user_id"], False), conn), {**state, "thread_id": str(row["thread_id"])})
+    elif action.tool.startswith("trigger."):
         from trigger_commands import prepare
         action = await prepare(action, await authorized_actor(actor or Actor(row["tenant_id"], row["user_id"], False), conn), state)
     card_id = str(uuid.uuid4())
