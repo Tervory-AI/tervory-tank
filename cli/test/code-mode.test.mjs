@@ -647,11 +647,16 @@ test('Confirm without an explicit interactive true cancels without reading a yes
 });
 
 
-test('hard-linked files are refused by local reads', async () => {
+test('hard-linked files cannot bypass read refusal through Git diff', async () => {
   const f = await folder(); const outside = join(work, 'placeholder-hardlink');
   await writeFile(outside, 'placeholder private contents');
+  await writeFile(join(f.root, 'x'), 'placeholder tracked contents\n');
+  execFileSync('git', ['add', 'x'], { cwd: f.root });
+  await fsPromises.unlink(join(f.root, 'x'));
   await fsPromises.link(outside, join(f.root, 'x'));
   await assert.rejects(f.read('x'), /Code tool refused/);
+  assert(!(await f.files()).files.includes('x'));
+  assert(!(await f.diff()).output.includes('placeholder private contents'));
 });
 
 test('non-Linux read rechecks the opened file identity after reading', async () => {
