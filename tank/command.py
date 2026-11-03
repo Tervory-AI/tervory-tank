@@ -54,7 +54,8 @@ FOUNDER_TOOLS = ["base.audit.start", "base.audit.csv", "base.audit.review", "tri
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
 FOUNDER_TOOLS += TISAN_CLIENT_TOOLS
-FOUNDER_TOOLS += ["autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy"]
+FOUNDER_TOOLS += ["autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy",
+                  "autumbra.fixes", "autumbra.fix.approve"]
 
 
 def db() -> Any:
@@ -935,6 +936,10 @@ MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 MAX_THREAD_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 
+class FixMatchArgs(Body):
+    match_id: uuid.UUID
+
+
 class EnforceTenantArgs(Body):
     tenant_id: uuid.UUID
 
@@ -1242,6 +1247,8 @@ from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServ
 
 
 ADAPTERS = {
+    "autumbra.fixes": Adapter("GET", "/v1/ghost/autumbra/fixes", EmptyArgs, "autumbra.fixes"),
+    "autumbra.fix.approve": Adapter("POST", "/v1/ghost/autumbra/fix/approve", FixMatchArgs, "autumbra.fix.approve"),
     "autumbra.enforce.list": Adapter("GET", "/v1/ghost/autumbra/enforce/list", EmptyArgs, "autumbra.enforce.list"),
     "autumbra.enforce.create": Adapter("POST", "/v1/ghost/autumbra/enforce/create", EnforceTenantArgs, "autumbra.enforce.create"),
     "autumbra.enforce.destroy": Adapter("POST", "/v1/ghost/autumbra/enforce/destroy", EnforceTenantArgs, "autumbra.enforce.destroy"),
@@ -1484,7 +1491,7 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, scope, None
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
-    if action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy", *TISAN_CLIENT_TOOLS}:
+    if action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy", "autumbra.fixes", "autumbra.fix.approve", *TISAN_CLIENT_TOOLS}:
         if adapter.method == 'GET':
             return adapter.method, path, args, None
         return adapter.method, path, {}, args  # Actor headers supply identity, never body fields.
@@ -1678,7 +1685,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if action.tool.startswith("mcp."):
                 from mcp_connections import dispatch
                 status, result = await dispatch(action, actor)
-            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan", "autumbra.enforce.create", "autumbra.enforce.destroy"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan", "autumbra.enforce.create", "autumbra.enforce.destroy", "autumbra.fix.approve"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
@@ -1849,17 +1856,20 @@ async def autumbra_enforce_code_plan(actor: Actor, messages: list[dict], task_id
     from trigger_routes import code_receipt
     last = messages[-1] if messages else {}
     text = last.get("content", "").strip()
-    if last.get("role") != "user" or not text.startswith("autumbra.enforce."):
+    if last.get("role") != "user" or not text.startswith("autumbra."):
         return None
     parts = text.split()
     tool = parts[0]
-    if tool not in {"autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy"}:
+    fields = {"autumbra.enforce.list": None, "autumbra.enforce.create": "tenant_id",
+              "autumbra.enforce.destroy": "tenant_id", "autumbra.fixes": None,
+              "autumbra.fix.approve": "match_id"}
+    if tool not in fields:
         return None
     actor = await authorized_actor(actor)
     require_tool(actor, tool)
-    if len(parts) != (1 if tool.endswith(".list") else 2):
+    if len(parts) != (1 if fields[tool] is None else 2):
         raise HTTPException(422, "Use: autumbra.enforce.create|destroy <tenant-uuid>")
-    arguments = {} if tool.endswith(".list") else {"tenant_id": parts[1]}
+    arguments = {} if fields[tool] is None else {fields[tool]: parts[1]}
     action = validate_action(PlannedAction(tool=tool, arguments=arguments), actor)
     ledger = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent="ghost")
     return SimpleNamespace(content=dump({"text": tool, "actions": [action.model_dump(mode="json")]}), ledger_id=ledger)
