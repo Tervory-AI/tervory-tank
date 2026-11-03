@@ -25,6 +25,11 @@ async def conversation(pool, tenant, days=-1):
         VALUES($1,$2,$3,$4)''', tenant, ident, uuid4(), stamp)
     await pool.execute('''INSERT INTO tank.trigger_bot_messages(tenant_id,id,conversation_id,question,outcome,created_at)
         VALUES($1,$2,$3,'placeholder private content','faq',$4)''', tenant, uuid4(), ident, stamp)
+    ledger = uuid4()
+    await pool.execute('''UPDATE tank.trigger_bot_messages SET ledger_id=$3
+        WHERE tenant_id=$1 AND conversation_id=$2''', tenant, ident, ledger)
+    await pool.execute('''INSERT INTO tank.transcripts(tenant_id,ledger_id,task_type,messages,content)
+        VALUES($1,$2,'trigger.bot.answer','[]','placeholder masked question')''', tenant, ledger)
     return ident
 
 
@@ -38,10 +43,15 @@ async def test_calendar_month_boundary_last_message_and_tenant_isolation(databas
     await database.execute('''INSERT INTO tank.trigger_bot_messages(tenant_id,id,conversation_id,question,outcome)
         VALUES($1,$2,$3,'placeholder recent message','faq')''', A, uuid4(), active)
     counts = await service.retain_conversations(A)
-    assert counts == {'conversations': 1, 'messages': 1, 'drafts': 0, 'confirmed_drafts_kept': 0, 'complete': True}
+    assert counts == {'conversations': 1, 'messages': 1, 'transcripts': 1, 'drafts': 0, 'confirmed_drafts_kept': 0, 'complete': True}
     remaining = await database.fetch('SELECT tenant_id,id FROM tank.trigger_bot_conversations')
     assert {(r['tenant_id'], r['id']) for r in remaining} == {(A, under), (A, active), (B, foreign)}
     assert over not in {r['id'] for r in remaining}
+    assert await database.fetchval('SELECT count(*) FROM tank.transcripts WHERE tenant_id=$1', A) == 2
+    assert await database.fetchval('SELECT count(*) FROM tank.transcripts WHERE tenant_id=$1', B) == 1
+    assert not await database.fetchval('''SELECT 1 FROM tank.transcripts t
+        WHERE t.tenant_id=$1 AND NOT EXISTS (SELECT 1 FROM tank.trigger_bot_messages m
+          WHERE m.tenant_id=$1 AND m.ledger_id=t.ledger_id)''', A)
     receipt = await database.fetchrow('''SELECT l.*,r.receipt FROM tank.ledger l
         JOIN tank.agent_receipts r ON r.ledger_id=l.id AND r.tenant_id=l.tenant_id
         WHERE l.tenant_id=$1 AND l.task_type='trigger.bot.retention' ''', A)
@@ -105,6 +115,7 @@ async def test_counts_receipt_failure_rolls_back_deletion(database, monkeypatch)
         await service.retain_conversations(A)
     assert await database.fetchval('SELECT 1 FROM tank.trigger_bot_messages WHERE tenant_id=$1 AND conversation_id=$2', A, ident)
     assert await database.fetchval('SELECT 1 FROM tank.trigger_bot_conversations WHERE tenant_id=$1 AND id=$2', A, ident)
+    assert await database.fetchval('SELECT count(*) FROM tank.transcripts WHERE tenant_id=$1', A) == 1
 
 
 @pytest.mark.asyncio
