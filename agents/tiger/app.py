@@ -1,8 +1,9 @@
-import asyncio
 """Tiger — watches pages and keeps a price history. It knows no industry."""
 
 from __future__ import annotations
 
+import asyncio
+import json
 import hmac
 import logging
 import os
