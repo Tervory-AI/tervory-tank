@@ -177,7 +177,8 @@ async def test_failed_check_returns_output_without_archive(builder, monkeypatch,
     p['copy'] = copy_for(builder, p['plan'])
     async with client_for() as client:
         result = await builder.execute(p, TENANT, http=client, data_root=tmp_path)
-    assert result == {'ok': False, 'checks': [{'name': 'npm ci', 'ok': False}], 'detail': 'offline cache missing'}
+    assert result == {'ok': False, 'slug': p['slug'], 'build': 1,
+                      'checks': [{'name': 'npm ci', 'ok': False}], 'detail': 'offline cache missing'}
     assert not list(tmp_path.rglob('*.tar.gz'))
     scaffold.run_checks.assert_awaited_once()
 

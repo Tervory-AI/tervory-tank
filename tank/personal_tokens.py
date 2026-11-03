@@ -118,7 +118,7 @@ async def device_approval_actor(request: Request) -> command.Actor:
 _UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 CLI_ROUTES = {
     "GET": re.compile(rf"/v1/command/(models|tools|threads|threads/{_UUID}(/events)?|tasks/{_UUID}/receipts)\Z"),
-    "POST": re.compile(rf"/v1/command/(threads|threads/{_UUID}/(turn|actions)|cards/{_UUID}|build)\Z"),
+    "POST": re.compile(rf"/v1/command/(threads|threads/{_UUID}/(turn|actions|code-turn)|cards/{_UUID}|build)\Z"),
     "PATCH": re.compile(rf"/v1/command/threads/{_UUID}\Z"),
 }
 

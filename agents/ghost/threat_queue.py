@@ -485,13 +485,27 @@ def enforce_drain_once(
         return None
     _item_id, payload = taken
     edge = control or DEFAULT_CONTROL
-    cap = action_cap or ActionCap()
+    cap = action_cap or ActionCap(data_dir=data_dir or queue.root)
 
     transit = _queue_transit_seconds(payload)
 
+    from .cloudflare_edge import CloudflareEdgeError
+
+    def retry_edge_failure(error: CloudflareEdgeError) -> None:
+        owned_undo = getattr(error, "retry_undo", None)
+        if owned_undo:
+            queue.put(ThreatPayload.model_validate({**payload.model_dump(), **owned_undo,
+                                                   "action": ThreatAction.undo_shield}))
+        else:
+            queue.put(payload)
+
     # Undo / approve doors — ThreatPayload only.
     if payload.action is ThreatAction.undo_shield:
-        receipt = undo_from_payload(payload, control=edge, settings=settings, data_dir=data_dir)
+        try:
+            receipt = undo_from_payload(payload, control=edge, settings=settings, data_dir=data_dir)
+        except CloudflareEdgeError as error:
+            retry_edge_failure(error)
+            raise
         if transit is not None:
             stamp_budget(receipt, stage="queue_transit", seconds=transit)
         stamp_budget(receipt, stage="event_to_shield_e2e", seconds=time.perf_counter() - t_drain + (transit or 0))
@@ -499,10 +513,16 @@ def enforce_drain_once(
         return receipt
 
     if payload.action is ThreatAction.approve_shield:
-        receipt = approve_pending(payload, control=edge, settings=settings, data_dir=data_dir)
+        try:
+            receipt = approve_pending(payload, control=edge, settings=settings, data_dir=data_dir)
+        except CloudflareEdgeError as error:
+            retry_edge_failure(error)
+            raise
         if transit is not None:
             stamp_budget(receipt, stage="queue_transit", seconds=transit)
-        stamp_budget(receipt, stage="event_to_shield_e2e", seconds=time.perf_counter() - t_drain + (transit or 0))
+        # A successful shield was already up before post-apply observation.
+        health_wait = (receipt.get("budgets") or {}).get("health_check", {}).get("seconds", 0) if receipt.get("applied") else 0
+        stamp_budget(receipt, stage="event_to_shield_e2e", seconds=max(0, time.perf_counter() - t_drain - health_wait) + (transit or 0))
         queue.write_receipt(receipt)
         if on_act_email and receipt.get("applied"):
             try:
@@ -530,17 +550,23 @@ def enforce_drain_once(
         queue.write_receipt(receipt)
         return receipt
 
-    receipt = apply_from_payload(
-        payload,
-        settings=settings,
-        control=edge,
-        source_credits=source_credits,
-        data_dir=data_dir,
-    )
+    try:
+        receipt = apply_from_payload(
+            payload,
+            settings=settings,
+            control=edge,
+            source_credits=source_credits,
+            data_dir=data_dir,
+        )
+    except CloudflareEdgeError as error:
+        if getattr(error, "retry_undo", None):
+            retry_edge_failure(error)
+        raise
     if transit is not None:
         stamp_budget(receipt, stage="queue_transit", seconds=transit)
     # E2E: queue transit + drain work (event→shield across the pipe).
-    e2e = time.perf_counter() - t_drain + (transit or 0.0)
+    health_wait = (receipt.get("budgets") or {}).get("health_check", {}).get("seconds", 0) if receipt.get("applied") else 0
+    e2e = max(0, time.perf_counter() - t_drain - health_wait) + (transit or 0.0)
     stamp_budget(receipt, stage="event_to_shield_e2e", seconds=e2e)
     queue.write_receipt(receipt)
     if on_act_email and receipt.get("applied"):

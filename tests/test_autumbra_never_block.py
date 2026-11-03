@@ -27,11 +27,11 @@ def test_may_block_attacker_present_in_log():
     assert ok is True and why == "ok"
 
 
-def test_action_cap_per_hour():
-    cap = ActionCap(limit=2, clock=lambda: 1_000.0)
-    assert cap.allow("t1")[0] is True
-    assert cap.allow("t1")[0] is True
-    ok, why = cap.allow("t1")
+def test_action_cap_per_hour(tmp_path):
+    cap = ActionCap(limit=2, clock=lambda: 1_000.0, data_dir=tmp_path / "placeholder-cap")
+    assert cap.allow("placeholder-tenant-one")[0] is True
+    assert cap.allow("placeholder-tenant-one")[0] is True
+    ok, why = cap.allow("placeholder-tenant-one")
     assert ok is False and "cap" in why
     # Other tenant unaffected.
-    assert cap.allow("t2")[0] is True
+    assert cap.allow("placeholder-tenant-two")[0] is True

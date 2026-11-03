@@ -14,7 +14,6 @@ from urllib.parse import urlencode
 
 from .client_settings import ClientAutumbraSettings, load_settings
 from .owner_email import (
-    DEFAULT_FIXTURE_TRANSPORT,
     build_owner_update,
     send_owner_update,
 )
@@ -321,7 +320,7 @@ def run_weekly_owner_updates(
     """
     stats = week_stats or {}
     by_receipts = receipts_by_tenant or {}
-    sender = transport or DEFAULT_FIXTURE_TRANSPORT
+    sender = transport
     results: list[dict[str, Any]] = []
     for settings in clients:
         to = (settings.owner_email or "").strip()
@@ -375,7 +374,9 @@ def run_weekly_owner_updates(
             receipt_url=receipt_url,
             checks_run=row.get("checks_run"),
         )
-        sent = send_owner_update(email, to=to, transport=sender)
+        start = week_start or week_bounds()[0]
+        sent = send_owner_update(email, to=to, transport=sender, tenant_id=settings.tenant_id,
+                                 message_key="weekly:" + start.isoformat())
         results.append({
             "tenant_id": settings.tenant_id,
             "job_id": WEEKLY_OWNER_UPDATE_JOB["id"],

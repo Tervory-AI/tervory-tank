@@ -24,6 +24,8 @@ ARG GITLEAKS_SHA_X64=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2
 ARG GITLEAKS_SHA_ARM64=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080
 ARG SEMGREP_VERSION=1.182.1
 ARG PIP_AUDIT_VERSION=2.10.1
+# Checkov is Apache-2.0; isolated from Semgrep and chassis dependencies.
+ARG CHECKOV_VERSION=3.3.21
 ARG TARGETARCH
 
 WORKDIR /app
@@ -49,6 +51,8 @@ RUN apt-get update \
     && useradd --create-home --uid 1000 agent \
     && mkdir -p /data /opt/osv \
     && chown agent:agent /data /opt/osv
+RUN python -m venv /opt/checkov \
+    && /opt/checkov/bin/pip install --no-cache-dir "checkov==${CHECKOV_VERSION}"
 COPY radix/install-passive-tools.sh /tmp/install-passive-tools.sh
 RUN sh /tmp/install-passive-tools.sh \
     && ln -s /opt/bin/nuclei /usr/local/bin/nuclei \
@@ -77,6 +81,7 @@ ENV AGENT_NAME=radix \
     RADIX_USE_SYSTEM_TOOLS=1 \
     RADIX_OSV_DIR=/opt/osv \
     SEMGREP_BIN=/opt/semgrep/bin/semgrep \
+    CHECKOV_BIN=/opt/checkov/bin/checkov \
     PIP_AUDIT_BIN=/opt/audit/bin/pip-audit \
     SEMGREP_SEND_METRICS=off \
     SEMGREP_ENABLE_VERSION_CHECK=0 \

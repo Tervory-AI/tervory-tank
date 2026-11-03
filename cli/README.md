@@ -46,3 +46,53 @@ The known-action `run` and owned task receipt endpoints are supplied by companio
 Interactive terminals show provisional answer text on a single stderr preview line; stdout receives the final answer once. Tank's `replace` event replaces the provisional answer, and duplicate sequence numbers are ignored. Non-interactive stdout receives only the validated final answer, avoiding stale previews in scripts.
 
 `npm test --prefix cli` runs fake-Tank tests with synthetic credentials and data only. No provider requests or live account changes occur. Evidence in `tests/cli_1_20261031/` is labeled offline fake-Tank proof and is not a founder-browser test.
+
+## Code mode
+
+`tervory code [folder]` opens an interactive session inside a git repository (the
+current folder by default). It uses the existing keychain credential and its region;
+there is no token argument, environment credential or URL override. Only Auto is
+available to customers; model pins remain founder-only. Receipts display Tank's
+amounts unchanged. An interrupted turn is never retried automatically.
+
+The six local tools list files, read text, search text, inspect git status/diff,
+propose a unified diff, and run a command. File tools stay inside the selected
+folder, including symlink resolution, and exclude ignored files and secret paths.
+Reads are limited to 200 KB, listings to 2,000 entries and searches to 200 matches.
+Secret-looking lines are redacted before any local result leaves the machine.
+Edits show their diff and require an explicit `y`; a file changed since its read
+cannot be edited. Commands show the full command and require an explicit `y`, run
+in the selected folder, time out after 120 seconds and retain at most 64 KB of
+output. Non-interactive sessions cannot apply edits or run commands. Approved
+commands use the worker's existing Linux Bubblewrap (`bwrap`): only the selected
+folder is writable, secret paths and `.git` internals are hidden, the environment
+is restricted, and networking is unavailable. For a leading Node, Python or
+pytest executable outside `/usr` and the selected folder, the CLI resolves its
+regular executable and its canonical executable. Node binds only that binary
+file. Python/pytest binds the executable, matching `lib/pythonX.Y`, venv
+`pyvenv.cfg` when present, and matching libpython files from its dedicated
+installation. The installation parent and `bin` directory are never bound.
+General user launchers under `~/.local/bin` are refused, including pip-user
+pytest and uv Python links; use a dedicated venv or interpreter installation.
+The complete command and each read-only file/library path are shown before
+`Run [y/N]`. Intermediate interpreter symlinks are recreated in the empty sandbox;
+their host directories are not mounted. Secret paths inside runtimes are hidden.
+`$HOME`, `~/.config`, `~/.ssh` and keychain directories are never mounted. Other
+host folders remain unavailable. Use a leading executable, rather than hiding
+an external runtime behind a shell wrapper or an environment assignment. There is no
+unsandboxed fallback. If Bubblewrap is unavailable or cannot create the sandbox,
+commands are refused. This command runner is currently Linux-only; the other
+existing CLI commands retain their current platform support.
+
+**Storage:** the Command thread and `/chats` retain user requests, steps, receipts
+and tool names/sizes, without tool-result file contents or proposed patches.
+A prompt is stored once across its continuation rounds. Earlier prompts,
+answers, and tool names/arguments remain in a bounded, redacted CLI transcript
+(at most 40 entries and 200,000 UTF-8 bytes). It is sent as untrusted session data
+for model context and never stored in the Command thread, tasks or events.
+The `command.code` policy uses `cache_scope='none'`; code turns neither read nor
+write the route cache, including its word-split `semantic_form`.
+The model-call transcript follows Tank's existing handling for every chat turn:
+masked by `_preflight_mask` and `_storage_mask`, tenant-scoped and kept on the
+region's own box. CLI secret redaction runs before anything leaves the machine.
+Tank requests tools; it never executes them or touches the local folder.

@@ -15,7 +15,7 @@ import uuid
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, Query
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import admin
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/v1/ghost")
 ROOMS = {name: f"http://agent-{name.replace('_', '-')}:8000" for name in
          ("base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas", "ghost")}
 TARGETS = frozenset((*ROOMS, "workspace", "site", "tank"))
-ROOM_METHODS = {("POST", "/v1/ghost/check"), ("POST", "/v1/ghost/actions"),
+ROOM_METHODS = {("GET", "/v1/ghost/google/signing-keys"), ("POST", "/v1/ghost/check"), ("POST", "/v1/ghost/actions"),
                 ("POST", "/v1/ghost/radix"), ("GET", "/v1/ghost/radix")}
 
 
@@ -36,6 +36,16 @@ def runtime():
 async def require_ghost(request: Request, x_tank_key: str = Header(default="")):
     if await runtime().require_key(request, x_tank_key) != "ghost":
         raise HTTPException(403, "Only Autumbra Watch may use this corridor.")
+
+
+@router.get("/google/signing-keys", dependencies=[Depends(require_ghost)])
+async def google_signing_keys(kid: str = Query(default="", max_length=200)):
+    from autumbra_google_keys import CACHE
+    try:
+        keys = await CACHE.get(kid)
+    except (ValueError, OSError, httpx.HTTPError, TimeoutError):
+        raise HTTPException(503, "The room is unavailable.") from None
+    return keys
 
 
 async def call_room(method: str, room: str, path: str, *, body=None, params=None):
