@@ -147,7 +147,7 @@ class WhatsApp:
         text = message.get('text', {}).get('body') if isinstance(message.get('text'), dict) else None
         if (message.get('type') != 'text' or not isinstance(sender, str) or not 1 <= len(sender) <= 128
                 or not isinstance(ident, str) or not 1 <= len(ident) <= 256
-                or not isinstance(text, str) or not 1 <= len(text.strip()) <= 2000):
+                or not isinstance(text, str) or not text.strip() or len(text) > 2000):
             return
         try:
             stamp = datetime.fromtimestamp(int(message['timestamp']), timezone.utc)
