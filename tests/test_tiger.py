@@ -488,7 +488,8 @@ def test_queries_are_tenant_scoped_and_the_room_is_wired() -> None:
 
     agent = _load("tiger_agent_app", ROOT / "agents" / "tiger" / "app.py")
     assert agent.app.state.agent == "tiger"
-    assert set(agent.app.state.handlers) == {"ping", "check", "dispatch", "rig_discover"}
+    assert set(agent.app.state.handlers) == {"ping", "check", "dispatch", "rig_discover", "competitor_match"}
+    assert agent.app.state.job_timeouts["competitor_match"] == 45
     assert any(row["kind"] == "ping" for row in agent.app.state.schedules)
     assert any(row["kind"] == "rig_discover" and row["cron"] == "* * * * *"
                and row["tenant_id"] == agent.HEARTBEAT_TENANT for row in agent.app.state.schedules)

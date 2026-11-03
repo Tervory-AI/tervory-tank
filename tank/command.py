@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 import command_repo
 from base_lists import FindArgs, SaveArgs, ListArgs, SendArgs
+from base_audit_commands import StartArgs as AuditStartArgs, CsvArgs as AuditCsvArgs, ReviewArgs as AuditReviewArgs
 from tenant_db import tenant_path
 from command_stream import AnswerText, TokenSink
 
@@ -37,7 +38,7 @@ from trigger_marketing_contract import TOOLS as MARKETING_TOOLS
 TOOLS = {
     "trigger": ["trigger.revise", "trigger.voice.learn", "trigger.write.batch", "trigger.scorecard", "trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
     "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.to_crm"],
-    "tiger": ["tiger.watch", "tiger.read"],
+    "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.position"],
     "market_lab": ["market_lab.research"],
     "rig": ["rig.search", "rig.ask"],
     "tisan": ["tisan.scaffold"],
@@ -46,7 +47,7 @@ TOOLS = {
 }
 TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
 
-FOUNDER_TOOLS = ["trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
+FOUNDER_TOOLS = ["base.audit.start", "base.audit.csv", "base.audit.review", "trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
                  "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
@@ -393,6 +394,10 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
     async with db().acquire() as conn:
         row = await owned(conn, thread_id, actor)
     state = unpack(row["state"])
+    for card in state.get("cards", {}).values():
+        if card.get("tool") == "tiger.match" and card.get("status") == "confirmed" and isinstance(card.get("result"), dict):
+            from access import tiger_card_result
+            card["result"] = await tiger_card_result(actor.tenant_id, card["result"])
     amounts = thread_totals(state)
     founder = current_actor(actor).founder
     return {"thread": {"thread_id": str(thread_id), "title": row["title"], "updated_at": row["updated_at"],
@@ -473,6 +478,9 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
                      *, task_id: uuid.UUID | None = None, on_token: TokenSink | None = None,
                      priority: str | None = None) -> Any:
     from main import Message, RouteRequest, box_region, run_route
+    planned = await tiger_code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     from memory_routes import remember_turn
     remembered = await remember_turn(actor, messages, task_id)
     if remembered is not None:
@@ -1076,6 +1084,9 @@ class ReviewArgs(Body):
     matter_id: uuid.UUID | None = None
 
 
+class TigerMatchArgs(Body):
+    match_id: uuid.UUID
+
 TriggerFormat = Literal['product description', 'Google Business Profile post', 'Facebook post',
                         'Instagram caption', 'LinkedIn post', 'X post', 'email',
                         'page meta description', 'article']
@@ -1199,6 +1210,9 @@ from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServ
 
 
 ADAPTERS = {
+    "base.audit.start": Adapter("POST", "/v1/command/base/audits/start", AuditStartArgs, "base.audit.start"),
+    "base.audit.csv": Adapter("GET", "/v1/command/base/audits/export", AuditCsvArgs, "base.audit.csv"),
+    "base.audit.review": Adapter("POST", "/v1/command/base/audits/review", AuditReviewArgs, "base.audit.review"),
     "mcp.servers.list": Adapter("GET", "/v1/command/mcp/servers/list", EmptyArgs, "mcp.servers.list"),
     "mcp.servers.approve": Adapter("POST", "/v1/command/mcp/servers/approve", MCPApproveArgs, "mcp.servers.approve"),
     "mcp.servers.remove": Adapter("POST", "/v1/command/mcp/servers/remove", MCPServerArgs, "mcp.servers.remove"),
@@ -1218,6 +1232,10 @@ ADAPTERS = {
     "repo.file": Adapter("GET", "/v1/command/repo/file", RepoFileArgs, "read one file from main"),
     "base.batch": Adapter("POST", "/v1/base/run", BaseBatchArgs, "Start a Base batch", True, "paid_run"),
     "base.search": Adapter("GET", "/v1/base/records", BaseSearchArgs, "Read Base records"),
+    "tiger.match": Adapter("POST", "/v1/access/tiger/match", EmptyArgs, "tiger.match"),
+    "tiger.match.confirm": Adapter("POST", "/v1/access/tiger/match/confirm", TigerMatchArgs, "tiger.match.confirm"),
+    "tiger.match.reject": Adapter("POST", "/v1/access/tiger/match/reject", TigerMatchArgs, "tiger.match.reject"),
+    "tiger.position": Adapter("GET", "/v1/access/tiger/position", EmptyArgs, "tiger.position"),
     "base.find": Adapter("GET", "/v1/command/base/lists/find", FindArgs, "base.find"),
     "base.list.save": Adapter("POST", "/v1/command/base/lists/save", SaveArgs, "base.list.save"),
     "base.lists": Adapter("GET", "/v1/command/base/lists", Body, "base.lists"),
@@ -1421,7 +1439,7 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, scope, None
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
-    if action.tool in {"base.list.save", "base.list.to_crm"}:
+    if action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review"}:
         return adapter.method, path, {}, args  # Actor headers supply identity, never body fields.
     if adapter.method == "GET":
         return adapter.method, path, {**args, **scope}, None
@@ -1482,6 +1500,13 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
                           "saved_usd": None if costs_pending or baseline_pending else task["saved_usd"],
                           "receipt_status": "pending" if costs_pending or baseline_pending else "recorded"})
         result = {"tenant_id": str(actor.tenant_id), "tasks": tasks, "window": result.get("window")}
+    if action.tool == "base.search" and 200 <= response.status_code < 300 and isinstance(result, list):
+        # Reuse Summary for product names; full sourced rows remain in the tool data.
+        result = [{**row, "summary": ", ".join(product["name"] for product in row["profile"]["products"]["value"][:50]
+                                                  if isinstance(product, dict) and isinstance(product.get("name"), str) and product["name"])}
+                  if isinstance(row, dict) and isinstance(row.get("profile"), dict)
+                  and isinstance(row["profile"].get("products"), dict) and row["profile"]["products"].get("value")
+                  else row for row in result]
     return response.status_code, result
 
 
@@ -1606,7 +1631,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if action.tool.startswith("mcp."):
                 from mcp_connections import dispatch
                 status, result = await dispatch(action, actor)
-            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "radix.repo.scan"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "radix.repo.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
@@ -1769,6 +1794,26 @@ async def repeat_messages(conn: Any, state: dict, actor: Actor, messages: list[d
             or [m for m in original if m["role"] == "system"] != [m for m in messages if m["role"] == "system"]):
         return messages
     return original
+
+
+async def tiger_code_plan(actor: Actor, messages: list[dict], task_id):
+    """Explicit catalogue commands never enter a model planner or checker."""
+    from types import SimpleNamespace
+    from trigger_routes import code_receipt
+    last = messages[-1] if messages else {}
+    if last.get('role') != 'user':
+        return None
+    text = last.get('content', '').strip()
+    match = re.fullmatch(r'(tiger\.match(?:\.(?:confirm|reject))?|tiger\.position)(?:\s+([0-9a-fA-F-]{36}))?', text)
+    if not match:
+        return None
+    tool, identifier = match.groups()
+    actor = await authorized_actor(actor)
+    require_tool(actor, tool)
+    args = {'match_id': identifier} if identifier else {}
+    action = validate_action(PlannedAction(tool=tool, arguments=args), actor)
+    ledger = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent='tiger')
+    return SimpleNamespace(content=dump({'text': tool, 'actions': [action.model_dump(mode='json')]}), ledger_id=ledger)
 
 
 # Local code tools are a proposal protocol, never server adapters. In particular,
