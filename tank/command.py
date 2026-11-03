@@ -1853,12 +1853,12 @@ async def autumbra_enforce_code_plan(actor: Actor, messages: list[dict], task_id
         return None
     parts = text.split()
     tool = parts[0]
-    actor = await authorized_actor(actor)
-    require_tool(actor, tool)
     if tool not in {"autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy"}:
         return None
+    actor = await authorized_actor(actor)
+    require_tool(actor, tool)
     if len(parts) != (1 if tool.endswith(".list") else 2):
-        raise HTTPException(422, "Action arguments are too large")
+        raise HTTPException(422, "Use: autumbra.enforce.create|destroy <tenant-uuid>")
     arguments = {} if tool.endswith(".list") else {"tenant_id": parts[1]}
     action = validate_action(PlannedAction(tool=tool, arguments=arguments), actor)
     ledger = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent="ghost")
