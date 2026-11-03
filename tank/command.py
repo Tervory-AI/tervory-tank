@@ -1256,7 +1256,7 @@ class Adapter:
 
 
 TOOLS["trigger"] += ["trigger.bot." + name for name in BOT_TOOLS]
-from plugins import PluginArgs
+from plugin_args import PluginArgs
 from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServerArgs
 
 
