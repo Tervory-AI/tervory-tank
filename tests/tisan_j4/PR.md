@@ -468,3 +468,98 @@ Pending after merge: the live deploy log must show successful schema startup
 and a healthy room. Local owner-role lifespan checks are not that deployment
 proof. Final-head hosted Tank/Workspace CI and founder-browser screenshots remain
 pending; no PR was opened or merged by this builder. Gate 3 has not been supplied.
+
+## PR #627 independent security review corrections (3 Nov 2026)
+
+Review base: `28b8203704b5de1095fc62c80322b7a2c7674e75`. All corrections
+stay in `/workspace/codex-tisan-w3` on `codex/tisan-w3`. Main was not merged.
+This section supersedes historical Raw Compose, external-volume, nine-case
+Skala eval and whole-room egress-isolation statements in earlier evidence.
+
+| Review item | File and line | Correction and evidence |
+| --- | --- | --- |
+| 1 | `ops/seal-check.sh:41`, `:187`, `:213` | Tisan is required; both services have exact expected networks and only their specified bridge exceptions. Extra internal or outbound networks remain LEAKs. |
+| 1 | `tests/fixtures/seal_check/tisan.json:1`; `tests/test_room_seal.py:651` | Dedicated placement sample; historical fixtures include the required Tisan room. Tests cover extra networks on both services, missing room and a non-internal private link. The existing required-room assertion now includes Tisan. |
+| 2 | `tank/skills/tisan.figma/1.1.0/evals/cases.jsonl:1` | First six cases are copied verbatim from 1.0.1; case seven is exactly the requested unpaired-file refusal. Paired REST and variables-403 tests remain pytest-only. |
+| 2, 3 | `agents/tisan/figma.py:1167`; `agents/tisan/app.py:85`, `:145` | execute() defaults offline. Tervory fixture fallback works with an unpaired token. Authenticated eval dispatch parses the version; old versions and ordinary jobs cannot read live or take live/version authority from caller input. |
+| 3 | `tank/skills/tisan.figma/1.1.0/run.py:37` | Only the versioned 1.1.0 wrapper explicitly opts into live reads. Approved 1.0.0/1.0.1 files remain unchanged. |
+| 2, 3 | `tests/test_tisan_figma_live.py:248`, `:333` | Tests execute Tank's actual run_room_eval definition and Skala evaluator through app.py /evals/run via TestClient, fixed environment and platform UUID. 1.0.0 scores 3/3, 1.0.1 scores 6/6, and 1.1.0 scores 7/7; the latter two are eligible. Tests with a paired token and spoofed caller live/version fields verify old-version/job execution makes no live call. |
+| 4, 12 | `agents/tisan/README.md:9`, `:62`; `agents/tisan/docker-compose.yml:3`, `:75` | Documentation now says code-path enforcement, not a whole-room egress seal. Original compose mode and managed volume declaration are restored. The proxy's implementation does not require a Raw Compose switch; no external volume name is pinned. |
+| 5 | `agents/tisan/docker-compose.yml:57`; `tests/test_c10_rooms.py:90`; `tests/test_tisan_figma.py:397` | Set this Proxy instance's max_response_bytes=5_000_000. Both topology tests check it. A real local HTTPS response above 1 MB succeeds; oversized responses remain fixed errors. No Radix source/default limit is changed. |
+| 6 | `agents/tisan/figma.py:535`, `:1104`; `tests/test_tisan_figma_live.py:369`, `:378` | CANVAS page/node identity follows the requested node. Resolved output parent must equal the resolved folder; a file symlink escaping it is refused without modifying its target. |
+| 7 | `agents/tisan/quotes.py:43`, `:59`, `:101`, `:134`; `tests/test_tisan_quotes_designed.py:283` | Reject NUL/C0/C1 controls other than newline/tab in all five text fields before storage. quote_message is also checked at Move parsing, giving 422 rather than 500. Newline/tab roundtrip tests pass. |
+| 8 | `agents/tisan/quotes.py:268`; `tests/test_tisan_quotes_designed.py:345` | Quoted UPDATE maps asyncpg.CheckViolationError to the existing Refused/409. A real forced CHECK failure rolls back state, snapshot and event. |
+| 9 | `agents/tisan/quotes.py:142`; `agents/tisan/schema.sql:45`; `tests/test_tisan_quotes_designed.py:320` | max_digits=18 in the app and an idempotent DB CHECK amount < 1e16. Exact upper-edge decimal succeeds; out-of-range API and direct SQL writes fail. |
+| 10 | `agents/tisan/quotes.py:160`; `tests/test_tisan_quotes_designed.py:338` | Full ASCII [A-Za-z]{3} match precedes uppercase; Unicode expansion such as sharp-s plus d is refused. |
+| 11 | `agents/tisan/schema.sql:70`; `tests/test_tisan_quotes_designed.py:358` | Trigger refuses every state change after accepted/declined; direct-SQL tests cover all other states. |
+| Documentation | `tank/skills/tisan.figma/1.1.0/CHANGELOG.md:1`; `agents/tisan/README.md:66` | Current eval, dispatch, limit and deployment behavior is explicit. Historical evidence is marked superseded where applicable. |
+| Existing CodeQL comments | `tests/test_tisan_figma_live.py:91`; `tests/test_tisan_figma.py:370` | Local test HTTPS server explicitly requires TLS 1.2+. Removed the source-text domain-substring check; exact host admission/refusal is exercised through the actual proxy. Topology tests assert the original compose mode and volume are retained. |
+| Evidence | `tests/tisan_j4/PR.md:472` | This review report, exact commands/results and remaining deployment boundary. |
+
+The proxy constrains the Figma reader's code path. The gateway is an ordinary
+bridge. The founder checks its status using:
+
+```sh
+docker network inspect -f '{{.Internal}}' tervory-gw-tisan
+```
+
+A read-only builder check returned `false`; this is not founder browser or
+deployment acceptance. Seal checks still reject unexpected deployed attachments.
+No network, production volume, production table, account, deployment or secret
+was modified by this review work.
+
+### Exact review verification commands and results
+
+```sh
+docker run --detach --rm --name codex-tisan-w3-review-postgres --network bridge --publish 127.0.0.1::5432 --env POSTGRES_HOST_AUTH_METHOD=trust --tmpfs /var/lib/postgresql/data --memory 512m --cpus 0.5 postgres:16
+docker port codex-tisan-w3-review-postgres 5432
+# Disposable local PostgreSQL on 127.0.0.1:32874; no production DB setting used.
+
+.venv/bin/python -m pytest tests/test_tisan_figma_live.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --maxfail=2
+# 30 passed, 1 existing warning, 57.11s; includes the real room eval path.
+
+J4_TEST_POSTGRES_PORT=32874 .venv/bin/python -m pytest tests/test_tisan_quotes.py tests/test_tisan_quotes_postgres.py tests/test_tisan_quotes_designed.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --maxfail=2
+# 269 passed, 1 existing warning, 47.46s; all PostgreSQL cases enabled.
+
+J4_TEST_POSTGRES_PORT=32874 POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32874/postgres TISAN_TEST_PLAYWRIGHT=/workspace/codex-tisan-w3/.venv/tisan-browser/node_modules/playwright PLAYWRIGHT_BROWSERS_PATH=/home/ammosync/.cache/ms-playwright .venv/bin/python -m pytest tests/test_tisan_*.py tests/tisan_promotion/ tests/test_c10_rooms.py tests/test_secrets.py -q -rs --disable-socket --allow-hosts=127.0.0.1,localhost --maxfail=3
+# 474 passed, 2 skipped, 15 existing warnings, 162.01s. Only the two explicitly
+# opt-in npm build cases were skipped; local PostgreSQL and Chromium were enabled.
+
+.venv/bin/python -m pytest tests/test_room_seal.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --maxfail=2
+# Final rerun: 113 passed, 161.36s. The initial run had 112 passed and one stale
+# exact required-room assertion; that assertion was updated to include Tisan.
+
+.venv/bin/python -m pytest tests/test_tisan_figma_live.py tests/test_tisan_figma.py tests/test_c10_rooms.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --maxfail=2
+# After the two CodeQL test-code corrections: 50 passed, 1 existing warning, 56.40s.
+
+.venv/bin/ruff check agents/tisan/quotes.py agents/tisan/app.py agents/tisan/figma.py tests/test_tisan_figma.py tests/test_tisan_figma_live.py tests/test_tisan_quotes_designed.py tests/test_room_seal.py --select E9,F
+# All checks passed.
+
+docker compose --env-file /dev/null -f agents/tisan/docker-compose.yml config --no-interpolate --quiet
+bash -n ops/seal-check.sh
+git diff --check origin/main...HEAD
+# Each exited 0.
+
+git diff --exit-code 28b82037 HEAD -- agents/radix/egress.py agents/radix/Dockerfile tank/skills/tisan.figma/1.0.0 tank/skills/tisan.figma/1.0.1
+# Exit 0: Radix code and approved skill versions untouched.
+
+docker stop codex-tisan-w3-review-postgres
+# Stopped/automatically removed only this review's throwaway container/tmpfs.
+```
+
+An explicit byte-prefix comparison passed for the first six eval cases. The
+actual memory-schema generator also passed all 11 temporary-copy roundtrips,
+and comparisons against review base confirmed unchanged existing Tisan RLS,
+grants and generated EOF block. QUOTE-EMAILS.md remains absent. No live model
+or SMTP call was used for checking.
+
+The broad runtime regression preceded only the final TLS minimum and compose
+assertion changes in test code; the final 50-case rerun covers those changes.
+Hosted final-head Tank/Workspace checks are separate and are not claimed green
+from local tests. PR #627 remains the same draft PR; no merge, label or deploy
+was performed by this builder.
+
+Per item 3, ordinary figma jobs intentionally remain offline until Tank provides
+the approved version in a server-controlled field. That trusted corridor is not
+invented from caller input here. Founder approval and post-merge live schema/
+health/browser evidence remain pending; these corrections do not claim them.
