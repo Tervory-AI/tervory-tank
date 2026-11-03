@@ -437,7 +437,8 @@ async def _visit(body, tenant, task, origin, run, directory):
                 proxy={"server": proxy}, viewport={"width": 1280, "height": 900},
                 service_workers="block", accept_downloads=False, user_agent=USER_AGENT)
             denied: set[str] = set()
-            await require_allowed(context, body.url, min(body.max_ms, 10000), run)
+            if not body.catalogue_match:
+                await require_allowed(context, body.url, min(body.max_ms, 10000), run)
             if body.catalogue_match:
                 # Page routing does not intercept redirect hops. This transport
                 # refuses them, leaving each destination to a new reservation.
