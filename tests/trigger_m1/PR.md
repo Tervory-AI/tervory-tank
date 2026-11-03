@@ -7,13 +7,17 @@ retains Google's returned ID/link. Review replies require Confirm; identical
 sent text is not sent twice, and an edit replaces the same reply resource.
 Other channels remain scheduled-only. No page, widget or visible wording added.
 
-**Branch implementation only; founder-browser acceptance is missing.** Claude
-opens the PR; the founder merges. No live Google write or production SQL ran.
+**PR #604; founder merges.** The founder browser test and real Trigger/internal
+LanguageTool check follow after merge, as directed in the review. No live Google
+write or production SQL ran.
 
 ## Heads and dependency
 
 - Branch: `codex/trigger-m1-marketing`; own folder `/workspace/codex-trigger-m1`.
-- Current code/test head: `ca8cc947` (full hash in verification evidence).
+- Final implementation/test head: `7c898d034078389d147bcd8f4efccada7542c979`.
+  Subsequent commits update documentation/evidence only. The exact final PR head
+  and its CI `tank` result are recorded in the PR description after the last push.
+  [Current branch head](https://github.com/Tervory-AI/tervory-tank/commits/codex/trigger-m1-marketing).
 - Included main: `b2fa83bdfca6d5788d12e11ce5230da1463a3621`.
 - Refreshed W1 head `b9d9b363` was merged without resetting either side; W1
   subsequently landed on main in #595. Main was merged again, keeping its
@@ -49,7 +53,7 @@ in `agents/trigger/formats.py:26`:
 | `tank/schema.sql:2445` | Six additive/idempotent tenant tables above generated memory; conditional ENABLE/FORCE RLS follows existing rollout guard. |
 | `tank/trigger_google.py:1` | Official OAuth/API endpoints, one-use tenant/user state, PKCE, scoped vault refresh storage, transient access tokens and sanitized failures. |
 | `tank/trigger_marketing.py:1` | Owned W1 drafts, revision/profile-bound approval, editing, scheduling, calendar, review cursor and saved reply drafts. |
-| `tank/trigger_publisher.py:1` | Committed claims, locked sends, bounded rate-limit backoff, terminal length failures, ambiguous-delivery refusal and confirmed reply PUT. |
+| `tank/trigger_publisher.py:1` | Committed claims, locked sends, bounded rate-limit backoff, terminal length failures, ambiguous-delivery handling, confirmed reconciliation and reply PUT. |
 | `tank/trigger_marketing_api.py:25` | Verified founder/admin authority and existing Confirm dispatch; no caller tenant override. |
 | `tank/command.py:35` | Register M1 tools/adapters and prepare exact owned previews; existing SQUADS and permission logic unchanged. |
 | `tank/trigger_routes.py:48` | Code parses explicit M1 commands before existing W1 planning. |
@@ -60,30 +64,51 @@ in `agents/trigger/formats.py:26`:
 | `docs/ops/TRIGGER-GBP.md:1` | Official access/client/scope/redirect instructions, existing-card workflow, recovery semantics and founder acceptance steps. |
 | `tests/trigger_m1/test_marketing.py:1` | Offline state/length/concurrency/retry/DST/Confirm/reply/OAuth tests. |
 | `tests/trigger_m1/test_m1_storage.py:1` | Actual W1 Confirm cards, customer-data prompt boundary, native RLS/startup guards and credential redaction. |
-| `tests/trigger_m1/test_m1_queue.py:1` | Eligible-tenant queue, known manual retry and ambiguous cancellation refusal. |
+| `tests/trigger_m1/test_m1_queue.py:1` | Eligible-tenant queue, known manual retry and confirmed cancellation of uncertain deliveries. |
 | `tests/trigger_m1/test_m1_metrics.py:1` | Existing report keys and actual count provenance across tenant/region/date boundaries. |
 | `tests/trigger_m1/callback_contract.cjs:1` | Actual Workspace callback tested with fake transport and outside fetch refused. |
 
-## Validation and acceptance
+## Review corrections 1–7
 
-Exact commands and captured results are in `verification.txt`. Current code/test
-head: **25 M1 tests passed**, with outside sockets blocked. Actual callback
-contract, TypeScript, Ruff and secret regressions passed.
+| Review | File and line | Verified change |
+|---|---|---|
+| 1 | `tank/trigger_google.py:43`, `:55`, `:142`; `tests/trigger_m1/test_m1_delivery.py:1` | Refresh failures and POST ConnectError/ConnectTimeout are unsent/retryable; only possibly sent publishing failures are uncertain. 20-case HTTP phase matrix; existing three-attempt/backoff test now covers 503 and 429. |
+| 2 | `tank/schema.sql:2464`, `tank/trigger_publisher.py:44`, `tank/trigger_marketing.py:95`, `:146`; `tests/trigger_m1/test_m1_reconcile.py:1` | Persist claim time. Uncertain cancellation works. Confirmed retry paginates location posts: same summary created after claim adopts name/searchUrl without a POST; no match permits one retry. Failed/incomplete reads retain uncertainty. Six actual-Confirm recovery tests pass. |
+| 3 | `tank/trigger_google.py:190`; `tests/trigger_m1/test_m1_oauth_review.py:1` | Revocation accepts 200 or explicit 400 invalid_token; other responses retain the sealed token and raise. |
+| 4 | `tank/command.py:1236`; `tests/trigger_m1/test_m1_paid.py:1` | The two model-capable routes are paid_run and execute the existing paid guard before dispatch; code-only tools keep defaults. Three tests pass. |
+| 5 | `tank/trigger_google.py:98`, `:134`; `tests/trigger_m1/test_m1_oauth_review.py:36` | Confirmed reconnect revokes the previous grant before new consent and clears the old ciphertext. Callback refuses to overwrite an installed token. Reconnect and revocation tests: eight passed. |
+| 6 | `tests/trigger_m1/test_m1_dst.py:1` | Both 2026-11-01 01:30 offsets (-07:00 and -08:00) are on November 1 in the actual SQL calendar and date filter. Two tests pass. |
+| 7 | This file; `review-verification.txt`; PR description | Current implementation head, exact commands/results, final-head CI record, and after-merge acceptance. |
 
-The full repository command completed with **6,612 passed, 10 failed, 42 skipped**
-and **1,799 subtests passed**; separate Tiger and Zenas runs passed **46** and
-**40** tests. The ten failures all pass on focused retries after correcting
-scratch/dependency setup. The original full command's exit 1 remains recorded;
-it is not relabelled green. Earlier incomplete/timed-out runs and the corrected
-case-study regression are also recorded. The final current-head Trigger/Command/M1 selection passed **489 tests, with
-2 skips**. The skipped CRM WSGI module then passed **4 tests** in its pinned
-Django runtime. The real Trigger room/LanguageTool integration remains unrun.
+Paid (`paid=True`, `kind="paid_run"`): `trigger.post.create`,
+`trigger.gbp.reply.draft`. Post creation remains classified as model-capable even
+when a particular request reuses an existing `write_id`.
 
-**Founder test and screenshots: not performed or available.** The required test
-is Custom Nation in its own browser: connect its actual profile, approve and
-schedule three real GBP posts, inspect the calendar, see one post appear on
-Google, and see a real review reply appear only after Confirm. Fake-Google
-tests do not satisfy that acceptance.
+Code-only (default `paid=False`, `kind="other"`): `trigger.post.edit`,
+`trigger.post.approve`, `trigger.post.schedule`, `trigger.post.cancel`,
+`trigger.post.retry`, `trigger.posts`, `trigger.calendar`, `trigger.gbp.connect`,
+`trigger.gbp.locations`, `trigger.gbp.location.select`, `trigger.gbp.disconnect`,
+`trigger.gbp.reviews`, `trigger.gbp.reply.edit`, `trigger.gbp.reply.send`.
+
+## Validation and after-merge acceptance
+
+**CI's `tank` job on the final PR head is the full-suite test of record.** The
+exact final head, job link and result are recorded in the PR description after
+its run completes; recording that result does not create another git head.
+Local focused commands/results are in `review-verification.txt`. Historical
+pre-review runs remain in `verification.txt` and are not the final CI record.
+
+All **65 M1 tests passed** with external sockets blocked. The current broader
+Trigger/Command selection passed **529 tests, with 2 skips** (separate CRM WSGI
+runtime and the after-merge Trigger/LanguageTool check). Ruff passed. Exact
+results are recorded in the review evidence.
+No actual model call was used to test or check this work.
+
+**After merge:** the founder runs Custom Nation in his own browser, connects its
+actual profile, approves/schedules three real posts, sees one appear on Google,
+and confirms a real review reply before it appears. The real Trigger/internal
+LanguageTool check also follows after merge. Screenshots of that founder test
+are not available before it runs; none is fabricated here.
 
 ## Deployment, settings and delivery boundary
 
@@ -98,10 +123,12 @@ separate runtime-config PR rule. Root/ZA Compose changes redeploy the main app
 and ZA Tank; `agents/trigger/` changes redeploy Trigger and its regional copies
 under existing deploy rules. No deployment was performed by this thread.
 
-Google has no documented create-post request-id/idempotency field. A transport
-error, 5xx, malformed success or lost in-flight claim becomes failed/uncertain,
-without automatic or ordinary manual POST replay. This prevents double posting
-after an unrecorded success; it cannot promise atomic Google/Postgres delivery.
-Uncertain deliveries require reconciliation against Google before any further
-publication decision. A successful create response is offline evidence of API
-acceptance only; actual public visibility still needs the founder's test.
+Google's create-post endpoint has no documented request-id/idempotency field.
+Possibly sent failures never automatically repeat a POST. A confirmed retry
+first reconciles the location's complete paginated list by exact summary and
+creation after the claim. A match is marked published with its returned ID/link;
+a complete read without a match permits one retry. Cancellation works before
+published; failed reads or changed profile binding do not authorize another POST.
+[Official list reference](https://developers.google.com/my-business/reference/rest/v4/accounts.locations.localPosts/list)
+and [LocalPost fields](https://developers.google.com/my-business/reference/rest/v4/accounts.locations.localPosts)
+checked 3 November 2026. Actual public visibility is checked after merge.
