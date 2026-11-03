@@ -181,3 +181,34 @@ async def test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task(mon
     with pytest.raises(RuntimeError, match='RLS requires'):
         await main._startup()
     assert main._bot_task is None
+
+
+@pytest.mark.asyncio
+async def test_bot_policy_reuses_writing_route_and_faq_records_zero_cost(database, monkeypatch):
+    import sys
+    writing = dict(await database.fetchrow("SELECT * FROM tank.policy WHERE tenant_id IS NULL AND task_type='trigger.write'"))
+    answer = dict(await database.fetchrow("SELECT * FROM tank.policy WHERE tenant_id IS NULL AND task_type='trigger.bot.answer'"))
+    for column in ('rung', 'model', 'priority', 'max_tokens_out'):
+        assert answer[column] == writing[column]
+    assert answer['cache_scope'] == 'none'
+    runtime = SimpleNamespace(pool=lambda: database, box_region=lambda: 'us-east')
+    monkeypatch.setitem(sys.modules, 'main', runtime)
+    bot = Bot(runtime)
+    bot.sources = Sources(database, 'us-east', Index())
+    bot.voice = AsyncMock(side_effect=AssertionError('FAQ must not fetch a voice'))
+    bot.route = AsyncMock(side_effect=AssertionError('FAQ must not call a model'))
+    await database.execute('INSERT INTO tank.trigger_bot_config(tenant_id,enabled) VALUES($1,true)', A)
+    question = 'How long does delivery take?'
+    for answer_text in ('Delivery takes 3 days.', 'Delivery takes 5 days.'):
+        identity = await bot.sources.add(A, uuid4(), 'faq', question,
+                                         content=json.dumps({'question': question, 'answer': answer_text}))
+        await bot.sources.refresh(A, identity)
+    result = await bot.ask(A, question)
+    assert result['answer'] == 'Delivery takes 5 days.'
+    assert result['outcome'] == 'faq'
+    bot.route.assert_not_called()
+    receipt = await database.fetchrow('SELECT cost_usd,tokens_in,tokens_out,model FROM tank.ledger WHERE tenant_id=$1 AND id=$2', A, UUID(result['ledger_id']))
+    assert receipt['cost_usd'] == 0 and receipt['tokens_in'] == receipt['tokens_out'] == 0
+    assert receipt['model'] == 'code'
+    saved = await database.fetchrow('SELECT retrieved,cited FROM tank.trigger_bot_messages WHERE tenant_id=$1 AND id=$2', A, UUID(result['message_id']))
+    assert saved['cited'] and set(saved['cited']) <= set(saved['retrieved'])
