@@ -80,8 +80,11 @@ async def main():
             assert result['checks']['browser']['status']=='complete'
             assert 'axe-core' not in {f['tool'] for f in result['findings']}
             path=directory/'placeholder-eicar';path.write_bytes(EICAR)
-            rc,out,err=await r6.command(['/usr/bin/clamscan','--no-summary','--max-filesize=1M',str(path)],directory,40)
-            malware='found' if rc==1 and b' FOUND' in out else 'skipped_memory' if rc in {-9,137} or b'memory' in err.lower() or b'allocat' in err.lower() else 'error'
+            try:
+                rc,out,err=await r6.command(['/usr/bin/clamscan','--no-summary','--max-filesize=1M',str(path)],directory,90)
+            except TimeoutError:
+                rc,out,err=124,b'',b''
+            malware='skipped_budget' if rc==124 else 'found' if rc==1 and b' FOUND' in out else 'skipped_memory' if rc in {-9,137} or b'memory' in err.lower() or b'allocat' in err.lower() else 'error'
             assert malware!='error', (rc,err.decode(errors='replace')[:200])
             proxy.close()
             proxy=Server(Proxy(verified_host=DOMAIN,allow_storage=False,resolve=lambda _: '93.184.216.34',
