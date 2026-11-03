@@ -59,7 +59,7 @@ The six local tools list files, read text, search text, inspect git status/diff,
 propose a unified diff, and run a command. File tools stay inside the selected
 folder, including symlink resolution, and exclude ignored files and secret paths.
 Reads are limited to 200 KB, listings to 2,000 entries and searches to 200 matches.
-Secret-looking lines are redacted before any local result leaves the machine.
+Secret-looking lines and whole private-key PEM blocks are redacted before any local result leaves the machine. Hard-linked files are refused.
 An edit may contain one unified diff for up to 20 files (200,000 UTF-8 bytes
 across the patch). Every file is read first, including a missing-file read for a
 new file. The CLI validates all paths, current contents and hunks before showing
@@ -97,19 +97,23 @@ commands are refused. macOS probes its Seatbelt profile before executing a
 command and refuses a missing executable or invalid profile. Its temporary files
 stay inside the selected folder; system libraries and explicitly selected
 runtimes are read-only. Secret paths, home configuration, SSH and keychain paths
-remain inaccessible and networking is denied. Windows commands remain refused.
+remain inaccessible and networking is denied. The CLI kills the command's process
+group when it exits, including background children. A child calling `setsid()`
+can still escape that process-group cleanup on macOS and remain alive inside
+the sandbox; Seatbelt does not provide a die-with-parent guarantee. Windows
+commands remain refused.
 
 The unchanged Seatbelt base is from [OpenAI Codex, commit
 6b2a2757de696c2506ee460c49c66a8e2bed65e0](https://github.com/openai/codex/blob/6b2a2757de696c2506ee460c49c66a8e2bed65e0/codex-rs/sandboxing/src/seatbelt_base_policy.sbpl),
-under Apache-2.0 (`src/seatbelt.LICENSE`). Tervory adds selected-folder writes,
+under Apache-2.0 (`src/seatbelt.LICENSE`, with upstream `src/seatbelt.NOTICE`). Tervory adds selected-folder writes,
 read-only system/runtime paths, system Xcode lookup for Apple's git launcher,
 ancestor metadata traversal, and explicit secret-path and network denies. The
-upstream broad platform-default policy is not included.
+upstream broad platform-default policy is not included; only its loader/container checks are adapted.
 
 Code mode can propose the signed-in tenant's Tervory and connected MCP tools
 through `tervory` requests. These actions use the existing Confirm cards, including
-reads, and appear in the same thread in `/chats`. Cancellation returns no result;
-confirmed card results are redacted and returned as untrusted tool data.
+reads. The CLI prints sanitized, redacted tool/arguments JSON before Confirm. They appear in the same thread in `/chats`. Cancellation returns no result;
+removing a plugin revokes its pending code cards at Confirm. Confirmed card results are redacted and returned as untrusted tool data.
 
 At session start, `AGENTS.md` at the selected folder's git root is read through
 the same bounded, secret-refusing file reader. Its redacted project notes travel
@@ -130,3 +134,8 @@ The model-call transcript follows Tank's existing handling for every chat turn:
 masked by `_preflight_mask` and `_storage_mask`, tenant-scoped and kept on the
 region's own box. CLI secret redaction runs before anything leaves the machine.
 Tank requests tools; it never executes them or touches the local folder.
+
+Unreadable project notes (a symlink, more than 200 KB, or invalid UTF-8) are
+skipped while the code session continues. The CLI notice is
+`AGENTS.md skipped: Code tool refused.` Repository notes are labeled as DATA,
+limited to conventions and test commands, never instructions or authority.
