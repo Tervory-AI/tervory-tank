@@ -107,3 +107,32 @@ permalink lookup cannot trigger a second publish.
 
 Founder browser evidence, screenshots and final-head hosted CI results must be
 recorded on the PR after they exist. Offline tests alone do not prove completion.
+
+## Gate 3 WhatsApp: blocked by current pricing
+
+Checked **3 November 2026**, before implementing the WhatsApp corridor. The
+brief explicitly requires stopping if an in-window free-form reply is charged.
+Meta's current pricing does charge service replies beyond a limited free tier:
+as of **1 October 2026**, each business phone number has 1,000 free service
+messages per month, and charging begins with the 1,001st. The customer-service
+window is 24 hours after the user's most recent message; being inside that
+window does not make every service reply free. Meta classifies non-template
+replies powered by third-party AI solutions as service messages.
+
+Official sources read directly from Meta, all checked **3 November 2026**:
+
+| Topic | Official URL | Finding |
+|---|---|---|
+| Pricing and free tier | https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing#free-tier-of-monthly-service-messages | Since 1 October 2026, only the first 1,000 service messages per phone number each month are free; subsequent service replies are charged. |
+| Customer-service window | https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing#customer-service-window-csw | 24 hours, reset by the user's messages; non-template messages require an open window. This is not an unlimited free-reply guarantee. |
+| Webhook verification and signature | https://developers.facebook.com/docs/graph-api/webhooks/getting-started/ | GET challenge with a matching verify token; X-Hub-Signature-256 authenticates the raw payload with the app secret. |
+| Message webhook shape | https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components/ | Incoming text is in entry/changes/value/messages; metadata supplies phone_number_id. |
+| Text send call | https://developers.facebook.com/docs/whatsapp/cloud-api/messages/text-messages/ | POST /{phone-number-id}/messages with type=text and bearer authorization; links can be included in the text. |
+| Send API reference | https://developers.facebook.com/docs/whatsapp/cloud-api/reference/messages/ | Versioned Graph message endpoint and bearer authentication. |
+
+The web reader returned a login page for pricing; direct public-document HTTP
+fetches returned 200 and the current pricing text. No authenticated Meta request,
+message send, live-data change or model call was performed. No WhatsApp route,
+setting, schema or bot-engine change was implemented. No message counter, cap or
+other workaround was added. Gate 3 remains blocked on the brief's free-only
+condition, not on a missing secret value. Gate 2 is unchanged.
