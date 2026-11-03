@@ -1,0 +1,17 @@
+"""tisan command declarations; argument classes remain exported by command."""
+TOOLS = {'tisan': ['tisan.scaffold']}
+FOUNDER_TOOLS = ['tisan.build', 'tisan.request', 'tisan.preview', 'tisan.feedback', 'tisan.handover']
+TENANT_ADMIN_TOOLS = ['tisan.request', 'tisan.preview', 'tisan.feedback', 'tisan.handover']
+ADMIN_ONLY_TOOLS = frozenset([])
+REQUEST_BODY_TOOLS = frozenset(['tisan.feedback', 'tisan.handover', 'tisan.preview', 'tisan.request'])
+CONFIRMED = frozenset(['tisan.feedback', 'tisan.handover', 'tisan.request'])
+
+def adapters(command):
+    return {
+        'tisan.request': command.Adapter('POST', '/v1/command/tisan/request', command.TisanRequestArgs, 'tisan.request', False, 'other', None),
+        'tisan.preview': command.Adapter('GET', '/v1/command/tisan/preview', command.TisanRequestIdArgs, 'tisan.preview', False, 'other', None),
+        'tisan.feedback': command.Adapter('POST', '/v1/command/tisan/feedback', command.TisanFeedbackArgs, 'tisan.feedback', False, 'other', None),
+        'tisan.handover': command.Adapter('POST', '/v1/command/tisan/handover', command.TisanRequestIdArgs, 'tisan.handover', False, 'other', None),
+        'tisan.scaffold': command.Adapter('POST', '/v1/skala/tisan.scaffold/run', command.ScaffoldArgs, 'Create a site scaffold', False, 'other', 'tisan.scaffold'),
+        'tisan.build': command.Adapter('POST', '/v1/skala/tisan.build/run', command.TisanBuildArgs, 'tisan.build', False, 'other', 'tisan.build'),
+    }
