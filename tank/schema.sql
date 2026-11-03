@@ -2809,7 +2809,6 @@ BEGIN
     END IF;
 END
 $$;
-
 -- BEGIN trigger (new blocks for trigger go here)
 -- END trigger
 -- BEGIN base (new blocks for base go here)
@@ -2835,6 +2834,7 @@ $$;
 -- BEGIN platform (new blocks for platform go here)
 ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS teacher_model text;
 -- END platform
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
