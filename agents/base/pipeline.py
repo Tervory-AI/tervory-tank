@@ -420,8 +420,11 @@ async def enrich_one(
                     for key in ("categories", "services", "description", "people"):
                         if ex.get(key):
                             profile[key] = {"value": ex[key], "source": source, "confidence": conf}
-                    if ex.get("products"):
-                        profile["products"] = {"value": ex["products"], "source": "site:code", "confidence": conf}
+                    products = [product for product in (ex.get("products") or []) if isinstance(product, dict)
+                                and all(isinstance(product.get(key), str) and product[key].strip()
+                                        for key in ("source_url", "checked_at"))]
+                    if products:
+                        profile["products"] = {"value": products, "source": "site:code", "confidence": conf}
                     passes["2c"] = {
                         "skill": named("base.extract", ex),
                         "ms": ex.get("_ms"),
