@@ -429,3 +429,34 @@ async def test_fifty_thousand_matches_keep_twenty_previews_and_refuse_save():
         await store.save(TENANT, "invented", lists.FindArgs())
     assert error.value.status_code == 422 and error.value.detail == {"total": 50000}
     assert not pool.saved
+
+
+@pytest.mark.asyncio
+async def test_cursor_uses_one_platform_snapshot_with_tenant_pool():
+    from tenant_db import TenantPool, tenant_scope
+    class Native(Pool):
+        def __init__(self):
+            super().__init__()
+            self.transactions = []
+        def transaction(self, **kwargs):
+            self.transactions.append(kwargs)
+            return self
+        async def execute(self, sql, *args):
+            assert sql == "SELECT set_config('app.tenant_id', $1, true)"
+            assert args == (str(TENANT),)
+        async def cursor(self, sql, tenant, *args, **kwargs):
+            assert tenant == TENANT and kwargs["prefetch"] == 200
+            for row in []:
+                yield row
+    native = Native()
+    with tenant_scope(TENANT):
+        store = lists.Store(TenantPool(native))
+        assert await store.find(TENANT, lists.FindArgs()) == {"total": 0, "records": []}
+        assert len(native.transactions) == 1
+        assert native.transactions[0]["isolation"] == "repeatable_read"
+        assert native.transactions[0]["readonly"] is True
+        saved = await store.save(TENANT, "invented", lists.FindArgs())
+        assert saved["total"] == 0
+        assert len(native.transactions) == 2
+        assert native.transactions[1]["isolation"] == "repeatable_read"
+        assert native.transactions[1]["readonly"] is False
