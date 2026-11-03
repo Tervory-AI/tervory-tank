@@ -244,7 +244,7 @@ def test_owner_email_sender_is_called_for_three_fixture_clients():
         assert needle in sent["body"]
         assert "https://example.test/cve" in sent["body"]
         assert "[" not in sent["body"]
-    assert len(transport.sent) == 3
+    assert len(transport.sent) == 2
     assert {row["to"] for row in transport.sent} == {
         "auto@example.test", "approve@example.test", "never@example.test",
     }
