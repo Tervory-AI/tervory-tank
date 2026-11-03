@@ -14,12 +14,46 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 VERSION = '2025-11-25'
+SUPPORTED_VERSIONS = frozenset({VERSION, '2025-06-18', '2025-03-26'})
 LIMIT = 2_000_000
 TOOL_NAME = re.compile(r'^[A-Za-z0-9_.-]{1,64}$')
 
 
 class Refused(ValueError):
     """Deliberately contains no remote body, headers, arguments or credentials."""
+
+
+class ResponseTooLarge(Refused):
+    pass
+
+
+class SSEDecoder:
+    """Consume each byte once, retaining only the current line/event tail."""
+
+    def __init__(self):
+        self.line = bytearray()
+        self.data: list[bytes] = []
+        self.after_cr = False
+
+    def feed(self, chunk: bytes):
+        for byte in chunk:
+            if self.after_cr:
+                self.after_cr = False
+                if byte == 10:
+                    continue
+            if byte not in {10, 13}:
+                self.line.append(byte)
+                continue
+            self.after_cr = byte == 13
+            line = bytes(self.line)
+            self.line.clear()
+            if not line:
+                if self.data:
+                    yield b'\n'.join(self.data)
+                    self.data.clear()
+            elif line.startswith(b'data:'):
+                value = line[5:]
+                self.data.append(value[1:] if value.startswith(b' ') else value)
 
 
 class SignInRequired(Refused):
@@ -59,6 +93,8 @@ class Client:
     def __init__(self, url: str, approved: Callable[[], Awaitable[None]], token: str | None = None):
         self.url, self.approved, self.token = url, approved, token
         self.session: str | None = None
+        self.version = VERSION
+        self.received_bytes = 0
 
     async def rpc(self, method: str, params: dict | None = None, *, notification=False) -> dict:
         from access import public_stream
@@ -71,7 +107,7 @@ class Client:
             message['id'] = ident
         headers = {'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream'}
         if method != 'initialize':
-            headers['MCP-Protocol-Version'] = VERSION
+            headers['MCP-Protocol-Version'] = self.version
         if self.token:
             headers['Authorization'] = 'Bearer ' + self.token
         if self.session:
@@ -97,21 +133,23 @@ class Client:
                     if media not in {'application/json', 'text/event-stream'}:
                         raise Refused('MCP content type refused')
                     raw = bytearray()
+                    decoder = SSEDecoder()
+                    response_bytes = 0
                     async for chunk in response.aiter_bytes():
-                        raw.extend(chunk)
-                        if len(raw) > LIMIT:
-                            raise Refused('MCP response too large')
+                        response_bytes += len(chunk)
+                        self.received_bytes += len(chunk)
+                        if response_bytes > LIMIT or self.received_bytes > LIMIT:
+                            raise ResponseTooLarge('MCP response too large')
                         if media == 'text/event-stream':
-                            # Normalize CRLF; only complete SSE events can carry a response.
-                            normalized = bytes(raw).replace(b'\r\n', b'\n').replace(b'\r', b'\n')
-                            for event in normalized.split(b'\n\n')[:-1]:
-                                lines = [line[5:].lstrip(b' ') for line in event.split(b'\n') if line.startswith(b'data:')]
-                                if not lines or not b''.join(lines).strip():
+                            for event in decoder.feed(chunk):
+                                if not event.strip():
                                     continue
-                                value = document(b'\n'.join(lines))
+                                value = document(event)
                                 if value.get('id') == ident:
                                     return self.result(value, ident)
                             # Requests/notifications from the server are intentionally not executed.
+                        else:
+                            raw.extend(chunk)
                     if media == 'application/json':
                         return self.result(document(bytes(raw)), ident)
                     raise Refused('MCP response incomplete')
@@ -129,8 +167,9 @@ class Client:
     async def initialize(self):
         result = await self.rpc('initialize', {'protocolVersion': VERSION, 'capabilities': {},
                                              'clientInfo': {'name': 'Tervory Tank', 'version': '1.0.0'}})
-        if result.get('protocolVersion') != VERSION:
+        if result.get('protocolVersion') not in SUPPORTED_VERSIONS:
             raise Refused('MCP protocol refused')
+        self.version = result['protocolVersion']
         await self.rpc('notifications/initialized', notification=True)
 
     async def tools(self, allowed: dict[str, str]) -> list[dict]:
