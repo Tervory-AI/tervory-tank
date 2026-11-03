@@ -2441,8 +2441,8 @@ ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_state text NOT NULL DE
 ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_tools jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_discovered_at timestamptz;
 
--- Trigger B1: tenant-private evidence and conversations. No conversation retention
--- policy is chosen here. Source removal disables evidence, not message history.
+-- Trigger B1: tenant-private evidence and conversations. Founder-approved
+-- retention is 12 months after the last message (2026-11-03).
 CREATE TABLE IF NOT EXISTS tank.trigger_bot_sources (
  tenant_id uuid NOT NULL, id uuid NOT NULL, kind text NOT NULL,
  title text NOT NULL, url text, content text NOT NULL DEFAULT '',
