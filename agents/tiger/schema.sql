@@ -12,6 +12,78 @@ CREATE TABLE IF NOT EXISTS alert_state (
     PRIMARY KEY (tenant_id, key)
 );
 
+-- Tiger T1: identifier evidence and durable command/job binding. Additive only.
+CREATE TABLE IF NOT EXISTS agent_tiger.matches (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    sku text NOT NULL,
+    url text NOT NULL,
+    method text NOT NULL CHECK (method IN ('gtin','brand_mpn')),
+    identifiers jsonb NOT NULL,
+    seen_on text NOT NULL,
+    checked_at timestamptz NOT NULL DEFAULT now(),
+    state text NOT NULL CHECK (state IN ('suggested','confirmed','rejected')),
+    UNIQUE (tenant_id,sku,url)
+);
+CREATE INDEX IF NOT EXISTS tiger_matches_product ON agent_tiger.matches(tenant_id,sku,state);
+CREATE TABLE IF NOT EXISTS agent_tiger.match_runs (
+    tenant_id uuid NOT NULL,
+    operation_id uuid NOT NULL,
+    job_id uuid,
+    ledger_id uuid NOT NULL,
+    PRIMARY KEY (tenant_id,operation_id)
+);
+ALTER TABLE agent_tiger.match_runs ADD COLUMN IF NOT EXISTS progress jsonb;
+ALTER TABLE agent_tiger.match_runs ADD COLUMN IF NOT EXISTS cursor jsonb;
+CREATE TABLE IF NOT EXISTS agent_tiger.match_sightings (
+    tenant_id uuid NOT NULL,
+    job_id uuid NOT NULL,
+    root_job_id uuid NOT NULL,
+    match_id uuid NOT NULL REFERENCES agent_tiger.matches(id),
+    evidence jsonb NOT NULL,
+    PRIMARY KEY (tenant_id,job_id,match_id)
+);
+CREATE INDEX IF NOT EXISTS tiger_sightings_run ON agent_tiger.match_sightings(tenant_id,root_job_id);
+-- Public host counters contain no catalogue, tenant identifiers or page content.
+-- A shared counter prevents concurrent jobs/tenants exceeding a site's allowance.
+CREATE TABLE IF NOT EXISTS agent_tiger.discovery_limits (
+    site text PRIMARY KEY,
+    day date NOT NULL DEFAULT (now() AT TIME ZONE 'UTC')::date,
+    requests integer NOT NULL DEFAULT 0,
+    last_at timestamptz,
+    human_check boolean NOT NULL DEFAULT false
+);
+-- Join the platform rollout exactly as the other room-owned tables do.
+DO $$
+DECLARE tab text;
+BEGIN
+    FOREACH tab IN ARRAY ARRAY['matches','match_runs','match_sightings'] LOOP
+        IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                   WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+            EXECUTE format('ALTER TABLE agent_tiger.%I ENABLE ROW LEVEL SECURITY',tab);
+            EXECUTE format('ALTER TABLE agent_tiger.%I FORCE ROW LEVEL SECURITY',tab);
+        ELSE
+            EXECUTE format('ALTER TABLE agent_tiger.%I NO FORCE ROW LEVEL SECURITY',tab);
+            EXECUTE format('ALTER TABLE agent_tiger.%I DISABLE ROW LEVEL SECURITY',tab);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='agent_tiger'
+                       AND tablename=tab AND policyname='tenant_access') THEN
+            EXECUTE format('CREATE POLICY tenant_access ON agent_tiger.%I USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),)::uuid) WITH CHECK (tenant_id=NULLIF(current_setting(app.tenant_id,true),)::uuid)',tab);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='agent_tiger'
+                       AND tablename=tab AND policyname='tenant_boundary') THEN
+            EXECUTE format('CREATE POLICY tenant_boundary ON agent_tiger.%I AS RESTRICTIVE USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),)::uuid) WITH CHECK (tenant_id=NULLIF(current_setting(app.tenant_id,true),)::uuid)',tab);
+        END IF;
+    END LOOP;
+END
+$$;
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agent_tiger') THEN
+        GRANT SELECT,INSERT,UPDATE ON agent_tiger.matches,agent_tiger.match_runs,
+            agent_tiger.match_sightings,agent_tiger.discovery_limits TO agent_tiger;
+    END IF;
+END $$;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE TABLE IF NOT EXISTS agent_tiger.memory_records (
     id uuid PRIMARY KEY,
