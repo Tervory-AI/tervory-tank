@@ -12,7 +12,7 @@ from rigbox.cart_store import CartStore
 from rigbox.fulfilment import RigOrders
 from rigbox.quotes.senders import DeliveryError
 from rigbox.commerce import CommerceError, event_digest, money
-from rigbox.locate import locate, needs_supply, stamp
+from rigbox.locate import locate, stamp
 from rigbox.locate_live import Holds, confirm, hold_secret
 
 WINDOW = 300
@@ -87,7 +87,7 @@ class Cart:
             await self.store.save_commerce_config(tenant, {**previous, 'mode': 'quote'})
             return {'saved': True}
         previous = await self.store.commerce_config(tenant)
-        config = {**previous, 'products': {}, 'delivery': {}, **config}
+        config = {'products': {}, 'delivery': {}, **previous, **config}
         if config.get('region') != 'US' or not config.get('vault_name') or not isinstance(config.get('products'), dict):
             raise CommerceError('config')
         config = {**config, 'delivery': delivery(config['delivery']) if config['delivery'] else {}}
@@ -203,6 +203,10 @@ class Cart:
         identity = session_id(token)
         async with self.rows.lock(tenant, identity) as rows:
             row = await rows.get(tenant, identity) or {'lines': [], 'checkout': None}
+            if row.get('checkout'):
+                prior = await self.rows.get(tenant, row['checkout'])
+                if prior and prior.get('paid_order_id') and prior['state'] in {'placed', 'needs_person'}:
+                    row = {'lines': [], 'checkout': None}
             if row.get('checkout') or len(row['lines']) >= 50:
                 raise CommerceError('cart_locked')
             # One line per SKU prevents split quantities bypassing available stock.
