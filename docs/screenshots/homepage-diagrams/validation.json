@@ -17,5 +17,22 @@
   "pdf": "PASS",
   "forms": "saved + failed",
   "javascriptErrors": [],
-  "screenshotDirectory": "/workspace/codex-homepage-diagrams/docs/screenshots/homepage-diagrams/browser"
+  "screenshotDirectory": "docs/screenshots/homepage-diagrams/browser",
+  "rigToggleRows": {
+    "result": "PASS",
+    "regressionWidths": [
+      320,
+      375,
+      430
+    ],
+    "continuousSweep": {
+      "minimum": 320,
+      "maximum": 430,
+      "widthsChecked": 111
+    },
+    "minimumTextSize": 14,
+    "optionalTagsVisible": 4,
+    "previous375LayoutRejected": true,
+    "copyChanged": false
+  }
 }

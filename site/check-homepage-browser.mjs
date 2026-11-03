@@ -90,6 +90,29 @@ try {
       });
     });
     assert(badgeFits, `Receipt tab or Example badge clips at ${width}`);
+    if ([320, 375, 430].includes(width)) {
+      const toggleOverflow = await rig.evaluate(section => {
+        const right = section.getBoundingClientRect().right - parseFloat(getComputedStyle(section).paddingRight);
+        return [...section.querySelectorAll('.rig-switches [role="switch"]')].flatMap(row =>
+          [row, ...row.querySelectorAll("*")].flatMap(element => {
+            const box = element.getBoundingClientRect();
+            const failures = box.right > right + 0.5 ? [`Element outside Rig section: ${element.className || element.tagName}`] : [];
+            for (const node of element.childNodes) {
+              if (node.nodeType !== Node.TEXT_NODE || !node.textContent.trim()) continue;
+              const range = document.createRange();
+              range.selectNodeContents(node);
+              if (range.getBoundingClientRect().right > right + 0.5) failures.push(`Text outside Rig section: ${node.textContent}`);
+              if (parseFloat(getComputedStyle(element).fontSize) < 14) failures.push(`Toggle text below 14px: ${node.textContent}`);
+            }
+            return failures;
+          })
+        );
+      });
+      assert.deepEqual(toggleOverflow, [], `Rig toggle row overflow at ${width}`);
+      const tags = rig.locator(".rig-switches .tag.optional");
+      assert.equal(await tags.count(), 4);
+      for (const tag of await tags.all()) assert(await tag.isVisible(), `Optional tag hidden at ${width}`);
+    }
     // Inspect actual text ranges: clipping and mid-word wrapping cannot hide
     // behind scrollWidth or the homepage's overflow:clip.
     const checkDiagramGeometry = async () => page.locator(".engine-interactive, .rig-diagram").evaluateAll(diagrams => {

@@ -17,7 +17,7 @@ Open [comparison.html](comparison.html) for source and rendered **sections** sid
 | Rig desktop | [source](figma-rig-section-desktop.png) | [1440px](browser/rig-section-1440.png) |
 | Rig mobile | [source](figma-rig-section-mobile.png) | [375px](browser/rig-section-375.png) |
 
-Side-by-side PNGs: [Engine 1440](comparison-engine-1440.png), [Engine 375](comparison-engine-375.png), [Rig 1440](comparison-rig-1440.png), [Rig 375](comparison-rig-375.png).
+Side-by-side PNGs: [Engine 1440](comparison-engine-1440.png), [Engine 375](comparison-engine-375.png), [Rig 1440](comparison-rig-1440.png), [Rig 375](comparison.html#rig-375).
 
 Final results: build PASS; public/store checks PASS; homepage regressions 3 passed; [browser validation](validation.json) PASS at all six widths with zero JavaScript errors.
 
@@ -80,3 +80,11 @@ Removed from the Rig illustration:
 - “Listed price · 3 accessories that fit, paired”
 
 Only the two new strings explicitly supplied by the founder were introduced: “Add to cart” and “In the cart · everything that fits, at a price that beats or matches the market”. Other copy-ledger additions transcribe existing Figma state labels, including mobile seller prices.
+
+## Rig toggle sizing correction on #637
+
+The 320–430px toggle rows now reserve a column for the toggle and wrap the label/status/tag group naturally. Optional tags keep their full width and wrap beneath the label when the row is too narrow. All four tags remain visible at 320px; text stays at least 14px. No wording changed.
+
+Updated 375px screenshots: [Rig section](browser/rig-section-375.png), [toggle rows](browser/rig-toggle-rows-375.png), and [whole homepage](browser/homepage-375.png). The fixed browser check asserts element and text bounds against the Rig section's content right edge at 320, 375 and 430px, plus visible Optional tags and minimum text size. A separate [111-width sweep](rig-toggle-width-sweep.json) passed at every integer width from 320 through 430px and rejected the previous four-column sizing at 375px.
+
+Build, public/store checks and the full six-width browser suite passed with zero JavaScript errors. This correction is based directly on branch head 98e21d33; origin/main was not merged.
