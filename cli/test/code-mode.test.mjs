@@ -410,3 +410,59 @@ test('external runtimes refuse pip-user and uv launchers without exposing .local
     assert.equal(prompts, 0);
   }
 });
+
+test('code catalogue cards use Confirm, follow the thread and return redacted results as DATA', async () => {
+  for (const answer of ['y', 'n', null]) {
+    const f = await folder();
+    const placeholderSecret = 'ghp_' + 'placeholder'.repeat(3);
+    await writeFile(join(f.root, 'AGENTS.md'), `Branches use codex/task.\n${placeholderSecret}\n`);
+    const token = 'tv1.us-east.' + '1'.repeat(32) + '.' + 'x'.repeat(43);
+    const prompts = ['read findings', answer, '/exit'];
+    const requests = []; let turns = 0; let action;
+    const card = { card_id: 'placeholder-card', tool: 'radix.repo.findings', status: 'pending', summary: 'Read findings' };
+    const stored = { ...card, status: answer === 'y' ? 'confirmed' : 'cancelled', result: { text: placeholderSecret } };
+    await run(['code', f.root], { store: { get: async () => token },
+      io: { interactive: true, write() {}, prompt: async () => prompts.shift() ?? null },
+      transport: async (url, init) => {
+        if (url.endsWith('/threads')) return Response.json({ thread_id: 'placeholder-thread' });
+        if (url.endsWith('/code-turn')) {
+          const body = JSON.parse(init.body); requests.push(body);
+          assert.equal(body.history[0].kind, 'project');
+          assert(body.history[0].content.includes('Branches use codex/task.'));
+          assert(!init.body.includes(placeholderSecret));
+          return Response.json(turns++ === 0 ? { answer: '', requests: [{ name: 'tervory', arguments: { tool: card.tool, arguments: {} } }], cards: [card] } : { answer: '', requests: [] });
+        }
+        if (url.endsWith('/cards/placeholder-card')) {
+          action = JSON.parse(init.body).action;
+          return Response.json(stored);
+        }
+        assert(url.endsWith('/threads/placeholder-thread'));
+        return Response.json({ cards: [stored], steps: [{ step_id: card.card_id, status: 'done' }] });
+      } });
+    assert.equal(action, answer === 'y' ? 'confirm' : 'cancel');
+    const result = JSON.parse(requests[1].tool_results[0].output).result;
+    assert.equal(result.tool, card.tool);
+    assert.equal(result.status, stored.status);
+    if (answer !== 'y') assert(!('result' in result));
+    assert(!JSON.stringify(result).includes(placeholderSecret));
+  }
+});
+
+test('project notes use the git root and refuse oversized notes before sending', async () => {
+  const f = await folder();
+  await mkdir(join(f.root, 'child'));
+  await writeFile(join(f.root, 'AGENTS.md'), 'placeholder notes');
+  const { codeSession } = await import('../src/code-mode.mjs');
+  const bodies = [];
+  const tank = { json: async (path, body) => {
+    if (path.endsWith('/threads')) return { thread_id: 'placeholder-thread' };
+    bodies.push(body); return { answer: '', requests: [] };
+  } };
+  const prompts = ['hello', '/exit'];
+  await codeSession(tank, join(f.root, 'child'), 'auto', { interactive: true, write() {}, prompt: async () => prompts.shift() }, () => [], x => x);
+  assert.deepEqual(bodies[0].history, [{ kind: 'project', content: 'placeholder notes' }]);
+  await writeFile(join(f.root, 'AGENTS.md'), 'x'.repeat(200001));
+  await assert.rejects(codeSession(tank, f.root, 'auto', io(), () => [], x => x));
+  assert.equal(bodies.length, 1);
+  await assert.rejects(codeSession(tank, f.root, 'auto', io('y', false), () => [], x => x));
+});
