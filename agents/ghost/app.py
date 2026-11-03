@@ -1265,10 +1265,11 @@ def create_app() -> FastAPI:
     @app.get("/ghost/autumbra/enforce/list", dependencies=[Depends(require_tank)])
     async def autumbra_enforce_list():
         if not coolify_configured():
-            raise HTTPException(422, "Fixture compose root is not configured.")
+            raise HTTPException(422, "Autumbra Coolify settings are not configured.")
         try:
             async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as http:
-                return {"applications": await CoolifyEnforceBackend.from_env(http).list()}
+                rows = await CoolifyEnforceBackend.from_env(http).list()
+                return {"applications": [{key: row[key] for key in ("name", "uuid", "status")} for row in rows]}
         except Refused as exc:
             raise HTTPException(422, str(exc)) from None
 
