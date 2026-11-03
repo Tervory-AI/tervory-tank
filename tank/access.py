@@ -966,12 +966,25 @@ async def rig_admin_action(operation: str, request: Request, actor: Actor = Depe
                       "woocommerce": {"consumer_key", "consumer_secret", "webhook_secret"},
                       "bigcommerce": {"access_token", "webhook_secret"}}.get(data.get("platform"))
             name = data.get("vault_name")
-            if (fields is None or not isinstance(credential, dict) or set(credential) != fields
+            if (fields is None or not isinstance(credential, dict) or not credential or set(credential) - fields
                     or any(not isinstance(value, str) or not 1 <= len(value) <= 8000 for value in credential.values())
                     or not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", name)):
                 raise HTTPException(422, "The action arguments are invalid")
-            encrypted = vault.seal({"value": json.dumps(credential)},
-                f"plugins:v1:{actor.tenant_id}:rig.vault:secret:{name}")
+            context = f"plugins:v1:{actor.tenant_id}:rig.vault:secret:{name}"
+            # Approved forms omit signing inputs for now. Preserve an existing
+            # sealed signing value; future approved fields use this same path.
+            async with db().acquire() as conn:
+                previous = await conn.fetchval("SELECT sealed FROM tank.vault_items WHERE tenant_id=$1 AND vault='rig.vault' AND kind='secrets' AND name=$2",
+                                               actor.tenant_id, name)
+            if previous:
+                try:
+                    stored = json.loads(vault.open_seal(previous, context)["value"])
+                    credential = {**{key: value for key, value in stored.items() if key in fields}, **credential}
+                except Exception:
+                    raise HTTPException(422, "The action arguments are invalid") from None
+            if fields - {"webhook_secret"} - set(credential):
+                raise HTTPException(422, "The action arguments are invalid")
+            encrypted = vault.seal({"value": json.dumps(credential)}, context)
             metadata = json.dumps({"name": name, "purpose": "commerce", "mask": "••••••••",
                                    "saved_at": datetime.now(timezone.utc).isoformat()})
             async with db().acquire() as conn:
