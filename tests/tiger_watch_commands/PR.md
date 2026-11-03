@@ -123,7 +123,10 @@ git diff origin/main --check
 ```
 
 **Ruff passed; 2 secret checks passed in 18.40s; both whitespace checks passed.**
-Raw outputs: `evidence/ruff.txt`, `evidence/secrets.txt`. The initial secret-scan
+Outputs: `evidence/ruff.txt`, `evidence/secrets.txt`. Captured warning lines had
+trailing whitespace; it was trimmed from the three affected logs before the
+final successful whitespace checks. Test result text is otherwise unchanged.
+The initial secret-scan
 attempt found Git absent from the test image; installing Git in that temporary
 container and setting its safe directory allowed the scanner to run.
 
