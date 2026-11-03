@@ -41,7 +41,7 @@ export async function processOutput(command, args, { cwd, gitDirectory, gitWorkT
     if (signal?.aborted) return reject(refused());
     try {
       child = spawn(command, args, { cwd, shell: false, detached: process.platform !== 'win32', windowsHide: true,
-        env: { PATH: process.env.PATH, ...(process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot } : {}), LANG: 'C.UTF-8', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_LITERAL_PATHSPECS: '1',
+        env: { PATH: process.env.PATH, ...(process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot } : {}), LANG: 'C.UTF-8', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_LITERAL_PATHSPECS: '1',
           ...(temporaryDirectory ? { TMPDIR: temporaryDirectory } : {}),
           ...(gitDirectory ? { GIT_DIR: gitDirectory, GIT_WORK_TREE: gitWorkTree } : {}) },
         stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });

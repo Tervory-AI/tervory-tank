@@ -189,9 +189,13 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/cli-w4-tests"
           echo "TMPDIR=$RUNNER_TEMP/cli-w4-tests" >> "$GITHUB_ENV"
+          echo "TEMP=$RUNNER_TEMP/cli-w4-tests" >> "$GITHUB_ENV"
+          echo "TMP=$RUNNER_TEMP/cli-w4-tests" >> "$GITHUB_ENV"
           echo 'C:\Program Files\Git\usr\bin' >> "$GITHUB_PATH"
           git config --global core.autocrlf false
           git config --global core.symlinks true
+          # Checkout happened before the Git configuration above; restore LF blobs.
+          git checkout-index --force --all
       - run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: cli
       - name: Full CLI suite, including Windows command refusal

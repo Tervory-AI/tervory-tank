@@ -61,7 +61,7 @@ export function buildRelease({ out, platforms = Object.keys(PLATFORMS), version 
     for (const name of platforms) {
       const stage = join(work, name); const top = `tervory-cli-${version}`; const root = join(stage, top);
       mkdirSync(stage, { recursive: true });
-      run('tar', ['-xzf', join(work, packed), '-C', stage]);
+      run('tar', ['--force-local', '-xzf', join(work, packed), '-C', stage]);
       renameSync(join(stage, 'package'), root);
       const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
       manifest.version = version;
@@ -77,7 +77,7 @@ export function buildRelease({ out, platforms = Object.keys(PLATFORMS), version 
       rmSync(join(root, 'node_modules', '.package-lock.json'), { force: true });
       writeFileSync(join(root, 'RELEASE.json'), JSON.stringify({ name: 'tervory-cli', version, platform: name }, null, 2) + '\n');
       const file = `${top}-${name}.tar.gz`; const tarFile = join(work, `${file}.tar`);
-      run('tar', ['--sort=name', '--mtime=@0', '--owner=0', '--group=0', '--numeric-owner', '--mode=u=rwX,go=rX', '--format=ustar',
+      run('tar', ['--force-local', '--sort=name', '--mtime=@0', '--owner=0', '--group=0', '--numeric-owner', '--mode=u=rwX,go=rX', '--format=ustar',
                   '-cf', tarFile, '-C', stage, top]);
       writeFileSync(join(releaseDir, file), execFileSync('gzip', ['-n', '-9', '-c', tarFile], { maxBuffer: 1 << 28 }));
       artifacts[name] = { file, sha256: sha256(join(releaseDir, file)), size: statSync(join(releaseDir, file)).size };

@@ -5,7 +5,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { mkdtemp, writeFile, readFile, mkdir, symlink as nativeSymlink, stat, rm, copyFile, chmod } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createServer, createConnection } from 'node:net';
 import { once } from 'node:events';
@@ -14,8 +14,9 @@ import { run } from '../src/client.mjs';
 
 // Windows needs the target kind when creating directory symlinks.
 const symlink = async (target, path) => {
-  const kind = process.platform === 'win32' && (await stat(target).catch(() => null))?.isDirectory() ? 'junction' : 'file';
-  return nativeSymlink(target, path, kind);
+  const absolute = resolve(dirname(path), target);
+  const kind = process.platform === 'win32' && (await stat(absolute).catch(() => null))?.isDirectory() ? 'junction' : 'file';
+  return nativeSymlink(kind === 'junction' ? absolute : target, path, kind);
 };
 const work = await mkdtemp(join(tmpdir(), 'code-mode-'));
 test.after(() => rm(work, { recursive: true, force: true }));
@@ -212,10 +213,10 @@ test('git status and diff work without exposing secret-file contents', async () 
   const f = await folder();
   execFileSync('git', ['add', 'file.txt'], { cwd: f.root });
   await writeFile(join(f.root, 'file.txt'), 'changed\n');
-  await writeFile(join(f.root, '.e*'), 'old glob file\n');
+  await writeFile(join(f.root, '.e[n]v'), 'old glob file\n');
   await writeFile(join(f.root, '.env'), 'old private file\n');
-  execFileSync('git', ['--literal-pathspecs', 'add', '.e*', '.env'], { cwd: f.root });
-  await writeFile(join(f.root, '.e*'), 'changed glob file\n');
+  execFileSync('git', ['--literal-pathspecs', 'add', '.e[n]v', '.env'], { cwd: f.root });
+  await writeFile(join(f.root, '.e[n]v'), 'changed glob file\n');
   await writeFile(join(f.root, '.env'), 'private-git-canary');
   const status = await f.tool({ name: 'git', arguments: { action: 'status' } }, io());
   const diff = await f.tool({ name: 'git', arguments: { action: 'diff' } }, io());
@@ -225,7 +226,7 @@ test('git status and diff work without exposing secret-file contents', async () 
   assert(!diff.output.includes('old private file'));
 });
 
-test('cancelling at command approval stops execution and any following model turn', async () => {
+test('cancelling at command approval stops execution and any following model turn', { skip: process.platform === 'win32' && 'Windows refuses commands before approval' }, async () => {
   const f = await folder(); const controller = new AbortController(); let calls = 0;
   const token = 'tv1.us-east.' + '1'.repeat(32) + '.' + ('placeholder' + 'x'.repeat(43)).slice(0, 43);
   await assert.rejects(run(['code', f.root], { store: { get: async () => token },
