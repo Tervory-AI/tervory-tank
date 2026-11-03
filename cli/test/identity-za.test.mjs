@@ -33,7 +33,7 @@ test('ZA login opens Zitadel and stores only the unchanged Tank credential pair'
     expires_at: new Date(Date.now() + 3600_000).toISOString(),
     refresh_expires_at: new Date(Date.now() + 30 * 86400_000).toISOString(),
   };
-  await run(['login', '--region', 'za'], {
+  await run(['login', '--region', 'za', '--sign-in', 'zitadel'], {
     store: { set: async value => { saved = value; } },
     io: { write() {}, sleep: async () => {}, open: value => opened.push(value) },
     transport: async (url, init) => {
@@ -41,6 +41,7 @@ test('ZA login opens Zitadel and stores only the unchanged Tank credential pair'
       assert.equal(new URL(url).origin, 'https://za.tervory.com');
       assert.equal(init.headers.Authorization, undefined);
       assert.equal(init.redirect, 'manual');
+      if (url.endsWith('/code')) assert.equal(JSON.parse(init.body).approval, 'zitadel');
       return Response.json(url.endsWith('/code') ? start : grant);
     },
   });
@@ -58,5 +59,38 @@ test('wrapped identity device codes are redacted across every chunk boundary', (
   for (let split = 0; split <= code.length; split++) {
     const sanitizer = new StreamSanitizer();
     assert.equal(sanitizer.write(code.slice(0, split)) + sanitizer.write(code.slice(split)) + sanitizer.end(), '[redacted]');
+  }
+});
+
+
+test('ZA default login sends the old request and opens Boston approval', async () => {
+  const opened = [];
+  let codes = 0;
+  await assert.rejects(run(['login', '--region', 'za'], {
+    store: {},
+    io: { write() {}, sleep: async () => {}, open: url => opened.push(url) },
+    transport: async (url, init) => {
+      if (url.endsWith('/code')) {
+        codes += 1;
+        assert.deepEqual(Object.keys(JSON.parse(init.body)), ['device_name']);
+        return Response.json({ device_code: 'tvd1.za.synthetic', user_code: 'BCDF-GHJK', interval: 1 });
+      }
+      return Response.json({ error: 'access_denied' });
+    },
+  }), /denied/i);
+  assert.equal(codes, 1);
+  assert.deepEqual(opened, ['https://app.tervory.com/cli/device?code=BCDF-GHJK&region=za']);
+});
+
+test('Zitadel flag is accepted only for ZA login', async () => {
+  for (const argv of [
+    ['login', '--sign-in', 'zitadel'],
+    ['login', '--region', 'za', '--sign-in', 'other'],
+    ['threads', '--sign-in', 'zitadel'],
+  ]) {
+    await assert.rejects(run(argv, {
+      store: { get() { assert.fail('Must refuse before reading credentials'); } },
+      io: { write() {} }, transport: () => assert.fail('Must refuse before network'),
+    }), /Login accepts|Invalid command option/);
   }
 });
