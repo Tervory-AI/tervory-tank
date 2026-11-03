@@ -1,7 +1,14 @@
 /* Offline browser checks for generated sites. No provider or model clients. */
 const http = require("node:http");
 const { spawn } = require("node:child_process");
-const { readFileSync, readdirSync, existsSync, rmSync, writeFileSync } = require("node:fs");
+const {
+  readFileSync,
+  readdirSync,
+  existsSync,
+  rmSync,
+  mkdirSync,
+  writeFileSync,
+} = require("node:fs");
 const { join } = require("node:path");
 const { chromium } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
