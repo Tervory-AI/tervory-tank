@@ -43,6 +43,21 @@ def test_formats_and_exact_counts_preserve_truncation():
         WriteIn(tenant_id=TENANT, text='Facts', format='unknown')
 
 
+def test_instagram_caption_official_character_limit():
+    spec = FORMATS['Instagram caption']
+    source = 'https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/error-codes'
+    assert spec.limit == 2200 and spec.source == source and spec.checked == '2026-11-03'
+    base = {'issues': [], 'issue_count': 0, 'truncated': False}
+    assert check_limit(base, 'a' * 2200, 'Instagram caption')['issue_count'] == 0
+    report = check_limit(base, 'a' * 2201, 'Instagram caption')
+    assert report['issue_count'] == 1
+    assert report['issues'][0]['rule'] == 'over_limit'
+    assert report['issues'][0]['count'] == 2201 and report['issues'][0]['limit'] == 2200
+    assert report['length']['source'] == source
+    # This change enforces characters only, not separate hashtag/mention limits.
+    assert check_limit(base, '#a ' * 31 + '@a ' * 21, 'Instagram caption')['issue_count'] == 0
+
+
 async def seed(env, tenant=TENANT, *, draft='Own facts.', status='pending', format='product description', age=0):
     write_id = uuid4()
     await env.pool.execute('''INSERT INTO tank.trigger_writes
