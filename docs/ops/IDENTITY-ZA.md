@@ -9,23 +9,51 @@ No live deployment or founder browser acceptance is claimed by this document.
 
 ## 1. DNS, once the ZA box is available
 
-In Cloudflare, create the **A** record `auth.za.tervory.com` with the ZA server's
-actual public origin IPv4 address, as shown on that server in Coolify. Use
-**DNS only** for this record. Do not copy Boston's address from PRODUCT-HOSTS.md,
-do not change the existing proxied `za.tervory.com` record, and do not change
-any Boston/Clerk host. If the ZA origin address is unavailable, stop there.
+Use **Proxied (orange cloud)** for the A record `auth.za.tervory.com`, pointing
+to the ZA server's actual origin IPv4 from Coolify. Do not copy Boston's IP or
+change the existing `za.tervory.com` record. Cloudflare supports proxied gRPC,
+so DNS-only is not required for Zitadel Console. Set/confirm these exact settings:
 
-DNS-only is the selected deployment here: browser TLS/HTTP2 goes straight to
-Coolify, whose existing proxy forwards API traffic as h2c. Cloudflare proxying
-is also supported by Cloudflare and Zitadel; it would require **Network → gRPC
-On**, Full (strict) TLS, origin port 443, HTTP/2 and ALPN h2. It is not necessary
-to change that zone-wide setting for this DNS-only identity hostname. Cloudflare
-Access is not a substitute for Zitadel's authentication: Access does not protect
-proxied gRPC. No second Traefik or public Cloudflare Tunnel is part of this stack.
+- Cloudflare **Network → gRPC: On** for the zone.
+- **Speed → Settings → Protocol Optimization → HTTP/2 to Origin: On**.
+- **SSL/TLS → Overview → encryption mode: Full (strict)**; never Flexible.
+- A valid Cloudflare edge certificate must cover **auth.za.tervory.com exactly**.
+  Universal SSL on a full `tervory.com` zone normally covers only the apex and
+  first-level subdomains, not this deeper hostname. Confirm existing certificate
+  coverage; if absent, stop and report missing edge certificate coverage. Do not
+  purchase a service or switch to DNS-only as a workaround.
+- Existing Coolify proxy: TLS on **443**, valid unexpired origin certificate
+  covering this hostname, HTTP/2 advertised as **h2** via ALPN. Keep the checked-in
+  API upstream **h2c** route and Login path route. Zitadel authenticates requests;
+  Cloudflare Access does not protect proxied gRPC.
+
+For certificate issuance/renewal while proxied, use the existing Coolify proxy's
+`letsencrypt` resolver with **DNS-01**, not an assumed working HTTP/TLS-ALPN
+challenge through Cloudflare. In **Servers → ZA server → Proxy → Configuration**,
+the founder configures the existing resolver using Coolify's DNS-challenge guide:
+remove its two `httpchallenge` flags, retain its existing ACME storage, and set
+`--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare` and
+`--certificatesresolvers.letsencrypt.acme.dnschallenge.delaybeforecheck=0`.
+The proxy setting name is `CF_DNS_API_TOKEN`; the founder supplies its value,
+scoped to DNS edits on the required zone only. It never goes in identity-za or
+Tank. No proxy configuration, DNS record or credential is changed by this PR.
+If the existing proxy cannot issue/renew the hostname certificate this way,
+stop with the missing prerequisite; do not disable certificate validation.
+
+With DNS-01, the identity HTTPS origin needs inbound **443 from Cloudflare's
+published IP ranges**; no identity database port is public. Preserve existing
+operator access and unrelated host rules. DNS-only would expose the shared ZA
+server IP publicly and require inbound HTTPS from clients directly (and public
+80 for HTTP-01); it is not this deployment instruction. Proxied DNS also cannot
+undo an address previously disclosed through DNS history.
 
 Sources: [Cloudflare gRPC requirements](https://developers.cloudflare.com/network/grpc-connections/),
 [HTTP/2 to origin](https://developers.cloudflare.com/speed/optimization/protocol/http2-to-origin/),
-[Zitadel compose](https://zitadel.com/docs/self-hosting/deploy/compose),
+[Full (strict)](https://developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full-strict/),
+[Universal SSL limitations](https://developers.cloudflare.com/ssl/edge-certificates/universal-ssl/limitations/),
+[Cloudflare IP ranges](https://www.cloudflare.com/ips/),
+[Coolify DNS challenge](https://coolify.io/docs/core/networking/proxy/traefik/dns-challenge),
+[Coolify proxy challenge limitations](https://coolify.io/docs/troubleshoot/dns-and-domains/lets-encrypt-not-working),
 [Zitadel proxy guidance](https://zitadel.com/docs/self-hosting/manage/reverseproxy/traefik).
 
 ## 2. Create the separate Coolify resource
@@ -82,7 +110,8 @@ creates organisations/users in this step.
 
 The checked-in dependency order is: own Postgres healthy → `zitadel-init` once →
 `zitadel-setup` once → API healthy → Login and `tervory-setup`. The separate
-`identity-backup` worker starts after successful Tervory setup.
+`identity-backup` worker depends only on healthy identity Postgres, so backups
+continue independently of setup success or machine-key expiry.
 
 Zitadel setup writes the first-instance machine key only to
 `identity-za-bootstrap`, never stdout. Login's token is in the separate
@@ -98,9 +127,13 @@ that public identifier for `IDENTITY_CLIENT_ID` below. Resource identifiers are
 also stored in `/bootstrap/tervory.json`; no credential is included in that file.
 A repeated setup run finds existing resources and makes no changes. A partial
 run resumes by searching the same resources. If an existing app differs, setup
-fails rather than replacing it. Rerun within the configured bootstrap key's
-validity; after expiry, use the founder-controlled instance administrator to
-renew the machine credential without printing or copying its value.
+fails rather than replacing it. After key expiry, a completed `/bootstrap/tervory.json`
+record makes the job exit 0 and log `Identity setup already completed; bootstrap
+key expired; no changes attempted` without reading/signing the key or calling an
+API. It prints the saved public client ID. This trusts the last completed setup,
+not a fresh drift audit. An expired partial/missing completion record still fails:
+the founder must renew the machine credential through the instance administrator
+before finishing setup, without printing/copying it. Backups remain independent.
 
 Confirm the API and Login health checks pass and the proxy serves HTTPS with
 HTTP/2. In the browser, open `/ui/console` and confirm console requests succeed;
@@ -129,7 +162,8 @@ console only; do not add SMTP values or configuration to this repository.
 
 ## 8. Tervory organisation and role assignments
 
-The first-instance setup has already created the **Tervory** organisation.
+The **Tervory** organisation is the one **Zitadel creates at first start** from
+`ZITADEL_FIRSTINSTANCE_ORG_NAME`, not a second organisation created by our job.
 Select it in the console; do not create a duplicate. Copy its organisation ID
 from the organisation details/URL. For additional client organisations, the
 founder creates them in this console, creates their users, and records each ID.
@@ -151,15 +185,34 @@ In the existing **tervory-tank-za** resource, set:
 | `IDENTITY_CLIENT_ID` | The public client ID printed by `tervory-setup`. |
 | `IDENTITY_ORG_TENANTS` | A JSON object mapping each actual Zitadel organisation ID to its approved existing Tervory tenant UUID, in the form `{"<org id>":"<tenant UUID>"}`. |
 
-These are passed only to ZA Tank by `docker-compose.za.yml`. Do not configure
-these names in Boston. With the issuer empty, behavior stays as before.
-Keep `TANK_DEVICE_APPROVAL_KEY_ZA`/`TANK_DEVICE_APPROVAL_KEY` and their existing
-Boston approval routes unchanged. While Zitadel is enabled, an existing caller
-may explicitly request `{"device_name":"…","approval":"workspace"}` at the
-same code endpoint for the limited Boston approval flow; no new browser controls
-or CLI option are added. Default ZA code requests use Zitadel. Existing local
-pending codes can still be approved/polled. Boston's key still cannot approve
-founder identities. Old CLI versions need the 0.1.2 update for the new default.
+The first-start Zitadel **Tervory** organisation must map to the **existing
+Tervory Workspace tenant UUID**, not the platform UUID, the Zitadel project/org
+ID, a user's personal tenant or a new UUID. Find the exact UUID without SQL:
+
+1. In the existing Boston Workspace, sign in as founder and select the existing
+   **Tervory** Clerk organisation using its current organisation selector.
+2. In the same authenticated browser, open
+   `https://app.tervory.com/api/case-studies` with **no tenant_id query**.
+   This existing GET returns the active organisation's exact `tenant_id` UUID
+   (`workspace/app/api/case-studies/[[...path]]/route.ts`; Tank's existing
+   `GET /v1/case-studies`). It already resolves any `TERVORY_TENANT_ALIASES`.
+3. Map the first-start Zitadel Tervory organisation ID from step 8 to **that exact
+   returned `tenant_id`**, preserving other approved mappings. Never select an
+   unlabelled UUID from `/clients` or infer identity from an organisation's name.
+
+The live Tervory UUID is not verified in this offline PR and is not fabricated
+here. If the founder cannot positively select the existing Tervory organisation,
+or the authenticated read does not return its UUID, **stop at this step**:
+missing input is the verified existing Tervory tenant UUID. Do not populate
+`IDENTITY_ORG_TENANTS` or continue sign-in acceptance until that read succeeds.
+
+These settings reach ZA Tank only. Do not configure them in Boston. An empty
+issuer preserves the existing behavior. **Zitadel is opt-in even with the issuer
+set**: only `tervory login --region za --sign-in zitadel` sends
+`{"device_name":"…","approval":"zitadel"}`. Plain `tervory login --region za`,
+older CLI requests without `approval`, and explicit `approval: "workspace"`
+keep the Boston approval path exactly as before. Keep both existing approval
+key settings/routes unchanged; Boston's limited key still cannot approve founders.
 
 ## 10. Find the founder sub and append the founder identity
 
@@ -182,7 +235,7 @@ Run:
 
 ```sh
 tervory version
-tervory login --region za
+tervory login --region za --sign-in zitadel
 tervory chat
 tervory logout
 ```
@@ -194,7 +247,13 @@ reserved organisation ID, and issues the same existing Tank credential format,
 one-hour access and rotating 30-day refresh. `user_id` is `zitadel:<sub>`.
 Project roles come only from Zitadel's reserved claim for the requesting
 application's own Tervory project; other-project claims and metadata are ignored.
-Roles are captured at sign-in; the existing Tank revoke ends that credential.
+Roles are captured at sign-in. **Removing a role in Zitadel does not remove
+it from an already issued Tank sign-in: it lasts until that Tank sign-in is
+revoked (or expires), including through refresh.** Run `tervory logout` on each
+affected signed-in CLI to revoke its existing Tank sign-in and refresh token,
+then sign in again for current roles. Repeat for every affected sign-in; logging
+out of Zitadel alone is not Tank revocation. The Clerk Workspace's own-sign-ins
+page uses the Clerk user ID and does not list `zitadel:<sub>` sign-ins.
 Founder membership is re-read from the explicit ZA admin list.
 
 Show a ZA chat as founder, then revoke that sign-in using `tervory logout` (the
@@ -212,6 +271,19 @@ that resource's `zitadel` role. Completed archives use the existing ZA backup
 prefix with label `identity/database.dump.age`. Neither SQL plaintext nor the
 private restore identity goes to R2. The main ZA/Postgres/Qdrant backups continue
 through their existing workers; no Boston backup path is changed.
+
+Why the second resource needs the existing ZA R2 settings: `r2-backup-za` in
+`docker-compose.za.yml` has only the `tervory-za` network. `identity-postgres`
+has only this resource's private, non-external `database` network and no published
+port. The existing worker cannot resolve/reach it. Sharing the identity database
+network or publishing Postgres would break this resource's intended isolation.
+Therefore the small separate worker reuses the existing backup code and **same
+ZA-only Zenas R2 setting names**, bucket and public age recipient in Coolify;
+it has only its own database credential, not the main Tank database credential.
+Coolify resources do not inherit each other's environment values. The founder
+supplies the existing storage values through Coolify; this PR reads none of them
+and creates no new storage account, bucket or credential. Successful archive
+manifests and the ZA restore drill remain required evidence.
 
 On the **ZA host only**, follow [RESTORE-DRILL.md](RESTORE-DRILL.md)'s existing
 secure operator prerequisites and add `--identity` to the ZA command:
