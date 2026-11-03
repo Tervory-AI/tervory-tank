@@ -313,6 +313,8 @@ export class CodeFolder {
     const match = /^(?:'([^']+)'|"([^"]+)"|([^\s;|&<>]+))(?=\s|$)/.exec(command);
     if (!match) return { command, mounts: [] };
     const executable = match[1] ?? match[2] ?? match[3];
+    // These are POSIX shell builtins, even if PATH also contains a host binary.
+    if (['printf', 'echo', 'true', 'false', 'pwd', 'cd', 'read', 'exit', 'test', ':', '['].includes(executable)) return { command, mounts: [] };
     let candidate;
     if (isAbsolute(executable)) candidate = executable;
     else if (!executable.includes('/')) {
