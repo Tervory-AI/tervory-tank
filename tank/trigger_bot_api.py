@@ -3,18 +3,18 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
+import logging
 import re
 from types import SimpleNamespace
+from typing import Annotated
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 import command
-from trigger_bot_contract import TOOLS, PublicMessage
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from tenant_db import tenant_scope
+from trigger_bot_contract import TOOLS, PublicMessage
 from trigger_bot_grounding import exact_origin
 from trigger_bot_shared import FailedKeyLimits, PgRateLimits, hash_key, issue_embed_key
 
@@ -52,7 +52,7 @@ async def authority(actor, operation, conn=None):
 
 
 async def plan(actor, text, task_id):
-    match = re.fullmatch(r'\s*(trigger\.bot\.([a-z.]+))\s*(?::\s*(.*))?\s*', text, re.S)
+    match = re.fullmatch(r'\s*(trigger\.bot\.([a-z.]+))\s*(?::\s*(.*))?\s*', text, re.DOTALL)
     if not match or match[2] not in TOOLS:
         return None
     await authority(actor, match[2])
@@ -130,7 +130,8 @@ async def execute(operation, args, actor, operation_id):
             VALUES($1,true) ON CONFLICT DO NOTHING''', tenant)
         try:
             await bot.sources.refresh(tenant, source, bot.rig_pages)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 — fail closed at service boundary
+            logging.getLogger(__name__).warning('Bot source unavailable (%s)', type(exc).__name__)
             return {'source_id': str(source), 'status': 'unavailable'}
         result = {'source_id': str(source), 'status': 'ready'}
         if args.kind == 'website':
@@ -230,7 +231,7 @@ async def confirm_draft(bot, actor, operation, args, operation_id):
 
 
 @router.post('/v1/trigger/bot/{operation}')
-async def command_bot(operation: str, request: Request, actor: command.Actor = Depends(command.identity)):
+async def command_bot(operation: str, request: Request, actor: Annotated[command.Actor, Depends(command.identity)]):
     if operation not in TOOLS:
         raise HTTPException(404)
     actor = await authority(actor, operation)
@@ -257,7 +258,7 @@ async def bounded_body(request, cap):
             raise HTTPException(413)
     body = json.loads(raw)
     if not isinstance(body, dict):
-        raise ValueError('object_required')
+        raise TypeError('object_required')
     return body
 
 
