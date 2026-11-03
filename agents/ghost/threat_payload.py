@@ -267,6 +267,13 @@ class ThreatPayload(Strict):
     advisory_url: str | None = Field(default=None, max_length=500)
     queued_at: str | None = Field(default=None, max_length=40)
 
+    @field_validator("source_data")
+    @classmethod
+    def source_counts_are_bounded(cls, values):
+        if any(type(value) is not int or not 1 <= value <= 1_000_000 for value in values.values()):
+            raise ValueError("invalid source count")
+        return values
+
     @field_validator("site")
     @classmethod
     def site_must_be_shaped(cls, value: str) -> str:
