@@ -198,12 +198,15 @@ async def trigger(conn, tenant, region, start, end, figures):
         "tank.ledger.feedback", reviewed=row["reviewed"])
     # Read checker results, not the draft text or user prompts. A receipt binds
     # the action to this tenant, region and period; repeated events do not count.
-    rows = await conn.fetch("""SELECT DISTINCT l.id,c.value->'result'->'report' AS report
+    rows = await conn.fetch("""SELECT DISTINCT l.id,item->'report' AS report
         FROM tank.command_threads t CROSS JOIN LATERAL jsonb_each(t.state->'cards') c
-        JOIN tank.ledger l ON l.tenant_id=$1 AND l.id::text=c.value->'result'->>'ledger_id'
+        CROSS JOIN LATERAL jsonb_array_elements(CASE
+            WHEN c.value->>'tool'='trigger.write.batch' AND jsonb_typeof(c.value->'result'->'items')='array'
+            THEN c.value->'result'->'items' ELSE jsonb_build_array(c.value->'result') END) item
+        JOIN tank.ledger l ON l.tenant_id=$1 AND l.id::text=item->>'ledger_id'
         WHERE t.tenant_id=$1 AND l.region=$2 AND l.ts >= $3 AND l.ts < $4
-            AND c.value->>'status'='confirmed' AND c.value->>'tool'='trigger.write'
-            AND jsonb_typeof(c.value->'result'->'report')='object'""", tenant, region, start, end)
+            AND c.value->>'status'='confirmed' AND c.value->>'tool' IN ('trigger.write','trigger.revise','trigger.write.batch')
+            AND jsonb_typeof(item->'report')='object'""", tenant, region, start, end)
     reports = [obj(row["report"]) for row in rows]
     issues = sum(report.get("issue_count", 0) for report in reports)
     voice_hits = sum(item.get("source") == "voice" for report in reports for item in report.get("issues", []))
