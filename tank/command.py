@@ -39,7 +39,7 @@ from trigger_marketing_contract import TOOLS as MARKETING_TOOLS
 
 TOOLS = {
     "trigger": ["trigger.revise", "trigger.voice.learn", "trigger.write.batch", "trigger.scorecard", "trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
-    "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.to_crm"],
+    "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.products", "base.list.to_crm"],
     "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.position"],
     "market_lab": ["market_lab.research"],
     "rig": ["rig.search", "rig.ask"],
@@ -1269,6 +1269,7 @@ ADAPTERS = {
     "base.lists": Adapter("GET", "/v1/command/base/lists", Body, "base.lists"),
     "base.list.show": Adapter("GET", "/v1/command/base/lists/show", ListArgs, "base.list.show"),
     "base.list.export": Adapter("GET", "/v1/command/base/lists/export", ListArgs, "base.list.export"),
+    "base.list.products": Adapter("GET", "/v1/command/base/lists/products", ListArgs, "base.list.products"),
     "base.list.to_crm": Adapter("POST", "/v1/command/base/lists/to-crm", SendArgs, "base.list.to_crm"),
     "tiger.watch": Adapter("POST", "/v1/tiger/watchlist", WatchArgs, "Start a price watch", True, "paid_run"),
     "tiger.read": Adapter("GET", "/v1/tiger/observations", UrlArgs, "Read price observations"),
