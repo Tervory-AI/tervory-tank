@@ -221,3 +221,42 @@ async def test_weak_refusal_checks_policy_system_prompt(monkeypatch, already_in_
     result = await routing.serve(tank, row, messages, tenant_id=TENANT)
     assert result['model'] == 'placeholder-strong'
     assert seen == [('placeholder-system\nplaceholder-user', 'placeholder-weak')]
+
+
+@pytest.mark.parametrize('samples,agreement,expected', [(200, .98, 'hold'), (30, 1, 'hold'), (200, .99, 'promote')])
+def test_routellm_cannot_lower_founder_bar(samples, agreement, expected):
+    row = {**policy(), 'eval_threshold': .95, 'min_shadow_samples': 30}
+    move = graduate.promote_if_proven(row, graduate.Evidence(samples=samples, agreement=agreement),
+                                     datetime.now(timezone.utc), automatic=False)
+    assert move.action == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('source_ref', ['placeholder-invalid', '', None])
+async def test_malformed_gold_ledger_reference_skips_lookup(monkeypatch, source_ref):
+    import training
+    captured = []
+    class Connection:
+        async def fetchval(self, *args):
+            pytest.fail('invalid UUID must never reach the ledger query')
+    async def save(*args, **kwargs):
+        captured.append(kwargs)
+    monkeypatch.setattr(training, 'save_pair', save)
+    monkeypatch.setattr(training, 'admits_training', lambda row: True)
+    monkeypatch.setattr(training, 'regional_labels', lambda row: (None, None))
+    row = dict(holdout=False, source='ledger', source_ref=source_ref, tenant_id=TENANT,
+               agent='placeholder', skill_id='placeholder.skill', input={}, expected={},
+               checked_by='placeholder-founder', id=uuid.UUID(int=2))
+    await training.pair_from_gold(Connection(), row)
+    assert captured[0]['teacher_model'] is None
+
+
+@pytest.mark.asyncio
+async def test_unauthorized_teacher_syntax_falls_through(monkeypatch):
+    import command
+    from command_tools.skala import code_plan
+    async def authorized(actor):
+        return actor
+    monkeypatch.setattr(command, 'authorized_actor', authorized)
+    actor = command.Actor(TENANT, 'placeholder-member', False)
+    assert await code_plan(actor, [{'role': 'user', 'content': 'skala.teachers placeholder.skill'}], None) is None

@@ -301,6 +301,8 @@ def fields_clear(scores: dict[str, float], policy: dict[str, Any]) -> tuple[bool
 def proven_reason(policy: dict[str, Any], evidence: Evidence) -> tuple[bool, str | None]:
     bar = _float(policy.get("eval_threshold"), DEFAULT_THRESHOLD)
     minimum = _int(policy.get("min_shadow_samples"), DEFAULT_MIN_SAMPLES)
+    if str(policy.get("candidate_model") or "").startswith("routellm:"):
+        bar, minimum = max(bar, DEFAULT_THRESHOLD), max(minimum, DEFAULT_MIN_SAMPLES)
     ceiling = _float(policy.get("max_reject_rate"), DEFAULT_MAX_REJECT)
     if evidence.samples < minimum:
         return False, "too few shadow samples"
