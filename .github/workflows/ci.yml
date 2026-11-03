@@ -67,7 +67,9 @@ jobs:
 
   changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    # 5, not 2 (3 Nov): in a merge-queue run the full-history checkout plus post steps took
+    # 2m22s, the job was cancelled, ci-ok failed and the queue dropped a green PR (#625).
+    timeout-minutes: 5
     outputs:
       run: ${{ steps.scope.outputs.run }}
       full: ${{ steps.scope.outputs.full }}
