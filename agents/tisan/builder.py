@@ -273,6 +273,7 @@ async def handle(ctx: Any) -> dict:
     result = await execute(ctx.input, str(ctx.tenant_id), tank=ctx.tank)
     if result.get("ok") is True:
         import hashlib
+
         from chassis.events import publish
         await publish(str(ctx.tenant_id), "tisan.build.ready", str(ctx.job_id), {
             "job_id": str(ctx.job_id), "site_id": hashlib.sha256(result["slug"].encode()).hexdigest()})
