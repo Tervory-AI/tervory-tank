@@ -1,19 +1,23 @@
 """B4 offline contract tests. No provider, external network, database or real CRM."""
 from copy import deepcopy
 from datetime import date
-import json
 from types import SimpleNamespace
-from uuid import UUID, uuid4
-
-import httpx
-import pytest
-from fastapi import FastAPI, HTTPException
+from uuid import uuid4
 
 import base_list_crm as crm
 import base_lists as lists
+import httpx
+import pytest
 from base_metrics import export_records
-from command import Actor, PlannedAction, ADAPTERS, allowed_tools, validate_action, adapter_request
-from trigger_commands import CONFIRMED
+from command import (
+    ADAPTERS,
+    Actor,
+    PlannedAction,
+    adapter_request,
+    allowed_tools,
+    validate_action,
+)
+from fastapi import FastAPI, HTTPException
 
 TENANT, OTHER, RECORD = uuid4(), uuid4(), uuid4()
 STAMP = "2026-11-02T12:00:00+00:00"
@@ -92,8 +96,8 @@ def test_projection_never_promotes_unverified_uploaded_identity():
 
 
 def test_base_only_and_no_paid_adapters_or_identity_arguments(monkeypatch):
-    import main
-    monkeypatch.setattr(main, "box_region", lambda: "us-east")
+    import sys
+    monkeypatch.setitem(sys.modules, "main", SimpleNamespace(box_region=lambda: "us-east"))
     base = Actor(TENANT, "invented", False, frozenset({"base"}))
     tiger = Actor(TENANT, "invented", False, frozenset({"tiger"}))
     for name in ("base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.to_crm"):
@@ -206,6 +210,7 @@ async def test_duplicates_by_email_or_website_and_within_card_are_skipped(monkey
 async def test_confirmation_tenant_binding_and_list_download_endpoint(monkeypatch):
     import command
     actor = Actor(TENANT, "invented", False, frozenset({"base"}))
+    monkeypatch.setattr(command, "db", lambda: None)
     app = FastAPI()
     app.include_router(lists.build_router())
     app.dependency_overrides[command.identity] = lambda: actor
