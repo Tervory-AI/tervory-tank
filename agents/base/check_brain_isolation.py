@@ -30,12 +30,6 @@ def main(names):
     if len(names) != 5:
         raise SystemExit("Supply ROOM BRAIN SANDBOX BROWSER GATEWAY container names")
     room, brain, sandbox, browser, gateway = [json.loads(docker("inspect", name))[0] for name in names]
-    service = room["Config"].get("Labels", {}).get("com.docker.compose.service")
-    room_name = {"agent-base": "base", "agent-tiger": "tiger"}.get(service)
-    assert room_name is not None, "unsupported room"
-    corridor_name = "tervory-gw-" + room_name
-    sandbox_host = sandbox["Config"].get("Labels", {}).get("com.docker.compose.service")
-    assert sandbox_host == room_name + "-sandbox", "sandbox belongs to another room"
     rows = [room, brain, sandbox, browser, gateway]
     for row in rows:
         assert row["State"].get("Health", {}).get("Status") == "healthy", "service is not healthy"
@@ -48,6 +42,14 @@ def main(names):
         assert all(m["Type"] == "volume" or (m["Type"] == "tmpfs" and m["Destination"] in {"/tmp", "/work"}) for m in row["Mounts"]), "unexpected host mount"
         keys = {v.split("=", 1)[0] for v in row["Config"]["Env"]}
         assert not keys & {"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "LITELLM_MASTER_KEY"}, "model key in room"
+    service = room["Config"].get("Labels", {}).get("com.docker.compose.service")
+    room_name = {"agent-base": "base", "agent-tiger": "tiger"}.get(service)
+    assert room_name is not None, "unsupported room"
+    corridor_name = "tervory-gw-" + room_name
+    sandbox_host = sandbox["Config"].get("Labels", {}).get("com.docker.compose.service")
+    assert sandbox_host == room_name + "-sandbox", "sandbox belongs to another room"
+    sandbox_keys = {value.split("=", 1)[0] for value in sandbox["Config"]["Env"]}
+    assert "TANK_KEY" not in sandbox_keys, "Tank key in sandbox"
     assert sandbox["HostConfig"].get("ReadonlyRootfs"), "sandbox root must be read-only"
     assert "ALL" in sandbox["HostConfig"].get("CapDrop", []), "sandbox must drop all capabilities"
     assert any("no-new-privileges" in option for option in sandbox["HostConfig"].get("SecurityOpt", [])), "sandbox can gain privileges"
