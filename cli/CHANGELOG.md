@@ -6,6 +6,10 @@
 - Six bounded local tools: file listing, text reads/search, git status/diff, single-file unified edits and approved commands. Path and symlink checks, secret-path refusal and line redaction run locally.
 - Edits and commands require a real interactive terminal and an explicit `y`. Stale edits are refused; commands use the worker's existing Linux Bubblewrap, a 120-second deadline and a 64 KB output cap, without an unsandboxed fallback.
 - Command threads retain tool names/sizes, steps and actual receipts, without source or patch bodies. Model transcripts retain Tank's existing masking, tenant and regional handling. No sign-in or provider routing implementation is added.
+## 0.1.2 — 2026-11-01
+
+- ZA can opt in to the self-hosted Zitadel device sign-in with `tervory login --region za --sign-in zitadel`, including founders. Both verification URLs must use https://auth-za.tervory.com.
+- Existing us-east and default ZA Boston/Workspace approval (including older CLIs) are unchanged even when the ZA issuer is set. Tank access/refresh credentials and logout/revoke are unchanged.
 
 ## 0.1.1 — 2026-10-31
 

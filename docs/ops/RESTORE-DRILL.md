@@ -120,3 +120,39 @@ Queries executed: `gh run list --repo Tervory-AI/tervory-tank --workflow watchdo
 ## Founder acceptance still pending
 
 Grok's real regional execution and the founder's own-browser demonstration/screenshots are pending. No screenshot or live restore result is fabricated. The PR must include the exact-head CI link, regional result JSON and founder-test screenshots when available. Offline success is preparation evidence, not product completion.
+
+## Identity database on ZA
+
+After deploying the separate `identity-za` resource, its worker uses the existing
+streaming encrypted Postgres backup/archive path with the label
+`identity/database.dump.age`, inside the existing ZA regional platform backup
+prefix. It has its own database role and named Postgres volume; it does not dump
+through the main ZA database connection. See [IDENTITY-ZA.md](IDENTITY-ZA.md).
+
+Use the same secure ZA operator environment, existing private identity **file
+path**, checkout/tools and completed Tank/Qdrant archives described above. On the
+**ZA host only**, the acceptance command additionally requires the identity dump:
+
+```sh
+.git/restore-venv/bin/python ops/restore_drill.py --region za --identity-file "$RESTORE_IDENTITY_FILE" --rls --identity
+```
+
+`--identity` fails if that completed encrypted archive is absent, and is refused
+on us-east. Identity cannot substitute for a required Qdrant archive. When an
+identity archive is present on ZA, selection includes its newest completed
+manifest; it restores into **identity_restore**, a separate database in the
+newly created disposable Postgres container. No production SQL or database
+connection is added. Main Tank RLS checks remain on the restored Tank database.
+Success includes `identity_database_restored: true` and a nonzero
+`identity_table_count`. Counts are metadata only, never identity user rows.
+
+This is a database restore proof. Keep the immutable original
+`ZITADEL_MASTERKEY` securely outside the backup, and retain the identity resource's
+operator settings and Login/bootstrap named volumes; the database dump does not
+back up those separate secret volumes. Do not put a master key or private age
+identity in a command, PR, screenshot, or repository.
+
+Offline coverage now includes a synthetic identity database in the existing
+real-container/age ZA round trip, with a separate identity-archive requirement
+and refusal to treat identity as a Qdrant snapshot. This does not claim the live
+ZA identity database has been restored; founder acceptance remains pending.
