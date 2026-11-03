@@ -3,8 +3,8 @@ import json
 
 import asyncpg
 import pytest
-from test_database import A, B, B1
-from test_database import database as database
+from test_database import B1, A, B
+from test_database import database as database  # noqa: PLC0414 -- pytest fixture re-export
 from test_engine import POINT, answer, passage
 from trigger_bot_grounding import DATES, PRICE_OR_STOCK, grounded
 
