@@ -109,11 +109,13 @@ def cost_rows(results: list[dict[str, Any]], ledger: list[dict[str, Any]]) -> li
     return out
 
 
-def list_costs(ledger: list[dict[str, Any]]) -> dict[str, Any]:
+def list_costs(ledger: list[dict[str, Any]], record_ids: list[str] | None = None) -> dict[str, Any]:
     """One contribution per ledger ID, with unknown prices kept unknown."""
     entries = {str(entry["id"]): entry for entry in ledger}.values()
     actual, baseline = Decimal(0), Decimal(0)
-    unpriced = baseline_missing = False
+    missing = not ledger or bool(record_ids is not None and set(map(str, record_ids))
+                                 - {str(entry.get("record_id")) for entry in ledger})
+    unpriced = baseline_missing = missing
     calls = 0
     for entry in entries:
         calls += 1
@@ -211,10 +213,15 @@ def export_records(rows: list[dict[str, Any]], ledger: list[dict[str, Any]] | No
     columns += [f"{name}_{part}" for name in SITE_SIGNAL_FIELDS
                 for part in ("source_url", "checked_at", "evidence", "confidence")]
     per_record: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    ledger_records: dict[str, set[str]] = defaultdict(set)
+    record_ids = {str(row["record_id"]) for row in rows}
     if ledger is not None:
         columns += ["cost_usd", "baseline_cost_usd"]
         for entry in ledger:
-            per_record[str(entry.get("record_id"))].append(entry)
+            record_id = str(entry.get("record_id"))
+            if record_id in record_ids:
+                per_record[record_id].append(entry)
+                ledger_records[str(entry["id"])].add(record_id)
     exported = []
     for row in rows:
         fields = obj(row["fields"])
@@ -255,9 +262,12 @@ def export_records(rows: list[dict[str, Any]], ledger: list[dict[str, Any]] | No
                 for part in ("source_url", "checked_at", "evidence", "confidence"):
                     record[f"{name}_{part}"] = signal.get(part)
         if ledger is not None:
-            costs = list_costs(per_record[str(row["record_id"])])
-            record["cost_usd"] = costs["actual_usd"]
-            record["baseline_cost_usd"] = costs["baseline_usd"]
+            entries = per_record[str(row["record_id"])]
+            shared = any(len(ledger_records[str(entry["id"])]) > 1 for entry in entries)
+            costs = list_costs(entries)
+            for column, key in (("cost_usd", "actual_usd"), ("baseline_cost_usd", "baseline_usd")):
+                value = None if shared else costs[key]
+                record[column] = None if value is None else format(value, "f")
         exported.append(record)
     return csv_text(exported, columns)
 
