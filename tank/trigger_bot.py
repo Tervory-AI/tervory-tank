@@ -213,4 +213,4 @@ async def refresh_loop(runtime):
             raise
         except Exception as exc:  # noqa: BLE001 — fail closed at service boundary
             logging.getLogger(__name__).warning('Bot maintenance unavailable (%s)', type(exc).__name__)
-        await asyncio.sleep(3600)
+        await asyncio.sleep(5)

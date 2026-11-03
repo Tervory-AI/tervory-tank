@@ -139,14 +139,15 @@ async def execute(operation, args, actor, operation_id):
         source = await bot.sources.add(tenant, operation_id, args.kind, args.title, args.url, content)
         await pool.execute('''INSERT INTO tank.trigger_bot_config(tenant_id,enabled)
             VALUES($1,true) ON CONFLICT DO NOTHING''', tenant)
+        if args.kind == 'website':
+            return {'source_id': str(source), 'status': 'queued',
+                    'embed_key': await key_for_site(bot, tenant, args.url, source)}
         try:
             await bot.sources.refresh(tenant, source, bot.rig_pages)
         except Exception as exc:  # noqa: BLE001 — fail closed at service boundary
             logging.getLogger(__name__).warning('Bot source unavailable (%s)', type(exc).__name__)
-            return {'source_id': str(source), 'status': 'unavailable'}
+            return {'source_id': str(source), 'status': 'failed'}
         result = {'source_id': str(source), 'status': 'ready'}
-        if args.kind == 'website':
-            result['embed_key'] = await key_for_site(bot, tenant, args.url, source)
         return result
     if operation == 'source.remove':
         async with pool.acquire() as conn, conn.transaction():

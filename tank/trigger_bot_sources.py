@@ -11,7 +11,7 @@ from urllib.parse import urldefrag, urljoin, urlsplit
 from urllib.robotparser import RobotFileParser
 from uuid import UUID, uuid5
 
-from access import public_get
+from access import public_get, public_stream
 from semantic_cache import VectorIndex
 from semantic_encoder import ENCODER_ID, LocalEncoder
 from trigger_bot_grounding import Passage, chunks, fuse
@@ -39,12 +39,33 @@ class Page(HTMLParser):
             self.text.append(text)
 
 
+async def robots_text(url):
+    # Same SSRF/DNS/TLS guard as pages; public_stream never follows redirects.
+    try:
+        async with asyncio.timeout(25), public_stream(url, headers={'User-Agent': 'TervoryBot'}) as response:
+            if 400 <= response.status_code < 500:
+                return b''
+            if response.status_code != 200:
+                return b'User-agent: *\nDisallow: /'
+            data = bytearray()
+            async for part in response.aiter_bytes():
+                data.extend(part)
+                if len(data) > 200_000:
+                    return b'User-agent: *\nDisallow: /'
+            return bytes(data)
+    except Exception:
+        return b'User-agent: *\nDisallow: /'
+
+
 async def crawl(url: str, get=public_get) -> list[dict]:
     origin = urlsplit(url)
     if origin.scheme != 'https' or origin.username or origin.password or not origin.hostname:
         raise ValueError('https_source_required')
     site = f'https://{origin.netloc}'
-    robots, _ = await get(site + '/robots.txt', limit=200_000)
+    if get is public_get:
+        robots = await robots_text(site + '/robots.txt')
+    else:
+        robots, _ = await get(site + '/robots.txt', limit=200_000)
     rules = RobotFileParser()
     rules.parse(robots.decode('utf-8', 'replace').splitlines())
     pending, visited, pages, size = [urldefrag(url)[0]], set(), [], 0
@@ -111,13 +132,14 @@ class Sources:
     async def add(self, tenant: UUID, operation: UUID, kind: str, title: str, url=None, content=''):
         source = uuid5(tenant, 'bot-source:' + str(operation))
         await self.pool.execute('''INSERT INTO tank.trigger_bot_sources
-            (tenant_id,id,kind,title,url,content,operation_id) VALUES($1,$2,$3,$4,$5,$6,$7)
+            (tenant_id,id,kind,title,url,content,operation_id,status) VALUES($1,$2,$3,$4,$5,$6,$7,'queued')
             ON CONFLICT(tenant_id,operation_id) DO NOTHING''', tenant, source, kind, title, url, content, operation)
         return source
 
     async def refresh(self, tenant: UUID, source: UUID, rig=None):
-        row = await self.pool.fetchrow('''UPDATE tank.trigger_bot_sources SET status='refreshing'
-            WHERE tenant_id=$1 AND id=$2 AND status<>'removed' RETURNING *''', tenant, source)
+        row = await self.pool.fetchrow('''UPDATE tank.trigger_bot_sources SET status='indexing', next_check=now()+interval '30 minutes'
+            WHERE tenant_id=$1 AND id=$2 AND status<>'removed'
+              AND (status<>'indexing' OR next_check<=now()) RETURNING *''', tenant, source)
         if row is None:
             return
         try:
@@ -142,7 +164,7 @@ class Sources:
                 # Removal during the crawl wins: a refresh cannot reactivate it.
                 current = await conn.fetchval('''SELECT status FROM tank.trigger_bot_sources
                     WHERE tenant_id=$1 AND id=$2 FOR UPDATE''', tenant, source)
-                if current != 'refreshing':
+                if current != 'indexing':
                     return
                 await conn.execute('DELETE FROM tank.trigger_bot_passages WHERE tenant_id=$1 AND source_id=$2', tenant, source)
                 for point, text, page in staged:
@@ -154,8 +176,8 @@ class Sources:
                 await conn.execute('''UPDATE tank.trigger_bot_sources SET status='ready',checked_at=now(),
                     next_check=now()+interval '7 days' WHERE tenant_id=$1 AND id=$2''', tenant, source)
         except Exception:
-            await self.pool.execute('''UPDATE tank.trigger_bot_sources SET status='unavailable',
-                next_check=now()+interval '1 day' WHERE tenant_id=$1 AND id=$2 AND status='refreshing' ''', tenant, source)
+            await self.pool.execute('''UPDATE tank.trigger_bot_sources SET status='failed',
+                next_check=now()+interval '1 day' WHERE tenant_id=$1 AND id=$2 AND status='indexing' ''', tenant, source)
             raise
 
     async def search(self, tenant: UUID, question: str) -> list[Passage]:
