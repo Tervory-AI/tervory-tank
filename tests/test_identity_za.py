@@ -44,7 +44,7 @@ class Provider:
         return jwt.encode({**self.claims, **claims}, self.private, algorithm='RS256', headers={'kid': self.kid})
 
     def __call__(self, request):
-        assert request.url.host == 'auth.za.tervory.com'
+        assert request.url.host == 'auth-za.tervory.com'
         self.calls.append((request.method, request.url.path))
         if request.url.path == '/.well-known/openid-configuration':
             return httpx.Response(200, json={'issuer': oidc.ISSUER, 'jwks_uri': oidc.ISSUER + '/keys',
@@ -126,8 +126,8 @@ def test_unmapped_organisation_and_metadata_do_not_grant_identity(provider, monk
 
 @pytest.mark.asyncio
 async def test_provider_endpoints_cannot_escape_fixed_origin(provider, monkeypatch):
-    for endpoint in ['https://evil.example/token', 'http://auth.za.tervory.com/token',
-                     'https://user@auth.za.tervory.com/token', 'https://auth.za.tervory.com:444/token']:
+    for endpoint in ['https://evil.example/token', 'http://auth-za.tervory.com/token',
+                     'https://user@auth-za.tervory.com/token', 'https://auth-za.tervory.com:444/token']:
         with pytest.raises(oidc.IdentityError):
             oidc.endpoint(endpoint)
 
