@@ -381,7 +381,7 @@ async def _visit(body, tenant, task, origin, run, directory):
     policy = await access_rpc(tenant, origin, "policy") if secure else {"state": "public"}
     private = policy["state"] != "public"
     if body.catalogue_match and (private or urlsplit(body.url).path.lower().endswith(".pdf")):
-        return {"ok": False, "challenge": True, "html": ""}
+        return {"ok": False, "challenge": False, "reason": "unsupported", "html": ""}
     if private: storage = storage_for(tenant, origin, authenticated=True)
     social = any(host == name or host.endswith("." + name) for name in ("facebook.com", "instagram.com", "fb.com", "fb.me"))
     if social: storage.unlink(missing_ok=True)
@@ -438,6 +438,22 @@ async def _visit(body, tenant, task, origin, run, directory):
                 service_workers="block", accept_downloads=False, user_agent=USER_AGENT)
             denied: set[str] = set()
             await require_allowed(context, body.url, min(body.max_ms, 10000), run)
+            if body.catalogue_match:
+                # Page routing does not intercept redirect hops. This transport
+                # refuses them, leaving each destination to a new reservation.
+                response = await context.request.get(body.url, timeout=min(body.max_ms, 10000), max_redirects=0)
+                status = response.status
+                if status in {301, 302, 303, 307, 308}:
+                    return {"ok": False, "challenge": False, "reason": "redirect",
+                            "status": status, "location": response.headers.get("location"), "url": body.url}
+                source = (await response.body())[:600000].decode("utf-8", errors="replace")
+                challenge = human_check(source) or status in {401, 403, 429}
+                if challenge:
+                    stop_host(run, body.url)
+                # An isolated structured-data read starts no page scripts,
+                # subresources, forms or navigation.
+                return {"ok": status == 200 and not challenge, "challenge": challenge,
+                        "status": status, "url": body.url, "html": "" if challenge else source}
             discovery_document_sent = False
             async def check(route):
                 nonlocal discovery_document_sent
@@ -571,7 +587,7 @@ async def _visit(body, tenant, task, origin, run, directory):
                     # Expiry never waits to save cookies. Bind the existing
                     # storage destination only for a normally completed visit.
                     await cleanup_visit(context, browser, manager, storage,
-                        save=not cancelled and not social, bounded=body.request_timeout_ms is not None)
+                        save=not cancelled and not social and not body.catalogue_match, bounded=body.request_timeout_ms is not None)
             finally:
                 last_visit[site] = time.monotonic()
 
