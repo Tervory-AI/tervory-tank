@@ -127,7 +127,10 @@ async def test_tank_research_job_writes_only_claims_with_openable_sources(monkey
     data = b'date,value,unit,series\n2026-09-01,100,cartons,inventory\n2026-09-08,110,cartons,inventory\n'
     await accept(ledger, TENANT, file_id, 'history.csv', extract('history.csv', data), region='us-east')
 
+    memory = object()
     class Context:
+        def __init__(self, **kwargs):
+            assert kwargs == {'memory': memory}
         async def __aenter__(self):
             return ledger
         async def __aexit__(self, *_):
@@ -139,7 +142,7 @@ async def test_tank_research_job_writes_only_claims_with_openable_sources(monkey
     async def no_web(*args, **kwargs):
         raise AssertionError('stored evidence must not call web research or a model')
     monkeypatch.setattr(core.research_adapter, 'research_web', no_web)
-    ctx = SimpleNamespace(tenant_id=TENANT, input={'question': 'inventory'})
+    ctx = SimpleNamespace(tenant_id=TENANT, input={'question': 'inventory'}, memory=memory)
     result = await room.research(ctx)
     assert result['cost_usd'] == 0
     assert result['answer'].splitlines() == [c['claim'] for c in result['citations']]
