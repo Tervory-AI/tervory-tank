@@ -327,3 +327,11 @@ async def test_saved_list_real_postgres_snapshot_and_rls(database):  # noqa: F81
         assert await conn.fetchval("SELECT count(*) FROM tank.base_saved_lists WHERE list_id=$1", saved["list_id"]) == 1
     finally:
         await conn.execute("RESET ROLE")
+
+
+def test_workspace_download_preserves_bytes_and_existing_batch_behavior():
+    import subprocess
+    from pathlib import Path
+    result = subprocess.run(["node", "tests/base_lists_download.cjs"],
+                            cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
