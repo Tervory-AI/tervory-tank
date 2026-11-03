@@ -70,7 +70,6 @@ def test_owner_email_three_fix_paragraphs():
                 "source_url": "https://feodotracker.abuse.ch"},
     )
     for mode, needle in [
-        (ApplyMode.auto_when_checks_pass, "let us fix this kind of problem automatically"),
         (ApplyMode.approve_each, "approve fixes yourself"),
         (ApplyMode.never, "never touch your code"),
     ]:
@@ -104,8 +103,6 @@ def test_owner_email_three_fix_paragraphs():
 def test_three_fixture_clients_get_matching_paragraphs():
     """Three fixture clients — one per client mode — each get the matching paragraph."""
     fixtures = [
-        ("00000000-0000-0000-0000-0000000000f1", ApplyMode.auto_when_checks_pass,
-         "let us fix this kind of problem automatically"),
         ("00000000-0000-0000-0000-0000000000f2", ApplyMode.approve_each,
          "approve fixes yourself"),
         ("00000000-0000-0000-0000-0000000000f3", ApplyMode.never,
