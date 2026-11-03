@@ -403,6 +403,7 @@ async def enrich_one(
                         "name": name,
                         "text": scr["text"],
                         "html": page_html(scr),
+                        "pages": scr.get("page_responses") or [],
                         "engine": engine_id(engine),
                     })
                     cost += cost_of(ex)
@@ -419,6 +420,8 @@ async def enrich_one(
                     for key in ("categories", "services", "description", "people"):
                         if ex.get(key):
                             profile[key] = {"value": ex[key], "source": source, "confidence": conf}
+                    if ex.get("products"):
+                        profile["products"] = {"value": ex["products"], "source": "site:code", "confidence": conf}
                     passes["2c"] = {
                         "skill": named("base.extract", ex),
                         "ms": ex.get("_ms"),
