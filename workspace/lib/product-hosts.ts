@@ -25,6 +25,7 @@ export const WORKSPACE_PRODUCT_HOSTS: readonly ProductHost[] = [
   /** Moot is part of Zenas — public watch lands on /moot; /zenas stays available. */
   { host: "zenas.tervory.com", rootPath: "/moot", product: "Zenas" },
   { host: "base.tervory.com", rootPath: "/base", product: "Base" },
+  { host: "trigger.tervory.com", rootPath: "/trigger", product: "Trigger" },
   { host: "tiger.tervory.com", rootPath: "/tiger", product: "Tiger" },
   { host: "market-lab.tervory.com", rootPath: "/market-lab", product: "Market Lab" },
   { host: "tisan.tervory.com", rootPath: "/tisan", product: "Tisan" },
