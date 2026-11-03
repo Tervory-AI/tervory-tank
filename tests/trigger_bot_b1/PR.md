@@ -52,7 +52,7 @@ The founder's explicit one-branch brief takes precedence over AGENTS.md's usual 
 
 Founder-supplied setting names only: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `TRIGGER_BOT_HANDOVER_ADDRESSES` (tenant UUID to recipient email map). Existing region/corridor and CRM tenant-binding settings remain prerequisites. Values were never inspected or supplied. Actual SMTP delivery, runtime bindings, local encoder/Qdrant availability and the store's approved source URLs are not certified by fake-based tests.
 
-No conversation/message deletion is scheduled. **Retention is a founder decision.** Rate-limit counters have Rig's existing short-lived windows; this does not delete conversation history. Ambiguous SMTP/CRM/quote execution is not automatically replayed.
+Founder decision, 3 November 2026: conversation retention is **12 calendar months after the last message**. Daily maintenance deletes expired conversations, messages and unconfirmed drafts in tenant-scoped batches. Confirmed lead/quote drafts and their CRM/Rig records remain. Rate-limit counters retain Rig's existing short-lived windows. Ambiguous SMTP/CRM/quote execution is not automatically replayed. Privacy-notice wording remains the founder's unfilled slot.
 
 ## Verification and gaps
 
@@ -71,3 +71,32 @@ Initial failed runs and their corrections are recorded in verification.txt; none
 **Missing test dependency:** the isolated Trigger room plus its pinned internal LanguageTool container for `test_real_room_with_internal_languagetool` (`TRIGGER_INTERNAL_CHECKER_TEST=1`). That test is skipped, not passed.
 
 **Missing founder acceptance and screenshots:** Custom Nation in the founder's own `/chats` browser: approve its website and Rig sources; ask 10 real customer questions with own-source links or hand-over; compare a price with live Rig; approve two corrected FAQs and repeat at $0; verify another tenant never appears; verify hand-over email and confirmed write corridor. No founder session or screenshots were supplied, and no completion claim is made. No new page or widget is necessary for this existing Command test path.
+
+
+## PR #600 review addition 14: twelve-month conversation retention
+
+Founder decision dated 3 November 2026; implemented on this same branch from
+`c71d048d77f203923cbcb309a5e11689bf957458`, with `origin/main` merged before each
+push. Own checkout: `/workspace/codex-trigger-b1-retention`. No deployment,
+production SQL, real deletion or model call was used to verify this change.
+
+- `tank/trigger_bot.py:104`: at most 100 expired conversations per transaction,
+  measured from the latest actual message (creation time for an empty conversation).
+  Delete messages and unconfirmed drafts; detach and preserve confirmed lead/quote
+  drafts without changing CRM/Rig. Lock/recheck protects a concurrent message.
+- `tank/trigger_bot.py:247`, `:264`: run from the existing maintenance loop with
+  tenant scope. An incomplete queue continues next tick; a completed tenant waits
+  24 hours. A transaction advisory lock serializes multiple instances.
+- `tank/trigger_routes.py:20`: reuse the existing $0 code receipt on the deletion
+  transaction's connection. `tank.agent_receipts` stores counts only, tied to
+  that tenant's ledger receipt; deletion and receipt commit or roll back together.
+- `tank/schema.sql:2444`, `:2488`: record the approved rule and add idempotent
+  indexes on existing message, draft and receipt stores. No new table/setting.
+- `tests/trigger_bot_b1/test_retention.py:1`: one-day-under/over calendar-month
+  boundary, actual last-message age, tenant isolation, confirmed lead/quote
+  preservation, daily restart/batches, concurrency and receipt rollback.
+
+Exact commands, heads and captured results are in `retention-verification.txt`.
+Privacy-notice wording is unchanged and remains for the founder's own words.
+No new UI, copy or screenshot is fabricated. Founder-browser acceptance and
+screenshots remain missing as stated above.
