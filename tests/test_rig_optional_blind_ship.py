@@ -183,11 +183,16 @@ async def test_switch_off_keeps_the_existing_ship_to_store_order(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_blind_order_failure_needs_person(monkeypatch):
+async def test_blind_transient_order_failure_releases_lease(monkeypatch):
     store, service, orders, _, body = await blind_shop(monkeypatch, fail=True)
     accepted = await service.locate_accept(TENANT, body)
     result = await service.confirm_store_payment(TENANT, accepted["request_id"])
-    assert result["state"] == "needs_person" and store.locate_orders == {}
+    assert result["state"] == "store_confirmed" and store.locate_orders == {}
+    state = (await store.quote_for(TENANT, accepted["request_id"]))["payload"]["locate_state"]
+    assert state["attempted_at"] is None
+    service.fulfilment = RigOrders(store)
+    assert (await service.confirm_store_payment(TENANT, accepted["request_id"]))["state"] == "ordered"
+    assert len(store.locate_orders) == 1
 
 
 # 3. Shopper HTTP responses: no supplier identity or supplier cost (an invented POF-style row, 92445).
