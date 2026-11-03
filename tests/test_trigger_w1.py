@@ -158,8 +158,13 @@ def test_csv_own_rows_and_bounds():
 
 
 @pytest.mark.asyncio
-async def test_batch_owned_attachment_confirm_individual_writes_receipts_and_facts(env):
+@pytest.mark.parametrize('cost', [0, None])
+async def test_batch_owned_attachment_confirm_individual_writes_receipts_and_facts(env, cost):
     calls = await fake_drafts(env)
+    fake_route = env.model.side_effect
+    async def route(*args):
+        return {**await fake_route(*args), 'cost_usd': cost}
+    env.model.side_effect = route
     actor = command.Actor(TENANT, 'admin', False, tenant_admin=True)
     thread = (await command.create_thread(command.NewThread(), actor))['thread_id']
     response = await env.client.post(f'/v1/command/threads/{thread}/turn',
@@ -173,6 +178,7 @@ async def test_batch_owned_attachment_confirm_individual_writes_receipts_and_fac
     assert not calls
     result = await confirm(env, card, user='admin', role='org:admin')
     assert result['status'] == 'confirmed', result
+    assert result['result']['cost_usd'] == cost
     items = result['result']['items']
     assert len(items) == len({i['write_id'] for i in items}) == len({i['ledger_id'] for i in items}) == 2
     assert 'steel' in json.dumps(calls[0]) and 'cotton' not in json.dumps(calls[0])
