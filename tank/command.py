@@ -45,7 +45,7 @@ TOOLS = {
     "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment"],
     "tisan": ["tisan.scaffold"],
     "radix": ["radix.scan", "radix.repo.scan", "radix.repo.findings"],
-    "zenas": ["zenas.ask", "zenas.matters", "zenas.draft", "zenas.review", "zenas.watch.add", "zenas.watch.list", "zenas.watch.enable", "zenas.watch.disable"],
+    "zenas": ["zenas.ask", "zenas.matters", "zenas.draft", "zenas.review", "zenas.playbook.add", "zenas.playbooks", "zenas.watch.add", "zenas.watch.list", "zenas.watch.enable", "zenas.watch.disable"],
 }
 TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
 
@@ -1136,6 +1136,24 @@ class ZenasDraftArgs(Body):
         return value
 
 
+class ZenasPosition(Body):
+    kind: str = Field(min_length=1, max_length=100)
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class ZenasPlaybookAddArgs(Body):
+    name: str = Field(min_length=1, max_length=200)
+    template: str = Field(min_length=1, max_length=100)
+    positions: list[ZenasPosition] = Field(min_length=1, max_length=50)
+
+    @field_validator("template")
+    @classmethod
+    def existing_template(cls, value: str) -> str:
+        from zenas_commands import drafting_templates
+        if value not in drafting_templates():
+            raise ValueError("unknown drafting template")
+        return value
+
 class TigerMatchArgs(Body):
     match_id: uuid.UUID
 
@@ -1317,6 +1335,8 @@ ADAPTERS = {
     "zenas.ask": Adapter("POST", "/v1/zenas/answers", ZenasAskArgs, "Ask a civil law question", True, "paid_run"),
     "zenas.matters": Adapter("POST", "/v1/zenas/matters", MatterArgs, "Create a matter"),
     "zenas.draft": Adapter("POST", "/v1/zenas/drafts", ZenasDraftArgs, "Draft a document", True, "paid_run"),
+    "zenas.playbook.add": Adapter("POST", "/v1/zenas/playbooks", ZenasPlaybookAddArgs, "Add a review guide"),
+    "zenas.playbooks": Adapter("GET", "/v1/zenas/playbooks", EmptyArgs, "List review guides"),
     "zenas.watch.add": Adapter("POST", "/v1/zenas/regulations/watches", ZenasWatchAddArgs, "zenas.watch.add"),
     "zenas.watch.list": Adapter("GET", "/v1/zenas/regulations/watches", EmptyArgs, "zenas.watch.list"),
     "zenas.watch.enable": Adapter("POST", "/v1/zenas/regulations/watches/{watch_id}", ZenasWatchIdArgs, "zenas.watch.enable"),
@@ -1531,7 +1551,7 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     import httpx
     from main import app, TANK_API_KEY
     actor = await authorized_actor(actor)
-    if action.tool == "zenas.draft":
+    if action.tool in {"zenas.draft", "zenas.playbook.add"}:
         from trigger_commands import confirmation
         confirmation(actor, action.tool, action.arguments)
     method, path, params, body = adapter_request(action, actor)
@@ -1553,6 +1573,14 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     if action.tool == "zenas.draft" and 200 <= response.status_code < 300:
         from trigger_routes import code_receipt
         result = {**result, "status": result.get("state"), "summary": result.get("legal_notice")}
+        result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="zenas"))
+    elif action.tool == "zenas.playbook.add" and 200 <= response.status_code < 300:
+        from trigger_routes import code_receipt
+        result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="zenas"))
+    elif action.tool == "zenas.playbooks" and 200 <= response.status_code < 300:
+        from trigger_routes import code_receipt
+        result = {"items": [{"id": row["id"], "name": row["name"], "count": row["positions"]}
+                            for row in result.get("items", [])]}
         result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="zenas"))
     if action.tool == "zenas.watch.list" and 200 <= response.status_code < 300:
         from trigger_routes import code_receipt
@@ -1714,7 +1742,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if action.tool.startswith("mcp."):
                 from mcp_connections import dispatch
                 status, result = await dispatch(action, actor)
-            elif action.tool.startswith("trigger.") or action.tool in {"zenas.draft", "rig.quote.confirm_payment", "base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"zenas.draft", "zenas.playbook.add", "rig.quote.confirm_payment", "base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
