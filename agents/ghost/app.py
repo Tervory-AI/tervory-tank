@@ -278,7 +278,7 @@ async def refresh_market_lab_intel(app: FastAPI) -> dict:
     """Fetch through Tank only; use the existing validator, catalog and receipts."""
     from uuid import NAMESPACE_URL, uuid5
     from .market_lab_intel import load_market_lab_advisories
-    raw = await app.state.tank.call("GET", "/v1/market-lab/intel")
+    raw = await Tank(app.state.http).call("GET", "/v1/market-lab/intel")
     bundle = accept_ioc_bundle(raw)
     load_market_lab_advisories([])
     register_advisories_from_ioc_bundle(bundle)
