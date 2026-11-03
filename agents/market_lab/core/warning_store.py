@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 from typing import Any
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -14,6 +15,22 @@ from core.ledger import PostgresLedger
 
 from core.evidence import current_revisions, usable_points
 from core.pure import series_fetch
+
+log = logging.getLogger(__name__)
+
+
+def event_day(event: object) -> date | None:
+    value = event.get("date") if isinstance(event, dict) else None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value).date()
+        except ValueError:
+            pass
+    return None
 
 
 def decoded(value: Any) -> Any:
@@ -39,10 +56,29 @@ async def series(ledger: PostgresLedger, tenant: str, now: datetime) -> dict[str
         now,
     )
     collected = {}
+    weather = {}
+    weather_title = None
+    skipped_events = 0
     for record in records:
         doc = decoded(record["content"])
         if doc.get("kind") == "warning_evidence":
             continue
+        if doc.get("source_id") == "noaa_alerts":
+            weather_title = doc["name"]
+            for index, event in enumerate(doc.get("events") or []):
+                observed_day = event_day(event)
+                if observed_day is None:
+                    skipped_events += 1
+                    continue
+                stamp = observed_day.isoformat()
+                if event.get("kind") != "severe_weather" or stamp > now.date().isoformat():
+                    continue
+                # One alert can have several state rows and appear in many snapshots.
+                identity = event.get("url") or (event.get("title"), event.get("body"))
+                weather.setdefault(stamp, {}).setdefault(identity, {
+                    "document_id": doc["id"], "row": index,
+                    "href": f"/market-lab/sources/{doc['id']}?row={index}&kind=event#event-{index}",
+                })
         current = current_revisions(doc["points"])
         for index, point in await usable_points(ledger, tenant, doc):
             if (
@@ -72,6 +108,21 @@ async def series(ledger: PostgresLedger, tenant: str, now: datetime) -> dict[str
                 "row": index,
                 "href": f"/market-lab/sources/{doc['id']}?row={index}#point-{index}",
             }
+    if skipped_events:
+        log.warning("Skipped %d stored weather events without a usable date", skipped_events)
+    if weather:
+        # Missing collection days remain missing; no zero counts are invented.
+        title = weather_title
+        identity = "noaa_alerts:severe_weather:US"
+        collected[identity] = {
+            "id": identity, "source": "noaa_alerts", "ref": "severe_weather:US",
+            "name": title, "unit": "count", "points": {
+                stamp: {"date": stamp, "value": str(len(alerts)), "unit": "count",
+                        "title": title, **next(iter(alerts.values())),
+                        "evidence": list(alerts.values())}
+                for stamp, alerts in weather.items()
+            },
+        }
     return {
         key: {
             **value,
