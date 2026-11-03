@@ -35,8 +35,6 @@ RUN apt-get update \
     && pip install --no-cache-dir -r requirements.txt \
     && python -m venv /opt/semgrep \
     && /opt/semgrep/bin/pip install --no-cache-dir "semgrep==${SEMGREP_VERSION}" \
-    && python -m venv /opt/checkov \
-    && /opt/checkov/bin/pip install --no-cache-dir "checkov==${CHECKOV_VERSION}" \
     && python -m venv /opt/audit \
     && /opt/audit/bin/pip install --no-cache-dir "pip-audit==${PIP_AUDIT_VERSION}" \
     && arch="${TARGETARCH:-amd64}" \
@@ -53,6 +51,8 @@ RUN apt-get update \
     && useradd --create-home --uid 1000 agent \
     && mkdir -p /data /opt/osv \
     && chown agent:agent /data /opt/osv
+RUN python -m venv /opt/checkov \
+    && /opt/checkov/bin/pip install --no-cache-dir "checkov==${CHECKOV_VERSION}"
 COPY radix/install-passive-tools.sh /tmp/install-passive-tools.sh
 RUN sh /tmp/install-passive-tools.sh \
     && ln -s /opt/bin/nuclei /usr/local/bin/nuclei \
