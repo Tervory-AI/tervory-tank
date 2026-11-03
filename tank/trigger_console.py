@@ -96,6 +96,15 @@ async def marketing(area: str, actor: Annotated[command.Actor, Depends(command.i
                 WHERE tenant_id=$1 AND post_id=$2 ORDER BY created_at,id''', tenant, record_id)]
         result['voice'] = await bot().voice(tenant)
     elif area == 'reviews':
+        await authority(actor, 'trigger.gbp.reviews')
+        connected = await pool.fetchval('''SELECT 1 FROM tank.trigger_gbp_connections
+            WHERE tenant_id=$1 AND status='connected' AND location IS NOT NULL''', tenant)
+        if connected:
+            from trigger_google import GoogleFailure
+            try:
+                await store.reviews(tenant)
+            except GoogleFailure as error:
+                raise HTTPException(502, error.message) from None
         reviews = await pool.fetch('''SELECT location,review_id,rating,text,updated_at FROM tank.trigger_gbp_reviews
             WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 100''', tenant)
         replies = await pool.fetch('''SELECT id,review_id,location,text,state,revision,report FROM tank.trigger_gbp_replies
