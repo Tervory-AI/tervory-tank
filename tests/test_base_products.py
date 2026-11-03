@@ -80,3 +80,40 @@ async def test_pipeline_forwards_existing_pages_and_retains_only_returned_produc
         assert outcome.profile["products"] == {"value": [product], "source": "site:code", "confidence": 90}
     else:
         assert "products" not in outcome.profile
+
+
+@pytest.mark.asyncio
+async def test_search_card_reuses_summary_for_products_and_preserves_older_records(monkeypatch):
+    from types import SimpleNamespace
+    from uuid import uuid4
+    from fastapi import FastAPI
+    import command
+
+    product = {"name": "placeholder", "source_url": "https://placeholder.example/product", "checked_at": "2026-11-03"}
+    older = {"profile": {"name": {"value": "placeholder older"}}}
+    app = FastAPI()
+    @app.get("/v1/base/records")
+    async def records():
+        return [{"profile": {"products": {"value": [product]}}}, older]
+    monkeypatch.setitem(sys.modules, "main", SimpleNamespace(app=app, TANK_API_KEY="placeholder", box_region=lambda: "us-east"))
+    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "placeholder-founder")
+    actor = command.Actor(uuid4(), "placeholder-founder", True)
+    status, result = await command.dispatch_action(command.PlannedAction(tool="base.search", arguments={}), actor)
+    assert status == 200 and json.loads(result[0]["summary"]) == [product]
+    assert result[1] == older
+
+
+@pytest.mark.asyncio
+async def test_microdata_offer_and_each_pages_own_provenance():
+    pages = [
+        {"source_url": "https://placeholder.example/first", "checked_at": "2026-11-01",
+         "html": '<div itemscope itemtype="https://schema.org/Product"><span itemprop="name">placeholder first</span><div itemprop="offers" itemscope itemtype="https://schema.org/Offer"><meta itemprop="price" content="9.00"><meta itemprop="priceCurrency" content="EUR"></div></div>'},
+        {"source_url": "https://placeholder.example/second", "checked_at": "2026-11-02",
+         "html": '<script type="application/ld+json">{"@type":"ListItem","item":"https://placeholder.example/product"}</script>'},
+    ]
+    result = (await load(NEW).run({"pages": pages}, None))["products"]
+    assert len(result) == 2
+    assert result[0]["price"] == "9.00" and result[0]["currency"] == "EUR"
+    assert result[1]["name"] == "" and result[1]["url"] == "https://placeholder.example/product"
+    for row, page in zip(result, pages):
+        assert row["source_url"] == page["source_url"] and row["checked_at"] == page["checked_at"]
