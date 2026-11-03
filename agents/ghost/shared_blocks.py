@@ -4,6 +4,7 @@ import json
 import time
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
 from .client_settings import load_settings
 from .never_block import classify_never_block
@@ -56,9 +57,13 @@ class StandingBlocks:
         pending = self.store.get_state(tenant, 'block_withdrawals', {})
         now = self.clock()
         undone = {str(r.get('prior_receipt_id')) for r in receipts if r.get('outcome') in {'undone', 'already_undone'}}
+        by_id = {str(r.get('id')): r for r in receipts}
+        def was_undone(rid):
+            identities = {rid, str((by_id.get(rid) or {}).get('prior_receipt_id') or '')} - {''}
+            return any(identity in undone or read_undo_used(queue, identity) for identity in identities)
         for identity, row in existing.items():
             rid = str(block_fact(row).get('receipt_id') or '')
-            if rid in undone or read_undo_used(queue, rid):
+            if was_undone(rid):
                 pending[identity] = {'published_row': published_id(tenant, identity)}
         self.store.set_state(tenant, 'block_withdrawals', pending)
         # Delete the client source first. A concurrent publish either commits before
@@ -81,11 +86,11 @@ class StandingBlocks:
             kind = receipt.get('kind') or applied.get('kind')
             rid = str(receipt.get('id') or '')
             address = receipt.get('address') or applied.get('address')
-            when = applied.get('applied_at') or receipt.get('timestamp')
+            when = applied.get('applied_at') or applied.get('up_at') or receipt.get('timestamp')
             started = epoch(when)
             if (not receipt.get('applied') or kind != 'block_ip' or not address
                     or started is None or now - started < HOLD_SECONDS
-                    or rid in undone or read_undo_used(queue, rid)
+                    or was_undone(rid)
                     or classify_never_block(address, client_own_cidrs=settings.own_cidrs)):
                 continue
             try:
@@ -98,7 +103,14 @@ class StandingBlocks:
             for source in receipt.get('sources') or []:
                 if isinstance(source, dict):
                     urls.add(str(source.get('url') or source.get('source_url') or ''))
-            public = sorted(url for url in urls if url and _advisory_url_is_public(url))
+            # Only named public sources, never query/credential fragments.
+            def public_url(url):
+                try:
+                    parsed = urlsplit(url)
+                    return _advisory_url_is_public(url) and not (parsed.query or parsed.fragment or parsed.username or parsed.password)
+                except ValueError:
+                    return False
+            public = sorted(url for url in urls if url and public_url(url))
             fact = {'kind': 'blocked_address', 'address': address, 'receipt_id': rid,
                     'applied_at': when, 'public_sources': public}
             row = await self.memory.remember(tenant, json.dumps(fact, sort_keys=True), 'blocked_address',
