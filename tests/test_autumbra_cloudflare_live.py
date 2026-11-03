@@ -192,3 +192,50 @@ def test_signed_health_failure_automatically_undoes(monkeypatch, tmp_path, failu
     assert receipt["outcome"] == "auto_undone_health_failed"
     assert receipt["control"] == "cloudflare"
     assert control.list_blocked() == []
+
+
+@pytest.mark.parametrize("fault", [None, "extra", "wrong_project", "outward", "missing_proxy", "cross_client"])
+def test_seal_checks_enforce_observer_and_both_proxies(tmp_path, fault):
+    import os
+    import subprocess
+    import sys
+    from test_room_seal import FAKE_DOCKER
+    data = json.loads((ROOT / "tests/fixtures/seal_check/sealed.json").read_text())
+    attached = {
+        "enforce": ["custom-enforce"],
+        "egress-proxy": ["custom-enforce", "a3_egress"],
+        "health-observer": ["a3_health_internal"],
+        "health-egress-proxy": ["a3_health_internal", "a3_health_egress"],
+    }
+    logical = {"custom-enforce": "enforce_internal", "a3_egress": "egress",
+               "a3_health_internal": "health_internal", "a3_health_egress": "health_egress"}
+    data["network_labels"] = {n: "a3|"+v for n, v in logical.items()}
+    data["networks"].update({n: v.endswith("internal") for n, v in logical.items()})
+    if fault == "extra":
+        attached["health-observer"].append("tanknet")
+        data["networks"]["tanknet"] = True
+    if fault == "cross_client":
+        attached["enforce"] = ["other-enforce"]
+        data["networks"]["other-enforce"] = True
+        data["network_labels"]["other-enforce"] = "other|enforce_internal"
+    if fault == "wrong_project":
+        data["network_labels"]["a3_health_internal"] = "other|health_internal"
+    if fault == "outward":
+        data["networks"]["a3_health_internal"] = False
+    if fault == "missing_proxy":
+        del attached["health-egress-proxy"]
+    for service, networks in attached.items():
+        data["containers"]["a3-"+service] = dict(uuid="a3", resource="autumbra-enforce-a3",
+            project="a3", service=service, name="a3-"+service, networks=networks)
+    fixture = tmp_path / "networks.json"
+    fixture.write_text(json.dumps(data))
+    script = FAKE_DOCKER.replace(
+        'print("true" if data["networks"][args[-1]] else "false")',
+        'print(data.get("network_labels", {}).get(args[-1], "unknown|unknown") if "Labels" in args[-2] else ("true" if data["networks"][args[-1]] else "false"))')
+    fake = tmp_path / "docker"
+    fake.write_text(f"#!{sys.executable}\n"+script)
+    fake.chmod(0o755)
+    result = subprocess.run(["bash", str(ROOT / "ops/seal-check.sh")], text=True,
+        capture_output=True, timeout=60, env=dict(os.environ, DOCKER=str(fake), SEAL_FIXTURE=str(fixture)))
+    assert result.returncode == (0 if fault is None else 1), result.stdout+result.stderr
+    assert "autumbra" in result.stdout
