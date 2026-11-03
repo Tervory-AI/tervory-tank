@@ -24,6 +24,23 @@ output:
     services: {type: array}
     description: {type: string}
     people: {type: array}
-    products: {type: array, maxItems: 50, items: {type: object}}
+    products:
+      type: array
+      maxItems: 50
+      items:
+        type: object
+        properties:
+          name: {type: string, maxLength: 200}
+          sku: {type: string, maxLength: 200}
+          gtin: {type: string, maxLength: 200}
+          mpn: {type: string, maxLength: 200}
+          brand: {type: string, maxLength: 200}
+          price: {type: string, maxLength: 200}
+          currency: {type: string, maxLength: 200}
+          availability: {type: string, maxLength: 200}
+          url: {type: string, maxLength: 200}
+          source_url: {type: string, maxLength: 200}
+          checked_at: {type: string, maxLength: 200}
+          method: {type: string, maxLength: 200}
     fields: {type: object, description: method and confidence for each field}
 eval_threshold: 0.8
