@@ -67,6 +67,12 @@ async def record(id: uuid.UUID, actor: Reviewer = Depends(require_reviewer)):
     return await hermes("GET", "/founder/records/" + str(id), actor.user)
 
 
+@router.post("/withdraw/{id}", dependencies=[Depends(require_admin)])
+async def withdraw_record(id: uuid.UUID, request: Request, x_tervory_admin: str = Header(default="")):
+    return await hermes("POST", "/founder/records/" + str(id) + "/withdraw", x_tervory_admin,
+                        body=await request.json())
+
+
 @router.api_route("/{operation}", methods=["GET", "POST"], dependencies=[Depends(require_admin)])
 async def control(
     operation: str, request: Request, x_tervory_admin: str = Header(default="")
