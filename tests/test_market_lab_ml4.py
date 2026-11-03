@@ -195,6 +195,7 @@ async def test_pattern_claim_whitelist_stable_retry_and_sql_listing_only():
     assert set(claim) == patterns.FIELDS
     assert all(value not in json.dumps(claim) for value in (TENANT, 'placeholder_private_product', 'placeholder_watch', 'https://'))
     requests = []
+    rows = {}
     doc = str(uuid4())
     def handle(request):
         requests.append(request)
@@ -202,23 +203,27 @@ async def test_pattern_claim_whitelist_stable_retry_and_sql_listing_only():
             body = json.loads(request.content)
             assert request.url.path == '/memories' and body['kind'] == 'warning_pattern'
             assert body['evidence'] == [doc] and body['source'] == doc
+            rows[body['id']] = {'id': body['id'], 'tenant_id': TENANT, 'tier': 'client', 'claim': body['text']}
             return httpx.Response(201, json={'id': body['id']})
-        assert request.url.path == '/records' and request.url.params['tier'] == 'platform'
-        return httpx.Response(200, json={'memories': []})
+        assert request.url.path == '/records'
+        assert request.url.params['tenant_id'] == TENANT
+        return httpx.Response(200, json={'memories': list(rows.values()) if request.url.params['tier'] == 'client' else []})
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
         memory = MemoryClient(base_url='http://placeholder-hermes', api_key='placeholder-room', http=http)
         assert await patterns.remember(memory, TENANT, config, stats, doc)
         assert await patterns.remember(memory, TENANT, config, stats, doc)
         assert await memory.records(TENANT, tier='platform') == []
-    assert json.loads(requests[0].content)['id'] == json.loads(requests[1].content)['id']
+    assert len([request for request in requests if request.method == 'POST']) == 1
+    assert not any(request.method == 'DELETE' for request in requests)
     assert all(request.url.path != '/recall' for request in requests)
 
 
 @pytest.mark.asyncio
-async def test_warning_run_remembers_changed_summaries_only_and_retries_same_record(monkeypatch):
+@pytest.mark.parametrize('failure', ['save', 'forget', 'response'])
+async def test_warning_run_remembers_changed_summaries_only_and_retries_same_record(monkeypatch, failure):
     from core import warnings as workflow
     from contextlib import asynccontextmanager
-    states, documents, writes = {}, set(), []
+    states, documents, writes, rows, deletes = {}, set(), [], {}, []
     class Connection:
         active = False
         @asynccontextmanager
@@ -236,39 +241,127 @@ async def test_warning_run_remembers_changed_summaries_only_and_retries_same_rec
         async def fetchrow(self, query, *args): return states.get(args[1])
     class Memory:
         pending = False
+        async def records(self, tenant, *, tier):
+            assert tenant == TENANT and tier == 'client'
+            return list(rows.values())
+        async def forget(self, ident, tenant):
+            assert tenant == TENANT and ident in rows
+            deletes.append(ident)
+            if self.pending and failure == 'forget':
+                raise RuntimeError('placeholder failure')
+            del rows[ident]
         async def remember(self, tenant, text, kind, source, **kwargs):
             assert not ledger.conn.active  # Evidence committed before the Hermes call.
             writes.append((tenant, json.loads(text), kind, source, kwargs))
-            return {'seen': None} if self.pending else {'id': kwargs['record_id']}
-    async def stored(*args): return {}
+            if self.pending:
+                if failure == 'response': return {'seen': None}
+                raise RuntimeError('placeholder failure')
+            ident = kwargs['record_id']
+            assert ident not in rows
+            rows[ident] = {'id': ident, 'tenant_id': tenant, 'tier': 'client', 'claim': text}
+            return {'id': ident}
+    async def stored(*args):
+        return {name: {'id': name, 'source': 'tiger_stock', 'name': name, 'points': []}
+                for name in ('watch-a', 'watch-b')}
+    async def imported(*args): return None
     async def evidence(*args):
         ident = str(uuid4()); documents.add(ident); return ident
     async def no_resolve(*args): return None
     async def no_listing(*args): return {}
     monkeypatch.setattr(workflow.store, 'series', stored)
+    monkeypatch.setattr(workflow.store, 'import_series', imported)
     monkeypatch.setattr(workflow.store, 'evidence', evidence)
     monkeypatch.setattr(workflow, 'resolve', no_resolve)
     monkeypatch.setattr(workflow, 'listing', no_listing)
     memory = Memory()
-    ledger = SimpleNamespace(conn=Connection(), memory=memory)
-    await workflow.run(ledger, TENANT, 'ffl', now=NOW)
-    assert len(writes) == len(warning_plan()['pairs'])
+    ledger = SimpleNamespace(conn=Connection(), memory=None)
+    module = SimpleNamespace(warning_plan=warning_plan,
+                             warning_series=lambda watch, observations: [{'source': 'tiger_stock', 'ref': watch}])
+    monkeypatch.setattr(workflow, 'load_engine', lambda engine: module)
+    # Active keys are source:ref, just as stored imports are addressed.
+    async def stored_targets(*args):
+        return {f'tiger_stock:{name}': {**row, 'id': f'tiger_stock:{name}'}
+                for name, row in (await stored()).items()}
+    monkeypatch.setattr(workflow.store, 'series', stored_targets)
+    groups = [{'watch': name, 'observations': []} for name in ('watch-a', 'watch-b')]
+    async def run(): return await workflow.run(ledger, TENANT, 'ffl', now=NOW, imported=groups)
+    # Existing pairs written before ML4 have neither a flag nor a memory row.
+    await run()
+    for state in states.values(): del state['summary']['pattern_pending']
+    ledger.memory = memory
+    await run()
+    pairs = len(warning_plan()['pairs'])
+    assert len(states) == pairs * 2
+    assert len(writes) == len(rows) == pairs < 50
+    original_ids = set(rows)
+    assert all(not state['summary']['pattern_pending'] for state in states.values())
     assert all(row[0] == TENANT and row[2] == 'warning_pattern' and row[3] in documents for row in writes)
     assert all(set(row[1]) == patterns.FIELDS for row in writes)
-    await workflow.run(ledger, TENANT, 'ffl', now=NOW)
-    assert len(writes) == 7  # Unchanged summaries do not create another record.
+    await run()
+    assert len(writes) == pairs and deletes == []
     original_analyze = workflow.analyze
     def changed(*args): return {**original_analyze(*args), 'episode_count': 1, 'hit_rate': 0}
     monkeypatch.setattr(workflow, 'analyze', changed)
     memory.pending = True
-    await workflow.run(ledger, TENANT, 'ffl', now=NOW)
-    failed_ids = [row[4]['record_id'] for row in writes[-7:]]
+    await run()
+    assert all(state['summary']['pattern_pending'] for state in states.values())
+    assert set(rows) == (original_ids if failure == 'forget' else set())
     memory.pending = False
-    await workflow.run(ledger, TENANT, 'ffl', now=NOW)
-    assert [row[4]['record_id'] for row in writes[-7:]] == failed_ids
-    assert len(writes) == 21
-    await workflow.run(ledger, TENANT, 'ffl', now=NOW)
-    assert len(writes) == 21
+    await run()
+    assert set(rows) == original_ids
+    assert all(json.loads(row['claim'])['episodes'] == 1 for row in rows.values())
+    assert all(not state['summary']['pattern_pending'] for state in states.values())
+    before = len(writes), len(deletes)
+    await run()
+    assert (len(writes), len(deletes)) == before
+
+
+@pytest.mark.asyncio
+async def test_malformed_weather_dates_are_skipped_and_counted(monkeypatch, caplog):
+    spec = next(row for row in sources('ffl') if row.id == 'noaa_alerts')
+    data = collect(spec, fixtures=str(FIXTURES), backfill=True, client=SimpleNamespace(documents=[]))
+    event = data['events'][0]
+    no_date = {key: value for key, value in event.items() if key != 'date'}
+    bad = [no_date, *({**event, 'date': value} for value in (None, '', 'not a date', '2026-02-30', '2026-01-01junk', 123)), None]
+    doc = {**data, 'id': str(uuid4()), 'points': [], 'events': [*bad, event]}
+    class Connection:
+        async def fetch(self, *args): return [{'content': doc}]
+    result = await series(SimpleNamespace(conn=Connection()), TENANT, NOW)
+    point = result['noaa_alerts:severe_weather:US']['points'][0]
+    assert point['value'] == '1' and point['row'] == len(bad)
+    assert f'Skipped {len(bad)} stored weather events without a usable date' in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_job_and_http_ledgers_reuse_the_rooms_memory(monkeypatch):
+    import importlib.util
+    import asyncpg
+    spec = importlib.util.spec_from_file_location('ml4_memory_room', ROOT / 'agents/market_lab/app.py')
+    room = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(room)
+    memory, shared = object(), object()
+    room.app.state.memory = shared
+    ctx = SimpleNamespace(memory=memory, tenant_id=TENANT, input={'engine': 'ffl'})
+    class Connection:
+        async def execute(self, *args): pass
+        async def close(self): pass
+    async def connect(*args): return Connection()
+    async def schema(*args): pass
+    async def refreshed(ledger, tenant, engine):
+        assert ledger.memory is memory
+        return {}
+    async def resolved(**kwargs): return {}
+    from core import warning_http
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://localhost/placeholder_test')
+    monkeypatch.setattr(asyncpg, 'connect', connect)
+    monkeypatch.setattr(room.PostgresLedger, 'apply_schema', schema)
+    monkeypatch.setattr(warning_http, 'refresh', refreshed)
+    monkeypatch.setattr(room, 'perform_resolve', resolved)
+    def no_client(*args, **kwargs): raise AssertionError('must reuse room memory')
+    monkeypatch.setattr(MemoryClient, '__init__', no_client)
+    await room.resolve(ctx)
+    async with room._ledger() as ledger:
+        assert ledger.memory is shared
 
 
 @pytest.mark.asyncio
