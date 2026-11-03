@@ -306,7 +306,7 @@ class CoolifyEnforceBackend:
         for row in rows:
             if not isinstance(row, dict) or not isinstance(row.get("name"), str):
                 raise Refused("Coolify application list unavailable")
-            if re.fullmatch(re.escape(PROJECT_PREFIX) + r"-[0-9a-fA-F-]{36}", row["name"]):
+            if re.fullmatch(re.escape(PROJECT_PREFIX) + r"-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", row["name"]):
                 result.append({"name": row["name"], "uuid": identifier(row.get("uuid", "")),
                                "status": str(row.get("status") or "unknown"),
                                **{key: row.get(key) for key in ("description", "git_repository", "build_pack", "docker_compose_location")}})
@@ -381,10 +381,12 @@ class CoolifyEnforceBackend:
         if not matches:
             return receipt_for(plan, outcome="absent")
         target = matches[0]
+        repository = target.get("git_repository")
+        own_repository = (isinstance(repository, str) and repository.lower().removeprefix("https://github.com/").removesuffix(".git") == "tervory-ai/tervory-tank")
         if (target.get("description") != "autumbra-enforce:" + plan["tenant_id"]
                 or target.get("build_pack") != "dockercompose"
                 or target.get("docker_compose_location") != "/agents/ghost/docker-compose.enforce.yml"
-                or target.get("git_repository") != "https://github.com/Tervory-AI/tervory-tank.git"):
+                or not own_repository):
             raise Refused("Enforce resource was not created by Autumbra")
         receipt = receipt_for(plan)
         receipt["uuid"] = matches[0]["uuid"]
