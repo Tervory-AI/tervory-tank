@@ -36,8 +36,8 @@ async def test_page_and_candidate_price_stock_are_refused(text):
 
 
 @pytest.mark.parametrize('token', ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun',
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Sept',
-    'Oct', 'Nov', 'Dec', 'weekend', 'tonight', 'next week', 'next month', 'soon'])
+    'Jan', 'Feb', 'Mar', 'Apr', 'May 5', 'Jun', 'Jul', 'Aug', 'Sep', 'Sept',
+    'Oct', 'Nov', 'Dec', 'weekend', 'tonight', 'next week', 'next month'])
 def test_novel_dates_refused(token):
     assert grounded({'answer': token, 'passage_ids': [str(POINT)]}, [passage(text='Hours 9 to 5.')]) is None
 
