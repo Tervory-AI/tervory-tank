@@ -99,3 +99,42 @@ def build_router():
         return await with_receipt(actor, "radix.repo.findings", lambda: findings(actor, scan_id))
 
     return router
+
+
+async def code_plan(actor, messages, task_id):
+    """Explicit repo commands bind upload metadata in code, without reading source."""
+    import json
+    import re
+    from command import authorized_actor, db, require_tool, unpack
+    from main import RouteRequest, _record_local
+
+    last = messages[-1] if messages else {}
+    if last.get("role") != "user" or not re.match(r"\s*radix\.repo\.(scan|findings)\b", last.get("content", ""), re.I):
+        return None
+    actor = await authorized_actor(actor)
+    source = last
+    if task_id:
+        async with db().acquire() as conn:
+            raw = await conn.fetchval(
+                "SELECT state FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND state->>'active_turn'=$3",
+                actor.tenant_id, actor.user_id, str(task_id))
+        source = next((m for m in reversed(unpack(raw or {}).get("messages", [])) if m.get("role") == "user"), last)
+    match = re.fullmatch(r"\s*radix\.repo\.(scan|findings)\s*:?\s*([0-9a-f-]*)\s*", source.get("content", ""), re.I)
+    if not match:
+        raise HTTPException(422, "The action arguments are invalid")
+    tool = "radix.repo." + match[1].lower()
+    require_tool(actor, tool)
+    identifier = match[2]
+    if tool == "radix.repo.scan" and not identifier:
+        attachments = source.get("attachments", [])
+        if len(attachments) != 1 or not attachments[0].get("attachment_id"):
+            raise HTTPException(404, "Attachment not found")
+        identifier = attachments[0]["attachment_id"]
+    try:
+        identifier = str(UUID(identifier))
+    except ValueError:
+        raise HTTPException(422, "The action arguments are invalid") from None
+    proposed = {"text": "", "actions": [{"tool": tool, "arguments": {
+        "attachment_id" if tool == "radix.repo.scan" else "scan_id": identifier}}]}
+    return await _record_local(RouteRequest(tenant_id=actor.tenant_id, agent="radix", task_type="command.turn", messages=[]),
+                               {}, model="code", rung=3, content=json.dumps(proposed), task_id=task_id)
