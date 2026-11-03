@@ -45,29 +45,31 @@ class GoogleFailure(Exception):
         super().__init__()  # Exception/log strings must never contain API bodies.
         self.status, self.message, self.uncertain = status, message, uncertain
         self.too_long = bool(message and re.search(r'too long|length|characters|size limit', message, re.IGNORECASE))
-        self.retryable = status == 429 and not self.too_long and not uncertain
+        self.retryable = (status == 429 or 500 <= status < 600) and not self.too_long and not uncertain
 
 
 class Google:
     def __init__(self, pool):
         self.pool = pool
 
-    async def http(self, method, url, **kwargs):
+    async def http(self, method, url, *, may_have_sent=False, **kwargs):
         try:
             async with httpx.AsyncClient(timeout=30, trust_env=False, follow_redirects=False) as client:
                 response = await client.request(method, url, **kwargs)
+        except (httpx.ConnectError, httpx.ConnectTimeout):
+            raise GoogleFailure(503) from None
         except httpx.HTTPError:
-            raise GoogleFailure(503, uncertain=True) from None
+            raise GoogleFailure(503, uncertain=may_have_sent) from None
         if len(response.content) > 2_000_000:
-            raise GoogleFailure(502, uncertain=True)
+            raise GoogleFailure(502, uncertain=may_have_sent)
         return response
 
     @staticmethod
-    def result(response, redactions=()):
+    def result(response, redactions=(), *, may_have_sent=False):
         try:
             data = response.json() if response.content else {}
         except ValueError:
-            raise GoogleFailure(502, uncertain=True) from None
+            raise GoogleFailure(502, uncertain=may_have_sent) from None
         if not response.is_success:
             error = data.get('error') if isinstance(data, dict) else None
             message = error.get('message') if isinstance(error, dict) else None
@@ -78,9 +80,9 @@ class Google:
                 message = message[:2000]
             else:
                 message = None
-            raise GoogleFailure(response.status_code, message, uncertain=response.status_code >= 500)
+            raise GoogleFailure(response.status_code, message, uncertain=may_have_sent and response.status_code >= 500)
         if not isinstance(data, dict):
-            raise GoogleFailure(502, uncertain=True)
+            raise GoogleFailure(502, uncertain=may_have_sent)
         return data
 
     async def connect(self, actor):
@@ -142,8 +144,9 @@ class Google:
         token = self.result(response, (refresh, config['client_secret'])).get('access_token')
         if not isinstance(token, str) or not token or len(token)>16000:
             raise GoogleFailure(502)
-        response = await self.http(method, url, headers={'Authorization': 'Bearer ' + token}, **kwargs)
-        return self.result(response, (refresh, token, config['client_secret']))
+        publishing = method.upper() == 'POST' and url.startswith(V4) and url.endswith('/localPosts')
+        response = await self.http(method, url, may_have_sent=publishing, headers={'Authorization': 'Bearer ' + token}, **kwargs)
+        return self.result(response, (refresh, token, config['client_secret']), may_have_sent=publishing)
 
     async def location(self, tenant):
         row = await self.pool.fetchrow("SELECT location,generation,reviews_checked_at FROM tank.trigger_gbp_connections WHERE tenant_id=$1 AND status='connected'", tenant)
