@@ -64,7 +64,8 @@ async def test_stored_matches_dry_run_and_fake_github(tmp_path, monkeypatch):
         if method == 'GET':
             return 200, {'default_branch': 'main'}
         return (200 if method == 'PATCH' else 201), {'sha': 'placeholder-sha'}
-    monkeypatch.setattr(patch_pr.GitHubClient, '_send', fake_send)
+    monkeypatch.setattr(patch_pr.GitHubClient, '_default_send', fake_send)
+    monkeypatch.setattr(patch_pr.GitHubClient, '_default_get', lambda self, url: fake_send(self, 'GET', url))
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://placeholder') as client:
             headers = {'X-Tank-Key': 'placeholder-room-key'}
