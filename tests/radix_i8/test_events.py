@@ -272,3 +272,35 @@ async def test_notice_comparison_cannot_fix_full_scan_findings(pool):
     changes = await store.changes(A, DOMAIN)
     assert changes['previous_scan_id'] == str(full)
     assert len(changes['unchanged']) == 1 and changes['new'] == changes['fixed'] == []
+
+
+@pytest.mark.asyncio
+async def test_gateway_txt_removal_stops_event_watch_before_checks(pool, monkeypatch):
+    import passive_gateway as gateway
+    store = await watched(pool)
+    await events.Queue(pool).enqueue(A, message())
+    async def gone(domain, challenge): return False
+    lease = gateway.Lease(store, check=gone)
+    monkeypatch.setattr(gateway.app.state, 'lease', lease, raising=False)
+    async def scanner(*args): raise AssertionError('placeholder: scanner ran without TXT')
+    async def execute_scan(s, body, **kwargs):
+        client = httpx.AsyncClient(transport=httpx.ASGITransport(app=gateway.app))
+        return await routes.execute(s, body, ident=kwargs['ident'], scanner=scanner, http=client, watched=True)
+    async with pool.acquire() as conn:
+        result = await events.run_queued(pool, conn, execute_scan=execute_scan)
+        assert result['count'] == 1
+    assert (await store.watches(A))[0]['status'] == 'stopped'
+    assert (await store.changes(A, DOMAIN))['status'] == 'failed'
+
+
+@pytest.mark.asyncio
+async def test_failed_multi_domain_enqueue_rolls_back_all_runs(pool, monkeypatch):
+    await watched(pool)
+    await watched(pool, domain='second-placeholder.example')
+    same_id = uuid4()
+    monkeypatch.setattr(events, 'uuid4', lambda: same_id)
+    with pytest.raises(asyncpg.UniqueViolationError):
+        await events.Queue(pool).enqueue(A, message())
+    async with pool.acquire() as conn:
+        assert await conn.fetchval('SELECT count(*) FROM agent_radix.regulation_runs') == 0
+        assert await conn.fetchval('SELECT count(*) FROM agent_radix.passive_scans') == 0
