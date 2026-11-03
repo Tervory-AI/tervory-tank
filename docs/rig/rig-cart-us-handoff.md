@@ -292,3 +292,82 @@ and BigCommerce's
 
 No PR was opened or merged. Claude opens the PR; hosted tank/workspace CI results
 must be recorded for its final head and are not inferred from local checks.
+
+## Gate 3 / L1 completed — 3 November 2026
+
+Search guidance is store data. `cn.py` was moved with `git mv` to
+`guided_search.py`; its category/word/pattern tables, model markers, unsold rules
+and exact sentences now read `shop.vocabulary`. No vocabulary means plain ranked
+results. Validation rejects the entire object on shape, fixed-size, regex or
+format-template errors, logging only a fixed reason. Context scopes reset after
+every pure entry, including exceptions. Missing rule values never activate an
+empty phrase. Recognised part-for-host relations stay separate from multi-item
+builds; a generic parts request uses the configured part categories even when
+no product literally contains that word.
+
+Custom Nation keeps the exact prior values in an idempotent literal UPDATE,
+directly after the existing carry-over. It adds vocabulary only to records with
+`shop->>'search'='true'` and no vocabulary key. Existing vocabulary, non-search
+stores and second applications are unchanged. The same object is in Aurora's
+offline publish fixture. No table/column or shop-settings write path was added.
+The existing startup call is `agents/rig/app.py:395`; no live SQL was run.
+
+`/widget/test` resolves the configured key through `store.key(hash_key(key))`,
+then reads that retailer's theme. Missing key/store mapping uses neutral. Only
+Custom Nation emits its licensed font attribute. The existing missing-config
+503 text stays unchanged.
+
+### File and line inventory
+
+| File:line | Final change |
+| --- | --- |
+| `agents/rig/rigbox/guided_search.py:1` | Moved/neutralised guidance; all vocabulary comes from the current store. |
+| `agents/rig/rigbox/vocabulary.py:109` | Fixed validation limits, pattern compilation and safe rejection logging. |
+| `agents/rig/rigbox/vocabulary.py:222` | Explicit context for pure helper callers; entry decorator resets context. |
+| `agents/rig/rigbox/service.py:316` | Search import now uses guided_search; six imports migrated, with vocabulary supplied to detail/setup/graph/reservation entries. |
+| `agents/rig/rigbox/service.py:1020` | Validate vocabulary when reading the stored shop object. |
+| `agents/rig/schema.sql:177` | Literal missing-key vocabulary migration, before generated memory. |
+| `agents/rig/rigbox/quotes/hosting.py:95` | Resolve theme through the configured store key. |
+| `tests/fixtures/rig_catalogues/aurora/publish.json:33` | Exact migrated vocabulary. |
+| `tests/fixtures/rig_catalogues/second/publish.json:15` | Independent lamp/shade store vocabulary. |
+| `tests/test_rig_l1.py:52` | Equality, neutrality, real migration, independent store, absence/invalidity and full golden checks. |
+| `tests/rig_l1/golden.json:1` | Complete 578-call baseline from unchanged origin/main, including reservations and letters. |
+| `tests/rig_l1/golden_plugin.py:1` | Deterministic test UUIDs and full output recorder. |
+| `tests/rig_l1/verification.txt:1` | Exact per-file commands/results and retry provenance. |
+| `tests/test_rig_quotes_hosting.py:125` | Neutral, Custom Nation and missing mappings; exact old Custom Nation markup. |
+| `tests/test_rig_search_input_safety.py:104` | Renamed helper import with explicit fixture vocabulary. |
+| `tests/test_rig_quotes_browser.py:73` | Existing skin journey explicitly selects Custom Nation over the neutral fixture; assertions retained. |
+
+### Line-number audit before L1
+
+Every listed cn.py anchor from the brief remained at its stated line, including
+20–53, 483–505, 513/516/543/546, 956, 962–998, 1441, 1664/1712/1744–1749,
+1799–1838, 2001/2068, 2123–2129 and 2174. Before the rename the six service
+imports were 316/503/523/558/622/637, not 318/505/525/560/624/639; `_shop` was
+1017, not 1004. The schema carry-over UPDATE was 174–175; startup schema apply
+was 395; PgStore.key was 1076, while hash_key stayed 168. Current implementation
+lines are in the table above and the PR.
+
+### Verification and review
+
+All **68** Rig test files have passing final results: **791 passed, 11 skipped**.
+The eight L1 tests include all **171** original golden-source tests in an
+isolated subprocess; every one of the **578** canonical full output records
+matches origin/main byte for byte. Baseline commit and determinism details are
+in `tests/rig_l1/README.md`. The baseline was captured twice independently
+before the refactor. Test UUIDs are deterministic in both runs; public outputs
+and letter wording are not normalised.
+
+The old shared Python environment/container disappeared during the host memory
+cleanup. Its replacement uses an existing Python 3.12 venv and the task-local
+jsonschema overlay. Initial dependency/import/theme/second-store failures and
+their passing reruns are described in `tests/rig_l1/verification.txt`. The final
+golden comparison is after the last runtime change. Secrets tests: 2 passed;
+changed Python Ruff E9/F and whitespace checks pass. Gate-2 Workspace build
+and Node checks remain applicable: L1 changes no Workspace source.
+
+L1 does not change cart files, `fulfilment.py` or `quotes/service.py`, verified
+against the gate-2 checkpoint `ba52fa80b3b1e1cfe451c5490e644438b651db76`.
+Main was not merged again. Claude opened draft PR #628; final-head hosted
+`tank` and `workspace` job results are recorded in that PR, separately from
+local evidence. No PR labels, merge, deployment or live configuration changed.
