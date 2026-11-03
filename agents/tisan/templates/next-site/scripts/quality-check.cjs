@@ -179,7 +179,14 @@ async function browserChecks(origin, paths, proxyUrl) {
                   signal: AbortSignal.timeout(10000),
                 });
                 status = answer.status;
-                await answer.body?.cancel();
+                if ((answer.headers.get("content-type") || "").includes("text/css")) {
+                  const css = await answer.text();
+                  const refs = [
+                    ...css.matchAll(/url\(\s*(?:"([^"]+)"|'([^']+)'|([^\s)]+))\s*\)/g),
+                  ].map((m) => m[1] || m[2] || m[3]);
+                  refs.push(...[...css.matchAll(/@import\s+["']([^"']+)["']/g)].map((m) => m[1]));
+                  refs.forEach((ref) => resources.add(new URL(ref, url.href).href));
+                } else await answer.body?.cancel();
               } catch {
                 /* status 0 fails closed */
               }
