@@ -89,7 +89,7 @@ def test_apollo_ambiguous_domains_and_unverified_evidence_do_not_match():
     assert base_compare.compare(rows[:1], text)['matched'] == 0
 
 
-@pytest.mark.parametrize('text', ['', 'a,a\n1,2', 'a,b\n1', 'a\n1,2'])
+@pytest.mark.parametrize('text', ['', 'a,a\n1,2', 'a,b\n1', 'a\n1,2', 'Website,Company Website\na,b'])
 def test_invalid_apollo_csv(text):
     from fastapi import HTTPException
     with pytest.raises(HTTPException):

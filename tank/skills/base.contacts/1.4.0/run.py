@@ -1,4 +1,4 @@
-"""base.contacts 1.1.0 — Pass 3, contact discovery. Pure code.
+"""base.contacts 1.4.0 — contact discovery and metadata phone quality. Pure code.
 
 From what pass 2 found (emails on the site, named people with roles, the website) produce:
   - generic inboxes (info@, sales@ …) kept separate from people

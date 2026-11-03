@@ -25,12 +25,15 @@ def compare(records: list[dict], text: str) -> dict:
     if not reader.fieldnames or len(set(reader.fieldnames)) != len(reader.fieldnames):
         raise HTTPException(422, "Invalid Apollo CSV")
     aliases = {"company_website": "website", "company_phone": "phone", "emails": "email"}
+    columns = [aliases.get(key.strip().lower().replace(" ", "_"), key.strip().lower().replace(" ", "_"))
+               for key in reader.fieldnames]
+    if len(set(columns)) != len(columns) or not set(columns).intersection({"licence_key", "website", "phone", "email"}):
+        raise HTTPException(422, "Invalid Apollo CSV")
     apollo = []
     for raw in reader:
         if None in raw or any(value is None for value in raw.values()):
             raise HTTPException(422, "Invalid Apollo CSV")
-        row = {aliases.get(key.strip().lower().replace(" ", "_"), key.strip().lower().replace(" ", "_")): value.strip()
-               for key, value in raw.items()}
+        row = {key: value.strip() for key, value in zip(columns, raw.values())}
         apollo.append(row)
         if len(apollo) > 10000:
             raise HTTPException(422, "Apollo CSV exceeds 10000 rows")
