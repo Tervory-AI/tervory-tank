@@ -211,7 +211,7 @@ class Platform:
             merchandise = sum(Decimal(item['total']) for item in p['line_items'])
             fees = sum(Decimal(item['total']) for item in p.get('fee_lines', []))
             calculated = merchandise + fees + Decimal(p.get('shipping_total', '0')) + Decimal(p.get('total_tax', '0'))
-            return {'paid': bool(p.get('date_paid')) and p['status'] not in ('refunded', 'failed'),
+            return {'paid': bool(p.get('date_paid')) and str(p['status']).upper() in {'PROCESSING', 'COMPLETED'},
                     'merchandise': money(merchandise), 'totals_valid': money(calculated) == money(p['total']),
                     'total': money(p['total']), 'currency': p['currency'], 'order_id': str(p['id'])}
         if self.kind == 'shopify':
@@ -247,7 +247,7 @@ class Platform:
         subtotal = Decimal(p['subtotal_ex_tax'])
         calculated = subtotal + Decimal(p['subtotal_tax']) + sum(Decimal(p.get(k, '0')) for k in
             ('shipping_cost_inc_tax', 'handling_cost_inc_tax', 'wrapping_cost_inc_tax'))
-        return {'paid': p.get('payment_status') == 'captured', 'total': money(p['total_inc_tax']),
+        return {'paid': str(p.get('payment_status', '')).upper() == 'CAPTURED', 'total': money(p['total_inc_tax']),
                 'merchandise': money(subtotal), 'totals_valid': money(calculated) == money(p['total_inc_tax']),
                 'currency': p['currency_code'], 'order_id': str(p['id'])}
 
