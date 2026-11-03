@@ -4,7 +4,6 @@ import io
 import json
 import uuid
 import zipfile
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
@@ -14,10 +13,9 @@ from fastapi import FastAPI, HTTPException
 
 import command
 import main as real_tank
-import radix_repo
 from test_command import TENANT, OTHER, runtime as runtime, command_pool as command_pool, api as api
 from test_radix_iac import fake_checkov as fake_checkov
-from test_rx1_scans import Ctx, _b64, _dirty, _tar, FIXTURE
+from test_rx1_scans import Ctx, _dirty, _tar, FIXTURE
 from scanlib import orchestrate
 
 JOB = uuid.UUID('33333333-3333-4333-8333-333333333333')
