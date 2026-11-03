@@ -260,3 +260,17 @@ async def test_unauthorized_teacher_syntax_falls_through(monkeypatch):
     monkeypatch.setattr(command, 'authorized_actor', authorized)
     actor = command.Actor(TENANT, 'placeholder-member', False)
     assert await code_plan(actor, [{'role': 'user', 'content': 'skala.teachers placeholder.skill'}], None) is None
+
+
+@pytest.mark.parametrize('agreement,threshold,conditional,expected', [
+    (.98, .95, True, 'rollback'), (.99, .95, True, 'hold'),
+    (.99, .995, True, 'rollback'), (.98, .95, False, 'hold')])
+def test_routellm_rollback_keeps_founder_bar(agreement, threshold, conditional, expected):
+    row = {**promoted(), 'eval_threshold': threshold}
+    if not conditional:
+        row['model'] = 'placeholder-concrete-model'
+    move = graduate.rollback_if_dropped(row, graduate.Evidence(live_agreement=agreement),
+                                         datetime.now(timezone.utc))
+    assert move.action == expected
+    if expected == 'rollback':
+        assert move.policy['model'] == 'placeholder-strong'
