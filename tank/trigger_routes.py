@@ -100,13 +100,14 @@ async def room(operation: str, body: dict):
 
 async def zenas_draft(body: dict, actor: Actor):
     from main import TANK_API_KEY, app, box_region
+    from zenas_commands import draft_payload
     require_tool(actor, "zenas.ask")
     if not body.get("template") or not body.get("jurisdiction"):
         raise HTTPException(422, "Zenas drafting requires a template and jurisdiction")
-    payload = {"tenant_id": str(actor.tenant_id), "home_region": box_region(),
-               "template": body["template"], "jurisdiction": body["jurisdiction"],
-               "terms": body.get("terms", {}), "narrative": body["text"],
-               "matter_id": body.get("matter_id")}
+    payload = draft_payload(tenant_id=str(actor.tenant_id), home_region=box_region(),
+                            template=body["template"], jurisdiction=body["jurisdiction"],
+                            terms=body.get("terms", {}), text=body["text"],
+                            matter_id=body.get("matter_id"), include_empty_matter=True)
     # Zenas's own scope and tenant checks remain authoritative, including criminal refusal.
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tank", trust_env=False) as client:
         response = await client.post("/v1/zenas/drafts", json=payload, headers={"X-Tank-Key": TANK_API_KEY})

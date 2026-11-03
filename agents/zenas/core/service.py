@@ -1551,6 +1551,20 @@ async def add_playbook(
     return {"ok": True, "playbook": saved}
 
 
+async def list_playbooks(
+    store: Any, *, tenant_id: str, home_region: str, box_region: str,
+) -> dict[str, Any]:
+    _home, refused = await _use_home(store, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
+    if refused:
+        return refused
+    rows = await store.list_playbooks(region=_box(box_region), tenant_id=str(tenant_id))
+    return {"ok": True, "items": [
+        {"id": row["id"], "name": row["name"], "template": row["template"],
+         "positions": len(row.get("positions") or []), "created_at": row.get("created_at")}
+        for row in rows
+    ]}
+
+
 def _apply_revision(sentences: list[dict[str, Any]], proposal: str, differing: list[str]) -> None:
     try:
         parsed = parse_json_object(proposal)
@@ -1649,6 +1663,7 @@ async def draft_contract(
         return _refuse(_ASSEMBLY_REGION_REFUSED)
     text = finished["text"]
     document_id = None
+    state = "released" if not await review_required(store, region=box) else "draft"
     if matter_id:
         matter = await store.get_matter(str(tenant_id), str(matter_id))
         if matter is None:
@@ -1666,7 +1681,7 @@ async def draft_contract(
                     for item in sentences
                     if item.get("library")
                 ],
-                "state": "released" if not await review_required(store, region=box) else "draft",
+                "state": state,
                 "reviewed": False,
             }
         )
@@ -1685,6 +1700,8 @@ async def draft_contract(
         "model_calls": model_calls,
         "document_id": document_id,
         "docx_base64": finished["docx_base64"],
+        "state": state,
+        "legal_notice": _LEGAL_NOTICE,
     }
 
 
