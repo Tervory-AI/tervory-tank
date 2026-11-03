@@ -51,7 +51,7 @@ async def shopper_cart(operation: str, request: Request):
         tenant = _tenant(request)
         await service.config(tenant)
         data = await body(request)
-        allowed = {'session': set(), 'view': {'session', 'product_id', 'recheck'}, 'add': {'session', 'product_id', 'quantity', 'back_order'},
+        allowed = {'session': set(), 'view': {'session', 'product_id', 'recheck'}, 'add': {'session', 'product_id', 'quantity', 'back_order', 'line_id'},
                    'remove': {'session', 'line_id'}, 'checkout': {'session'}, 'order': {'session', 'checkout_id'}}
         if operation not in allowed or set(data) - allowed[operation]:
             raise CommerceError('invalid')
@@ -63,7 +63,7 @@ async def shopper_cart(operation: str, request: Request):
             result = await service.view(tenant, token, product_id=data.get('product_id'), recheck=data.get('recheck') is True)
         elif operation == 'add':
             result = await service.add(tenant, token, data.get('product_id'), data.get('quantity'),
-                                        back_order=data.get('back_order') is True)
+                                        back_order=data.get('back_order') is True, line_id=data.get('line_id'))
         elif operation == 'remove':
             result = await service.remove(tenant, token, data.get('line_id'))
         elif operation == 'checkout':
