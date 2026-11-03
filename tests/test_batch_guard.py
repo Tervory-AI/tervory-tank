@@ -31,7 +31,7 @@ TENANT = "00000000-0000-0000-0000-000000000001"
 
 
 def _train():
-    spec = importlib.util.spec_from_file_location("batch_guard_train", ROOT / "jobs" / "train" / "train.py")
+    spec = importlib.util.spec_from_file_location("batch_guard_train", ROOT / "tank" / "training_jobs" / "train.py")
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
