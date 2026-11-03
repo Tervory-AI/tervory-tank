@@ -2,7 +2,7 @@
 
 Per-store ``blind_ship`` switch, off by default. Per-source
 ``neutral_slip_required``. The order and the supplier PO are Rig's own rows
-(rigbox.fulfilment; Tervory no longer uses Odoo): the PO carries the shopper's
+(rigbox.fulfilment): the PO carries the shopper's
 delivery address and, when the source requires it, the neutral-slip
 instruction. No supplier identity reaches the shopper. Offline here, except the
 real Postgres test (RIG_TEST_DATABASE_URL).

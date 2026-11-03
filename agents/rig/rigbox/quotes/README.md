@@ -15,63 +15,33 @@ fixed error code, attempt count, and next due time. An admin can use `/retry` to
 bring a due time forward without resetting the budget, or explicitly `/resume`
 after investigating a stopped request to allow a new six-attempt budget.
 Claims are atomic across workers. A 60-second send timeout is shorter than the
-five-minute crash-recovery lease. Odoo reconciles `client_order_ref` before
-creating another order; webhooks must honor `Idempotency-Key`. No errors, URLs,
-contact details or credential values are written to logs. Stored error values
-are fixed codes such as `not_configured` and `odoo_product_mapping`.
+five-minute crash-recovery lease. Webhooks must honor `Idempotency-Key`. No errors,
+URLs, contact details or credential values are written to logs. Stored error
+values are fixed codes such as `not_configured` and `email_unavailable`.
 
-## Configure the retailer last
+## Configure the store's email delivery
 
-Set `RIG_QUOTE_FLOWS` to a JSON object keyed by exact tenant UUID. Each value has
-`sender` (`webhook`, `odoo`, or `odoo+webhook`), `env_prefix` (default `RIG_ODOO`)
-and optional `portal_url` (the retailer's HTTPS client portal). A missing entry
-uses that tenant's existing retailer webhook. An empty configuration is valid.
-This mapping never crosses into the public API. For combined delivery, Odoo is
-reconciled first and the portal webhook is then delivered with the same request
-reference. The portal endpoint is the existing `agent_rig.retailers.webhook`.
+Quote delivery uses the existing `EmailHandoff` and SMTP transport to the store's
+configured email address. Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`,
+`SMTP_PASSWORD` and `SMTP_FROM` in the room. Custom Nation remains quote → the
+store's own invoice → EFT. Rig never invoices, takes payment, holds a card or
+refunds. Trigger CRM replaces the retired ERP integration; this change adds no
+new CRM delivery transport.
 
-Leave these Coolify settings empty until the test or live retailer is connected:
+`RIG_QUOTE_FLOWS` remains an optional JSON object keyed by exact tenant UUID.
+Supported `sender` values are `email` and `webhook`, with optional `portal_url`
+for the store's HTTPS client portal. Without an explicit sender, an email-only
+store uses email; a store with an existing webhook keeps its webhook delivery.
+These private settings never cross into the public API. Invalid sender names
+fail with `configuration`; a missing email/SMTP or webhook stays pending.
 
-```dotenv
-RIG_QUOTE_FLOWS=
-RIG_ODOO_URL=
-RIG_ODOO_DATABASE=
-RIG_ODOO_USER=
-RIG_ODOO_API_KEY=
-RIG_WIDGET_PUBLISHABLE_KEY=
-```
+A product link remains an unpriced request with the shopper's contact, never a
+fabricated product or price. Email retries keep the same Message-ID and quote
+reference. SMTP acknowledgement loss can cause a repeat email; delivery status
+means transport acceptance, not that the store has invoiced the shopper.
 
-Additional retailers can select distinct `RIG_ODOO_<RETAILER>` prefixes. Expose
-their corresponding variables to the room through Coolify/Compose when adding
-them; never put credential values in the mapping, catalogue or widget.
-
-The adapter supports **Odoo 16, 17 and 18**, using the
-[external RPC API](https://www.odoo.com/documentation/18.0/developer/reference/external_api.html):
-`/jsonrpc`, `common.version`, `common.authenticate`, then `object.execute_kw`.
-The version is checked before authentication or mutations. Other versions fail
-closed with `odoo_version_unsupported`. **Odoo 19 is not supported**: it renamed
-`tax_id` to `tax_ids`; the legacy RPC endpoints are deprecated and scheduled for
-removal. Supporting 19+ requires a separately reviewed JSON-2 adapter
-and tax-field mapping. Versioned stubs cover 16–18 and rejection of 19; this is
-not a claim of live validation against each Odoo deployment. The Odoo plan must
-support external API access. The integration user needs partner/product reads,
-partner creation and draft sale-order creation. Product internal references
-(`product.product.default_code`) must match Rig SKUs uniquely. A pricelist in
-the quote currency must exist. Missing configuration, ambiguous/missing SKUs,
-or currency mapping leaves the request pending rather than inventing data.
-
-The order keeps Rig's server-priced indicative amounts and an explicit empty
-tax set, preserving the single indicative total. The retailer reviews tax and
-commercial terms before sending or confirming the quote. A product link becomes
-an unpriced order note with the shopper's contact, never a fabricated product or
-price. The adapter never confirms orders, invoices, charges or emails shoppers.
-Each new request creates a separate partner with the internal comment
-**“from Rig, not verified”**. Shopper-typed email never selects an existing
-customer account. Product/currency mappings are checked before creating a
-partner. The partner's `ref` is the tenant/request reference, so a rejected order
-or lost partner-create response reuses that request's unverified partner on
-retry. An ambiguous partner reference stops delivery for staff review. Order
-reconciliation still prevents a duplicate order after a lost order response.
+Leave `RIG_WIDGET_PUBLISHABLE_KEY` empty until the retailer's restricted embed
+key is issued. Real shopper data is connected last.
 
 ## Key, origins and bundle
 
@@ -118,7 +88,7 @@ The limit is 1–100. Pages use the immutable creation time and request ID, scop
 to the authenticated tenant, so removing an earlier hold does not skip later
 requests. Staff inspect the matching tenant-scoped quote and explicitly
 `/resume` after review. Ordinary retry and scheduled retry cannot
-release a hold. No Odoo partner, order or webhook is created while held.
+release a hold. No email or webhook is sent while held.
 A rejected client does not consume the tenant ceiling. HTTP 429 includes
 `Retry-After`, exposed through CORS. These are abuse controls, not visitor
 analytics; clients sharing a public IPv4 address or IPv6 `/64` share an allowance.
@@ -170,7 +140,7 @@ even after a retailer is removed and deletes each tenant's rows separately.
 `quote_handoffs` has `ON DELETE CASCADE`; anonymous daily counts remain. A live
 five-minute delivery lease is allowed to finish before deletion; an expired
 quote cannot start another delivery attempt. This policy also covers held quotes.
-Retailer Odoo/webhook copies have their own retention policy.
+Store email/webhook copies have their own retention policy.
 
 Contact fields are capped at 120 characters for name, 254 for email and 40 for
 phone; notes are capped at 4000. Oversized fields fail before storage/delivery.
@@ -218,10 +188,10 @@ Set `RIG_SCREENSHOT_DIR` to retain the 390px/1440px browser screenshots.
    parts must be absent. The network payload must contain no pricing inputs.
 3. Submit a setup quote and a missing-product link with synthetic contact data.
    Check the matching tenant/id in `agent_rig.quotes` and
-   `agent_rig.quote_handoffs`. With Odoo configured, `sent_at` must be populated
-   and `sale.order.client_order_ref` must be `rig:<tenant>:<request_id>` in draft
-   state. With no configuration, verify pending status instead.
-4. Check the client portal webhook received the same reference (combined flow),
+   `agent_rig.quote_handoffs`. With the store's SMTP delivery configured,
+   `sent_at` must be populated and its inbox must receive the matching quote reference. With no
+   configuration, verify pending status instead.
+4. Check the client portal webhook received the same reference (if explicitly configured),
    and that the configured portal link opens without contact data in its URL.
 5. With the tenant's admin key, read `GET /v1/rig/admin/analytics`. The five daily
    counts must increase for the corresponding actions. Type several characters
@@ -229,8 +199,8 @@ Set `RIG_SCREENSHOT_DIR` to retain the 390px/1440px browser screenshots.
    alone must not increment swaps. Shopper keys cannot read these counts.
 6. For a failed test delivery, inspect
    `GET /v1/rig/admin/quotes/<id>/delivery`, fix configuration, then use
-   `POST /v1/rig/admin/quotes/<id>/retry` or wait for the scheduled retry. There
-   must still be only one Odoo order for that reference. After six failures,
+   `POST /v1/rig/admin/quotes/<id>/retry` or wait for the scheduled retry. Retries
+   must retain the same quote reference and email Message-ID. After six failures,
    verify `needs_person` and no further automatic attempts; use `/resume` only
    after fixing the cause. Add a new test retailer after startup and verify its
    `retry_quotes` row in `agent_rig.schedules` appears on the next discovery tick.
@@ -242,8 +212,8 @@ Set `RIG_SCREENSHOT_DIR` to retain the 390px/1440px browser screenshots.
 8. In a disposable test tenant, reach the tenant quote ceiling: further eligible
    submissions must return `needs_person`, emit `rig_quote_held`, appear in the
    admin attention queue, and create no outbound writes until explicit resume.
-   Use a synthetic email matching a test Odoo customer and verify the new order
-   uses a new partner marked “from Rig, not verified”, never the existing account.
+   Resume the held request and verify store email delivery keeps its original
+   quote reference and contact details.
 9. In a disposable database, age synthetic quote rows past the retention window
    and run discovery. Quote/contact and handoff rows must disappear together;
    recent quotes and anonymous totals must remain. Do not age real shopper rows.

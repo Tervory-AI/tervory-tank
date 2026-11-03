@@ -140,7 +140,7 @@ retailer catalogue, contact or paid job is used.
 4. Open `/3d/`: rotate, zoom, explode and swap the neutral parts; verify the
    indicative total. At 1920×1080, open terminal mode, request a sample quote,
    and find its tenant-scoped `agent_rig.quotes` row. An acknowledgement means
-   stored, not a confirmed email/Odoo delivery unless RIG-4 returns `sent`.
+   stored, not a confirmed store delivery unless RIG-4 returns `sent`.
 5. POST the administrator terminal reset route. Its tenant-scoped
    `agent_rig.rig_3d_kiosks.revision` must increment and the connected terminal
    must clear contact/build state. No production deployment was performed here.
