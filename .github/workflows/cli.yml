@@ -172,3 +172,43 @@ jobs:
           export PATH="$(brew --prefix gnu-tar)/libexec/gnubin:$(brew --prefix coreutils)/libexec/gnubin:$(brew --prefix openssl@3)/bin:/usr/bin:/bin:$PATH"
           npm test
         working-directory: cli
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      # Use task-owned runner storage, never the shared worker's /tmp.
+      TMPDIR: ${{ runner.temp }}/cli-w4-tests
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+      - name: Prepare GNU archive tools and consistent Git fixtures
+        run: |
+          mkdir -p "$TMPDIR"
+          echo 'C:\Program Files\Git\usr\bin' >> "$GITHUB_PATH"
+          git config --global core.autocrlf false
+          git config --global core.symlinks true
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: cli
+      - name: Full CLI suite, including Windows command refusal
+        run: npm test
+        working-directory: cli
+      - name: Build Windows archives twice and compare bytes
+        run: |
+          node cli/scripts/build-release.mjs --platforms win32-x64-msvc,win32-arm64-msvc --out "$RUNNER_TEMP/cli-a"
+          node cli/scripts/build-release.mjs --platforms win32-x64-msvc,win32-arm64-msvc --out "$RUNNER_TEMP/cli-b"
+          diff -r "$RUNNER_TEMP/cli-a" "$RUNNER_TEMP/cli-b"
+      - name: Run the built Windows x64 launcher
+        shell: pwsh
+        run: |
+          $version = node -p 'require("./cli/package.json").version'
+          tar -xzf "$env:RUNNER_TEMP/cli-a/releases/$version/tervory-cli-$version-win32-x64-msvc.tar.gz" -C "$env:RUNNER_TEMP"
+          $env:TERVORY_NO_UPDATE_CHECK = '1'
+          & "$env:RUNNER_TEMP/tervory-cli-$version/tervory.cmd" version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

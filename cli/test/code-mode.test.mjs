@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fsPromises from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
-import { mkdtemp, writeFile, readFile, mkdir, symlink, rm, copyFile, chmod } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, mkdir, symlink as nativeSymlink, stat, rm, copyFile, chmod } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -12,6 +12,11 @@ import { once } from 'node:events';
 import { CodeFolder, LIMITS, redactSecrets, processOutput, applyDiff } from '../src/code-tools.mjs';
 import { run } from '../src/client.mjs';
 
+// Windows needs the target kind when creating directory symlinks.
+const symlink = async (target, path) => {
+  const kind = process.platform === 'win32' && (await stat(target).catch(() => null))?.isDirectory() ? 'junction' : 'file';
+  return nativeSymlink(target, path, kind);
+};
 const work = await mkdtemp(join(tmpdir(), 'code-mode-'));
 test.after(() => rm(work, { recursive: true, force: true }));
 async function folder() {
