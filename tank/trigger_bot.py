@@ -101,6 +101,55 @@ class Bot:
         from trigger_routes import code_receipt
         return await code_receipt(tenant, task)
 
+    async def retain_conversations(self, tenant, *, batch_size=100):
+        """Founder decision, 2026-11-03: 12 calendar months after last message.
+
+        Each bounded batch and its counts-only receipt commit together. A full
+        queue continues on the next maintenance tick; a completed tenant waits
+        24 hours. Transaction locks serialize multiple maintenance instances.
+        """
+        from trigger_routes import code_receipt
+        async with self.pool.acquire() as conn, conn.transaction():
+            if not await conn.fetchval("SELECT pg_try_advisory_xact_lock(hashtextextended('trigger.bot.retention:' || $1::text,0))", str(tenant)):
+                return None
+            completed = await conn.fetchval('''SELECT 1 FROM tank.ledger l
+                JOIN tank.agent_receipts r ON r.tenant_id=l.tenant_id AND r.ledger_id=l.id
+                WHERE l.tenant_id=$1 AND l.task_type='trigger.bot.retention'
+                AND l.ts>now()-interval '1 day' AND r.receipt->>'complete'='true' LIMIT 1''', tenant)
+            if completed:
+                return None
+            candidates = await conn.fetch('''SELECT c.id FROM tank.trigger_bot_conversations c
+                WHERE c.tenant_id=$1 AND COALESCE((SELECT max(m.created_at)
+                    FROM tank.trigger_bot_messages m WHERE m.tenant_id=$1 AND m.conversation_id=c.id),c.created_at)
+                    <=now()-interval '12 months'
+                ORDER BY c.id FOR UPDATE OF c SKIP LOCKED LIMIT $2''', tenant, batch_size)
+            # Recheck after acquiring the conversation lock: a message writer
+            # may have committed between the candidate snapshot and that lock.
+            ids = await conn.fetch('''SELECT c.id FROM tank.trigger_bot_conversations c
+                WHERE c.tenant_id=$1 AND c.id=ANY($2::uuid[]) AND COALESCE((SELECT max(m.created_at)
+                    FROM tank.trigger_bot_messages m WHERE m.tenant_id=$1 AND m.conversation_id=c.id),c.created_at)
+                    <=now()-interval '12 months' ''', tenant, [r['id'] for r in candidates])
+            identities = [r['id'] for r in ids]
+            kept = await conn.fetch('''UPDATE tank.trigger_bot_drafts SET conversation_id=NULL
+                WHERE tenant_id=$1 AND conversation_id=ANY($2::uuid[])
+                AND state='confirmed' AND kind IN ('lead','quote') RETURNING id''', tenant, identities)
+            drafts = await conn.fetch('''DELETE FROM tank.trigger_bot_drafts
+                WHERE tenant_id=$1 AND conversation_id=ANY($2::uuid[]) RETURNING id''', tenant, identities)
+            messages = await conn.fetch('''DELETE FROM tank.trigger_bot_messages
+                WHERE tenant_id=$1 AND conversation_id=ANY($2::uuid[]) RETURNING id''', tenant, identities)
+            conversations = await conn.fetch('''DELETE FROM tank.trigger_bot_conversations
+                WHERE tenant_id=$1 AND id=ANY($2::uuid[]) RETURNING id''', tenant, identities)
+            remaining = await conn.fetchval('''SELECT 1 FROM tank.trigger_bot_conversations c
+                WHERE c.tenant_id=$1 AND COALESCE((SELECT max(m.created_at)
+                    FROM tank.trigger_bot_messages m WHERE m.tenant_id=$1 AND m.conversation_id=c.id),c.created_at)
+                    <=now()-interval '12 months' LIMIT 1''', tenant)
+            counts = {'conversations': len(conversations), 'messages': len(messages),
+                      'drafts': len(drafts), 'confirmed_drafts_kept': len(kept), 'complete': not remaining}
+            ledger = await code_receipt(tenant, 'trigger.bot.retention', conn=conn)
+            await conn.execute('''INSERT INTO tank.agent_receipts(ledger_id,tenant_id,room,receipt)
+                VALUES($1,$2,'trigger',$3::jsonb)''', ledger, tenant, json.dumps(counts))
+            return counts
+
     async def ask(self, tenant, text, *, conversation_id=None, visitor_id=None, contact=None, address="command"):
         visitor_id = visitor_id or uuid4()
         conversation_id = conversation_id or uuid4()
@@ -195,9 +244,24 @@ class Bot:
         return status
 
 
+async def retention_due(runtime):
+    admin = runtime._admin_pool or runtime.pool()
+    with tenant_scope(None, administrative=True):
+        tenants = await admin.fetch('''SELECT t.tenant_id FROM (
+            SELECT tenant_id FROM tank.trigger_bot_conversations UNION SELECT tenant_id FROM tank.trigger_bot_config) t
+            WHERE NOT EXISTS(SELECT 1 FROM tank.ledger l JOIN tank.agent_receipts r
+                ON r.tenant_id=l.tenant_id AND r.ledger_id=l.id WHERE l.tenant_id=t.tenant_id
+                AND l.task_type='trigger.bot.retention' AND l.ts>now()-interval '1 day'
+                AND r.receipt->>'complete'='true') ORDER BY t.tenant_id LIMIT 50''')
+    for row in tenants:
+        with tenant_scope(row['tenant_id']):
+            await Bot(runtime).retain_conversations(row['tenant_id'])
+
+
 async def refresh_loop(runtime):
     while True:
         try:
+            await retention_due(runtime)
             admin = runtime._admin_pool or runtime.pool()
             with tenant_scope(None, administrative=True):
                 rows = await admin.fetch('''SELECT tenant_id,id FROM tank.trigger_bot_sources
