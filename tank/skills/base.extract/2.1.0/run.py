@@ -630,9 +630,19 @@ def _product(node: dict, offer: dict, page: dict, method: str) -> dict:
 
 def _structured_products(nodes: list[dict], page: dict, method: str) -> list[dict]:
     products = []
+    breadcrumbs = []
+    listed = set()
+    for node in nodes:
+        leaves = _leaves(node)
+        if "breadcrumblist" in leaves:
+            _walk(node, breadcrumbs)
+        elif "itemlist" in leaves:
+            listed.update(id(item) for item in _as_list(node.get("itemListElement"))
+                          if isinstance(item, dict) and "listitem" in _leaves(item))
+    excluded = {id(node) for node in breadcrumbs}
     offered = {id(node["itemOffered"]) for node in nodes if "offer" in _leaves(node) and isinstance(node.get("itemOffered"), dict)}
     for node in nodes:
-        if id(node) in offered:
+        if id(node) in offered or id(node) in excluded:
             continue
         leaves = _leaves(node)
         if _kind(leaves) == "product":
@@ -641,12 +651,13 @@ def _structured_products(nodes: list[dict], page: dict, method: str) -> list[dic
         elif "offer" in leaves:
             target = node.get("itemOffered")
             if isinstance(target, dict):
-                products.append(_product(target, node, page, method))
+                if _kind(_leaves(target)) != "service":
+                    products.append(_product(target, node, page, method))
             elif node.get("name"):
                 products.append(_product(node, node, page, method))
-        elif "listitem" in leaves:
+        elif "listitem" in leaves and id(node) in listed:
             item = node.get("item")
-            if isinstance(item, dict) and _kind(_leaves(item)) != "product":
+            if isinstance(item, dict) and _kind(_leaves(item)) not in {"product", "service"}:
                 products.append(_product(item, {}, page, method))
             elif isinstance(item, str):
                 products.append(_product({**node, "url": node.get("url") or item}, {}, page, method))
@@ -675,13 +686,14 @@ def _micro_product_node(el: Any) -> dict:
 
 def _products(payload: dict) -> list[dict]:
     pages = payload.get("pages")
-    # Legacy single-page callers have no invented provenance.
-    if not isinstance(pages, list) or not pages:
-        pages = [{"html": _load_html(payload), "source_url": payload.get("source_url"), "checked_at": payload.get("checked_at")}]
+    if not isinstance(pages, list):
+        return []
     found = []
     seen = set()
     for page in pages:
-        if not isinstance(page, dict) or not isinstance(page.get("html"), str):
+        if (not isinstance(page, dict) or not isinstance(page.get("html"), str)
+                or any(not isinstance(page.get(key), str) or not page[key].strip()
+                       for key in ("source_url", "checked_at"))):
             continue
         tree = HTMLParser(page["html"])
         nodes = []
@@ -696,7 +708,11 @@ def _products(payload: dict) -> list[dict]:
         rows = _structured_products(nodes, page, "jsonld")
         micro_nodes = []
         for el in tree.css("[itemscope]"):
-            _walk(_micro_product_node(el), micro_nodes)
+            parent = el.parent
+            while parent is not None and "itemscope" not in parent.attributes:
+                parent = parent.parent
+            if parent is None:
+                _walk(_micro_product_node(el), micro_nodes)
         rows.extend(_structured_products(micro_nodes, page, "microdata"))
         for row in rows:
             identity = tuple(row[key] for key in row)
