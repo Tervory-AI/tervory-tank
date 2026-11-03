@@ -1202,6 +1202,7 @@ def tiger_identity_match(own: dict, seen: dict) -> tuple[str, str] | None:
 def tiger_product_evidence(html: str, url: str) -> list[dict]:
     import importlib.util
     from pathlib import Path
+    from urllib.parse import urljoin
     from selectolax.parser import HTMLParser
     # Reuse the published pure-code reader unchanged, without the model ladder.
     module = globals().get('_tiger_structured_reader')
@@ -1222,6 +1223,8 @@ def tiger_product_evidence(html: str, url: str) -> list[dict]:
     result = []
     for node in nodes:
         stated_url = module._http_url(node.get('url'))
+        if stated_url is None and isinstance(node.get('url'), str) and node['url'].strip():
+            stated_url = urljoin(url, node['url'])
         if stated_url and stated_url.rstrip('/') != url.rstrip('/'):
             continue
         # An unlocated Product on a multi-product listing is ambiguous.
@@ -1230,7 +1233,7 @@ def tiger_product_evidence(html: str, url: str) -> list[dict]:
         brand = node.get('brand')
         if isinstance(brand, dict):
             brand = brand.get('name')
-        facts = {'gtins': [node[k] for k in ('gtin','gtin8','gtin12','gtin13','gtin14') if node.get(k)],
+        facts = {'gtins': [node[k] for k in ('gtin','gtin8','gtin12','gtin13','gtin14') if node.get(k) is not None and node.get(k) != ''],
                  'brand': brand if isinstance(brand, str) else None,
                  'mpn': node.get('mpn') if isinstance(node.get('mpn'), str) else None}
         prices = module._from_product(node, url)
@@ -1253,7 +1256,7 @@ def tiger_product_evidence(html: str, url: str) -> list[dict]:
                     names = [n for n in el.css('[itemprop="name"]') if module._nearest_scope(n).mem_id == el.mem_id]
                     if len(names) == 1:
                         fields['brand'] = module._prop_value(names[0])
-        if fields.get('url') and fields['url'].rstrip('/') != url.rstrip('/'):
+        if fields.get('url') and urljoin(url, fields['url']).rstrip('/') != url.rstrip('/'):
             continue
         result.append({'gtins': [fields[k] for k in ('gtin','gtin8','gtin12','gtin13','gtin14') if fields.get(k)],
                        'brand': fields.get('brand'), 'mpn': fields.get('mpn'),
@@ -1329,7 +1332,11 @@ async def tiger_match_page(body: TigerMatchPage, request: Request):
                 return {'matches': [], 'human_check': True}
         products = await tiger_catalogue(body.tenant_id)
         matches = []
-        for seen in tiger_product_evidence(body.html, body.url):
+        facts = tiger_product_evidence(body.html, body.url)
+        possible_skus = {p['sku'] for seen in facts for p in products if tiger_identity_match(p, seen)}
+        if len(possible_skus) > 1:
+            return {'matches': []}
+        for seen in facts:
             candidates = [(p, tiger_identity_match(p, seen)) for p in products]
             candidates = [(p, rule) for p, rule in candidates if rule]
             # One URL cannot be auto-assigned to several catalogue SKUs.
@@ -1497,8 +1504,9 @@ async def tiger_card_result(tenant, result: dict) -> dict:
         if job is None:
             return result
         matches = await conn.fetch('SELECT * FROM agent_tiger.matches WHERE tenant_id=$1 AND checked_at >= $2 ORDER BY checked_at,id LIMIT 100', tenant, job['created_at'])
+        count = await conn.fetchval('SELECT count(*) FROM agent_tiger.matches WHERE tenant_id=$1 AND checked_at >= $2', tenant, job['created_at'])
     update = {k:v for k,v in result.items() if k != 'text'}
-    update.update(status=job['status'], matches=[tiger_match_out(r) for r in matches])
+    update.update(status=job['status'], matches=[tiger_match_out(r) for r in matches], matches_count=count, has_more=count > len(matches))
     if job['result']:
         update['discovery'] = json.loads(job['result']) if isinstance(job['result'], str) else job['result']
     return {**update, 'text': json.dumps(update, ensure_ascii=False, default=str)}
