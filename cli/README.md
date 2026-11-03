@@ -68,10 +68,14 @@ commands use the worker's existing Linux Bubblewrap (`bwrap`): only the selected
 folder is writable, secret paths and `.git` internals are hidden, the environment
 is restricted, and networking is unavailable. For a leading Node, Python or
 pytest executable outside `/usr` and the selected folder, the CLI resolves its
-existing installation and binds only that runner's own directory read-only
-(a Python venv also needs its base interpreter installation). The complete
-executable path and every read-only runner directory are shown before `Run
-[y/N]`. Intermediate interpreter symlinks are recreated in the empty sandbox;
+regular executable and its canonical executable. Node binds only that binary
+file. Python/pytest binds the executable, matching `lib/pythonX.Y`, venv
+`pyvenv.cfg` when present, and matching libpython files from its dedicated
+installation. The installation parent and `bin` directory are never bound.
+General user launchers under `~/.local/bin` are refused, including pip-user
+pytest and uv Python links; use a dedicated venv or interpreter installation.
+The complete command and each read-only file/library path are shown before
+`Run [y/N]`. Intermediate interpreter symlinks are recreated in the empty sandbox;
 their host directories are not mounted. Secret paths inside runtimes are hidden.
 `$HOME`, `~/.config`, `~/.ssh` and keychain directories are never mounted. Other
 host folders remain unavailable. Use a leading executable, rather than hiding
@@ -86,6 +90,8 @@ A prompt is stored once across its continuation rounds. Earlier prompts,
 answers, and tool names/arguments remain in a bounded, redacted CLI transcript
 (at most 40 entries and 200,000 UTF-8 bytes). It is sent as untrusted session data
 for model context and never stored in the Command thread, tasks or events.
+The `command.code` policy uses `cache_scope='none'`; code turns neither read nor
+write the route cache, including its word-split `semantic_form`.
 The model-call transcript follows Tank's existing handling for every chat turn:
 masked by `_preflight_mask` and `_storage_mask`, tenant-scoped and kept on the
 region's own box. CLI secret redaction runs before anything leaves the machine.
