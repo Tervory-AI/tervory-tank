@@ -132,7 +132,9 @@ class StandingBlocks:
             target = shared.get(published_id(tenant, str(row['id'])))
             verified = epoch(target.get('last_verified')) if target else None
             state = 'private' if target is None else ('published' if verified is not None and 0 <= self.clock() - verified < SHARE_SECONDS else 'expired')
-            items.append({'id': str(row['id']), 'address': fact['address'],
+            items.append({'id': str(row['id']), 'name': fact['address'], 'status': state,
+                          'summary': str(row.get('last_verified') or '') + ' · ' + str(row['id']),
+                          'address': fact['address'],
                           'last_verified': row.get('last_verified'), 'publish_state': state})
         return {'items': items}
 
