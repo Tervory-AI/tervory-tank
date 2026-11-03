@@ -14,6 +14,7 @@ import secrets
 import time
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID
 
 QUOTE_ROUTES = frozenset({"/v1/rig/quote", "/v1/rig/link-quote"})
@@ -195,6 +196,8 @@ class PgRateLimits:
 import smtplib
 import ssl
 from email.message import EmailMessage
+
+
 class RigError(Exception):
     def __init__(self, code: str, message: str, status: int) -> None:
         super().__init__(message)
