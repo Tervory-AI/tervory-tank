@@ -2333,3 +2333,52 @@ CREATE TABLE IF NOT EXISTS agent_tank.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
+
+-- Tiger T1: identifier evidence and durable command/job binding. Additive only.
+CREATE SCHEMA IF NOT EXISTS agent_tiger;
+CREATE TABLE IF NOT EXISTS agent_tiger.matches (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    sku text NOT NULL,
+    url text NOT NULL,
+    method text NOT NULL CHECK (method IN ('gtin','brand_mpn')),
+    identifiers jsonb NOT NULL,
+    seen_on text NOT NULL,
+    checked_at timestamptz NOT NULL DEFAULT now(),
+    state text NOT NULL CHECK (state IN ('suggested','confirmed','rejected')),
+    UNIQUE (tenant_id,sku,url)
+);
+CREATE INDEX IF NOT EXISTS tiger_matches_product ON agent_tiger.matches(tenant_id,sku,state);
+CREATE TABLE IF NOT EXISTS agent_tiger.match_runs (
+    tenant_id uuid NOT NULL,
+    operation_id uuid NOT NULL,
+    job_id uuid,
+    ledger_id uuid NOT NULL,
+    PRIMARY KEY (tenant_id,operation_id)
+);
+-- Public host counters contain no catalogue, tenant identifiers or page content.
+-- A shared counter prevents concurrent jobs/tenants exceeding a site's allowance.
+CREATE TABLE IF NOT EXISTS agent_tiger.discovery_limits (
+    site text PRIMARY KEY,
+    day date NOT NULL DEFAULT (now() AT TIME ZONE 'UTC')::date,
+    requests integer NOT NULL DEFAULT 0,
+    last_at timestamptz,
+    human_check boolean NOT NULL DEFAULT false
+);
+DO $$
+DECLARE tab text;
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        FOREACH tab IN ARRAY ARRAY['matches','match_runs'] LOOP
+            EXECUTE format('ALTER TABLE agent_tiger.%I ENABLE ROW LEVEL SECURITY', tab);
+            EXECUTE format('ALTER TABLE agent_tiger.%I FORCE ROW LEVEL SECURITY', tab);
+            IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid=('agent_tiger.'||tab)::regclass AND polname='tenant_access') THEN
+                EXECUTE format('CREATE POLICY tenant_access ON agent_tiger.%I FOR ALL TO PUBLIC USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid) WITH CHECK (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)',tab);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid=('agent_tiger.'||tab)::regclass AND polname='tenant_boundary') THEN
+                EXECUTE format('CREATE POLICY tenant_boundary ON agent_tiger.%I AS RESTRICTIVE FOR ALL TO PUBLIC USING (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid) WITH CHECK (tenant_id=NULLIF(current_setting(''app.tenant_id'',true),'''')::uuid)',tab);
+            END IF;
+        END LOOP;
+    END IF;
+END
+$$;
