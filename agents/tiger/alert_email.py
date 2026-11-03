@@ -44,7 +44,7 @@ def _address(value: Any) -> str:
 
 def configuration(tenant_id: str, *, prefix: str = "TIGER") -> tuple[SmtpMailer, str]:
     """Exact tenant mapping; never select another tenant or a default recipient."""
-    if prefix not in {"TIGER", "ZENAS"}:
+    if prefix not in {"TIGER", "ZENAS", "MARKET_LAB"}:
         raise MailConfigurationError("mail_not_configured")
     try:
         tenant = str(UUID(tenant_id))
@@ -136,7 +136,7 @@ async def deliver_pending(
     store: Any, tenant_id: str, *, transport=None, recipient=None, clock=None, namespace="tiger"
 ) -> dict:
     """Retry definite rejections; never repeat an accepted/uncertain SMTP send."""
-    if namespace not in {"tiger", "zenas"}:
+    if namespace not in {"tiger", "zenas", "market_lab"}:
         raise MailConfigurationError("mail_not_configured")
     clock = clock or (lambda: datetime.now(timezone.utc))
     if transport is None:
