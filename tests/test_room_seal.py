@@ -101,7 +101,7 @@ def test_sealed_rooms_are_marked_raw_compose(room: str) -> None:
 
 @pytest.mark.parametrize("room, sealed", [
     ("base", {"base-sandbox", "base-browser"}),
-    ("tiger", {"tiger-browser"}),
+    ("tiger", {"tiger-browser", "tiger-ocr"}),
     ("rig", {"rig-sandbox", "rig-browser", "rig-forge"}),
     # Radix is sealed on the live host today; this keeps it so.
     ("radix", {"agent-radix"}),
@@ -527,3 +527,35 @@ def test_languagetool_cannot_join_the_trigger_corridor(tmp_path):
     result = run_seal_check(tmp_path, str(path))
     assert result.returncode == 1, result.stdout + result.stderr
     assert "LEAK: triggerproject-trigger-languagetool-1 on tervory-gw-trigger" in result.stdout
+
+
+@pytest.mark.parametrize("extra", [None, "outbound", "other-internal"])
+def test_tiger_ocr_exact_attachment(tmp_path, extra):
+    data = json.loads((FIXTURES / "sealed.json").read_text())
+    data["networks"].update({"tervory-gw-tiger-ocr": True, "outbound": False, "other-internal": True})
+    data["containers"]["ocr"] = {
+        "uuid": "tigeruuid", "service": "tiger-ocr", "name": "tiger-ocr-fixture",
+        "networks": ["tervory-gw-tiger-ocr"] + ([extra] if extra else []),
+    }
+    fixture = tmp_path / "ocr.json"
+    fixture.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(fixture))
+    assert result.returncode == (1 if extra else 0), result.stdout + result.stderr
+    assert ("LEAK: tiger-ocr-fixture on " + extra in result.stdout) if extra else "agent-tiger (tigeruuid): sealed" in result.stdout
+
+
+def test_ocr_has_only_its_internal_network_and_ephemeral_data():
+    text = (ROOT / "agents/tiger/docker-compose.yml").read_text()
+    room = yaml.safe_load(text)
+    ocr = room["services"]["tiger-ocr"]
+    assert is_raw(text) and leaks(text) == []
+    assert ocr["networks"] == ["ocr"] and network_flags(text)["ocr"]
+    assert room["networks"]["ocr"] == {"external": True, "name": "tervory-gw-tiger-ocr"}
+    assert not ocr.get("volumes") and not ocr.get("ports")
+    assert ocr["tmpfs"] == ["/data:uid=1000,gid=1000,mode=0700,size=64m"]
+    assert set(ocr["environment"]) == {"TIGER_MAX_PAGES"}
+    assert ocr["cap_drop"] == ["ALL"] and ocr["security_opt"] == ["no-new-privileges:true"]
+    assert ocr["mem_limit"] == "1g" and ocr["shm_size"] == "256m"
+    main = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
+    assert {name for name, service in main["services"].items() if "tervory-gw-tiger-ocr" in service.get("networks", [])} == {"tank"}
+    assert {name for name, service in room["services"].items() if "ocr" in service.get("networks", [])} == {"tiger-ocr"}
