@@ -2415,3 +2415,4 @@ FROM tank.policy WHERE task_type='trigger.write' AND tenant_id IS NULL
 AND NOT EXISTS(SELECT 1 FROM tank.policy WHERE task_type='trigger.bot.answer' AND tenant_id IS NULL)
 LIMIT 1;
 ALTER TABLE tank.trigger_bot_passages ADD COLUMN IF NOT EXISTS checked_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE tank.trigger_bot_sources ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
