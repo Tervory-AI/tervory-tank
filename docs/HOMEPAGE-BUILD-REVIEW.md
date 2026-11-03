@@ -123,3 +123,22 @@ Playwright generated each receipt view with `page.pdf({ printBackground: true, p
 ![Per-call PDF rendered by PDFium](screenshots/homepage-build/receipt-per-call-review.png)
 
 Nothing merged or deployed. Founder browser acceptance remains pending.
+
+## Wave 4 — public website inventory and Rig
+
+The founder confirmed this document is the homepage register and that his own public website frames count as approved. The complete frame-by-frame inventory now lives in [figma/HOMEPAGE-REGISTER.md](figma/HOMEPAGE-REGISTER.md), with a machine-readable snapshot alongside it. It lists all 30 top-level frames across all 5 pages, including the excluded app screens, guides, experiments and old homepages.
+
+The current homepage v6 is already implemented. The only missing public product page in this file was Rig, desktop **56:127** and mobile **56:798**. It is now built at `/rig`, with exact source copy, the seven-step example, stage selection/keyboard control, supplier inspector, basket, illustrative calculator and receipt, benefits, close and footer. The existing local Tervory mark is reused. The early-access links lead to the existing homepage form. The example sends no payment, order or model requests. Only stage 03 has detailed inspector copy in the source; other selections use their existing stage title/owner without inventing descriptions.
+
+Rig verification: production build and static export pass; public-page and isolated signup-store checks pass; homepage Python regressions pass (3 tests). `site/check-website-browser.mjs` passes every integer width from **320 through 1440** (1,121 widths), plus all seven stage selections at 10 breakpoint widths, keyboard navigation, the example checkout selection and calculator input, canonical URL, anchors and zero browser errors/POSTs. Browser screenshots are in [screenshots/homepage-wave4](screenshots/homepage-wave4), including [375px](screenshots/homepage-wave4/rig-product-375.png), [390px source width](screenshots/homepage-wave4/rig-product-390.png) and [1440px](screenshots/homepage-wave4/rig-product-1440.png).
+
+Commands run from `site/` in the Wave 4 checkout:
+
+```sh
+npm run build
+TMPDIR=/dev/shm npm run check
+/home/ammosync/trigger-crm-venv312/bin/python -m pytest ../tests/test_site_homepage.py -q
+TMPDIR=/dev/shm PLAYWRIGHT_MODULE=/home/ammosync/tngo-review-20261027/node_modules/playwright/index.mjs BROWSER_EXECUTABLE=/opt/google/chrome/chrome WEBSITE_ROUTES=/rig node check-website-browser.mjs
+```
+
+The preview uses `server.mjs --root out --file /dev/shm/homepage-wave4-signups.jsonl --port 8947`. These are agent browser checks; founder visual acceptance is not claimed. Nothing merged or deployed.
