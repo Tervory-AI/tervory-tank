@@ -1,13 +1,23 @@
 """Lifecycle API shared by offline fixture routes and the isolated control service."""
+import hashlib
+import hmac
 import json
 import os
+import time
 from pathlib import Path
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
 
-from .enforce_lifecycle import (CoolifyEnforceBackend, Refused, coolify_configured,
-                                FixtureComposeBackend, plan_create, plan_destroy, receipt_for)
+from .enforce_lifecycle import (
+    CoolifyEnforceBackend,
+    FixtureComposeBackend,
+    Refused,
+    coolify_configured,
+    plan_create,
+    plan_destroy,
+    receipt_for,
+)
 
 
 def register(app, require_tank, bounded_json):
@@ -80,9 +90,26 @@ def register(app, require_tank, bounded_json):
             raise HTTPException(422, str(exc)) from None
 
 
+async def require_lifecycle(request: Request):
+    key = os.environ.get("AUTUMBRA_LIFECYCLE_KEY", "")
+    timestamp = request.headers.get("X-Lifecycle-Timestamp", "")
+    signature = request.headers.get("X-Lifecycle-Signature", "")
+    try:
+        fresh = abs(time.time() - int(timestamp)) <= 60
+    except ValueError:
+        fresh = False
+    if not key or not fresh or not signature:
+        raise HTTPException(401, "Lifecycle authentication required.")
+    from .app import bounded_json
+    body = await bounded_json(request, 4_000)
+    message = f"{timestamp}\n{request.method}\n{request.url.path}\n".encode() + body
+    expected = hmac.new(key.encode(), message, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected.encode(), signature.encode()):
+        raise HTTPException(401, "Lifecycle authentication required.")
+
+
 def create_app():
-    # Reuse the existing HMAC and body bound; no Watch lifespan/background tasks.
-    from .app import require_tank, bounded_json
+    from .app import bounded_json
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-    register(app, require_tank, bounded_json)
+    register(app, require_lifecycle, bounded_json)
     return app

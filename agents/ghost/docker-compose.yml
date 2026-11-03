@@ -62,7 +62,7 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     environment:
-      TANK_KEY: ${TANK_KEY_GHOST:-}
+      AUTUMBRA_LIFECYCLE_KEY: ${AUTUMBRA_LIFECYCLE_KEY:-}
       PYTHONDONTWRITEBYTECODE: "1"
       AUTUMBRA_COOLIFY_URL: ${AUTUMBRA_COOLIFY_URL:-}
       AUTUMBRA_COOLIFY_TOKEN: ${AUTUMBRA_COOLIFY_TOKEN:-}
@@ -70,7 +70,7 @@ services:
       AUTUMBRA_COOLIFY_SERVER_UUID: ${AUTUMBRA_COOLIFY_SERVER_UUID:-}
       AUTUMBRA_COOLIFY_ENVIRONMENT: ${AUTUMBRA_COOLIFY_ENVIRONMENT:-}
       AUTUMBRA_COOLIFY_GITHUB_APP_UUID: ${AUTUMBRA_COOLIFY_GITHUB_APP_UUID:-}
-    networks: [enforce_control]
+    networks: [gw]
   ghost-browser:
     build:
       context: ..
@@ -101,6 +101,3 @@ networks:
   gw:
     external: true
     name: tervory-gw-ghost
-  enforce_control:
-    external: true
-    name: tervory-enforce-control

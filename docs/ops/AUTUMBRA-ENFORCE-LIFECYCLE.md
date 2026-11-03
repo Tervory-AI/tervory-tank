@@ -16,15 +16,15 @@ It mounts no data volume. It does not run Watch's lifespan or background probes.
    permission is required by Coolify's application DELETE endpoint, even though
    this implementation never calls deploy/start/restart. The token owner must
    remain a team administrator/owner. Values are entered by the founder only.
-2. Deploy the reviewed main-stack mapping that creates
-   `tervory-enforce-control` with `internal: true` and attaches Tank. The Ghost
-   compose joins this network as external; only its lifecycle service joins it,
-   not Watch or the browser. Provision the existing Coolify HTTPS API endpoint
-   on that internal network, with DNS/alias and a trusted certificate matching
-   the origin in `AUTUMBRA_COOLIFY_URL`. An internal network has no public
-   internet route: a public-only API origin will remain unreachable. Do not
-   weaken the network or attach Watch to it. Only Tank holds the HMAC key on the
-   caller side; the existing require_tank check protects all lifecycle routes.
+2. Keep the Ghost compose in normal mode. Lifecycle joins only the external
+   `tervory-gw-ghost` network, shared with Watch, browser and Tank. It is not a
+   sealed service. No volumes are renamed or pinned and no ingress is added.
+   Give `AUTUMBRA_LIFECYCLE_KEY` only to Tank and enforce-lifecycle. Watch and
+   browser receive neither this key nor the six lifecycle Coolify settings.
+   Tank signs the timestamp, HTTP method, path and exact body with HMAC-SHA256.
+   Lifecycle rejects missing signatures, Watch-key signatures and timestamps
+   outside 60 seconds with 401. This separate key enforces the air gap on the
+   shared network; it never falls back to Watch's `TANK_KEY_GHOST`.
 3. Connect the GitHub App source to `Tervory-AI/tervory-tank`. On the isolated
    **enforce-lifecycle service only**, fill these six setting names:
 
@@ -265,7 +265,7 @@ Every changed file; line is the first changed location relative to the starting 
 | `agents/ghost/Dockerfile:10` | Package the existing Tisan Coolify client only. |
 | `agents/ghost/app.py:8` | Reuse lifecycle routes; stored-match approval; standing-record loop, undo reconciliation and signed evidence. |
 | `agents/ghost/client_settings.py:12` | Two code-fix modes and legacy read normalization; three shield modes unchanged. |
-| `agents/ghost/docker-compose.yml:35` | Hardened internal lifecycle service; Watch has no lifecycle names. |
+| `agents/ghost/docker-compose.yml:35` | Hardened lifecycle service on Ghost gateway; Watch has no lifecycle names or lifecycle key. |
 | `agents/ghost/enforce_api.py:1` | Shared lifecycle registration and a standalone service without Watch lifespan. |
 | `agents/ghost/enforce_apply.py:158` | Retain source_data in receipts without affecting apply decisions. |
 | `agents/ghost/enforce_lifecycle.py:16` | Coolify lifecycle, real cap count, provenance, volume retention and precise outcomes. |
@@ -276,7 +276,7 @@ Every changed file; line is the first changed location relative to the starting 
 | `agents/ghost/threat_payload.py:266` | Bound the single shared-evidence key and positive count. |
 | `agents/ghost/threat_queue.py:246` | Carry server-derived evidence through the existing queue. |
 | `agents/tisan/promotion.py:138` | Reusable client settings and opt-in lifecycle response handling; Tisan defaults retained. |
-| `docker-compose.yml:319` | Tank-only internal control network attachment and creation. |
+| `docker-compose.yml:319` | Tank-only lifecycle HMAC key; no separate control network. |
 | `docs/ops/AUTUMBRA-ENFORCE-LIFECYCLE.md:1` | Setup, API citations, three acceptance gates and exact evidence. |
 | `hermes/deidentify.py:8` | Preserve explicit public IP facts after identity inventory scrubbing. |
 | `hermes/publishing.py:82` | Audit-proven single platform withdrawal, withdrawn-source guard and code-only publication. |

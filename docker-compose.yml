@@ -288,6 +288,7 @@ services:
       META_GRAPH_VERSION: ${META_GRAPH_VERSION}
       META_IG_BUSINESS_ID: ${META_IG_BUSINESS_ID}
       TANK_KEY_RIG: ${TANK_KEY_RIG:-}
+      AUTUMBRA_LIFECYCLE_KEY: ${AUTUMBRA_LIFECYCLE_KEY:-}
       TANK_KEY_GHOST: ${TANK_KEY_GHOST:-}
       TANK_KEY_WORKERS: ${TANK_KEY_WORKERS:-}
       RIG_RETAILER_KEY: ${RIG_RETAILER_KEY:-}
@@ -316,7 +317,6 @@ services:
       - tervory-gw-base
       - tervory-gw-rig
       - tervory-gw-ghost
-      - tervory-enforce-control
       - research-internal
     # Host loopback only, for the workers service on the Boston host (workers/host/).
     # Never a public address: Tank stays off the internet.
@@ -547,8 +547,3 @@ networks:
 
   tervory-gw-trigger:
     name: tervory-gw-trigger
-
-  # Tank and the isolated lifecycle resource only; no internet gateway.
-  tervory-enforce-control:
-    name: tervory-enforce-control
-    internal: true

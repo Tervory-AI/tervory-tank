@@ -205,7 +205,7 @@ def test_compose_adds_names_only_and_keeps_the_seal():
     for name, service in room["services"].items():
         assert "ports" not in service and not service.get("privileged")
         assert not any("docker.sock" in str(v) for v in service.get("volumes", []))
-        assert service["networks"] == (["enforce_control"] if name == "enforce-lifecycle" else ["gw"])
+        assert service["networks"] == ["gw"]
     assert "COOLIFY_TOKEN_GHOST_ACTIONS" not in str(room)
 
 

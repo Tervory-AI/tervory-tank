@@ -8,17 +8,18 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
+import hmac
 import json
 import os
 import time
 import uuid
 from typing import Literal
 
-import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, Query
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
-
 import admin
+import httpx
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 router = APIRouter(prefix="/v1/ghost")
 ROOMS = {name: f"http://agent-{name.replace('_', '-')}:8000" for name in
@@ -64,15 +65,25 @@ async def google_signing_keys(kid: str = Query(default="", max_length=200)):
 
 
 async def call_room(method: str, room: str, path: str, *, body=None, params=None, timeout=60):
-    key = os.environ.get(f"TANK_KEY_{room.upper()}", "")
+    lifecycle = room == "ghost" and path.startswith("/ghost/autumbra/enforce/")
+    key = os.environ.get("AUTUMBRA_LIFECYCLE_KEY" if lifecycle else f"TANK_KEY_{room.upper()}", "")
     http = runtime()._http
     if not key or http is None:
         raise HTTPException(503, "The room is unavailable.")
     try:
-        base = ("http://enforce-lifecycle:8000" if room == "ghost"
-                and path.startswith("/ghost/autumbra/enforce/") else ROOMS[room])
-        response = await http.request(method, base + path, json=body, params=params,
-                                      headers={"X-Tank-Key": key}, follow_redirects=False, timeout=timeout)
+        base = "http://enforce-lifecycle:8000" if lifecycle else ROOMS[room]
+        if lifecycle:
+            content = json.dumps(body, separators=(",", ":")).encode() if body is not None else b""
+            timestamp = str(int(time.time()))
+            message = f"{timestamp}\n{method}\n{path}\n".encode() + content
+            headers = {"X-Lifecycle-Timestamp": timestamp,
+                       "X-Lifecycle-Signature": hmac.new(key.encode(), message, hashlib.sha256).hexdigest(),
+                       "Content-Type": "application/json"}
+            response = await http.request(method, base + path, content=content, params=params,
+                                          headers=headers, follow_redirects=False, timeout=timeout)
+        else:
+            response = await http.request(method, base + path, json=body, params=params,
+                                          headers={"X-Tank-Key": key}, follow_redirects=False, timeout=timeout)
     except httpx.HTTPError:
         raise HTTPException(503, "The room is unavailable.") from None
     if len(response.content) > 2_000_000 or response.status_code >= 500:

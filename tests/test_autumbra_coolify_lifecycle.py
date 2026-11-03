@@ -416,16 +416,20 @@ def test_isolated_service_seal():
     compose = yaml.safe_load((ROOT / 'agents/ghost/docker-compose.yml').read_text())
     service = compose['services']['enforce-lifecycle']
     assert set(lifecycle.COOLIFY_SETTINGS) <= service['environment'].keys()
-    assert service['networks'] == ['enforce_control']
+    assert service['networks'] == ['gw']
     assert not service.get('ports') and not service.get('expose') and not service.get('volumes')
     assert service['read_only'] and service['cap_drop'] == ['ALL']
     assert service['security_opt'] == ['no-new-privileges:true']
     assert service['mem_limit'] and service['cpus']
     main = yaml.safe_load((ROOT / 'docker-compose.yml').read_text())
-    assert main['networks']['tervory-enforce-control']['internal'] is True
-    assert 'tervory-enforce-control' in main['services']['tank']['networks']
+    assert 'tervory-enforce-control' not in main['networks']
+    for services in (main['services'], compose['services']):
+        for name, spec in services.items():
+            assert ('AUTUMBRA_LIFECYCLE_KEY' in (spec.get('environment') or {})) == (name in {'tank', 'enforce-lifecycle'})
+    for name in ('agent-ghost', 'ghost-browser'):
+        assert not set(lifecycle.COOLIFY_SETTINGS) & compose['services'][name]['environment'].keys()
     with TestClient(create_control()) as client:
-        assert client.get('/ghost/autumbra/enforce/list').status_code == 404
+        assert client.get('/ghost/autumbra/enforce/list').status_code == 401
         assert client.get('/ghost/autumbra/settings').status_code == 404
 
 
@@ -440,3 +444,39 @@ async def test_same_repository_forms_and_canonical_names(repository):
         assert len(await service.list()) == 1
         assert (await service.create_plan(B))['cap']['current'] == 2
         assert (await service.destroy(lifecycle.plan_destroy(A)))['outcome'] == 'destroyed'
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_separate_hmac_key(monkeypatch):
+    import hashlib
+    import hmac
+    import time
+
+    from agents.ghost.enforce_api import create_app as create_control
+    monkeypatch.setenv('AUTUMBRA_LIFECYCLE_KEY', 'placeholder-lifecycle-key')
+    monkeypatch.setenv('TANK_KEY_GHOST', 'placeholder-watch-key')
+    for setting in lifecycle.COOLIFY_SETTINGS:
+        monkeypatch.delenv(setting, raising=False)
+    path = '/ghost/autumbra/enforce/plan-create'
+    content = json.dumps({'tenant_id': A}).encode()
+    timestamp = str(int(time.time()))
+    def signed(key, stamp=timestamp, data=content):
+        message = f'{stamp}\nPOST\n{path}\n'.encode() + data
+        return {'X-Lifecycle-Timestamp': stamp,
+                'X-Lifecycle-Signature': hmac.new(key.encode(), message, hashlib.sha256).hexdigest()}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_control()), base_url='http://lifecycle') as client:
+        assert (await client.post(path, content=content)).status_code == 401
+        assert (await client.post(path, content=content, headers={'X-Tank-Key': 'placeholder-watch-key'})).status_code == 401
+        assert (await client.post(path, content=content, headers=signed('placeholder-watch-key'))).status_code == 401
+        assert (await client.post(path, content=content, headers=signed('placeholder-lifecycle-key', '1'))).status_code == 401
+        assert (await client.post(path, content=content + b' ', headers=signed('placeholder-lifecycle-key'))).status_code == 401
+        assert (await client.post(path, content=content, headers=signed('placeholder-lifecycle-key'))).status_code == 200
+        async def send(method, url, **kwargs):
+            assert url == 'http://enforce-lifecycle:8000' + path
+            assert 'X-Tank-Key' not in kwargs['headers']
+            return await client.request(method, path, **kwargs)
+        monkeypatch.setattr(ghost_routes, 'runtime', lambda: SimpleNamespace(_http=SimpleNamespace(request=send)))
+        response = await ghost_routes.call_room('POST', 'ghost', path, body={'tenant_id': A})
+        assert response.status_code == 200
+        monkeypatch.delenv('AUTUMBRA_LIFECYCLE_KEY')
+        assert (await client.post(path, content=content, headers=signed('placeholder-lifecycle-key'))).status_code == 401
