@@ -1,0 +1,501 @@
+PR #604 review corrections 1–7 — 3 November 2026
+
+Reviewed starting head: 71fcb68be58f79a84e09ad09f075370c6cadb816
+Final implementation/test head: 7c898d034078389d147bcd8f4efccada7542c979
+Initially included main: b2fa83bdfca6d5788d12e11ce5230da1463a3621
+Latest merged main: ecef216bc16d17c6337242971d117b3fbd8db854
+Validated merged head: 0b1e3d6a4d4e8dec96893b8f471d9da33ab831aa
+Branch: codex/trigger-m1-marketing
+Own checkout: /workspace/codex-trigger-m1
+PR: https://github.com/Tervory-AI/tervory-tank/pull/604
+
+A later required fetch merged main cleanly; its verification follows below. The exact final PR SHA
+and its CI tank job URL/result are recorded in the PR description AFTER the
+last push, without creating another commit. CI's tank job is the full-suite
+test of record. Historical local full-suite logs in verification.txt are not
+substituted for this final-head CI result.
+
+Founder browser acceptance and the real Trigger/internal LanguageTool check
+follow AFTER MERGE, as directed by the founder review. No browser screenshot,
+live Google write, actual model call or production SQL was used here. No main
+push/merge, new page, visible copy, live fixture or secret setting value.
+
+First operation:
+git fetch origin && git merge origin/main
+# PASS, main already included. Existing branch continued, never reset.
+
+For each finished file, exact helper contents:
+#!/bin/bash
+set -e
+git fetch origin main
+git merge origin/main
+git add -- "$1"
+git commit -m "$2"
+git push origin codex/trigger-m1-marketing
+# Invoked as: bash .m1-tmp/finish <file> <commit-message>
+# All fetches and pushes succeeded. Commits/files/messages below identify every
+# helper invocation. No force push or main push.
+
+e14766bc37403894561d60430e62c5fd0bc49094 Fix 604.1 retry unsent refresh and connection failures without treating them as published uncertainty
+
+tank/trigger_google.py
+17003bb03f8d226777f7e753db3bf19020dd4738 Test 604.1 refresh versus publication failures across connection timeouts responses and rejections
+
+tests/trigger_m1/test_m1_delivery.py
+2f48183927e6d654da4ff04f477289b52c3935f0 Fix 604.2 persist the publication claim time for confirmed reconciliation
+
+tank/schema.sql
+c61f9e8d7a4aa1aa355214fa259216c217c76446 Fix 604.2 bind every durable send claim to its exact reconciliation timestamp
+
+tank/trigger_publisher.py
+4d65f4bcdaf5233706eb4bd432a044da27fe12d1 Fix 604.2 reuse the locked transaction when paginating Google posts for reconciliation
+
+tank/trigger_google.py
+f9199cbe43b197c8f09c7b67423bece21e690726 Fix 604.2 allow uncertain cancellation and reconcile confirmed retries against all location posts
+
+tank/trigger_marketing.py
+658789ee9f2b32349b3c29b16edcbad5b889279a Test 604.2 confirmed uncertain recovery pagination cancellation and fail-closed reads
+
+tests/trigger_m1/test_m1_reconcile.py
+cc799d3f9e497a1f186204c7b191caa0257c4f8f Align uncertain cancellation regression with founder review rule 604.2
+
+tests/trigger_m1/test_m1_queue.py
+b92a4fc7d334b6943831465ac617f532914820af Verify 604.1 bounded server-failure retries and 604.2 confirmed recovery of lost claims
+
+tests/trigger_m1/test_marketing.py
+ead1a7297e1167d838b353ee9bb088a55c015247 Fix 604.3 accept only explicit already-revoked invalid_token responses during disconnect
+
+tank/trigger_google.py
+f531592649ec060d4e80933e64a081ff6c980875 Test 604.3 disconnect keeps failures sealed and erases only successful or invalid_token revocations
+
+tests/trigger_m1/test_m1_oauth_review.py
+4920de5386cc5213118249c1cfd9ddb243046485 Fix 604.4 mark post creation and review drafting as paid_run at the existing Confirm guard
+
+tank/command.py
+6e35bf2ebed2e41305248aec0478ee66ab2acf03 Test 604.4 exact paid-tool classification and refusal before either drafting route starts
+
+tests/trigger_m1/test_m1_paid.py
+78e984bba4408b76266c9cf5cf66f30beaa4f9b6 Fix 604.5 revoke the old grant at confirmed reconnect before new consent and prevent callback overwrite
+
+tank/trigger_google.py
+a3d56defd6e009d8431a5501b68f178d5b8f2c27 Test 604.5 old-grant revocation precedes new consent and storage and fails closed on other errors
+
+tests/trigger_m1/test_m1_oauth_review.py
+7c898d034078389d147bcd8f4efccada7542c979 Fix 604.6 prove both Los Angeles DST folds retain November first in calendar and date filtering
+
+tests/trigger_m1/test_m1_dst.py
+e250739e938029ed0038cb7dab66a090a34cfbc7 Document 604 recovery revocation paid-card classification and after-merge acceptance
+
+docs/ops/TRIGGER-GBP.md
+a73db907de331dce2391dedb60a6714f02b5ef88 Clarify that confirmed uncertain retry reconciles before resetting delivery
+
+docs/ops/TRIGGER-GBP.md
+5f1392844cba3dac4b4a26543ff4124cc5977e94 Fix 604.7 replace stale head and evidence with review fixes paid tool list and final-head CI record policy
+
+tests/trigger_m1/PR.md
+
+Disposable local SQL setup:
+docker run --detach --rm --name codex-trigger-m1-review-pg --publish 127.0.0.1:32835:5432 --memory 768m --cpus 1 --tmpfs /var/lib/postgresql/data:rw,size=512m -e POSTGRES_HOST_AUTH_METHOD=trust postgres:16.15
+docker exec codex-trigger-m1-review-pg createdb -U postgres pooltest
+# PASS; each native fixture creates/drops its own isolated database. Production
+# is never used. No dependency or runtime-setting change was needed in review.
+
+Fix 1's initial unit invocation omitted --allow-unix-socket, preventing
+asyncio's self-pipe creation: 20 setup errors, not a product failure or pass.
+Corrected exact command:
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank .m1-tmp/venv/bin/python -m pytest tests/trigger_m1/test_m1_delivery.py -q --disable-socket --allow-unix-socket
+....................                                                     [100%]
+20 passed in 0.57s
+
+TMPDIR=/workspace/codex-trigger-m1-test-scratch PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32835/pooltest .m1-tmp/venv/bin/python -m pytest tests/trigger_m1/test_m1_reconcile.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --allow-unix-socket --timeout=180
+6 passed, 4 warnings in 12.51s
+
+TMPDIR=/workspace/codex-trigger-m1-test-scratch PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32835/pooltest .m1-tmp/venv/bin/python -m pytest tests/trigger_m1/test_m1_paid.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --allow-unix-socket --timeout=180
+3 passed, 4 warnings in 5.53s
+
+TMPDIR=/workspace/codex-trigger-m1-test-scratch PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32835/pooltest .m1-tmp/venv/bin/python -m pytest tests/trigger_m1/test_m1_oauth_review.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --allow-unix-socket --timeout=180
+8 passed, 4 warnings in 9.23s
+
+TMPDIR=/workspace/codex-trigger-m1-test-scratch PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32835/pooltest .m1-tmp/venv/bin/python -m pytest tests/trigger_m1/test_m1_dst.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --allow-unix-socket --timeout=180
+2 passed, 4 warnings in 3.05s
+
+Final M1 suite:
+TMPDIR=/workspace/codex-trigger-m1-test-scratch PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32835/pooltest .m1-tmp/venv/bin/python -m pytest tests/trigger_m1 -q --disable-socket --allow-hosts=127.0.0.1,localhost --allow-unix-socket --timeout=180
+.................................................................        [100%]
+=============================== warnings summary ===============================
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "WriteIn" shadows an attribute in parent "CheckerIn"
+    warnings.warn(
+
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/main.py:753: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/main.py:810: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+65 passed, 15 warnings in 26.67s
+
+Current Trigger/Command/M1 selection:
+rg --files tests | rg '(^tests/test_(trigger|command|workers_command)[^/]*\.py$|^tests/(trigger_|command_acceptance)[^/]*/test[^/]*\.py$)' > .m1-tmp/review-selected-trigger-command.txt
+bwrap --bind / / --dev-bind /dev /dev --bind /workspace/codex-trigger-m1-test-scratch /tmp --ro-bind /tmp/tervory-command-workspace-20261031 /tmp/tervory-command-workspace-20261031 --ro-bind /tmp/tervory-base-437-origin /tmp/tervory-base-437-origin -- env TMPDIR=/workspace/codex-trigger-m1-test-scratch CRM_ASSEMBLED_ROOT=$PWD COMMAND_ACCEPTANCE_CLIENTS=1 COMMAND_TEST_TOOLS=$PWD/workspace/node_modules PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank:tests:.m1-tmp/site POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32835/pooltest RLS_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32835/pooltest GIT_AUTHOR_NAME=Codex GIT_AUTHOR_EMAIL=codex@users.noreply.github.com GIT_COMMITTER_NAME=Codex GIT_COMMITTER_EMAIL=codex@users.noreply.github.com .m1-tmp/venv/bin/python -m pytest $(cat .m1-tmp/review-selected-trigger-command.txt) -q -n 4 --dist loadfile --disable-socket --allow-hosts=127.0.0.1,localhost --allow-unix-socket --timeout=180 -rs
+Selected files:
+tests/test_command.py
+tests/test_command_1b_workspace.py
+tests/trigger_crm_acceptance_20261031/test_combined.py
+tests/command_acceptance_20261031/test_cross_lane.py
+tests/test_command_repo_tools.py
+tests/test_trigger_x_length.py
+tests/test_command_code.py
+tests/test_trigger_w1.py
+tests/trigger_second_build/test_second.py
+tests/test_command_streaming.py
+tests/test_workers_command.py
+tests/test_command_squads_ui.py
+tests/trigger_m1/test_m1_metrics.py
+tests/trigger_m1/test_m1_delivery.py
+tests/trigger_m1/test_m1_reconcile.py
+tests/trigger_m1/test_m1_queue.py
+tests/trigger_m1/test_m1_oauth_review.py
+tests/trigger_m1/test_m1_storage.py
+tests/trigger_m1/test_m1_dst.py
+tests/trigger_m1/test_m1_paid.py
+tests/trigger_m1/test_marketing.py
+tests/trigger_gate2/test_gate2.py
+tests/test_trigger_crm_wsgi.py
+tests/test_trigger_crm.py
+tests/trigger_first_build/test_trigger.py
+tests/test_command_radix.py
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [ 13%]
+........................................................................ [ 27%]
+...............................................s........................ [ 40%]
+........................................................................ [ 54%]
+........................................................................ [ 67%]
+........................................................................ [ 81%]
+........................................................................ [ 95%]
+..........................                                               [100%]
+=============================== warnings summary ===============================
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "WriteIn" shadows an attribute in parent "CheckerIn"
+    warnings.warn(
+
+tests/test_command_streaming.py::test_tokens_arrive_before_finish_then_exact_message_and_receipt
+tests/test_command_code.py::test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_transcript[auto-us-east]
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/main.py:753: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_command_streaming.py: 5 warnings
+tests/test_command_code.py: 5 warnings
+tests/test_command.py: 5 warnings
+tests/trigger_m1/test_m1_storage.py: 5 warnings
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_command_streaming.py::test_tokens_arrive_before_finish_then_exact_message_and_receipt
+tests/test_command_code.py::test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_transcript[auto-us-east]
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/main.py:810: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_command_streaming.py::test_tokens_arrive_before_finish_then_exact_message_and_receipt
+tests/test_command_code.py::test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_transcript[auto-us-east]
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/test_command_streaming.py::test_tokens_arrive_before_finish_then_exact_message_and_receipt
+tests/test_command_code.py::test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_transcript[auto-us-east]
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_command_streaming.py::test_tokens_arrive_before_finish_then_exact_message_and_receipt
+tests/test_command_code.py::test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_transcript[auto-us-east]
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_command_streaming.py::test_tokens_arrive_before_finish_then_exact_message_and_receipt
+tests/test_command_code.py::test_actual_code_route_uses_pat_corridor_ledger_and_existing_masked_transcript[auto-us-east]
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_trigger_crm_wsgi.py:14: Run with the pinned CRM Django runtime for WSGI smoke
+SKIPPED [1] tests/trigger_first_build/test_trigger.py:337: Requires isolated room and LanguageTool containers
+529 passed, 2 skipped, 60 warnings in 111.64s (0:01:51)
+
+/home/ammosync/trigger-crm-venv312/bin/ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+All checks passed!
+
+git diff --check
+# PASS exit 0; empty output.
+
+Owned disposable service cleanup after native tests:
+docker stop --timeout 5 codex-trigger-m1-review-pg
+# PASS: codex-trigger-m1-review-pg stopped. No production container changed.
+
+CI observation commands/tools (after final push):
+git rev-parse HEAD origin/codex/trigger-m1-marketing origin/main
+# Verify local and remote head match.
+GitHub fetch_commit_workflow_runs(commit_sha=<final SHA>, repo_full_name='Tervory-AI/tervory-tank')
+GitHub fetch_workflow_run_jobs(repo_full_name='Tervory-AI/tervory-tank', run_id=<ci run>)
+GitHub fetch_workflow_job_steps(repo_full_name='Tervory-AI/tervory-tank', job_id=<tank job>)
+# Exact final SHA, tank job URL and conclusion go into PR #604's description.
+# Local focused tests are not labelled the CI full-suite result.
+
+Final required fetch during the evidence push advanced origin/main to
+ecef216bc16d17c6337242971d117b3fbd8db854 (#602). Normal merge d5851380
+kept both sides' Command/planner changes without conflicts. The M1 implementation
+files remained unchanged; Command registrations/planner were merged normally.
+The 529-pass broader run above precedes this main refresh. New merged-head
+verification follows, and final-head CI tank is authoritative for the full suite.
+
+Disposable merged-head check database:
+docker run --detach --rm --name codex-trigger-m1-review-merged-pg --publish 127.0.0.1:32835:5432 --memory 768m --cpus 1 --tmpfs /var/lib/postgresql/data:rw,size=512m -e POSTGRES_HOST_AUTH_METHOD=trust postgres:16.15
+docker exec codex-trigger-m1-review-merged-pg createdb -U postgres pooltest
+# PASS; own disposable service only.
+
+TMPDIR=/workspace/codex-trigger-m1-test-scratch PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32835/pooltest .m1-tmp/venv/bin/python -m pytest tests/trigger_m1 tests/test_command_zenas_z3.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --allow-unix-socket --timeout=180
+........................................................................ [100%]
+=============================== warnings summary ===============================
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "WriteIn" shadows an attribute in parent "CheckerIn"
+    warnings.warn(
+
+tank/main.py:753
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/main.py:753: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: 5 warnings
+tests/trigger_m1/test_m1_storage.py: 5 warnings
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tank/main.py:810
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/main.py:810: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tank/agent_skills.py:531
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tank/skala_intake.py:71
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tank/skala_intake.py:77
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tank/skala_revalidation.py:192
+tests/trigger_m1/test_m1_storage.py::test_startup_guard_rejects_bypass_role_before_starting_publisher
+  /workspace/codex-trigger-m1/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+72 passed, 26 warnings in 94.44s (0:01:34)
+
+/home/ammosync/trigger-crm-venv312/bin/ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+All checks passed!
+
+git diff --check
+# PASS exit 0.
+docker stop --timeout 5 codex-trigger-m1-review-merged-pg
+# PASS: codex-trigger-m1-review-merged-pg stopped. No production container changed.

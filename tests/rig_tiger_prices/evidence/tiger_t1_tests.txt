@@ -1,0 +1,263 @@
+Final full validation on implementation 5b6625f9 (main cf95a07e merged).
+The subsequent 406fe08e public-policy compilation change is covered by all 66 focused T1 tests and the policy benchmark; see tiger_t1_focused_and_static.txt.
+
+Command:
+.venv/bin/python tests/rig_tiger_prices/run_t1_offline.py
+Includes every tests/test_tiger*.py case, tests/rig_tiger_prices, tests/test_command.py and tests/test_personal_tokens.py.
+Final test timeout: 300 seconds (normal CI limit); discovery job timeout: 45 seconds.
+Exit status: 1; exactly six failures also reproduced on clean origin/main.
+
+..............................................F......................... [ 19%]
+........................................................................ [ 38%]
+......................................................................FF [ 58%]
+F...........................FF.......................................... [ 77%]
+........................................................................ [ 97%]
+...........                                                              [100%]
+=================================== FAILURES ===================================
+______________ test_email_copy_matches_actual_workspace_formatter ______________
+tests/test_tiger_alert_email.py:399: in test_email_copy_matches_actual_workspace_formatter
+    result = subprocess.run(
+/home/ammosync/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/subprocess.py:571: in run
+    raise CalledProcessError(retcode, process.args,
+E   subprocess.CalledProcessError: Command '['node', 'tests/tiger_alert_email/page_copy.cjs']' returned non-zero exit status 1.
+______________ test_real_browser_document_and_asset_refusals[200] ______________
+tests/test_tiger_public_policy.py:282: in test_real_browser_document_and_asset_refusals
+    result = await browser.visit(browser.Page(url=url, price_reader=True, settle_ms=500),
+agents/_brain/browser.py:361: in visit
+    result = await _visit(body, tenant, task, origin, run, directory)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agents/_brain/browser.py:590: in _visit
+    await cleanup_visit(context, browser, manager, storage,
+agents/_brain/browser.py:82: in cleanup_visit
+    await step(lambda: context.storage_state(path=str(storage)))
+agents/_brain/browser.py:71: in step
+    await action()
+.venv/lib/python3.12/site-packages/playwright/async_api/_generated.py:3630: in storage_state
+    await self._impl_obj.storage_state(
+.venv/lib/python3.12/site-packages/playwright/_impl/_browser_context.py:584: in storage_state
+    result = await self._channel.send_return_as_dict(
+.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:105: in send_return_as_dict
+    return await self._connection.wrap_api_call(
+.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:636: in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E   playwright._impl._errors.TargetClosedError: BrowserContext.storage_state: Target page, context or browser has been closed
+______________ test_real_browser_document_and_asset_refusals[403] ______________
+tests/test_tiger_public_policy.py:282: in test_real_browser_document_and_asset_refusals
+    result = await browser.visit(browser.Page(url=url, price_reader=True, settle_ms=500),
+agents/_brain/browser.py:361: in visit
+    result = await _visit(body, tenant, task, origin, run, directory)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agents/_brain/browser.py:590: in _visit
+    await cleanup_visit(context, browser, manager, storage,
+agents/_brain/browser.py:82: in cleanup_visit
+    await step(lambda: context.storage_state(path=str(storage)))
+agents/_brain/browser.py:71: in step
+    await action()
+.venv/lib/python3.12/site-packages/playwright/async_api/_generated.py:3630: in storage_state
+    await self._impl_obj.storage_state(
+.venv/lib/python3.12/site-packages/playwright/_impl/_browser_context.py:584: in storage_state
+    result = await self._channel.send_return_as_dict(
+.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:105: in send_return_as_dict
+    return await self._connection.wrap_api_call(
+.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:636: in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E   playwright._impl._errors.TargetClosedError: BrowserContext.storage_state: Target page, context or browser has been closed
+______________ test_real_browser_document_and_asset_refusals[429] ______________
+tests/test_tiger_public_policy.py:282: in test_real_browser_document_and_asset_refusals
+    result = await browser.visit(browser.Page(url=url, price_reader=True, settle_ms=500),
+agents/_brain/browser.py:361: in visit
+    result = await _visit(body, tenant, task, origin, run, directory)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agents/_brain/browser.py:590: in _visit
+    await cleanup_visit(context, browser, manager, storage,
+agents/_brain/browser.py:82: in cleanup_visit
+    await step(lambda: context.storage_state(path=str(storage)))
+agents/_brain/browser.py:71: in step
+    await action()
+.venv/lib/python3.12/site-packages/playwright/async_api/_generated.py:3630: in storage_state
+    await self._impl_obj.storage_state(
+.venv/lib/python3.12/site-packages/playwright/_impl/_browser_context.py:584: in storage_state
+    result = await self._channel.send_return_as_dict(
+.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:105: in send_return_as_dict
+    return await self._connection.wrap_api_call(
+.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:636: in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E   playwright._impl._errors.TargetClosedError: BrowserContext.storage_state: Target page, context or browser has been closed
+________________ test_workspace_actions_and_safe_unread_display ________________
+tests/test_tiger_works.py:222: in test_workspace_actions_and_safe_unread_display
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: TAP version 13
+E     # node:internal/modules/cjs/loader:1433
+E     #   throw err;
+E     #   ^
+E     # Error: Cannot find module '/workspace/codex-tiger-t1/workspace/node_modules/typescript'
+E     # Require stack:
+E     # - /workspace/codex-tiger-t1/tests/tiger_works/workspace.test.cjs
+E     #     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+E     #     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)
+E     #     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)
+E     #     at Function._load (node:internal/modules/cjs/loader:1216:25)
+E     #     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+E     #     at Module.require (node:internal/modules/cjs/loader:1527:12)
+E     #     at require (node:internal/modules/helpers:147:16)
+E     #     at Object.<anonymous> (/workspace/codex-tiger-t1/tests/tiger_works/workspace.test.cjs:6:12)
+E     #     at Module._compile (node:internal/modules/cjs/loader:1781:14)
+E     #     at Object..js (node:internal/modules/cjs/loader:1913:10) {
+E     #   code: 'MODULE_NOT_FOUND',
+E     #   requireStack: [ '/workspace/codex-tiger-t1/tests/tiger_works/workspace.test.cjs' ]
+E     # }
+E     # Node.js v22.23.4
+E     # Subtest: tests/tiger_works/workspace.test.cjs
+E     not ok 1 - tests/tiger_works/workspace.test.cjs
+E       ---
+E       duration_ms: 89.619788
+E       type: 'test'
+E       location: '/workspace/codex-tiger-t1/tests/tiger_works/workspace.test.cjs:1:1'
+E       failureType: 'testCodeFailure'
+E       exitCode: 1
+E       signal: ~
+E       error: 'test failed'
+E       code: 'ERR_TEST_FAILURE'
+E       ...
+E     1..1
+E     # tests 1
+E     # suites 0
+E     # pass 0
+E     # fail 1
+E     # cancelled 0
+E     # skipped 0
+E     # todo 0
+E     # duration_ms 100.551835
+E
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['node', '--test', 'tests/tiger_works/workspace.test.cjs'], returncode=1, stdout="TAP version 13... tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 100.551835\n", stderr='').returncode
+_________ test_real_chromium_markup_stores_history_and_one_price_alert _________
+tests/test_tiger_works.py:236: in test_real_chromium_markup_stores_history_and_one_price_alert
+    await page.set_content(html)
+.venv/lib/python3.12/site-packages/playwright/async_api/_generated.py:20365: in set_content
+    await self._impl_obj.set_content(
+.venv/lib/python3.12/site-packages/playwright/_impl/_page.py:555: in set_content
+    return await self._main_frame.set_content(**locals_to_params(locals()))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/playwright/_impl/_frame.py:509: in set_content
+    await self._channel.send(
+.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:78: in send
+    return await self._connection.wrap_api_call(
+.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:636: in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E   playwright._impl._errors.TargetClosedError: Page.set_content: Target page, context or browser has been closed
+E   Call log:
+E     - setting frame content, waiting until "load"
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+  /workspace/codex-tiger-t1/tank/main.py:752: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+  /workspace/codex-tiger-t1/tank/main.py:806: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+  /workspace/codex-tiger-t1/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+  /workspace/codex-tiger-t1/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+  /workspace/codex-tiger-t1/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+  /workspace/codex-tiger-t1/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_tiger_alert_email.py::test_email_copy_matches_actual_workspace_formatter
+FAILED tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[200]
+FAILED tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[403]
+FAILED tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[429]
+FAILED tests/test_tiger_works.py::test_workspace_actions_and_safe_unread_display
+FAILED tests/test_tiger_works.py::test_real_chromium_markup_stores_history_and_one_price_alert
+6 failed, 365 passed, 14 warnings in 595.78s (0:09:55)
+
+Earlier 90-second full-run attempt (superseded):
+7 failed, 363 passed; the extra failure was a fixture-inclusive 90-second timeout in test_command.py::test_pinned_turn_receipt_uses_actual_model_and_pending_auto.
+
+Targeted rerun command:
+.venv/bin/python tests/rig_tiger_prices/run_t1_offline.py tests/test_command.py::test_pinned_turn_receipt_uses_actual_model_and_pending_auto
+Exit status: 0
+
+.                                                                        [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-tiger-t1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 3 warnings in 12.29s

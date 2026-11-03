@@ -17,13 +17,13 @@ from fastapi.responses import JSONResponse
 router = APIRouter(prefix="/v1/trigger", tags=["trigger"])
 
 
-async def code_receipt(tenant_id: UUID, task: str, *, task_id: UUID | None = None) -> UUID:
+async def code_receipt(tenant_id: UUID, task: str, *, task_id: UUID | None = None, agent: str = "trigger") -> UUID:
     from main import box_region, pool
     return await pool().fetchval(
         "INSERT INTO tank.ledger(tenant_id,region,agent,task_type,rung,model,cost_usd,"
         "tokens_in,tokens_out,task_id) "
-        "VALUES($1,$2,'trigger',$3,3,'code',0,0,0,$4) RETURNING id",
-        tenant_id, box_region(), task, task_id)
+        "VALUES($1,$2,$5,$3,3,'code',0,0,0,$4) RETURNING id",
+        tenant_id, box_region(), task, task_id, agent)
 
 
 async def code_plan(actor: Actor, messages: list[dict], task_id: UUID | None):
@@ -36,7 +36,19 @@ async def code_plan(actor: Actor, messages: list[dict], task_id: UUID | None):
     if last.get("role") != "user":
         return None
     from trigger_commands import plan
-    proposed = await plan(actor, last.get("content", ""), task_id)
+    source_text = last.get('content', '')
+    if task_id and re.match(r'\s*trigger\.write\.batch\b', source_text, re.I):
+        # Attachment contents are data, never part of the command syntax.
+        from command import db, unpack
+        async with db().acquire() as conn:
+            raw = await conn.fetchval("SELECT state FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND state->>'active_turn'=$3",
+                                      actor.tenant_id, actor.user_id, str(task_id))
+        messages = unpack(raw or {}).get('messages', [])
+        source_text = next((m.get('content', '') for m in reversed(messages) if m.get('role') == 'user'), source_text)
+    from trigger_marketing_api import plan as marketing_plan
+    proposed = await marketing_plan(actor, source_text)
+    if proposed is None:
+        proposed = await plan(actor, source_text, task_id)
     if proposed is not None:
         return SimpleNamespace(content=json.dumps(proposed, ensure_ascii=False), ledger_id=await code_receipt(actor.tenant_id, "command.turn", task_id=task_id))
     prefix = r"\s*trigger(?:\.check|[, ]+check)(?:\s+(?:this\s+)?paragraph)?\s*:\s*"
@@ -123,19 +135,44 @@ async def accepted_copy(write_id: UUID, tenant_id: UUID, request: Request):
             WHERE w.id=$1 AND w.tenant_id=$2 AND w.feedback_status='accepted'
             AND EXISTS (SELECT 1 FROM tank.command_threads t
                 CROSS JOIN LATERAL jsonb_each(t.state->'cards') c
-                WHERE t.tenant_id=w.tenant_id AND c.value->>'tool'='trigger.write'
+                CROSS JOIN LATERAL jsonb_array_elements(CASE
+                    WHEN c.value->>'tool'='trigger.write.batch' THEN c.value->'result'->'items'
+                    ELSE jsonb_build_array(c.value->'result') END) item
+                WHERE t.tenant_id=w.tenant_id AND c.value->>'tool' IN ('trigger.write','trigger.revise','trigger.write.batch')
                 AND c.value->>'status'='confirmed'
-                AND c.value->'result'->>'write_id'=w.id::text)""", write_id, tenant_id)
+                AND item->>'write_id'=w.id::text)""", write_id, tenant_id)
     if row is None:
         raise HTTPException(404, "Writing record unavailable")
     return JSONResponse({"write_id": str(write_id), "tenant_id": str(tenant_id), "text": row["draft"]},
                         headers={"Cache-Control": "private, no-store"})
 
 
+@router.get('/scorecard')
+async def get_scorecard(tenant_id: UUID, actor: Annotated[Actor, Depends(identity)]):
+    require_tool(actor, 'trigger.scorecard')
+    if tenant_id != actor.tenant_id:
+        raise HTTPException(403, 'Tenant mismatch')
+    from trigger_learning import scorecard
+    data = await scorecard(actor)
+    return {**data, 'text': json.dumps(data, ensure_ascii=False, indent=2), 'model_calls': 0,
+            'ledger_id': str(await code_receipt(actor.tenant_id, 'trigger.scorecard')), 'cost_usd': 0}
+
+
+async def draft_and_record(actor, body, parent=None):
+    from trigger_learning import record
+    data = await room('write', {**body, 'tenant_id': str(actor.tenant_id)})
+    if data.get('delegate') == 'zenas.draft':
+        response = await zenas_draft(body, actor)
+        if response.status_code >= 400:
+            return response
+        data = json.loads(response.body)
+    return await record(actor, body['text'], data, context=body, parent_write_id=parent)
+
+
 @router.post("/{operation}")
 async def invoke(operation: str, request: Request, actor: Annotated[Actor, Depends(identity)]):
-    from command import TriggerCheckArgs, TriggerWriteArgs, TriggerVoiceShowArgs, TriggerVoiceSetArgs, TriggerVoiceRollbackArgs, TriggerFeedbackArgs
-    schemas = {"write": TriggerWriteArgs, "check": TriggerCheckArgs, "voice.show": TriggerVoiceShowArgs,
+    from command import TriggerCheckArgs, TriggerWriteArgs, TriggerVoiceShowArgs, TriggerVoiceSetArgs, TriggerVoiceRollbackArgs, TriggerFeedbackArgs, TriggerReviseArgs, TriggerVoiceLearnArgs, TriggerBatchArgs
+    schemas = {"revise": TriggerReviseArgs, "voice.learn": TriggerVoiceLearnArgs, "write.batch": TriggerBatchArgs, "write": TriggerWriteArgs, "check": TriggerCheckArgs, "voice.show": TriggerVoiceShowArgs,
                "voice.set": TriggerVoiceSetArgs, "voice.rollback": TriggerVoiceRollbackArgs, "feedback": TriggerFeedbackArgs}
     if operation not in schemas:
         raise HTTPException(404, "No such Trigger action")
@@ -157,7 +194,11 @@ async def invoke(operation: str, request: Request, actor: Annotated[Actor, Depen
             data = await room("voice/show", {**body, "tenant_id": str(actor.tenant_id)})
         else:
             operation_id = confirmation(actor, "trigger." + operation, body)
-            if operation == "feedback":
+            if operation == 'voice.learn':
+                data = await room('voice/commit', {'tenant_id': str(actor.tenant_id),
+                    'rules': body['rules'], 'expected_revision': body['expected_revision'],
+                    'preview_hash': body['preview_hash'], 'operation_id': str(operation_id)})
+            elif operation == "feedback":
                 from trigger_learning import feedback
                 data = await feedback(actor, UUID(body["write_id"]), body["status"], body["changes"], operation_id)
             else:
@@ -166,15 +207,30 @@ async def invoke(operation: str, request: Request, actor: Annotated[Actor, Depen
                 "ledger_id": str(await code_receipt(actor.tenant_id, "trigger." + operation)), "cost_usd": 0}
     from trigger_commands import confirmation
     confirmation(actor, "trigger." + operation, body)
-    data = await room(operation, {**body, "tenant_id": str(actor.tenant_id)})
-    if operation == "write" and data.get("delegate") == "zenas.draft":
-        response = await zenas_draft(body, actor)
-        if response.status_code >= 400:
-            return response
-        data = json.loads(response.body)
-    if operation == "write":
-        from trigger_learning import record
-        data = await record(actor, body["text"], data)
+    from trigger_learning import guidance, revision
+    if operation == 'write':
+        context = {**body, **await guidance(actor, body['text'], body.get('format'))}
+        return await draft_and_record(actor, context)
+    if operation == 'revise':
+        context, parent = await revision(actor, UUID(body['write_id']))
+        return await draft_and_record(actor, context, parent)
+    if operation == 'write.batch':
+        from trigger_batch import item_body
+        if not 1 <= len(body['products']) <= 25:
+            raise HTTPException(422, 'Invalid Trigger request')
+        items = []
+        for product in body['products']:
+            context = item_body(product)
+            context.update(await guidance(actor, json.dumps(product, ensure_ascii=False), context['format']))
+            result = await draft_and_record(actor, context)
+            if not isinstance(result, dict):
+                return result
+            items.append(result)
+        return {'items': items, 'text': '\n\n'.join(i['text'] for i in items),
+                'item_count': len(items), 'cost_usd': (None if any(i.get('cost_usd') is None for i in items)
+                    else sum(float(i['cost_usd']) for i in items)),
+                'ledger_ids': [i.get('ledger_id') for i in items]}
+    data = await room(operation, {**body, 'tenant_id': str(actor.tenant_id)})
     if operation == "check":
         data["ledger_id"] = str(await code_receipt(actor.tenant_id, "trigger.check"))
         data["cost_usd"] = 0
