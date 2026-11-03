@@ -1,4 +1,4 @@
-"""Run the three scans on one handed-over tree and store the findings."""
+"""Run the handed-over-code scans on one handed-over tree and store the findings."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from scanlib import archive, dependencies, secrets, static, store
+from scanlib import archive, dependencies, iac, secrets, static, store
 
 _KEEP = ("tool", "severity", "file", "line", "rule", "fix", "type", "package", "version", "advisory")
 
@@ -44,9 +44,12 @@ def _redact_findings(findings: list[dict], hidden: list[str]) -> list[dict]:
     return cleaned
 
 
-def collect(root: Path) -> tuple[list[dict], list[str]]:
+def collect(root: Path, tool_status: dict | None = None) -> tuple[list[dict], list[str]]:
     secret_findings, hidden = secrets.scan_tree(root)
-    findings = secret_findings + dependencies.scan_tree(root) + static.scan_tree(root)
+    infrastructure = iac.scan_tree(root)
+    if tool_status is not None:
+        tool_status[iac.TOOL] = infrastructure.status
+    findings = secret_findings + dependencies.scan_tree(root) + static.scan_tree(root) + infrastructure
     findings.sort(key=lambda item: (item["tool"], item["file"], item["line"], item["rule"]))
     return _redact_findings(findings, hidden), hidden
 
@@ -67,17 +70,20 @@ def build_result(ctx) -> dict:
     raw = archive.load_bytes(source, read_file)
     with tempfile.TemporaryDirectory(prefix="radix-scan-") as tmp:
         root = archive.unpack(raw, Path(tmp) / "tree")
-        findings, hidden = collect(root)
+        tool_status = {}
+        findings, hidden = collect(root, tool_status)
     shown_ref = _public_ref(ref, hidden)
     critical = sum(1 for item in findings if item.get("severity") == "critical")
     result = {
         "scan_id": str(ctx.job_id),
         "tenant_id": str(ctx.tenant_id),
         "ref": shown_ref,
-        "summary": summarize(shown_ref, findings),
+        "summary": summarize(shown_ref, findings) if tool_status[iac.TOOL] == "run" else None,
+        "tool_status": tool_status,
+        "scan_complete": tool_status[iac.TOOL] == "run",
         "deploy_blocked": critical > 0,
         "critical": critical,
-        "tools": ["scan.secrets", "scan.dependencies", "scan.static"],
+        "tools": ["scan.secrets", "scan.dependencies", "scan.static", "scan.iac"],
         "findings": findings,
     }
     blob = json.dumps(result)
