@@ -24,7 +24,12 @@ PRICE_OR_STOCK = re.compile(
     r'|\b(?:sold out|out of stock|back[ -]?order|in stock|low stock)\b'
     r'|\b(?:R|ZAR|USD|EUR|GBP|NAD|BWP|AUD|CAD)\s*\d|\d[\d,. ]*\s*(?:ZAR|USD|EUR|GBP|NAD|BWP|AUD|CAD|rand|dollars?|euros?|pounds?)\b',
     re.IGNORECASE)
-DATES = re.compile(r'\b(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?|Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|May(?=\s+(?:\d{1,2}\b|\d{4}\b))|(?<=\d )May|today|tomorrow|yesterday|tonight|weekends?|(?:next|last|this)\s+(?:week|month|year|day))\b', re.IGNORECASE)
+DATES = re.compile(r'\b(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?|Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|May(?=\s+(?:\d{1,2}\b|\d{4}\b))|(?:\d{1,2}|\d{4})\s+May|today|tomorrow|yesterday|tonight|weekends?|(?:next|last|this)\s+(?:week|month|year|day))\b', re.IGNORECASE)
+
+
+def date_words(text):
+    return {'may' if re.search(r'\bmay\b', token, re.IGNORECASE) else token.casefold()
+            for token in DATES.findall(text)}
 
 
 def decimal(value):
@@ -135,7 +140,7 @@ def grounded(output: Any, passages: list[Passage]) -> tuple[str, list[Passage]] 
         if not numeric_evidence(answer, cited):
             return None
         source_text = ' '.join(p.text for p in cited).casefold()
-        if not {token.casefold() for token in DATES.findall(answer)} <= {token.casefold() for token in DATES.findall(source_text)}:
+        if not date_words(answer) <= date_words(source_text):
             return None
         # The engine owns links. A model cannot introduce a destination or a raw citation URL.
         if re.search(r"https?://|\]\(", answer, re.IGNORECASE):
