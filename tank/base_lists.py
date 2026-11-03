@@ -45,6 +45,7 @@ class SendArgs(ListArgs):
 
 def verified(item: Any) -> bool:
     return (isinstance(item, dict) and item.get("verified") is True
+            and item.get("value") not in (None, "", [], {})
             and bool(public_url(item.get("source_url")) and item.get("checked_at")))
 
 
@@ -130,7 +131,7 @@ class Store:
     async def find(self, tenant: UUID, filters: FindArgs) -> list[dict]:
         async with self.pool.acquire() as conn:
             rows = await conn.fetch("SELECT id,raw,profile,passes,status,updated_at FROM agent_base.records "
-                                    "WHERE tenant_id=$1 AND status='done' ORDER BY updated_at DESC,id", tenant)
+                                    "WHERE tenant_id=$1 AND status IN ('done','failed') ORDER BY updated_at DESC,id", tenant)
         projected = [project(dict(row)) for row in rows]
         return [row for row in projected if matches(row, filters)]
 
