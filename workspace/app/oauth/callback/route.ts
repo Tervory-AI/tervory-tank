@@ -12,6 +12,7 @@ export async function GET(request: Request) {
     const state = params.get("state");
     if (!state || state.length > 500) return new Response(null, { status: 400, headers });
     const tenant = await activeTenant();
+    if (!tenant) return new Response(null, { status: 401, headers });
     const upstream = await commandRequest(tenant, "mcp/oauth/callback", {
       method: "POST", body: JSON.stringify({ state, code: params.get("code"), error: params.get("error"), iss: params.get("iss") }),
     });
