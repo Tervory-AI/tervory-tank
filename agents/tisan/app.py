@@ -82,7 +82,7 @@ async def scaffold(ctx: JobContext) -> dict:
 async def figma(ctx: JobContext) -> dict:
     """Read the recorded Figma page for this job's tenant. No call leaves the room."""
     module = _load_beside(_figma_cache(), "tisan_figma", "figma.py")
-    return await module.execute(ctx.input, str(ctx.tenant_id))
+    return await module.execute(ctx.input, str(ctx.tenant_id), live=False)
 
 
 def _figma_cache() -> dict[str, Any]:
@@ -141,6 +141,9 @@ async def eval_case(body: EvalCase, x_tank_key: str = Header(default="")) -> dic
     else:
         raise HTTPException(404, "unknown eval skill")
     try:
+        if body.skill_id == "tisan.figma":
+            version = tuple(int(part) for part in body.version.split("."))
+            return await module.execute(body.input, str(body.tenant_id), live=version >= (1, 1, 0))
         return await module.execute(body.input, str(body.tenant_id))
     except ValueError:
         return {"refused": True, "error": "invalid eval input"}
