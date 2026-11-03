@@ -473,6 +473,10 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
     remembered = await remember_turn(actor, messages, task_id)
     if remembered is not None:
         return remembered
+    from radix_repo import code_plan as repo_plan
+    planned = await repo_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     from trigger_routes import code_plan
     planned = await code_plan(actor, messages, task_id)
     if planned is not None:
