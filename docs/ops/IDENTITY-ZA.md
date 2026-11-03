@@ -9,51 +9,68 @@ No live deployment or founder browser acceptance is claimed by this document.
 
 ## 1. DNS, once the ZA box is available
 
-Use **Proxied (orange cloud)** for the A record `auth.za.tervory.com`, pointing
-to the ZA server's actual origin IPv4 from Coolify. Do not copy Boston's IP or
-change the existing `za.tervory.com` record. Cloudflare supports proxied gRPC,
-so DNS-only is not required for Zitadel Console. Set/confirm these exact settings:
+Use **Proxied (orange cloud)** for the A record `auth-za.tervory.com`, pointing
+to the ZA server's actual origin IPv4 from Coolify. Keep the existing
+`za.tervory.com` record unchanged. The identity hostname is one level below
+`tervory.com`, so Cloudflare's free Universal SSL `*.tervory.com` coverage applies.
+Confirm the zone's existing Universal SSL edge certificate is active. Set/confirm:
 
 - Cloudflare **Network → gRPC: On** for the zone.
 - **Speed → Settings → Protocol Optimization → HTTP/2 to Origin: On**.
-- **SSL/TLS → Overview → encryption mode: Full (strict)**; never Flexible.
-- A valid Cloudflare edge certificate must cover **auth.za.tervory.com exactly**.
-  Universal SSL on a full `tervory.com` zone normally covers only the apex and
-  first-level subdomains, not this deeper hostname. Confirm existing certificate
-  coverage; if absent, stop and report missing edge certificate coverage. Do not
-  purchase a service or switch to DNS-only as a workaround.
-- Existing Coolify proxy: TLS on **443**, valid unexpired origin certificate
-  covering this hostname, HTTP/2 advertised as **h2** via ALPN. Keep the checked-in
-  API upstream **h2c** route and Login path route. Zitadel authenticates requests;
-  Cloudflare Access does not protect proxied gRPC.
+- **SSL/TLS → Overview → encryption mode: Full (strict)**.
+- Existing Coolify proxy: TLS on **443**, a valid unexpired origin certificate
+  covering `auth-za.tervory.com`, and HTTP/2 advertised as **h2** via ALPN. Keep
+  the checked-in API upstream **h2c** and Login routes. Zitadel authenticates
+  requests; Cloudflare Access does not protect proxied gRPC.
 
-For certificate issuance/renewal while proxied, use the existing Coolify proxy's
-`letsencrypt` resolver with **DNS-01**, not an assumed working HTTP/TLS-ALPN
-challenge through Cloudflare. In **Servers → ZA server → Proxy → Configuration**,
-the founder configures the existing resolver using Coolify's DNS-challenge guide:
-remove its two `httpchallenge` flags, retain its existing ACME storage, and set
-`--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare` and
-`--certificatesresolvers.letsencrypt.acme.dnschallenge.delaybeforecheck=0`.
-The proxy setting name is `CF_DNS_API_TOKEN`; the founder supplies its value,
-scoped to DNS edits on the required zone only. It never goes in identity-za or
-Tank. No proxy configuration, DNS record or credential is changed by this PR.
-If the existing proxy cannot issue/renew the hostname certificate this way,
-stop with the missing prerequisite; do not disable certificate validation.
+### Origin certificate: establish the existing ZA issuance path first
 
-With DNS-01, the identity HTTPS origin needs inbound **443 from Cloudflare's
-published IP ranges**; no identity database port is public. Preserve existing
-operator access and unrelated host rules. DNS-only would expose the shared ZA
-server IP publicly and require inbound HTTPS from clients directly (and public
-80 for HTTP-01); it is not this deployment instruction. Proxied DNS also cannot
-undo an address previously disclosed through DNS history.
+The origin certificate must be issued/renewed **exactly as Coolify does today
+for the existing proxied `za.tervory.com`**, using the existing ZA proxy
+configuration. No resolver/challenge change and no new Cloudflare token.
+
+**What the repo establishes:** `docker-compose.za.yml:2` and `:174` say Coolify
+attaches `za.tervory.com` to Tank, which exposes port 8000. That service has no
+checked-in Traefik TLS/certificate labels; the running resource's generated
+labels and the ZA proxy's current certificate challenge configuration are not
+in the repo. The identity compose references the existing `https` entrypoint and
+`letsencrypt` resolver, but that does not prove what the live ZA host uses.
+
+**Founder checks, read-only, in Coolify before deployment:**
+
+1. Open the existing **tervory-tank-za** resource on the ZA server. Under
+   **Configuration → General**, read the existing Domains/service routing entry
+   for `https://za.tervory.com` and Tank port 8000. Inspect the resource's current
+   generated labels/configuration for its HTTPS router: record only its
+   `entrypoints`, `tls` and `tls.certresolver` names, if present.
+2. Open **Servers → ZA server → Proxy → Configuration**, without editing,
+   saving or restarting. Identify the same resolver's existing ACME challenge
+   type from its command flags; if the router uses a custom certificate instead,
+   identify that existing certificate mechanism from the proxy's dynamic TLS
+   configuration. Record only the mechanism/resolver names. Do not display/copy
+   environment values, private-key files or ACME storage contents.
+3. Confirm the current `za.tervory.com` certificate is valid and how Coolify
+   issues and renews it while that record stays proxied. Use that **same existing
+   issuance/renewal path** for `auth-za.tervory.com`; confirm its certificate covers
+   the identity hostname too. Keep the ZA proxy configuration unchanged. The
+   checked-in identity labels require `https`/`letsencrypt`; if the existing names
+   or mechanism differ, record that mismatch for an identity-resource label
+   review rather than changing the shared proxy.
+
+**Stop at this step until the existing issuance/renewal mechanism and matching
+identity origin certificate are established.** Missing evidence is the live ZA
+resource's TLS router/resolver and the existing proxy's certificate issuance and
+renewal method; this cannot be established from the repository. Do not deploy
+identity-za, enter the issuer on Tank or continue sign-in acceptance until that
+read-only check succeeds. Do not switch the record to DNS-only, alter the ZA
+proxy or introduce a token as a workaround. Preserve the host's existing firewall
+and certificate-validation rules.
 
 Sources: [Cloudflare gRPC requirements](https://developers.cloudflare.com/network/grpc-connections/),
 [HTTP/2 to origin](https://developers.cloudflare.com/speed/optimization/protocol/http2-to-origin/),
 [Full (strict)](https://developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full-strict/),
 [Universal SSL limitations](https://developers.cloudflare.com/ssl/edge-certificates/universal-ssl/limitations/),
-[Cloudflare IP ranges](https://www.cloudflare.com/ips/),
-[Coolify DNS challenge](https://coolify.io/docs/core/networking/proxy/traefik/dns-challenge),
-[Coolify proxy challenge limitations](https://coolify.io/docs/troubleshoot/dns-and-domains/lets-encrypt-not-working),
+[Coolify certificate troubleshooting](https://coolify.io/docs/troubleshoot/dns-and-domains/lets-encrypt-not-working),
 [Zitadel proxy guidance](https://zitadel.com/docs/self-hosting/manage/reverseproxy/traefik).
 
 ## 2. Create the separate Coolify resource
@@ -65,7 +82,7 @@ and proxy labels are used. Build contexts intentionally point back to the full
 repository. Do not attach any service to the main ZA database network or volume.
 
 Use Coolify's existing HTTPS proxy, entrypoint `https`, certificate resolver
-`letsencrypt`, with a valid public certificate for `auth.za.tervory.com`. Put the
+`letsencrypt`, with a valid public certificate for `auth-za.tervory.com`. Put the
 existing proxy network's name in `COOLIFY_PROXY_NETWORK`; select the name from
 the ZA server's existing proxy configuration, not from another server. If this
 server uses different proxy entrypoint/resolver names, stop and record those
@@ -142,7 +159,7 @@ certificate issuance fails, stop with that result. Do not disable TLS checks.
 
 ## 5. First sign-in and password change
 
-Open `https://auth.za.tervory.com/ui/console`, sign in with the first admin email
+Open `https://auth-za.tervory.com/ui/console`, sign in with the first admin email
 and temporary password, and complete the required password change. The root
 hostname routes to the default Login app. Keep Zitadel's default words and
 branding. No new sign-in page or copied Figma frame is introduced by this step.
@@ -181,7 +198,7 @@ In the existing **tervory-tank-za** resource, set:
 
 | Setting | Value to enter |
 | --- | --- |
-| `IDENTITY_ISSUER` | `https://auth.za.tervory.com`, exactly, without a trailing slash. |
+| `IDENTITY_ISSUER` | `https://auth-za.tervory.com`, exactly, without a trailing slash. |
 | `IDENTITY_CLIENT_ID` | The public client ID printed by `tervory-setup`. |
 | `IDENTITY_ORG_TENANTS` | A JSON object mapping each actual Zitadel organisation ID to its approved existing Tervory tenant UUID, in the form `{"<org id>":"<tenant UUID>"}`. |
 
@@ -240,7 +257,7 @@ tervory chat
 tervory logout
 ```
 
-The browser must open only `https://auth.za.tervory.com`; approve the displayed
+The browser must open only `https://auth-za.tervory.com`; approve the displayed
 code on Zitadel's default page. Tank validates issuer, audience, expiry and
 RS256 signature using discovery/JWKS, refreshes unknown signing keys, maps the
 reserved organisation ID, and issues the same existing Tank credential format,
