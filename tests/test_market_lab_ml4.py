@@ -291,7 +291,7 @@ async def test_warning_run_remembers_changed_summaries_only_and_retries_same_rec
     for state in states.values(): del state['summary']['pattern_pending']
     ledger.memory = memory
     await run()
-    pairs = len(warning_plan()['pairs'])
+    pairs = sum(not row.get('key_name') for row in warning_plan()['pairs'])
     assert len(states) == pairs * 2
     assert len(writes) == len(rows) == pairs < 50
     original_ids = set(rows)
