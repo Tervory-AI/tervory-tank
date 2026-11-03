@@ -223,3 +223,15 @@ test('cancelling at command approval stops execution and any following model tur
   assert.equal(calls, 1);
   await assert.rejects(readFile(join(f.root, 'cancel-marker')));
 });
+
+test('git read tools cannot execute repository clean/process filters without approval', async () => {
+  const f = await folder();
+  execFileSync('git', ['add', 'file.txt'], { cwd: f.root });
+  execFileSync('git', ['config', 'filter.guard.clean', 'sh -c "printf wrong > filter-marker; cat"'], { cwd: f.root });
+  await writeFile(join(f.root, '.gitattributes'), 'file.txt filter=guard\n');
+  await writeFile(join(f.root, 'file.txt'), 'changed\n');
+  const diff = await f.tool({ name: 'git', arguments: { action: 'diff' } }, io());
+  await f.tool({ name: 'git', arguments: { action: 'status' } }, io());
+  assert(diff.output.includes('+changed'));
+  await assert.rejects(readFile(join(f.root, 'filter-marker')));
+});
