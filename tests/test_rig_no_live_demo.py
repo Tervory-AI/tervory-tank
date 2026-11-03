@@ -100,7 +100,7 @@ async def test_production_startup_never_imports_bundled_catalogues(
     store = SimpleNamespace(
         apply_schema=AsyncMock(), tenant_ids=AsyncMock(return_value=[])
     )
-    service = SimpleNamespace(load_catalogues=AsyncMock(return_value=[]))
+    service = SimpleNamespace(store=store, load_catalogues=AsyncMock(return_value=[]))
     application = FastAPI()
     application.state.pool = SimpleNamespace(acquire=context)
     application.state.http = None
