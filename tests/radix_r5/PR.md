@@ -102,6 +102,16 @@ The first full CI run at `790a8214` reported three R5-specific harness failures 
 
 ### Hosted full-suite result
 
-CI's `tank` job is the full-suite test of record. Final review-head result: **pending** at this report checkpoint; the actual completed job result will be recorded here before handoff. [Current #605 head checks](https://github.com/Tervory-AI/tervory-tank/pull/605/checks).
+CI's `tank` job is the full-suite test of record. **SUCCESS** for final code/test head `9bfa0ef579eda1f0f27366dd10dba2d2fcfae35f`: [run 41650099511, Tank job 125966380828](https://github.com/Tervory-AI/tervory-tank/actions/runs/41650099511/job/125966380828).
+
+Exact hosted command: `python3 .github/scripts/offline_suite.py`, exit 0. Its three runs reported:
+
+- Main group: **6,788 passed, 42 skipped, 1,804 subtests passed** in 1039.90 seconds.
+- `tests/tiger_g5`: **46 passed** in 14.84 seconds.
+- `tests/zenas_regulation_alerts`: **40 passed** in 6.13 seconds.
+
+Security, Command acceptance and Workspace also passed for that head. The earlier three-failure run and fixes remain documented above; no unrelated baseline failure was changed.
+
+**Final report-head CI result:** [the `tank` job in #605's current-head checks](https://github.com/Tervory-AI/tervory-tank/pull/605/checks). That link tracks the final report commit as well as its code/test checkpoint; the builder waits for its completed result before handoff. The source checkpoint and immutable completed-job link above are retained so documentation-only publication cannot obscure which code was tested.
 
 The founder's own `skala.evals` run, upload/Confirm/findings test and screenshots follow **after merge**. No founder acceptance or production change is claimed. The builder does not merge.
