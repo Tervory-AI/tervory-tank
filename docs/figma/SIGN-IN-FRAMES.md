@@ -152,3 +152,19 @@ All rows are **Proposed, not approved**. `translations.` below means a leaf unde
 - Command: `python3` validation of the table — PASS: 72 frame rows, 72 unique node IDs, no incomplete creation marker. Command: `git diff --check` — PASS, no output.
 - Only this mapping document is committed. No application, identity-provider setting, account or live data was changed. No authentication implementation or deployment is included.
 - Founder approval and founder browser acceptance remain pending. Claude opens the PR from `codex/identity-figma`; the founder merges.
+
+## 3 Nov post-approval design check — blocked before canvas edits
+
+The founder reports that the existing design was approved on 3 Nov. The requested follow-up includes additional native error states, approval-history labels, code/email wording changes, homepage-red alignment and an AA contrast fix using branding settings only. These changes have not been applied to Figma: rule 9 requires stopping at the blocker below. No changed frame IDs or new deployable wording are claimed.
+
+**Blocker, request item 2:** the unmodified Zitadel Login V2 Button component hardcodes `disabled:dark:bg-gray-700` and `disabled:dark:text-gray-900`. The resulting pair is background `#374151` and text `#111827`, with contrast 1.72:1. These classes do not use branding `darkTheme.backgroundColor`, `fontColor`, `primaryColor` or `warnColor`. There is no supported branding/message-text setting for disabled-button foreground/background in the referenced implementation. A branding palette change cannot produce the requested AA contrast for this control.
+
+Verified against both the original reference source and the current [official native Button source](https://github.com/zitadel/zitadel/blob/main/apps/login/src/components/button.tsx), `getButtonClasses`, lines 35–43. Implementing a different disabled-button pair would require a change to Zitadel Login source or styling outside the permitted branding/message-text controls, or an upstream implementation exposing suitable settings. Neither is authorized by this design-only brief. No such workaround was made.
+
+**Fixed wording explicitly retained for informed founder acceptance:** `User is locked` (`Errors.User.Locked`) and `Code is expired` (`Errors.User.Code.Expired`) are Zitadel backend wording where Hosted Login message texts cannot change them. The baseline approval does not turn these strings into editable settings; the founder should knowingly accept that exact native wording. Existing frames and mappings retain these strings.
+
+Pending after resolution of item 2: additional native error frames, frame/top-bar approval labels, explicit spacing before `{lockoutMessage}`, unified email code phrasing and purpose-specific footers, and red copied from approved homepage node `59:164`. No canvas changes were made during this follow-up.
+
+Verification: read existing mapping and native Button source; checked the current official source; calculated relative luminance with the sRGB contrast formula in Python. The current source confirms that the disabled colours remain fixed. Only this mapping document is changed on `codex/identity-figma`; no runtime files, settings, secrets or live data were changed.
+
+Repository commands: `git status --short --branch`; `git diff --check`; `git add docs/figma/SIGN-IN-FRAMES.md`; `git commit -m 'docs(figma): record native disabled-button branding blocker'`; `git push origin codex/identity-figma`; `git diff --check origin/main...HEAD`; `git diff --name-only origin/main...HEAD`; `git status --short --branch`. Exact results are recorded in this task. Nothing merged or deployed.
