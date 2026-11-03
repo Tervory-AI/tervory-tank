@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { SquadLinks, SQUAD_MEMBERS } from "../squad-links";
+import { RadixCard } from "./radix-card";
 import { clientLabel, visibleCard } from "./presentation";
 import { applyReceipt, canConfirm, dollars, readEvents, safeLink, upsert, type Attachment, type Card, type Event, type Message, type ModelOption, type Receipt, type Snapshot, type Step, type Thread } from "./contract";
 import doneDot from "./assets/done.svg";
@@ -249,6 +250,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
   const confirmation = cards.map(card => <section className="cw-confirm" key={card.card_id} data-status={card.status ?? "pending"}><strong className="cw-eyebrow">{cardLabels[card.status ?? "pending"] ?? "STATUS UNAVAILABLE"}</strong><p>{clean(card.summary)}</p>
     {!!card.targets?.length && <dl className="cw-card-details">{card.targets.map((target, index) => <div key={index}><dt>{target.label}</dt><dd>{safeLink(target.href) ? <a href={safeLink(target.href)} target="_blank" rel="noreferrer">{target.value}</a> : target.value}</dd></div>)}</dl>}
     {card.cost_estimate_usd !== undefined && <p className="cw-meta">Estimated {dollars(card.cost_estimate_usd)}</p>}
+    {card.radix && <RadixCard view={card.radix} status={card.status} disabled={sending || busy || !!cardBusy} onPrepare={message => { setText(message); document.getElementById("cw-message")?.focus(); }} />}
     {!!card.results?.length && <dl className="cw-card-details" aria-label="Action result">{card.results.map((result, index) => <div key={index}><dt>{result.label}</dt><dd>{safeLink(result.href) ? <a href={safeLink(result.href)} target="_blank" rel="noreferrer">{result.value}</a> : result.value}</dd></div>)}</dl>}
     {card.error && ["failed", "unknown"].includes(card.status ?? "") && <p className="cw-note">{clean(card.error)}</p>}
     {card.status === "unknown" && <p className="cw-note">Do not repeat this action until its outcome is checked. Retrying is disabled.</p>}

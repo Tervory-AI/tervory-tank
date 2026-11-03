@@ -1,7 +1,9 @@
 """Tenant-owned DNS challenges and completed passive assessments, never raw traffic."""
 from __future__ import annotations
 
+import json
 import re
+from html.parser import HTMLParser
 import secrets
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
@@ -52,6 +54,30 @@ def artifact_id(value: str) -> str:
     if not re.fullmatch(r'(?:commit:[0-9a-f]{40}|sha256:[0-9a-f]{64})', value):
         raise ValueError('invalid artifact')
     return value
+
+
+class RuleText(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.parts = []
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+
+def report_finding(row) -> dict:
+    item = dict(row)
+    encoded = item.pop('fix', None)
+    texts = json.loads(encoded).get(item['rule'], {}) if encoded else {}
+    for field in ('explanation', 'remediation'):
+        text = texts.get(field)
+        if text:
+            parser = RuleText()
+            parser.feed(text)
+            item[field] = ' '.join(' '.join(parser.parts).split())
+        else:
+            item[field] = f"No rule text for {item['rule']}."
+    return item
 
 
 class Store:
@@ -147,7 +173,7 @@ class Store:
     async def findings(self, tenant: UUID, ident: UUID) -> list:
         from scanlib.store import list_findings
         async with self.pool.acquire() as conn:
-            return [dict(row) for row in await list_findings(conn, 'agent_radix', str(tenant), str(ident))]
+            return [report_finding(row) for row in await list_findings(conn, 'agent_radix', str(tenant), str(ident))]
 
 
 def gate_result(row, tenant: UUID, target: str, artifact: str, *, now=None) -> dict:

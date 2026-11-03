@@ -100,6 +100,16 @@ def finding(tool: str, severity: str, rule: str, target: str) -> dict:
     return {'tool': tool, 'severity': severity, 'rule': rule, 'file': target, 'line': 0}
 
 
+def rule_text(item: dict, explanation, remediation) -> dict:
+    # Only upstream static rule fields survive; never alert instances or CLI rows.
+    texts = {key: value for key, value in
+             (('explanation', explanation), ('remediation', remediation))
+             if isinstance(value, str) and value.strip()}
+    if texts:
+        item['fix'] = json.dumps({item['rule']: texts}, ensure_ascii=False)
+    return item
+
+
 def zap_findings(report: dict, target: str) -> list[dict]:
     if not isinstance(report.get('site'), list) or not report['site']:
         raise ValueError('incomplete baseline')
@@ -111,19 +121,26 @@ def zap_findings(report: dict, target: str) -> list[dict]:
             raise ValueError('incomplete baseline')
         for alert in site['alerts']:
             severity = {'0': 'info', '1': 'low', '2': 'medium', '3': 'high'}.get(str(alert.get('riskcode')))
-            findings.append(finding('zap', severity, str(alert['pluginid']), target))
+            findings.append(rule_text(finding('zap', severity, str(alert['pluginid']), target),
+                                      alert.get('desc'), alert.get('solution')))
     return findings
 
 
 def nuclei_findings(report: str, target: str) -> list[dict]:
     findings = []
+    try:
+        template = yaml.safe_load(Path(TEMPLATE).read_text())
+        info = template['info'] if template.get('id') == 'http-missing-security-headers' else {}
+    except FileNotFoundError:
+        info = {}
     for line in report.splitlines():
         row = json.loads(line)
         if row.get('template-id') != 'http-missing-security-headers' or row.get('type') != 'http':
             raise ValueError('unexpected template')
         if row.get('matched-at', '').removesuffix('/') != target.removesuffix('/'):
             raise ValueError('unexpected nuclei target')
-        findings.append(finding('nuclei', row['info']['severity'], row['template-id'], target))
+        findings.append(rule_text(finding('nuclei', row['info']['severity'], row['template-id'], target),
+                                  info.get('description'), info.get('remediation')))
     return findings
 
 
