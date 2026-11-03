@@ -1056,6 +1056,7 @@ def compile_reading(source: dict[str, Any]) -> dict[str, Any]:
         "ready": not blocked,
         "blocked": blocked,
         "source": source.get("source"),
+        "collections_known": bool(source.get("collections_known")),
         "recorded_at": source.get("recorded_at"),
         "note": source.get("note"),
         "file_key": source.get("file_key"),
