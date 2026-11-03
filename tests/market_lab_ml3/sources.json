@@ -1,0 +1,91 @@
+{
+  "fixture": "placeholder offline formats; never a live bundle",
+  "kev": {
+    "title": "CISA Catalog of Known Exploited Vulnerabilities",
+    "catalogVersion": "2021.12.10",
+    "dateReleased": "2021-12-10T00:00:00Z",
+    "count": 1,
+    "vulnerabilities": [
+      {
+        "cveID": "CVE-2021-44228",
+        "vendorProject": "Apache",
+        "product": "Log4j2",
+        "vulnerabilityName": "Apache Log4j2 Remote Code Execution Vulnerability",
+        "dateAdded": "2021-12-10",
+        "shortDescription": "Apache Log4j2 remote code execution",
+        "requiredAction": "Apply updates per vendor instructions.",
+        "dueDate": "2021-12-24",
+        "knownRansomwareCampaignUse": "Known"
+      }
+    ]
+  },
+  "osv_query": {
+    "results": [
+      {
+        "vulns": [
+          {
+            "id": "GHSA-xvch-5gv4-984h",
+            "modified": "2024-01-01T00:00:00Z"
+          },
+          {
+            "id": "placeholder-unlicensed-database"
+          }
+        ]
+      }
+    ]
+  },
+  "osv_advisory": {
+    "id": "GHSA-xvch-5gv4-984h",
+    "summary": "Prototype Pollution in minimist",
+    "aliases": [
+      "CVE-2021-44906"
+    ],
+    "affected": [
+      {
+        "package": {
+          "ecosystem": "npm",
+          "name": "minimist"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "1.0.0"
+              },
+              {
+                "fixed": "1.2.6"
+              }
+            ]
+          },
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.2.4"
+              }
+            ]
+          }
+        ],
+        "database_specific": {
+          "severity": "CRITICAL"
+        }
+      }
+    ],
+    "database_specific": {
+      "severity": "CRITICAL"
+    }
+  },
+  "lock": {
+    "name": "placeholder",
+    "lockfileVersion": 3,
+    "packages": {
+      "node_modules/minimist": {
+        "version": "1.2.5"
+      }
+    }
+  }
+}
