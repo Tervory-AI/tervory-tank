@@ -8,6 +8,14 @@ import { mootCanonicalRedirectUrl, productHostRewritePath, publicReturnUrl } fro
 // The squad consoles (/base, /tiger, /market-lab, /tisan, /radix, /skala, /tank) need sign-in.
 // Founder console /admin/autumbra stays private.
 const isPublic = createRouteMatcher([
+  // MCP authenticates its own bearer credentials; OAuth public protocol endpoints.
+  "/mcp",
+  "/oauth/token",
+  "/oauth/register",
+  "/oauth/revoke",
+  "/.well-known/oauth-protected-resource",
+  "/.well-known/oauth-protected-resource/mcp",
+  "/.well-known/oauth-authorization-server",
   // CLI corridor authenticates bearer PATs in Tank, never Clerk cookies.
   "/v1/command(.*)",
   // Self-hosted CLI release files (static, public/cli). SHA256SUMS has no dot, so the
