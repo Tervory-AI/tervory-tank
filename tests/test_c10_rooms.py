@@ -38,12 +38,13 @@ def _service_block(compose: str, name: str) -> str:
 def test_main_compose_joins_both_corridors_and_both_keys() -> None:
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     services = compose["services"]
+    assert "tiger" not in services
     for corridor in ("tervory-gw-radix", "tervory-gw-tisan"):
         assert compose["networks"][corridor]["external"] is True
         assert compose["networks"][corridor]["name"] == corridor
         for name in ("tank", "postgres", "hermes"):
             assert corridor in services[name]["networks"]
-        for name in ("redis", "qdrant", "litellm", "searxng", "tiger", "workspace", "agent-roles"):
+        for name in ("redis", "qdrant", "litellm", "searxng", "workspace", "agent-roles"):
             assert corridor not in (services[name].get("networks") or [])
     for key in ("TANK_KEY_RADIX", "TANK_KEY_TISAN"):
         assert services["tank"]["environment"][key] == f"${{{key}:-}}"
