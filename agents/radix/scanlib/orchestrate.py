@@ -75,11 +75,16 @@ def build_result(ctx) -> dict:
         findings, hidden = collect(root, tool_status)
     shown_ref = _public_ref(ref, hidden)
     critical = sum(1 for item in findings if item.get("severity") == "critical")
+    summary = summarize(shown_ref, findings)
+    if tool_status[iac.TOOL] != "run":
+        if not findings:
+            summary = f"Scanned {shown_ref}. This scan does not block the build."
+        summary += " scan.iac: not run."
     result = {
         "scan_id": str(ctx.job_id),
         "tenant_id": str(ctx.tenant_id),
         "ref": shown_ref,
-        "summary": summarize(shown_ref, findings) + (" scan.iac: not run." if tool_status[iac.TOOL] != "run" else ""),
+        "summary": summary,
         "tool_status": tool_status,
         "scan_complete": tool_status[iac.TOOL] == "run",
         "deploy_blocked": critical > 0,
