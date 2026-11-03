@@ -43,7 +43,7 @@ TOOLS = {
     "market_lab": ["market_lab.research"],
     "rig": ["rig.search", "rig.ask"],
     "tisan": ["tisan.scaffold"],
-    "radix": ["radix.scan"],
+    "radix": ["radix.scan", "radix.repo.scan", "radix.repo.findings"],
     "zenas": ["zenas.ask", "zenas.matters", "zenas.review", "zenas.watch.add", "zenas.watch.list", "zenas.watch.enable", "zenas.watch.disable"],
 }
 TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
@@ -486,6 +486,10 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
     remembered = await remember_turn(actor, messages, task_id)
     if remembered is not None:
         return remembered
+    from radix_repo import code_plan as repo_plan
+    planned = await repo_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     from trigger_bot_api import plan as bot_plan
     bot_proposal = await bot_plan(actor, messages[-1].get("content", ""), task_id) if messages and messages[-1].get("role") == "user" else None
     if bot_proposal is not None:
@@ -1254,6 +1258,8 @@ ADAPTERS = {
     "radix.passive.scan": Adapter("POST", "/v1/radix/passive/scans", RadixPassiveArgs, "radix.passive.scan"),
     "radix.findings": Adapter("GET", "/v1/radix/passive/scans/{scan_id}/findings", RadixFindingsArgs, "radix.findings"),
     "tisan.build": Adapter("POST", "/v1/skala/tisan.build/run", TisanBuildArgs, "tisan.build", False, "other", "tisan.build"),
+    "radix.repo.scan": Adapter("POST", "/v1/command/radix/repo/scan", UploadRef, "radix.repo.scan"),
+    "radix.repo.findings": Adapter("GET", "/v1/command/radix/repo/findings", RadixFindingsArgs, "radix.repo.findings"),
     "radix.scan": Adapter("POST", "/v1/skala/scan.static/run", ScanArgs, "Scan supplied source text", False, "other", "scan.static"),
     "zenas.ask": Adapter("POST", "/v1/zenas/answers", ZenasAskArgs, "Ask a civil law question", True, "paid_run"),
     "zenas.matters": Adapter("POST", "/v1/zenas/matters", MatterArgs, "Create a matter"),
@@ -1416,6 +1422,8 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
     args = dict(action.arguments)
     path = adapter.path
     scope = {"tenant_id": str(actor.tenant_id)}
+    if action.tool.startswith("radix.repo."):
+        return adapter.method, path, args if adapter.method == "GET" else {}, args if adapter.method == "POST" else None
     if action.tool == "radix.passive.scan":
         args = {"target": args["url"], "artifact": "commit:" + args["commit"]}
     elif action.tool == "radix.findings":
@@ -1635,7 +1643,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if action.tool.startswith("mcp."):
                 from mcp_connections import dispatch
                 status, result = await dispatch(action, actor)
-            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "radix.repo.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
@@ -2029,3 +2037,8 @@ async def code_turn(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends
                                uuid.UUID(turn_id), actor.tenant_id)
         # Never reflect tool data, model text, request arguments or raw exceptions.
         raise HTTPException(502, 'The answer could not be completed. Check routing policy and service availability.') from None
+
+
+# Reuse Command identity, durable Confirm and the existing Radix presentation.
+from radix_repo import build_router as radix_repo_router
+router.include_router(radix_repo_router())
