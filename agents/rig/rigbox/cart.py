@@ -38,8 +38,13 @@ def public_checkout(row):
 
 
 def delivery(value):
-    if not isinstance(value, dict) or set(value) - {'ship_days', 'eta'}:
+    if not isinstance(value, dict) or set(value) - {'ship_days', 'eta', 'min_days', 'max_days'}:
         raise CommerceError('delivery')
+    if 'min_days' in value or 'max_days' in value:
+        if (not all(type(value.get(key)) is int and 0 <= value[key] <= 60 for key in ('min_days', 'max_days'))
+                or value['min_days'] > value['max_days']):
+            raise CommerceError('delivery')
+        return {key: value[key] for key in ('min_days', 'max_days')}
     if value.get('ship_days') is not None and (type(value['ship_days']) is not int or not 0 <= value['ship_days'] <= 3650):
         raise CommerceError('delivery')
     if value.get('eta') is not None and (not isinstance(value['eta'], str) or len(value['eta']) > 200):
@@ -125,7 +130,7 @@ class Cart:
                 days = private['offer'].get('ship_days')
                 days = int(days) if days is not None else None
                 # Never invent a longer promise than the source actually gives.
-                own = config['delivery'].get('ship_days')
+                own = config['delivery'].get('max_days', config['delivery'].get('ship_days'))
                 if own is None or days is None or days <= own:
                     raise CommerceError('delivery')
                 line.update(kind='locate', price=money(checked['public']['price']['amount']),
