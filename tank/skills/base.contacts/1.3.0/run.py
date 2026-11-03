@@ -83,10 +83,10 @@ def learn_pattern(locals_: list[str], people: list[dict]) -> str | None:
 
 async def mx_ok(ctx, domain: str) -> bool | None:
     """True/False if the lookup answered, None if it could not be made."""
+    if not domain or ctx is None:
+        return None
     # RFC 2606 / RFC 6761 special-use final labels have no public MX evidence.
     if domain.lower().rstrip(".").rsplit(".", 1)[-1] in {"example", "invalid", "localhost", "test"}:
-        return None
-    if not domain or ctx is None:
         return None
     try:
         r = await ctx.http.get("https://cloudflare-dns.com/dns-query", params={"name": domain, "type": "MX"},
