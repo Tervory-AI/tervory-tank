@@ -57,8 +57,10 @@ Facebook post, Instagram caption, LinkedIn post, X post, email, page meta
 description or article. Email requests name subject and body. Limits are sourced
 only from official documents with dates beside each entry. No universal article,
 email or product-description limit is invented. Google Business Profile's
-reference does not publish a post length; Meta's reference was unavailable at
-verification, so those unverified limits remain unset. LinkedIn is checked at
+reference does not publish a post length, so that limit remains unset. Instagram
+captions are checked at 2,200 characters, from Meta's official error-code reference
+(HTTP 400, code 36004, subcode 2207010), checked 2026-11-03. Separate hashtag and
+mention limits are not enforced. LinkedIn is checked at
 3,000 Unicode code points; standard X posts use the reused twitter-text weighted
 counter at 280. `over_limit` includes the exact count and limit, without losing
 the existing total finding count or truncation marker.
