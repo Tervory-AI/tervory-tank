@@ -79,3 +79,19 @@ async def code_plan(actor, messages, task_id):
                                          'placeholder-task', products)
     assert result.content == 'placeholder-plan' and result.ledger_id == 'placeholder-task'
     assert await registry.plan_products(None, [{'role': 'user', 'content': 'placeholder-unmatched'}], None, products) is None
+
+
+def test_dispatch_snapshot_detects_dropped_prefix(monkeypatch):
+    import inspect
+    import command
+    from test_registry_frozen import _dispatch
+    tools = {'mcp.placeholder', 'market_lab.alerts.email', 'trigger.placeholder', 'base.search'}
+    before = _dispatch(command, tools)
+    assert before['market_lab.alerts.email'] == 1
+    source = inspect.getsource(command.execute_card)
+    start = source.index('            elif action.tool.startswith("market_lab.alerts."):')
+    end = source.index('            elif action.tool.startswith("trigger.")', start)
+    mutated = source[:start] + source[end:]
+    monkeypatch.setattr(inspect, 'getsource', lambda function: mutated)
+    after = _dispatch(command, tools)
+    assert after['market_lab.alerts.email'] != before['market_lab.alerts.email']
