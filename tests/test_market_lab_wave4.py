@@ -26,6 +26,9 @@ def source_ledger():
                             'unit': 'count', 'engine': 'ffl'})
         ledger.save_points(ident, OWNER, [{'date': '2026-09-01', 'value': 10},
                                          {'date': '2026-10-01', 'value': 12}], stored=True, source=source)
+        for batch in list(ledger.pool.batches):
+            if ledger.pool.batches[batch]['status'] == 'held':
+                ledger.release_batch(OWNER, batch)
         points = [{**p, 'ref': ref, 'title': title, 'unit': 'count', 'geo': 'placeholder_area',
                    'geo_level': 'state', 'frequency': 'monthly'} for p in ledger.points_for(OWNER, ident)]
         ledger.feed_documents = getattr(ledger, 'feed_documents', []) + [{
