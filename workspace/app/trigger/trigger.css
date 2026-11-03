@@ -34,8 +34,8 @@ body:has(.trigger-console) main { max-width:none; padding:0; margin:0; }
 .trigger-table th,.trigger-table td { border-bottom:1px solid var(--tr-line); vertical-align:top; }
 .trigger-table tr[data-record] { cursor:pointer; }
 .trigger-mobile-records { display:none; }
-.trigger-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0; background:white; border-radius:8px; overflow:hidden; }
-.trigger-field { display:flex; min-width:0; flex-direction:column; gap:8px; background:white; padding:16px; border-bottom:1px solid var(--tr-line); overflow-wrap:anywhere; }
+.trigger-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 16px; }
+.trigger-field { display:flex; min-width:0; flex-direction:column; gap:8px; background:white; padding:16px; border-bottom:1px solid var(--tr-input); overflow-wrap:anywhere; }
 .trigger-field-label { font-size:14px; color:var(--tr-muted); }
 .trigger-field-value { min-height:24px; white-space:pre-wrap; }
 .trigger-field input,.trigger-field textarea,.trigger-field select { width:100%; min-width:0; background:white; border:1px solid var(--tr-input); border-radius:8px; padding:8px; min-height:44px; }
@@ -53,8 +53,8 @@ body:has(.trigger-console) main { max-width:none; padding:0; margin:0; }
 .trigger-confirm { padding-bottom:104px; }
 .trigger-confirm-footer { position:fixed; inset:auto 0 0 240px; height:80px; background:white; border-top:1px solid var(--tr-line); padding:16px 24px; display:flex; justify-content:flex-end; gap:16px; z-index:20; }
 .trigger-confirm-footer>* { min-width:120px; }
-.trigger-calendar { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:8px; }
-.trigger-calendar-cell { background:white; min-height:104px; padding:8px; overflow-wrap:anywhere; }
+.trigger-calendar { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:0; }
+.trigger-calendar-cell { background:white; min-height:144px; border:1px solid var(--tr-line); padding:8px; overflow-wrap:anywhere; }
 .trigger-post-card { background:var(--tr-canvas); border-radius:8px; padding:8px; margin-top:8px; display:flex; flex-direction:column; gap:8px; }
 .trigger-transcript { display:flex; flex-direction:column; gap:16px; }
 .trigger-bubble { padding:16px; background:white; border:1px solid var(--tr-line); border-radius:8px; white-space:pre-wrap; }
@@ -89,3 +89,18 @@ body:has(.trigger-console) main { max-width:none; padding:0; margin:0; }
  .trigger-calendar-cell { min-height:104px; padding:8px; font-size:12px; }
  .trigger-calendar-cell .trigger-post-card { font-size:11px; padding:8px 4px; }
 }
+
+.trigger-actions [role=switch] { display:flex; align-items:center; gap:8px; width:180px; height:48px; }
+.trigger-button { display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--tr-line); border-radius:8px; min-height:44px; padding:8px 16px; background:white; }
+.trigger-channel select { width:100%; min-height:44px; border:1px solid var(--tr-input); background:white; border-radius:8px; }
+
+/* Field edits retain the framed label/value geometry. */
+.trigger-table th { text-align:left; }
+.trigger-table td { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.trigger-table td>a { display:block; overflow:hidden; text-overflow:ellipsis; }
+.trigger-business { height:44px; font-size:11px; line-height:16px; overflow:hidden; }
+.trigger-business>span { flex:1; min-width:0; }
+.trigger-business>.cl-rootBox { flex:none; max-width:28px; }
+.trigger-field textarea,.trigger-field input,.trigger-field select { border:0; border-radius:0; min-height:24px; padding:0; }
+.trigger-field textarea { height:24px; resize:vertical; }
+.trigger-mobile-bar button { font-family:Arial,sans-serif; }
