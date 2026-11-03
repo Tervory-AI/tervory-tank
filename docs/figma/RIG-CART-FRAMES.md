@@ -1,8 +1,8 @@
-# Rig cart (US) — Approved 3 Nov 2026
+# Rig cart (US) — Approved baseline; changes awaiting founder
 
 Page: [10 · Rig cart (US)](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=289-13919), node `289:13919`. Branch: `codex/rig-cart-figma`. Design-check revisions: rounds 1 and 2, then the 12-item sizing round, 3 November 2026. The sizing-round values below supersede earlier dimensional audit results.
 
-All 52 frames are **Approved 3 Nov 2026**, following the founder’s explicit approval of page `289:13919` as it stood at `0f403e3ebae8470a2186592690958fbe857b0f19`. Earlier Proposed statements below are historical. Frame-name status suffixes are updated; review-bar text and design content are unchanged. Illustrative values exist only in Figma, not on a live screen. This branch changes only this register relative to main; no widget, admin, payment, credential or other runtime code is changed.
+Baseline: all 52 frames were **Approved 3 Nov 2026**, following the founder’s explicit approval of page `289:13919` as it stood at `0f403e3ebae8470a2186592690958fbe857b0f19`. The current follow-up is **Changed after approval, awaiting founder**: webhook-secret fields, a paid-order failure row, and light-only review bands/mobile headers. All existing frame IDs remain. Earlier approval and Proposed statements below are historical; the final post-approval section is current. Illustrative values exist only in Figma, not on a live screen. This branch changes only this register relative to main; no widget, admin, payment, credential or other runtime code is changed.
 
 ## Frame register
 
@@ -33,20 +33,20 @@ The original 38 frame IDs are retained. All 94 distinct node IDs named in the ro
 | A07-choose · Shop platform · not connected | [291:8053](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8053) | 1440 × 900 | RetailerAdmin card, label/input, select, notice and buttons |
 | A07-choose · Shop platform · not connected | [291:8075](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8075) | 375 × 812 | RetailerAdmin card, label/input, select, notice and buttons |
 | A07-shopify · Shopify · enter credentials | [291:8097](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8097) | 1440 × 900 | RetailerAdmin card, label/input, select, notice and buttons |
-| A07-shopify · Shopify · enter credentials | [291:8124](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8124) | 375 × 812 | RetailerAdmin card, label/input, select, notice and buttons |
-| A07-woo · WooCommerce · enter credentials | [291:8151](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8151) | 1440 × 900 | RetailerAdmin card, label/input, select, notice and buttons |
-| A07-woo · WooCommerce · enter credentials | [291:8182](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8182) | 375 × 856 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-shopify · Shopify · enter credentials | [291:8124](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8124) | 375 × 880 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-woo · WooCommerce · enter credentials | [291:8151](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8151) | 1440 × 920 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-woo · WooCommerce · enter credentials | [291:8182](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8182) | 375 × 984 | RetailerAdmin card, label/input, select, notice and buttons |
 | A07-big · BigCommerce · enter credentials | [291:8213](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8213) | 1440 × 900 | RetailerAdmin card, label/input, select, notice and buttons |
-| A07-big · BigCommerce · enter credentials | [291:8240](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8240) | 375 × 812 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-big · BigCommerce · enter credentials | [291:8240](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8240) | 375 × 880 | RetailerAdmin card, label/input, select, notice and buttons |
 | A07-testing · Shop platform · testing | [291:8267](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8267) | 1440 × 900 | RetailerAdmin card, label/input, select, notice and buttons |
 | A07-testing · Shop platform · testing | [291:8288](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8288) | 375 × 812 | RetailerAdmin card, label/input, select, notice and buttons |
 | A07-connected · Shop platform · connected | [291:8309](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8309) | 1440 × 900 | RetailerAdmin card, label/input, select, notice and buttons |
 | A07-connected · Shop platform · connected | [291:8333](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8333) | 375 × 812 | RetailerAdmin card, label/input, select, notice and buttons |
 | A07-failed · Shop platform · connection failed | [291:8357](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8357) | 1440 × 900 | RetailerAdmin card, label/input, select, notice and buttons |
 | A07-failed · Shop platform · connection failed | [291:8381](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8381) | 375 × 812 | RetailerAdmin card, label/input, select, notice and buttons |
-| A08 · Orders | [291:8405](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8405) | 1440 × 900 | RetailerAdmin stacked history and actions |
+| A08 · Orders | [291:8405](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8405) | 1440 × 1050 | RetailerAdmin stacked history and actions |
 | A09 · Store delivery time | [291:8444](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8444) | 1440 × 900 | RetailerAdmin numeric label/inputs and preview |
-| A08 · Orders | [291:8464](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8464) | 375 × 935 | RetailerAdmin stacked history and actions |
+| A08 · Orders | [291:8464](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8464) | 375 × 1210 | RetailerAdmin stacked history and actions |
 | A09 · Store delivery time | [291:8503](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8503) | 375 × 812 | RetailerAdmin numeric label/inputs and preview |
 | S03-empty · Empty cart | [318:60926](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=318-60926) | 1440 × 900 | Widget card, field, price, notice and actions |
 | S03-empty · Empty cart | [318:60992](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=318-60992) | 375 × 812 | Widget card, field, price, notice and actions |
@@ -446,3 +446,73 @@ Work was performed in the isolated clone `/workspace/fresh-rig-figma-0845` on th
 The founder explicitly approved page **10 · Rig cart (US)** (`289:13919`) as it stood at head **`0f403e3ebae8470a2186592690958fbe857b0f19`** (`0f403e3e`) on **3 Nov 2026**. This approval supersedes the historical Proposed status entries above.
 
 All 52 frame names were renamed from “Proposed, not approved” to “Approved 3 Nov 2026”. Figma returned all 52 preserved frame IDs, confirmed 52 approved frame names, and found zero remaining frame names containing the old status. Only frame names changed in Figma; review-bar text, layout, styling, copy, components and node IDs are unchanged. This records the founder’s explicit approval in this thread; it makes no additional browser-acceptance claim.
+
+
+## Post-approval additions and light-only ruling · 3 Nov 2026
+
+**Changed after approval, awaiting founder.** Baseline approval above remains historical; this section records the current page changes. All 52 existing frame IDs remain. No new screen roots were needed: six A07 connection forms gain a field, and both A08 Orders frames gain a distinct sixth row. The founder’s 3 Nov 11:37 PT ruling also applies to the page’s review bands and mobile Menu bars, so all 52 frames now carry the post-approval status in their names and visible review labels. No proposal is marked approved.
+
+### A07 · Platform webhook-signing secrets
+
+Each new field is a clone of that platform form’s existing blank credential instance, retaining its component, CRM typography, border, 88px height and radius 8. Shopify’s **API secret key** is the app secret used for webhook HMAC; it is separate from the Access token. WooCommerce’s **Webhook secret** is separate from its Consumer key and Consumer secret. BigCommerce’s **Client secret** is separate from the Access token. Labels use the founder’s requested platform names.
+
+All values are blank. These inputs are write-only in the intended build: never prefill, redisplay or reveal a saved value, including on later visits. The existing “Saved credentials stay hidden.” instruction remains. Saved/connected states have no credential-value display. This is a design contract, not a claim that runtime storage or secret handling has been implemented; no actual credentials were read, generated, entered, saved or tested.
+
+| Platform / width | Existing frame | New field | New label text | Blank value text |
+| --- | --- | --- | --- | --- |
+| Shopify / 1440 | `291:8097` | `483:42403` | `I483:42403;289:13954` — API secret key | `I483:42403;289:13956` |
+| Shopify / 375 | `291:8124` | `483:42407` | `I483:42407;289:13954` — API secret key | `I483:42407;289:13956` |
+| WooCommerce / 1440 | `291:8151` | `483:42411` | `I483:42411;289:13954` — Webhook secret | `I483:42411;289:13956` |
+| WooCommerce / 375 | `291:8182` | `483:42415` | `I483:42415;289:13954` — Webhook secret | `I483:42415;289:13956` |
+| BigCommerce / 1440 | `291:8213` | `483:42419` | `I483:42419;289:13954` — Client secret | `I483:42419;289:13956` |
+| BigCommerce / 375 | `291:8240` | `483:42423` | `I483:42423;289:13954` — Client secret | `I483:42423;289:13956` |
+
+### A08 · Paid, supplier order not placed
+
+Proposed status pill: **Paid · not placed**.
+
+Proposed instruction (one sentence): **Payment is confirmed, but the Locate order could not be placed; contact the supplier or retry the order.**
+
+The new row explicitly confirms payment and does not replace **Needs a person**, which continues to mean payment could not be confirmed (`291:8437`, `291:8496`). It adds no retry button or new action behavior. The existing order-history layout and text styles are reused. The small neutral white pill uses existing CRM ink, field-border paint, `radius/16` (`VariableID:42:34`), 16px horizontal padding, 32px height and the existing Inter Semi Bold 14/24 heading treatment. Subscribed-library search returned unrelated navigation pills/status bars, not a matching Rig order composite; no unrelated kit component was imported. Existing source directories had no Code Connect mappings for these additions.
+
+`#1006` is a new illustrative order-number slot, not a real order. `$205.00` reuses the existing illustrative order-amount slot. The line **$205.00 · Payment confirmed** combines those existing words with the amount slot. Runtime values must come from the store’s actual order; no order or payment was created.
+
+| Width | Existing frame | New row | Heading | Amount/payment | Pill container | Pill text | Instruction |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1440 | `291:8405` | `483:42427` | `483:42428` | `483:42429` | `483:42431` | `483:42432` | `483:42430` |
+| 375 | `291:8464` | `483:42433` | `483:42434` | `483:42435` | `483:42437` | `483:42438` | `483:42436` |
+
+### Light CRM surfaces and retained geometry
+
+All 52 review bands are white with CRM navy text. All eleven mobile Menu bars are white with navy text and reuse the approved original logo image from CRM `I182:9119;180:8390` (`tervory-logo-on-white.png`); their rectangle IDs are retained. Existing linked white desktop CRM navigation instances remain linked and their shared component is unchanged. No dark sidebar, panel, band or theme remains; existing action-button styling is retained as a control. No homepage is changed.
+
+Mobile Menu-bar IDs: `441:530`, `441:564`, `441:598`, `441:632`, `441:666`, `441:700`, `441:734`, `441:799`, `441:802`, `441:836`, `441:870`.
+
+| Existing frame | Final dimensions |
+| --- | --- |
+| `291:8097` | 1440 × 900 |
+| `291:8124` | 375 × 880 |
+| `291:8151` | 1440 × 920 |
+| `291:8182` | 375 × 984 |
+| `291:8213` | 1440 × 900 |
+| `291:8240` | 375 × 880 |
+| `291:8405` | 1440 × 1050 |
+| `291:8464` | 375 × 1210 |
+
+Auto-layout extends the six credential cards/content stacks by 104px. Existing helpers and action rows shift down; their wording and IDs remain. A08 extends to accommodate the new row. WooCommerce desktop sidebar `441:567` / CRM instance `456:18691` extend to 920px; Orders sidebar `441:737` / instance `456:19156` extend to 1050px. Frame widths, card insets, existing fields and existing rows are retained.
+
+### Exact words and node manifest
+
+New product words: **API secret key**; **Webhook secret**; **Client secret**; **Paid · not placed**; **Payment is confirmed, but the Locate order could not be placed; contact the supplier or retry the order.** The new display combination is **$205.00 · Payment confirmed**, with illustrative **#1006**. New review wording: **Changed after approval, awaiting founder**. No other existing product wording changed.
+
+All 36 created IDs (including nested field layers): `483:42403`, `I483:42403;289:13954`, `I483:42403;289:13955`, `I483:42403;289:13956`, `483:42407`, `I483:42407;289:13954`, `I483:42407;289:13955`, `I483:42407;289:13956`, `483:42411`, `I483:42411;289:13954`, `I483:42411;289:13955`, `I483:42411;289:13956`, `483:42415`, `I483:42415;289:13954`, `I483:42415;289:13955`, `I483:42415;289:13956`, `483:42419`, `I483:42419;289:13954`, `I483:42419;289:13955`, `I483:42419;289:13956`, `483:42423`, `I483:42423;289:13954`, `I483:42423;289:13955`, `I483:42423;289:13956`, `483:42427`, `483:42428`, `483:42431`, `483:42432`, `483:42429`, `483:42430`, `483:42433`, `483:42434`, `483:42437`, `483:42438`, `483:42435`, `483:42436`.
+
+All 277 existing changed IDs (including auto-layout geometry changes and frame/review labels): `291:8106`, `291:8133`, `291:8160`, `291:8191`, `291:8222`, `291:8249`, `291:8414`, `291:8473`, `291:10`, `291:11`, `291:12`, `291:9`, `291:27`, `291:28`, `291:29`, `291:26`, `291:44`, `291:45`, `291:46`, `291:43`, `291:61`, `291:62`, `291:63`, `291:60`, `291:78`, `291:79`, `291:80`, `291:77`, `291:98`, `291:99`, `291:100`, `291:97`, `291:118`, `291:119`, `291:120`, `291:117`, `291:141`, `291:142`, `291:143`, `291:140`, `291:164`, `291:165`, `291:166`, `291:163`, `291:224`, `291:225`, `291:226`, `291:223`, `291:284`, `291:285`, `291:286`, `291:283`, `291:303`, `291:304`, `291:305`, `291:302`, `291:322`, `291:323`, `291:324`, `291:321`, `291:385`, `291:386`, `291:387`, `291:384`, `291:448`, `291:449`, `291:450`, `291:447`, `291:512`, `291:513`, `291:514`, `291:511`, `291:576`, `291:577`, `291:578`, `291:575`, `291:599`, `291:600`, `291:601`, `291:598`, `291:622`, `291:623`, `291:624`, `291:621`, `291:641`, `291:642`, `291:643`, `291:640`, `291:8054`, `291:8055`, `291:8056`, `291:8053`, `291:8076`, `291:8077`, `291:8078`, `291:8075`, `441:530`, `441:532`, `441:531`, `291:8098`, `291:8099`, `291:8100`, `291:8097`, `291:8125`, `291:8126`, `291:8127`, `291:8124`, `441:564`, `441:566`, `441:565`, `291:8152`, `291:8153`, `291:8154`, `291:8151`, `441:567`, `456:18691`, `291:8183`, `291:8184`, `291:8185`, `291:8182`, `441:598`, `441:600`, `441:599`, `291:8214`, `291:8215`, `291:8216`, `291:8213`, `291:8241`, `291:8242`, `291:8243`, `291:8240`, `441:632`, `441:634`, `441:633`, `291:8268`, `291:8269`, `291:8270`, `291:8267`, `291:8289`, `291:8290`, `291:8291`, `291:8288`, `441:666`, `441:668`, `441:667`, `291:8310`, `291:8311`, `291:8312`, `291:8309`, `291:8334`, `291:8335`, `291:8336`, `291:8333`, `441:700`, `441:702`, `441:701`, `291:8358`, `291:8359`, `291:8360`, `291:8357`, `291:8382`, `291:8383`, `291:8384`, `291:8381`, `441:734`, `441:736`, `441:735`, `291:8406`, `291:8407`, `291:8408`, `291:8405`, `441:737`, `456:19156`, `291:8445`, `291:8446`, `291:8447`, `291:8444`, `291:8465`, `291:8466`, `291:8467`, `291:8464`, `441:799`, `441:801`, `441:800`, `291:8504`, `291:8505`, `291:8506`, `291:8503`, `441:802`, `441:804`, `441:803`, `318:60927`, `318:60928`, `318:60929`, `318:60926`, `318:60993`, `318:60994`, `318:60995`, `318:60992`, `318:61059`, `318:61060`, `318:61061`, `318:61058`, `318:61124`, `318:61125`, `318:61126`, `318:61123`, `318:61189`, `318:61190`, `318:61191`, `318:61188`, `318:61253`, `318:61254`, `318:61255`, `318:61252`, `321:6201`, `321:6202`, `321:6203`, `321:6200`, `321:6234`, `321:6235`, `321:6236`, `321:6233`, `321:6267`, `321:6268`, `321:6269`, `321:6266`, `321:6286`, `321:6287`, `321:6288`, `321:6285`, `321:6305`, `321:6306`, `321:6307`, `321:6304`, `321:6344`, `321:6345`, `321:6346`, `321:6343`, `441:836`, `441:838`, `441:837`, `321:6383`, `321:6384`, `321:6385`, `321:6382`, `321:6411`, `321:6412`, `321:6413`, `321:6410`, `441:870`, `441:872`, `441:871`, `291:8101`, `291:8120`, `291:8121`, `291:8128`, `291:8147`, `291:8148`, `291:8155`, `291:8178`, `291:8179`, `I456:18691;180:8395`, `I456:18691;180:8454`, `291:8186`, `291:8209`, `291:8210`, `291:8217`, `291:8236`, `291:8237`, `291:8244`, `291:8263`, `291:8264`, `291:8409`, `I456:19156;180:8395`, `I456:19156;180:8454`, `291:8468`.
+
+### Verification
+
+Figma read-back: 52 roots retained; all 52 frame names carry the exact awaiting-founder suffix; six new credential values are empty; both original Needs-a-person rows retain their wording. No dark surface remains in the visible panels/bands/header audit. New field labels measure **8.87:1** on white; new pill labels measure **17.44:1** on white. Field/pill borders retain the existing **3.17:1** field-border paint on white. Instruction text inherits the CRM secondary-text token, **8.87:1** on white.
+
+The geometry audit found no added-content overflow. It also surfaced 33 inherited 1px horizontal extents inside the eleven linked CRM navigation instances (their three component children begin at x=1 with width=240 inside a 240px instance); those source-component bounds predate this change and remain unchanged. The shared CRM component was not edited. Desktop Shopify `291:8097`, mobile WooCommerce `291:8182`, desktop Orders `291:8405` and mobile Orders `291:8464` screenshots were visually inspected after the final writes: labels fit, blank fields are visible, status pill and instruction fit, no clipping or overlap. These are design checks, not founder acceptance or runtime tests.
+
+Only `docs/figma/RIG-CART-FRAMES.md` is committed. No runtime code, Zitadel code/settings, actual secret, order, payment, deployment or main-branch push is involved. Validation: targeted Figma read-back, composition screenshots, register manifest checks and `git diff --check`. Pushed on the existing `codex/rig-cart-figma` branch; founder approval of this follow-up remains outstanding.
