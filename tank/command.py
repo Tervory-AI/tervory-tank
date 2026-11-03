@@ -484,8 +484,8 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
     if planned is not None:
         return planned
     from main import Message, RouteRequest, box_region, run_route
-    from command_tools.skala import code_plan as teachers_code_plan
-    planned = await teachers_code_plan(actor, messages, task_id)
+    from command_tools import plan_products
+    planned = await plan_products(actor, messages, task_id)
     if planned is not None:
         return planned
     from tisan_requests import code_plan as tisan_code_plan
