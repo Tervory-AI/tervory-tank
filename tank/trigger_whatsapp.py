@@ -47,7 +47,7 @@ def bindings():
         return {}
     result = {}
     for phone, value in values.items():
-        if not isinstance(phone, str) or not 1 <= len(phone) <= 64 or not isinstance(value, dict):
+        if not isinstance(phone, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', phone) or not isinstance(value, dict):
             continue
         try:
             tenant = UUID(value['tenant_id'])
@@ -154,7 +154,8 @@ class WhatsApp:
             stamp = datetime.min.replace(tzinfo=timezone.utc)  # Invalid window: hand over, never send.
         tenant = binding.tenant
         visitor = UUID(fingerprint(tenant, phone, sender)[:32])
-        conversation = uuid5(visitor, 'trigger.whatsapp.conversation')
+        # A new account month starts a fresh session, including senders handed over at last month's cap.
+        conversation = uuid5(visitor, 'trigger.whatsapp.conversation:' + str(month(binding) or 'unconfigured'))
         event = fingerprint(tenant, phone, ident)
         # Rate limits use an opaque keyed sender id, never the Meta server IP or raw phone.
         address = str(visitor)
@@ -203,6 +204,10 @@ class WhatsApp:
             return  # Retention/deletion wins; the committed attempt remains spent.
         try:
             recipient = open_seal(sealed, context(tenant, conversation))['sender']
+            if not in_window(stamp) or month(binding) != period:
+                await self.handover(tenant, conversation, text, address)
+                await self.state(tenant, event, 'handed_over')
+                return
             sent = await self.send(phone, token, recipient, outgoing)
         except Exception:  # No exception bodies, tokens or customer metadata in logs/responses; no replay.
             sent = False
