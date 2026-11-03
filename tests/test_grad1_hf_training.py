@@ -143,7 +143,7 @@ async def test_actual_export_payload_cannot_contain_private_rows(database, monke
             await training.save_pair(conn, tenant=tenant, agent='base', task='base.fixture', value={'n': n}, output={'ok': True},
                                      approved_by='fixture', source='gold', ref=str(n), public=public, client_matter=client)
     captured = []
-    async def upload(client, org, agent, day, rows, region):
+    async def upload(client, org, agent, day, rows, region, holdouts=None):
         load('train').validate_rows(rows)  # Any forbidden row fails the export test.
         captured.extend(rows)
     monkeypatch.setattr(training, 'upload_dataset', upload)
@@ -238,7 +238,7 @@ async def test_legacy_ledger_and_package_pairs_stay_private_after_upgrade(databa
                     value={'public_source': source, 'held': held}, output={}, approved_by='fixture',
                     source=source, ref='public-' + str(held), public=True, holdout=held)
     captured = []
-    async def upload(client, org, agent, day, rows, region):
+    async def upload(client, org, agent, day, rows, region, holdouts=None):
         load('train').validate_rows(rows)
         captured.extend(rows)
     monkeypatch.setattr(training, 'upload_dataset', upload)

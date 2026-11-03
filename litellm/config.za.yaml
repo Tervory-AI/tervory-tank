@@ -36,6 +36,7 @@ model_list:
       output_cost_per_token: 0
       open_weights: true
       host: tervory-za
+      hosted_in: za
 
   # ---------- OpenAI (API key, Responses/Chat) ----------
   - model_name: luna            # cheap, fast workhorse: classify, extract, short drafts

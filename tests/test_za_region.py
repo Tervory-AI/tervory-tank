@@ -73,11 +73,13 @@ def test_model_keys_reach_only_litellm_in_za() -> None:
 
 def test_za_zenas_room_is_its_own_resource_on_the_corridor() -> None:
     room = yaml.safe_load(ROOM_COMPOSE)
-    assert set(room["services"]) == {"agent-zenas", "pool-loader"}
+    assert set(room["services"]) == {"agent-zenas", "pool-loader", "zenas-own-model"}
     assert room["networks"]["gw"] == {"external": True, "name": "tervory-gw-zenas"}
     # Contracts are assembled inside agent-zenas; no Docassemble network or resource.
-    assert set(room["networks"]) == {"gw"}
-    for name, service in room["services"].items():
+    assert set(room["networks"]) == {"gw", "own_model"}
+    assert room["networks"]["own_model"] == {"external": True, "name": "tervory-own-zenas-za"}
+    for name in ("agent-zenas", "pool-loader"):
+        service = room["services"][name]
         assert service["environment"]["TANK_REGION"] == "za", name
         assert service["networks"] == ["gw"], name
         assert "ports" not in service, name
@@ -110,7 +112,7 @@ def test_za_compose_names_no_us_host_and_does_not_replicate() -> None:
         assert banned not in lowered
 
 
-def test_za_roster_matches_the_funded_models_and_has_no_sa_model_yet() -> None:
+def test_za_roster_includes_the_gated_own_model() -> None:
     za_names = [item["model_name"] for item in ZA_CONFIG["model_list"]]
     us_names = [item["model_name"] for item in US_CONFIG["model_list"]]
     assert za_names == us_names
@@ -119,10 +121,14 @@ def test_za_roster_matches_the_funded_models_and_has_no_sa_model_yet() -> None:
     assert "model_name: za-local" in raw
     assert "hosted_in: za" in raw
     for item in ZA_CONFIG["model_list"]:
+        if item["model_name"] == "tervory-own-zenas-za":
+            assert item["litellm_params"]["api_base"] == "http://zenas-own-model:8080/v1"
+            assert item["model_info"]["hosted_in"] == "za"
+            continue
         # MODELS-3: the public Hugging Face router is the only api_base; it is not SA hosting.
         assert item["litellm_params"].get("api_base") in (None, "https://router.huggingface.co/v1"), item["model_name"]
         assert "hosted_in" not in (item.get("model_info") or {}), item["model_name"]
-    assert main.sa_hosted_models() == frozenset()
+    assert main.sa_hosted_models() == frozenset({"tervory-own-zenas-za"})
 
 
 def test_za_litellm_gets_the_deepseek_and_moonshot_keys_like_boston() -> None:
