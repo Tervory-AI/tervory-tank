@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from tenant_db import tenant_path
 
 PLATFORM = "00000000-0000-0000-0000-000000000001"
-READS = {"warnings", "predictions", "calibration", "feeds", "patterns", "gate", "briefs"}
+READS = {"warnings", "predictions", "calibration", "feeds", "patterns", "gate", "briefs", "calibration.curve"}
 
 
 def obj(raw):
@@ -45,6 +45,13 @@ def link(value: str) -> str:
 
 
 def records(operation: str, data: dict) -> list[dict]:
+    if operation == "calibration.curve":
+        # The binned data is available to callers; its dedicated Workspace view
+        # waits for Figma rather than creating labels or a new chart here.
+        return [{"name": " / ".join(str(row[k]) for k in ("kind", "feed", "horizon_seconds")),
+                 "count": row["count"], "bins": row["bins"], "brier_score": row["brier_score"],
+                 "kind": row["kind"], "feed": row["feed"], "horizon_seconds": row["horizon_seconds"]}
+                for row in data.get("curves", [])]
     if operation == "briefs":
         return [{"name": row["question"], "summary": row["answer"],
                  "status": " / ".join(d["channel"] + ":" + d["status"] for d in row["deliveries"]),
