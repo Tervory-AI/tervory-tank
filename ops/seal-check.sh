@@ -73,13 +73,14 @@ APPS=()
 FORMAT='{{index .Config.Labels "coolify.applicationUuid"}}|{{index .Config.Labels "coolify.resourceName"}}|{{index .Config.Labels "com.docker.compose.service"}}|{{index .Config.Labels "com.docker.compose.project"}}|{{.Name}}|{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}'
 
 # Identify raw per-client Enforce projects before validating their proxy services.
-declare -A ENFORCE_PROJECTS=()
+declare -A ENFORCE_PROJECTS=() CONTAINER_LINES=()
 for id in $ids; do
   if ! line="$("$DOCKER" inspect -f "$FORMAT" "$id" 2>&1)"; then
     echo "seal-check: docker inspect $id failed: $line" >&2
     exit 2
   fi
   IFS='|' read -r uuid resource service project name networks <<<"$line"
+  CONTAINER_LINES[$id]="$line"
   [[ "$service" == enforce ]] && ENFORCE_PROJECTS[$project]=1
 done
 
@@ -97,10 +98,7 @@ internal_flag() {  # sets FLAG; no subshell, so the cache and exit 2 both hold
 }
 
 for id in $ids; do
-  if ! line="$("$DOCKER" inspect -f "$FORMAT" "$id" 2>&1)"; then
-    echo "seal-check: docker inspect $id failed: $line" >&2
-    exit 2
-  fi
+  line="${CONTAINER_LINES[$id]}"
   IFS='|' read -r uuid resource service project name networks <<<"$line"
   name="${name#/}"
   if [[ -z "$uuid" ]]; then
