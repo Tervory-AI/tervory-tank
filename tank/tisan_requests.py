@@ -1,0 +1,185 @@
+"""Tenant-admin site requests, staging evidence and sign-off; no build or deploy."""
+import json
+import os
+import re
+from types import SimpleNamespace
+from typing import Annotated
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException
+import httpx
+from pydantic import BaseModel, ConfigDict, Field
+from tenant_db import tenant_path, tenant_transaction
+
+TOOLS = ['tisan.request', 'tisan.preview', 'tisan.feedback', 'tisan.handover']
+MOVES = {'requested': {'changes_requested', 'accepted'},
+         'changes_requested': {'changes_requested', 'accepted'}, 'accepted': set()}
+
+
+class RequestIdArgs(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    request_id: UUID
+
+
+class FeedbackArgs(RequestIdArgs):
+    text: str = Field(min_length=1, max_length=4000)
+
+
+def refused(code: str, status: int = 409):
+    raise HTTPException(status, {'status': code})
+
+
+def transition(row: dict, target: str, published: dict) -> None:
+    if target not in MOVES.get(row['state'], set()):
+        refused('invalid_transition')
+    # A revision advances the build as well as the state. A repeated change
+    # request or acceptance of the build already sent back is not sign-off.
+    if row['build'] is not None and (published['build'] <= row['build'] or published['commit'] == row['commit']):
+        refused('new_build_required')
+
+
+async def latest(tenant: UUID, slug: str) -> dict:
+    from main import _http
+    key = os.environ.get('TANK_KEY_TISAN', '')
+    if _http is None or not key:
+        refused('unavailable', 503)
+    try:
+        response = await _http.get('http://agent-tisan:8000/publish/latest',
+            params={'tenant_id': str(tenant), 'slug': slug}, headers={'X-Tank-Key': key}, timeout=15)
+        if response.status_code != 200:
+            refused('unavailable', 503)
+        data = response.json()
+        if data == {'status': 'unavailable'}:
+            return data
+        # Return only the journal's verified successful evidence, never body errors.
+        from urllib.parse import urlsplit
+        url = urlsplit(data['url'])
+        if (data['status'] != 'succeeded' or type(data['build']) is not int or data['build'] < 1
+                or not re.fullmatch(r'[0-9a-f]{40}', data['commit'])
+                or url.scheme != 'https' or not url.hostname or url.username or url.password
+                or url.path not in ('', '/') or url.query or url.fragment or url.port not in (None, 443)):
+            refused('unavailable', 503)
+        return {k: data[k] for k in ('status', 'build', 'commit', 'url')}
+    except (httpx.HTTPError, ValueError, TypeError, KeyError):
+        refused('unavailable', 503)
+
+
+class Store:
+    def __init__(self, pool):
+        self.pool = pool
+
+    @tenant_path('tenant')
+    async def create(self, tenant, actor, operation, data):
+        async with tenant_transaction(self.pool) as conn:
+            row = await conn.fetchrow(
+                "INSERT INTO tank.tisan_requests(tenant_id,request_id,actor,data,state) "
+                "VALUES($1,$2,$3,$4::jsonb,'requested') ON CONFLICT DO NOTHING RETURNING request_id",
+                tenant, operation, actor, json.dumps(data))
+            if row is None:
+                old = await self.get(conn, tenant, operation)
+                if old['actor'] != actor or obj(old['data']) != data:
+                    refused('operation_changed')
+                return {'request_id': str(operation), 'status': old['state'], 'input': data}
+            await conn.execute("INSERT INTO tank.tisan_request_events(tenant_id,event_id,request_id,kind,actor) "
+                               "VALUES($1,$2,$2,'requested',$3)", tenant, operation, actor)
+        return {'request_id': str(operation), 'status': 'requested', 'input': data}
+
+    async def get(self, conn, tenant, request):
+        row = await conn.fetchrow("SELECT * FROM tank.tisan_requests WHERE tenant_id=$1 AND request_id=$2 FOR UPDATE", tenant, request)
+        if row is None:
+            refused('not_found', 404)
+        return dict(row)
+
+    @tenant_path('tenant')
+    async def preview(self, tenant, request):
+        async with tenant_transaction(self.pool) as conn:
+            row = await self.get(conn, tenant, request)
+            data = obj(row['data'])
+            return {'request_id': str(request), **await latest(tenant, data['slug'])}
+
+    @tenant_path('tenant')
+    async def move(self, tenant, actor, operation, request, target, text=None):
+        async with tenant_transaction(self.pool) as conn:
+            row = await self.get(conn, tenant, request)
+            prior = await conn.fetchrow("SELECT request_id,kind,actor,build,\"commit\",text FROM tank.tisan_request_events "
+                                        "WHERE tenant_id=$1 AND event_id=$2", tenant, operation)
+            if prior:
+                if (prior['request_id'], prior['kind'], prior['actor'], prior['text']) != (request, target, actor, text):
+                    refused('operation_changed')
+                return {'request_id': str(request), 'status': prior['kind'], 'build': prior['build'], 'commit': prior['commit']}
+            if target not in MOVES.get(row['state'], set()):
+                refused('invalid_transition')
+            published = await latest(tenant, obj(row['data'])['slug'])
+            if published['status'] != 'succeeded':
+                refused('unavailable')
+            transition(row, target, published)
+            await conn.execute("INSERT INTO tank.tisan_request_events(tenant_id,event_id,request_id,kind,actor,build,\"commit\",text) "
+                               "VALUES($1,$2,$3,$4,$5,$6,$7,$8)", tenant, operation, request, target, actor,
+                               published['build'], published['commit'], text)
+            await conn.execute("UPDATE tank.tisan_requests SET state=$3,build=$4,\"commit\"=$5,updated_at=now() "
+                               "WHERE tenant_id=$1 AND request_id=$2", tenant, request, target, published['build'], published['commit'])
+        return {'request_id': str(request), 'status': target, 'build': published['build'], 'commit': published['commit']}
+
+
+def obj(value):
+    return json.loads(value) if isinstance(value, str) else value
+
+
+async def code_plan(actor, messages, task_id):
+    from command import authorized_actor, PlannedAction, validate_action
+    from trigger_routes import code_receipt
+    source = messages[-1] if messages else {}
+    if source.get('role') != 'user':
+        return None
+    match = re.fullmatch(r'\s*tisan\.(request|preview|feedback|handover)\s*:?\s+(.+)', source.get('content', ''), re.I | re.S)
+    if not match:
+        return None
+    actor = await authorized_actor(actor)
+    tool, raw = 'tisan.' + match[1].lower(), match[2]
+    try:
+        args = {'request_id': str(UUID(raw.strip()))} if tool in ('tisan.preview', 'tisan.handover') and not raw.lstrip().startswith('{') else json.loads(raw)
+    except ValueError:
+        refused('invalid_arguments', 422)
+    action = validate_action(PlannedAction(tool=tool, arguments=args), actor)
+    return SimpleNamespace(content=json.dumps({'text': '', 'actions': [action.model_dump(mode='json')]}),
+        ledger_id=await code_receipt(actor.tenant_id, 'command.turn', task_id=task_id, agent='tisan'))
+
+
+def build_router():
+    from command import Actor, TisanRequestArgs, db, identity, require_tool
+    from trigger_commands import confirmation
+    from trigger_routes import code_receipt
+    router = APIRouter(prefix='/v1/command/tisan', tags=['tisan'])
+    # Local annotation must be available to FastAPI's signature resolver.
+    globals()['TisanRequestArgs'] = TisanRequestArgs
+    globals()['Actor'] = Actor
+
+    async def result(actor, tool, data):
+        return {**data, 'ledger_id': str(await code_receipt(actor.tenant_id, tool, agent='tisan')), 'cost_usd': 0}
+
+    @router.post('/request')
+    async def request(args: TisanRequestArgs, actor: Annotated[Actor, Depends(identity)]):
+        require_tool(actor, 'tisan.request')
+        data = args.model_dump(mode='json', exclude_none=True)
+        operation = confirmation(actor, 'tisan.request', data)
+        return await result(actor, 'tisan.request', await Store(db()).create(actor.tenant_id, actor.user_id, operation, data))
+
+    @router.get('/preview')
+    async def preview(request_id: UUID, actor: Annotated[Actor, Depends(identity)]):
+        require_tool(actor, 'tisan.preview')
+        return await result(actor, 'tisan.preview', await Store(db()).preview(actor.tenant_id, request_id))
+
+    @router.post('/feedback')
+    async def feedback(args: FeedbackArgs, actor: Annotated[Actor, Depends(identity)]):
+        require_tool(actor, 'tisan.feedback')
+        operation = confirmation(actor, 'tisan.feedback', args.model_dump(mode='json', exclude_none=True))
+        return await result(actor, 'tisan.feedback', await Store(db()).move(actor.tenant_id, actor.user_id, operation,
+                            args.request_id, 'changes_requested', args.text))
+
+    @router.post('/handover')
+    async def handover(args: RequestIdArgs, actor: Annotated[Actor, Depends(identity)]):
+        require_tool(actor, 'tisan.handover')
+        operation = confirmation(actor, 'tisan.handover', args.model_dump(mode='json', exclude_none=True))
+        return await result(actor, 'tisan.handover', await Store(db()).move(actor.tenant_id, actor.user_id, operation,
+                            args.request_id, 'accepted'))
+    return router
