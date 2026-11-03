@@ -32,6 +32,13 @@ services:
       # GHOST-2 inventory: read-only Coolify API token, by name only. Empty = not connected.
       COOLIFY_TOKEN_GHOST: ${COOLIFY_TOKEN_GHOST:-}
       COOLIFY_URL_GHOST: ${COOLIFY_URL_GHOST:-}
+      # Enforce-only team, test host; founder supplies values in Coolify.
+      AUTUMBRA_COOLIFY_URL: ${AUTUMBRA_COOLIFY_URL:-}
+      AUTUMBRA_COOLIFY_TOKEN: ${AUTUMBRA_COOLIFY_TOKEN:-}
+      AUTUMBRA_COOLIFY_PROJECT_UUID: ${AUTUMBRA_COOLIFY_PROJECT_UUID:-}
+      AUTUMBRA_COOLIFY_SERVER_UUID: ${AUTUMBRA_COOLIFY_SERVER_UUID:-}
+      AUTUMBRA_COOLIFY_ENVIRONMENT: ${AUTUMBRA_COOLIFY_ENVIRONMENT:-}
+      AUTUMBRA_COOLIFY_GITHUB_APP_UUID: ${AUTUMBRA_COOLIFY_GITHUB_APP_UUID:-}
       # Air gap: Watch has NO edge write credential. Per-client Enforce holds
       # Edge credential names held until a real connected edge client (agnostic).
     volumes:
