@@ -95,3 +95,25 @@ def test_dispatch_snapshot_detects_dropped_prefix(monkeypatch):
     monkeypatch.setattr(inspect, 'getsource', lambda function: mutated)
     after = _dispatch(command, tools)
     assert after['market_lab.alerts.email'] != before['market_lab.alerts.email']
+
+
+def test_fresh_tank_fixture_replaces_stale_module_alias():
+    import os
+    from pathlib import Path
+    import subprocess
+    import sys
+    root = Path(__file__).resolve().parents[1]
+    env = {key: os.environ[key] for key in ('PATH', 'HOME', 'LANG') if key in os.environ}
+    env.update(PYTHONPATH='tank:agents/_chassis:tests',
+               DATABASE_URL='postgresql://placeholder/placeholder',
+               TANK_API_KEY='placeholder', LITELLM_MASTER_KEY='placeholder')
+    subprocess.run([sys.executable, '-c', """
+import main, runpy, sys
+from http_routes import iter_http_routes
+sys.modules['tank_main'] = main
+fresh = runpy.run_path('tests/test_smoke.py')['mod']
+assert sys.modules['tank_main'] is fresh
+routes = [(r.path, method) for r in iter_http_routes(fresh.app.routes) for method in (r.methods or [])]
+for endpoint in ('/v1/command/mcp/oauth/start', '/v1/command/mcp/oauth/callback'):
+    assert routes.count((endpoint, 'POST')) == 1
+"""], cwd=root, env=env, check=True, capture_output=True, text=True, timeout=60)

@@ -83,6 +83,12 @@ also inserted a blank separator before generated memory.
   generator is now byte-idempotent. Golden normalization still matches main after
   excluding the teacher ALTER; finish updated only that column's blank placement.
 Focused contract verification: 81 passed in 17.09s. Finish: 1 passed in 7.84s.
+Shard 3 also exposed a stale Tank alias in tests/test_smoke.py:15: the fresh
+module used setdefault and could register routers on an older app left by prior
+imports. The fixture now replaces its own alias. A subprocess regression in
+registry extensions preloads a different Tank module and requires both OAuth
+client routes exactly once on the newly imported app. The existing MCP coexistence
+assertions remain unchanged. Smoke/MCP/extensions/frozen checks: 8 passed in 9.12s.
 No scanner exceptions, skipped checks or retry behavior were added.
 
 Final re-freeze, only when authorized
