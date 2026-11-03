@@ -46,3 +46,28 @@ The known-action `run` and owned task receipt endpoints are supplied by companio
 Interactive terminals show provisional answer text on a single stderr preview line; stdout receives the final answer once. Tank's `replace` event replaces the provisional answer, and duplicate sequence numbers are ignored. Non-interactive stdout receives only the validated final answer, avoiding stale previews in scripts.
 
 `npm test --prefix cli` runs fake-Tank tests with synthetic credentials and data only. No provider requests or live account changes occur. Evidence in `tests/cli_1_20261031/` is labeled offline fake-Tank proof and is not a founder-browser test.
+
+## Code mode
+
+`tervory code [folder]` opens an interactive session inside a git repository (the
+current folder by default). It uses the existing keychain credential and its region;
+there is no token argument, environment credential or URL override. Only Auto is
+available to customers; model pins remain founder-only. Receipts display Tank's
+amounts unchanged. An interrupted turn is never retried automatically.
+
+The six local tools list files, read text, search text, inspect git status/diff,
+propose a unified diff, and run a command. File tools stay inside the selected
+folder, including symlink resolution, and exclude ignored files and secret paths.
+Reads are limited to 200 KB, listings to 2,000 entries and searches to 200 matches.
+Secret-looking lines are redacted before any local result leaves the machine.
+Edits show their diff and require an explicit `y`; a file changed since its read
+cannot be edited. Commands show the full command and require an explicit `y`, run
+in the selected folder, time out after 120 seconds and retain at most 64 KB of
+output. Non-interactive sessions cannot apply edits or run commands.
+
+**Storage:** the Command thread and `/chats` retain user requests, steps, receipts
+and tool names/sizes, without tool-result file contents or proposed patches.
+The model-call transcript follows Tank's existing handling for every chat turn:
+masked by `_preflight_mask` and `_storage_mask`, tenant-scoped and kept on the
+region's own box. CLI secret redaction runs before anything leaves the machine.
+Tank requests tools; it never executes them or touches the local folder.
