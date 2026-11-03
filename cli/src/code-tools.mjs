@@ -435,7 +435,8 @@ export class CodeFolder {
     const scan = async (directory, prefix = '') => {
       for (const entry of await readdir(directory, { withFileTypes: true })) {
         const name = prefix + entry.name;
-        if (secretPath(name)) {
+        // Pathname Unix sockets can cross network namespaces through bind mounts.
+        if (secretPath(name) || entry.isSocket()) {
           masks.push(...(entry.isDirectory() ? ['--tmpfs', '/work/' + name] : ['--ro-bind', '/dev/null', '/work/' + name]));
         } else if (entry.isDirectory()) await scan(resolve(directory, entry.name), name + '/');
       }
