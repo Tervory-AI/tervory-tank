@@ -295,7 +295,7 @@ class DiscoveryGate:
         from urllib.parse import urlsplit
         from datetime import timezone
         from watch import check_url
-        safe = check_url(url)
+        safe = await asyncio.to_thread(check_url, url)
         parsed = urlsplit(safe)
         site = f'{parsed.scheme}://{parsed.netloc}'
         checkout = self.pool.acquire(autocommit=True) if hasattr(self.pool, 'raw') else self.pool.acquire()
@@ -320,7 +320,7 @@ class DiscoveryGate:
                 # The reservation committed before transport: cancellation or a
                 # crashed worker cannot refund an already-started public request.
                 result = await operation()
-                if isinstance(result, dict) and (result.get('challenge') or result.get('blocked_by_check') or result.get('status') in {401,403,429}):
+                if isinstance(result, dict) and (result.get('challenge') or result.get('status') in {401,403,429}):
                     await conn.execute('UPDATE agent_tiger.discovery_limits SET human_check=true WHERE site=$1', site)
                 return result
             finally:
@@ -449,7 +449,11 @@ class CatalogueDiscovery:
             return (discovery_same(site, url)
                     and all(discovery_robots_allows(active['robots'], url, token) for token in ('tervorytiger', 'tervory')))
         def enqueue(kind, urls, **extra):
-            active['queue'][0:0] = [{'kind': kind, 'url': url, **extra} for url in dict.fromkeys(urls) if allowed(url)]
+            pending = [{'kind': kind, 'url': url, **extra} for url in dict.fromkeys(urls) if allowed(url)]
+            capacity = max(0, 10000 - len(active['queue']))
+            if len(pending) > capacity:
+                active['warnings'].append({'url': site, 'reason': 'candidate_limit'})
+            active['queue'][0:0] = pending[:capacity]
         def finish(status):
             state['sites'].append({'site': site, 'status': status, 'pages': active['pages'], 'warnings': active['warnings']})
             state['site_index'] += 1
