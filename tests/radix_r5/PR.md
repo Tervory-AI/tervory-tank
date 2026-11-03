@@ -115,3 +115,14 @@ Security, Command acceptance and Workspace also passed for that head. The earlie
 **Final report-head CI result:** [the `tank` job in #605's current-head checks](https://github.com/Tervory-AI/tervory-tank/pull/605/checks). That link tracks the final report commit as well as its code/test checkpoint; the builder waits for its completed result before handoff. The source checkpoint and immutable completed-job link above are retained so documentation-only publication cannot obscure which code was tested.
 
 The founder's own `skala.evals` run, upload/Confirm/findings test and screenshots follow **after merge**. No founder acceptance or production change is claimed. The builder does not merge.
+
+
+### Repeated attachment item 2 — current-head verification
+
+The repeated brief was checked against `d78b124a4eefc694a98dc070651aa2065ed06bea`; both review fixes and their tests were already present, unchanged. No duplicate implementation changes were made. This head merges `origin/main` at `1ad2c794`.
+
+CI `tank` **SUCCESS**: [run 41658177761, attempt 2, job 126006867505](https://github.com/Tervory-AI/tervory-tank/actions/runs/41658177761/job/126006867505). Exact command: `python3 .github/scripts/offline_suite.py`, exit 0. Main group: **6,968 passed, 42 skipped, 1,832 subtests passed** in 1022.52 seconds; Tiger G5: **46 passed**; Zenas: **40 passed**. Total: **7,054 tests passed**. All required PR checks passed on that head.
+
+[Attempt 1](https://github.com/Tervory-AI/tervory-tank/actions/runs/41658177761/job/125994136695) exceeded the main group's 1,080-second budget at 99%, without a reported assertion failure; Tiger G5 and Zenas passed. The same-source rerun above passed without a test, source or budget change. The corresponding `origin/main` Tank job also passed ([job 125991675115](https://github.com/Tervory-AI/tervory-tank/actions/runs/41657471874/job/125991675115)), with its main group taking 1064.72 seconds.
+
+This publication changes this report only. The final report commit's Tank result remains available through the current-head checks link above. Founder `skala.evals`, upload/Confirm/findings test and screenshots follow **after merge**. The builder does not merge or push main.
