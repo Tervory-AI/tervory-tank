@@ -10,7 +10,6 @@ from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
-import command
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -106,6 +105,9 @@ class ConfirmDraft(Args):
 TOOLS = {'source.add': SourceAdd, 'source.remove': SourceRemove, 'sources': Args,
          'ask': Ask, 'faq.add': FAQ, 'feedback': Feedback, 'review': Args, 'stats': Args,
          'lead.confirm': ConfirmDraft, 'quote.confirm': ConfirmDraft}
+
+
+import command
 
 
 def runtime():
@@ -270,6 +272,9 @@ async def ask(bot, tenant, args, **session):
 
 
 async def confirm_draft(bot, actor, operation, args, operation_id):
+    if operation == 'lead.confirm':
+        from trigger_crm import binding
+        binding(actor)  # Missing settings fail before claiming or contacting CRM.
     row = await bot.pool.fetchrow('''UPDATE tank.trigger_bot_drafts SET state='executing',operation_id=$3
         WHERE tenant_id=$1 AND id=$2 AND state='draft' AND kind=$4 RETURNING data''',
         actor.tenant_id, args.draft_id, operation_id, operation.split('.')[0])
@@ -281,7 +286,7 @@ async def confirm_draft(bot, actor, operation, args, operation_id):
     try:
         if operation == 'lead.confirm':
             from trigger_crm import confirmed_bot_lead
-            result = await confirmed_bot_lead(actor, args.draft_id, data)
+            result = await confirmed_bot_lead(actor, args.draft_id, data, args.model_dump(mode='json', exclude_none=True))
         else:
             if not await bot.has_rig(actor.tenant_id):
                 raise HTTPException(403, 'Rig is not available for this tenant')
