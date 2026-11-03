@@ -239,11 +239,21 @@ class Store:
                 await ensure_findings(conn, 'agent_radix')
                 prior = await conn.fetchval('''SELECT id FROM agent_radix.passive_scans
                   WHERE tenant_id=$1 AND domain=$2 AND status='complete' AND id<>$3
+                  AND NOT EXISTS(SELECT 1 FROM jsonb_each(coalesce(checks,'{}'::jsonb)) AS check_row
+                    WHERE check_row.value->>'status' IN ('partial','skipped'))
                   AND EXISTS(SELECT 1 FROM agent_radix.regulation_runs r WHERE r.tenant_id=$1 AND r.scan_id=$3)
                     = EXISTS(SELECT 1 FROM agent_radix.regulation_runs r WHERE r.tenant_id=$1 AND r.scan_id=passive_scans.id)
                   ORDER BY completed_at DESC,id DESC LIMIT 1''', tenant, domain, ident)
                 from scanlib.store import list_findings
                 previous = [report_finding(r) for r in await list_findings(conn, 'agent_radix', str(tenant), str(prior))] if prior else []
+                if measurements is not None:
+                    covered = {'zap','nuclei'} if not any(f.get('tool') == 'http' for f in findings) else set()
+                    namespaces = {'pages':{'sha256'},'certificate':{'scan.tls'},'tls':{'testssl.sh'},
+                        'malware':{'clamav'},'browser':{'axe-core','chromium'},'notices':{'comply.gdpr'}}
+                    for check, status in measurements.get('checks', {}).items():
+                        if status.get('status') == 'complete':
+                            covered.update(namespaces.get(check,set()))
+                    previous = [f for f in previous if f['tool'] in covered]
                 changes = compare_findings([report_finding(f) for f in findings], previous)
                 await insert_findings(conn, 'agent_radix', str(tenant), str(ident), findings)
                 row = await conn.fetchrow("""UPDATE agent_radix.passive_scans
