@@ -476,7 +476,7 @@ export async function run(argv, { store, transport, io, env = process.env }) {
         || (signIn !== undefined && (region !== 'za' || signIn !== 'zitadel'))) {
       throw new Error('Login accepts only --region us-east or --region za; ZA also accepts --sign-in zitadel.');
     }
-    return login(region, signIn, { store, transport, io });
+    return login(region, signIn ?? (region === 'za' ? 'zitadel' : undefined), { store, transport, io });
   }
   if (flags.region !== undefined || flags['sign-in'] !== undefined) throw new Error('Invalid command option.');
   if (name === 'logout') return logout({ store, transport, io });
