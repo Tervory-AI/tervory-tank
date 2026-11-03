@@ -25,16 +25,28 @@ from passive_store import Store
 from chassis.tenant_db import TenantPool, tenant_path, tenant_scope
 
 
-async def proof(domain: str, challenge: str) -> bool:
+async def proof_status(domain: str, challenge: str) -> str | None:
+    """The scan's one DNS proof check, also used before enabling a watch."""
     try:
         answer = await dns.asyncresolver.resolve('_tervory-verify.' + domain, 'TXT', lifetime=5)
-        return any(hmac.compare_digest(b''.join(row.strings).decode('ascii'), challenge) for row in answer)
-    except (dns.exception.DNSException, UnicodeError, OSError):
-        return False
+        values = [b''.join(row.strings).decode('ascii') for row in answer]
+        if any(hmac.compare_digest(value, challenge) for value in values):
+            return None
+        return 'txt_changed' if values else 'txt_missing'
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+        return 'txt_missing'
+    except UnicodeError:
+        return 'txt_changed'
+    except (dns.exception.DNSException, OSError):
+        return 'dns_unavailable'
+
+
+async def proof(domain: str, challenge: str) -> bool:
+    return await proof_status(domain, challenge) is None
 
 
 class Lease:
-    def __init__(self, store, *, check=proof, server=Server, now=time.monotonic):
+    def __init__(self, store, *, check=None, server=Server, now=time.monotonic):
         self.store, self.check, self.server, self.now = store, check, server, now
         self.lock = asyncio.Lock()
         self.run = None
@@ -55,7 +67,14 @@ class Lease:
                 raise HTTPException(409, 'scan busy')
             self.close()
             row = await self.store.pending(tenant, ident)
-            if row is None or not await self.check(row['domain'], row['challenge']):
+            if row is None:
+                raise HTTPException(403, 'domain proof required')
+            reason = (await proof_status(row['domain'], row['challenge']) if self.check is None
+                      else None if await self.check(row['domain'], row['challenge']) else 'txt_missing')
+            if reason == 'dns_unavailable':
+                raise HTTPException(503, 'scan not authorized')
+            if reason:
+                await self.store.stop_for_scan(tenant, ident, reason)
                 raise HTTPException(403, 'domain proof required')
             if env_revoked():
                 raise HTTPException(403, 'egress revoked')
@@ -159,3 +178,27 @@ async def release(body: Run):
 @app.get('/health')
 async def health():
     return {'ok': True}
+
+
+class ProofDomain(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    tenant_id: UUID
+    domain: str
+
+
+@app.post('/proof')
+@tenant_path('body')
+async def verify_domain(body: ProofDomain):
+    from passive_store import domain_name
+    domain = domain_name(body.domain)
+    async with app.state.pool.acquire() as conn:
+        row = await conn.fetchrow("""SELECT d.challenge FROM agent_radix.passive_domains d
+          WHERE d.tenant_id=$1 AND d.domain=$2 AND (d.expires_at>now() OR EXISTS (
+            SELECT 1 FROM agent_radix.passive_watches w WHERE w.tenant_id=d.tenant_id
+            AND w.domain=d.domain AND w.status='active' AND w.challenge=d.challenge))""", body.tenant_id, domain)
+    if row is None:
+        raise HTTPException(403, 'domain proof required')
+    reason = await proof_status(domain, row['challenge'])
+    if reason:
+        raise HTTPException(503 if reason == 'dns_unavailable' else 403, 'domain proof required')
+    return {'ready': True}

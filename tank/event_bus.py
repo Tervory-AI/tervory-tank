@@ -246,7 +246,7 @@ class Publication(Strict):
 
 
 class Delivery(Strict):
-    event: Literal["tiger.price.changed"]
+    event: Literal["tiger.price.changed", "zenas.regulation.changed"]
     consumer: UUID
 
 
@@ -272,7 +272,7 @@ async def publish(body: Publication, actor: Scope = Depends(identity)):
 
 @router.post("/receive")
 async def receive(body: Delivery, actor: Scope = Depends(identity)):
-    if actor.agent != "rig":
+    if (actor.agent, body.event) not in {("rig", "tiger.price.changed"), ("radix", "zenas.regulation.changed")}:
         raise HTTPException(403)
     try:
         return {"messages": await bus().receive(actor, body.event, str(body.consumer))}
@@ -282,7 +282,7 @@ async def receive(body: Delivery, actor: Scope = Depends(identity)):
 
 @router.post("/settle")
 async def settle(body: Settlement, actor: Scope = Depends(identity)):
-    if actor.agent != "rig":
+    if (actor.agent, body.event) not in {("rig", "tiger.price.changed"), ("radix", "zenas.regulation.changed")}:
         raise HTTPException(403)
     try:
         return {"settled": await bus().settle(actor, body.event, str(body.consumer), body.id, body.action)}
