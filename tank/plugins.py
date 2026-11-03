@@ -72,7 +72,7 @@ MANIFESTS = load_manifests()
 
 class PluginArgs(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    id: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=64)
     version: str = Field(min_length=1, max_length=30)
 
 
@@ -108,7 +108,7 @@ async def listing(conn, actor):
         result.append({'name': manifest.id, 'version': manifest.version, 'installed': key in installed,
                        'status': 'installed' if key in installed else 'ready' if ready else 'not_ready',
                        'servers': servers, 'skills': skills})
-    return {'count': len(result), 'plugins': result}
+    return {'count': len(result), 'items': result}
 
 
 async def prepare(action, actor, conn):
@@ -117,7 +117,7 @@ async def prepare(action, actor, conn):
     if not (actor.founder or actor.tenant_admin):
         raise HTTPException(403, 'This tool is not available to this user')
     body = PluginArgs.model_validate(action.arguments)
-    manifest = MANIFESTS.get((body.id, body.version))
+    manifest = MANIFESTS.get((body.name, body.version))
     if manifest is None or not visible(actor, manifest):
         raise HTTPException(422, 'The action arguments are invalid')
     if action.tool == 'plugins.install':
@@ -128,7 +128,7 @@ async def prepare(action, actor, conn):
 
 
 async def dispatch(action, actor, thread_id=None, card_id=None):
-    from command import db, require_tool, dump
+    from command import db, require_tool
     from trigger_routes import code_receipt
     require_tool(actor, action.tool)
     if action.tool != 'plugins.list' and not (actor.founder or actor.tenant_admin):
@@ -143,21 +143,21 @@ async def dispatch(action, actor, thread_id=None, card_id=None):
             if card.get('status') != 'executing' or card.get('payload') != action.model_dump(mode='json'):
                 raise HTTPException(409, 'Confirmed action required')
             body = PluginArgs.model_validate(action.arguments)
-            manifest = MANIFESTS.get((body.id, body.version))
+            manifest = MANIFESTS.get((body.name, body.version))
             if manifest is None or not visible(actor, manifest):
                 raise HTTPException(422, 'The action arguments are invalid')
             if action.tool == 'plugins.install':
                 servers, skills = await readiness(conn, actor, manifest)
                 if not all(s['approved'] for s in servers) or not all(s['approved'] for s in skills):
                     return 422, {'ledger_id': str(await code_receipt(actor.tenant_id, action.tool))}
-                await conn.execute('INSERT INTO tank.plugin_installs(tenant_id,plugin_id,version,installed_by) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,plugin_id,version) DO NOTHING', actor.tenant_id, body.id, body.version, actor.user_id)
-                result = {'name': body.id, 'status': 'installed'}
+                await conn.execute('INSERT INTO tank.plugin_installs(tenant_id,plugin_id,version,installed_by) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,plugin_id,version) DO NOTHING', actor.tenant_id, body.name, body.version, actor.user_id)
+                result = {'name': body.name, 'status': 'installed'}
             elif action.tool == 'plugins.remove':
-                await conn.execute('DELETE FROM tank.plugin_installs WHERE tenant_id=$1 AND plugin_id=$2 AND version=$3', actor.tenant_id, body.id, body.version)
-                result = {'name': body.id, 'status': 'removed'}
+                await conn.execute('DELETE FROM tank.plugin_installs WHERE tenant_id=$1 AND plugin_id=$2 AND version=$3', actor.tenant_id, body.name, body.version)
+                result = {'name': body.name, 'status': 'removed'}
             else:
                 raise HTTPException(403, 'This tool is not available to this user')
-    return 200, {**result, 'text': dump(result)[:12000], 'ledger_id': str(await code_receipt(actor.tenant_id, action.tool))}
+    return 200, {**result, 'ledger_id': str(await code_receipt(actor.tenant_id, action.tool))}
 
 
 async def code_actor(actor, conn):
