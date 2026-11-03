@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, readFile, mkdir, symlink, rm, copyFile } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, mkdir, symlink, rm, copyFile, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -302,13 +302,17 @@ test('external Node runtime is read-only, named before approval and cannot expos
   const runtime = await mkdtemp(join(work, 'runtime-'));
   await mkdir(join(runtime, 'bin'));
   const node = join(runtime, 'bin/node'); await copyFile(process.execPath, node);
+  await writeFile(join(runtime, 'bin/.npmrc'), 'neighbor-file-canary');
   await writeFile(join(f.root, 'real.test.mjs'), 'import test from "node:test"; test("external runner", () => {});\n');
   let shown = '';
   const result = await f.tool({ name: 'run_command', arguments: { command: `${node} --test real.test.mjs` } }, {
     ...io(), write: value => { shown += value; }, prompt: async () => { assert(shown.includes(node)); return 'y'; },
   });
   assert.equal(result.code, 0, result.output); assert(result.output.includes('# pass 1'));
-  const write = await f.tool({ name: 'run_command', arguments: { command: `${node} -e 'require("fs").writeFileSync("${runtime}/bin/wrong", "wrong")'` } }, io());
+  const neighbor = await f.tool({ name: 'run_command', arguments: { command: `${node} -e 'console.log("runner-ok"); try { console.log(require("fs").readFileSync("${runtime}/bin/.npmrc", "utf8")); } catch {}'` } }, io());
+  assert.equal(neighbor.code, 0, neighbor.output); assert(neighbor.output.includes('runner-ok'));
+  assert(!neighbor.output.includes('neighbor-file-canary'));
+  const write = await f.tool({ name: 'run_command', arguments: { command: `${node} -e 'require("fs").writeFileSync("${node}", "wrong")'` } }, io());
   assert.notEqual(write.code, 0); assert.match(write.output, /EROFS|[Rr]ead-only/); await assert.rejects(readFile(join(runtime, 'bin/wrong')));
 });
 
@@ -361,4 +365,48 @@ test('external Node intermediate links do not expose their host directory', asyn
   assert.equal(result.code, 0, result.output);
   assert(result.output.includes('runtime-ok'));
   assert(!result.output.includes('unmounted-directory-canary'));
+});
+
+
+test('external runtime rejects directories, nonexecutables and their symlinks before approval', async () => {
+  const f = await folder(); const outside = await mkdtemp(join(work, 'other-projects-'));
+  await mkdir(join(outside, 'client-a/.aws'), { recursive: true });
+  await writeFile(join(outside, 'client-a/.npmrc'), 'unrelated-npm-canary');
+  await writeFile(join(outside, 'client-a/.aws/credentials'), 'unrelated-aws-canary');
+  let prompts = 0;
+  for (const name of ['node', 'python', 'pytest']) {
+    const directory = join(outside, name); await mkdir(directory);
+    await assert.rejects(f.tool({ name: 'run_command', arguments: { command: `'${directory}' --version; cat '${outside}/client-a/.npmrc'` } }, {
+      ...io(), prompt: async () => { prompts++; return 'y'; },
+    }));
+    const aliases = join(outside, name + '-links'); await mkdir(aliases);
+    await symlink(directory, join(aliases, name));
+    await assert.rejects(f.prepareCommand(`'${join(aliases, name)}' --version`));
+  }
+  const bin = join(outside, 'nonexec'); await mkdir(bin);
+  const file = join(bin, 'node'); await writeFile(file, 'not executable'); await chmod(file, 0o600);
+  await symlink(file, join(bin, 'python'));
+  await assert.rejects(f.prepareCommand(`'${file}' --version`));
+  await assert.rejects(f.prepareCommand(`'${join(bin, 'python')}' --version`));
+  assert.equal(prompts, 0);
+});
+
+test('external runtimes refuse pip-user and uv launchers without exposing .local user data', async () => {
+  const f = await folder(); const home = await mkdtemp(join(work, 'user-home-'));
+  const local = join(home, '.local'); await mkdir(join(local, 'bin'), { recursive: true });
+  await mkdir(join(local, 'share/python_keyring'), { recursive: true });
+  await mkdir(join(local, 'share/fish'), { recursive: true });
+  await writeFile(join(local, 'share/python_keyring/keyring_pass.cfg'), 'unrelated-keyring-canary');
+  await writeFile(join(local, 'share/fish/fish_history'), 'unrelated-history-canary');
+  const python = join(local, 'bin/python3'); await symlink(process.execPath, python);
+  const pytest = join(local, 'bin/pytest'); await writeFile(pytest, `#!${python}\n`); await chmod(pytest, 0o700);
+  // Include plausible pip-user libraries: they still cannot authorize a .local bind.
+  await mkdir(join(local, 'lib/python3.12/site-packages'), { recursive: true });
+  for (const runner of [python, pytest]) {
+    let prompts = 0;
+    await assert.rejects(f.tool({ name: 'run_command', arguments: {
+      command: `'${runner}' --version; cat '${local}/share/python_keyring/keyring_pass.cfg' '${local}/share/fish/fish_history'`,
+    } }, { ...io(), prompt: async () => { prompts++; return 'y'; } }));
+    assert.equal(prompts, 0);
+  }
 });
