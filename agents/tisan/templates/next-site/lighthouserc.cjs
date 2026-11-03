@@ -30,7 +30,7 @@ module.exports = {
         chromeFlags:
           "--no-sandbox --disable-dev-shm-usage --disable-gpu --disable-background-networking" +
           (process.env.TISAN_CHECK_PROXY
-            ? ` --proxy-server=${process.env.TISAN_CHECK_PROXY} --proxy-bypass-list=<-loopback> --host-resolver-rules=MAP\ *\ ~NOTFOUND,\ EXCLUDE\ 127.0.0.1`
+            ? ` --proxy-server=${process.env.TISAN_CHECK_PROXY} --proxy-bypass-list=<-loopback> --host-resolver-rules="MAP * ~NOTFOUND, EXCLUDE 127.0.0.1"`
             : ""),
         formFactor: "mobile",
         onlyCategories: categories,
