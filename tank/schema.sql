@@ -2833,6 +2833,7 @@ $$;
 -- BEGIN worker (new blocks for worker go here)
 -- END worker
 -- BEGIN platform (new blocks for platform go here)
+ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS teacher_model text;
 -- END platform
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
