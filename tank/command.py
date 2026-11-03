@@ -1402,7 +1402,10 @@ async def propose_tool(thread_id: uuid.UUID, body: PlannedAction, actor: Actor =
 
 
 async def propose_action(conn: Any, row: dict, state: dict, action: PlannedAction, actor: Actor | None = None) -> dict:
-    if action.tool.startswith("trigger.bot."):
+    if action.tool.startswith("plugins."):
+        from plugins import prepare
+        action = await prepare(action, actor, conn)
+    elif action.tool.startswith("trigger.bot."):
         from trigger_bot_api import prepare as prepare_bot
         action = await prepare_bot(action, await authorized_actor(actor or Actor(row["tenant_id"], row["user_id"], False), conn), {**state, "thread_id": str(row["thread_id"])}, conn=conn)
     elif action.tool.removeprefix("trigger.") in MARKETING_TOOLS:
