@@ -85,10 +85,17 @@ BEGIN
     END LOOP;
 END
 $$;
-DO $$ BEGIN
+DO $$
+DECLARE tab text;
+BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agent_tiger') THEN
-        GRANT SELECT,INSERT,UPDATE ON agent_tiger.matches,agent_tiger.match_runs,
-            agent_tiger.match_sightings,agent_tiger.discovery_limits TO agent_tiger;
+        FOREACH tab IN ARRAY ARRAY['matches','match_runs','match_sightings','discovery_limits'] LOOP
+            IF NOT has_table_privilege('agent_tiger','agent_tiger.'||tab,'SELECT')
+               OR NOT has_table_privilege('agent_tiger','agent_tiger.'||tab,'INSERT')
+               OR NOT has_table_privilege('agent_tiger','agent_tiger.'||tab,'UPDATE') THEN
+                EXECUTE format('GRANT SELECT,INSERT,UPDATE ON agent_tiger.%I TO agent_tiger',tab);
+            END IF;
+        END LOOP;
     END IF;
 END $$;
 
