@@ -236,7 +236,7 @@ class QuoteService(Service):
             state = new
 
         try:
-            await self.fulfilment.place_located_order(
+            order = await self.fulfilment.place_located_order(
                 tenant_id=tenant_id, quote_id=quote_id, located=located, price=state["price"],
                 ship={"address": payload["ship_to"]} if payload.get("ship_to") else None)
         except Exception:
@@ -244,6 +244,7 @@ class QuoteService(Service):
             # or create a different one: a person must inspect this quote.
             await record(state="needs_person", needs_review=True)
             return response(state)
+        await record(order=order["order"]["number"], purchase_order=order["purchase_order"]["number"])
         if auto:
             try:
                 supplied = await self.fulfilment.send_supplier_order(
