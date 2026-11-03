@@ -4,7 +4,7 @@ Every Squad member (Tiger, Market Lab, Zenas, RIG, Tisan, Radix) gets exactly th
 
 ## The room
 1. **Own Coolify resource.** `agents/<name>/docker-compose.yml`, deployed as its own Coolify "Docker Compose" resource: Base Directory `/agents/<name>`, Compose Location `/docker-compose.yml`, no domain (except RIG's public API), Predefined Network setting = "Isolated network only". Build context `..` (agents/) so the chassis is included. `mem_limit`/`cpus` set; healthcheck on `/health`; volume for `/data`.
-2. **One private corridor.** The agent's only network is `tervory-gw-<name>` (`external: true` in the agent's compose). In the MAIN `docker-compose.yml`, declare it (see Deploy order) and add it to `tank`, `postgres`, and any shared service the agent needs (`hermes` after C7; Tiger's browser service for agents that browse). Nothing else joins it. Never put two agents on one corridor.
+2. **One private corridor.** The agent's only network is `tervory-gw-<name>` (`external: true` in the agent's compose). In the MAIN `docker-compose.yml`, declare it (see Deploy order) and add it to `tank`, `postgres`, and any shared service the agent needs (`hermes` after C7; browsers stay in their own rooms). Nothing else joins it. Never put two agents on one corridor.
 3. **Own database login.** Add `AGENT_DB_PASSWORD_<NAME>: ${AGENT_DB_PASSWORD_<NAME>:-}` to the `agent-roles` service env in the MAIN compose (roles are provisioned generically for every non-empty `AGENT_DB_PASSWORD_*`). The agent's compose builds `DATABASE_URL=postgresql://agent_<name>:${AGENT_DB_PASSWORD_<NAME>}@postgres:5432/${POSTGRES_DB:-tervory}`. Never give an agent `POSTGRES_USER`/`POSTGRES_PASSWORD`.
 4. **Own Tank key.** `TANK_KEY_<NAME>` on Tank (main compose) and as `TANK_KEY` in the agent's compose.
 4b. **Memory (Hermes, C7).** In the MAIN compose, add `tervory-gw-<name>` to the `hermes` service's networks and `TANK_KEY_<NAME>: ${TANK_KEY_<NAME>:-}` to its environment. Without both, Hermes cannot be reached or does not recognise the agent. The agent calls `http://hermes:8000` through the chassis `MemoryClient`; it never calls Qdrant.
@@ -24,12 +24,12 @@ Every Squad member (Tiger, Market Lab, Zenas, RIG, Tisan, Radix) gets exactly th
 The founder does nothing for a new room except merge. Public rooms (Rig) also need one DNS record.
 
 ## Rules
-- Shared services (Tank, Postgres, Hermes, Tiger's browser) live in the MAIN stack and join every agent's corridor. Agents never live in the main stack.
+- Shared services (Tank, Postgres, Hermes) live in the MAIN stack and join every agent's corridor. Agents never live in the main stack.
 - Hex passwords only (`openssl rand -hex 24`), never logged.
 - Main-compose changes are additive: add networks/env lines; do not change existing services otherwise.
 
 ## Sealed rooms (SEAL-1, 21 Oct 2026)
-A **sealed** service is one declared only on internal networks: Base's `base-sandbox` and `base-browser`, Tiger's `tiger-browser`, and `agent-radix`.
+A **sealed** service is one declared only on internal networks: Base's `base-sandbox` and `base-browser`, Tiger's `tiger-browser` and `tiger-ocr`, and `agent-radix`.
 - **Why raw compose.** In its normal mode Coolify adds its own app network to every service without `network_mode`. That network is not internal, so a sealed service would reach the internet and every other service in the app. In **Raw Compose Deployment** mode Coolify deploys the file as written and adds only its labels.
 - **The marker.** A compose file with a sealed service starts with `# coolify: raw compose`. Base, Tiger and Radix do. `tests/test_room_seal.py` simulates normal mode on every `agents/*/docker-compose*.yml` and fails if a sealed service would leak in a file without the marker, or if a service on an internal network declares `ports:`.
 - **A raw file needs nothing from Coolify:** every variable comes through explicit `environment:` interpolation (no `env_file`), every service names its networks, no `ports:`, and existing volumes are `external` with their live names, so data survives the switch. Tiger's existing data volume is pinned to its live name (`fro6z8xlh579owlp1wwrjr8n_agent-tiger-data`), because Coolify rejects `${VAR:?…}` in external volume names; its new browser volume has the separate name `tervory-tiger-browser-data`.
@@ -58,9 +58,22 @@ checks URLs without outside DNS; gateway DNS checks pin HTTP/CONNECT addresses.
 WebRTC cannot use non-proxied UDP. Browser memory is 2 GB; queue waits return
 busy after 20 seconds.
 
-Base's Skala context uses its own gateway. Tiger no longer joins
-`tervory-gw-base`; Tank reaches Tiger through `tervory-gw-tiger`. Other room
-deployments retain their existing browser pattern until their own migration.
+Every Base skill context, including founder previews and Skala evals, uses
+`base-browser-gateway` with Base room headers. Tiger's browser stays in the Tiger
+room; no shared browser runs in the main stack. Tank reaches only `tiger-ocr`
+on `tervory-gw-tiger-ocr` for PNG OCR. Neither the Tiger agent, its browser, nor
+other room corridors join that network. OCR has no internet, Tank key or volume;
+its `/data` is tmpfs. The old `tiger_data` volume is retained, not removed.
+
+Before deploying, the founder creates the network once:
+```sh
+docker network create --internal tervory-gw-tiger-ocr
+```
+Keep Tiger's existing Raw Compose Deployment enabled. Deploy the main app and
+the Tiger room, then run `bash ops/seal-check.sh` on the host. In `/chats`,
+verify `tiger.watch` and `tiger.read` return prices on a page needing OCR; confirm
+Coolify's main app no longer lists a `tiger` container. Record the host output
+and founder browser screenshots in the PR.
 
 Before taking real jobs, run
 `python agents/base/check_brain_isolation.py ROOM BRAIN SANDBOX BROWSER GATEWAY`
