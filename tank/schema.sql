@@ -2461,6 +2461,7 @@ CREATE TABLE IF NOT EXISTS tank.trigger_posts (
 );
 CREATE INDEX IF NOT EXISTS trigger_posts_due ON tank.trigger_posts(planned_at,retry_at)
  WHERE state IN ('scheduled','failed');
+ALTER TABLE tank.trigger_posts ADD COLUMN IF NOT EXISTS claimed_at timestamptz;
 CREATE TABLE IF NOT EXISTS tank.trigger_post_events (
  tenant_id uuid NOT NULL, id uuid NOT NULL DEFAULT gen_random_uuid(), post_id uuid NOT NULL,
  revision integer NOT NULL, state text NOT NULL, operation_id uuid NOT NULL,
