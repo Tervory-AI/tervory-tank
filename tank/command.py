@@ -54,6 +54,7 @@ FOUNDER_TOOLS = ["base.audit.start", "base.audit.csv", "base.audit.review", "tri
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
 FOUNDER_TOOLS += TISAN_CLIENT_TOOLS
+TOOLS["plugins"] = ["plugins.list", "plugins.install", "plugins.remove"]
 
 
 def db() -> Any:
@@ -119,9 +120,10 @@ def allowed_tools(actor: Actor) -> list[str]:
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
     voice_tools = TOOLS["trigger"] + ["rig.quote.confirm_payment"] if actor.tenant_admin and not actor.founder else []
     client_tools = TISAN_CLIENT_TOOLS if actor.tenant_admin and not actor.founder else []
+    plugin_tools = (["plugins.list"] + (["plugins.install", "plugins.remove"] if actor.tenant_admin else [])) if not actor.founder else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]
                    if tool != "rig.quote.confirm_payment" or actor.tenant_admin or actor.founder]
-                  + founder_tools + voice_tools + client_tools + list(actor.mcp_tools))
+                  + founder_tools + voice_tools + client_tools + plugin_tools + list(actor.mcp_tools))
 
 
 def require_tool(actor: Actor, name: str) -> None:
@@ -1236,6 +1238,7 @@ class Adapter:
 
 
 TOOLS["trigger"] += ["trigger.bot." + name for name in BOT_TOOLS]
+from plugins import PluginArgs
 from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServerArgs
 
 
@@ -1247,6 +1250,9 @@ ADAPTERS = {
     "base.audit.start": Adapter("POST", "/v1/command/base/audits/start", AuditStartArgs, "base.audit.start"),
     "base.audit.csv": Adapter("GET", "/v1/command/base/audits/export", AuditCsvArgs, "base.audit.csv"),
     "base.audit.review": Adapter("POST", "/v1/command/base/audits/review", AuditReviewArgs, "base.audit.review"),
+    "plugins.list": Adapter("GET", "/v1/command/plugins/list", EmptyArgs, "plugins.list"),
+    "plugins.install": Adapter("POST", "/v1/command/plugins/install", PluginArgs, "plugins.install"),
+    "plugins.remove": Adapter("POST", "/v1/command/plugins/remove", PluginArgs, "plugins.remove"),
     "mcp.servers.list": Adapter("GET", "/v1/command/mcp/servers/list", EmptyArgs, "mcp.servers.list"),
     "mcp.servers.approve": Adapter("POST", "/v1/command/mcp/servers/approve", MCPApproveArgs, "mcp.servers.approve"),
     "mcp.servers.remove": Adapter("POST", "/v1/command/mcp/servers/remove", MCPServerArgs, "mcp.servers.remove"),
@@ -1674,7 +1680,10 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
         require_tool(current_actor(actor), action.tool)
         attempted = True
         async with asyncio.timeout(action_timeout(action.tool)):
-            if action.tool.startswith("mcp."):
+            if action.tool.startswith("plugins."):
+                from plugins import dispatch
+                status, result = await dispatch(action, actor, thread_id, card_id)
+            elif action.tool.startswith("mcp."):
                 from mcp_connections import dispatch
                 status, result = await dispatch(action, actor)
             elif action.tool.startswith("trigger.") or action.tool in {"rig.quote.confirm_payment", "base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
@@ -1994,7 +2003,8 @@ async def code_turn(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends
     turn_id = str(uuid.uuid4())
     metadata = [{'name': result.name, 'size': len(result.output.encode())} for result in body.tool_results]
     async with editing(thread_id, actor) as (conn, row, state):
-        planner_actor = await authorized_actor(actor, conn, include_mcp=True)
+        from plugins import code_actor
+        planner_actor = await code_actor(await authorized_actor(actor, conn, include_mcp=True), conn)
         if state['active_turn']:
             # No automatic retry of a paid/unknown outcome. A user can inspect the
             # existing thread; this route does not replace an active chat turn.
@@ -2051,7 +2061,7 @@ async def code_turn(thread_id: uuid.UUID, body: CodeTurn, actor: Actor = Depends
         async with asyncio.timeout(150):
             answer = await route_code(actor, messages, body.model, uuid.UUID(turn_id))
         async with editing(thread_id, actor) as (conn, row, state):
-            planner_actor = await authorized_actor(actor, conn, include_mcp=True)
+            planner_actor = await code_actor(await authorized_actor(actor, conn, include_mcp=True), conn)
             plan = code_plan(answer.content, planner_actor)
             cards = []
             for request in plan.requests:
