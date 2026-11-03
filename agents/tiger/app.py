@@ -254,10 +254,12 @@ async def _competitor_match_slice(ctx, root):
         if original is None:
             raise ValueError('Missing matching run')
         operation = UUID(original['operation_id']) if original.get('operation_id') else None
-        run = await conn.fetchrow('SELECT cursor FROM agent_tiger.match_runs WHERE tenant_id=$1 AND (job_id=$2 OR operation_id=$3)', tenant, root_id, operation)
+        run = await conn.fetchrow('SELECT cursor,progress FROM agent_tiger.match_runs WHERE tenant_id=$1 AND (job_id=$2 OR operation_id=$3)', tenant, root_id, operation)
         if run is None:
             raise ValueError('Missing matching run')
         cursor = json.loads(run['cursor']) if isinstance(run['cursor'], str) else run['cursor']
+        progress = json.loads(run['progress']) if isinstance(run['progress'], str) else run['progress']
+        saved_sites = {site['site']:site for site in (progress or {}).get('sites', [])}
     corridor = TankRig(app.state.http)
     async def fetch(url):
         return await _fetch_text(url, catalogue=True)
@@ -271,8 +273,18 @@ async def _competitor_match_slice(ctx, root):
     cursor, done = await CatalogueDiscovery(fetch, render, DiscoveryGate(app.state.pool), publish).step(
         original.get('sites', []), original.get('products', []), cursor)
     continuation = None if done else uuid5(NAMESPACE_URL, str(ctx.job_id) + ':continuation')
+    # Full finished-site warnings live only in this run's mutable progress row.
+    # Neither continuation results nor the cursor repeat those lists.
+    summaries, detailed_sites = [], []
+    for site in cursor['sites']:
+        warnings = site.get('warnings', saved_sites.get(site['site'], {}).get('warnings', []))
+        summary = {**{key:value for key,value in site.items() if key != 'warnings'}, 'warning_count':len(warnings)}
+        summaries.append(summary)
+        detailed_sites.append({**summary, 'warnings':warnings})
+    cursor['sites'] = summaries
     result = {'slice_saved': True, 'status': 'completed' if done else 'running',
-              'sites': cursor['sites'], 'model_calls': 0, 'continuation_id': str(continuation) if continuation else None}
+              'sites': summaries, 'model_calls': 0, 'continuation_id': str(continuation) if continuation else None}
+    progress = {**result, 'sites':detailed_sites}
     async with app.state.pool.acquire() as conn:
         async with conn.transaction():
             if continuation:
@@ -282,7 +294,7 @@ async def _competitor_match_slice(ctx, root):
             await conn.execute('UPDATE agent_tiger.jobs SET result=$3::jsonb WHERE tenant_id=$1 AND id=$2', tenant, current_id, json.dumps(result))
             await conn.execute("""UPDATE agent_tiger.match_runs SET job_id=COALESCE(job_id,$2),progress=$3::jsonb,cursor=$4::jsonb
                 WHERE tenant_id=$1 AND (job_id=$2 OR operation_id=$5)""",
-                tenant, root_id, json.dumps(result), None if done else json.dumps(cursor), operation)
+                tenant, root_id, json.dumps(progress), None if done else json.dumps(cursor), operation)
     return result
 
 
