@@ -743,7 +743,10 @@ def create_app() -> FastAPI:
             brief_for(data)
             result = connect_match_to_plan(data)
             pr_url = (result.get("result") or {}).get("pr_url")
-            return {**result, **({"pr_url": pr_url} if pr_url else {})}
+            brief = result["brief"]
+            return {**result, "name": brief["package"], "status": result["result"]["mode"],
+                    "summary": brief["from_version"] + " → " + brief["to_version"],
+                    **({"pr_url": pr_url} if pr_url else {})}
         except PatchBurned:
             raise HTTPException(422, PATCH_BURN_DETAIL) from None
 
