@@ -1233,7 +1233,9 @@ ADAPTERS = {
 }
 
 
-ADAPTERS.update({"trigger." + name: Adapter("POST", "/v1/trigger/marketing/" + name, schema, "trigger." + name)
+MARKETING_PAID_TOOLS = frozenset({'post.create', 'gbp.reply.draft'})
+ADAPTERS.update({"trigger." + name: Adapter("POST", "/v1/trigger/marketing/" + name, schema, "trigger." + name,
+                                          name in MARKETING_PAID_TOOLS, 'paid_run' if name in MARKETING_PAID_TOOLS else 'other')
                  for name, schema in MARKETING_TOOLS.items()})
 
 
