@@ -2957,7 +2957,13 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,tank AS $$ BEGIN
     IF EXISTS(SELECT 1 FROM tank.roster_heads h JOIN tank.skill_revalidations r
         ON r.tenant_id=h.tenant_id AND r.preflight_hash=h.fingerprint
         WHERE h.tenant_id='00000000-0000-0000-0000-000000000001'::uuid
-        AND (r.completed_at IS NULL OR r.error IS NOT NULL)) THEN
+        AND (r.completed_at IS NULL OR r.error IS NOT NULL))
+      AND NOT EXISTS(SELECT 1 FROM tank.roster_checks c JOIN tank.roster_heads h
+        ON h.tenant_id=c.tenant_id AND h.region=c.region AND h.roster_hash=c.roster_hash
+        WHERE c.tenant_id='00000000-0000-0000-0000-000000000001'::uuid
+        AND c.fingerprint=current_setting('tank.policy_preflight',true)
+        AND NOT EXISTS(SELECT 1 FROM tank.skill_revalidations v WHERE v.tenant_id=c.tenant_id
+            AND v.preflight_hash=c.fingerprint AND (v.completed_at IS NULL OR v.error IS NOT NULL))) THEN
         RAISE EXCEPTION 'models_validation_required' USING ERRCODE='P0409';
     END IF;
     IF TG_OP='DELETE' THEN RETURN OLD; END IF;
@@ -2990,6 +2996,29 @@ DO $$ BEGIN
     USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
     WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
    CREATE POLICY tenant_access ON tank.roster_heads FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+
+-- C1/N1: intentionally no guessed home for existing tenants. Founder onboarding
+-- records the authority before Workspace sends any tenant content to a box.
+CREATE TABLE IF NOT EXISTS tank.tenants (
+    tenant_id uuid PRIMARY KEY,
+    home_region text NOT NULL CHECK(home_region IN ('us-east','za')),
+    onboarded_by text NOT NULL,
+    onboarded_at timestamptz NOT NULL DEFAULT now()
+);
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.tenants ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.tenants FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.tenants'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.tenants AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+   CREATE POLICY tenant_access ON tank.tenants FOR ALL TO PUBLIC
     USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
     WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
   END IF;

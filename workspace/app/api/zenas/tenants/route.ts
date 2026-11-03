@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { notFound } from "next/navigation";
 import { NextResponse } from "next/server";
+import { onboardTenant } from "@/lib/tank";
 import { isFounder } from "@/lib/admin";
 import { chosenHome } from "../rules";
 import { zenasIn } from "../tank";
@@ -25,6 +26,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Choose za or us-east." }, { status: 400 });
   }
   try {
+    await onboardTenant(userId!, tenantId, home);
     const res = await zenasIn(home, "tenants", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenantId, home_region: home }),

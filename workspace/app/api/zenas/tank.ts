@@ -35,8 +35,9 @@ function withHome(path: string, init: RequestInit, home: Region = homeRegion(), 
 }
 
 export async function zenas(path: string, init: RequestInit = {}): Promise<Response> {
+  const { tenantFetch } = await import("@/lib/tank");
   const call = withHome(path, init);
-  return fetch(`${TANK_URL}/v1/zenas/${call.path}`, {
+  return tenantFetch(`${TANK_URL}/v1/zenas/${call.path}`, {
     ...call.init,
     headers: {
       "content-type": "application/json",

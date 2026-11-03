@@ -24,6 +24,9 @@ async def prepare(tank, proposed=None, *, remove=False):
                 ORDER BY s.id,s.version""", tank.box_region())
             policies = [dict(r) for r in await conn.fetch('SELECT * FROM tank.policy ORDER BY task_type,tenant_id NULLS FIRST')]
             if proposed:
+                previous = next((p for p in policies if (p['task_type'], p.get('tenant_id')) ==
+                    (proposed['task_type'], proposed.get('tenant_id'))), {})
+                proposed = {**previous, **proposed}
                 policies = [p for p in policies if (p['task_type'], p['tenant_id']) != (proposed['task_type'], proposed.get('tenant_id'))]
                 if not remove:
                     policies.append(proposed)

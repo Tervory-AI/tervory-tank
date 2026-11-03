@@ -48,6 +48,8 @@ async def boundary(monkeypatch, tmp_path):
         monkeypatch.setattr(skala, "run_skill", run)
         async with pool.acquire() as conn:
             await conn.execute((ROOT / "tank/schema.sql").read_text())
+            for tenant in tenants:
+                await conn.execute("INSERT INTO tank.tenants(tenant_id,home_region,onboarded_by) VALUES($1,'us-east','founder-fixture')", tenant)
             for i, tenant in enumerate(tenants):
                 skill = f"base.private{i}"
                 path = tmp_path / skill

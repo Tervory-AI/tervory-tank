@@ -170,10 +170,8 @@ def home_region_refusal(home: str | None, box: str | None = None) -> str | None:
     None is refused here too. Callers that may omit the field pass call_home()
     first. The Zenas proxy calls this directly, so a missing home stays refused.
 
-    TODO(Thread C): the authoritative home region will live on the tenant
-    record. That column is yours; do not add it here. The value on this
-    request is only a cross-check against that column. Read it once the
-    column exists, and keep refusing when the two disagree or either is missing.
+    Tenant content paths additionally consult tenant_regions.local; this
+    synchronous check remains useful for refusing malformed homes early.
     """
     home_region = normalize_home(home)
     if home_region not in (US_REGION, ZA_REGION):
@@ -918,8 +916,9 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
         problem = graduate.code_candidate_problem(body.model, state=await skill_state(*parsed), task_type=pkg.task_type, on_disk=True)
         if problem:
             raise HTTPException(409, problem)
-    await __import__("roster_validation").ensure(__import__("sys").modules[__name__], body.model_dump())
-    async with pool().acquire() as conn:
+    proof = await __import__("roster_validation").ensure(__import__("sys").modules[__name__], body.model_dump())
+    async with pool().acquire() as conn, conn.transaction():
+        await conn.execute("SELECT set_config('tank.policy_preflight',$1,true)", proof["fingerprint"])
         await conn.execute(
             """
             INSERT INTO tank.policy
@@ -944,9 +943,10 @@ async def delete_tenant_policy(task_type: str, tenant_id: uuid.UUID) -> dict[str
     """Remove one tenant's own policy row so that tenant follows the platform default again.
     The platform default row (tenant_id null) is never deleted here. Used to switch a build
     tenant back off a build-only model after a test run."""
-    await __import__("roster_validation").ensure(__import__("sys").modules[__name__],
+    proof = await __import__("roster_validation").ensure(__import__("sys").modules[__name__],
         {"task_type": task_type, "tenant_id": tenant_id}, remove=True)
-    async with pool().acquire() as conn:
+    async with pool().acquire() as conn, conn.transaction():
+        await conn.execute("SELECT set_config('tank.policy_preflight',$1,true)", proof["fingerprint"])
         status = await conn.execute(
             "DELETE FROM tank.policy WHERE task_type=$1 AND tenant_id=$2", task_type, tenant_id,
         )
@@ -1223,6 +1223,7 @@ async def run_route(
     Used directly by /v1/route and in the background by tasks."""
     await _check_route_task(req, task_id)
     box = box_region()
+    await __import__("tenant_regions").local(__import__("sys").modules[__name__], req.tenant_id, req.home_region)
     foreign = home_region_refusal(call_home(req.home_region, box), box)
     if foreign:
         # Empty, unknown, or the other region's text is not written.
@@ -1862,7 +1863,8 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
 _POLICY_MOVE = """
     SELECT task_type, model, candidate_model, previous_model, rung, eval_threshold,
            min_shadow_samples, max_reject_rate, auto_promote, field_floors,
-           semantic_cache, promoted_at, number_tolerance, shadow_rate
+           semantic_cache, promoted_at, number_tolerance, shadow_rate,
+           system_prompt,max_tokens_out,updated_at
     FROM tank.policy
     WHERE task_type=$1 AND tenant_id IS NULL
 """
@@ -1959,9 +1961,6 @@ async def _load_evidence(conn: Any, policy: dict[str, Any]) -> graduate.Evidence
 
 async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by: str) -> None:
     task_type = before["task_type"]
-    if move.action in {"promote", "rollback"}:
-        await __import__("roster_validation").ensure(__import__("sys").modules[__name__],
-            {**before, **move.policy, "tenant_id": None})
     if move.action == "promote" and is_build_only_model(move.policy.get("model")):
         log.warning("graduation %s: build-only model not promoted", task_type)
         return
@@ -2031,9 +2030,19 @@ async def _move_task(task_type: str, *, by: str = "tank", automatic: bool = True
                 move = graduate.apply(policy, evidence, now)
             else:
                 move = graduate.promote_if_proven(policy, evidence, now, automatic=False)
-            if move.action != "hold":
-                await _apply_move(conn, move, policy, by)
-            return move
+    if move.action == "hold":
+        return move
+    # Queue proof without holding a pool checkout/row lock: the worker needs
+    # its own connection and a pending batch must survive this request's 409.
+    proof = await __import__("roster_validation").ensure(__import__("sys").modules[__name__],
+        {**policy, **move.policy, "tenant_id": None})
+    async with pool().acquire() as conn, conn.transaction():
+        await conn.execute("SELECT set_config('tank.policy_preflight',$1,true)", proof["fingerprint"])
+        latest = await conn.fetchrow(_POLICY_MOVE + " FOR UPDATE", task_type)
+        if latest is None or dict(latest) != policy:
+            return graduate.Move("hold", policy, "Policy changed while validating models")
+        await _apply_move(conn, move, policy, by)
+    return move
 
 
 async def _move_all() -> None:
@@ -2409,8 +2418,13 @@ async def rollback(task_type: str, body: PromoteBody) -> dict[str, Any]:
         if graduate.router_cannot_serve(row["previous_model"]):
             raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
         rung, semantic = _rung_for(row["previous_model"])
-        await __import__("roster_validation").ensure(__import__("sys").modules[__name__],
-            {**dict(row), "model": row["previous_model"], "rung": rung})
+    proof = await __import__("roster_validation").ensure(__import__("sys").modules[__name__],
+        {**dict(row), "model": row["previous_model"], "rung": rung})
+    async with pool().acquire() as conn, conn.transaction():
+        await conn.execute("SELECT set_config('tank.policy_preflight',$1,true)", proof["fingerprint"])
+        latest = await conn.fetchrow("SELECT * FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL FOR UPDATE", task_type)
+        if latest is None or dict(latest) != dict(row):
+            raise HTTPException(409, "Policy changed while validating models")
         await conn.execute(
             """
             UPDATE tank.policy
@@ -2602,6 +2616,7 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
 async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     if caller:
         body = body.model_copy(update={"agent": caller})
+    await __import__("tenant_regions").local(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
     foreign = home_region_refusal(call_home(body.home_region, box_region()), box_region())
     if foreign:
         raise HTTPException(403, foreign)
@@ -2709,6 +2724,7 @@ async def _batch_gateway(method: str, path: str, *, model: str | None = None, **
 async def route_batch(body: BatchRequest, caller: str | None = Depends(require_key)) -> dict[str, Any]:
     tenant = body.requests[0].tenant_id
     task = body.requests[0].task_type
+    await __import__("tenant_regions").local(__import__("sys").modules[__name__], tenant, body.requests[0].home_region)
     if any(r.tenant_id != tenant or r.task_type != task for r in body.requests):
         raise HTTPException(422, "A batch has one tenant and one task type")
     if "#moa." in task or override_allowed(task):
@@ -3054,7 +3070,7 @@ async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
 @tenant_path("body")
 async def create_task(body: TaskCreate) -> dict[str, Any]:
     box = box_region()
-    home = call_home(body.home_region, box)
+    home = await __import__("tenant_regions").local(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
     foreign = home_region_refusal(home, box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
@@ -3429,7 +3445,7 @@ async def run_one_skill(
     caller: str | None = Depends(require_key),
 ) -> dict[str, Any]:
     box = box_region()
-    home = call_home(body.home_region, box)
+    home = await __import__("tenant_regions").local(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
     foreign = home_region_refusal(home, box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
@@ -3445,6 +3461,7 @@ async def _run_one_skill(
     body: SkillRun,
     caller: str | None,
 ) -> dict[str, Any]:
+    await __import__("tenant_regions").local(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
     __import__("skala_intake").guard_preview(skill_id, caller, body.preview)
     version = body.version or await _pick_version(skill_id, body.preview)
     pkg = get_package(skill_id, version)
@@ -3731,6 +3748,23 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     foreign = home_region_refusal(_request_home(raw, request.query_params.get("home_region")), box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
+    tenant_values = [request.headers.get("x-tervory-tenant"), request.query_params.get("tenant_id")]
+    try:
+        document = json.loads(raw) if raw else {}
+    except (ValueError, UnicodeError):
+        document = {}
+    if isinstance(document, dict):
+        tenant_values.append(document.get("tenant_id"))
+    tenant_ids = {str(value) for value in tenant_values if value}
+    if len(tenant_ids) > 1:
+        raise HTTPException(422, "A request must belong to one workspace")
+    if tenant_ids:
+        try:
+            owner = uuid.UUID(next(iter(tenant_ids)))
+        except ValueError:
+            raise HTTPException(422, "A workspace is required") from None
+        await __import__("tenant_regions").local(__import__("sys").modules[__name__], owner,
+            _request_home(raw, request.query_params.get("home_region")))
     target = zenas_upstream(path)
     if _http is None:
         raise HTTPException(status_code=503, detail="Zenas room is unreachable")
@@ -4737,6 +4771,8 @@ app.include_router(memory_router)
 __import__("skala_revalidation").install(app, __import__("sys").modules[__name__])
 
 __import__("roster_validation").install(app, __import__("sys").modules[__name__])
+
+__import__("tenant_regions").install(app, __import__("sys").modules[__name__])
 
 __import__("morning_report").install(app, __import__("sys").modules[__name__])
 
