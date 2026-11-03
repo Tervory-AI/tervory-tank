@@ -83,7 +83,7 @@ async def prepare(action, actor, state, conn=None):
                 WHERE tenant_id=$1 AND user_id=$2 AND attachment_id=$3 AND thread_id=$4''',
                 actor.tenant_id, actor.user_id, UUID(attachment['attachment_id']), UUID(state['thread_id']))
         if not isinstance(text, str) or not text.strip() or len(text) > 200000:
-            raise HTTPException(422, 'Attachment unavailable')
+            raise HTTPException(422)
         data = {'text': text, 'user_id': actor.user_id}
         draft = uuid4()
         await pool.execute('''INSERT INTO tank.trigger_bot_drafts(tenant_id,id,kind,data)
@@ -93,7 +93,7 @@ async def prepare(action, actor, state, conn=None):
         row = await pool.fetchrow('SELECT kind,data,state FROM tank.trigger_bot_drafts WHERE tenant_id=$1 AND id=$2',
                                   actor.tenant_id, UUID(values['draft_id']))
         if row is None or row['kind'] != operation.split('.')[0] or row['state'] != 'draft':
-            raise HTTPException(404, 'Draft unavailable')
+            raise HTTPException(404)
         data = obj(row['data'])
         values.update(expected_digest=digest(data), brief_markdown=json.dumps(data, ensure_ascii=False, indent=2))
     return command.validate_action(command.PlannedAction(tool=action.tool, arguments=values), actor)
@@ -124,7 +124,7 @@ async def execute(operation, args, actor, operation_id):
                 raise HTTPException(409, 'Confirmed action required')
             content = data['text']
         if args.kind == 'rig' and not await bot.has_rig(tenant):
-            raise HTTPException(403, 'Rig is not available for this tenant')
+            raise HTTPException(403)
         source = await bot.sources.add(tenant, operation_id, args.kind, args.title, args.url, content)
         await pool.execute('''INSERT INTO tank.trigger_bot_config(tenant_id,enabled)
             VALUES($1,true) ON CONFLICT DO NOTHING''', tenant)
@@ -140,7 +140,7 @@ async def execute(operation, args, actor, operation_id):
     if operation == 'source.remove':
         removed = await pool.fetchval("UPDATE tank.trigger_bot_sources SET status='removed' WHERE tenant_id=$1 AND id=$2 RETURNING id", tenant, args.source_id)
         if removed is None:
-            raise HTTPException(404, 'Source unavailable')
+            raise HTTPException(404)
         return {'source_id': str(args.source_id), 'status': 'removed'}
     if operation == 'sources':
         rows = await pool.fetch('''SELECT id,kind,title,url,status,checked_at FROM tank.trigger_bot_sources
@@ -156,7 +156,7 @@ async def execute(operation, args, actor, operation_id):
         row = await pool.fetchrow('''UPDATE tank.trigger_bot_messages SET feedback=$3 WHERE tenant_id=$1
             AND id=$2 RETURNING question,conversation_id''', tenant, args.message_id, args.status)
         if row is None:
-            raise HTTPException(404, 'Message unavailable')
+            raise HTTPException(404)
         draft = None
         if args.correct_answer:
             draft = uuid4()
@@ -206,7 +206,7 @@ async def confirm_draft(bot, actor, operation, args, operation_id):
         WHERE tenant_id=$1 AND id=$2 AND state='draft' AND kind=$4 RETURNING data''',
         actor.tenant_id, args.draft_id, operation_id, operation.split('.')[0])
     if not row:
-        raise HTTPException(409, 'Draft unavailable')
+        raise HTTPException(409)
     data = obj(row['data'])
     if digest(data) != args.expected_digest:
         raise HTTPException(409, 'Confirmed action required')
@@ -216,7 +216,7 @@ async def confirm_draft(bot, actor, operation, args, operation_id):
             result = await confirmed_bot_lead(actor, args.draft_id, data, args.model_dump(mode='json', exclude_none=True))
         else:
             if not await bot.has_rig(actor.tenant_id):
-                raise HTTPException(403, 'Rig is not available for this tenant')
+                raise HTTPException(403)
             response = await bot.rt._rig_call('POST', '/internal/trigger/bot-quote',
                 [('tenant_id', str(actor.tenant_id))], json.dumps({'tenant_id': str(actor.tenant_id),
                 'home_region': bot.rt.box_region(), 'data': data}).encode(), timeout=60)
