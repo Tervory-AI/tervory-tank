@@ -222,10 +222,8 @@ async def test_roster_price_book_and_quotes_keep_first_deployment(routing):
     assert [q.name for q in quotes].count("kimi-lite") == 1
 
 
-@pytest.mark.asyncio
-async def test_gateway_receipt_keeps_generation_and_batch_compatibility(routing, monkeypatch):
-    import execution_receipt
-    import batch_providers
+@pytest.fixture
+def gateway(monkeypatch):
     bodies = []
     class Gateway:
         def __init__(self, **kwargs):
@@ -236,10 +234,19 @@ async def test_gateway_receipt_keeps_generation_and_batch_compatibility(routing,
             pass
         async def post(self, url, **kwargs):
             bodies.append(kwargs["json"])
-            return httpx.Response(200, headers={"x-litellm-response-cost": "0.0000042", "content-type": "application/json"},
+            return httpx.Response(200, headers={"x-litellm-response-cost": "0.0000042", "content-type": "application/json",
+                "x-litellm-model-group": kwargs["json"]["model"]},
                 json={"choices": [{"message": {"content": "placeholder answer"}}],
                       "usage": {"prompt_tokens": 1, "completion_tokens": 1}}, request=httpx.Request("POST", url))
     monkeypatch.setattr(main.httpx, "AsyncClient", Gateway)
+    return bodies
+
+
+@pytest.mark.asyncio
+async def test_gateway_receipt_keeps_generation_and_batch_compatibility(routing, gateway):
+    import execution_receipt
+    import batch_providers
+    bodies = gateway
     await main.put_policy(TASK, main.PolicyRow(task_type=TASK, model="kimi-lite", priority="urgent", fallbacks=["haiku"]))
     req = main.RouteRequest(tenant_id=TENANT, agent="base", task_type=TASK,
                            messages=[main.Message(role="user", content="placeholder question")])
@@ -355,3 +362,36 @@ async def test_one_failure_drops_the_hold_even_while_another_job_is_pending(rout
     assert (await read(routing))["held_swap_id"] is None and (await read(routing))["model"] == "kimi-lite"
     await result(second)
     assert (await read(routing))["model"] == "kimi-lite"
+
+
+@pytest.mark.asyncio
+async def test_foreground_receipts_use_old_model_until_all_jobs_pass(routing, gateway):
+    await approve(routing)
+    await approve(routing, "base.placeholder-two")
+    await main.put_policy(TASK, main.PolicyRow(task_type=TASK, model="sol"))
+    request = main.RouteRequest(tenant_id=TENANT, agent="base", task_type=TASK, priority="urgent",
+        messages=[main.Message(role="user", content="placeholder live-path question")])
+    first, second = await jobs(routing)
+    before = await main.run_route(request)
+    assert gateway[-1]["model"] == before.model == "kimi-lite"
+    await result(first)
+    midway = await main.run_route(request)
+    assert gateway[-1]["model"] == midway.model == "kimi-lite"
+    await result(second)
+    after = await main.run_route(request)
+    assert gateway[-1]["model"] == after.model == "sol"
+    receipts = await routing.fetch("SELECT id,model FROM tank.ledger WHERE tenant_id=$1 AND id=ANY($2::uuid[])",
+        TENANT, [before.ledger_id, midway.ledger_id, after.ledger_id])
+    assert {row["id"]: row["model"] for row in receipts} == {
+        before.ledger_id: "kimi-lite", midway.ledger_id: "kimi-lite", after.ledger_id: "sol"}
+
+
+@pytest.mark.asyncio
+async def test_restricted_foreground_body_cannot_select_the_second_host(routing, gateway, monkeypatch):
+    monkeypatch.setenv("TANK_PROVIDER_ALLOW", json.dumps({str(TENANT): ["kimi-lite"]}))
+    request = main.RouteRequest(tenant_id=TENANT, agent="base", task_type=TASK, priority="urgent",
+        messages=[main.Message(role="user", content="placeholder")])
+    answer = await main.run_route(request)
+    assert gateway[-1]["model"] == "kimi-lite-direct" and gateway[-1]["disable_fallbacks"] is True
+    assert "fallbacks" not in gateway[-1] and answer.model == "kimi-lite"
+    assert answer.execution["model"] == "kimi-lite"
