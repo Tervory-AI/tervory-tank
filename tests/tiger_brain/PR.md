@@ -83,9 +83,9 @@ uncommitted real-supplier-cost export. These are existing opt-in and fixture
 conditions. Hosted CI remains responsible for its configured
 container/Forge jobs; no real supplier data was requested.
 
-The implementation and new test source have been unchanged since `03df12cd`;
-later commits contain documentation and validation evidence only. Local focused
-checks are not a substitute for hosted final-head CI.
+The initial setup checks above used implementation and test source at
+`03df12cd`; the CI follow-up below updates the room guard and regression tests.
+Local focused checks are not a substitute for hosted final-head CI.
 
 The real Compose CLI selects exactly three services without profiles:
 `agent-tiger`, `tiger-browser`, `tiger-browser-gateway`. With `--profile brain`
@@ -180,3 +180,30 @@ check, including Tiger-page observations. TG1 is not merged into this branch.
 Hosted final-head Tank/Workspace/security CI and the Boston/browser evidence are
 not claimed. Claude owns PR creation, labels and merge. This handoff does not
 authorize enabling a brain or adding an escalation caller.
+
+## PR #638 CI follow-up
+
+- `tests/tiger_brain/test_tg3.py:61`: absence check covers the Tiger agent-route
+  prefix; the health fixture uses `placeholder.invalid`, and the in-process
+  chat fixture derives its URL from FastAPI's registered route. The one-door
+  scanner and its allowlist are unchanged.
+- `tank/agent_skills.py:54`: owning-key validation first uses `room_text`, so
+  injected, unknown and malformed room values consistently get HTTP 403.
+- `tests/test_ledger_sql_param.py:20`: replace the obsolete hostile `tiger`
+  fixture with an injected Tiger value and unknown/case-variant/malformed rooms.
+  Base, Rig and Tiger each exercise valid parameterized ledger, transcript,
+  receipt and skills reads. Hostile values must fail before even acquiring a
+  database connection.
+
+Validation: **86 passed, 4 skipped in 43.64s**. The four skips require a
+disposable Postgres for existing Rig box integration cases; the new guard,
+Tiger owning-key/accounting checks and both reported CI regressions pass.
+Ruff E9/F and whitespace checks pass. Raw output:
+[CI follow-up](evidence/ci638-fix.txt).
+
+```sh
+python -m pytest tests/test_tank_one_door.py tests/test_ledger_sql_param.py \
+  tests/tiger_brain/test_tg3.py tests/test_agent1_brain_route.py \
+  tests/test_rig_box_tank.py -q --tb=short -rs --disable-warnings --timeout=300 \
+  --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1
+```
