@@ -1,3 +1,4 @@
+import { seatbeltProfile } from './seatbelt.mjs';
 import { constants } from 'node:fs';
 import { lstat, stat, access, realpath, readlink, open, readdir, readFile, writeFile, rename, unlink, mkdtemp, rm } from 'node:fs/promises';
 import { resolve, relative, isAbsolute, sep, dirname, basename } from 'node:path';
@@ -30,7 +31,7 @@ export function secretPath(path) {
 
 // The process output is collected, not streamed: redaction must see complete lines
 // even when a secret arrives split across stdout/stderr chunks.
-export async function processOutput(command, args, { cwd, gitDirectory, gitWorkTree, timeoutMs = LIMITS.commandMs, signal, input, outputBytes = LIMITS.outputBytes, delimiter = '\n' } = {}) {
+export async function processOutput(command, args, { cwd, gitDirectory, gitWorkTree, timeoutMs = LIMITS.commandMs, signal, input, outputBytes = LIMITS.outputBytes, delimiter = '\n', temporaryDirectory } = {}) {
   return new Promise((resolveResult, reject) => {
     let child; let timer; let killed = false; let size = 0; let total = 0; const chunks = [];
     const stop = () => {
@@ -41,6 +42,7 @@ export async function processOutput(command, args, { cwd, gitDirectory, gitWorkT
     try {
       child = spawn(command, args, { cwd, shell: false, detached: process.platform !== 'win32', windowsHide: true,
         env: { PATH: process.env.PATH, LANG: 'C.UTF-8', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_LITERAL_PATHSPECS: '1',
+          ...(temporaryDirectory ? { TMPDIR: temporaryDirectory } : {}),
           ...(gitDirectory ? { GIT_DIR: gitDirectory, GIT_WORK_TREE: gitWorkTree } : {}) },
         stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
     } catch { return reject(refused()); }
@@ -62,6 +64,7 @@ export async function processOutput(command, args, { cwd, gitDirectory, gitWorkT
 
 export class CodeFolder {
   #reads = new Map();
+  #undo = [];
   static async create(folder = '.') {
     const root = await realpath(resolve(folder));
     if (!(await lstat(root)).isDirectory()) throw refused();
@@ -189,30 +192,86 @@ export class CodeFolder {
     if (!files.length) return { output: '' };
     return this.git(['diff', '--no-ext-diff', '--no-textconv', '--ignore-submodules', '--', ...files]);
   }
+  async verify(name, expected) {
+    const value = await this.raw(name);
+    if ((value === null ? null : value.text) !== expected) throw refused();
+  }
+  async renameFile(source, target) { await rename(source, target); }
+  async writeSet(entries) {
+    const temporary = []; const renamed = [];
+    try {
+      for (const entry of entries) {
+        await this.verify(entry.name, entry.before);
+        const path = await this.path(entry.name, { missing: true });
+        if (entry.after !== null) {
+          const temp = resolve(dirname(path), `.tervory-${randomUUID()}`);
+          temporary.push({ temp, path, entry });
+          await writeFile(temp, entry.after, { flag: 'wx', mode: entry.mode });
+        } else temporary.push({ path, entry });
+      }
+      // All validation and temporary writes finish before the first rename.
+      for (const entry of entries) await this.verify(entry.name, entry.before);
+      for (const item of temporary) {
+        await this.verify(item.entry.name, item.entry.before);
+        if (item.temp) await this.renameFile(item.temp, item.path);
+        else await unlink(item.path);
+        renamed.push(item);
+      }
+    } catch (error) {
+      // A normal I/O failure rolls back files already replaced. A process crash
+      // can interrupt this loop; same-directory renames still leave whole files.
+      for (const item of renamed.reverse()) {
+        await this.verify(item.entry.name, item.entry.after);
+        if (item.entry.before === null) await unlink(item.path);
+        else {
+          const temp = resolve(dirname(item.path), `.tervory-${randomUUID()}`);
+          try {
+            await writeFile(temp, item.entry.before, { flag: 'wx', mode: item.entry.mode });
+            await this.renameFile(temp, item.path);
+          } finally { await unlink(temp).catch(() => {}); }
+        }
+      }
+      throw error;
+    } finally {
+      for (const item of temporary) if (item.temp) await unlink(item.temp).catch(() => {});
+    }
+    for (const entry of entries) {
+      const path = await this.path(entry.name, { missing: true });
+      this.#reads.set(path, entry.after === null ? null : digest(Buffer.from(entry.after)));
+    }
+  }
   async edit(name, patch, io) {
-    const path = await this.path(name, { missing: true });
-    if (!this.#reads.has(path) || typeof patch !== 'string' || Buffer.byteLength(patch) > LIMITS.fileBytes || redactSecrets(patch) !== patch) throw refused();
-    const expected = this.#reads.get(path);
-    const check = async () => {
-      await this.path(name, { missing: true });
+    if (typeof patch !== 'string' || Buffer.byteLength(patch) > LIMITS.fileBytes || redactSecrets(patch) !== patch) throw refused();
+    const files = splitDiff(patch);
+    if (name !== undefined && name !== null && name !== files[0].name) throw refused();
+    const entries = []; const targets = new Set();
+    for (const file of files) {
+      const path = await this.path(file.name, { missing: true });
       const canonical = resolve(await realpath(dirname(path)), basename(path));
-      if (!inside(this.root, canonical) || secretPath(relative(this.root, canonical))) throw refused();
-      const value = await this.raw(name);
-      if (value === null && expected === null) return '';
-      if (value === null || expected === null || digest(value.bytes) !== expected || redactSecrets(value.text) !== value.text) throw refused();
-      return value.text;
-    };
-    const before = await check(); const after = await applyDiff(before, patch, name, expected === null, this.root);
-    if (Buffer.byteLength(after) > LIMITS.fileBytes || redactSecrets(after) !== after) throw refused();
+      if (targets.has(canonical) || !this.#reads.has(path)) throw refused();
+      targets.add(canonical);
+      const value = await this.raw(file.name);
+      const expected = this.#reads.get(path);
+      if ((value === null ? null : digest(value.bytes)) !== expected || (value && redactSecrets(value.text) !== value.text)) throw refused();
+      const before = value?.text ?? null;
+      const after = await applyDiff(before ?? '', file.patch, file.name, before === null, this.root);
+      if (Buffer.byteLength(after) > LIMITS.fileBytes || redactSecrets(after) !== after) throw refused();
+      entries.push({ name: file.name, before, after, mode: before === null ? 0o600 : (await lstat(path)).mode & 0o777 });
+    }
     io.write(patch + '\n');
     if (io.interactive !== true || (await io.prompt('Apply [y/N] '))?.trim().toLowerCase() !== 'y') return { applied: false };
-    await check();
-    const temporary = resolve(dirname(path), `.tervory-${randomUUID()}`);
-    try {
-      await writeFile(temporary, after, { flag: 'wx', mode: expected === null ? 0o600 : (await lstat(path)).mode & 0o777 });
-      await check(); await rename(temporary, path);
-    } finally { await unlink(temporary).catch(() => {}); }
-    this.#reads.set(path, digest(Buffer.from(after)));
+    await this.writeSet(entries);
+    this.#undo.push(entries);
+    if (this.#undo.length > 10) this.#undo.shift();
+    return { applied: true };
+  }
+  async undo(io) {
+    const entries = this.#undo.at(-1);
+    if (io.interactive !== true || !entries) throw refused();
+    for (const entry of entries) await this.verify(entry.name, entry.after);
+    if ((await io.prompt('Undo [y/N] '))?.trim().toLowerCase() !== 'y') return { applied: false };
+    await this.writeSet(entries.map(entry => ({ ...entry, before: entry.after, after: entry.before })));
+    this.#undo.pop();
     return { applied: true };
   }
   async prepareCommand(command) {
@@ -271,7 +330,7 @@ export class CodeFolder {
       // Standalone Python may dynamically link its own libpython. Bind matching
       // regular library files, never the containing lib or installation parent.
       for (const name of await readdir(resolve(prefix, 'lib'))) {
-        if (/^libpython3\.\d+\.so(?:\.\d+)*$/.test(name)) {
+        if (/^libpython3\.\d+(?:\.so(?:\.\d+)*|\.dylib)$/.test(name)) {
           const path = resolve(prefix, 'lib', name); const actual = await realpath(path);
           if (!inside(prefix, actual) || !(await stat(actual)).isFile()) throw refused();
           await bind(actual, path);
@@ -320,6 +379,17 @@ export class CodeFolder {
     return { command: quoted + command.slice(match[0].length), mounts, runners };
   }
   async command(command, io, timeoutMs, mounts = []) {
+    if (process.platform === 'darwin') {
+      await access('/usr/bin/sandbox-exec', constants.X_OK).catch(() => { throw refused(); });
+      const profile = await seatbeltProfile(this.root, mounts);
+      const temp = await mkdtemp(resolve(this.root, '.tervory-command-'));
+      try {
+        const options = { cwd: this.root, timeoutMs, signal: io.signal, temporaryDirectory: temp };
+        const probe = await processOutput('/usr/bin/sandbox-exec', ['-p', profile, '/usr/bin/true'], options);
+        if (probe.code !== 0 || probe.timed_out) throw refused();
+        return await processOutput('/usr/bin/sandbox-exec', ['-p', profile, '/bin/sh', '-c', command], options);
+      } finally { await rm(temp, { recursive: true, force: true }); }
+    }
     if (process.platform !== 'linux') throw refused();
     // A confirmed command must not bypass the folder/secret-file boundary by
     // reading an absolute host path, a symlink, .env or the user's environment.
@@ -361,6 +431,39 @@ export class CodeFolder {
       default: throw refused();
     }
   }
+}
+
+export function splitDiff(patch) {
+  const lines = patch.split('\n'); const result = []; let i = 0;
+  while (i < lines.length - 1) {
+    const start = i;
+    const old = /^--- (a\/(.+)|\/dev\/null)$/.exec(lines[i++]);
+    const next = /^\+\+\+ b\/(.+)$/.exec(lines[i++] ?? '');
+    if (!old || !next || (old[2] && old[2] !== next[1])) throw refused();
+    const name = next[1]; let hunks = 0;
+    while (i < lines.length && lines[i].startsWith('@@')) {
+      const header = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@(?:.*)$/.exec(lines[i++]);
+      if (!header) throw refused();
+      let before = header[1] === undefined ? 1 : Number(header[1]);
+      let after = header[2] === undefined ? 1 : Number(header[2]);
+      while (before > 0 || after > 0) {
+        const line = lines[i++];
+        if (line === undefined) throw refused();
+        if (line.startsWith(' ')) { before--; after--; }
+        else if (line.startsWith('-')) before--;
+        else if (line.startsWith('+')) after--;
+        else if (line !== '\\ No newline at end of file') throw refused();
+        if (before < 0 || after < 0) throw refused();
+      }
+      if (lines[i] === '\\ No newline at end of file') i++;
+      hunks++;
+    }
+    if (!hunks) throw refused();
+    result.push({ name, patch: lines.slice(start, i).join('\n') + '\n' });
+    if (result.length > 20) throw refused();
+  }
+  if (!result.length || lines.at(-1) !== '' || i !== lines.length - 1) throw refused();
+  return result;
 }
 
 // Use Git's existing unified-diff parser/applicator, not a second patch engine.
