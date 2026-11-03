@@ -54,7 +54,9 @@ async def call_room(method: str, room: str, path: str, *, body=None, params=None
     if not key or http is None:
         raise HTTPException(503, "The room is unavailable.")
     try:
-        response = await http.request(method, ROOMS[room] + path, json=body, params=params,
+        base = ("http://enforce-lifecycle:8000" if room == "ghost"
+                and path.startswith("/ghost/autumbra/enforce/") else ROOMS[room])
+        response = await http.request(method, base + path, json=body, params=params,
                                       headers={"X-Tank-Key": key}, follow_redirects=False, timeout=timeout)
     except httpx.HTTPError:
         raise HTTPException(503, "The room is unavailable.") from None
