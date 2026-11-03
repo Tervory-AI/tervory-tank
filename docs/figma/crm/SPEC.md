@@ -413,7 +413,7 @@ The supplied IDs 125:10374 / 125:10372 / 125:10373 resolve to the separate Clien
 - Page 2 · CRM (93:2), set 180:8549: desktop 180:8387, switcher text 180:8392; mobile 180:8467, switcher text 180:8474.
 - Page 4 · Marketing (148:9), set 266:3212: desktop 266:3039, switcher text 266:3044; mobile 266:3125, switcher text 266:3131. Page 5 · Chat bot inherits this family.
 
-Both master families now say Business. Ten legacy text overrides also required correction. The two detached drawer-end review copies were updated directly. No node ID was replaced. All 130 reached screen/drawer frames retain **Changed after approval, awaiting founder**. A closed mobile screen without a menu instance is not counted as a directly changed frame; opening its shared drawer shows Business.
+Both master families now say Business. Their customer navigation row consistently says Clients; the master label nodes are I180:8409;43:410, I180:8491;43:410, I266:3055;43:410 and I266:3142;43:410. Ten legacy text overrides also required correction. The two detached drawer-end review copies were updated directly. No node ID was replaced. All 130 reached screen/drawer frames retain **Changed after approval, awaiting founder**. A closed mobile screen without a menu instance is not counted as a directly changed frame; opening its shared drawer shows Business.
 
 ### Pages and frames reached by Business
 
