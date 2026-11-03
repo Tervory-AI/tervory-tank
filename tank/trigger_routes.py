@@ -45,7 +45,10 @@ async def code_plan(actor: Actor, messages: list[dict], task_id: UUID | None):
                                       actor.tenant_id, actor.user_id, str(task_id))
         messages = unpack(raw or {}).get('messages', [])
         source_text = next((m.get('content', '') for m in reversed(messages) if m.get('role') == 'user'), source_text)
-    proposed = await plan(actor, source_text, task_id)
+    from trigger_marketing_api import plan as marketing_plan
+    proposed = await marketing_plan(actor, source_text)
+    if proposed is None:
+        proposed = await plan(actor, source_text, task_id)
     if proposed is not None:
         return SimpleNamespace(content=json.dumps(proposed, ensure_ascii=False), ledger_id=await code_receipt(actor.tenant_id, "command.turn", task_id=task_id))
     prefix = r"\s*trigger(?:\.check|[, ]+check)(?:\s+(?:this\s+)?paragraph)?\s*:\s*"
