@@ -1,105 +1,93 @@
-# Tiger T1: match the store catalogue to saved competitor sites
+# Tiger T1: catalogue competitor matching and price position
 
-Tiger could watch manually supplied pages and Rig supplier URLs, but could not find competitors for the store's own catalogue. This change discovers pages on the tenant's saved Tiger Source origins, records identifier evidence, creates ordinary watches for confirmed matches, and returns price position through the existing `/chats` cards.
+Tiger discovers public product pages on the tenant's saved Tiger Source sites, matches catalogue identifiers, creates ordinary watches for confirmed matches, and returns price position in existing `/chats` cards. Exact validated GTIN confirms automatically; brand plus MPN without a barcode stays suggested until a bound Confirm card is accepted. Titles and competitor SKUs never establish identity. Every command records the existing code/$0 receipt shape.
 
-Branch: `codex/tiger-competitors`. Tested implementation: `556809f8`, including main `d6004c8d` through merge `fe1f605c`. Subsequent commits add evidence only. Claude opens the PR; the founder merges. Nothing was merged into main or deployed by this build.
+PR #599, branch `codex/tiger-competitors`. Includes Claude's schema-order fix `cea1a0cf` and main `cf95a07e`. The founder merges. No production SQL, runtime setting changes, model calls, paid search, new UI or deployment was performed.
 
-**Acceptance is incomplete: founder-browser evidence and screenshots are missing.** Offline tests are not live acceptance.
+**Founder-browser acceptance and screenshots remain missing. Tests are not live acceptance.**
 
-## Changes, with file and line
+## Review fixes, with file and line
 
-| File | Change |
+| Review | Final behavior and source |
 | --- | --- |
-| [retailer_store.py:33](../../agents/rig/rigbox/retailer_store.py#L33), [Postgres:138](../../agents/rig/rigbox/retailer_store.py#L138) | Add GTIN, MPN, brand, price and currency to watch-products. The optional `catalogue=True` includes feed-backed products and products without supplier URLs. The default retains existing watch eligibility and deletion exclusions. |
-| [retailer_api.py:50](../../agents/rig/rigbox/retailer_api.py#L50) | Forward the opt-in catalogue flag through the existing private operation. Tank's existing [products pass-through:992](../../tank/access.py#L992) already forwards the added fields without filtering them. |
-| [rig_watch.py:290](../../agents/tiger/rig_watch.py#L290) | Durable host accounting: a PostgreSQL advisory lock serializes all workers/tenants for that public origin, requests are spaced by at least three seconds, and the UTC daily cap is 500 attempts. Reservations commit before transport, including failed attempts. Public counters contain no tenant data. |
-| [rig_watch.py:366](../../agents/tiger/rig_watch.py#L366) | Discover robots-listed/default sitemaps and nested sitemap indexes, then GTIN searches through Shopify, WooCommerce and existing GET search forms. Enforce robots restrictions, same-origin HTTPS and human-check stops. No external search or model. |
-| [app.py:63](../../agents/tiger/app.py#L63), [text fetch:89](../../agents/tiger/app.py#L89), [job:205](../../agents/tiger/app.py#L205) | Use existing fetch/render functions and the existing durable Tiger queue. Discovery text fetches are bounded and redirects are checked individually. The job has an explicit 24-hour maximum. |
-| [browser.py:119](../../agents/_brain/browser.py#L119), [guard:446](../../agents/_brain/browser.py#L446) | Discovery uses one exact anonymous document GET per reservation. Assets, frames, redirects, POSTs and subsequent navigation are blocked. It does not reuse authenticated/held sessions, click age checks, or retain a challenge for solving. Existing `human_check` detects challenges. Ordinary browser callers retain their existing behavior. |
-| [access.py:1175](../../tank/access.py#L1175), [matching:1185](../../tank/access.py#L1185), [reader:1202](../../tank/access.py#L1202) | Validate GTIN check digits and normalize to GTIN-14. Reuse the existing published structured price reader unchanged. Read JSON-LD/microdata Product identifiers with their own product scope; titles and competitor SKUs are never matching evidence. Refuse conflicting identifiers and ambiguous assignments of one URL to multiple own SKUs. |
-| [access.py:1297](../../tank/access.py#L1297), [publication:1320](../../tank/access.py#L1320) | Save tenant/SKU/URL, method, identifiers seen, source page, timestamp and state. Exact GTIN matches confirm automatically. Brand+MPN without a page barcode stays suggested. Confirmed matches atomically bind `access_feed_links` and use the existing watch create path: new watches are enabled, every 6h, all five alerts on. Existing URL bindings are not overwritten; existing watches are reused. Human checks create a tenant access-queue record and stop that site. |
-| [access.py:1382](../../tank/access.py#L1382), [decisions:1417](../../tank/access.py#L1417), [position:1482](../../tank/access.py#L1482), [card:1499](../../tank/access.py#L1499) | Tenant-scoped start/confirm/reject and GET position routes. Start/decisions require the existing durable Confirm binding. Recheck catalogue identifiers and Source entitlement before confirming a suggestion. Poll the durable job into the existing chat result; bounded match output includes the total and `has_more`. Position reads existing observations, never fetches a competitor page or invokes a model. |
-| [command.py:37](../../tank/command.py#L37), [adapters:1160](../../tank/command.py#L1160), [planner:1642](../../tank/command.py#L1642) | Tiger-only tool catalogue and adapters for all four commands. Explicit commands are planned in code before the memory/model planner. All are unpaid; `tiger.position` is GET. Confirm actions reuse the existing confirmation dispatcher. Existing cards and result fields render the data; no Workspace/UI file changes. |
-| [app.py:148](../../agents/tiger/app.py#L148) | Subsequent checks for a confirmed catalogue match use `tiger.price_structured` and disable the screenshot/model fallback. Existing supplier/ordinary watch behavior remains on its original path. |
-| [schema.sql:2337](../../tank/schema.sql#L2337) | Additive/idempotent `agent_tiger.matches`, `match_runs`, and public host counters. Tenant tables use the same legacy-safe RLS activation sentinel and permissive/restrictive policies as `tank.personal_tokens`. Checked [Tank startup:753](../../tank/main.py#L753): schema runs through the existing admin-or-legacy connection and existing role validation. No startup, queue worker, policy lifecycle or cache edits. |
-| [trigger_routes.py:20](../../tank/trigger_routes.py#L20) | Approved shared-helper change: optional keyword `agent='trigger'`, passed as `$5` in literal SQL. Existing callers keep their signature and attribution. Tiger uses `agent='tiger'`; receipts have the same zero-token/code/$0 ledger shape as `trigger.check`. |
-| [test_tiger_competitors.py:1](../test_tiger_competitors.py#L1), [legacy corridor:59](test_prices.py#L59), [opt-in test:105](test_prices.py#L105), [wiring:491](../test_tiger.py#L491), [runner:1](run_t1_offline.py#L1) | Synthetic tests for receipt attribution, GTIN validation, evidence refusal, suggested/confirmed/rejected states, tenant isolation, position arithmetic, robots, human checks, search forms, host limits, anonymous browser requests, durable chat results and RLS. Update the handler contract for the added job. Run database tests on an existing free PostgreSQL image with `pg_trgm`. |
+| 1 | [rig_watch.py:456](../../agents/tiger/rig_watch.py#L456) advances one network operation or one catalogue position per slice. The JSON cursor persists site, robots, sitemap/candidate queues, visited URLs, confirmed SKUs, forms and search index. [app.py:200](../../agents/tiger/app.py#L200) atomically saves the slice result and inserts a deterministic continuation in the existing jobs table. Continuations wait one second so queued checks can run first; timeout is 45 seconds, not 24 hours. A real chassis `claim_next`/`run_claimed` test executes a check between discovery slices. |
+| 2 | [browser.py:436](../../agents/_brain/browser.py#L436) starts an empty context; [cleanup:591](../../agents/_brain/browser.py#L591) passes `save=False` for catalogue visits. Existing saved cookie bytes survive unchanged. |
+| 3 | [access.py:1347](../../tank/access.py#L1347) records discovery captcha items with `ON CONFLICT DO NOTHING`. Existing waiting/handling items retain handles, handler, timestamps and status. |
+| 4 | [browser.py:383](../../agents/_brain/browser.py#L383) returns `unsupported`, not a challenge, for private policies/PDFs. [syntactic filtering:411](../../agents/tiger/rig_watch.py#L411) skips PDF candidates before reservation. Only the existing human-check detector or HTTP 401/403/429 marks the host blocked. |
+| 5 | [rig_watch.py:402](../../agents/tiger/rig_watch.py#L402) adds discovery-local path-plus-query robots matching with `*`, `$`, longest match and Allow ties. Existing watch robots callers are unchanged. Both `/?s=` and `/*?s=` refusals are tested. Public rules are compiled once per body/user-agent, with a bounded cache; URL filtering does not reparse robots.txt for every sitemap location. |
+| 6 | [rig_watch.py:536](../../agents/tiger/rig_watch.py#L536) skips unavailable, redirected or soft-404 HTML sitemaps and continues to search. Only challenge-looking HTML receives a separately reserved browser probe. |
+| 7 | [app.py:91](../../agents/tiger/app.py#L91) bounds sitemap reads at 4 MB and robots at 100 KB, exposing truncation. [iterparse:430](../../agents/tiger/rig_watch.py#L430) bounds locations at 10,000 and records cuts/parse truncation. Traversal queues are also bounded. |
+| 8 | [access.py:1521](../../tank/access.py#L1521) returns only catalogue SKUs with confirmed matches, at most 100 SKUs, retaining every competitor for each returned SKU, with `total` and `has_more`. [card bound:1546](../../tank/access.py#L1546) measures the entire serialized result, including repeated text, against 240 KB. Tests cover 1,000 unmatched SKUs and escaped text. |
+| 9 | [app.py:137](../../agents/tiger/app.py#L137) keeps ordinary watches on the original `price_extract` and OCR paths. The per-check matches/to_regclass query and reader switch are removed. Reused hand-made watches retain their existing settings; new watches use the existing six-hour/all-alert defaults. |
+| 10 | [access.py:1336](../../tank/access.py#L1336) validates the publishing job's tenant/root binding and stores a sighting with the actual slice job ID, stable root job ID and evidence snapshot. [card loading:1555](../../tank/access.py#L1555) selects that run's sightings, never a timestamp window. |
+| 11 | [access.py:1189](../../tank/access.py#L1189) rejects normalized all-zero GTIN placeholders as well as bad check digits. |
+| 12 | [rig_watch.py:411](../../agents/tiger/rig_watch.py#L411) filters links by parsed HTTPS host/port only. Public-DNS validation happens at transport admission, off the event loop. |
+| 13 | [test_tiger_competitors.py](../test_tiger_competitors.py) removes unused imports/fixture redefinition warnings. [test_command.py:49](../test_command.py#L49), [squad grant:956](../test_command.py#L956), and [test_personal_tokens.py:49](../test_personal_tokens.py#L49) expect all six Tiger tools. [runner:30](run_t1_offline.py#L30) includes both entire suites as well as every Tiger/Rig-price test. Full CI Ruff command is recorded below. |
+| 14 | [schema.sql:2308](../../tank/schema.sql#L2308) adds run progress and tenant-scoped sightings; [grants:2345](../../tank/schema.sql#L2345) grants existing roles the required privileges. Fresh-role ownership and existing-role migration orders are exercised using a disposable NOLOGIN role. [access.py:1555](../../tank/access.py#L1555) preserves a saved card if enrichment fails, so one error cannot break a thread. |
+| 15 | [browser.py:442](../../agents/_brain/browser.py#L442) uses the existing browser service's anonymous request context with `max_redirects=0`; it never starts page navigation, scripts or assets. This explicitly refuses redirects rather than relying on Playwright page routing. A same-origin WooCommerce search redirect becomes a new product candidate and receives its own robots check and reservation. Sitemap redirects are skipped. |
+| 16 | [rig_watch.py:564](../../agents/tiger/rig_watch.py#L564) publishes only product candidates. Search/home HTML is used solely to find forms/links. [access.py:1361](../../tank/access.py#L1361) also refuses known search URLs as product evidence. Tests put matching Product markup on search/home pages and prove no binding/watch is made. |
 
-Position uses competition ranking: `1 + competitors priced below the store`. Difference is own price minus the cheapest matched competitor in the same currency. Other currencies, missing prices and unreadable pages remain in the source data but are excluded from arithmetic. No currency conversion is invented. Each competitor includes its URL, latest price, stock and observation time.
+Rig's [store projection:33](../../agents/rig/rigbox/retailer_store.py#L33) and [API:50](../../agents/rig/rigbox/retailer_api.py#L50) add GTIN/brand/MPN/price/currency through the existing opt-in catalogue operation; default callers retain their eligibility rules. [command.py:37](../../tank/command.py#L37) exposes the six Tiger-only tools and unpaid adapters through existing cards. [trigger_routes.py:20](../../tank/trigger_routes.py#L20) has the approved optional `agent='trigger'` parameter, passed as `$5` in literal SQL; Tiger explicitly passes `agent='tiger'`. Both receipt attributions are tested.
 
-The 500-request allowance conservatively includes robots/sitemap requests, not only product pages. Discovery blocks external scripts/assets so those requests cannot escape the budget. Sites requiring those resources may remain unreadable; there is no paid/model fallback or challenge bypass.
+Position uses competition rank `1 + cheaper comparable competitors` and difference `own price - cheapest comparable competitor`, using latest tenant observations. Missing prices and different currencies are excluded from arithmetic; no conversion is invented. Confirmed matches bind tenant/URL/SKU through the existing feed-link/watch path. No existing URL binding is overwritten.
 
-## Exact validation commands and results
+The shared host gate reserves before transport, including failures, spaces attempts by three seconds and limits each public origin to 500 attempts per UTC day across tenants/workers. Robots, sitemap and product/search requests all count. Isolated catalogue reads use returned HTML structured data and do not run client scripts or bypass challenges; some sites may yield no match.
 
-Working directory: `/workspace/codex-tiger-t1`.
+## Deployment order and privileges
+
+[Tank startup:753](../../tank/main.py#L753) applies idempotent schema through the existing admin-or-legacy connection. Tenant tables join the existing personal-token RLS rollout only when the command-thread sentinel is enabled; they use both permissive and restrictive tenant policies.
+
+[docker-compose.yml:363](../../docker-compose.yml#L363) explicitly says Tank does not wait for the one-shot `agent-roles` service. [provision_agent_roles.py:29](../../agents/_chassis/provision_agent_roles.py#L29) calls `apply_roles`; [roles.py:63](../../agents/_chassis/chassis/roles.py#L63) transfers ownership of every existing table/sequence in the agent schema, and its caller grants schema USAGE/CREATE. Therefore migration-before-role is covered by the existing ownership pass; role-before-migration is covered by the new conditional schema/table grants. Tests assert SELECT, INSERT and UPDATE privileges on all four T1 tables and execute writes as the NOLOGIN role. No password is created or read by these tests.
+
+[deploy_changed.py:254](../../.github/scripts/deploy_changed.py#L254) deploys/waits for main and ZA before room stacks. Changed Tank, Rig, Tiger and shared browser sources require their normal stack/image rebuilds after merge. No runtime configuration file or setting was changed.
+
+## Validation
+
+Working directory `/workspace/codex-tiger-t1`; Python 3.12 virtual environment. The runner uses a disposable existing `postgres:16` image with trust authentication on loopback, blocks external test sockets, and removes its container afterward. No production DSN is used.
+
+**Full required suites: 365 passed, 6 failed, no skips; exit 1.** The six failures have the same errors on clean main and are listed below. This run includes all Tiger/Rig-price tests plus the entire command (83 cases) and personal-token (8 cases) suites. Tested implementation `5b6625f9`; the subsequent policy-compilation change `406fe08e` was validated with the entire focused T1 suite. [Full output and targeted timeout rerun](evidence/tiger_t1_tests.txt).
+
+**Final focused T1 suite: 66 passed; shared browser fixture suite: 9 passed; both exit 0.** These cover the final implementation, including compiled robots policy, preserved cookies/handoffs, job/run isolation, deployment-order grants, check execution between slices, large sitemap/card bounds and the twenty-first competitor. **Both Ruff commands and both whitespace checks pass.** [Commands and raw focused/static/browser/benchmark output](evidence/tiger_t1_focused_and_static.txt).
+
+Commands:
 
 ```sh
 .venv/bin/python tests/rig_tiger_prices/run_t1_offline.py
-```
-
-**245 passed, 6 failed, no skips; exit 1.** The six failures are the identical test IDs reproduced on clean current main, below. All 14 Rig/Tiger PostgreSQL cycle tests and the optional Tiger mail persistence test ran. The runner invokes every `tests/test_tiger*.py` and `tests/rig_tiger_prices` test, limits network access to loopback/Unix sockets, starts a disposable trust-authenticated PostgreSQL container, and removes that container afterward. It does not read a production DSN or a password. [Full raw output](evidence/tiger_t1_tests.txt).
-
-```sh
-.venv/bin/python -m pytest tests/test_tiger_competitors.py -q --tb=short --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1
-```
-
-**37 passed; exit 0.** Includes the requested default-Trigger and explicit-Tiger receipt tests. [Focused output](evidence/tiger_t1_focused_and_static.txt).
-
-```sh
+.venv/bin/python -m pytest tests/test_tiger_competitors.py -q --tb=short --timeout=300 --disable-socket --allow-unix-socket
+.venv/bin/ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+.venv/bin/ruff check agents/tiger/app.py agents/tiger/rig_watch.py agents/_brain/browser.py --select E9,F
 git diff --check
 git diff origin/main --check
-.venv/bin/ruff check --select F821,F822,F823 tank/access.py tank/command.py tank/trigger_routes.py agents/rig/rigbox/retailer_api.py agents/rig/rigbox/retailer_store.py agents/tiger/app.py agents/tiger/rig_watch.py agents/_brain/browser.py tests/test_tiger_competitors.py tests/rig_tiger_prices/run_t1_offline.py
+.venv/bin/python -m pytest tests/test_agent1_browser.py -q --tb=short --timeout=300 --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1
+.venv/bin/python tests/rig_tiger_prices/run_t1_offline.py tests/test_command.py::test_pinned_turn_receipt_uses_actual_model_and_pending_auto
 ```
 
-**All exit 0.** [Static output and exact commands](evidence/tiger_t1_focused_and_static.txt).
+An initial full run was interrupted to inspect three PostgreSQL fixture setup timeouts and a stale wiring assertion for 86400 seconds. That assertion was corrected to 45 seconds before the final validation. A second run was stopped when main advanced, so the merged branch could be validated afresh. Final outputs below supersede those incomplete runs. A completed 90-second run had 363 passes and seven failures: the six main failures plus a fixture-inclusive timeout in `test_pinned_turn_receipt_uses_actual_model_and_pending_auto`. That test passed in an isolated rerun (1 passed, 12.29 seconds). The runner now uses the normal [CI 300-second test limit](../../.github/scripts/offline_suite.py#L103); the discovery job limit remains 45 seconds. The final full run includes the position case whose cheapest competitor appears beyond the twentieth source. A final compiled-policy optimization is covered by the complete focused T1 suite and the offline benchmark below.
 
-Captured output files retain the test/error content; trailing whitespace was trimmed for repository checks.
+Offline policy benchmark (no requests): 10,000 URLs against 1,000 rules for both user agents completed in **5.364 seconds**. Before compilation was shared, only 100 URLs for one user agent took 2.631 seconds. The complete command and output are in the focused/static evidence.
 
-## Clean-main comparison of the six failures
+## Clean-main comparison: six pre-existing failures
 
-The separate checkout `/workspace/codex-tiger-t1-main-baseline` was fetched and detached at clean `origin/main` **`d6004c8d1f0110cc74fc7bbeaae4144277ca6758`**. `git status --porcelain` was empty. It contains none of this branch's changes.
-
-Commands in that checkout:
+Separate clean checkout: `/workspace/codex-tiger-t1-main-baseline`, detached at fetched `origin/main` `cf95a07e`; `git status --short` empty.
 
 ```sh
-git fetch origin main && git checkout --detach origin/main && git status --short
-/workspace/codex-tiger-t1/.venv/bin/python -m pytest tests/test_tiger_alert_email.py::test_email_copy_matches_actual_workspace_formatter 'tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[200]' 'tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[403]' 'tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[429]' tests/test_tiger_works.py::test_workspace_actions_and_safe_unread_display tests/test_tiger_works.py::test_real_chromium_markup_stores_history_and_one_price_alert -q --tb=short
+git fetch origin main
+git checkout --detach origin/main
+git status --short
+/workspace/codex-tiger-t1/.venv/bin/python -m pytest tests/test_tiger_alert_email.py::test_email_copy_matches_actual_workspace_formatter tests/test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals tests/test_tiger_works.py::test_workspace_actions_and_safe_unread_display tests/test_tiger_works.py::test_real_chromium_markup_stores_history_and_one_price_alert -q --tb=short --timeout=90 --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,::1
 ```
 
-**All six also fail on main; exit 1.** They were left unchanged as instructed. [Complete baseline trace and error lines](evidence/tiger_t1_main_baseline.txt).
+**6 failed; exit 1**, also on main. Left unchanged as instructed. [Full main trace](evidence/tiger_t1_main_baseline.txt).
 
-| Failing test | Main error line |
+| Test | Error line on clean main |
 | --- | --- |
 | `test_tiger_alert_email.py::test_email_copy_matches_actual_workspace_formatter` | `tests/test_tiger_alert_email.py:399`: `CalledProcessError: Command '['node', 'tests/tiger_alert_email/page_copy.cjs']' returned non-zero exit status 1.` |
 | `test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[200]` | `tests/test_tiger_public_policy.py:282`: `TargetClosedError: BrowserContext.storage_state: Target page, context or browser has been closed` |
-| `test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[403]` | Same test line and `BrowserContext.storage_state` error. |
-| `test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[429]` | Same test line and `BrowserContext.storage_state` error. |
+| `test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[403]` | `tests/test_tiger_public_policy.py:282`: same `BrowserContext.storage_state` error. |
+| `test_tiger_public_policy.py::test_real_browser_document_and_asset_refusals[429]` | `tests/test_tiger_public_policy.py:282`: same `BrowserContext.storage_state` error. |
 | `test_tiger_works.py::test_workspace_actions_and_safe_unread_display` | `tests/test_tiger_works.py:222`: `MODULE_NOT_FOUND`, `Cannot find module '/workspace/codex-tiger-t1-main-baseline/workspace/node_modules/typescript'` |
 | `test_tiger_works.py::test_real_chromium_markup_stores_history_and_one_price_alert` | `tests/test_tiger_works.py:237`: `TargetClosedError: Page.evaluate: Target page, context or browser has been closed` |
 
-## Checkout and environment commands
+## Founder-browser proof still required
 
-```sh
-git clone https://github.com/Tervory-AI/tervory-tank.git /workspace/codex-tiger-t1 && cd /workspace/codex-tiger-t1 && git fetch origin main && git checkout -B codex/tiger-competitors origin/main
-git config user.name 'Codex' && git config user.email 'codex@users.noreply.github.com'
-/home/ammosync/.local/bin/python3.12 -m venv .venv
-.venv/bin/pip install -r tank/requirements.txt -r tank/requirements-dev.txt
-docker image inspect postgres:16 --format '{{.Id}}'
-```
-
-All succeeded. The PostgreSQL image already existed (`sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c`); no paid service was added. Earlier setup attempts found no `python` alias/no system `pytest` and an unset Git author; the configured Python 3.12 environment and the founder-supplied Git identity resolved those setup issues. These are test/build settings, not application credential changes.
-
-Each finished file was committed and pushed on `codex/tiger-competitors`, with `git merge origin/main` before the push. Later evidence pushes also fetch main first. Main advanced during the build; `git fetch origin main` and `git merge origin/main` produced `fe1f605c`, without conflicts, and the full suite was rerun afterward. No push failed. Commit history and the branch diff are the source-change record.
-
-## Deployment and founder-browser proof — missing
-
-No new Coolify setting names or values are required. Existing deploy-on-merge selection includes the main/ZA stack and Rig/Tiger room stacks and their regional copies. The Tiger stack already builds its browser sidecar from `agents/base/Dockerfile.browser`, which copies `agents/_brain`; its browser image must be rebuilt with the agent. No runtime configuration file was changed.
-
-Missing acceptance evidence is exactly:
-
-1. Founder screenshots of Custom Nation's two or three chosen public HTTPS Source links saved in Tiger Plugins.
-2. In the founder's own `/chats`, `tiger.match`, its Confirm card/$0 receipt, then returned confirmed matches showing source pages and barcodes. A brand+MPN suggestion must remain suggested until `tiger.match.confirm <match-id>` is confirmed; rejection uses `tiger.match.reject <match-id>` and its own Confirm card.
-3. After ordinary watch checks, the founder's `tiger.position` result with own price, competitor prices/stock/source links/check times, rank and difference.
-4. A second tenant's browser showing none of Custom Nation's matches/readings.
-
-**No founder-browser screenshots exist for this build. None are replaced with synthetic screenshots, and live acceptance is not claimed.** The Tiger page view remains deferred to approved Figma page “9 · Tiger price position”; no page, button, UI copy, empty state or error wording was added.
+No founder screenshots exist. Missing: Custom Nation's chosen two or three Source links saved in Tiger Plugins; `tiger.match` Confirm/$0 receipt and returned page/barcode evidence in `/chats`; `tiger.position` after ordinary checks with prices, stock, sources, check times, rank and difference; another tenant seeing none of those rows. No synthetic screenshot substitutes for that proof. The Tiger page remains deferred to approved Figma page “9 · Tiger price position”.
