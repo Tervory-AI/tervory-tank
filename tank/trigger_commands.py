@@ -104,7 +104,7 @@ async def prepare(action, actor, state):
     elif action.tool == 'trigger.write.batch':
         from trigger_batch import products
         rows = await products(actor, args, state)
-        args.update(products=rows, brief_markdown=json.dumps({'item_count': len(rows), 'products': rows}, ensure_ascii=False))
+        args.update(products=rows, brief_markdown=json.dumps({'item_count': len(rows), 'products': [r.get('name', '') for r in rows]}, ensure_ascii=False))
     elif action.tool == 'trigger.feedback':
         args['brief_markdown'] = json.dumps({k: args[k] for k in ('write_id', 'status', 'changes')}, ensure_ascii=False)
     else:
