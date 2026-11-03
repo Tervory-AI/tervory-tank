@@ -155,7 +155,9 @@ async def enforce_list(x_tervory_tenant: uuid.UUID = Header()):
         return Response(response.content, status_code=response.status_code, media_type="application/json")
     from trigger_routes import code_receipt
     ledger_id = await code_receipt(x_tervory_tenant, "autumbra.enforce.list", agent="ghost")
-    return {**response.json(), "ledger_id": str(ledger_id), "cost_usd": 0}
+    data = response.json()
+    items = [{"name": row["name"], "summary": row["uuid"], "status": row["status"]} for row in data.get("applications", [])]
+    return {**data, "items": items, "ledger_id": str(ledger_id), "cost_usd": 0}
 
 
 async def enforce_write_result(response, actor, tool):
@@ -166,7 +168,11 @@ async def enforce_write_result(response, actor, tool):
     if outcome not in {"created", "destroyed", "absent"}:
         raise HTTPException(409, f"Enforce outcome {outcome}; check Coolify before repeating")
     from trigger_routes import code_receipt
-    return {**result, "ledger_id": str(await code_receipt(actor.tenant_id, tool, agent="ghost")), "cost_usd": 0}
+    receipt = result.get("receipt") or {}
+    facts = [str(receipt["uuid"])] if receipt.get("uuid") else []
+    facts.extend(receipt.get("founder_fills") or [])
+    return {**result, "name": receipt.get("project"), "status": outcome, "summary": " · ".join(facts),
+            "ledger_id": str(await code_receipt(actor.tenant_id, tool, agent="ghost")), "cost_usd": 0}
 
 
 @router.post("/autumbra/enforce/create", dependencies=[Depends(admin.require_admin)])
@@ -280,7 +286,9 @@ async def blocks_share(body: BlockShare, request: Request):
             if result.status_code != 200:
                 status = result.status_code
                 data = data.get("detail") or {"result": "refused"}
-            items.append({"id": str(source), **(data if isinstance(data, dict) else {"result": "refused"})})
+            outcome = data.get("result", "refused") if isinstance(data, dict) else "refused"
+            items.append({"id": str(source), "summary": str(source), "status": outcome,
+                          **(data if isinstance(data, dict) else {"result": "refused"})})
     ledger = str(await code_receipt(actor.tenant_id, tool, agent="ghost"))
     return Response(json.dumps({"items": items, "ledger_id": ledger, "cost_usd": 0}), status_code=status, media_type="application/json")
 
