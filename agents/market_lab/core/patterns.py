@@ -49,7 +49,16 @@ async def listing(memory: object, tenant: str, plan: dict) -> dict:
                 value = json.loads(row["claim"])
             except (KeyError, ValueError, TypeError):
                 continue
-            if not isinstance(value, dict) or set(value) != FIELDS:
+            if not isinstance(value, dict) or set(value) != FIELDS or not isinstance(value["pair_id"], str):
+                continue
+            episodes, hits, rate, lag = (value[field] for field in ("episodes", "hits", "hit_rate", "lag_days"))
+            if type(episodes) is not int or type(hits) is not int or not 0 <= hits <= episodes:
+                continue
+            if (rate is None) != (episodes == 0) or (rate is not None and (type(rate) not in (int, float) or rate != round(hits / episodes, 6))):
+                continue
+            if not isinstance(lag, dict) or set(lag) != {"min", "max", "median"}:
+                continue
+            if any(v is not None and (type(v) not in (int, float) or not 0 <= v <= 36500) for v in lag.values()):
                 continue
             config = configs.get(value["pair_id"])
             if config is None or value["pair_id"] in seen:
