@@ -15,15 +15,16 @@ from uuid import UUID
 PASSAGE_THRESHOLD = 0.35
 FAQ_THRESHOLD = 0.92
 MAX_PASSAGES = 6
-CURRENCY = r'(?:[A-Z]{3}|R|[$£€]|(?i:rand|dollars?|euros?|pounds?))'
-AMOUNT = r'(?<![\w.])\d+(?:[, ]\d{3})*(?:\.\d+)?(?![\w.])'
-MONEY = re.compile(r'(?P<prefix>' + CURRENCY + r')\s*(?P<value>\d+(?:[, ]\d{3})*(?:\.\d+)?)(?!\w)|(?P<amount>' + AMOUNT + r')\s*(?P<suffix>' + CURRENCY + r')(?!\w)')
+CURRENCY = r'(?i:ZAR|USD|EUR|GBP|NAD|BWP|AUD|CAD|R|[$£€]|rand|dollars?|euros?|pounds?)'
+AMOUNT = r'\d+'
+MONEY_AMOUNT = r'\d+(?:[, ]\d{3})*(?:\.\d+)?'
+MONEY = re.compile(r'(?P<prefix>' + CURRENCY + r')\s*(?P<value>' + MONEY_AMOUNT + r')(?!\w)|(?P<amount>' + MONEY_AMOUNT + r')\s*(?P<suffix>' + CURRENCY + r')(?!\w)')
 PRICE_OR_STOCK = re.compile(
     r'\b(price|prices|cost|costs|stock|available|availability|inventory)\b|how much|[$£€]'
     r'|\b(?:sold out|out of stock|back[ -]?order|in stock|low stock)\b'
-    r'|\b(?:R|[A-Z]{3})\s*\d|\d[\d,. ]*\s*(?:[A-Z]{3}|rand|dollars?|euros?|pounds?)\b',
+    r'|\b(?:R|ZAR|USD|EUR|GBP|NAD|BWP|AUD|CAD)\s*\d|\d[\d,. ]*\s*(?:ZAR|USD|EUR|GBP|NAD|BWP|AUD|CAD|rand|dollars?|euros?|pounds?)\b',
     re.IGNORECASE)
-DATES = re.compile(r'\b(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?|Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|today|tomorrow|yesterday|tonight|weekends?|(?:next|last|this)\s+(?:week|month|year|day)|now|soon|later)\b', re.IGNORECASE)
+DATES = re.compile(r'\b(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?|Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|May(?=\s+(?:\d{1,2}\b|\d{4}\b))|(?<=\d )May|today|tomorrow|yesterday|tonight|weekends?|(?:next|last|this)\s+(?:week|month|year|day))\b', re.IGNORECASE)
 
 
 def decimal(value):
@@ -34,7 +35,7 @@ def money(text):
     aliases = {'rand': 'ZAR', 'dollar': 'USD', 'dollars': 'USD', '$': 'USD',
                'euro': 'EUR', 'euros': 'EUR', '€': 'EUR', 'pound': 'GBP', 'pounds': 'GBP', '£': 'GBP'}
     return {(decimal(m['value'] or m['amount']), aliases.get((m['prefix'] or m['suffix']).lower(),
-             m['prefix'] or m['suffix'])) for m in MONEY.finditer(text)}
+             (m['prefix'] or m['suffix']).upper())) for m in MONEY.finditer(text)}
 
 
 def numeric_evidence(answer, cited):
