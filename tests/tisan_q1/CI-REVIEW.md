@@ -59,3 +59,7 @@ raise SystemExit(subprocess.call([sys.executable,'.github/scripts/offline_suite.
 The lower-concurrency full run is in progress; the final summary will follow. Its cases were collected after merging `origin/main` at `fb55cd35`. Main advanced to `cf95a07e` during a required push checkpoint; its new/changed test files will also receive a separate post-merge run. Test-generated dashboard HTML artifacts will be restored, not included in the PR.
 
 The host is concurrently running another full suite. Inspection found only this run's three active workers and their current subprocess, with no leftover workers from the stopped attempt. At 79%, the lower-concurrency run has reported the same three failures in the unrelated immutable Trigger intake checks (`identity4`, `identity5`, `identity6`). Final tracebacks and counts are still pending. The requested accepted-copy regression has also passed inside this full run. This is not a passing full-suite claim.
+
+## Lower-concurrency main result
+
+Main completed in 2852.34 seconds: **6388 passed, 52 skipped, 5 failed, 1805 subtests passed**. The failures are Trigger intake `identity4`/`identity5`/`identity6` (some engine evals returned empty error details), plus worker crashes in `tests/test_skills_offline.py::test_rung3_offline_cases` and `tests/autumbra_public_bugs/test_page.py::test_public_host_and_direct_page_have_no_shell_admin_keeps_gate`. The requested four Tisan CI failures did not recur. Isolated-group totals and separate rechecks follow after completion. This is not a green full-suite result.
