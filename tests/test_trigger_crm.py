@@ -465,3 +465,49 @@ async def test_founder_base_list_capability_preserved(setup):
             await crm.authority(command.Actor(OTHER, FOUNDER.user_id, True))
     finally:
         trigger_commands.CONFIRMED.reset(token)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('tool', ['trigger.crm.list', 'trigger.crm.get', 'trigger.crm.write'])
+async def test_existing_cards_route_only_crm_writes_through_confirm_dispatch(monkeypatch, tool):
+    from contextlib import asynccontextmanager
+
+    admin = command.Actor(T, 'placeholder-admin', False, tenant_admin=True)
+    args = {'resource': 'contacts'}
+    if tool.endswith('.get'):
+        args['record_id'] = str(RECORD)
+    elif tool.endswith('.write'):
+        args['data'] = {'first_name': 'placeholder', 'last_name': 'placeholder'}
+    action = command.validate_action(command.PlannedAction(tool=tool, arguments=args), admin)
+    state = {'cards': {}, 'steps': {}}
+    row = {'state': state}
+
+    @asynccontextmanager
+    async def editing(*unused):
+        yield None, row, state
+
+    @asynccontextmanager
+    async def acquire():
+        yield None
+
+    monkeypatch.setattr(command, 'authorized_actor', AsyncMock(side_effect=lambda actor, *a, **kw: actor))
+    monkeypatch.setattr(command, 'editing', editing)
+    monkeypatch.setattr(command, 'db', lambda: SimpleNamespace(acquire=acquire))
+    monkeypatch.setattr(command, 'owned', AsyncMock(return_value=row))
+    for name in ('step', 'event', 'refresh_action_receipts'):
+        monkeypatch.setattr(command, name, AsyncMock())
+    monkeypatch.setattr(trigger_commands, 'prepare', AsyncMock(side_effect=lambda action, *a: action))
+    card = await command.propose_action(None, row, state, action, admin)
+    assert card['status'] == 'pending'
+    direct = AsyncMock(return_value=(200, {'ledger_id': str(RECORD)}))
+    confirmed = AsyncMock(return_value=(200, {'ledger_id': str(RECORD)}))
+    monkeypatch.setattr(command, 'dispatch_action', direct)
+    monkeypatch.setattr(trigger_commands, 'dispatch_confirmed', confirmed)
+    result = await command.execute_card(RECORD, admin, card['card_id'], action)
+    assert result['status'] == 'confirmed'
+    if tool.endswith('.write'):
+        confirmed.assert_awaited_once()
+        direct.assert_not_awaited()
+    else:
+        direct.assert_awaited_once()
+        confirmed.assert_not_awaited()
