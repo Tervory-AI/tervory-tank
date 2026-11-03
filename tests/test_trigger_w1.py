@@ -281,6 +281,22 @@ async def test_batch_25_receipts_feedback_and_case_study_provenance(env, monkeyp
     copy = await env.client.get('/v1/trigger/copy/' + items[0]['write_id'], params={'tenant_id': str(TENANT)},
         headers={'X-Tank-Key': 'offline-tisan', 'X-Tervory-Tenant': str(TENANT), 'X-Tervory-Home-Region': 'us-east'})
     assert copy.status_code == 200 and copy.json()['text'] == items[0]['text']
+    from trigger_commands import plan
+    turn_id = uuid4()
+    async with command.editing(thread, actor) as (conn, row, state):
+        state['active_turn'] = str(turn_id)
+    planned = await plan(actor, 'trigger, changes: ' + items[1]['write_id'] + ': Exact client request.', turn_id)
+    assert planned['actions'][0]['arguments']['write_id'] == items[1]['write_id']
+    with pytest.raises(HTTPException):
+        await plan(actor, 'trigger, changes: Ambiguous batch item.', turn_id)
+    async with command.editing(thread, actor) as (conn, row, state):
+        state['active_turn'] = None
+        state['messages'].append({'role': 'user', 'content': 'trigger.write.batch: attachment next.csv',
+            'attachments': [{'name': 'next.csv', 'text': 'name,fact\nNext,Own facts\n'}]})
+    _, next_card = await card_for(env, 'trigger.write.batch', {'attachment': 'next.csv'}, thread=thread)
+    next_result = await confirm(env, next_card, user='admin', role='org:admin')
+    assert next_result['status'] == 'confirmed', next_result
+    assert items[0]['write_id'] in next_result['result']['items'][0]['accepted_write_ids']
 
 
 @pytest.mark.asyncio
