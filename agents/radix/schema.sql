@@ -24,6 +24,33 @@ CREATE TABLE IF NOT EXISTS agent_radix.business_sources (
     CHECK (catalogue->>'id' IS NOT NULL AND catalogue->>'id' = source_id)
 );
 
+-- I8: durable tenant/domain/event deduplication beside passive scan runs.
+CREATE TABLE IF NOT EXISTS agent_radix.regulation_runs (
+ tenant_id uuid NOT NULL, domain text NOT NULL, event_id uuid NOT NULL,
+ scan_id uuid NOT NULL, facts jsonb NOT NULL,
+ settled boolean NOT NULL DEFAULT false,
+ next_attempt timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY (tenant_id,domain,event_id),
+ UNIQUE (tenant_id,scan_id)
+);
+-- Join the existing tenant RLS rollout; never enable it independently.
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_class WHERE oid=to_regclass('tank.command_threads') AND relrowsecurity) THEN
+  ALTER TABLE agent_radix.regulation_runs ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE agent_radix.regulation_runs FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.regulation_runs'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON agent_radix.regulation_runs FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.regulation_runs'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON agent_radix.regulation_runs AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE TABLE IF NOT EXISTS agent_radix.memory_records (
     id uuid PRIMARY KEY,
