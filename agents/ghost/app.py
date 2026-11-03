@@ -273,6 +273,33 @@ async def _weekly_owner_email_loop(app: "FastAPI") -> None:
             pass
 
 
+async def deliver_act_owner_updates(app: FastAPI) -> None:
+    """The closed Enforce box emits receipts; Watch alone owns real SMTP delivery."""
+    if transport_status() != "smtp":
+        return
+    from .owner_email_jobs import _parse_receipt_time, week_bounds
+    start, end = week_bounds()
+    for settings in list_clients_with_owner(app.state.store):
+        receipts = _receipts_for_tenant(settings.tenant_id)
+        for receipt in receipts:
+            moment = _parse_receipt_time(receipt)
+            identity = str(receipt.get("id") or "")
+            if not receipt.get("applied") or not identity or moment is None or not start <= moment <= end:
+                continue
+            email = build_owner_update_from_receipts(settings=settings, receipts=receipts)
+            await asyncio.to_thread(send_owner_update, email, to=settings.owner_email,
+                                   tenant_id=settings.tenant_id, message_key="act:" + identity)
+
+
+async def _act_owner_email_loop(app: FastAPI) -> None:
+    while True:
+        try:
+            await deliver_act_owner_updates(app)
+        except Exception:
+            pass  # Durable SMTP claims remain sent/uncertain; never automatically resend.
+        await asyncio.sleep(30)
+
+
 async def refresh_market_lab_intel(app: FastAPI) -> dict:
     """Fetch through Tank only; use the existing validator, catalog and receipts."""
     from uuid import NAMESPACE_URL, uuid5
@@ -338,6 +365,7 @@ def create_app() -> FastAPI:
                 asyncio.create_task(nightly(app)),
                 asyncio.create_task(advisory_watch.watch(app)),
                 asyncio.create_task(_weekly_owner_email_loop(app)),
+                asyncio.create_task(_act_owner_email_loop(app)),
                 asyncio.create_task(_market_lab_intel_loop(app)),
             ]
             try:
