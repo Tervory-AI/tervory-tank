@@ -25,6 +25,7 @@ ROUTES = (
     ('early', 'agent_skills', 'build_router', ('tank',), True),
     ('early', 'base_product', 'build_router', ('tank',), True),
     ('early', 'base_lists', 'build_router', (), True),
+    ('early', 'tiger_watch_commands', 'build_router', (), True),
     ('early', 'tiger_alerts', 'build_router', (), True),
     ('early', 'tisan_requests', 'build_router', (), True),
     ('early', 'base_audit_commands', 'build_router', (), True),
