@@ -283,7 +283,7 @@ async def refresh_market_lab_intel(app: FastAPI) -> dict:
     register_advisories_from_ioc_bundle(bundle)
     tenants = {PLATFORM_TENANT}
     tenants.update(str(row[0]) for row in app.state.store.db.execute(
-        "SELECT DISTINCT tenant FROM ghost_state WHERE key=$1", ("autumbra_client_settings",)).fetchall())
+        "SELECT DISTINCT tenant FROM ghost_state WHERE key=$1", {"1": "autumbra_client_settings"}).fetchall())
     if watch_queue_configured():
         for tenant in tenants:
             queue = watch_threat_queue(tenant)
