@@ -231,7 +231,8 @@ async def test_teachers_sources_counts_receipt_and_tenant_isolation(serving, mon
     assert 'placeholder-input' not in response.text and 'placeholder-sensitive-output' not in response.text
     assert 'placeholder-foreign' not in response.text
     assert all(row['task_type'] == TASK for row in result['items'])
-    assert all(row['model'] == 'null' for row in result['items'] if row['teacher_model'] is None)
+    assert all('model' not in row for row in result['items'])
+    assert any(row['teacher_model'] is None for row in result['items'])
     async with real.pool.acquire() as conn:
         receipt = await conn.fetchrow('SELECT * FROM tank.ledger WHERE id=$1', uuid.UUID(result['ledger_id']))
     assert receipt['tenant_id'] == tenant and receipt['rung'] == 3 and receipt['model'] == 'code'
@@ -266,3 +267,18 @@ async def test_teachers_sources_counts_receipt_and_tenant_isolation(serving, mon
     assert 'skala.teachers' in command.FOUNDER_TOOLS
     assert 'skala.teachers' not in command.CONFIRMED and not command.ADAPTERS['skala.teachers'].paid
     assert 'skala.teachers' not in command.allowed_tools(command.Actor(tenant, 'placeholder-member', False, frozenset(command.SQUADS)))
+
+
+@pytest.mark.asyncio
+async def test_served_annotation_failure_keeps_delivered_answer(serving, monkeypatch, caplog):
+    await promote(serving)
+    async def failed(*args, **kwargs):
+        raise RuntimeError('placeholder-private-update-error')
+    monkeypatch.setattr(routing, 'record_served', failed)
+    answer = await request(serving)
+    assert answer['model'] in {WEAK, STRONG}
+    assert 'RuntimeError' in caplog.text
+    assert 'placeholder-private-update-error' not in caplog.text
+    async with serving.real.pool.acquire() as conn:
+        row = await conn.fetchrow('SELECT * FROM tank.ledger WHERE id=$1', uuid.UUID(answer['ledger_id']))
+    assert row['outcome'] == 'delivered' and row['model'] == answer['model']
