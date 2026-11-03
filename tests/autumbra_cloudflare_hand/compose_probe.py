@@ -20,7 +20,7 @@ import time
 def endpoint():
     with socket.socket() as listener:
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listener.bind(("0.0.0.0", 443))
+        listener.bind((os.environ["TEST_BIND"], 443))
         listener.listen()
         while True:
             conn, _ = listener.accept()
@@ -109,6 +109,7 @@ def run():
                               ("other-client", "other_client", "172.30.245.10")]:
         services[name] = dict(image="python:3.12-slim", volumes=[f"{root}:/source:ro"],
                               command=["python", "/source/tests/autumbra_cloudflare_hand/compose_probe.py", "endpoint"],
+                              environment={"TEST_BIND": ip},
                               networks={network: {"ipv4_address": ip}})
     networks = {name: {"internal": True} for name in source["networks"]}
     for name, subnet in [("egress", "172.30.242.0/24"), ("health_egress", "172.30.243.0/24"),
