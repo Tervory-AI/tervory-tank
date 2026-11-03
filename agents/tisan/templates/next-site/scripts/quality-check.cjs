@@ -228,11 +228,19 @@ async function lighthouse(origin, paths, proxyUrl) {
     TISAN_CHECK_PAGES: JSON.stringify(paths),
     NPM_CONFIG_OFFLINE: "true",
   };
+  let runnerLog = "";
   const code = await new Promise((resolve) => {
-    const child = spawn("npm", ["run", "lhci"], { env, stdio: "ignore" });
+    const child = spawn("npm", ["run", "lhci"], { env, stdio: ["ignore", "pipe", "pipe"] });
+    const collect = (chunk) => {
+      runnerLog = (runnerLog + chunk.toString()).slice(-100000);
+    };
+    child.stdout.on("data", collect);
+    child.stderr.on("data", collect);
     child.on("error", () => resolve(127));
     child.on("exit", (code) => resolve(code));
   });
+  mkdirSync(reportDir, { recursive: true });
+  writeFileSync(join(reportDir, "runner.log"), runnerLog);
   const reports = existsSync(reportDir)
     ? readdirSync(reportDir)
         .filter((n) => /^lhr-.*\.json$/.test(n))
