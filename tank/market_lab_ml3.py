@@ -52,7 +52,9 @@ def records(operation: str, data: dict) -> list[dict]:
                          "link": link(f["href"])} for f in warning["facts"])
         return rows
     if operation == "calibration":
-        return [{"summary": json.dumps(data, default=str, ensure_ascii=False)}]
+        hits, misses = data.get("hits", 0), data.get("misses", 0)
+        summary = {"hits": hits, "misses": misses, "hit_rate": hits / (hits + misses) if hits + misses else None}
+        return [{"summary": json.dumps(summary)}] + [{"summary": json.dumps(c, default=str)} for c in data.get("curves", [])]
     fields = {
         "predictions": ("id", "made_at", "statement", "horizon_seconds", "confidence", "outcome", "realised_value", "realised_date", "sources"),
         "feeds": ("id", "name", "state", "rows", "checked_at", "key_name"),
@@ -60,6 +62,35 @@ def records(operation: str, data: dict) -> list[dict]:
     return [{"name": r.get("name") or r.get("statement") or r["id"],
              "summary": json.dumps({k: r.get(k) for k in fields}, default=str, ensure_ascii=False)}
             for r in data.get(operation, [])]
+
+
+@tenant_path("actor")
+async def code_plan(actor, messages: list[dict], task_id=None):
+    """Exact ML3 commands propose existing cards without consulting a model."""
+    import command
+    from main import pool, box_region
+    from types import SimpleNamespace
+    last = messages[-1] if messages else {}
+    if last.get("role") != "user":
+        return None
+    source = last.get("content", "").strip()
+    allowed = {"market_lab." + name for name in READS} | {"market_lab.alerts." + name for name in ("email", "webhook", "off")}
+    if not source or source.split(maxsplit=1)[0] not in allowed:
+        return None
+    if task_id:
+        raw = await pool().fetchval("SELECT state FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND state->>'active_turn'=$3", actor.tenant_id, actor.user_id, str(task_id))
+        original = next((m for m in reversed((obj(raw) or {}).get("messages", [])) if m.get("role") == "user"), {})
+        source = original.get("content", "").strip()
+    parts = source.split(maxsplit=1)
+    if not parts or parts[0] not in allowed:
+        return None
+    try:
+        arguments = json.loads(parts[1]) if len(parts) == 2 else {}
+        action = command.validate_action(command.PlannedAction(tool=parts[0], arguments=arguments), await command.authorized_actor(actor))
+    except (ValueError, TypeError):
+        raise HTTPException(422, "The action arguments are invalid") from None
+    ledger_id = await pool().fetchval("INSERT INTO tank.ledger(tenant_id,region,agent,task_type,rung,model,cost_usd,tokens_in,tokens_out,task_id) VALUES($1,$2,'market_lab','command.turn',3,'code',0,0,0,$3) RETURNING id", actor.tenant_id, box_region(), task_id)
+    return SimpleNamespace(content=json.dumps({"text": action.tool, "actions": [{"tool": action.tool, "arguments": action.arguments}]}), ledger_id=ledger_id)
 
 
 @tenant_path("actor")
