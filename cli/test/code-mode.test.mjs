@@ -622,3 +622,13 @@ test('undo restores the exact UTF-8 bytes, including a byte-order mark', async (
   await f.undo(io());
   assert.deepEqual(await readFile(join(f.root, 'file.txt')), original);
 });
+
+test('an explicitly non-interactive Confirm cancels without reading a yes', async () => {
+  const { confirmCard } = await import('../src/client.mjs');
+  const requests = [];
+  const result = await confirmCard({ json: async (path, body) => { requests.push({ path, body }); return { status: 'cancelled' }; } },
+    { card_id: 'placeholder-card', summary: 'placeholder summary' },
+    { interactive: false, write() {}, prompt: async () => { throw Error('must not prompt'); } });
+  assert.equal(result.status, 'cancelled');
+  assert.deepEqual(requests, [{ path: '/v1/command/cards/placeholder-card', body: { action: 'cancel' } }]);
+});
