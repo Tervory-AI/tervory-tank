@@ -18,7 +18,7 @@ x-database: &database
 x-runtime: &runtime
   <<: *database
   ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY:?founder sets immutable 32-character ZITADEL_MASTERKEY}
-  ZITADEL_EXTERNALDOMAIN: auth.za.tervory.com
+  ZITADEL_EXTERNALDOMAIN: auth-za.tervory.com
   ZITADEL_EXTERNALPORT: "443"
   ZITADEL_EXTERNALSECURE: "true"
   ZITADEL_TLS_ENABLED: "false"
@@ -30,10 +30,10 @@ x-runtime: &runtime
   ZITADEL_DEFAULTINSTANCE_LOCKOUTPOLICY_MAXPASSWORDATTEMPTS: "5"
   ZITADEL_DEFAULTINSTANCE_LOCKOUTPOLICY_MAXOTPATTEMPTS: "5"
   ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
-  ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: https://auth.za.tervory.com/ui/v2/login/
-  ZITADEL_OIDC_DEFAULTLOGINURLV2: https://auth.za.tervory.com/ui/v2/login/login?authRequest=
-  ZITADEL_OIDC_DEFAULTLOGOUTURLV2: https://auth.za.tervory.com/ui/v2/login/logout?post_logout_redirect=
-  ZITADEL_SAML_DEFAULTLOGINURLV2: https://auth.za.tervory.com/ui/v2/login/login?samlRequest=
+  ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: https://auth-za.tervory.com/ui/v2/login/
+  ZITADEL_OIDC_DEFAULTLOGINURLV2: https://auth-za.tervory.com/ui/v2/login/login?authRequest=
+  ZITADEL_OIDC_DEFAULTLOGOUTURLV2: https://auth-za.tervory.com/ui/v2/login/logout?post_logout_redirect=
+  ZITADEL_SAML_DEFAULTLOGINURLV2: https://auth-za.tervory.com/ui/v2/login/login?samlRequest=
 services:
   identity-postgres:
     image: postgres:16.15@sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a
@@ -107,7 +107,7 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: ${COOLIFY_PROXY_NETWORK:?existing Coolify proxy network name}
-      traefik.http.routers.identity-za-api.rule: Host(`auth.za.tervory.com`)
+      traefik.http.routers.identity-za-api.rule: Host(`auth-za.tervory.com`)
       traefik.http.routers.identity-za-api.entrypoints: https
       traefik.http.routers.identity-za-api.tls: "true"
       traefik.http.routers.identity-za-api.tls.certresolver: letsencrypt
@@ -124,7 +124,7 @@ services:
       NEXT_PUBLIC_BASE_PATH: /ui/v2/login
       ZITADEL_SERVICE_USER_TOKEN_FILE: /login/login-client.pat
       ZITADEL_SESSION_COOKIE_SECRET: ${LOGIN_SESSION_COOKIE_SECRET:?founder sets LOGIN_SESSION_COOKIE_SECRET}
-      CUSTOM_REQUEST_HEADERS: Host:auth.za.tervory.com,X-Forwarded-Proto:https
+      CUSTOM_REQUEST_HEADERS: Host:auth-za.tervory.com,X-Forwarded-Proto:https
     volumes: [identity_login_token:/login:ro]
     expose: ["3000"]
     networks: [database, proxy]
@@ -134,7 +134,7 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: ${COOLIFY_PROXY_NETWORK:?existing Coolify proxy network name}
-      traefik.http.routers.identity-za-login.rule: Host(`auth.za.tervory.com`) && PathPrefix(`/ui/v2/login`)
+      traefik.http.routers.identity-za-login.rule: Host(`auth-za.tervory.com`) && PathPrefix(`/ui/v2/login`)
       traefik.http.routers.identity-za-login.entrypoints: https
       traefik.http.routers.identity-za-login.tls: "true"
       traefik.http.routers.identity-za-login.tls.certresolver: letsencrypt
@@ -142,7 +142,7 @@ services:
       traefik.http.routers.identity-za-login.service: identity-za-login
       traefik.http.services.identity-za-login.loadbalancer.server.port: "3000"
       traefik.http.middlewares.identity-za-root.replacepath.path: /ui/v2/login/
-      traefik.http.routers.identity-za-root.rule: Host(`auth.za.tervory.com`) && Path(`/`)
+      traefik.http.routers.identity-za-root.rule: Host(`auth-za.tervory.com`) && Path(`/`)
       traefik.http.routers.identity-za-root.entrypoints: https
       traefik.http.routers.identity-za-root.tls: "true"
       traefik.http.routers.identity-za-root.tls.certresolver: letsencrypt
