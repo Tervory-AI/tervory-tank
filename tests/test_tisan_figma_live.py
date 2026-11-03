@@ -86,6 +86,7 @@ def live(tmp_path, monkeypatch):
 
     api = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    tls.minimum_version = ssl.TLSVersion.TLSv1_2
     tls.load_cert_chain(cert, key)
     api.socket = tls.wrap_socket(api.socket, server_side=True)
     thread = threading.Thread(target=api.serve_forever, daemon=True)
