@@ -93,3 +93,8 @@ class ConfirmDraft(Args):
 TOOLS = {'source.add': SourceAdd, 'source.remove': SourceRemove, 'sources': Args,
          'ask': Ask, 'faq.add': FAQ, 'feedback': Feedback, 'review': Args, 'stats': Args,
          'lead.confirm': ConfirmDraft, 'quote.confirm': ConfirmDraft}
+
+
+# B2 store controls retain the existing durable Command confirmation corridor.
+from trigger_console_contract import ConversationAction, Settings
+TOOLS.update({'settings': Settings, 'handover': ConversationAction, 'reply': ConversationAction})
