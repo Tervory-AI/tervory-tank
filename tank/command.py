@@ -43,7 +43,7 @@ TOOLS = {
     "market_lab": ["market_lab.research"],
     "rig": ["rig.search", "rig.ask"],
     "tisan": ["tisan.scaffold"],
-    "radix": ["radix.scan", "radix.repo.scan", "radix.repo.findings"],
+    "radix": ["radix.scan", "radix.repo.scan", "radix.repo.findings", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"],
     "zenas": ["zenas.ask", "zenas.matters", "zenas.review", "zenas.watch.add", "zenas.watch.list", "zenas.watch.enable", "zenas.watch.disable"],
 }
 TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
@@ -486,6 +486,10 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
     remembered = await remember_turn(actor, messages, task_id)
     if remembered is not None:
         return remembered
+    from radix_watch import code_plan as watch_plan
+    planned = await watch_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     from radix_repo import code_plan as repo_plan
     planned = await repo_plan(actor, messages, task_id)
     if planned is not None:
@@ -1050,6 +1054,11 @@ class RadixDomainArgs(Body):
     domain: str = Field(min_length=1, max_length=253)
 
 
+class RadixWatchArgs(RadixDomainArgs):
+    interval: Literal["daily", "weekly"]
+    run_now: bool = True
+
+
 class RadixPassiveArgs(Body):
     url: str = Field(max_length=300)
     commit: str = Field(default="", max_length=200)
@@ -1254,6 +1263,10 @@ ADAPTERS = {
     "rig.search": Adapter("GET", "/v1/rig/search", QueryArgs, "Search the product catalogue"),
     "rig.ask": Adapter("POST", "/v1/rig/ask", RigAskArgs, "Ask about a product", True, "paid_run"),
     "tisan.scaffold": Adapter("POST", "/v1/skala/tisan.scaffold/run", ScaffoldArgs, "Create a site scaffold", False, "other", "tisan.scaffold"),
+    "radix.watch": Adapter("POST", "/v1/radix/passive/watch", RadixWatchArgs, "radix.watch"),
+    "radix.unwatch": Adapter("POST", "/v1/radix/passive/unwatch", RadixDomainArgs, "radix.unwatch"),
+    "radix.watches": Adapter("GET", "/v1/radix/passive/watches", EmptyArgs, "radix.watches"),
+    "radix.changes": Adapter("GET", "/v1/radix/passive/changes", RadixDomainArgs, "radix.changes"),
     "radix.domain.prove": Adapter("POST", "/v1/radix/passive/domains", RadixDomainArgs, "radix.domain.prove"),
     "radix.passive.scan": Adapter("POST", "/v1/radix/passive/scans", RadixPassiveArgs, "radix.passive.scan"),
     "radix.findings": Adapter("GET", "/v1/radix/passive/scans/{scan_id}/findings", RadixFindingsArgs, "radix.findings"),
@@ -1353,7 +1366,12 @@ def planning_message(actor: Actor) -> dict:
 
 
 def public_card(card: dict) -> dict:
-    return {k: v for k, v in card.items() if k not in {"payload", "evidence_ids"}}
+    public = {k: v for k, v in card.items() if k not in {"payload", "evidence_ids"}}
+    # Reuse the approved results/pending/failed presentation without adding any
+    # view fields or copy. Execution, confirmation and receipts keep the real tool.
+    if card.get("tool") == "radix.changes":
+        public["tool"] = "radix.findings"
+    return public
 
 
 @router.post("/threads/{thread_id}/actions")
@@ -1470,7 +1488,7 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     method, path, params, body = adapter_request(action, actor)
     headers = {"X-Tank-Key": TANK_API_KEY, "X-Tervory-User": actor.user_id,
                "X-Tervory-Tenant": str(actor.tenant_id)}
-    if action.tool in {"radix.domain.prove", "radix.passive.scan", "radix.findings"}:
+    if action.tool in {"radix.domain.prove", "radix.passive.scan", "radix.findings", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"}:
         from main import box_region
         headers.update({"X-Tervory-Squad": "radix", "X-Tervory-Region": box_region()})
     headers["X-Tervory-Role"] = "org:admin" if actor.tenant_admin else ""
@@ -1483,6 +1501,9 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     if len(response.content) > response_limit:
         raise ValueError("Tool response is too large; outcome needs reconciliation")
     result = response.json()
+    if action.tool in {"radix.watch", "radix.unwatch", "radix.watches", "radix.changes"} and 200 <= response.status_code < 300:
+        from trigger_routes import code_receipt
+        result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="radix"))
     if action.tool == "zenas.watch.list" and 200 <= response.status_code < 300:
         from trigger_routes import code_receipt
         result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="zenas"))
