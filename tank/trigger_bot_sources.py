@@ -125,7 +125,7 @@ class Sources:
                 pages = [{'text': data['question'] if data else row['content'], 'url': row['url'],
                           'title': row['title'], 'question': data['question'] if data else None,
                           'approved_answer': data['answer'] if data else None}]
-            if not pages:
+            if not pages and row['kind'] != 'rig':
                 raise ValueError('no_eligible_pages')
             staged = []
             for page in pages[:200]:
