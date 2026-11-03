@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 PRODUCTS = ('trigger', 'base', 'tiger', 'market_lab', 'rig', 'tisan', 'radix', 'zenas', 'mcp', 'skala', 'worker')
 FOUNDER_ORDER = (('base', 3), ('trigger', 1), ('skala', 6), ('tisan', 1), ('worker', 4), ('mcp', 3), ('radix', 3), ('tisan', 4))
-ADAPTER_ORDER = (('tisan', 4), ('base', 3), ('mcp', 3), ('trigger', 11), ('worker', 3), ('base', 2), ('tiger', 4), ('base', 6), ('tiger', 3), ('market_lab', 1), ('rig', 3), ('tisan', 1), ('radix', 3), ('tisan', 1), ('radix', 3), ('zenas', 7), ('skala', 6), ('trigger', 26))
+ADAPTER_ORDER = (('tisan', 4), ('base', 3), ('mcp', 3), ('trigger', 11), ('worker', 3), ('base', 2), ('tiger', 4), ('base', 7), ('tiger', 7), ('market_lab', 7), ('tiger', 1), ('market_lab', 1), ('rig', 3), ('tisan', 1), ('radix', 3), ('tisan', 1), ('radix', 3), ('zenas', 7), ('skala', 6), ('trigger', 26))
 
 def product_modules(products=PRODUCTS):
     return [import_module("command_tools." + name) if isinstance(name, str) else name for name in products]
