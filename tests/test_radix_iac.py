@@ -89,7 +89,10 @@ def test_evals_match_fixture_files_and_have_real_pin_rule_sets():
     assert len(cases) >= 5
     for case in cases:
         for item in case['input']['files']:
-            assert (PACKAGE / 'evals/fixtures' / case['name'] / item['path']).read_text() == item['text']
+            stored = {'docker': {'Dockerfile': 'root-container.fixture'},
+                      'kubernetes': {'privileged.yaml': 'privileged-pod.fixture'}}
+            name = stored.get(case['name'], {}).get(item['path'], item['path'])
+            assert (PACKAGE / 'evals/fixtures' / case['name'] / name).read_text() == item['text']
     by_name = {case['name']: case for case in cases}
     assert 'CKV_AWS_24' in by_name['terraform']['expected']['rules']
     assert 'CKV_K8S_16' in by_name['kubernetes']['expected']['rules']
