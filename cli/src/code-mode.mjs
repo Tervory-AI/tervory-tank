@@ -13,6 +13,7 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
     const text = redactSecrets(input);
     let results = [];
     for (let round = 0; ; round++) {
+      if (io.signal?.aborted) throw new Error('Command cancelled; no action was retried.');
       if (round === 32) throw new Error('Code tool limit reached; nothing was retried.');
       // Existing token-chosen origin and the existing bounded JSON transport.
       // No request is retried, including an interrupted/charged code turn.
@@ -24,6 +25,7 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
       io.write(formatReceipt(plan.receipt ?? {}).map(sanitize).join('\n') + '\n');
       if (!plan.requests.length) break;
       for (const request of plan.requests) {
+        if (io.signal?.aborted) throw new Error('Command cancelled; no action was retried.');
         let result;
         try { result = await local.tool(request, io); }
         catch { result = { error: 'Code tool refused.' }; }
