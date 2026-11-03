@@ -49,7 +49,8 @@ def official_truth() -> dict[str, dict[str, Any]]:
 
 def select_records(rows: list[Any], truth: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     try:
-        from engines.ffl.atf_gold import licence_id
+        from engines import load_engine
+        licence_id = load_engine("ffl").module("atf_gold").licence_id
     except ModuleNotFoundError:
         licence_id = lambda raw: ""
     selected = []
