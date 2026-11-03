@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import math
+import time
 from email.headerregistry import Address
 from pathlib import Path
 
@@ -17,18 +19,33 @@ def settings():
     if not any(values.values()):
         return None
     host, sender = values['HOST'].strip(), values['FROM'].strip()
-    address = Address(addr_spec=sender)
-    port = int(values['PORT'] or '587')
+    try:
+        address = Address(addr_spec=sender)
+        port = int(values['PORT'] or '587')
+    except Exception:
+        # Address can raise HeaderParseError, IndexError or other parser errors.
+        raise ValueError('mail_not_configured') from None
     if (not host or not address.username or not address.domain or not 0 < port < 65536
             or any(c in host + sender for c in '\r\n')):
         raise ValueError('mail_not_configured')
+    smtp_available_since()
     return SmtpMailer(host, port, values['USER'].strip(), values['PASSWORD'], address.addr_spec)
+
+
+def smtp_available_since() -> float:
+    """One durable activation boundary for this Watch volume, across restarts."""
+    path = Path(os.environ.get('DATA_DIR', '/data')) / 'owner-email-availability.json'
+    with locked_state(path) as state:
+        since = state.setdefault('available_since', time.time())
+        if isinstance(since, bool) or not isinstance(since, (int, float)) or not math.isfinite(since) or since <= 0:
+            raise ValueError('mail_not_configured')
+        return since
 
 
 def transport_status() -> str:
     try:
         return 'smtp' if settings() is not None else 'fixture'
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OSError):
         return 'unavailable'
 
 
