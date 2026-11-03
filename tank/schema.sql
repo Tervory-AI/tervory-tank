@@ -2820,6 +2820,9 @@ CREATE TABLE IF NOT EXISTS tank.trigger_whatsapp_months (
  timezone text NOT NULL, count integer NOT NULL CHECK(count BETWEEN 1 AND 1000),
  PRIMARY KEY(tenant_id,phone_number_id,month)
 );
+-- Rebinding a business phone to another tenant cannot replenish this month's budget.
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_whatsapp_phone_month
+ ON tank.trigger_whatsapp_months(phone_number_id,month);
 CREATE TABLE IF NOT EXISTS tank.trigger_whatsapp_events (
  tenant_id uuid NOT NULL, event_hash text NOT NULL, conversation_id uuid NOT NULL,
  state text NOT NULL DEFAULT 'claimed' CHECK(state IN ('claimed','sending','sent','uncertain','handed_over')),
