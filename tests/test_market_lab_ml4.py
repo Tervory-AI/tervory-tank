@@ -220,15 +220,24 @@ async def test_warning_run_remembers_changed_summaries_only_and_retries_same_rec
     from contextlib import asynccontextmanager
     states, documents, writes = {}, set(), []
     class Connection:
+        active = False
         @asynccontextmanager
-        async def transaction(self): yield
+        async def transaction(self):
+            self.active = True
+            try: yield
+            finally: self.active = False
         async def execute(self, query, *args):
             if 'INSERT INTO agent_market_lab.warning_pairs' in query:
                 states[args[1]] = {'summary': json.loads(args[3]), 'document_id': args[2]}
+            elif 'UPDATE agent_market_lab.warning_pairs' in query:
+                assert 'tenant_id=$1' in query and str(args[0]) == TENANT
+                if states[args[1]]['document_id'] == args[2]:
+                    states[args[1]]['summary']['pattern_pending'] = False
         async def fetchrow(self, query, *args): return states.get(args[1])
     class Memory:
         pending = False
         async def remember(self, tenant, text, kind, source, **kwargs):
+            assert not ledger.conn.active  # Evidence committed before the Hermes call.
             writes.append((tenant, json.loads(text), kind, source, kwargs))
             return {'seen': None} if self.pending else {'id': kwargs['record_id']}
     async def stored(*args): return {}
