@@ -55,6 +55,14 @@ DO $$ BEGIN
   END IF;
  END IF;
 END $$;
+CREATE TABLE IF NOT EXISTS agent_radix.regulation_runs (
+ tenant_id uuid NOT NULL, domain text NOT NULL, event_id uuid NOT NULL,
+ scan_id uuid NOT NULL, facts jsonb NOT NULL,
+ settled boolean NOT NULL DEFAULT false,
+ next_attempt timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY (tenant_id,domain,event_id),
+ UNIQUE (tenant_id,scan_id)
+);
 CREATE UNIQUE INDEX IF NOT EXISTS passive_one_running
  ON agent_radix.passive_scans ((true)) WHERE status='running';
 """
@@ -178,7 +186,9 @@ class Store:
               ((s.watched=false AND d.expires_at>now()) OR (s.watched=true AND EXISTS (
                 SELECT 1 FROM agent_radix.passive_watches w WHERE w.tenant_id=s.tenant_id
                 AND w.domain=s.domain AND w.status='active' AND w.challenge=d.challenge)))
-              AND s.created_at>now()-interval '5 minutes'""", tenant, ident)
+              AND (s.created_at>now()-interval '5 minutes' OR EXISTS (
+                SELECT 1 FROM agent_radix.regulation_runs r WHERE r.tenant_id=s.tenant_id
+                AND r.scan_id=s.id AND NOT r.settled))""", tenant, ident)
 
     async def running(self, tenant: UUID, ident: UUID) -> bool:
         async with self.pool.acquire() as conn:
@@ -219,6 +229,8 @@ class Store:
                 await ensure_findings(conn, 'agent_radix')
                 prior = await conn.fetchval('''SELECT id FROM agent_radix.passive_scans
                   WHERE tenant_id=$1 AND domain=$2 AND status='complete' AND id<>$3
+                  AND EXISTS(SELECT 1 FROM agent_radix.regulation_runs r WHERE r.tenant_id=$1 AND r.scan_id=$3)
+                    = EXISTS(SELECT 1 FROM agent_radix.regulation_runs r WHERE r.tenant_id=$1 AND r.scan_id=passive_scans.id)
                   ORDER BY completed_at DESC,id DESC LIMIT 1''', tenant, domain, ident)
                 from scanlib.store import list_findings
                 previous = [report_finding(r) for r in await list_findings(conn, 'agent_radix', str(tenant), str(prior))] if prior else []
@@ -276,13 +288,20 @@ class Store:
     async def changes(self, tenant: UUID, domain: str) -> dict:
         domain = domain_name(domain)
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow("""SELECT id,status,completed_at,changes,previous_scan_id
+            row = await conn.fetchrow("""SELECT id,status,completed_at,changes,previous_scan_id,
+              (SELECT jsonb_build_object('event_id',r.event_id,'facts',r.facts,
+                'checks',jsonb_build_array('comply.gdpr','cookie-missing-flags'),
+                'browser_cookies_checked',false)
+               FROM agent_radix.regulation_runs r WHERE r.tenant_id=$1 AND r.scan_id=passive_scans.id) AS regulation_event
               FROM agent_radix.passive_scans WHERE tenant_id=$1 AND domain=$2
               ORDER BY created_at DESC,id DESC LIMIT 1""", tenant, domain)
         if not row:
             return {'status': 'pending'}
         result = {'scan_id': str(row['id']), 'status': 'failed' if row['status'] == 'error' else row['status'],
                   'completed_at': row['completed_at'], 'previous_scan_id': str(row['previous_scan_id']) if row['previous_scan_id'] else None}
+        if row.get('regulation_event') is not None:
+            event = row['regulation_event']
+            result['regulation_event'] = json.loads(event) if isinstance(event, str) else event
         if row['status'] == 'complete':
             delta = json.loads(row['changes']) if isinstance(row['changes'], str) else row['changes']
             # Old complete manual scans predate comparison persistence.
