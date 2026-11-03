@@ -1,7 +1,7 @@
 """B4 retirement eligibility; a clean 30-day window, measured in UTC."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from gold import PLATFORM_TENANT
@@ -32,8 +32,21 @@ async def evidence(conn: Any, skill_id: str, version: str, *, now: datetime | No
     pending = await conn.fetchval(
         "SELECT EXISTS(SELECT 1 FROM tank.skill_revalidations WHERE tenant_id=$1 AND skill_id=$2 AND version=$3 AND completed_at IS NULL)",
         PLATFORM_TENANT, skill_id, newer["version"])
-    allowed, eligible_at = clean_window(newer["approved_at"], failed_at, rollback_at,
-                                        now or datetime.now(timezone.utc))
-    return {"allowed": allowed and not pending, "code": "retirement_probation",
+    current = now or datetime.now(UTC)
+    # Preview/eval receipts cannot age a replacement into retirement eligibility.
+    live = await conn.fetchrow("""SELECT min(ts) FILTER(WHERE outcome='delivered') AS first_run,
+        max(ts) FILTER(WHERE outcome IS DISTINCT FROM 'delivered' OR feedback='rejected') AS failed_run
+        FROM tank.ledger WHERE skill=$1 AND ts >= $2 AND ts <= $3""",
+        f"{skill_id}@{newer['version']}", newer["approved_at"], current)
+    if live["first_run"] is None:
+        return {"allowed": False, "code": "live_probation_required", "newer_version": newer["version"]}
+    failures = [t for t in (failed_at, live["failed_run"]) if t is not None]
+    allowed, eligible_at = clean_window(max(newer["approved_at"], live["first_run"]),
+        max(failures) if failures else None, rollback_at, current)
+    # A success after the complete clean interval proves the replacement is still running.
+    recent = await conn.fetchval("""SELECT EXISTS(SELECT 1 FROM tank.ledger WHERE skill=$1
+        AND outcome='delivered' AND feedback IS DISTINCT FROM 'rejected' AND ts >= $2 AND ts <= $3)""",
+        f"{skill_id}@{newer['version']}", eligible_at, current)
+    return {"allowed": allowed and bool(recent) and not pending, "code": "retirement_probation",
             "newer_version": newer["version"], "eligible_at": eligible_at.isoformat(),
-            "pending_revalidation": pending}
+            "pending_revalidation": pending, "live_run_after_probation": bool(recent)}

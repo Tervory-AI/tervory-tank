@@ -23,3 +23,9 @@ Results append to skills.models_validated with their roster fingerprint. Failed 
 Validation: real PostgreSQL tests cover two approved packages, pending/failed holds, unchanged policy before proof, successful change after proof, cached proof, and a direct SQL writer blocked on an observed roster change. External sockets disabled; eval fixtures execute real pure code.
 
 Missing frame: founder roster-validation pending/failed status and evidence detail.
+
+## B4: retirement requires live probation
+
+The newer approved version needs a delivered live receipt, a clean 30-day interval measured from approval/first delivery/last failed eval/last rollback/last failed or rejected live receipt, and a delivered receipt after that interval. Preview receipts cannot count. Pending revalidations hold retirement. Retirement changes registry state only; version files and previous approval stay available to the existing confirmed rollback path.
+
+Validation: real SQL covers an old approval with no live use, 29 days of live use, delivery after 30 clean days, and a late live failure resetting probation.
