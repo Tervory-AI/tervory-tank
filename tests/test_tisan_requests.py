@@ -324,7 +324,7 @@ async def test_existing_build_card_hydrates_memory_only_from_its_tenant(client, 
         assert request.headers['X-Tank-Key'] == 'placeholder-room'
         calls.append(request)
         return httpx.Response(200, json={'tenant_id': str(OTHER if foreign else TENANT), 'id': job_id,
-            'kind': 'build', 'status': 'done', 'result': {'ok': True, 'memory_id': memory_id,
+            'kind': 'build', 'status': 'done', 'result': {'ok': True, 'build': 2, 'memory_id': memory_id,
                 'checks': [{'name': 'placeholder check', 'ok': True}], '_ledger_id': 'placeholder-forged'}})
     original = runtime._http
     async with httpx.AsyncClient(transport=httpx.MockTransport(job)) as corridor:
@@ -335,6 +335,7 @@ async def test_existing_build_card_hydrates_memory_only_from_its_tenant(client, 
         assert ('memory_id' in result) is not foreign
         if not foreign:
             assert result['memory_id'] == memory_id and result['checks'][0]['ok'] is True
+            assert result['build_id'] == 2
             assert result['status'] == 'done' and '_ledger_id' not in result
         assert (await http.get('/v1/command/threads/' + thread_id, headers={**founder, 'X-Tervory-Tenant': str(OTHER)})).status_code == 404
         assert len(calls) == 1
