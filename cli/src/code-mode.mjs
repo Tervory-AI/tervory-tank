@@ -22,6 +22,10 @@ export async function codeSession(tank, folder, model, io, formatReceipt, saniti
     const input = await io.prompt('> ');
     if (input === null || input.trim() === '/exit') return;
     if (!input.trim()) continue;
+    if (input.trim() === '/undo') {
+      try { await local.undo(io); } catch { io.write('Code tool refused.\n'); }
+      continue;
+    }
     const text = redactSecrets(input);
     const promptId = randomUUID();
     const previous = history.slice();
