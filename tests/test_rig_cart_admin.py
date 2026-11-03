@@ -43,6 +43,10 @@ async def test_cart_admin_credentials_sealed_not_forwarded_returned_or_logged(mo
         async def acquire(self):
             yield self
 
+        async def fetchval(self, sql, *args):
+            assert args == (actor.tenant_id, "placeholder-commerce")
+            return None
+
         async def execute(self, sql, *args):
             assert 'INSERT INTO tank.vault_items' in sql
             written.append(args)
