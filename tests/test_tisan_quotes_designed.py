@@ -275,3 +275,92 @@ async def test_actual_quote_lifespan_reapplies_new_schema_as_room_owner(api):
         assert {row['column_name'] for row in columns} == set(q._QUOTE_FIELDS)
     async with api[3].router.lifespan_context(api[3]):
         pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('path', ['contact.name', 'contact.company', 'item.description', 'item.notes', 'quote_message'])
+@pytest.mark.parametrize('control', ['\x00', '\x01', '\r', '\x1f', '\x7f', '\x85', '\x9f'])
+async def test_control_characters_are_422_before_database_writes(api, path, control):
+    value = 'placeholder' + control + 'text'
+    if path == 'quote_message':
+        ref = await acknowledged(api)
+        response = await api[0].post(f'/quotes/{ref}/state', headers=HEADERS,
+            json={'tenant_id': str(A), 'state': 'quoted', **quote_fields(), 'quote_message': value})
+        assert await api[2].fetchval('SELECT count(*) FROM agent_tisan.quote_requests WHERE quote_amount IS NOT NULL') == 0
+    else:
+        data = designed()
+        section, field = path.split('.')
+        target = data['contact'] if section == 'contact' else data['items'][0]
+        target[field] = value
+        response = await create(api, data)
+        assert await api[2].fetchval('SELECT count(*) FROM agent_tisan.quote_requests') == 0
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('control', ['\n', '\t'])
+async def test_newline_and_tab_remain_valid_text(api, control):
+    data = designed()
+    for field in ('name', 'company'):
+        data['contact'][field] = 'placeholder' + control + 'text'
+    for field in ('description', 'notes'):
+        data['items'][0][field] = 'placeholder' + control + 'text'
+    response = await create(api, data)
+    assert response.status_code == 201, response.text
+    ref = response.json()['id']
+    assert (await api[0].post(f'/quotes/{ref}/state', headers=HEADERS,
+        json={'tenant_id': str(A), 'state': 'acknowledged'})).status_code == 200
+    assert (await api[0].post(f'/quotes/{ref}/state', headers=HEADERS,
+        json={'tenant_id': str(A), 'state': 'quoted', **quote_fields(),
+              'quote_message': 'placeholder' + control + 'text'})).status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('amount,valid', [('9999999999999999.99', True), ('10000000000000000', False), ('10000000000000000.00', False)])
+async def test_decimal_precision_bound_at_api_and_database(api, amount, valid):
+    ref = await acknowledged(api)
+    quote = {**quote_fields(), 'quote_amount': amount}
+    response = await api[0].post(f'/quotes/{ref}/state', headers=HEADERS,
+        json={'tenant_id': str(A), 'state': 'quoted', **quote})
+    assert response.status_code == (200 if valid else 409), response.text
+    if valid:
+        assert response.json()['quote_amount'] == amount
+    else:
+        with pytest.raises(asyncpg.CheckViolationError):
+            await api[2].execute('''UPDATE agent_tisan.quote_requests SET state='quoted',
+                quote_amount=$3,quote_currency=$4,valid_until=$5,quote_message=$6
+                WHERE tenant_id=$1 AND id=$2''', A, UUID(ref), Decimal(amount), 'USD',
+                datetime.now(timezone.utc) + timedelta(days=1), 'placeholder quote')
+        assert await api[2].fetchval('SELECT state FROM agent_tisan.quote_requests WHERE tenant_id=$1 AND id=$2', A, UUID(ref)) == 'acknowledged'
+
+
+@pytest.mark.asyncio
+async def test_unicode_uppercase_expansion_is_not_a_currency_code(api):
+    ref = await acknowledged(api)
+    assert (await api[0].post(f'/quotes/{ref}/state', headers=HEADERS,
+        json={'tenant_id': str(A), 'state': 'quoted', **quote_fields(), 'quote_currency': 'ßd'})).status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_database_check_refusal_is_409_and_rolls_back_quote_and_event(api):
+    ref = await acknowledged(api)
+    await api[2].execute("ALTER TABLE agent_tisan.quote_requests ADD CONSTRAINT placeholder_no_quote CHECK (state <> 'quoted')")
+    response = await api[0].post(f'/quotes/{ref}/state', headers=HEADERS,
+        json={'tenant_id': str(A), 'state': 'quoted', **quote_fields()})
+    assert response.status_code == 409
+    row = await api[2].fetchrow('SELECT state,quote_amount FROM agent_tisan.quote_requests WHERE tenant_id=$1 AND id=$2', A, UUID(ref))
+    assert row['state'] == 'acknowledged' and row['quote_amount'] is None
+    assert await api[2].fetchval('SELECT count(*) FROM agent_tisan.quote_events') == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal,target', [(final, target) for final in ('accepted', 'declined') for target in q.MOVES if target != final])
+async def test_database_trigger_refuses_all_state_changes_after_a_final_decision(api, terminal, target):
+    ref = await acknowledged(api)
+    for state in ('quoted', terminal):
+        response = await api[0].post(f'/quotes/{ref}/state', headers=HEADERS,
+            json={'tenant_id': str(A), 'state': state, **(quote_fields() if state == 'quoted' else {})})
+        assert response.status_code == 200, response.text
+    with pytest.raises(asyncpg.CheckViolationError):
+        await api[2].execute('UPDATE agent_tisan.quote_requests SET state=$3 WHERE tenant_id=$1 AND id=$2', A, UUID(ref), target)
+    assert await api[2].fetchval('SELECT state FROM agent_tisan.quote_requests WHERE tenant_id=$1 AND id=$2', A, UUID(ref)) == terminal
