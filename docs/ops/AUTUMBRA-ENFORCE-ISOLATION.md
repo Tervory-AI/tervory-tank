@@ -13,11 +13,18 @@ bash ops/seal-check.sh && bash ops/autumbra-enforce-isolation-check.sh <enforce-
 
 Builders do not run this on a live host. The probe reads DNS/connectivity and
 holds no Tank key; it changes no controls or client data. A missing mandatory
-room or an extra network is a failure, not a skipped room. `EXPECTED_SEALED` now
-includes `agent-ghost` and `autumbra-enforce`, alongside the existing four rooms.
+room or an extra network is a failure, not a skipped room. `agent-ghost` is
+required alongside the existing four rooms. `autumbra-enforce` is required only
+when an app containing an `enforce` service is present on this host; its absence
+on other hosts does not block their deployments. Every such app is audited,
+regardless of its Coolify resource name.
 Watch's seal means exactly its existing `tervory-gw-ghost` corridor (including
-its browser), not an internet-dark process. Enforce must have exactly one
-internal network and no other attachment. No outbound network is added here.
+its browser), not an internet-dark process. Before any per-project early return,
+Enforce must have exactly one internal network. The labelled-network check then
+requires that network to be this project's `enforce_internal`. Its app must also
+contain `egress-proxy`, `health-observer` and `health-egress-proxy`, with exactly
+their existing declared project networks and internal flags. No extra attachment
+is permitted and no outbound network is added here.
 
 ## Automated proof: disposable GitHub CI only
 
