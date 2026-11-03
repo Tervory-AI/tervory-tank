@@ -57,12 +57,12 @@ tests/test_trigger_w1.py::test_formats_and_exact_counts_preserve_truncation
     import pkg_resources
 
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
-  /workspace/codex-trigger-w1/tank/main.py:752: DeprecationWarning: 
+  /workspace/codex-trigger-w1/tank/main.py:752: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
@@ -70,57 +70,57 @@ tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_le
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
-  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
-  /workspace/codex-trigger-w1/tank/main.py:806: DeprecationWarning: 
+  /workspace/codex-trigger-w1/tank/main.py:806: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
-  /workspace/codex-trigger-w1/tank/agent_skills.py:531: DeprecationWarning: 
+  /workspace/codex-trigger-w1/tank/agent_skills.py:531: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
-  /workspace/codex-trigger-w1/tank/skala_intake.py:71: DeprecationWarning: 
+  /workspace/codex-trigger-w1/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
-  /workspace/codex-trigger-w1/tank/skala_intake.py:77: DeprecationWarning: 
+  /workspace/codex-trigger-w1/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
-  /workspace/codex-trigger-w1/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /workspace/codex-trigger-w1/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
