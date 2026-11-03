@@ -5,6 +5,7 @@ import re
 from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from trigger_bot_grounding import exact_origin
 
