@@ -204,8 +204,10 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
             eligible = [u for u in parser.links if u != target]
             ordered = [u for u in eligible if u in previous] + [u for u in eligible if u not in previous]
             linked = ordered[:30]
+            visited = []
             for url in linked:
                 budget.require(5)
+                visited.append(url)
                 data, mime = await fetch(url, missing_ok=True)
                 if data is None:
                     continue
@@ -217,7 +219,11 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
                 if len(pages) >= 11:
                     break
             findings.extend(page_changes(hashes, previous))
-            return {'pages': len(hashes), 'discovery_truncated': len(eligible) > len(linked)}
+            skipped = [{'url':u,'status':'skipped','reason':'page_limit' if len(pages)>=11 else 'link_limit'}
+                       for u in eligible if u not in visited]
+            if skipped:
+                findings.append(measured('sha256','skipped',target,{'links':skipped},item='page_scope'))
+            return {'pages': len(hashes), 'discovery_truncated': bool(skipped), 'skipped':skipped}
 
         if not notice_only:
             await step('pages', pages_work)
@@ -317,7 +323,10 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
                                 findings.append(measured('clamav', signature, url,
                                     {'url':url,'signature':signature,'database_date':stamp[2]}, text=signature))
                     path.unlink(missing_ok=True)
-                return {'scanned':scanned,'database_date':stamp[2], 'discovery_truncated':len(urls)>20}
+                skipped = [{'url':u,'status':'skipped','reason':'file_limit'} for u in urls[20:]]
+                if skipped:
+                    findings.append(measured('clamav','skipped',target,{'links':skipped},item='file_scope'))
+                return {'scanned':scanned,'database_date':stamp[2], 'discovery_truncated':bool(skipped), 'skipped':skipped}
             await step('malware', malware_work)
 
         async def browser_work():
