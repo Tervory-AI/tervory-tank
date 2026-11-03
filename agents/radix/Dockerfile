@@ -87,6 +87,9 @@ COPY radix/scanlib/osv/ /opt/osv/
 RUN chown -R agent:agent /app /opt/osv
 # Root-owned and read-only for the agent; copied after the chown so it is one layer.
 COPY --from=osv /out/osv.sqlite /opt/osv/osv.sqlite
+# testssl requires hexdump even with DNS disabled. No runtime package install.
+RUN apt-get update && apt-get install -y --no-install-recommends bsdextrautils \
+    && rm -rf /var/lib/apt/lists/*
 USER agent
 ENV AGENT_NAME=radix \
     DATA_DIR=/data \
