@@ -305,11 +305,17 @@ def send_owner_update(
     *,
     to: str,
     transport: Any | None = None,
+    tenant_id: str = "",
+    message_key: str = "",
 ) -> dict[str, Any]:
     """Call the sender. Weekly/quiet-week paths use the same door."""
     if not to:
         raise ValueError("recipient must come from the client's settings")
-    sender = transport or DEFAULT_FIXTURE_TRANSPORT
+    if transport is None and tenant_id:
+        from .smtp_email import configured_transport
+        sender = configured_transport(tenant_id, message_key)
+    else:
+        sender = transport or DEFAULT_FIXTURE_TRANSPORT
     result = sender.send(to=to, subject=email["subject"], body=email["body"])
     return {
         "sent": bool(result.get("sent")),
