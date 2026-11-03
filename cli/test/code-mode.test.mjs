@@ -755,6 +755,7 @@ test('AWS assignments and complete or truncated PEM blocks are redacted', async 
   assert.equal(redactSecrets(`safe\n${placeholder}\nafter`), 'safe\n[redacted]\nafter');
   assert.equal(redactSecrets(`${begin}\nplaceholder-private-body`), '[redacted]');
   assert.equal(redactSecrets('aws_secret_access_key=placeholder-long-value'), '[redacted]');
+  assert.equal(redactSecrets(JSON.stringify({ aws_secret_access_key: 'placeholder-long-value' })), '[redacted]');
   const f = await folder();
   const source = `process.stdout.write(${JSON.stringify(begin + '\nplaceholder-private-body\n' + end + '\n')})`;
   const result = await processOutput(process.execPath, ['-e', source], { cwd: f.root });
