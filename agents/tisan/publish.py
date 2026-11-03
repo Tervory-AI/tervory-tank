@@ -6,7 +6,6 @@ import base64
 import hmac
 import json
 import os
-import re
 import tarfile
 import uuid
 from pathlib import Path, PurePosixPath
