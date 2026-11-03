@@ -3,7 +3,6 @@ import hashlib
 import importlib.util
 import json
 import sys
-from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
