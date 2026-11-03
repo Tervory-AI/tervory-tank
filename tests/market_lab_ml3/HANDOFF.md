@@ -47,7 +47,7 @@ alert delivery is explicitly confirmed. Each finished file was pushed serially.
   feed state with code receipts at zero cost. Exact command planning is code.
   Feed reads return registry setting names, never values. Keyed feeds stay off
   until the founder fills their existing values.
-- Feed changes were copied into new `market.series_fetch/1.3.1` with preserved
+- Feed changes were copied into new `market.series_fetch/1.4.0` with preserved
   baseline cases and new licence/transport checks. Older versions were untouched;
   the new snapshot is neither approved nor selected by policy by this branch.
 
@@ -132,38 +132,38 @@ Against main `ecef216bc16d17c6337242971d117b3fbd8db854`; numbers are changed-hun
 | `tank/market_lab_ml3.py` | 1 |
 | `tank/market_lab_routes.py` | 25 |
 | `tank/schema.sql` | 2444 |
-| `tank/skills/market.series_fetch/1.3.1/BUNDLE.md` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/CHANGELOG.md` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/evals/cases.jsonl` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/evals/feed_cases.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/__init__.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/adapters.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/batch_guard.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/catalog.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/db.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/engines/__init__.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/engines/ffl/__init__.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/engines/ffl/lists.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/engines/ffl/sources.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/fetch.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/geo.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/keyless.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/keys.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/licence.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/licences.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/live.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/models.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/published.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/reader.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/runner.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/schema.sql` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/feeds/store.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/pure.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/run.py` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/skill.yaml` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/tests/fixtures/feeds/geo/zip_county.csv` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/tests/fixtures/feeds/listing/2024-01.tsv` | 1 |
-| `tank/skills/market.series_fetch/1.3.1/tests/fixtures/feeds/listing/2024-02.tsv` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/BUNDLE.md` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/CHANGELOG.md` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/evals/cases.jsonl` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/evals/feed_cases.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/__init__.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/adapters.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/batch_guard.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/catalog.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/db.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/engines/__init__.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/engines/ffl/__init__.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/engines/ffl/lists.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/engines/ffl/sources.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/fetch.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/geo.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/keyless.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/keys.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/licence.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/licences.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/live.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/models.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/published.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/reader.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/runner.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/schema.sql` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/feeds/store.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/pure.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/run.py` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/skill.yaml` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/tests/fixtures/feeds/geo/zip_county.csv` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/tests/fixtures/feeds/listing/2024-01.tsv` | 1 |
+| `tank/skills/market.series_fetch/1.4.0/tests/fixtures/feeds/listing/2024-02.tsv` | 1 |
 | `tests/market_lab_ml3/regressions.txt` | 1 |
 | `tests/market_lab_ml3/sources.json` | 1 |
 | `tests/test_market_lab_ml3.py` | 1 |

@@ -1,6 +1,6 @@
 # ML3 dependency snapshot
 
-Version 1.3.1 copies 1.3.0 and refreshes its existing feed dependency closure from the room. Older versions remain immutable. The entry point, pure series logic, fixtures and every imported eval case remain unchanged. The new licence constants and bounded request method do not alter series_fetch output.
+Version 1.4.0 copies 1.3.0 and refreshes its existing feed dependency closure from the room. Older versions remain immutable. The entry point, pure series logic, fixtures and every imported eval case remain unchanged. The new licence constants and bounded request method do not alter series_fetch output.
 
 # Candidate runtime bundle
 

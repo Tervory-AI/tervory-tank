@@ -1,6 +1,6 @@
 # market.series_fetch
 
-## 1.3.1
+## 1.4.0
 - Refresh the room feed dependency snapshot for ML3: bounded read-only POST support and the reviewed intel licence gate. No approved package changes.
 - Reuse 1.3.0 entry point, pure logic, fixtures and all imported eval cases unchanged. Add offline cases for the shared transport and commercial-use guard. No model, provider, key or policy change.
 
