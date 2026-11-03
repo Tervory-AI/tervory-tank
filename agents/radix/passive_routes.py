@@ -48,6 +48,12 @@ class Scan(BaseModel):
         return artifact_id(value)
 
 
+class Active(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    tenant_id: UUID
+    url: str
+
+
 class Watch(Domain):
     interval: Literal['daily', 'weekly']
     run_now: bool = True
@@ -130,8 +136,25 @@ def attach(app):
     @router.get('/scans/{scan_id}/findings')
     async def findings(scan_id: UUID, tenant_id: UUID, request: Request):
         identity(request, tenant_id)
-        return {'findings': await Store(app.state.pool).findings(tenant_id, scan_id)}
+        store = Store(app.state.pool)
+        return {'findings': await store.findings(tenant_id, scan_id),
+                **await store.active_state(tenant_id, scan_id)}
 
+
+    @router.post('/active')
+    async def active_scan(body: Active, request: Request):
+        identity(request, body.tenant_id)
+        if request.headers.get('x-tervory-active-authorized') != 'true':
+            raise HTTPException(403, 'scan not authorized')
+        from active_routes import execute as execute_active
+        try:
+            return await execute_active(Store(app.state.pool), body.tenant_id, body.url)
+        except (PermissionError, ValueError):
+            raise HTTPException(403, 'scan not authorized') from None
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(503, 'scan incomplete') from None
 
     @router.post('/watch')
     async def watch(body: Watch, request: Request):

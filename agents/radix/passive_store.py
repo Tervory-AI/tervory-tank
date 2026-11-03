@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS agent_radix.passive_scans (
  PRIMARY KEY (tenant_id,id),
  FOREIGN KEY (tenant_id,domain) REFERENCES agent_radix.passive_domains(tenant_id,domain)
 );
+ALTER TABLE agent_radix.passive_scans ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT false;
 ALTER TABLE agent_radix.passive_scans ADD COLUMN IF NOT EXISTS checks jsonb;
 ALTER TABLE agent_radix.passive_scans ADD COLUMN IF NOT EXISTS watched boolean NOT NULL DEFAULT false;
 ALTER TABLE agent_radix.passive_scans ADD COLUMN IF NOT EXISTS changes jsonb;
@@ -172,28 +173,31 @@ class Store:
         return {'tenant_id': str(tenant), 'domain': domain, 'name': '_tervory-verify.' + domain,
                 'value': row['challenge'], 'expires_at': row['expires_at'].isoformat()}
 
-    async def create(self, tenant: UUID, target: str, artifact: str, *, watched: bool = False) -> UUID:
+    async def create(self, tenant: UUID, target: str, artifact: str, *, watched: bool = False, active: bool = False) -> UUID:
         target, domain = target_url(target)
         artifact = artifact_id(artifact)
+        if active:
+            from active_policy import active_target
+            active_target(target)
         ident = uuid4()
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow("""INSERT INTO agent_radix.passive_scans(tenant_id,id,domain,target,artifact,watched)
-              SELECT d.tenant_id,$2,d.domain,$3,$4,$6 FROM agent_radix.passive_domains d
+            row = await conn.fetchrow("""INSERT INTO agent_radix.passive_scans(tenant_id,id,domain,target,artifact,watched,active)
+              SELECT d.tenant_id,$2,d.domain,$3,$4,$6,$7 FROM agent_radix.passive_domains d
               WHERE d.tenant_id=$1 AND d.domain=$5 AND
-              (($6=false AND d.expires_at>now()) OR ($6=true AND EXISTS (
+              (($6=false AND d.expires_at>now()) OR (($6=true OR $7=true) AND EXISTS (
                 SELECT 1 FROM agent_radix.passive_watches w WHERE w.tenant_id=d.tenant_id
                 AND w.domain=d.domain AND w.status='active' AND w.challenge=d.challenge))) RETURNING id""",
-              tenant, ident, target, artifact, domain, watched)
+              tenant, ident, target, artifact, domain, watched, active)
         if row is None:
             raise PermissionError('domain proof required')
         return ident
 
     async def pending(self, tenant: UUID, ident: UUID):
         async with self.pool.acquire() as conn:
-            return await conn.fetchrow("""SELECT s.domain,d.challenge FROM agent_radix.passive_scans s
+            return await conn.fetchrow("""SELECT s.domain,d.challenge,s.active FROM agent_radix.passive_scans s
               JOIN agent_radix.passive_domains d ON d.tenant_id=s.tenant_id AND d.domain=s.domain
               WHERE s.tenant_id=$1 AND s.id=$2 AND s.status='pending' AND
-              ((s.watched=false AND d.expires_at>now()) OR (s.watched=true AND EXISTS (
+              ((s.watched=false AND d.expires_at>now()) OR ((s.watched=true OR s.active=true) AND EXISTS (
                 SELECT 1 FROM agent_radix.passive_watches w WHERE w.tenant_id=s.tenant_id
                 AND w.domain=s.domain AND w.status='active' AND w.challenge=d.challenge)))
               AND (s.created_at>now()-interval '5 minutes' OR EXISTS (
@@ -203,7 +207,7 @@ class Store:
     async def running(self, tenant: UUID, ident: UUID) -> bool:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow("""UPDATE agent_radix.passive_scans
-              SET status='running',lease_until=now()+interval '420 seconds'
+              SET status='running',lease_until=now()+CASE WHEN active THEN interval '1800 seconds' ELSE interval '420 seconds' END
               WHERE tenant_id=$1 AND id=$2 AND status='pending' RETURNING id""", tenant, ident)
         return row is not None
 
@@ -239,6 +243,7 @@ class Store:
                 await ensure_findings(conn, 'agent_radix')
                 prior = await conn.fetchval('''SELECT id FROM agent_radix.passive_scans
                   WHERE tenant_id=$1 AND domain=$2 AND status='complete' AND id<>$3
+                  AND active=(SELECT active FROM agent_radix.passive_scans WHERE tenant_id=$1 AND id=$3)
                   AND NOT EXISTS(SELECT 1 FROM jsonb_each(coalesce(checks,'{}'::jsonb)) AS check_row
                     WHERE check_row.value->>'status' IN ('partial','skipped'))
                   AND EXISTS(SELECT 1 FROM agent_radix.regulation_runs r WHERE r.tenant_id=$1 AND r.scan_id=$3)
@@ -248,6 +253,8 @@ class Store:
                 previous = [report_finding(r) for r in await list_findings(conn, 'agent_radix', str(tenant), str(prior))] if prior else []
                 if measurements is not None:
                     covered = {'zap','nuclei'} if not any(f.get('tool') == 'http' for f in findings) else set()
+                    if measurements.get('checks', {}).get('active', {}).get('status') in {'partial','skipped'}:
+                        covered = set()
                     namespaces = {'pages':{'sha256'},'certificate':{'scan.tls'},'tls':{'testssl.sh'},
                         'malware':{'clamav'},'browser':{'axe-core','chromium'},'notices':{'comply.gdpr'}}
                     for check, status in measurements.get('checks', {}).items():
@@ -257,9 +264,10 @@ class Store:
                 changes = compare_findings([report_finding(f) for f in findings], previous)
                 await insert_findings(conn, 'agent_radix', str(tenant), str(ident), findings)
                 row = await conn.fetchrow("""UPDATE agent_radix.passive_scans
-                  SET status='complete',high=$3,critical=$4,completed_at=now(),changes=$5::jsonb,previous_scan_id=$6,checks=$7::jsonb
+                  SET status=CASE WHEN $8 THEN 'error' ELSE 'complete' END,high=$3,critical=$4,completed_at=now(),changes=$5::jsonb,previous_scan_id=$6,checks=$7::jsonb
                   WHERE tenant_id=$1 AND id=$2 AND status='running'
-                  AND lease_until>now() RETURNING id""", tenant, ident, high, critical, json.dumps(changes, default=str), prior, json.dumps((measurements or {}).get('checks', {})))
+                  AND lease_until>now() RETURNING id""", tenant, ident, high, critical, json.dumps(changes, default=str), prior, json.dumps((measurements or {}).get('checks', {})),
+                  (measurements or {}).get('checks', {}).get('active', {}).get('status') in {'partial','skipped'})
                 if row is None:
                     raise RuntimeError('scan lease expired')
                 for url, digest in ((measurements or {}).get('page_hashes') or {}).items():
@@ -315,7 +323,7 @@ class Store:
     async def changes(self, tenant: UUID, domain: str) -> dict:
         domain = domain_name(domain)
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow("""SELECT id,status,completed_at,changes,previous_scan_id,checks,
+            row = await conn.fetchrow("""SELECT id,status,completed_at,changes,previous_scan_id,checks,active,
               (SELECT jsonb_build_object('event_id',r.event_id,'facts',r.facts,
                 'checks',jsonb_build_array('comply.gdpr','cookie-missing-flags'),
                 'browser_cookies_checked',coalesce(checks->'browser'->>'status'='complete',false))
@@ -331,7 +339,9 @@ class Store:
         if row.get('regulation_event') is not None:
             event = row['regulation_event']
             result['regulation_event'] = json.loads(event) if isinstance(event, str) else event
-        if row['status'] == 'complete':
+        if row.get('active'):
+            result['active'] = True
+        if row['status'] == 'complete' or row.get('active') and row['status'] == 'error':
             delta = json.loads(row['changes']) if isinstance(row['changes'], str) else row['changes']
             # Old complete manual scans predate comparison persistence.
             result.update(delta or {'new': [], 'fixed': [], 'unchanged': []})
@@ -352,9 +362,18 @@ class Store:
         artifact_id(artifact)
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow("""SELECT id,status,high,critical,completed_at
-              FROM agent_radix.passive_scans WHERE tenant_id=$1 AND target=$2 AND artifact=$3
+              FROM agent_radix.passive_scans WHERE tenant_id=$1 AND target=$2 AND artifact=$3 AND NOT active
               ORDER BY created_at DESC,id DESC LIMIT 1""", tenant, target, artifact)
         return gate_result(row, tenant, target, artifact)
+
+    async def active_state(self, tenant: UUID, ident: UUID) -> dict:
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow("""SELECT status,checks FROM agent_radix.passive_scans
+              WHERE tenant_id=$1 AND id=$2 AND active""", tenant, ident)
+        if not row:
+            return {}
+        return {'active': True, 'status': 'failed' if row['status']=='error' else row['status'],
+                'checks': json.loads(row['checks']) if isinstance(row['checks'],str) else row['checks']}
 
     async def findings(self, tenant: UUID, ident: UUID) -> list:
         from scanlib.store import list_findings

@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class Body(BaseModel):
     model_config = ConfigDict(extra='forbid')
     tenant_id: UUID
+    url: str | None = Field(default=None, max_length=300)
     target: str | None = Field(default=None, max_length=300)
     artifact: str | None = Field(default=None, max_length=80)
     domain: str | None = Field(default=None, max_length=253)
@@ -43,6 +44,15 @@ def build_router(tank):
         if request.headers.get('x-tervory-squad') != 'radix' or not request.headers.get('x-tervory-user'):
             raise HTTPException(403, 'Radix access required')
         founders = {value.strip() for value in os.environ.get('TERVORY_ADMIN_USER_IDS', '').split(',') if value.strip()}
+        if operation == 'active':
+            user = request.headers['x-tervory-user']
+            if user not in founders:
+                raise HTTPException(403, 'Radix access required')
+            from trigger_commands import CONFIRMED
+            bound = CONFIRMED.get()
+            if not bound or bound[:2] != (tenant, user) or bound[3] != 'radix.active.scan':
+                raise HTTPException(409, 'Confirmed action required')
+            return
         if operation in {'watch','unwatch','watches','changes'} and request.headers['x-tervory-user'] in founders:
             return
         async with tank.pool().acquire() as conn:
@@ -51,13 +61,18 @@ def build_router(tank):
 
     async def forward(request, tenant, operation, *, body=None, params=None, method='POST'):
         await authorize(request, tenant, operation.split('/')[0])
+        if operation == 'active':
+            from trigger_commands import CONFIRMED
+            if CONFIRMED.get()[4] != {'url': body['url']}:
+                raise HTTPException(409, 'Confirmed action required')
         key = os.environ.get('TANK_KEY_RADIX', '')
         if not key or tank._http is None:
             raise HTTPException(503, 'Radix unavailable')
         try:
             response = await tank._http.request(method, 'http://agent-radix:8000/passive/' + operation,
-                json=body, params=params, timeout=390 if operation == 'scans' else 15,
-                headers={'X-Tank-Key': key, 'X-Tervory-Tenant': str(tenant)}, follow_redirects=False)
+                json=body, params=params, timeout=1230 if operation == 'active' else 390 if operation == 'scans' else 15,
+                headers={'X-Tank-Key': key, 'X-Tervory-Tenant': str(tenant),
+                    **({'X-Tervory-Active-Authorized': 'true'} if operation == 'active' else {})}, follow_redirects=False)
             if response.status_code not in {200,201}:
                 detail = response.json().get('detail')
                 if response.status_code == 403 and isinstance(detail, str) and detail in {
@@ -80,10 +95,10 @@ def build_router(tank):
 
     @router.post('/{operation}')
     async def call(operation: str, body: Body, request: Request):
-        if operation not in {'domains','scans','gate','watch','unwatch'}:
+        if operation not in {'domains','scans','gate','watch','unwatch','active'}:
             raise HTTPException(404)
         payload = body.model_dump(mode='json', exclude_none=True)
-        required = ({'tenant_id','domain','interval'} if operation == 'watch' else
+        required = ({'tenant_id','url'} if operation == 'active' else {'tenant_id','domain','interval'} if operation == 'watch' else
                     {'tenant_id','domain'} if operation in {'domains','unwatch'} else
                     {'tenant_id','target','artifact'})
         if not required <= set(payload) or set(payload) - required - ({'run_now'} if operation == 'watch' else set()):

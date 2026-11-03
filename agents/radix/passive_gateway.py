@@ -61,7 +61,7 @@ class Lease:
             self.proxy_server = None
 
     @tenant_path("tenant")
-    async def start(self, tenant: UUID, ident: UUID):
+    async def start(self, tenant: UUID, ident: UUID, *, active=False):
         async with self.lock:
             if self.run is not None and self.now() < self.until:
                 raise HTTPException(409, 'scan busy')
@@ -69,6 +69,14 @@ class Lease:
             row = await self.store.pending(tenant, ident)
             if row is None:
                 raise HTTPException(403, 'domain proof required')
+            if bool(row.get('active', False)) != active:
+                raise HTTPException(403, 'scan not authorized')
+            if active:
+                from active_policy import active_target
+                try:
+                    active_target('https://' + row['domain'] + '/')
+                except (PermissionError, ValueError):
+                    raise HTTPException(403, 'scan not authorized') from None
             reason = (await proof_status(row['domain'], row['challenge']) if self.check is None
                       else None if await self.check(row['domain'], row['challenge']) else 'txt_missing')
             if reason == 'dns_unavailable':
@@ -84,11 +92,13 @@ class Lease:
                 raise HTTPException(409, 'scan busy') from None
             if not started:
                 raise HTTPException(409, 'scan unavailable')
-            self.run, self.until = (tenant, ident), self.now() + 420
+            self.run, self.until = (tenant, ident), self.now() + (1800 if active else 420)
             domain = row['domain']
             # Capture this lease's deadline, so a later tenant cannot revive an old tunnel.
             until = self.until
-            proxy = Proxy(verified_host=domain, allow_storage=False,
+            from active_policy import BOUNDS as ACTIVE_BOUNDS
+            proxy = Proxy(**(ACTIVE_BOUNDS if active else {}), verified_host=domain, allow_storage=False,
+                require_sni=active,
                 resolve=lambda host: system_resolve(host, verified_host=domain),
                 active=lambda: self.run == (tenant, ident) and self.now() < until and not env_revoked())
             try:
@@ -167,6 +177,11 @@ app = FastAPI(lifespan=lifespan)
 @app.post('/lease')
 async def lease(body: Run):
     return await app.state.lease.start(body.tenant_id, body.scan_id)
+
+
+@app.post('/active/lease')
+async def active_lease(body: Run):
+    return await app.state.lease.start(body.tenant_id, body.scan_id, active=True)
 
 
 @app.post('/release')

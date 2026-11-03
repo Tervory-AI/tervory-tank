@@ -76,6 +76,9 @@ DO $$ BEGIN
  END IF;
 END $$;
 
+-- I2: mode is persisted beside runs and shares their existing tenant policies.
+ALTER TABLE IF EXISTS agent_radix.passive_scans ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT false;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE TABLE IF NOT EXISTS agent_radix.memory_records (
     id uuid PRIMARY KEY,

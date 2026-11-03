@@ -44,7 +44,7 @@ TOOLS = {
     "market_lab": ["market_lab.research", "market_lab.warnings", "market_lab.predictions", "market_lab.calibration", "market_lab.feeds", "market_lab.alerts.email", "market_lab.alerts.webhook", "market_lab.alerts.off"],
     "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment"],
     "tisan": ["tisan.scaffold"],
-    "radix": ["radix.scan", "radix.repo.scan", "radix.repo.findings", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"],
+    "radix": ["radix.active.scan", "radix.scan", "radix.repo.scan", "radix.repo.findings", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"],
     "zenas": ["zenas.ask", "zenas.matters", "zenas.draft", "zenas.review", "zenas.playbook.add", "zenas.playbooks", "zenas.watch.add", "zenas.watch.list", "zenas.watch.enable", "zenas.watch.disable"],
 }
 TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
@@ -122,8 +122,8 @@ def allowed_tools(actor: Actor) -> list[str]:
     client_tools = TISAN_CLIENT_TOOLS if actor.tenant_admin and not actor.founder else []
     plugin_tools = (["plugins.list"] + (["plugins.install", "plugins.remove"] if actor.tenant_admin else [])) if not actor.founder and (actor.squads & SQUADS or actor.tenant_admin) else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]
-                   if (tool != "rig.quote.confirm_payment" and not tool.startswith("market_lab.alerts."))
-                   or actor.tenant_admin or actor.founder]
+                   if (tool != "radix.active.scan" or actor.founder) and ((tool != "rig.quote.confirm_payment" and not tool.startswith("market_lab.alerts."))
+                   or actor.tenant_admin or actor.founder)]
                   + founder_tools + voice_tools + client_tools + plugin_tools + list(actor.mcp_tools))
 
 
@@ -942,6 +942,8 @@ def action_timeout(tool: str | None) -> int:
     if tool == "base.list.to_crm":
         from base_list_crm import CRM_CARD_SECONDS
         return CRM_CARD_SECONDS  # 60s discovery + 20 waves * 45s + 60s margin.
+    if tool == "radix.active.scan":
+        return 1260
     return 390 if tool == "radix.passive.scan" else ACTION_TIMEOUT
 
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
@@ -1093,6 +1095,10 @@ class RadixDomainArgs(Body):
 class RadixWatchArgs(RadixDomainArgs):
     interval: Literal["daily", "weekly"]
     run_now: bool = True
+
+
+class RadixActiveArgs(Body):
+    url: str = Field(min_length=1, max_length=300)
 
 
 class RadixPassiveArgs(Body):
@@ -1372,6 +1378,7 @@ ADAPTERS = {
     "rig.ask": Adapter("POST", "/v1/rig/ask", RigAskArgs, "Ask about a product", True, "paid_run"),
     "rig.quote.confirm_payment": Adapter("POST", "/v1/access/rig/admin/confirm-store-payment", RigConfirmPaymentArgs, "rig.quote.confirm_payment"),
     "tisan.scaffold": Adapter("POST", "/v1/skala/tisan.scaffold/run", ScaffoldArgs, "Create a site scaffold", False, "other", "tisan.scaffold"),
+    "radix.active.scan": Adapter("POST", "/v1/radix/passive/active", RadixActiveArgs, "radix.passive.scan"),
     "radix.watch": Adapter("POST", "/v1/radix/passive/watch", RadixWatchArgs, "radix.watch"),
     "radix.unwatch": Adapter("POST", "/v1/radix/passive/unwatch", RadixDomainArgs, "radix.unwatch"),
     "radix.watches": Adapter("GET", "/v1/radix/passive/watches", EmptyArgs, "radix.watches"),
@@ -1503,6 +1510,14 @@ def public_card(card: dict) -> dict:
                         rule += " · " + item
                     rows.append({**finding, "rule": state + " · " + rule})
             public["result"] = {**result, "findings": rows}
+    if card.get("tool") == "radix.active.scan":
+        public["tool"] = "radix.findings"
+    if public.get("tool") == "radix.findings" and isinstance(public.get("result"), dict):
+        result = public["result"]
+        if isinstance(result.get("findings"), list):
+            public["result"] = {**result, "findings": [
+                {**row, "rule": "active · " + str(row.get("rule") or "")} if isinstance(row, dict) and row.get("active") else row
+                for row in result["findings"]]}
     return public
 
 
@@ -1636,9 +1651,12 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
         from trigger_commands import confirmation
         confirmation(actor, action.tool, action.arguments)
     method, path, params, body = adapter_request(action, actor)
+    if action.tool == "radix.active.scan":
+        from trigger_commands import confirmation
+        confirmation(actor, action.tool, action.arguments)
     headers = {"X-Tank-Key": TANK_API_KEY, "X-Tervory-User": actor.user_id,
                "X-Tervory-Tenant": str(actor.tenant_id)}
-    if action.tool in {"radix.domain.prove", "radix.passive.scan", "radix.findings", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"}:
+    if action.tool in {"radix.active.scan", "radix.domain.prove", "radix.passive.scan", "radix.findings", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"}:
         from main import box_region
         headers.update({"X-Tervory-Squad": "radix", "X-Tervory-Region": box_region()})
     headers["X-Tervory-Role"] = "org:admin" if actor.tenant_admin else ""
@@ -1651,7 +1669,7 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     if len(response.content) > response_limit:
         raise ValueError("Tool response is too large; outcome needs reconciliation")
     result = response.json()
-    if action.tool in {"radix.watch", "radix.unwatch", "radix.watches", "radix.changes"} and 200 <= response.status_code < 300:
+    if action.tool in {"radix.active.scan", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"} and 200 <= response.status_code < 300:
         from trigger_routes import code_receipt
         result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="radix"))
     if action.tool == "zenas.draft" and 200 <= response.status_code < 300:
@@ -1834,7 +1852,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 from market_lab_ml3 import confirmed
                 status, result = 200, await confirmed(action, actor, thread_id, card_id)
                 once = result.pop("_once", None)
-            elif action.tool.startswith("trigger.") or action.tool in {"zenas.draft", "zenas.playbook.add", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"zenas.draft", "zenas.playbook.add", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan", "radix.active.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
