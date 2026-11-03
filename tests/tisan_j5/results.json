@@ -1,0 +1,262 @@
+{
+  "ok": true,
+  "checks": [
+    {
+      "name": "npm ci",
+      "ok": true
+    },
+    {
+      "name": "npm run lint",
+      "ok": true
+    },
+    {
+      "name": "npm run build",
+      "ok": true
+    },
+    {
+      "name": "npm test",
+      "ok": true
+    },
+    {
+      "name": "accessibility",
+      "ok": true,
+      "pages": [
+        {
+          "page": "/contact",
+          "width": 390,
+          "violations": []
+        },
+        {
+          "page": "/privacy",
+          "width": 390,
+          "violations": []
+        },
+        {
+          "page": "/contact",
+          "width": 1440,
+          "violations": []
+        },
+        {
+          "page": "/privacy",
+          "width": 1440,
+          "violations": []
+        }
+      ],
+      "violations": [],
+      "summary": "desktop and mobile pages; no serious or critical violations"
+    },
+    {
+      "name": "lighthouse",
+      "ok": true,
+      "scores": [
+        {
+          "page": "/contact",
+          "scores": {
+            "performance": 0.92,
+            "accessibility": 1,
+            "best-practices": 1,
+            "seo": 0.9
+          },
+          "runs": [
+            {
+              "performance": 0.92,
+              "accessibility": 1,
+              "best-practices": 1,
+              "seo": 0.9
+            },
+            {
+              "performance": 0.97,
+              "accessibility": 1,
+              "best-practices": 1,
+              "seo": 0.9
+            },
+            {
+              "performance": 0.92,
+              "accessibility": 1,
+              "best-practices": 1,
+              "seo": 0.9
+            }
+          ]
+        },
+        {
+          "page": "/privacy",
+          "scores": {
+            "performance": 0.95,
+            "accessibility": 1,
+            "best-practices": 1,
+            "seo": 0.9
+          },
+          "runs": [
+            {
+              "performance": 0.95,
+              "accessibility": 1,
+              "best-practices": 1,
+              "seo": 0.9
+            },
+            {
+              "performance": 0.87,
+              "accessibility": 1,
+              "best-practices": 1,
+              "seo": 0.9
+            },
+            {
+              "performance": 0.96,
+              "accessibility": 1,
+              "best-practices": 1,
+              "seo": 0.9
+            }
+          ]
+        }
+      ],
+      "failures": [],
+      "missing": [],
+      "summary": "/contact {\"accessibility\": 1, \"best-practices\": 1, \"performance\": 0.92, \"seo\": 0.9}; /privacy {\"accessibility\": 1, \"best-practices\": 1, \"performance\": 0.95, \"seo\": 0.9}"
+    },
+    {
+      "name": "links",
+      "ok": true,
+      "checked": [
+        {
+          "page": "/contact",
+          "url": "/contact",
+          "status": 200
+        },
+        {
+          "page": "/contact",
+          "url": "/_next/static/css/b63027ab3408a650.css",
+          "status": 200
+        },
+        {
+          "page": "/contact",
+          "url": "/_next/static/chunks/webpack-cb8ff8f369c93f92.js",
+          "status": 200
+        },
+        {
+          "page": "/contact",
+          "url": "/_next/static/chunks/4bd1b696-c023c6e3521b1417.js",
+          "status": 200
+        },
+        {
+          "page": "/contact",
+          "url": "/_next/static/chunks/255-b1e2483a7e02feee.js",
+          "status": 200
+        },
+        {
+          "page": "/contact",
+          "url": "/_next/static/chunks/main-app-71d61d186f5f3f48.js",
+          "status": 200
+        },
+        {
+          "page": "/contact",
+          "url": "/favicon.ico",
+          "status": 200
+        },
+        {
+          "page": "/contact",
+          "url": "/_next/static/chunks/polyfills-42372ed130431b0a.js",
+          "status": 200
+        },
+        {
+          "page": "/privacy",
+          "url": "/privacy",
+          "status": 200
+        },
+        {
+          "page": "/privacy",
+          "url": "/_next/static/css/b63027ab3408a650.css",
+          "status": 200
+        },
+        {
+          "page": "/privacy",
+          "url": "/_next/static/chunks/webpack-cb8ff8f369c93f92.js",
+          "status": 200
+        },
+        {
+          "page": "/privacy",
+          "url": "/_next/static/chunks/4bd1b696-c023c6e3521b1417.js",
+          "status": 200
+        },
+        {
+          "page": "/privacy",
+          "url": "/_next/static/chunks/255-b1e2483a7e02feee.js",
+          "status": 200
+        },
+        {
+          "page": "/privacy",
+          "url": "/_next/static/chunks/main-app-71d61d186f5f3f48.js",
+          "status": 200
+        },
+        {
+          "page": "/privacy",
+          "url": "/favicon.ico",
+          "status": 200
+        },
+        {
+          "page": "/privacy",
+          "url": "/_next/static/chunks/polyfills-42372ed130431b0a.js",
+          "status": 200
+        }
+      ],
+      "failures": [],
+      "external": [],
+      "summary": "16 local links/assets answered 200; external links were not fetched"
+    },
+    {
+      "name": "secrets",
+      "ok": true,
+      "findings": [],
+      "checked_files": 60,
+      "summary": "60 generated text files; no findings"
+    },
+    {
+      "name": "k6",
+      "ok": true,
+      "pages": [
+        {
+          "page": "/contact",
+          "ok": true,
+          "status": 200,
+          "requests": 42,
+          "failures": 0,
+          "p95_ms": 77.7010349
+        },
+        {
+          "page": "/privacy",
+          "ok": true,
+          "status": 200,
+          "requests": 42,
+          "failures": 0,
+          "p95_ms": 46.47787354999997
+        }
+      ],
+      "summary": "/contact: 200; p95 77.70 ms; /privacy: 200; p95 46.48 ms"
+    }
+  ],
+  "results": [
+    {
+      "name": "accessibility",
+      "ok": true,
+      "summary": "desktop and mobile pages; no serious or critical violations"
+    },
+    {
+      "name": "lighthouse",
+      "ok": true,
+      "summary": "/contact {\"accessibility\": 1, \"best-practices\": 1, \"performance\": 0.92, \"seo\": 0.9}; /privacy {\"accessibility\": 1, \"best-practices\": 1, \"performance\": 0.95, \"seo\": 0.9}"
+    },
+    {
+      "name": "links",
+      "ok": true,
+      "summary": "16 local links/assets answered 200; external links were not fetched"
+    },
+    {
+      "name": "secrets",
+      "ok": true,
+      "summary": "60 generated text files; no findings"
+    },
+    {
+      "name": "k6",
+      "ok": true,
+      "summary": "/contact: 200; p95 77.70 ms; /privacy: 200; p95 46.48 ms"
+    }
+  ]
+}

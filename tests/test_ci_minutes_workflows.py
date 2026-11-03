@@ -37,7 +37,7 @@ def _triggers(workflow: dict) -> dict:
 def test_docs_only_changes_skip_on_push_and_pull_request(path: Path) -> None:
     triggers = _triggers(_load(path))
     # merge_group (3 Nov): the merge queue runs CI on each queued group before it lands.
-    assert set(triggers) == {"pull_request", "merge_group", "push"}
+    assert set(triggers) == {"pull_request", "merge_group", "push", "workflow_dispatch"}
     assert triggers["merge_group"] == {"types": ["checks_requested"]}
     # The security job runs on every PR, docs-only included, so there is no
     # paths-ignore. Build jobs skip docs-only changes through ci_scope.py instead.
@@ -461,3 +461,14 @@ def test_savings_page_limit_and_caches() -> None:
     assert "esbuild@0.28.2" in pinned
     assert "1.64.1" in steps[caches["~/.npm"]]["with"]["key"]
     assert "0.28.2" in steps[caches["~/.npm"]]["with"]["key"]
+
+
+def test_manual_ci_head_runs_full_suite_without_a_push_or_pr_base(monkeypatch):
+    module = _scope_module()
+    monkeypatch.setenv('EVENT_NAME', 'workflow_dispatch')
+    monkeypatch.setenv('DIFF_BASE', '')
+    monkeypatch.setenv('DIFF_HEAD', 'placeholder-head')
+    paths = module.changed_paths()
+    assert paths == ['unknown-change']
+    scope = module.select(paths)
+    assert scope['run'] and scope['full'] and scope['tests'] == ['.']

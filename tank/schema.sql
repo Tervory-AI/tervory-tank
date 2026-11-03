@@ -2810,6 +2810,34 @@ BEGIN
 END
 $$;
 
+-- First-party plugin installs: tenant records only, never credentials.
+CREATE TABLE IF NOT EXISTS tank.plugin_installs (
+    tenant_id uuid NOT NULL,
+    plugin_id text NOT NULL,
+    version text NOT NULL,
+    installed_by text NOT NULL,
+    installed_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,plugin_id,version)
+);
+-- Follow an existing RLS rollout; do not turn it on for a legacy installation.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        ALTER TABLE tank.plugin_installs ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE tank.plugin_installs FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.plugin_installs'::regclass AND polname='tenant_access') THEN
+            CREATE POLICY tenant_access ON tank.plugin_installs FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.plugin_installs'::regclass AND polname='tenant_boundary') THEN
+            CREATE POLICY tenant_boundary ON tank.plugin_installs AS RESTRICTIVE FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+    END IF;
+END
+$$;
 -- Trigger M2: tenant-private Facebook connection and one-use consent states.
 CREATE TABLE IF NOT EXISTS tank.trigger_meta_connections (
  tenant_id uuid PRIMARY KEY, generation uuid NOT NULL, sealed text,

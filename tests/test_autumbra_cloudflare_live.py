@@ -202,6 +202,10 @@ def test_seal_checks_enforce_observer_and_both_proxies(tmp_path, fault):
     import sys
     from test_room_seal import FAKE_DOCKER
     data = json.loads((ROOT / "tests/fixtures/seal_check/sealed.json").read_text())
+    # seal-check.sh also requires the sealed Tisan room.
+    tisan = json.loads((ROOT / "tests/fixtures/seal_check/tisan.json").read_text())
+    data["containers"].update(tisan["containers"])
+    data["networks"].update(tisan["networks"])
     # A2 requires Watch to exist as well as the connected Enforce services.
     data["networks"]["tervory-gw-ghost"] = False
     for service in ("agent-ghost", "ghost-browser"):
