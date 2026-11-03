@@ -40,7 +40,7 @@ from trigger_marketing_contract import TOOLS as MARKETING_TOOLS
 TOOLS = {
     "trigger": ["trigger.revise", "trigger.voice.learn", "trigger.write.batch", "trigger.scorecard", "trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
     "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.to_crm"],
-    "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.position"],
+    "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.position", "tiger.alerts"],
     "market_lab": ["market_lab.research", "market_lab.warnings", "market_lab.predictions", "market_lab.calibration", "market_lab.feeds", "market_lab.alerts.email", "market_lab.alerts.webhook", "market_lab.alerts.off"],
     "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment"],
     "tisan": ["tisan.scaffold"],
@@ -1299,6 +1299,7 @@ ADAPTERS = {
     "market_lab.alerts.email": Adapter("POST", "/v1/market-lab/alerts/email", EmptyArgs, "market_lab.alerts.email"),
     "market_lab.alerts.webhook": Adapter("POST", "/v1/market-lab/alerts/webhook", MarketLabWebhookArgs, "market_lab.alerts.webhook"),
     "market_lab.alerts.off": Adapter("POST", "/v1/market-lab/alerts/off", EmptyArgs, "market_lab.alerts.off"),
+    "tiger.alerts": Adapter("GET", "/v1/command/tiger/alerts", __import__("tiger_alerts").AlertsArgs, "tiger.alerts"),
     "market_lab.research": Adapter("POST", "/v1/research", QuestionArgs, "Research a market question", True, "paid_run"),
     "rig.search": Adapter("GET", "/v1/rig/search", QueryArgs, "Search the product catalogue"),
     "rig.ask": Adapter("POST", "/v1/rig/ask", RigAskArgs, "Ask about a product", True, "paid_run"),
@@ -1880,7 +1881,7 @@ async def tiger_code_plan(actor: Actor, messages: list[dict], task_id):
     if last.get('role') != 'user':
         return None
     text = last.get('content', '').strip()
-    match = re.fullmatch(r'(tiger\.match(?:\.(?:confirm|reject))?|tiger\.position)(?:\s+([0-9a-fA-F-]{36}))?', text)
+    match = re.fullmatch(r'(tiger\.match(?:\.(?:confirm|reject))?|tiger\.position|tiger\.alerts)(?:\s+([0-9a-fA-F-]{36}))?', text)
     if not match:
         return None
     tool, identifier = match.groups()
