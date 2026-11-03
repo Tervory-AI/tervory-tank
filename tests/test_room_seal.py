@@ -92,7 +92,7 @@ def test_no_room_service_would_leak_when_coolify_deploys_it(path: Path) -> None:
     assert leaks(path.read_text(encoding="utf-8")) == []
 
 
-@pytest.mark.parametrize("room", ["base", "radix", "tiger", "rig"])
+@pytest.mark.parametrize("room", ["base", "radix", "tiger", "rig", "zenas"])
 def test_sealed_rooms_are_marked_raw_compose(room: str) -> None:
     text = (ROOT / "agents" / room / "docker-compose.yml").read_text(encoding="utf-8")
     assert is_raw(text), f"agents/{room}/docker-compose.yml must start with {RAW_MARKER!r}"
