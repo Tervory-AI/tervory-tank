@@ -230,12 +230,13 @@ export class CodeFolder {
       }
     }
     if (!candidate || inside('/usr', candidate) || inside(this.root, candidate)) return { command, mounts: [] };
+    const resolved = await realpath(candidate);
+    if (inside('/usr', resolved)) return { command, mounts: [] };
     // Only recognized language runtimes may expose an external installation.
     // Their bin + library directory is the runtime's own root, never its parent
     // HOME, .config, .ssh or a keychain. Both a venv and its base interpreter may
     // be needed; no other host directories or environment are inherited.
     if (!/^(node|python(?:3(?:\.\d+)?)?|pytest)$/.test(basename(candidate))) throw refused();
-    const resolved = await realpath(candidate);
     const roots = [...new Set([candidate, resolved].map(path => basename(dirname(path)) === 'bin' ? dirname(dirname(path)) : dirname(path)))];
     const mounts = [];
     for (const root of roots) {
@@ -256,7 +257,7 @@ export class CodeFolder {
       await scan(root);
     }
     const quoted = "'" + candidate.replaceAll("'", "'\"'\"'") + "'";
-    return { command: quoted + command.slice(match[0].length), mounts };
+    return { command: quoted + command.slice(match[0].length), mounts, runners: roots.filter(root => !inside('/usr', root) && !inside(this.root, root)) };
   }
   async command(command, io, timeoutMs, mounts = []) {
     if (process.platform !== 'linux') throw refused();
@@ -291,6 +292,7 @@ export class CodeFolder {
         if (typeof args.command !== 'string' || !args.command || args.command.length > 8000 || /[\x00-\x1f\x7f]/.test(args.command) || redactSecrets(args.command) !== args.command) throw refused();
         const prepared = await this.prepareCommand(args.command);
         io.write(prepared.command + '\n');
+        for (const root of prepared.runners ?? []) io.write(`Read-only runner: ${root}\n`);
         if (io.interactive !== true || (await io.prompt('Run [y/N] '))?.trim().toLowerCase() !== 'y') return { ran: false };
         const result = await this.command(prepared.command, io, timeoutMs, prepared.mounts);
         io.write(result.output);
