@@ -163,12 +163,28 @@ the main merge and schema correction; the final-head link below is authoritative
   and the pre-existing broader runtime import-order lint are recorded without
   presenting either as a passing check.
 
-**Final-head CI Tank result (full-suite test of record):**
-[the current-head `tank` result on PR #600](https://github.com/Tervory-AI/tervory-tank/pull/600/checks).
-This link follows the final head, rather than an earlier green run. The final
-Tank counts and immutable job permalink are also recorded in the PR review
-evidence after that head finishes. CI includes `tests/test_tenant_rls.py` with
-Postgres and the tisan schema-generator test above.
+**CI Tank result: PASS — full-suite test of record.**
+On `59edcb483db1b7ecf0dc1e756ca009f101ad652f`, CI command
+`python3 .github/scripts/offline_suite.py` completed with **6,770 passed,
+42 skipped, 136 warnings, 1,799 subtests passed in 743.69s**:
+[immutable Tank result](https://github.com/Tervory-AI/tervory-tank/actions/runs/41647104336/job/125956038299).
+Both initial failures are absent: the schema guard and all Rig screenshot cases
+pass. Security/Semgrep, CodeQL, Workspace, Command acceptance, CLI, tenant
+isolation and nonroot services are green on this head.
+
+`tests/test_tenant_rls.py` also passed in the corrected-head CI PostgreSQL
+isolation job: **393 passed, zero skips**, including the 239-table / 13-schema
+matrix:
+[immutable isolation result](https://github.com/Tervory-AI/tervory-tank/actions/runs/41647104306/job/125955729762).
+The tisan actual schema-generator test and agent schema-generator test passed in
+the local merged 162-test run and this full CI run. The local `pg_trgm` fixture
+gap is resolved by CI; it is not an unresolved code failure.
+
+This final evidence commit records those completed results. The
+[current-head Tank check](https://github.com/Tervory-AI/tervory-tank/pull/600/checks)
+is the authoritative final-head result, also checked before the final report;
+the PR review evidence records that head's SHA, counts and immutable job link.
+No earlier green run is substituted for the final-head check.
 
 **Founder-browser test follows after merge**, in the founder's own Custom Nation
 `/chats` session. Founder alone merges. No browser acceptance or screenshots are
