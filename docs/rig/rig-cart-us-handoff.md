@@ -158,7 +158,7 @@ not available and no CI success is claimed.
 | `agents/rig/rigbox/fulfilment.py` | 57, 101 | Optional keyword quantity, default 1; validated quantity used in PO. |
 | `agents/rig/rigbox/cart_api.py` | 79 | Shared admin dispatch and integer store-delivery validation. |
 | `agents/rig/rigbox/retailer_api.py` | 18, 46 | Three commerce operations in the private retailer corridor. |
-| `agents/rig/rigbox/commerce.py` | 231, 270 | Normalize external states; require paid Woo processing/completed status. |
+| `agents/rig/rigbox/commerce.py` | 214, 250 | Normalize external states; require paid Woo processing/completed status. |
 | `agents/rig/schema.sql` | 545 | Existing commerce DDL moved above generated memory; no new DDL. |
 | `tank/access.py` | 939, 961 | Explicit admin/founder requirement; account tenant; credentials sealed in existing vault and not forwarded. |
 | `workspace/app/rig/admin/api/route.ts` | 5 | Three operation names; no page edits. |
@@ -166,7 +166,7 @@ not available and no CI success is claimed.
 | `tests/test_rig_cart.py` | 346 | Real placement tests, mixed cart, quantities, concurrent webhooks/read-back, post-insert retry, permanent errors, auto-order and lease takeover. |
 | `tests/test_rig_cart_admin.py` | 20 | Ordinary-member refusal for all three operations; sealed credential/tenant/response/log and delivery-range checks. |
 | `tests/test_rig_cart_postgres.py` | 72 | Real Postgres CAS/placement retry, durable quantities and quote default. |
-| `docs/rig/rig-cart-us-handoff.md` | 33 | Sources, commands, proof and this explicit missing-frame stop. |
+| `docs/rig/rig-cart-us-handoff.md` | 35 | Sources, commands, proof and this explicit missing-frame stop. |
 
 Additional final checks:
 
