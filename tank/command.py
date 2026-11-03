@@ -1466,6 +1466,15 @@ async def refresh_action_receipts(thread_id: uuid.UUID, actor: Actor, card_id: s
         await event(conn, row, "card", public_card(card))
 
 
+def list_refusal_result(tool: str, status: int, result: Any) -> dict | None:
+    """Only expose our bounded-list count, never arbitrary failed-provider data."""
+    detail = result.get("detail") if isinstance(result, dict) else None
+    total = detail.get("total") if isinstance(detail, dict) else None
+    if tool == "base.list.save" and status == 422 and type(total) is int and total > 10000:
+        return {"total": total}
+    return None
+
+
 async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action: PlannedAction) -> dict:
     attempted = False
     try:
@@ -1496,6 +1505,9 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if card["status"] == "confirmed":
                 card["result"] = result
             else:
+                refused = list_refusal_result(action.tool, status, result)
+                if refused is not None:
+                    card["result"] = refused
                 detail = result.get("detail") if isinstance(result, dict) else None
                 card["error"] = (detail if action.tool == "radix.passive.scan"
                                  and isinstance(detail, str) and detail in {"invalid artifact", "domain proof required"}
