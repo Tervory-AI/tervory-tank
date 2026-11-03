@@ -48,14 +48,14 @@ async def google_signing_keys(kid: str = Query(default="", max_length=200)):
     return keys
 
 
-async def call_room(method: str, room: str, path: str, *, body=None, params=None):
+async def call_room(method: str, room: str, path: str, *, body=None, params=None, timeout=60):
     key = os.environ.get(f"TANK_KEY_{room.upper()}", "")
     http = runtime()._http
     if not key or http is None:
         raise HTTPException(503, "The room is unavailable.")
     try:
         response = await http.request(method, ROOMS[room] + path, json=body, params=params,
-                                      headers={"X-Tank-Key": key}, follow_redirects=False, timeout=60)
+                                      headers={"X-Tank-Key": key}, follow_redirects=False, timeout=timeout)
     except httpx.HTTPError:
         raise HTTPException(503, "The room is unavailable.") from None
     if len(response.content) > 2_000_000 or response.status_code >= 500:
@@ -144,14 +144,14 @@ async def enforce_list(x_tervory_tenant: uuid.UUID = Header()):
 @router.post("/autumbra/enforce/create", dependencies=[Depends(admin.require_admin)])
 async def enforce_create(body: EnforceTenant):
     response = await call_room("POST", "ghost", "/ghost/autumbra/enforce/plan-create",
-                               body={"tenant_id": str(body.tenant_id), "execute": True})
+                               body={"tenant_id": str(body.tenant_id), "execute": True}, timeout=150)
     return Response(response.content, status_code=response.status_code, media_type="application/json")
 
 
 @router.post("/autumbra/enforce/destroy", dependencies=[Depends(admin.require_admin)])
 async def enforce_destroy(body: EnforceTenant):
     response = await call_room("POST", "ghost", "/ghost/autumbra/enforce/plan-destroy",
-                               body={"tenant_id": str(body.tenant_id), "execute": True})
+                               body={"tenant_id": str(body.tenant_id), "execute": True}, timeout=90)
     return Response(response.content, status_code=response.status_code, media_type="application/json")
 
 
