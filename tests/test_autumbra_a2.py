@@ -350,6 +350,7 @@ async def test_act_mail_uses_watch_receipts_once_without_enforce_network(monkeyp
     async def send(self, letter):
         letters.append(letter)
     monkeypatch.setattr(SmtpMailer, 'send', send)
+    assert transport_status() == 'smtp'  # Establish availability before this new action.
     receipt = {'id': 'placeholder-act', 'tenant_id': 'placeholder-tenant', 'applied': True,
                'timestamp': datetime.now(timezone.utc).isoformat()}
     monkeypatch.setattr(watch_app, '_receipts_for_tenant', lambda tenant: [receipt])
@@ -364,3 +365,118 @@ async def test_act_mail_uses_watch_receipts_once_without_enforce_network(monkeyp
         assert letters[0]['to'] == 'placeholder-owner@example.test'
     finally:
         store.close()
+
+
+@pytest.mark.parametrize('sender', ['', 'placeholder@@example.test', 'placeholder <'])
+def test_partial_smtp_configuration_keeps_watch_healthy(monkeypatch, sender):
+    from agents.ghost import smtp_email
+    monkeypatch.setenv('AUTUMBRA_SMTP_HOST', 'placeholder-smtp.example.test')
+    monkeypatch.setenv('AUTUMBRA_SMTP_FROM', sender)
+    with pytest.raises(ValueError, match='^mail_not_configured$'):
+        smtp_email.settings()
+    assert transport_status() == 'unavailable'
+    response = TestClient(create_app()).get('/health')
+    assert response.status_code == 200
+    assert response.json()['owner_email_transport'] == 'unavailable'
+
+
+@pytest.mark.asyncio
+async def test_smtp_activation_skips_history_and_restart_never_resends(monkeypatch, tmp_path):
+    from datetime import datetime, timedelta, timezone
+    from agents.ghost import app as watch_app, owner_email_jobs, smtp_email
+    from agents.ghost.client_settings import ClientAutumbraSettings, save_settings
+    from agents.rig.rigbox.reserve import SmtpMailer
+    start = datetime(2026, 11, 2, tzinfo=timezone.utc)
+    moment = start + timedelta(hours=12)
+    monkeypatch.setattr(owner_email_jobs, 'week_bounds', lambda now=None: (start, start + timedelta(days=7)))
+    monkeypatch.setattr(smtp_email, 'time', SimpleNamespace(time=lambda: moment.timestamp()))
+    old = {'id': 'placeholder-old-act', 'tenant_id': 'placeholder-tenant', 'applied': True,
+           'timestamp': (moment - timedelta(seconds=1)).isoformat()}
+    receipts, letters = [old], []
+    monkeypatch.setattr(watch_app, '_receipts_for_tenant', lambda tenant: receipts)
+    async def send(self, letter):
+        letters.append(letter)
+    monkeypatch.setattr(SmtpMailer, 'send', send)
+    assert transport_status() == 'fixture'
+    monkeypatch.setenv('AUTUMBRA_SMTP_HOST', 'placeholder-smtp.example.test')
+    monkeypatch.setenv('AUTUMBRA_SMTP_FROM', 'placeholder-sender@example.test')
+    # Health can observe availability before the scheduler's first scan.
+    assert TestClient(create_app()).get('/health').json()['owner_email_transport'] == 'smtp'
+    database = tmp_path / 'placeholder-activation.sqlite3'
+    store = Store(database)
+    try:
+        save_settings(store, ClientAutumbraSettings(tenant_id='placeholder-tenant', site_name='placeholder-site',
+                                                  owner_email='placeholder-owner@example.test'))
+        app = SimpleNamespace(state=SimpleNamespace(store=store))
+        await watch_app.deliver_act_owner_updates(app)
+        assert letters == []
+        receipts.append({**old, 'id': 'placeholder-new-act',
+                         'timestamp': (moment + timedelta(seconds=1)).isoformat()})
+        await watch_app.deliver_act_owner_updates(app)
+        await watch_app.deliver_act_owner_updates(app)
+        assert len(letters) == 1
+    finally:
+        store.close()
+    # Recreate Watch state against the same data folder, not a fresh in-memory claim.
+    store = Store(database)
+    try:
+        await watch_app.deliver_act_owner_updates(SimpleNamespace(state=SimpleNamespace(store=store)))
+        assert len(letters) == 1
+        state = json.loads((tmp_path / 'placeholder-state/owner-email-availability.json').read_text())
+        assert state['available_since'] == moment.timestamp()
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize('provider', ['cloudflare', 'google', 'google_workspace'])
+def test_verified_native_event_cannot_queue_another_tenant(provider, signing, monkeypatch, tmp_path):
+    from agents.ghost import app as watch_app
+    public, token = signing
+    malicious = {'tenant_id': '00000000-0000-0000-0000-000000000608',
+                 'site': 'placeholder-other.example.test', 'address': '203.0.113.8',
+                 'raw_log': 'placeholder event from 203.0.113.8'}
+    if provider == 'cloudflare':
+        monkeypatch.setenv('AUTUMBRA_CLOUDFLARE_WEBHOOK_SECRET', 'placeholder-secret')
+        headers = {'cf-webhook-auth': 'placeholder-secret'}
+    else:
+        malicious.update(json.loads(push_body()))
+        headers = {'authorization': 'Bearer ' + token()}
+    async def tank_call(self, method, path, **kwargs):
+        assert method == 'GET' and path == '/v1/ghost/google/signing-keys?kid=placeholder-key'
+        return {'keys': [public]}
+    monkeypatch.setattr(watch_app.Tank, 'call', tank_call)
+    monkeypatch.setattr(watch_app, 'watch_queue_configured', lambda: True)
+    def no_queue(**kwargs):
+        pytest.fail('Provider identity cannot authorize any tenant queue')
+    monkeypatch.setattr(watch_app, 'enqueue_fixture_attack_for_watch', no_queue)
+    response = TestClient(create_app()).post('/ghost/autumbra/webhooks/' + provider,
+                                           json=malicious, headers=headers)
+    assert response.status_code == 200
+    assert response.json()['accepted'] is True and response.json()['stored'] is True
+    assert response.json()['queued'] is False and response.json()['queue_receipt'] is None
+    saved = (tmp_path / 'placeholder-state/verified-webhook-events.json').read_text()
+    assert json.loads(saved)[provider]['provider'] == provider
+    assert malicious['tenant_id'] not in saved and malicious['site'] not in saved
+    assert 'authorization' not in saved and 'placeholder-secret' not in saved
+
+
+def test_existing_hmac_path_still_queues_the_verified_tenant(monkeypatch):
+    from agents.ghost import app as watch_app
+    from agents.ghost.webhooks import EDGE_WEBHOOK_SECRET_ENV, sign_body
+    monkeypatch.setenv(EDGE_WEBHOOK_SECRET_ENV, 'placeholder-secret')
+    monkeypatch.setattr(watch_app, 'watch_queue_configured', lambda: True)
+    calls = []
+    def enqueue(**kwargs):
+        calls.append(kwargs)
+        return {'queued': True}
+    monkeypatch.setattr(watch_app, 'enqueue_fixture_attack_for_watch', enqueue)
+    payload = {'tenant_id': '00000000-0000-0000-0000-000000000608',
+               'site': 'placeholder.example.test', 'address': '203.0.113.8',
+               'raw_log': 'placeholder event from 203.0.113.8'}
+    body = json.dumps(payload).encode()
+    timestamp, nonce = str(int(time.time())), 'placeholder-review-hmac'
+    signature = sign_body(secret='placeholder-secret', body=body, timestamp=timestamp, nonce=nonce)
+    response = TestClient(create_app()).post('/ghost/autumbra/webhooks/cloudflare', content=body,
+        headers={'x-autumbra-signature': signature, 'x-autumbra-timestamp': timestamp, 'x-autumbra-nonce': nonce})
+    assert response.status_code == 200 and response.json()['queued'] is True
+    assert len(calls) == 1 and calls[0]['tenant_id'] == payload['tenant_id']
