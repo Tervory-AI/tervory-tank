@@ -17,5 +17,6 @@ export function projectRadix(card: Card): RadixView | undefined {
     const row = record(item);
     return { tool: text(row.tool), severity: text(row.severity), rule: text(row.rule), file: text(row.file), line: count(row.line), explanation: text(row.explanation), remediation: text(row.remediation) };
   });
+  if (card.tool === "radix.repo.findings" && result.scan_complete === false && Array.isArray(result.findings) && result.findings.length === 0) view.status = "failed";
   return view;
 }
