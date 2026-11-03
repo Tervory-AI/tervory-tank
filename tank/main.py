@@ -1999,9 +1999,11 @@ async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by
     updated = await conn.execute(
         """
         UPDATE tank.policy
-        SET model=previous_model, previous_model=NULL, promoted_at=NULL, semantic_cache=$2,
+        SET model=CASE WHEN held_swap_id IS NOT NULL THEN model ELSE previous_model END,
+            previous_model=NULL, promoted_at=NULL, semantic_cache=$2,
             rung=$3, shadow_rate=0, updated_at=now()
-        WHERE task_type=$1 AND tenant_id IS NULL AND previous_model IS NOT NULL AND promoted_at IS NOT NULL
+        WHERE task_type=$1 AND tenant_id IS NULL
+          AND (held_swap_id IS NOT NULL OR (previous_model IS NOT NULL AND promoted_at IS NOT NULL))
         """,
         task_type, bool(move.policy.get("semantic_cache")), int(move.policy["rung"]),
     )
