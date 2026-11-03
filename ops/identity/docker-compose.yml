@@ -155,6 +155,8 @@ services:
       timeout: 5s
       retries: 30
   tervory-setup:
+    environment:
+      IDENTITY_BOOTSTRAP_KEY_EXPIRATION: ${IDENTITY_BOOTSTRAP_KEY_EXPIRATION:?founder sets bootstrap key expiry}
     build:
       context: ../..
       dockerfile: ops/identity/Dockerfile.setup
@@ -181,8 +183,8 @@ services:
       R2_BACKUP_RECIPIENT: ${R2_BACKUP_RECIPIENT:?existing public age recipient}
     networks: [database, backup_outbound]
     depends_on:
-      tervory-setup:
-        condition: service_completed_successfully
+      identity-postgres:
+        condition: service_healthy
 volumes:
   identity_login_token:
     name: identity-za-login-token
