@@ -4,8 +4,8 @@ Branch: `codex/market-lab-ml4`. PR: [#606](https://github.com/Tervory-AI/tervory
 Prepared 3 November 2026 (Pacific). Founder merges; Claude opens the PR.
 
 Original ML4 items 1–5 are implemented and locally checked. Review fixes 1–4
-are already pushed. Review fix 5's original-head CI evidence is verified below;
-the new evidence-update head's Tank result will be appended after CI. Item 6 has
+are already pushed. Review fix 5's original-head evidence and the new
+evidence-update head's successful Tank result are recorded below. Item 6 has
 NOT started and remains explicitly held for ML3. This is not founder browser acceptance and not a completed ML4 job.
 No page, card layout, visible wording, credential setting, keyed feed, production
 row, schema, approved skill package or Hermes implementation changed.
@@ -47,7 +47,7 @@ No new memory client is constructed by `_ledger`.
 | `tests/market_lab_ml4/review-results.txt` | 1 | Exact local commands, results, startup excerpt and the initial corrected test failure. |
 | `tests/market_lab_ml4/HANDOFF.md` | 1 | This follow-up and honest CI limitation. |
 
-### Local proof and CI limitation
+### Local proof and subsequent CI verification
 
 Code head tested: `76a727b308eb86b3bf5f166476796435b2402626`. Later commits only
 record this evidence. See [review-results.txt](review-results.txt) for commands.
@@ -104,10 +104,36 @@ gh run view 41644927621 --json headSha,status,conclusion,jobs --jq '{headSha,sta
 Fetch and both merges succeeded without conflicts; existing remote work and
 current main were retained. Diff check passed. The run lookup returned head
 `eb93519442a6df724f94b74621e0ca670555ec99`, `completed`, `success`, and Tank job
-`125947758080` with `success`. No source file changed during this delivery.
+`125947758080` with `success`. No source file was edited for this evidence
+update; source changes came only from preserving existing remote work and
+merging the explicitly authorized current main.
 
-The new evidence-update head's Tank result is pending its push and CI completion;
-it will be appended here with its actual SHA and job URL before this delivery stops.
+### New evidence-update head — completed CI
+
+Head `14d4b4f43a189fd6588ac0df11fd7e5c86e2ba0e` completed CI run
+[41658556175](https://github.com/Tervory-AI/tervory-tank/actions/runs/41658556175)
+with **success**. Its [Tank job 125995468817](https://github.com/Tervory-AI/tervory-tank/actions/runs/41658556175/job/125995468817)
+completed with **success**. CI's Tank job is the full-suite result of record.
+The recorded original-head 6653/42 totals and named-test proof above remain
+Claude's verified evidence; no unverified aggregate count is assigned to this
+new job.
+
+Exact verification command:
+
+```sh
+gh run view 41658556175 --json headSha,status,conclusion,jobs --jq '{headSha,status,conclusion,tank:[.jobs[]|select(.name=="tank")|{databaseId,status,conclusion,url}]}'
+```
+
+Result: head SHA `14d4b4f43a189fd6588ac0df11fd7e5c86e2ba0e`, run status
+`completed`, run conclusion `success`; Tank job `125995468817`, status
+`completed`, conclusion `success`. The optional `gh run view 41658556175 --job
+125995468817 --log` lookup exited 1; no verbose test line or new aggregate was
+invented from unavailable logs.
+
+The following documentation-only commit records this completed run. It does
+not change the tested source. No further implementation work is included;
+item 6 remains held for ML3 on main, and this delivery stops after recording
+and pushing the result.
 
 ### Decisions I made
 
