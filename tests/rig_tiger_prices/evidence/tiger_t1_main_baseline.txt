@@ -121,7 +121,7 @@ E     # cancelled 0
 E     # skipped 0
 E     # todo 0
 E     # duration_ms 67.712705
-E     
+E
 E   assert 1 == 0
 E    +  where 1 = CompletedProcess(args=['node', '--test', 'tests/tiger_works/workspace.test.cjs'], returncode=1, stdout="TAP version 13...# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 67.712705\n", stderr='').returncode
 _________ test_real_chromium_markup_stores_history_and_one_price_alert _________
