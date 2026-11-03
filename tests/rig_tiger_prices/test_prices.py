@@ -62,7 +62,8 @@ async def test_receiver_and_discovery_are_tiger_only_and_tenant_scoped(corridor)
     assert denied.status_code == 401
     assert set((await client.get('/v1/access/rig/tiger/tenants')).json()['tenants']) == {A, B}
     rows = (await client.get('/v1/access/rig/tiger/products', params={'tenant_id': A})).json()
-    assert rows == {'tenant_id': A, 'products': [{'sku': 'item', 'url': URL, 'name': 'Offline item'}]}
+    assert rows == {'tenant_id': A, 'products': [{'sku': 'item', 'url': URL, 'name': 'Offline item',
+        'gtin': None, 'mpn': None, 'brand': 'Offline', 'price': '10', 'currency': 'USD'}]}
     response = await client.post('/v1/access/rig/tiger', json=update())
     assert response.status_code == 200 and response.json() == {'updated': True}
     assert Decimal((await store.products(A))[0]['price']) == 12
