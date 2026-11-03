@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from typing import Literal
 from uuid import UUID
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -47,7 +47,10 @@ class Schedule(Post):
 
     @model_validator(mode='after')
     def zone(self):
-        zone = ZoneInfo(self.time_zone)
+        try:
+            zone = ZoneInfo(self.time_zone)
+        except ZoneInfoNotFoundError:
+            raise ValueError('time_zone') from None
         if self.planned_at.utcoffset() is None:
             raise ValueError('offset_required')
         local = self.planned_at.astimezone(zone)
