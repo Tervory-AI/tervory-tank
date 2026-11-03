@@ -13,6 +13,30 @@ VOICE_PREFIX = re.compile(r'\s*trigger(?:\.voice\.|[, ]+voice[ .]+)(show|set|rol
 
 async def plan(actor, text: str, task_id):
     from command import authorized_actor, require_tool, db, unpack
+    explicit = re.fullmatch(r'\s*trigger\.(revise|voice\.learn|write\.batch|scorecard)\s*:?[ \t]*(.*)', text, re.I | re.S)
+    if explicit:
+        actor = await authorized_actor(actor)
+        tool = 'trigger.' + explicit[1].lower()
+        require_tool(actor, tool)
+        source = explicit[2].strip()
+        try:
+            if tool == 'trigger.scorecard':
+                if source:
+                    raise ValueError
+                args = {}
+            elif tool == 'trigger.voice.learn':
+                args = {'write_ids': [str(UUID(v.strip())) for v in source.split(',')]}
+            elif tool == 'trigger.revise':
+                args = {'write_id': str(UUID(source))}
+            elif source.lower().startswith('attachment '):
+                args = {'attachment': source[11:].strip()}
+            elif source.lower().startswith('skus '):
+                args = {'skus': [v.strip() for v in source[5:].split(',')]}
+            else:
+                raise ValueError
+        except ValueError:
+            raise HTTPException(422, 'Invalid Trigger request') from None
+        return {'text': '', 'actions': [{'tool': tool, 'arguments': args}]}
     match = VOICE_PREFIX.fullmatch(text)
     if match:
         actor = await authorized_actor(actor)
@@ -39,13 +63,23 @@ async def plan(actor, text: str, task_id):
     require_tool(actor, 'trigger.feedback')
     async with db().acquire() as conn:
         raw = await conn.fetchval("SELECT state FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND state->>'active_turn'=$3", actor.tenant_id, actor.user_id, str(task_id))
-    cards = [c for c in unpack(raw or {}).get('cards', {}).values()
-             if c.get('tool') == 'trigger.write' and c.get('status') == 'confirmed' and c.get('result', {}).get('write_id')]
+    cards = []
+    for card in unpack(raw or {}).get('cards', {}).values():
+        if card.get('status') != 'confirmed' or card.get('tool') not in {'trigger.write', 'trigger.revise', 'trigger.write.batch'}:
+            continue
+        for result in card.get('result', {}).get('items', [card.get('result', {})]):
+            if result.get('write_id'):
+                cards.append({**card, 'result': result})
+    selected = re.match(r'([0-9a-fA-F-]{36})\s*:?\s*(.*)', match[2], re.S)
+    if selected:
+        cards = [c for c in cards if c['result']['write_id'] == selected[1]]
     if not cards:
         raise HTTPException(404, 'Writing record unavailable')
     last = max(cards, key=lambda c: c.get('started_at', ''))
+    if not selected and last.get('tool') == 'trigger.write.batch':
+        raise HTTPException(422, 'Writing record unavailable')
     status = {'accept': 'accepted', 'reject': 'rejected', 'changes': 'changes_requested'}[match[1].lower()]
-    args = {'write_id': last['result']['write_id'], 'status': status, 'changes': match[2]}
+    args = {'write_id': last['result']['write_id'], 'status': status, 'changes': selected[2] if selected else match[2]}
     return {'text': '', 'actions': [{'tool': 'trigger.feedback', 'arguments': args}]}
 
 
@@ -63,6 +97,16 @@ async def prepare(action, actor, state):
         preview = await room('voice/preview', {'tenant_id': str(actor.tenant_id), 'text': args.get('text', ''), 'target': args.get('target')})
         args.update(expected_revision=preview['expected_revision'], preview_hash=preview['preview_hash'],
                     brief_markdown=json.dumps(preview['voice'], ensure_ascii=False, indent=2))
+    elif action.tool == 'trigger.voice.learn':
+        from trigger_learning import learn_notes
+        rules = await learn_notes(actor, args['write_ids'])
+        preview = await room('voice/preview', {'tenant_id': str(actor.tenant_id), 'rules': rules})
+        args.update(rules=rules, expected_revision=preview['expected_revision'], preview_hash=preview['preview_hash'],
+                    brief_markdown=json.dumps(preview['voice'], ensure_ascii=False, indent=2))
+    elif action.tool == 'trigger.write.batch':
+        from trigger_batch import products
+        rows = await products(actor, args, state)
+        args.update(products=rows, brief_markdown=json.dumps({'item_count': len(rows), 'products': [r.get('name', '') for r in rows]}, ensure_ascii=False))
     elif action.tool == 'trigger.feedback':
         args['brief_markdown'] = json.dumps({k: args[k] for k in ('write_id', 'status', 'changes')}, ensure_ascii=False)
     else:

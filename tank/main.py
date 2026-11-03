@@ -4198,6 +4198,7 @@ app.include_router(__import__("case_studies").router)
 app.include_router(__import__("event_bus").router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("base_lists").build_router())
 app.include_router(__import__("rig_brain_routes").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("moa").router)
 
@@ -4683,6 +4684,7 @@ __import__("research").register(app, globals())
 # COMMAND-1A: conversation routes live in their own module.
 app.include_router(__import__("command").router)
 __import__("personal_tokens").register(app)
+__import__("mcp_server").register(app)
 app.include_router(__import__("trigger_routes").router)
 app.include_router(__import__("trigger_crm").router)
 app.include_router(__import__("trigger_bot_api").router)
@@ -4706,6 +4708,7 @@ app.include_router(semantic_cache.build_router(__import__("sys").modules[__name_
 __import__("skala_intake").install(app, __import__("sys").modules[__name__])
 
 app.include_router(__import__("vault_routes").build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("mcp_client_oauth").router)
 
 # D1-D3 memory: founder-only record/publication corridor.
 from memory_routes import router as memory_router

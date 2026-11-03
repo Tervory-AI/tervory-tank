@@ -2283,6 +2283,156 @@ INSERT INTO tank.policy(task_type,rung,model,cache_scope,max_tokens_out,eval_thr
 VALUES ('tisan.plan',1,'luna','tenant',3000,0.99,200,false)
 ON CONFLICT DO NOTHING;
 
+-- IDENTITY-ZA: existing token format/lifetimes remain unchanged. Trusted role
+-- snapshot is set only by verified OIDC issuance; refresh/revoke preserve the row.
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS identity_tenant_admin boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.device_authorizations ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT 'workspace'
+    CHECK (provider IN ('workspace', 'zitadel'));
+
+-- B4 saved Base lists: immutable tenant-owned record/evidence snapshots.
+CREATE TABLE IF NOT EXISTS tank.base_saved_lists (
+    list_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    name text NOT NULL CHECK (length(name) BETWEEN 1 AND 120),
+    filters jsonb NOT NULL,
+    record_ids uuid[] NOT NULL,
+    records jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS base_saved_lists_tenant ON tank.base_saved_lists(tenant_id,created_at DESC);
+-- Follow personal_tokens: join an existing RLS rollout, never start one.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        ALTER TABLE tank.base_saved_lists ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE tank.base_saved_lists FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.base_saved_lists'::regclass AND polname='tenant_access') THEN
+            CREATE POLICY tenant_access ON tank.base_saved_lists FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.base_saved_lists'::regclass AND polname='tenant_boundary') THEN
+            CREATE POLICY tenant_boundary ON tank.base_saved_lists AS RESTRICTIVE FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+    END IF;
+END
+$$;
+
+-- Trigger W1 provenance remains in the existing tenant-private tables.
+ALTER TABLE tank.trigger_writes ADD COLUMN IF NOT EXISTS format text;
+ALTER TABLE tank.trigger_writes ADD COLUMN IF NOT EXISTS accepted_write_ids uuid[] NOT NULL DEFAULT '{}';
+ALTER TABLE tank.trigger_writes ADD COLUMN IF NOT EXISTS write_context jsonb NOT NULL DEFAULT '{}';
+ALTER TABLE tank.trigger_writes ADD COLUMN IF NOT EXISTS parent_write_id uuid;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='tank.trigger_writes'::regclass AND conname='trigger_parent_tenant') THEN
+        ALTER TABLE tank.trigger_writes ADD CONSTRAINT trigger_parent_tenant FOREIGN KEY (tenant_id,parent_write_id) REFERENCES tank.trigger_writes(tenant_id,id);
+    END IF;
+    -- Match personal_tokens: follow an existing rollout, never enable legacy RLS.
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        ALTER TABLE tank.trigger_writes ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE tank.trigger_writes FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_writes'::regclass AND polname='tenant_access') THEN
+            CREATE POLICY tenant_access ON tank.trigger_writes FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.trigger_writes'::regclass AND polname='tenant_boundary') THEN
+            CREATE POLICY tenant_boundary ON tank.trigger_writes AS RESTRICTIVE FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+    END IF;
+END
+$$;
+CREATE INDEX IF NOT EXISTS trigger_writes_format_recent ON tank.trigger_writes(tenant_id,format,created_at DESC);
+
+-- MCP G1: reuse CLI credentials, with a distinct audience and public-client binding.
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS audience text NOT NULL DEFAULT 'cli'
+    CHECK (audience IN ('cli','mcp'));
+ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS client_id text;
+
+-- Public OAuth client metadata, not tenant-owned records or credentials.
+CREATE TABLE IF NOT EXISTS tank.oauth_clients (
+    client_id text PRIMARY KEY,
+    client_name text NOT NULL CHECK (length(client_name) BETWEEN 1 AND 100),
+    redirect_uris jsonb NOT NULL,
+    source_address_hash text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS oauth_clients_source ON tank.oauth_clients(source_address_hash,created_at);
+
+-- The code envelope supplies only a tenant scope; its hash must match before use.
+CREATE TABLE IF NOT EXISTS tank.oauth_codes (
+    code_hash text PRIMARY KEY CHECK (code_hash ~ '^[0-9a-f]{64}$'),
+    tenant_id uuid NOT NULL,
+    user_id text NOT NULL,
+    region text NOT NULL CHECK (region='us-east'),
+    client_id text NOT NULL,
+    client_name text NOT NULL,
+    redirect_uri text NOT NULL,
+    challenge text NOT NULL,
+    resource text NOT NULL CHECK (resource='https://app.tervory.com/mcp'),
+    expires_at timestamptz NOT NULL,
+    consumed_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS oauth_codes_tenant ON tank.oauth_codes(tenant_id,expires_at);
+-- Retain the issued grant reference so an authorization-code replay revokes it.
+ALTER TABLE tank.oauth_codes ADD COLUMN IF NOT EXISTS token_id uuid REFERENCES tank.personal_tokens(token_id);
+
+CREATE TABLE IF NOT EXISTS tank.mcp_sessions (
+    session_hash text PRIMARY KEY CHECK (session_hash ~ '^[0-9a-f]{64}$'),
+    tenant_id uuid NOT NULL,
+    user_id text NOT NULL,
+    token_id uuid NOT NULL REFERENCES tank.personal_tokens(token_id),
+    client_id text NOT NULL,
+    thread_id uuid NOT NULL REFERENCES tank.command_threads(thread_id),
+    initialized boolean NOT NULL DEFAULT false,
+    expires_at timestamptz NOT NULL DEFAULT now() + interval '30 days'
+);
+CREATE INDEX IF NOT EXISTS mcp_sessions_owner ON tank.mcp_sessions(tenant_id,token_id);
+
+-- Match personal_tokens exactly: staged installations stay staged. Enforced
+-- installations get both the permissive policy and the restrictive boundary.
+DO $$
+DECLARE tab text;
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        FOREACH tab IN ARRAY ARRAY['oauth_codes','mcp_sessions'] LOOP
+            EXECUTE format('ALTER TABLE tank.%I ENABLE ROW LEVEL SECURITY',tab);
+            EXECUTE format('ALTER TABLE tank.%I FORCE ROW LEVEL SECURITY',tab);
+            IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid=format('tank.%I',tab)::regclass AND polname='tenant_access') THEN
+                EXECUTE format($policy$CREATE POLICY tenant_access ON tank.%I FOR ALL TO PUBLIC
+                    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)$policy$,tab);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid=format('tank.%I',tab)::regclass AND polname='tenant_boundary') THEN
+                EXECUTE format($policy$CREATE POLICY tenant_boundary ON tank.%I AS RESTRICTIVE FOR ALL TO PUBLIC
+                    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)$policy$,tab);
+            END IF;
+        END LOOP;
+    END IF;
+END
+$$;
+
+-- G3: founder-owned MCP approval registry (global, deliberately no tenant/RLS).
+CREATE TABLE IF NOT EXISTS tank.mcp_servers (
+    url text PRIMARY KEY,
+    name text NOT NULL,
+    allowed_tools jsonb NOT NULL CHECK (jsonb_typeof(allowed_tools)='object'),
+    approved_by text NOT NULL,
+    approved_at timestamptz NOT NULL DEFAULT now()
+);
+-- Existing vault row/RLS scope protects cached discovery and sealed OAuth state.
+-- Plugin status is deliberately unchanged; mcp_state has its own lifecycle.
+ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_state text NOT NULL DEFAULT 'not_approved'
+    CHECK (mcp_state IN ('not_approved','needs_sign_in','connected','sign_in_failed'));
+ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_tools jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_discovered_at timestamptz;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (

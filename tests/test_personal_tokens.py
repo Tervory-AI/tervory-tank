@@ -48,7 +48,7 @@ async def test_token_identity_ignores_all_assertion_headers(runtime):
     assert not actor.founder and not actor.tenant_admin
     assert command.allowed_tools(actor) == ['tiger.read', 'tiger.watch']
     args = runtime.fetchrow.call_args.args
-    assert args[1:] == (TENANT, 'us-east', pat.digest(TOKEN))
+    assert args[1:] == (TENANT, 'us-east', pat.digest(TOKEN), 'cli')
     assert TOKEN not in repr(args)
 
 

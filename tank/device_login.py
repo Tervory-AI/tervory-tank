@@ -55,6 +55,8 @@ NO_STORE = {"Cache-Control": "no-store", "Pragma": "no-cache"}
 class NewCode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     device_name: str = Field(min_length=1, max_length=100)
+    # Zitadel is opt-in; old clients retain the existing Boston approval path.
+    approval: Literal["workspace", "zitadel"] | None = None
 
 
 class Poll(BaseModel):
@@ -128,6 +130,10 @@ def platform():
 @router.post("/code")
 async def create_code(body: NewCode) -> JSONResponse:
     box = region()
+    import identity_oidc
+    if identity_oidc.configured() and body.approval == "zitadel":
+        from identity_device import create
+        return await create(clean_name(body.device_name))
     device_code = f"tvd1.{box}.{secrets.token_urlsafe(32)}"
     name = clean_name(body.device_name)
     with platform():
@@ -159,6 +165,10 @@ async def create_code(body: NewCode) -> JSONResponse:
 @router.post("/token")
 async def poll(body: Poll) -> JSONResponse:
     box = region()
+    import identity_oidc
+    if body.device_code.startswith('tzd1.') and identity_oidc.configured():
+        from identity_device import poll as identity_poll
+        return await identity_poll(body.device_code)
     match = DEVICE_CODE.fullmatch(body.device_code)
     if match is None or match.group(1) != box:
         return error("invalid_grant")
@@ -206,22 +216,29 @@ async def poll(body: Poll) -> JSONResponse:
 
 @router.post("/refresh")
 async def refresh(body: Refresh) -> JSONResponse:
+    return await rotate_refresh(body.refresh_token, audience="cli")
+
+
+async def rotate_refresh(presented: str, *, audience: str, client_id: str | None = None) -> JSONResponse:
+    """CLI and OAuth share token format, lifetimes and atomic one-use rotation."""
     box = region()
-    match = REFRESH.fullmatch(body.refresh_token)
+    match = REFRESH.fullmatch(presented)
     if match is None or match.group(1) != box:
         return error("invalid_grant")
     tenant = uuid.UUID(hex=match.group(2))
     access, rotated = credential_pair(box, tenant)
     issued = now()
+    expiries = (issued + ACCESS_TTL, issued + REFRESH_TTL)
     with tenant_scope(tenant):
         async with command.db().acquire() as conn:
             # Rotation: the presented refresh token and the old access token stop working.
             token_id = await conn.fetchval(
-                "UPDATE tank.personal_tokens SET token_hash=$4,expires_at=$5,refresh_hash=$6,refresh_expires_at=$7 "
-                "WHERE tenant_id=$1 AND region=$2 AND refresh_hash=$3 AND revoked_at IS NULL "
-                "AND refresh_expires_at > now() RETURNING token_id",
-                tenant, box, pat.digest(body.refresh_token), pat.digest(access), issued + ACCESS_TTL,
-                pat.digest(rotated), issued + REFRESH_TTL)
+                """UPDATE tank.personal_tokens SET token_hash=$4,expires_at=$5,refresh_hash=$6,refresh_expires_at=$7
+                WHERE tenant_id=$1 AND region=$2 AND refresh_hash=$3 AND revoked_at IS NULL
+                AND audience=$8 AND client_id IS NOT DISTINCT FROM $9
+                AND refresh_expires_at > now() RETURNING token_id""",
+                tenant, box, pat.digest(presented), pat.digest(access), expiries[0],
+                pat.digest(rotated), expiries[1], audience, client_id)
     if token_id is None:
         return error("invalid_grant")
     return JSONResponse(grant(access, rotated, token_id, box, issued), headers=NO_STORE)
@@ -253,8 +270,10 @@ async def revoke(request: Request) -> JSONResponse:
     with tenant_scope(tenant):
         async with command.db().acquire() as conn:
             await conn.execute(
-                f"UPDATE tank.personal_tokens SET revoked_at=coalesce(revoked_at,now()) "
-                f"WHERE tenant_id=$1 AND region=$2 AND {column}=$3", tenant, box, pat.digest(token))
+                """UPDATE tank.personal_tokens SET revoked_at=coalesce(revoked_at,now())
+                WHERE tenant_id=$1 AND region=$2 AND audience='cli'
+                AND (($4='token_hash' AND token_hash=$3) OR ($4='refresh_hash' AND refresh_hash=$3))""",
+                tenant, box, pat.digest(token), column)
     # RFC 7009: the same answer whether or not the token existed.
     return JSONResponse({"revoked": True}, headers=NO_STORE)
 
@@ -264,7 +283,7 @@ async def pending(conn: Any, code: str, box: str) -> Any:
         raise HTTPException(404, "Sign-in code not found")
     row = await conn.fetchrow(
         "SELECT device_hash,user_code,region,device_name,status,created_at,expires_at FROM tank.device_authorizations "
-        "WHERE user_code=$1 AND region=$2 FOR UPDATE", code, box)
+        "WHERE user_code=$1 AND region=$2 AND provider='workspace' FOR UPDATE", code, box)
     if row is None or row["status"] != "pending" or row["expires_at"] <= now():
         raise HTTPException(404, "Sign-in code not found or expired")
     return row

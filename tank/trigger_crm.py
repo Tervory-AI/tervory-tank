@@ -50,6 +50,14 @@ class CRMWriteArgs(BaseModel):
 
 async def authority(actor: Actor) -> Actor:
     actor = await authorized_actor(actor)
+    # Only a durably confirmed Base list card can use this corridor as a
+    # Base-squad client. Ordinary Trigger CRM actions remain founder-only.
+    from trigger_commands import CONFIRMED, confirmation
+    bound = CONFIRMED.get()
+    if bound and bound[3] == "base.list.to_crm":
+        require_tool(actor, "base.list.to_crm")
+        confirmation(actor, "base.list.to_crm", bound[4])
+        return actor
     require_founder(actor)
     require_tool(actor, "trigger.crm.write")
     return actor
