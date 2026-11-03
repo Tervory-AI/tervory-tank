@@ -241,8 +241,9 @@ test('git read tools cannot execute repository clean/process filters without app
   execFileSync('git', ['add', 'file.txt'], { cwd: sub });
   execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'sub'], { cwd: sub });
   execFileSync('git', ['add', 'sub'], { cwd: f.root, stdio: 'pipe' });
-  execFileSync('git', ['config', 'filter.guard.clean', 'sh -c "printf wrong > sub-filter-marker; cat"'], { cwd: sub });
-  await writeFile(join(sub, '.gitattributes'), 'file.txt filter=guard\n');
+  execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'parent'], { cwd: f.root });
+  execFileSync('git', ['config', 'filter.subguard.clean', 'sh -c "printf wrong > sub-filter-marker; cat"'], { cwd: sub });
+  await writeFile(join(sub, '.gitattributes'), 'file.txt filter=subguard\n');
   await writeFile(join(sub, 'file.txt'), 'sub changed\n');
   execFileSync('git', ['add', 'file.txt'], { cwd: f.root });
   execFileSync('git', ['config', 'filter.guard.clean', 'sh -c "printf wrong > filter-marker; cat"'], { cwd: f.root });
