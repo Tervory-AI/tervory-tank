@@ -154,6 +154,18 @@ def register_record_routes(app, records, resolve_agent):
         except RuntimeError:
             raise HTTPException(503, "memory store unreachable") from None
 
+    @app.post("/founder/records/{id}/withdraw")
+    async def withdraw(
+        id: uuid.UUID, body: Scoped,
+        x_tank_key: str = Header(default=""),
+        x_tervory_admin: str = Header(default=""),
+    ):
+        actor = founder(x_tank_key, x_tervory_admin)
+        try:
+            return await Publisher(ready(body.agent)).withdraw(body.agent, str(body.tenant_id), str(id), actor)
+        except ValueError:
+            raise HTTPException(409, "Memory record conflict") from None
+
     @app.post("/founder/publish-policy")
     async def policy(
         body: Policy,
