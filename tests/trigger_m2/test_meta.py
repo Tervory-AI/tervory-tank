@@ -24,9 +24,8 @@ from test_second import OTHER, TENANT, confirm, headers, proposal
 
 import command
 import trigger_google
-import trigger_marketing_api as api
 from trigger_marketing_contract import Post, Posts, Schedule, utc_now
-from trigger_meta import GRAPH, PERMISSIONS, MetaFailure, context
+from trigger_meta import PERMISSIONS, MetaFailure, context
 from trigger_publisher import Publisher, publish_due
 from vault import open_seal
 
@@ -101,7 +100,7 @@ class FakeMeta:
 async def m2(m1, monkeypatch):
     monkeypatch.setenv('TRIGGER_META_APP_ID', 'placeholder-meta-app-id')
     monkeypatch.setenv('TRIGGER_META_APP_SECRET', APP_SECRET)
-    monkeypatch.setenv('TANK_VAULT_KEY', base64.urlsafe_b64encode(b'placeholder-vault-key-for-tests!!').decode())
+    monkeypatch.setenv('TANK_VAULT_KEY', base64.urlsafe_b64encode(b'placeholder-vault-key-for-tests!').decode())
     fake = FakeMeta()
     original = httpx.AsyncClient
     def client(**kwargs):
