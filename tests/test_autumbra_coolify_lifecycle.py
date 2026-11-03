@@ -65,6 +65,7 @@ def backend(http):
 
 @pytest.mark.asyncio
 async def test_create_four_values_only_and_no_deploy_or_secret_leak(caplog):
+    caplog.set_level("DEBUG")
     api = FakeAPI()
     api.rows = [{'name': lifecycle.project_name(B), 'uuid': 'placeholder-other', 'status': 'exited'},
                 {'name': 'placeholder-unrelated', 'uuid': 'placeholder-unrelated', 'status': 'exited'}]
@@ -128,6 +129,7 @@ async def test_destroy_exact_tenant_and_absent():
 @pytest.mark.parametrize('action', ['create', 'destroy'])
 @pytest.mark.parametrize('failure', ['timeout', 500, 503])
 async def test_ambiguous_mutation_unknown_no_retry(action, failure, caplog):
+    caplog.set_level("DEBUG")
     api = FakeAPI()
     api.failure = failure
     if action == 'destroy':
