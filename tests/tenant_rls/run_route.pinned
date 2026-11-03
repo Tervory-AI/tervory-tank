@@ -1,3 +1,8 @@
+# Pinned body of tank/main.py run_route for tests/test_tenant_rls.py.
+# Changed on purpose by the prompt-caching PR (cache read/write tokens on the receipt).
+# Changed on purpose by #500: urgent reads the tenant-sealed exact cache (#360 over #424).
+# Metadata-only execution receipt delta: dispatched settings are not resolved defaults.
+# Update this copy only together with a reviewed change to run_route.
 async def run_route(
     req: RouteRequest,
     task_id: uuid.UUID | None = None,
@@ -106,10 +111,6 @@ async def run_route(
     transcript_messages = await _preflight_mask(req, policy, messages, task_id)
     identity = _cache_identity(req, policy, messages, max_tokens, route_seat)
     cache_policy, cache_probe = dict(policy), None
-    # An exact repeat is served free at every priority: the tenant-sealed exact cache is a
-    # single indexed read, so urgent loses no time and pays no model call (#360). Urgent
-    # reads the exact match only (no semantic form) and still skips the encoder and every
-    # shadow (#424).
     if not _offpeak_dispatch and not holds_identifier and code_problem is None:
         exact_policy = policy if priority != "urgent" else {**policy, "semantic_cache": False}
         hit = await _cache_read(req, exact_policy, identity)
