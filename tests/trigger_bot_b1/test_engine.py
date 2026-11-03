@@ -211,3 +211,18 @@ def test_reused_rig_security_and_smtp_implementations_keep_original_behavior():
         source = ast.parse((root / original).read_text())
         for name in names:
             assert definition(shared, name) == definition(source, name), name
+
+
+@pytest.mark.asyncio
+async def test_contact_details_without_an_enquiry_do_not_create_a_lead():
+    from trigger_bot import Bot
+    pool = SimpleNamespace(execute=AsyncMock())
+    bot = Bot(SimpleNamespace(pool=lambda: pool, box_region=lambda: 'us-east'))
+    contact_only = 'Name: Typed name\nEmail: typed@offline.invalid\n'
+    assert await bot.lead_draft(A, SOURCE, contact_only, None) is None
+    pool.execute.assert_not_awaited()
+    draft = await bot.lead_draft(A, SOURCE, contact_only + 'Please quote the item.', None)
+    assert isinstance(draft, UUID)
+    stored = json.loads(pool.execute.await_args.args[-1])
+    assert stored['first_name'] == 'Typed name' and stored['email'] == 'typed@offline.invalid'
+    assert stored['description'] == contact_only + 'Please quote the item.'
