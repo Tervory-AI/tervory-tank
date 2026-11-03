@@ -2,6 +2,7 @@
 import asyncio
 import json
 import os
+import resource
 import time
 import tracemalloc
 from pathlib import Path
@@ -48,7 +49,8 @@ async def benchmark(uri):
             except HTTPException as error:
                 assert error.status_code == 422 and error.detail == {"total": 50000}
         metrics[operation] = {"seconds": round(time.perf_counter()-started, 3),
-                              "peak_python_mib": round(tracemalloc.get_traced_memory()[1]/1024/1024, 3)}
+                              "peak_python_mib": round(tracemalloc.get_traced_memory()[1]/1024/1024, 3),
+                              "peak_client_rss_mib": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024, 3)}
         tracemalloc.stop()
     await pool.close()
     print(json.dumps({"records": 50000, "database": "ephemeral local PostgreSQL", "metrics": metrics}))
