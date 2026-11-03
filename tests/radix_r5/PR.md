@@ -98,6 +98,8 @@ The initial implementation/proof above is retained as history. Review fixes are 
 
 Local review validation: **22 Command repo tests passed**, **16 IaC/secret/projection guards passed**, projection and browser checks passed, TypeScript and Ruff passed, and real network-disabled Radix room evals remained **5/5, score 1.0, eligible true, $0**. Exact commands and outputs: [REVIEW-PROOF.txt](REVIEW-PROOF.txt).
 
+The first full CI run at `790a8214` reported three R5-specific harness failures (old three-tool expectation, attempting room-only IaC evals in Tank, and a cached Tiger `gold_sources` import). A fresh main archive passed the unchanged comparison tests (**31 passed**); the affected tests after correction passed **44 tests**. The generic harness now treats `scan.iac` like Tisan's room-only packages; actual Checkov evals remain in Radix at threshold 1.0. The room test explicitly reproduces the foreign cached-module condition. No unrelated baseline failure was changed. Evidence and the failed run link are retained in [REVIEW-PROOF.txt](REVIEW-PROOF.txt).
+
 ### Hosted full-suite result
 
 CI's `tank` job is the full-suite test of record. Final review-head result: **pending** at this report checkpoint; the actual completed job result will be recorded here before handoff. [Current #605 head checks](https://github.com/Tervory-AI/tervory-tank/pull/605/checks).
