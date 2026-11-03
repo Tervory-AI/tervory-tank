@@ -11,6 +11,51 @@ proxy/network, fetches only the project's allowed health URL, and writes signed
 results to a volume Enforce mounts read-only. No direct connection fallback,
 other client zone, model call, page, copy, sign-in or production SQL is added.
 
+## Free-plan review — availability checked 3 November 2026
+
+Cloudflare's current [rate-limit availability table](https://developers.cloudflare.com/waf/rate-limiting-rules/#availability)
+limits Free expressions to Path and Verified Bot; Host starts at Pro. Its
+[managed-rules availability table](https://developers.cloudflare.com/waf/managed-rules/#availability)
+excludes the Cloudflare Managed Ruleset from Free (the separate Free Managed
+Ruleset is not the ruleset named by this shield).
+
+- `agents/ghost/cloudflare_edge.py:115` reads the zone's `plan.legacy_id`
+  immediately before an apply. Free, missing, malformed or unrecognized plan data
+  refuses host-scoped rate limiting before a ruleset write. The managed-shield
+  preflight applies the same refusal; paid managed execution remains unsupported
+  by this hand. Existing Pro rate-limit expressions and Radix limits are unchanged.
+- `agents/ghost/enforce_apply.py:92` records policy refusal as `applied=False`,
+  `control=cloudflare`, `cloudflare_plan` (null when unknown), and the existing
+  fixed error. Approval rechecks the current plan and records a refusal after a
+  downgrade. There is no fixture switch or transient retry for this refusal.
+  A path-only rewrite would affect other hosts in the zone, beyond approval;
+  it is never used. Successful applied records also contain `cloudflare_plan`.
+- `tests/test_autumbra_cloudflare_hand.py:331` covers both refused kinds, Free,
+  missing and unknown plans, zero writes, Pro rate limiting with the host match,
+  Free `block_ip` for `192.0.2.1`, and downgrade before approval.
+- `docs/ops/AUTUMBRA-CLOUDFLARE-LIVE.md:9` now requires a custom-rule slot for
+  Free. Its M24 procedure at line 87 uses `block_ip` for RFC 5737 TEST-NET-1
+  `192.0.2.1` on `tervory.com`, with the same queue, approval, receipt, owner
+  email, signed Undo and health checks. Rate limiting is a Pro-plan variant only.
+  The documentation address passes the existing `accept_threat_payload` and
+  `may_block_ip` gates; validation and the never-block list were not changed.
+
+### This round's offline validation
+
+Initial command:
+`/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python .proof/run_review.py tests/test_autumbra_cloudflare_hand.py`
+Exit 0: **45 passed in 2.21s** (before adding the explicit M24 gate regression).
+
+
+Final command for this review round:
+`/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python .proof/run_review.py tests/test_autumbra_a3_review.py tests/test_autumbra_cloudflare_hand.py tests/test_autumbra_cloudflare_live.py tests/test_bucket1_radix.py tests/test_radix_passive.py`
+Exit 0: **192 passed, 6 skipped in 39.55s**.
+
+`/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python -m ruff check agents/ghost/cloudflare_edge.py agents/ghost/enforce_apply.py tests/test_autumbra_cloudflare_hand.py --select E9,F`
+Exit 0: **All checks passed!**
+`git diff --check`: exit 0. Tests use offline HTTP mocks and loopback only;
+no Cloudflare writes or founder acceptance runs were performed.
+
 ## Review fixes and source locations
 
 1. `agents/ghost/cloudflare_edge.py:29`: GET /health replaces CONNECT probes.

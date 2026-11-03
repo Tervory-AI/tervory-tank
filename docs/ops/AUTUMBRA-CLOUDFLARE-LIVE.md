@@ -7,10 +7,14 @@ tokens, page changes, model calls, or changes to the existing safety rules.
 ## Before deploying
 
 1. In Cloudflare, select **tervory.com**. Under **Security → Security rules**,
-   inspect the existing rate limiting rules and the zone's available rule quota.
-   Confirm a slot and support for the existing fixed rate limit parameters in
-   `agents/ghost/shields.py`. Stop if unavailable; do not change plans, quotas,
-   existing rules, or the fixed parameters.
+   confirm the zone's current plan. On Free, inspect custom rules and confirm
+   one available custom-rule slot for the host-scoped `block_ip` test below.
+   Only for the Pro-plan variant, confirm a rate-limit slot and support for the
+   existing fixed parameters in `agents/ghost/shields.py`. Stop if unavailable;
+   do not change plans, quotas, existing rules, or the fixed parameters.
+   Free or missing plan data refuses `rate_limit` and `waf_managed` before any
+   write, with `applied=False`, the fixed error and `cloudflare_plan` in the
+   receipt. No path-only rewrite or fixture fallback is allowed.
 2. Create a **custom API token** with resource scope
    **Include → Specific zone → tervory.com** and only these permissions:
    **Zone → Zone → Read** and **Zone → WAF → Edit**. No DNS permission,
@@ -83,39 +87,49 @@ M24 if the receipt names the fixture.
 ## M24 in the founder's browser
 
 Keep the Cloudflare dashboard, Coolify browser terminal, and the owner's inbox
-open. Use a single path the founder has confirmed is unused on `tervory.com`.
-Do not target `/`, login, checkout or a working application route. This is the
-one authorized temporary rate-limit test, followed immediately by Undo.
+open. On Free, the one authorized temporary test is `block_ip` on
+`tervory.com` for `192.0.2.1`, the RFC 5737 TEST-NET-1 documentation address.
+It never represents real traffic. Follow it immediately with Undo.
 
-From the existing per-client Enforce browser terminal, run the following,
-replacing the sole path argument with that confirmed unused path. It uses the
-existing validated ThreatPayload queue door and the existing client mode/cap;
-it does not call Cloudflare directly or bypass Enforce.
+From the existing per-client Enforce browser terminal, run this through the
+existing validated ThreatPayload queue door and existing client mode/cap:
 
 ```bash
-python - /THE-CONFIRMED-UNUSED-PATH <<'PY'
+python - <<'PY'
 import os
-import sys
 from ghost.threat_payload import accept_threat_payload
 from ghost.threat_queue import ThreatPayloadQueue, queue_root_from_env
 payload = accept_threat_payload({
     "schema_version": "ghost.threat.v1",
     "action": "propose_shield",
     "site": "tervory.com",
-    "kind": "rate_limit",
-    "path": sys.argv[1],
-    "reason": "Founder-authorized M24 rate-limit verification",
+    "kind": "block_ip",
+    "address": "192.0.2.1",
+    "reason": "Founder-authorized M24 documentation-address verification",
     "tenant_id": os.environ["TENANT_ID"],
 })
 print(ThreatPayloadQueue(queue_root_from_env()).put(payload))
 PY
 ```
 
+If payload validation or A2's never-block gate refuses this address, stop and
+report the refusal. Do not change validation or substitute a real address.
+
+**Pro-plan variant only:** the authorized temporary `rate_limit` test uses one
+path the founder has confirmed is unused on `tervory.com`. Never target `/`,
+login, checkout or a working application route. In the same queue command above,
+replace `"kind": "block_ip"` and `"address": "192.0.2.1"` with
+`"kind": "rate_limit"` and `"path": "/THE-CONFIRMED-UNUSED-PATH"`, and use
+`"reason": "Founder-authorized M24 rate-limit verification"`. Use the confirmed
+path in place of the placeholder. This variant requires the Pro-plan quota check
+in step 1 and the same approval, receipt, email, signed Undo and health checks.
+Never run it on Free or remove the host match to make it fit the plan.
+
 If the existing client mode requires approval, use the existing approval door
 for this receipt. Do not change modes to bypass it. Read this client's newest
 queue receipt from `/queue/receipts` in the same browser terminal. Verify the
-path and site, `control=cloudflare`, `applied=True`, `health_ok=True`, and the
-owned rule ID. Verify the matching rule appears in Cloudflare's dashboard.
+kind, documentation address (or Pro variant path) and site, `control=cloudflare`,
+`applied=True`, `health_ok=True`, and the owned rule ID. Verify the matching rule appears in Cloudflare's dashboard.
 The receipt's decision-to-shield must be at most 10 seconds and
  event-to-shield at most 15 seconds. Save the actual receipt; wall-clock dashboard
 refresh timing is additional evidence, not a replacement for the receipt.

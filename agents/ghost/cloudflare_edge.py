@@ -48,6 +48,14 @@ class CloudflareEdgeError(RuntimeError):
     """Fixed error only: never expose HTTP headers, URLs with credentials or bodies."""
 
 
+class CloudflarePlanRefused(CloudflareEdgeError):
+    """Policy refusal with bounded plan data; never a transport retry."""
+
+    def __init__(self, plan: str | None):
+        super().__init__("Cloudflare request failed.")
+        self.plan = plan
+
+
 def _id(value: object) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{32}", value):
         raise CloudflareEdgeError("Invalid Cloudflare resource identifier.")
@@ -104,8 +112,26 @@ class CloudflareEdgeControl(FixtureEdgeControl):
         except (httpx.HTTPError, ValueError, KeyError, TypeError):
             raise CloudflareEdgeError("Cloudflare request failed.") from None
 
+    def _zone_plan(self, kind: str) -> tuple[str, str | None]:
+        zones = self._request("GET", "zones?name=" + self._zone(self.site))
+        if (not isinstance(zones, list) or len(zones) != 1
+                or not isinstance(zones[0], dict) or zones[0].get("name") != self._zone(self.site)):
+            raise CloudflareEdgeError("Allowed Cloudflare zone was not found.")
+        zone_id = _id(zones[0].get("id"))
+        raw_plan = zones[0].get("plan")
+        plan = raw_plan.get("legacy_id") if isinstance(raw_plan, dict) else None
+        plan = plan if isinstance(plan, str) and plan in {"free", "pro", "business", "enterprise"} else None
+        if kind in {"rate_limit", "waf_managed"} and plan not in {"pro", "business", "enterprise"}:
+            raise CloudflarePlanRefused(plan)
+        return zone_id, plan
+
+    def check_managed_plan(self) -> None:
+        # Managed execution is still unsupported by this hand. Refuse Free or
+        # unknown plans explicitly instead of suggesting an applicable shield.
+        self._zone_plan("waf_managed")
+
     def _apply(self, *, kind: str, site: str, ref: str, address=None, path=None) -> dict:
-        zone = self._zone(site)
+        self._zone(site)
         if site != self.site:
             raise ValueError("Control is bound to another site.")
         if kind not in {"block_ip", "rate_limit"}:
@@ -117,10 +143,7 @@ class CloudflareEdgeControl(FixtureEdgeControl):
             raise ValueError("Invalid Autumbra rule reference.")
         rule = rule_for(kind, site, request.path, ref, address=address)
         with self._lock:
-            zones = self._request("GET", "zones?name=" + zone)
-            if not isinstance(zones, list) or len(zones) != 1 or zones[0].get("name") != zone:
-                raise CloudflareEdgeError("Allowed Cloudflare zone was not found.")
-            zone_id = _id(zones[0].get("id"))
+            zone_id, plan = self._zone_plan(kind)
             entry = f"zones/{zone_id}/rulesets/phases/{PHASES[kind]}/entrypoint"
             ruleset = self._request("GET", entry, missing_ok=True)
             if ruleset is None:
@@ -149,6 +172,7 @@ class CloudflareEdgeControl(FixtureEdgeControl):
                 "ruleset_id": ruleset_id, "site": site, "ref": ref, "kind": kind,
                 "address": address, "path": request.path, "up_at": _now(),
                 "expression": rule["expression"], "applied_at": time.time(),
+                "cloudflare_plan": plan,
             }
             self.blocked[rule_id] = row
             return dict(row)
