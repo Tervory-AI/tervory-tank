@@ -138,6 +138,13 @@ No public client routes or links. Public-link fields are not exposed. Money uses
 - `98:9181` · Trigger / Mobile drawer / Zero · Changed after approval, awaiting founder.
 - `98:9227` · Trigger / Mobile drawer / Filled · Changed after approval, awaiting founder.
 
+## New invoice table nodes
+
+- Detail `97:7743`: Items / Table `288:8507`; Payments / Table `288:8522`.
+- Detail `97:8098`: Items / Table `288:8563`; Payments / Table `288:8590`.
+- Detail `97:8464`: Items / Table `288:8623`; Payments / Table `288:8638`.
+- Detail `97:8716`: Items / Table `288:8659`; Payments / Table `288:8686`.
+
 ## New words and slots awaiting founder approval
 
 - Changed after approval, awaiting founder
@@ -249,7 +256,7 @@ Detail: GET `/api/leads/{id}/`, schema `Lead`, record path `lead_obj`.
 | `is_unanswered` | `open_leads.open_leads[].is_unanswered` | `lead_obj.is_unanswered` |
 | `is_sample` | — | `lead_obj.is_sample` (hidden; policy above) |
 
-### Accounts
+### Clients (Accounts API)
 
 List: GET `/api/accounts/`, schema `Account`, record path `active_accounts.open_accounts[]`.
 Detail: GET `/api/accounts/{id}/`, schema `AccountWithRelated`, record path `account_obj`.
@@ -511,7 +518,7 @@ Detail: GET `/api/invoices/{id}/`, schema `Invoice`, record path `invoice`.
 | `public_link_enabled` | — | `invoice.public_link_enabled` (hidden; policy above) |
 | `public_url` | — | `invoice.public_url` (hidden; policy above) |
 
-### Estimates
+### Quotes (Estimates API)
 
 List: GET `/api/invoices/estimates/`, schema `EstimateList`, record path `results[]`.
 Detail: GET `/api/invoices/estimates/{id}/`, schema `Estimate`, record path `estimate`.
@@ -579,6 +586,28 @@ Detail: GET `/api/invoices/estimates/{id}/`, schema `Estimate`, record path `est
 
 
 
+## API action register
+
+| Section | Action | Method | API path |
+|---|---|---|---|
+| Leads | Delete | DELETE | `/api/leads/{id}/` |
+| Clients | Delete | DELETE | `/api/accounts/{id}/` |
+| Contacts | Delete | DELETE | `/api/contacts/{id}/` |
+| Opportunities | Delete | DELETE | `/api/opportunities/{id}/` |
+| Cases | Delete | DELETE | `/api/cases/{id}/` |
+| Tasks | Delete | DELETE | `/api/tasks/{id}/` |
+| Invoices | Send | POST | `/api/invoices/{id}/send/` |
+| Invoices | Mark paid | POST | `/api/invoices/{id}/mark-paid/` |
+| Quotes | Delete | DELETE | `/api/invoices/estimates/{id}/` |
+| Quotes | Send | POST | `/api/invoices/estimates/{id}/send/` |
+| Quotes | Convert | POST | `/api/invoices/estimates/{id}/convert/` |
+| Invoices | Record payment | POST | `/api/invoices/{invoice_id}/payments/` |
+| Invoices | Delete payment | DELETE | `/api/invoices/{invoice_id}/payments/{id}/` |
+| Invoices | Delete line item | DELETE | `/api/invoices/{invoice_id}/line-items/{id}/` |
+
+All other DELETE operations, including comments and attachments, inherit the same confirmation gate if exposed. There is no invoice-record DELETE endpoint; do not invent one. Converted estimates open the invoice through `converted_to_invoice`. Cases may return `CaseMergedRedirectResponse`; resolve the canonical case rather than rendering a fictitious record. Leads' closed lists use `close_leads.close_leads[]`; Accounts' closed lists use `closed_accounts.close_accounts[]` with the same record schema.
+
+
 ## Authoring verification and acceptance
 
 The requested branch was cloned into /workspace/codex-crm-design. Fetch succeeded. The first merge attempt stopped because the local committer identity was absent; the requested local Codex name/email were configured, then git merge origin/main passed and the merge was pushed. Only docs/figma/crm/SPEC.md is edited for this design revision.
@@ -586,3 +615,5 @@ The requested branch was cloned into /workspace/codex-crm-design. Fetch succeede
 Commands: git clone https://github.com/Tervory-AI/tervory-tank.git /workspace/codex-crm-design; git fetch origin codex/crm-design; git checkout codex/crm-design; git config user.name Codex; git config user.email codex@users.noreply.github.com; git merge origin/main; git diff --check; git push origin codex/crm-design.
 
 Figma structural checks cover duplicate detail labels, hidden internals, column counts, confirmation context, required payment inputs, drawer clearance and canvas text. Screenshots are authoring evidence, not a founder browser acceptance test. Founder acceptance remains outstanding. No tests or screenshots are claimed as founder approval. Claude handles PR review and the founder merges.
+
+Verification results: all 94 original screen/drawer roots retained; zero visible duplicate detail labels; zero exposed Reference, Board order, Organisation or Acceptance IP address fields; all 16 desktop lists at 5–8 columns. Mobile payment scroll ends at y732, exactly above the footer; last input ends at y935 of 1039px content, leaving 104px clearance. Both drawers: bottom width240, one Settings, vertical scroll, end padding16. Visible canvas SPEC matches this document; both native SPEC copies match after Markdown whitespace normalization. Old canvas SPEC sections101:8245–101:8261 were deleted. Authoring screenshots inspected invoice list, mobile full-name cards, invoice/quote detail, payment forms, Send/Convert and isolated invoice tables. No founder-test screenshot exists yet.
