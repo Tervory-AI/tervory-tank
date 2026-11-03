@@ -298,14 +298,15 @@ class CoolifyEnforceBackend:
                    environment=os.environ[COOLIFY_SETTINGS[4]],
                    github_app=os.environ[COOLIFY_SETTINGS[5]])
 
-    async def list(self) -> list[dict[str, str]]:
+    async def _applications(self):
         rows = await self.coolify.call("GET", "/applications", allow_list=True)
-        if not isinstance(rows, list):
+        if not isinstance(rows, list) or any(not isinstance(row, dict) or not isinstance(row.get("name"), str) for row in rows):
             raise Refused("Coolify application list unavailable")
+        return rows
+
+    async def list(self) -> list[dict[str, str]]:
         result = []
-        for row in rows:
-            if not isinstance(row, dict) or not isinstance(row.get("name"), str):
-                raise Refused("Coolify application list unavailable")
+        for row in await self._applications():
             if re.fullmatch(re.escape(PROJECT_PREFIX) + r"-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", row["name"]):
                 result.append({"name": row["name"], "uuid": identifier(row.get("uuid", "")),
                                "status": str(row.get("status") or "unknown"),
@@ -314,10 +315,11 @@ class CoolifyEnforceBackend:
 
     async def create_plan(self, tenant_id: str) -> dict[str, Any]:
         name = project_name(tenant_id)
-        rows = await self.list()
+        rows = await self._applications()
         if any(row["name"] == name for row in rows):
             raise Refused("Enforce project already exists")
-        return plan_create(tenant_id.lower(), existing_count=len(rows), cap=DEFAULT_CONTAINER_CAP)
+        count = sum(row["name"].startswith(PROJECT_PREFIX) for row in rows)
+        return plan_create(tenant_id.lower(), existing_count=count, cap=DEFAULT_CONTAINER_CAP)
 
     @staticmethod
     def settings_for(plan: dict[str, Any]) -> dict[str, str]:
