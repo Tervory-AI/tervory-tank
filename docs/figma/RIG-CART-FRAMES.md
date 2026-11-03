@@ -402,11 +402,40 @@ Commands: `git fetch origin && git merge origin/main` completed successfully wit
 | --- | --- | --- |
 | 1 | `321:6400` | Rotation remains 180°. Pivot x/y = **1096/143**; rendered 16×16 bounds start at **1080/127**, centre y = **135**. |
 | 2 | `321:6428` | Rotation remains 180°. Pivot x/y = **311/135**; rendered 16×16 bounds start at **295/119**, centre y = **127**. |
-| 3 | `441:737`, `441:805` | Both navy sidebars are **240×906**, matching their enclosing frames `291:8405` and `321:6304`. |
-| 4 | `441:511`, `441:545`, `441:579`, `441:613`, `441:647`, `441:681`, `441:715`, `441:749`, `441:780`, `441:817`, `441:851` | **Blocked; unchanged.** The specified CRM reference does not currently supply the requested colour on navy. |
+| 3 | `441:737`, `441:805` | Both sidebars are **240×906**, matching their enclosing frames `291:8405` and `321:6304`. |
+| 4 | `441:511`, `441:545`, `441:579`, `441:613`, `441:647`, `441:681`, `441:715`, `441:749`, `441:780`, `441:817`, `441:851` | **Resolved by the founder’s white-navigation correction below.** Legacy section-label nodes remain hidden for ID preservation. |
 
 For rotated open chevrons, Figma x/y denotes the pivot position, not the rendered top-left. Desktop and mobile open-select screenshots were inspected after correcting these pivots.
 
 Item 4 source inspection: frame `94:1061` is currently named **Leads / Detail / Desktop / Filled · Changed after approval, awaiting founder**. Its `182:9119` navigation instance has a **white** fill, bound to `VariableID:42:13`. Its CRM section label `I182:9119;180:8405` (and Writing, Sales, Marketing, Chat bot section labels) uses `VariableID:42:15`, **#3d4a66**, at opacity 1. The ancestor chain has no navy background. That reference therefore cannot supply a matching CRM section-label colour meeting 4.5:1 on #001840. Rule 9 stop: the missing input is a CRM navy-sidebar section-label colour/reference meeting the specified contrast. No replacement colour was invented. Rig section labels retain 12/20 Semi Bold; light-background kickers remain unchanged.
 
 Verification: Figma returned all four mutated node IDs and their new geometry; desktop/mobile open-select screenshots were inspected. `git fetch origin && git merge origin/main` was run before the documentation commit/push. `git diff --check` verifies the register. No runtime code or production data changed. No founder acceptance is claimed.
+
+
+## Founder correction · CRM navigation replacement · 3 November 2026
+
+**Proposed, not approved.** This correction supersedes the item 4 stop above. The founder confirmed that the white CRM navigation is the intended reference; no navy-background section-label colour is required.
+
+All eleven desktop A-frame sidebars now contain a clone of CRM navigation instance `182:9119`, linked to the same main component `180:8387`. The original sidebar wrapper IDs and every enclosing frame ID are preserved. Legacy logo/navigation children are hidden for ID preservation; wrapper navy fills and strokes are removed. The live instances supply the white fill (`VariableID:42:13`), section-label colour (`VariableID:42:15`, #3d4a66), fonts, row spacing and Default/Hover/Active component states. Only instance content and visibility are customized. The inherited CRM Leads selection paint was cleared using the Default row’s existing paints, so Chats is not incorrectly selected.
+
+Navigation follows `workspace/app/product-nav.ts`: Dashboard, Projects, Chats, Squad, Rig (section heading), Overview, Ledger, Billing, Tasks, Data, Prices, Settings, CLI sign-ins, Support. Unused CRM entries and headings are hidden. Rig replaces Trigger in the identity slot. The eleven mobile A frames retain their Menu bars; they have no navy desktop sidebar to replace.
+
+| A frame | Preserved sidebar wrapper | CRM navigation instance | Size |
+| --- | --- | --- | --- |
+| `291:8053` | `441:499` | `456:18492` | 240 × 900 |
+| `291:8097` | `441:533` | `456:18598` | 240 × 900 |
+| `291:8151` | `441:567` | `456:18691` | 240 × 900 |
+| `291:8213` | `441:601` | `456:18784` | 240 × 900 |
+| `291:8267` | `441:635` | `456:18877` | 240 × 900 |
+| `291:8309` | `441:669` | `456:18970` | 240 × 900 |
+| `291:8357` | `441:703` | `456:19063` | 240 × 900 |
+| `291:8405` | `441:737` | `456:19156` | 240 × 906 |
+| `291:8444` | `441:768` | `456:19249` | 240 × 900 |
+| `321:6304` | `441:805` | `456:19342` | 240 × 906 |
+| `321:6382` | `441:839` | `456:19435` | 240 × 900 |
+
+Figma read-back confirmed every instance at x=0, y=0 inside its x=0 wrapper, with width 240 and height equal to its enclosing frame. Every visible sidebar text label was checked against its nearest opaque solid background: 187 text nodes across eleven sidebars, zero failures below 4.5:1. Rig section labels are 8.87:1 on white; default navigation labels are 17.44:1; the business-switcher text is 16.12:1; the inherited Jost product identity is the minimum at 6.47:1. Fonts remain component-governed Inter and Jost. The final Chats paint matches the audited default navigation colour/background pair.
+
+The full Orders frame `291:8405` composition screenshot was inspected after the changes: white navigation, correct entry order, readable labels, full 906px sidebar and no visible clipping or overlap. Navigation consists of linked instances and editable text; the only image fills are the CRM component’s approved Tervory logo assets, not flattened UI screenshots. This is tool-based design verification, not founder browser acceptance. All 52 frames and review bars remain Proposed, not approved. No model calls were used to check the work.
+
+Work was performed in the isolated clone `/workspace/fresh-rig-figma-0845` on the existing `codex/rig-cart-figma` branch. The old owner’s latest public `task_complete` (3 November 2026, 16:47:59 UTC) confirmed stopping, no push in flight, and Figma head `dd8e5bfb` pushed and clean. Its reported uncommitted work belongs to the separate no-payments folder and was left untouched. Only this register changes in Git; no runtime code, secrets or production actions are involved.
