@@ -10,6 +10,8 @@ from pathlib import Path
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    # pipeline._ENGINE_ID uses the existing shared source-score helper.
+    sys.path.append(str(Path(__file__).resolve().parents[3] / "tank"))
 
 from engines import ROOT, check_id, load_engine
 
