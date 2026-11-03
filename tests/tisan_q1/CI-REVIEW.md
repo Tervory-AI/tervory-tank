@@ -26,4 +26,12 @@ TMPDIR=/workspace/codex-tisan-q1/.git/tmp node tests/quality-browser.cjs
 # /missing-test-link named with 404; external server received no requests.
 ```
 
-The full Tank offline suite is running with four workers, its normal network restrictions and disposable PostgreSQL on loopback port 32806. It has reported failures; final counts and diagnoses will be appended after completion. No production database is used.
+The first full Tank offline run used four workers, normal network restrictions and disposable PostgreSQL on loopback port 32806: main **8 failed, 6381 passed, 56 skipped, 1805 subtests passed**; Tiger **46 passed**; Zenas regulation alerts **40 passed**. The eight failures were test setup: task temp files lived under `.git`, which Radix deliberately excludes and which let Base's flat-image test discover the enclosing repository's skills. No application change was made for these failures.
+
+```sh
+mkdir -p /workspace/codex-tisan-q1-tmp
+TMPDIR=/workspace/codex-tisan-q1-tmp .git/venv/bin/python -m pytest -q tests/test_rx1_scans.py tests/test_base_engine_terms_approved.py tests/test_radix_osv_real.py
+# 40 passed, 1 skipped in 2.14s.
+```
+
+The complete suite is being rerun with the corrected temp location and a fresh disposable database. Final counts will follow. No production database is used.
