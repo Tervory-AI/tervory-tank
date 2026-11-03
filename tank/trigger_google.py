@@ -181,16 +181,27 @@ class Google:
                 return rows
         raise GoogleFailure(502)  # Never advance a cursor after an incomplete read.
 
+    async def revoke(self, tenant, generation, sealed):
+        refresh = open_seal(sealed, context(tenant, str(generation)))['refresh_token']
+        response = await self.http('POST', REVOKE, data={'token': refresh})
+        if response.status_code == 200:
+            return
+        if response.status_code == 400:
+            try:
+                data = response.json()
+            except ValueError:
+                data = None
+            if isinstance(data, dict) and data.get('error') == 'invalid_token':
+                return  # Google already revoked this grant.
+        raise GoogleFailure(response.status_code)  # No token-bearing error body.
+
     async def disconnect(self, tenant, generation):
         async with self.pool.acquire() as conn, conn.transaction():
             row = await conn.fetchrow('SELECT * FROM tank.trigger_gbp_connections WHERE tenant_id=$1 FOR UPDATE', tenant)
             if row is None or row['generation'] != generation:
                 raise HTTPException(409)
             if row['sealed']:
-                refresh = open_seal(row['sealed'], context(tenant, str(generation)))['refresh_token']
-                response = await self.http('POST', REVOKE, data={'token': refresh})
-                if response.status_code != 200:
-                    raise GoogleFailure(response.status_code)  # No token-bearing error body.
+                await self.revoke(tenant, generation, row['sealed'])
             await conn.execute("UPDATE tank.trigger_gbp_connections SET sealed=NULL,status='disconnected',location=NULL,location_title=NULL,updated_at=now() WHERE tenant_id=$1", tenant)
             await conn.execute('DELETE FROM tank.trigger_gbp_states WHERE tenant_id=$1', tenant)
         return {'status': 'disconnected'}
