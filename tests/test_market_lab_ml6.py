@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
+import pytest_asyncio
 from fastapi import FastAPI, Request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'agents/market_lab'))
@@ -31,11 +32,12 @@ def report(tenant=OWNER, citations=None):
                 {'claim': 'placeholder citation', 'date': '2026-11-03', 'url': 'https://placeholder.example/source'}]}
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def ledger(database):
-    value = PostgresLedger(database.pool)
-    await value.apply_schema()
-    return value
+    async with database.pool.acquire() as conn:
+        value = PostgresLedger(conn)
+        await value.apply_schema()
+        yield value
 
 
 async def opt_in(db, *, email=True, webhook=True):
@@ -45,7 +47,7 @@ async def opt_in(db, *, email=True, webhook=True):
         'https://placeholder.example/hooks' if webhook else None)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def receiver(database, monkeypatch):
     received = []
     app = FastAPI()
