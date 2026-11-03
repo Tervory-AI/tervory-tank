@@ -36,7 +36,16 @@ async def code_plan(actor: Actor, messages: list[dict], task_id: UUID | None):
     if last.get("role") != "user":
         return None
     from trigger_commands import plan
-    proposed = await plan(actor, last.get("content", ""), task_id)
+    source_text = last.get('content', '')
+    if task_id and re.match(r'\s*trigger\.write\.batch\b', source_text, re.I):
+        # Attachment contents are data, never part of the command syntax.
+        from command import db, unpack
+        async with db().acquire() as conn:
+            raw = await conn.fetchval("SELECT state FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND state->>'active_turn'=$3",
+                                      actor.tenant_id, actor.user_id, str(task_id))
+        messages = unpack(raw or {}).get('messages', [])
+        source_text = next((m.get('content', '') for m in reversed(messages) if m.get('role') == 'user'), source_text)
+    proposed = await plan(actor, source_text, task_id)
     if proposed is not None:
         return SimpleNamespace(content=json.dumps(proposed, ensure_ascii=False), ledger_id=await code_receipt(actor.tenant_id, "command.turn", task_id=task_id))
     prefix = r"\s*trigger(?:\.check|[, ]+check)(?:\s+(?:this\s+)?paragraph)?\s*:\s*"
