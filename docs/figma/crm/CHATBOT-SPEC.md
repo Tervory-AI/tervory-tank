@@ -266,3 +266,7 @@ Content/* padding of 40/32 becomes 24. Compact card 149:14873 and its rows 209:9
 No source delay is 1.2 seconds, replacing 1200 seconds, on components 274:14673 / 274:14699 and specimen instances 274:24343, 274:24360, 274:24377, 274:24394, 274:24411 and 274:24428. Their original Hand-over destinations remain. The widget keeps the client's brand; only prototype timing changes in this follow-up.
 
 Exact edited/created IDs, layer-name changes, timing evidence and screenshots: [follow-up register](evidence/2026-11-03-followup/REGISTER.md). No new product words, approval claims, production code, deployment or secrets. Changed designs remain Changed after approval, awaiting founder.
+
+## Shared mobile Close target · follow-up item 8
+
+Close menu × retains node 180:8471 in Top mobile source 180:8467 and node 483:39702 in scrolled mobile source 483:39698. Both clickable text boxes are fixed 44×44 with the glyph centred and their existing Close prototype action retained. The header row grows to 44px, and the approved logo scales proportionally to 156px wide to fit the 208px row. The scrolled state adjusts its groups by 8px to preserve 16px bottom clearance and active-item visibility. All 44 current mobile menu instances inherit a 44×44 Close target; no instance failed the check. No new nodes or product words. [Exact changed nodes, inherited-instance checks and screenshot](evidence/2026-11-03-followup/close-target.json); [screenshot](evidence/2026-11-03-followup/close-target-375.png). Changed after approval, awaiting founder.

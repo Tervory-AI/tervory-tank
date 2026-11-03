@@ -2040,3 +2040,19 @@ The Settings screenshot isolates the frame because unrelated page content overla
 - `483:39737`
 - `483:39738`
 - `483:39739`
+
+## Item 8 · shared mobile Close hit area
+
+Top `180:8471` and scrolled `483:39702` retain their IDs and Close actions; each now has a centred glyph inside a fixed **44×44** clickable text box. Both shared source states are fixed, so every page using them inherits the correction. Verified **44/44 instances**, with no failures. Header rows are 44px high; the logo asset scales proportionally to 156px wide. Scrolled groups shift 8px to maintain active-item visibility and 16px bottom clearance. No new nodes or product wording. Native registers and their existing mirrors are synced.
+
+Direct design nodes changed:
+
+- `180:8471` — Close target.
+- `180:8470` — proportional logo size.
+- `180:8469` — header row height.
+- `483:39702` — scrolled Close target.
+- `483:39701` — scrolled proportional logo size.
+- `483:39700` — scrolled header row height.
+- `483:39708`, `483:39712`, `483:39720`, `483:39724`, `483:39731` — scrolled group offsets.
+
+[Mutation and inherited-instance evidence](close-target.json), [375px screenshot](close-target-375.png). Documentation node edits are also recorded in the evidence JSON. No production changes.
