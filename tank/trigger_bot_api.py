@@ -217,6 +217,10 @@ async def execute(operation, args, actor, operation_id):
 
 async def ask(bot, tenant, args, **session):
     result = await bot.ask(tenant, args.text, contact=args.contact.model_dump(exclude_none=True) if args.contact else None, **session)
+    return await quote_draft(bot, tenant, args, result)
+
+
+async def quote_draft(bot, tenant, args, result):
     if args.quote_product_id and args.contact:
         active = await bot.pool.fetchval("SELECT 1 FROM tank.trigger_bot_sources WHERE tenant_id=$1 AND kind='rig' AND status='ready'", tenant)
         if active:
