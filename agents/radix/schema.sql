@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS agent_radix.regulation_runs (
 );
 -- Join the existing tenant RLS rollout; never enable it independently.
 DO $$ BEGIN
- IF EXISTS (SELECT 1 FROM pg_class WHERE oid=to_regclass('tank.command_threads') AND relrowsecurity) THEN
+ IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
   ALTER TABLE agent_radix.regulation_runs ENABLE ROW LEVEL SECURITY;
   ALTER TABLE agent_radix.regulation_runs FORCE ROW LEVEL SECURITY;
   IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.regulation_runs'::regclass AND polname='tenant_access') THEN
