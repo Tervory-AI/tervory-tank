@@ -163,7 +163,14 @@ jobs:
       - name: Validate the Seatbelt profile on the macOS runner
         run: |
           node --input-type=module -e 'import {seatbeltProfile} from "./cli/src/seatbelt.mjs"; import {writeFile} from "node:fs/promises"; await writeFile(process.env.RUNNER_TEMP + "/cli-w3.sb", await seatbeltProfile(process.cwd()));'
-          /usr/bin/sandbox-exec -f "$RUNNER_TEMP/cli-w3.sb" /usr/bin/true
+          if /usr/bin/sandbox-exec -f "$RUNNER_TEMP/cli-w3.sb" /usr/bin/true; then
+            exit 0
+          fi
+          # Keep diagnostics to this disposable runner's probe crash fields.
+          sleep 5
+          /usr/bin/log show --last 1m --style compact --predicate 'process == "true" OR process == "sandbox-exec"' || true
+          node --input-type=module -e 'import fs from "node:fs"; for (const dir of [process.env.HOME + "/Library/Logs/DiagnosticReports", "/Library/Logs/DiagnosticReports"]) { if (!fs.existsSync(dir)) continue; for (const file of fs.readdirSync(dir).filter(x => /^(true|sandbox-exec).*\.ips$/.test(x))) { const text = fs.readFileSync(dir + "/" + file,"utf8"); try { const r = JSON.parse(text.slice(text.indexOf("\n") + 1)); console.log(JSON.stringify({file,exception:r.exception,termination:r.termination,asi:r.asi})); } catch { console.log("Probe crash report could not be parsed: " + file); } } }'
+          exit 1
       - name: CLI tests including outside-write, secret-read and network confinement
         # The same code-mode suite runs in the Ubuntu job. It requires echo's
         # exit 0 and uses a reachable host listener as the network control.
