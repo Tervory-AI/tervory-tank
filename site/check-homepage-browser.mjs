@@ -25,7 +25,7 @@ try {
   });
   assert.equal(await page.locator("h1").count(), 1);
   assert.equal(await page.locator(".squad-row").count(), 10);
-  assert.equal(await page.getByRole("link", { name:"Rig", exact:true }).getAttribute("href"), "/rig");
+  assert.equal(await page.getByRole("link", { name:"Rig", exact:true }).getAttribute("href"), "https://rig.tervory.com");
   const assets = await page.locator("img").evaluateAll(images => images.map(image => {
     const box = image.getBoundingClientRect();
     return { src: image.getAttribute("src"), loaded: image.complete && image.naturalWidth > 0, width: box.width, height: box.height };

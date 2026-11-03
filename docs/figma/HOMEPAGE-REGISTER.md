@@ -2,7 +2,7 @@
 
 Source: [homepage Figma file](https://www.figma.com/design/bOSFzo7qMhHjJ6T5brXG1Y). Inventory read 3 Nov 2026. Approval/build source: [HOMEPAGE-BUILD-REVIEW.md](../HOMEPAGE-BUILD-REVIEW.md), plus the founder’s Wave 4 ruling that his own public website frames count as approved.
 
-Scope: only the current homepage and public product pages. The founder explicitly excludes Workspace campaign screens, design standards/guides, toggle experiments and older homepage versions. Those exclusions say **not part of tervory.com**, not “not approved”. No design was edited in Figma.
+Scope: `tervory.com` contains the current homepage and the public Rig page drawn in 56:127 / 56:798. Products are separate apps on their own hosts. The founder explicitly excludes Workspace campaign screens, design standards/guides, toggle experiments and older homepage versions. Those exclusions say **not part of tervory.com**, not “not approved”. No design was edited in Figma.
 
 ## Public website pages
 
@@ -117,13 +117,9 @@ This table includes every direct child of type FRAME on every Figma page, includ
 
 No current public homepage/product frame is marked proposed, draft or “not approved”. The older homepage v3 title frame **56:115** contains **56:118 “DRAFT COPY”**; homepage v3 **56:119** is excluded as an old version and is not built. The v6 Zenas product description uses “drafting” and “draft” as product wording; those words are not approval notices.
 
-## Pages with no approved website frame
-
-No standalone public website frame exists in this file for Tisan, Trigger, Tank, Skala, Base, Zenas, Zenas ZA, Tiger, Market Lab, Radix or Autumbra. Their homepage entries are sections, not separate page designs. The old generic site navigation/footer also names About, Pricing, Contact, Privacy and Terms; there are no corresponding page frames. None of these pages is invented or published. Sign in/Create account belong to the hosted Workspace, not new public pages.
-
 ## Browser verification
 
 Rig: build/static export, public-page and isolated signup-store checks, and 3 homepage Python regressions pass. All seven stage selections are checked at 320, 375, 390, 430, 767, 768, 1000, 1199, 1200 and 1440px. The default drawn state passes every integer width from 320 through 1440 (1,121 widths). The check measures visible text ranges, panel/control bounds and page width, checks keyboard operation, and rejects illustration POSTs or JavaScript errors. [375px](../screenshots/homepage-wave4/rig-product-375.png), [1440px](../screenshots/homepage-wave4/rig-product-1440.png). Commands and scope are in the Wave 4 entry of the build review.
 
-Homepage: all 1,121 integer widths also pass. The expanded existing browser suite passes 12 widths, all four Rig illustration states, Engine geometry, exports and saved/failed forms. Fixed the Off/Optional column overflow above 430px, restored tablet Optional labels, and reserved enough tablet column width for “Air-Gapped Cybersecurity”. The Rig logo now links to its product page. No homepage words changed. [375px](../screenshots/homepage-wave4/homepage-375.png), [768px](../screenshots/homepage-wave4/homepage-768.png), [1440px](../screenshots/homepage-wave4/homepage-1440.png).
+Homepage: all 1,121 integer widths also pass. The expanded existing browser suite passes 12 widths, all four Rig illustration states, Engine geometry, exports and saved/failed forms. Fixed the Off/Optional column overflow above 430px, restored tablet Optional labels, and reserved enough tablet column width for “Air-Gapped Cybersecurity”. The Rig logo links to the Rig app at `rig.tervory.com`; `/rig` remains the public page. No homepage words changed. [375px](../screenshots/homepage-wave4/homepage-375.png), [768px](../screenshots/homepage-wave4/homepage-768.png), [1440px](../screenshots/homepage-wave4/homepage-1440.png).
 
