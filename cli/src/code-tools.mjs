@@ -229,15 +229,24 @@ export class CodeFolder {
         } catch { /* not on this PATH entry */ }
       }
     }
-    if (!candidate || inside('/usr', candidate) || inside(this.root, candidate)) return { command, mounts: [] };
-    const resolved = await realpath(candidate);
-    if (inside('/usr', resolved)) return { command, mounts: [] };
+    if (!candidate || inside('/usr', candidate) || inside('/bin', candidate) || inside(this.root, candidate)) return { command, mounts: [] };
     // Only recognized language runtimes may expose an external installation.
     // Their bin + library directory is the runtime's own root, never its parent
     // HOME, .config, .ssh or a keychain. Both a venv and its base interpreter may
     // be needed; no other host directories or environment are inherited.
     if (!/^(node|python(?:3(?:\.\d+)?)?|pytest)$/.test(basename(candidate))) throw refused();
-    const roots = [...new Set([candidate, resolved].map(path => basename(dirname(path)) === 'bin' ? dirname(dirname(path)) : dirname(path)))];
+    const executables = [candidate];
+    if (basename(candidate) === 'pytest') {
+      const handle = await open(candidate, constants.O_RDONLY);
+      try {
+        const bytes = Buffer.alloc(1024); const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
+        const interpreter = /^#!(\/[^\s]+)\s*$/.exec(bytes.subarray(0, bytesRead).toString('utf8').split('\n')[0])?.[1];
+        if (!interpreter || !/^python(?:3(?:\.\d+)?)?$/.test(basename(interpreter))) throw refused();
+        executables.push(interpreter);
+      } finally { await handle.close(); }
+    }
+    const paths = [...executables, ...await Promise.all(executables.map(path => realpath(path)))];
+    const roots = [...new Set(paths.map(path => basename(path) !== 'node' && basename(dirname(path)) === 'bin' ? dirname(dirname(path)) : dirname(path)))];
     const mounts = [];
     for (const root of roots) {
       if (inside('/usr', root) || inside(this.root, root)) continue;
@@ -259,16 +268,19 @@ export class CodeFolder {
     // A venv may link via ~/.local/bin before reaching its base interpreter.
     // Recreate only those intermediate links in the empty sandbox; never bind
     // their parent directory (which could contain unrelated credentials).
-    let link = candidate;
-    const seen = new Set();
-    while ((await lstat(link)).isSymbolicLink()) {
+    for (const executable of executables) {
+      let link = executable;
+      const target = await realpath(executable);
+      const seen = new Set();
+      while ((await lstat(link)).isSymbolicLink()) {
       if (seen.has(link)) throw refused();
       seen.add(link);
       if (!inside('/usr', link) && !roots.some(root => inside(root, link))) {
         if (secretPath(link) || link.split(sep).some(part => ['.config', '.ssh', 'keychains', 'keyrings'].includes(part.toLowerCase()))) throw refused();
-        mounts.push('--symlink', resolved, link);
+        mounts.push('--symlink', target, link);
       }
-      link = resolve(dirname(link), await readlink(link));
+        link = resolve(dirname(link), await readlink(link));
+      }
     }
     const quoted = "'" + candidate.replaceAll("'", "'\"'\"'") + "'";
     return { command: quoted + command.slice(match[0].length), mounts, runners: roots.filter(root => !inside('/usr', root) && !inside(this.root, root)) };
