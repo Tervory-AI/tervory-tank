@@ -25,7 +25,7 @@ import access
 import command
 import mcp_client as protocol
 import mcp_connections as connections
-import mcp_oauth as oauth
+import mcp_client_oauth as oauth
 import vault
 
 URL = 'https://mcp.example.test/mcp'

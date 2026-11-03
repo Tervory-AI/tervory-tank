@@ -1,270 +1,367 @@
-"""MCP OAuth client. All credentials and pending state stay in their sealed vault row.
+"""MCP G1 OAuth server: existing Clerk identity and hash-only CLI credentials.
 
-ACCESS browser RPCs are product-specific cookie sessions, not OAuth redirects;
-reuse the vault's scoped connection identity instead of sending OAuth tokens to rooms.
+Public protocol responses contain no service identity. Only the signed-in
+Workspace corridor may approve a grant; client URLs are never browser redirects
+until validated against public metadata or an explicit registration.
 """
 from __future__ import annotations
 
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import re
 import secrets
 import time
-from urllib.parse import urlencode, urlsplit
+import uuid
+from collections import OrderedDict
+from dataclasses import dataclass
+from datetime import timedelta
+from urllib.parse import parse_qsl, urlencode, urlsplit
 
-from mcp_client import Client, Refused, SignInRequired, document, request
-from mcp_connections import approved, connection, credentials, db, state, store_credentials, unpack
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-CLIENT_ID = 'https://app.tervory.com/oauth/client/mcp.json'
-REDIRECT_URI = 'https://app.tervory.com/oauth/callback'
-METADATA = {'client_id': CLIENT_ID, 'client_name': 'Tervory', 'redirect_uris': [REDIRECT_URI],
-            'grant_types': ['authorization_code', 'refresh_token'], 'response_types': ['code'],
-            'token_endpoint_auth_method': 'none'}
+import access
+import command
+import device_login as device
+import personal_tokens as pat
+from tenant_db import tenant_scope
 
-
-def endpoint(value) -> str:
-    from access import origin
-    if not isinstance(value, str) or len(value) > 2000:
-        raise Refused('MCP OAuth endpoint refused')
-    origin(value)
-    parsed = urlsplit(value)
-    if parsed.query or parsed.fragment:
-        raise Refused('MCP OAuth endpoint refused')
-    return value
-
-
-async def get_json(url: str) -> dict:
-    status, raw, _ = await request(endpoint(url))
-    if status != 200:
-        raise Refused('MCP OAuth metadata refused')
-    return document(raw)
+ISSUER = 'https://app.tervory.com'
+RESOURCE = ISSUER + '/mcp'
+PROTECTED_METADATA = ISSUER + '/.well-known/oauth-protected-resource/mcp'
+CODE = re.compile(r'tvo1\.us-east\.([0-9a-f]{32})\.([A-Za-z0-9_-]{43})\Z')
+CHALLENGE = re.compile(r'[A-Za-z0-9_-]{43}\Z')
+VERIFIER = re.compile(r'[A-Za-z0-9._~-]{43,128}\Z')
+router = APIRouter(tags=['MCP OAuth'])
 
 
-async def metadata(resource: str, challenge: str) -> tuple[dict, dict, str]:
-    base = urlsplit(resource)
-    site = f'{base.scheme}://{base.netloc}'
-    # Parse only bounded quoted Bearer parameters, never an error description.
-    params = dict(re.findall(r'\b(resource_metadata|scope)="([^"\\\r\n]*)"', challenge))
-    candidates = [params['resource_metadata']] if params.get('resource_metadata') else [
-        site + '/.well-known/oauth-protected-resource' + base.path,
-        site + '/.well-known/oauth-protected-resource']
-    protected = None
-    for url in dict.fromkeys(candidates):
-        try:
-            protected = await get_json(url)
-            break
-        except Refused:
-            continue
-    if not protected or protected.get('resource') != resource:
-        raise Refused('MCP OAuth resource refused')
-    issuers = protected.get('authorization_servers')
-    if not isinstance(issuers, list) or not issuers:
-        raise Refused('MCP OAuth issuer refused')
-    # Deterministically choose the first advertised issuer; never select an arbitrary input.
-    issuer = endpoint(issuers[0])
-    issuer_parts = urlsplit(issuer)
-    root = f'{issuer_parts.scheme}://{issuer_parts.netloc}'
-    path = issuer_parts.path.rstrip('/')
-    urls = [root + '/.well-known/oauth-authorization-server' + path,
-            root + '/.well-known/openid-configuration' + path]
-    if path:
-        urls.append(issuer.rstrip('/') + '/.well-known/openid-configuration')
-    authorization = None
-    for url in urls:
-        try:
-            candidate = await get_json(url)
-            if candidate.get('issuer') == issuer:
-                authorization = candidate
-                break
-        except Refused:
-            continue
-    if not authorization or 'S256' not in authorization.get('code_challenge_methods_supported', []):
-        raise Refused('MCP OAuth PKCE refused')
-    for key in ('authorization_endpoint', 'token_endpoint'):
-        endpoint(authorization.get(key))
-    scope = params.get('scope')
-    if scope is None:
-        scopes = protected.get('scopes_supported', [])
-        if not isinstance(scopes, list) or any(not isinstance(item, str) for item in scopes):
-            raise Refused('MCP OAuth scopes refused')
-        scope = ' '.join(scopes)
-    if len(scope) > 4000 or any(ord(c) < 32 for c in scope):
-        raise Refused('MCP OAuth scopes refused')
-    return protected, authorization, scope
+def east_only() -> None:
+    from main import box_region
+    if box_region() != 'us-east':
+        raise HTTPException(404, 'Not Found')
 
 
-async def post(url: str, payload: dict, *, registration=False) -> dict:
-    headers = {'Accept': 'application/json', 'Content-Type': 'application/json' if registration else 'application/x-www-form-urlencoded'}
-    content = json.dumps(payload).encode() if registration else urlencode(payload).encode()
-    status, raw, _ = await request(endpoint(url), method='POST', headers=headers, content=content)
-    if status not in ({200, 201} if registration else {200}):
-        raise Refused('MCP OAuth request refused')
-    return document(raw)
+def oauth_error(name: str, status: int = 400) -> JSONResponse:
+    return JSONResponse({'error': name}, status_code=status, headers=device.NO_STORE)
 
 
-async def start(actor, vault: str, ident: str) -> str:
-    row = await connection(actor, vault, ident)
-    resource = row['metadata']['server_url']
-    await approved(resource)
-    if row['metadata']['auth_type'] != 'provider':
-        raise Refused('MCP OAuth connection refused')
-    async def gate():
-        await approved(resource)
-    challenge = ''
+def redirect_allowed(value: str) -> bool:
     try:
-        await Client(resource, gate).initialize()
-    except SignInRequired as exc:
-        challenge = exc.challenge
-    protected, authorization, scope = await metadata(resource, challenge)
-    client_id = CLIENT_ID
-    if authorization.get('client_id_metadata_document_supported') is not True:
-        registration = await post(authorization.get('registration_endpoint'),
-                                  {key: value for key, value in METADATA.items() if key != 'client_id'}, registration=True)
-        client_id = registration.get('client_id')
-        if not isinstance(client_id, str) or not client_id or len(client_id) > 2000 or registration.get('token_endpoint_auth_method', 'none') != 'none':
-            raise Refused('MCP OAuth registration refused')
-    verifier = secrets.token_urlsafe(48)
-    nonce = secrets.token_urlsafe(32)
-    opaque_state = f'{vault}:{ident}:{nonce}'
-    pending = {'state_hash': hashlib.sha256(opaque_state.encode()).hexdigest(), 'verifier': verifier,
-               'user_id': actor.user_id, 'expires_at': time.time() + 600, 'resource': resource,
-               'issuer': authorization['issuer'], 'token_endpoint': authorization['token_endpoint'], 'client_id': client_id}
-    await store_credentials(row, {**credentials(row), 'pending': pending}, mcp_state='needs_sign_in')
-    params = {'response_type': 'code', 'client_id': client_id, 'redirect_uri': REDIRECT_URI,
-              'code_challenge_method': 'S256', 'code_challenge': base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode(),
-              'state': opaque_state, 'resource': resource}
-    if scope:
-        params['scope'] = scope
-    return endpoint(authorization['authorization_endpoint']) + '?' + urlencode(params)
+        p = urlsplit(value)
+        return (bool(p.hostname) and not p.username and not p.password and not p.fragment
+                and not any(ord(c) < 33 or ord(c) == 127 for c in value)
+                and '\\' not in value and p.port != 0
+                and (p.scheme == 'https' or (p.scheme == 'http' and p.hostname in {'127.0.0.1', 'localhost'})))
+    except (ValueError, TypeError):
+        return False
 
 
-def token_data(response: dict, previous: dict) -> dict:
-    access = response.get('access_token')
-    expiry = response.get('expires_in')
-    if not isinstance(access, str) or not access or len(access) > 16000 or response.get('token_type', '').lower() != 'bearer':
-        raise Refused('MCP OAuth token refused')
-    if expiry is not None and (isinstance(expiry, bool) or not isinstance(expiry, (int, float)) or not 0 < expiry <= 366 * 86400):
-        raise Refused('MCP OAuth expiry refused')
-    refresh = response.get('refresh_token', previous.get('refresh_token'))
-    if refresh is not None and (not isinstance(refresh, str) or len(refresh) > 16000):
-        raise Refused('MCP OAuth token refused')
-    return {key: value for key, value in {**previous, 'access_token': access,
-            'refresh_token': refresh, 'expires_at': time.time() + expiry if expiry is not None else None}.items() if key != 'pending'}
+@dataclass(frozen=True)
+class Client:
+    client_id: str
+    name: str
+    redirects: tuple[str, ...]
 
 
-async def callback(actor, opaque_state: str, code: str | None, error: str | None, issuer: str | None = None) -> bool:
+# Public metadata only, bounded in size and duration. Never OAuth credentials.
+_metadata: OrderedDict[str, tuple[float, Client]] = OrderedDict()
+
+
+def metadata_client(client_id: str, value: dict) -> Client:
+    redirects, name = value.get('redirect_uris'), value.get('client_name', client_id)
+    if (value.get('client_id') != client_id or not isinstance(name, str) or not 1 <= len(name) <= 100
+            or not isinstance(redirects, list) or not 1 <= len(redirects) <= 32
+            or any(not isinstance(uri, str) or len(uri) > 2048 or not redirect_allowed(uri) for uri in redirects)
+            or value.get('token_endpoint_auth_method', 'none') != 'none'):
+        raise ValueError('invalid client metadata')
+    return Client(client_id, name, tuple(redirects))
+
+
+async def client_metadata(client_id: str) -> Client:
+    if not isinstance(client_id, str) or not 1 <= len(client_id) <= 2048:
+        raise ValueError('invalid client')
+    if client_id.startswith('https://'):
+        p = urlsplit(client_id)
+        if p.fragment or not p.path or p.path == '/':
+            raise ValueError('invalid client metadata URL')
+        access.origin(client_id)
+        cached = _metadata.get(client_id)
+        if cached and cached[0] > time.monotonic():
+            return cached[1]
+        _metadata.pop(client_id, None)
+        data, headers = await access.public_get(client_id, limit=65536)
+        if len(data) > 65536:
+            raise ValueError('client metadata too large')
+        value = json.loads(data)
+        if not isinstance(value, dict):
+            raise ValueError('invalid client metadata')
+        client = metadata_client(client_id, value)
+        control = next((v for k, v in headers.items() if k.lower() == 'cache-control'), '').lower()
+        age = re.search(r'(?:^|,)\s*max-age=(\d+)', control)
+        ttl = min(86400, int(age[1])) if age else 3600
+        if 'no-store' not in control and 'no-cache' not in control and ttl > 0:
+            _metadata[client_id] = (time.monotonic() + ttl, client)
+            while len(_metadata) > 256:
+                _metadata.popitem(last=False)
+        return client
+    # Registration ids are generated opaque identifiers, never alternative URLs.
+    if not re.fullmatch(r'tvc_[0-9a-f]{32}', client_id):
+        raise ValueError('invalid client')
+    with device.platform():
+        async with command.db().acquire() as conn:
+            row = await conn.fetchrow('SELECT client_name,redirect_uris FROM tank.oauth_clients WHERE client_id=$1', client_id)
+    if row is None:
+        raise ValueError('unknown client')
+    redirects = command.unpack(row['redirect_uris'])
+    return metadata_client(client_id, {'client_id': client_id, 'client_name': row['client_name'], 'redirect_uris': redirects})
+
+
+async def bounded_body(request: Request, limit: int = 65536) -> bytes:
+    data = bytearray()
+    async for chunk in request.stream():
+        data.extend(chunk)
+        if len(data) > limit:
+            raise ValueError('request too large')
+    return bytes(data)
+
+
+async def form(request: Request) -> dict[str, str]:
+    if request.headers.get('content-type', '').split(';')[0].lower() != 'application/x-www-form-urlencoded':
+        raise ValueError('form required')
+    pairs = parse_qsl((await bounded_body(request, 16384)).decode('utf-8'), keep_blank_values=True,
+                      strict_parsing=True, max_num_fields=16)
+    if len({key for key, _ in pairs}) != len(pairs):
+        raise ValueError('duplicate parameter')
+    return dict(pairs)
+
+
+@router.get('/.well-known/oauth-protected-resource')
+@router.get('/.well-known/oauth-protected-resource/mcp')
+async def protected_resource():
+    east_only()
+    return JSONResponse({'resource': RESOURCE, 'authorization_servers': [ISSUER],
+                         'bearer_methods_supported': ['header']}, headers=device.NO_STORE)
+
+
+@router.get('/.well-known/oauth-authorization-server')
+async def authorization_server():
+    east_only()
+    return JSONResponse({'issuer': ISSUER, 'authorization_endpoint': ISSUER + '/oauth/authorize',
+        'token_endpoint': ISSUER + '/oauth/token', 'registration_endpoint': ISSUER + '/oauth/register',
+        'revocation_endpoint': ISSUER + '/oauth/revoke', 'code_challenge_methods_supported': ['S256'],
+        'grant_types_supported': ['authorization_code', 'refresh_token'], 'response_types_supported': ['code'],
+        'token_endpoint_auth_methods_supported': ['none'], 'client_id_metadata_document_supported': True},
+        headers=device.NO_STORE)
+
+
+@router.post('/oauth/register')
+async def register(request: Request):
+    east_only()
     try:
-        vault, ident, nonce = opaque_state.split(':')
-        if len(nonce) > 100 or len(opaque_state) > 500:
-            raise ValueError()
+        value = json.loads(await bounded_body(request))
+        if not isinstance(value, dict):
+            return oauth_error('invalid_client_metadata')
+        grants = value.get('grant_types', ['authorization_code', 'refresh_token'])
+        responses = value.get('response_types', ['code'])
+        if (value.get('token_endpoint_auth_method', 'none') != 'none'
+                or not supported_values(grants, {'authorization_code', 'refresh_token'})
+                or not supported_values(responses, {'code'})):
+            return oauth_error('invalid_client_metadata')
+        client_id = 'tvc_' + uuid.uuid4().hex
+        client = metadata_client(client_id, {**value, 'client_id': client_id})
+    except (ValueError, TypeError, RecursionError):
+        return oauth_error('invalid_client_metadata')
+    try:
+        address = registration_address(request)
     except ValueError:
-        raise Refused('MCP OAuth state refused') from None
-    row = await connection(actor, vault, ident)
-    await approved(row['metadata']['server_url'])
-    data = credentials(row)
-    pending = data.get('pending', {})
-    if (not pending or pending.get('user_id') != actor.user_id or pending.get('expires_at', 0) < time.time()
-            or not hmac.compare_digest(pending.get('state_hash', ''), hashlib.sha256(opaque_state.encode()).hexdigest())
-            or (issuer is not None and issuer != pending.get('issuer'))):
-        raise Refused('MCP OAuth state refused')
-    # Claim/consume before the token exchange. Replays fail even after a timeout.
-    await store_credentials(row, {key: value for key, value in data.items() if key != 'pending'}, mcp_state='needs_sign_in')
-    if error or not code or len(code) > 8000:
-        await state(row, 'sign_in_failed')
-        return False
+        return oauth_error('invalid_request')
+    source = hashlib.sha256(address.encode()).hexdigest()
+    with device.platform():
+        async with command.db().acquire() as conn:
+            async with conn.transaction():
+                await conn.execute('SELECT pg_advisory_xact_lock(hashtext($1))', source)
+                count = await conn.fetchval("""SELECT count(*) FROM tank.oauth_clients
+                    WHERE source_address_hash=$1 AND created_at>now()-interval '1 hour'""", source)
+                if count >= 50:
+                    return oauth_error('temporarily_unavailable', 429)
+                await conn.execute('INSERT INTO tank.oauth_clients(client_id,client_name,redirect_uris,source_address_hash) VALUES($1,$2,$3::jsonb,$4)',
+                                   client.client_id, client.name, json.dumps(client.redirects), source)
+    return JSONResponse({'client_id': client.client_id, 'client_name': client.name,
+        'redirect_uris': list(client.redirects), 'token_endpoint_auth_method': 'none',
+        'grant_types': sorted(set(grants)), 'response_types': sorted(set(responses))},
+        status_code=201, headers=device.NO_STORE)
+
+
+def supported_values(values, supported: set[str]) -> bool:
+    return (isinstance(values, list) and bool(values)
+            and all(isinstance(value, str) for value in values) and set(values) <= supported)
+
+
+def registration_address(request: Request) -> str:
+    # Only Workspace's existing service authentication can assert a proxy-derived
+    # source. Public callers cannot select a bucket by spoofing any header.
+    from main import TANK_API_KEY
+    if command.key_matches(request.headers.get('x-tank-key', ''), TANK_API_KEY):
+        return str(ipaddress.ip_address(request.headers.get('x-tervory-oauth-source', '')))
+    return str(ipaddress.ip_address(request.client.host)) if request.client else 'unknown'
+
+
+class Authorization(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+    response_type: str
+    client_id: str = Field(min_length=1, max_length=2048)
+    redirect_uri: str = Field(min_length=1, max_length=2048)
+    state: str = Field(min_length=1, max_length=4096)
+    code_challenge: str = Field(min_length=43, max_length=43)
+    code_challenge_method: str
+    resource: str
+
+
+class Decision(Authorization):
+    action: str
+
+
+async def validate_authorization(value: Authorization) -> Client:
+    if value.resource != RESOURCE:
+        raise HTTPException(400, 'invalid_target')
+    if value.response_type != 'code' or value.code_challenge_method != 'S256' or not CHALLENGE.fullmatch(value.code_challenge):
+        raise HTTPException(400, 'invalid_request')
     try:
-        await approved(row['metadata']['server_url'])
-        response = await post(pending['token_endpoint'], {'grant_type': 'authorization_code', 'code': code,
-            'client_id': pending['client_id'], 'redirect_uri': REDIRECT_URI,
-            'code_verifier': pending['verifier'], 'resource': pending['resource']})
-        value = token_data(response, {key: pending[key] for key in ('resource', 'issuer', 'token_endpoint', 'client_id')})
-        await store_credentials(row, value, mcp_state='connected')
-        from mcp_connections import discover
-        await discover(actor, vault, ident, force=False)
-        return True
-    except Refused:
-        await state(row, 'sign_in_failed')
-        return False
+        client = await client_metadata(value.client_id)
+    except (ValueError, OSError, httpx.HTTPError, RecursionError, HTTPException):
+        raise HTTPException(400, 'invalid_client') from None
+    if value.redirect_uri not in client.redirects:
+        raise HTTPException(400, 'invalid_redirect_uri')
+    return client
 
 
-async def refresh(row, data: dict, *, force=False) -> dict:
-    # A row lock works across Tank processes. Re-read inside the lock, including
-    # when the caller's snapshot was taken before a concurrent token rotation.
-    failed = False
-    async with db().acquire() as conn, conn.transaction():
-        locked = await conn.fetchrow("SELECT * FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 AND kind='connections' AND name=$3 FOR UPDATE", row['tenant_id'], row['vault'], row['name'])
-        if not locked:
-            raise SignInRequired()
-        current = {**dict(locked), 'metadata': unpack(locked['metadata'])}
-        resource = current['metadata']['server_url']
-        await approved(resource)
-        latest = credentials(current)
-        expiry = latest.get('expires_at')
-        fresh = expiry is None or expiry > time.time() + 60
-        if latest.get('resource') != resource:
-            raise SignInRequired()
-        rotated = latest.get('access_token') != data.get('access_token')
-        if fresh and (not force or rotated):
-            row.update(current)
-            return latest
-        if not latest.get('refresh_token'):
-            raise SignInRequired()
-        try:
-            response = await post(latest['token_endpoint'], {'grant_type': 'refresh_token', 'refresh_token': latest['refresh_token'],
-                                                           'client_id': latest['client_id'], 'resource': resource})
-            updated = token_data(response, latest)
-            await store_credentials(current, updated, mcp_state='connected', conn=conn)
-            row.update(current)
-            return updated
-        except Refused:
-            # Compare sealed bytes as well: a stale failure never overwrites a
-            # successful renewal or a new authorization handoff.
-            await state(current, 'sign_in_failed', conn=conn)
-            row.update(current)
-            failed = True
-    if failed:
-        raise Refused('MCP OAuth refresh refused') from None
-
-
-# Workspace server corridor; no browser-supplied tenant/user assertions are accepted.
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
-from command import Actor, identity, authorized_actor
-
-router = APIRouter(prefix='/v1/command/mcp')
-
-
-class StartBody(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    vault: str = Field(max_length=40)
-    connection_id: str = Field(max_length=36)
-
-
-class CallbackBody(BaseModel):
-    model_config = ConfigDict(extra='forbid', hide_input_in_errors=True)
-    state: str = Field(max_length=500)
-    code: str | None = Field(default=None, max_length=8000)
-    error: str | None = Field(default=None, max_length=200)
-    iss: str | None = Field(default=None, max_length=2000)
-
-
-@router.post('/oauth/start')
-async def start_route(request: Request, actor: Actor = Depends(identity)):
-    from access import parse
-    body = await parse(request, StartBody, limit=2000)
+@router.get('/oauth/authorize')
+async def authorization(request: Request, actor: command.Actor = Depends(pat.workspace_actor)):
+    east_only()
     try:
-        return {'url': await start(await authorized_actor(actor), body.vault, body.connection_id)}
-    except Refused:
-        raise HTTPException(409, 'Secure connection refused.') from None
+        pairs = list(request.query_params.multi_items())
+        if len({key for key, _ in pairs}) != len(pairs):
+            raise ValueError('duplicate parameter')
+        value = Authorization.model_validate(dict(pairs))
+    except (ValueError, ValidationError):
+        raise HTTPException(400, 'invalid_request') from None
+    client = await validate_authorization(value)
+    return JSONResponse({'client_id': client.client_id, 'client_name': client.name,
+                         'redirect_uri': value.redirect_uri, 'tenant_id': str(actor.tenant_id), 'region': 'us-east'},
+                        headers=device.NO_STORE)
 
 
-@router.post('/oauth/callback')
-async def callback_route(request: Request, actor: Actor = Depends(identity)):
-    from access import parse
-    body = await parse(request, CallbackBody, limit=12000)
+@router.post('/oauth/authorize')
+async def decide(body: Decision, actor: command.Actor = Depends(pat.workspace_actor)):
+    east_only()
+    client = await validate_authorization(body)
+    if body.action not in {'approve', 'deny'}:
+        raise HTTPException(400, 'invalid_request')
+    query = {'state': body.state, 'iss': ISSUER}
+    if body.action == 'deny':
+        query['error'] = 'access_denied'
+    else:
+        code = f'tvo1.us-east.{actor.tenant_id.hex}.{secrets.token_urlsafe(32)}'
+        with tenant_scope(actor.tenant_id):
+            async with command.db().acquire() as conn:
+                await conn.execute("""INSERT INTO tank.oauth_codes(code_hash,tenant_id,user_id,region,client_id,client_name,redirect_uri,challenge,resource,expires_at)
+                    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now()+$10::interval)""", pat.digest(code), actor.tenant_id,
+                    actor.user_id, 'us-east', client.client_id, client.name, body.redirect_uri, body.code_challenge,
+                    body.resource, timedelta(minutes=10))
+        query['code'] = code
+    # Preserve an already registered redirect query, exactly; fragments were refused.
+    separator = '&' if '?' in body.redirect_uri else '?'
+    return JSONResponse({'redirect_to': body.redirect_uri + separator + urlencode(query)}, headers=device.NO_STORE)
+
+
+@router.post('/oauth/token')
+async def token(request: Request):
+    east_only()
     try:
-        return {'ok': await callback(await authorized_actor(actor), body.state, body.code, body.error, body.iss)}
-    except Refused:
-        raise HTTPException(409, 'Secure connection refused.') from None
+        value = await form(request)
+    except (ValueError, UnicodeError):
+        return oauth_error('invalid_request')
+    if value.get('resource') != RESOURCE:
+        return oauth_error('invalid_target')
+    if request.headers.get('authorization') or value.get('client_secret'):
+        return oauth_error('invalid_client')
+    client_id = value.get('client_id', '')
+    if not client_id or len(client_id) > 2048:
+        return oauth_error('invalid_client')
+    if value.get('grant_type') == 'refresh_token':
+        return await refresh_grant(value.get('refresh_token', ''), client_id)
+    if value.get('grant_type') != 'authorization_code':
+        return oauth_error('unsupported_grant_type')
+    code, verifier = value.get('code', ''), value.get('code_verifier', '')
+    match = CODE.fullmatch(code)
+    if match is None or not VERIFIER.fullmatch(verifier):
+        return oauth_error('invalid_grant')
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode('ascii')).digest()).decode().rstrip('=')
+    tenant = uuid.UUID(hex=match[1])
+    access_token, refresh_token = device.credential_pair('us-east', tenant)
+    issued = device.now()
+    expiries = (issued + device.ACCESS_TTL, issued + device.REFRESH_TTL)
+    with tenant_scope(tenant):
+        async with command.db().acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow("""SELECT *,expires_at>now() AS unexpired FROM tank.oauth_codes
+                    WHERE tenant_id=$1 AND code_hash=$2 FOR UPDATE""", tenant, pat.digest(code))
+                if (row is None or row['client_id'] != client_id or row['redirect_uri'] != value.get('redirect_uri')
+                        or row['resource'] != RESOURCE or row['region'] != 'us-east'
+                        or not hmac.compare_digest(row['challenge'], challenge)):
+                    return oauth_error('invalid_grant')
+                if row['consumed_at'] is not None:
+                    await conn.execute("""UPDATE tank.personal_tokens SET revoked_at=COALESCE(revoked_at,now())
+                        WHERE tenant_id=$1 AND token_id=$2 AND client_id=$3 AND audience='mcp'""",
+                        tenant, row['token_id'], client_id)
+                    return oauth_error('invalid_grant')
+                if not row['unexpired']:
+                    return oauth_error('invalid_grant')
+                ident = await conn.fetchval("""INSERT INTO tank.personal_tokens(tenant_id,user_id,region,name,device_name,token_hash,expires_at,refresh_hash,refresh_expires_at,audience,client_id)
+                    VALUES($1,$2,'us-east',$3,$3,$4,$5,$6,$7,'mcp',$8) RETURNING token_id""",
+                    tenant, row['user_id'], row['client_name'], pat.digest(access_token), expiries[0],
+                    pat.digest(refresh_token), expiries[1], client_id)
+                await conn.execute("""UPDATE tank.oauth_codes SET consumed_at=now(),token_id=$3
+                    WHERE tenant_id=$1 AND code_hash=$2""", tenant, pat.digest(code), ident)
+    return JSONResponse(device.grant(access_token, refresh_token, ident, 'us-east', issued), headers=device.NO_STORE)
+
+
+async def refresh_grant(presented: str, client_id: str):
+    match = device.REFRESH.fullmatch(presented)
+    if match is None or match[1] != 'us-east':
+        return oauth_error('invalid_grant')
+    tenant = uuid.UUID(hex=match[2])
+    with tenant_scope(tenant):
+        async with command.db().acquire() as conn:
+            row = await conn.fetchrow("""SELECT client_id FROM tank.personal_tokens
+                WHERE tenant_id=$1 AND region='us-east' AND audience='mcp' AND refresh_hash=$2
+                AND revoked_at IS NULL AND refresh_expires_at>now()""", tenant, pat.digest(presented))
+    if row is None or row['client_id'] != client_id:
+        return oauth_error('invalid_grant')
+    return await device.rotate_refresh(presented, audience='mcp', client_id=client_id)
+
+
+@router.post('/oauth/revoke')
+async def revoke(request: Request):
+    east_only()
+    try:
+        value = await form(request)
+    except (ValueError, UnicodeError):
+        return oauth_error('invalid_request')
+    token = value.get('token', '')
+    match = pat.TOKEN.fullmatch(token) or device.REFRESH.fullmatch(token)
+    if match and match[1] == 'us-east':
+        tenant = uuid.UUID(hex=match[2])
+        column = 'token_hash' if pat.TOKEN.fullmatch(token) else 'refresh_hash'
+        with tenant_scope(tenant):
+            async with command.db().acquire() as conn:
+                await conn.execute("""UPDATE tank.personal_tokens SET revoked_at=COALESCE(revoked_at,now())
+                    WHERE tenant_id=$1 AND region='us-east' AND audience='mcp' AND client_id=$2
+                    AND (($4='token_hash' AND token_hash=$3) OR ($4='refresh_hash' AND refresh_hash=$3))""",
+                    tenant, value.get('client_id', ''), pat.digest(token), column)
+    return Response(status_code=200, headers=device.NO_STORE)

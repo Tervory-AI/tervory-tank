@@ -108,7 +108,7 @@ async def bearer(row) -> tuple[str | None, list[str]]:
         return None, []
     data = credentials(row)
     if mode == 'provider':
-        from mcp_oauth import refresh
+        from mcp_client_oauth import refresh
         data = await refresh(row, data)
         token = data.get('access_token')
     else:
@@ -128,7 +128,7 @@ async def authenticated(row, gate, operation):
     except SignInRequired:
         if row['metadata']['auth_type'] != 'provider':
             raise
-        from mcp_oauth import refresh
+        from mcp_client_oauth import refresh
         await refresh(row, credentials(row), force=True)
         token, renewed_secrets = await bearer(row)
         retry = Client(row['metadata']['server_url'], gate, token)
