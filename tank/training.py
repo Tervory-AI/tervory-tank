@@ -566,14 +566,14 @@ async def teachers(skill_id: str, actor: Reviewer = Depends(require_reviewer)) -
             FROM tank.skills s LEFT JOIN tank.training_pairs p
               ON p.tenant_id=$2 AND p.region=$3 AND p.agent=s.agent
               AND (p.task_type=s.task_type OR p.task_type=s.id)
-              AND p.active AND p.polarity='positive' AND NOT p.holdout
+              AND p.active AND p.polarity='positive'
             WHERE s.id=$1
             GROUP BY s.version,s.task_type,p.teacher_model
             ORDER BY s.version,p.teacher_model NULLS FIRST""", args.skill_id, actor.tenant, runtime().box_region())
         ledger_id = await code_receipt(actor.tenant, "skala.teachers", agent="tank", conn=conn)
-    return {"name": args.skill_id, "count": sum(row["count"] for row in rows),
+    return {"name": args.skill_id, "count": len(rows),
             "items": [{"name": row["version"], "task_type": row["task_type"],
-                       "model": row["teacher_model"], "teacher_model": row["teacher_model"], "count": row["count"],
+                       "model": row["teacher_model"] if row["teacher_model"] is not None else "null", "teacher_model": row["teacher_model"], "count": row["count"],
                        "newest_created_at": row["newest_created_at"].isoformat() if row["newest_created_at"] else None}
                       for row in rows], "ledger_id": str(ledger_id)}
 
