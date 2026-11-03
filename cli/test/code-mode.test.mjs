@@ -1,0 +1,139 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, writeFile, readFile, mkdir, symlink, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { CodeFolder, LIMITS, redactSecrets, processOutput, applyDiff } from '../src/code-tools.mjs';
+import { run } from '../src/client.mjs';
+
+const work = await mkdtemp(join(tmpdir(), 'code-mode-'));
+test.after(() => rm(work, { recursive: true, force: true }));
+async function folder() {
+  const root = await mkdtemp(join(work, 'repo-'));
+  execFileSync('git', ['init', '-q', root]);
+  await writeFile(join(root, 'file.txt'), 'old\n');
+  return CodeFolder.create(root);
+}
+const io = (answer = 'y', interactive = true) => ({ interactive, write() {}, prompt: async () => answer });
+const patch = '--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-old\n+new\n';
+
+test('folder must be a git repository; paths and symlinks cannot escape', async () => {
+  const nongit = join(work, 'nongit'); await mkdir(nongit);
+  await writeFile(join(nongit, '.git'), 'not a git repository');
+  await assert.rejects(CodeFolder.create(nongit), /git repository/);
+  const f = await folder();
+  await writeFile(join(work, 'outside.txt'), 'outside');
+  await symlink(work, join(f.root, 'escape'));
+  await symlink(join(work, 'outside.txt'), join(f.root, 'link.txt'));
+  for (const name of ['../outside.txt', join(work, 'outside.txt'), 'escape/outside.txt', 'escape/new.txt', 'link.txt', '.git/config']) {
+    await assert.rejects(f.read(name));
+  }
+  await assert.rejects(f.edit('../outside.txt', patch, io()));
+  assert.equal(await readFile(join(work, 'outside.txt'), 'utf8'), 'outside');
+});
+
+test('secret filenames, binary data and oversized reads are refused; listing respects ignore', async () => {
+  const f = await folder();
+  for (const name of ['.env', '.env.local', 'cert.pem', 'cert.key', 'id_rsa']) {
+    await writeFile(join(f.root, name), 'not read');
+    await assert.rejects(f.read(name));
+  }
+  await writeFile(join(f.root, '.gitignore'), 'ignored.txt\n');
+  await writeFile(join(f.root, 'ignored.txt'), 'ignored');
+  await writeFile(join(f.root, 'binary'), Buffer.from([0, 1, 2]));
+  await writeFile(join(f.root, 'huge'), 'a'.repeat(LIMITS.fileBytes + 1));
+  await assert.rejects(f.read('binary')); await assert.rejects(f.read('huge'));
+  const names = (await f.files()).files;
+  assert(names.includes('file.txt')); assert(!names.includes('ignored.txt')); assert(!names.includes('.env'));
+});
+
+test('secret patterns are redacted as whole lines before file/search/git/command results leave', async () => {
+  const f = await folder();
+  const secret = 'ghp_' + 'A'.repeat(24), assigned = 'password=' + 'Z'.repeat(14);
+  await writeFile(join(f.root, 'source.txt'), `safe\n${secret}\n${assigned}\n`);
+  const result = await f.read('source.txt');
+  assert.equal(result.text, 'safe\n[redacted]\n[redacted]\n');
+  assert(!JSON.stringify(await f.search('redacted')).includes(secret));
+  const output = await processOutput(process.execPath, ['-e', `process.stdout.write(${JSON.stringify(secret + '\n')})`], { cwd: f.root });
+  assert.equal(output.output, '[redacted]\n');
+  assert.equal(redactSecrets('sk-' + 'a'.repeat(24)), '[redacted]');
+});
+
+test('literal/regex search caps at 200 matches and regex execution is bounded', async () => {
+  const f = await folder();
+  await writeFile(join(f.root, 'source.txt'), 'match\n'.repeat(230));
+  assert.equal((await f.search('match')).matches.length, 200);
+  assert.equal((await f.search('^match$', true)).matches.length, 200);
+  await writeFile(join(f.root, 'source.txt'), 'a'.repeat(10000) + '!');
+  await assert.rejects(f.search('(a+)+$', true));
+});
+
+test('edits require a prior read and literal y; stale file and approval-time mutations refuse', async () => {
+  const f = await folder();
+  await assert.rejects(f.edit('file.txt', patch, io()));
+  await f.read('file.txt');
+  for (const answer of ['N', 'yes', '', null]) assert.equal((await f.edit('file.txt', patch, io(answer))).applied, false);
+  assert.equal((await f.edit('file.txt', patch, io('y', false))).applied, false);
+  assert.equal(await readFile(join(f.root, 'file.txt'), 'utf8'), 'old\n');
+  assert.equal((await f.edit('file.txt', patch, io())).applied, true);
+  await writeFile(join(f.root, 'file.txt'), 'changed\n');
+  await assert.rejects(f.edit('file.txt', patch, io()));
+  await writeFile(join(f.root, 'file.txt'), 'old\n'); await f.read('file.txt');
+  await assert.rejects(f.edit('file.txt', patch, { ...io(), prompt: async () => {
+    await writeFile(join(f.root, 'file.txt'), 'during approval\n'); return 'y';
+  } }));
+});
+
+test('new file diff requires a missing-file read; malformed/context-mismatched diffs refuse', async () => {
+  const f = await folder();
+  const add = '--- /dev/null\n+++ b/test.txt\n@@ -0,0 +1 @@\n+test\n';
+  await assert.rejects(f.edit('test.txt', add, io()));
+  await f.read('test.txt'); assert.equal((await f.edit('test.txt', add, io())).applied, true);
+  assert.equal(await readFile(join(f.root, 'test.txt'), 'utf8'), 'test\n');
+  assert.throws(() => applyDiff('different\n', patch, 'file.txt'));
+  assert.throws(() => applyDiff('old\n', patch.replace('b/file.txt', 'b/../outside.txt'), 'file.txt'));
+});
+
+test('commands show in full, require y and cannot run non-interactively; cwd and output cap', async () => {
+  const f = await folder();
+  const command = 'printf done > marker'; const request = { name: 'run_command', arguments: { command } };
+  let shown = '';
+  for (const terminal of [io('N'), io('yes'), io('y', false)]) {
+    terminal.write = text => { shown += text; };
+    assert.equal((await f.tool(request, terminal)).ran, false);
+  }
+  await assert.rejects(readFile(join(f.root, 'marker')));
+  assert(shown.includes(command));
+  assert.equal((await f.tool(request, io())).ran, true);
+  assert.equal(await readFile(join(f.root, 'marker'), 'utf8'), 'done');
+  const output = await processOutput(process.execPath, ['-e', 'process.stdout.write("x".repeat(100000))'], { cwd: f.root });
+  assert(output.truncated); assert(Buffer.byteLength(output.output) <= LIMITS.outputBytes);
+  const timed = await processOutput(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { cwd: f.root, timeoutMs: 80 });
+  assert(timed.timed_out);
+});
+
+test('fake Tank code loop uses existing region/token, redacts results and never retries a failed turn', async () => {
+  const f = await folder();
+  const secret = 'ghp_' + 'B'.repeat(24);
+  await writeFile(join(f.root, 'file.txt'), `safe\n${secret}\n`);
+  const token = 'tv1.za.' + '1'.repeat(32) + '.' + 'x'.repeat(43);
+  const received = []; let output = ''; let prompts = ['inspect file', '/exit'];
+  await run(['code', f.root], { store: { get: async () => token },
+    io: { interactive: true, prompt: async () => prompts.shift(), write: value => { output += value; } },
+    transport: async (url, init) => {
+      assert.equal(new URL(url).origin, 'https://za.tervory.com');
+      assert.equal(init.headers.Authorization, 'Bearer ' + token);
+      if (url.endsWith('/threads')) return Response.json({ thread_id: 'thread' });
+      received.push(JSON.parse(init.body));
+      if (received.length === 1) return Response.json({ answer: '', requests: [{ name: 'read_file', arguments: { path: 'file.txt' } }] });
+      assert(!init.body.includes(secret)); assert(init.body.includes('[redacted]'));
+      return Response.json({ answer: 'Ready', requests: [], receipt: { rows: [] } });
+    } });
+  assert.equal(received.length, 2); assert(output.includes('Ready')); assert(!output.includes(secret));
+  let calls = 0; prompts = ['inspect file'];
+  await assert.rejects(run(['code', f.root], { store: { get: async () => token },
+    io: { interactive: true, prompt: async () => prompts.shift(), write() {} },
+    transport: async url => { if (url.endsWith('/threads')) return Response.json({ thread_id: 'thread' }); calls++; throw Error('offline'); } }));
+  assert.equal(calls, 1);
+});
