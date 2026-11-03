@@ -2,6 +2,8 @@
 from trigger_bot_contract import TOOLS as BOT_TOOLS
 from trigger_marketing_contract import TOOLS as MARKETING_TOOLS
 
+MARKETING_PAID_TOOLS = frozenset({'post.create', 'gbp.reply.draft'})
+
 TOOLS = {"trigger": ['trigger.revise', 'trigger.voice.learn', 'trigger.write.batch', 'trigger.scorecard', 'trigger.write', 'trigger.check', 'trigger.voice.show', 'trigger.voice.set', 'trigger.voice.rollback', 'trigger.feedback'] + ["trigger." + name for name in MARKETING_TOOLS] + ["trigger.bot." + name for name in BOT_TOOLS]}
 FOUNDER_TOOLS = ['trigger.crm.write']
 TENANT_ADMIN_TOOLS = TOOLS["trigger"]
@@ -26,6 +28,6 @@ def adapters(command):
     result.update({"trigger.bot." + name: command.Adapter("POST", "/v1/trigger/bot/" + name, schema, "trigger.bot." + name)
                    for name, schema in BOT_TOOLS.items()})
     result.update({"trigger." + name: command.Adapter("POST", "/v1/trigger/marketing/" + name, schema, "trigger." + name,
-                   name in command.MARKETING_PAID_TOOLS, 'paid_run' if name in command.MARKETING_PAID_TOOLS else 'other')
+                   name in MARKETING_PAID_TOOLS, 'paid_run' if name in MARKETING_PAID_TOOLS else 'other')
                    for name, schema in MARKETING_TOOLS.items()})
     return result
