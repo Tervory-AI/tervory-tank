@@ -1766,6 +1766,8 @@ async def _run_code_candidate(req: RouteRequest, cand: str, messages: list[dict[
         tenant_id=req.tenant_id, skill_ref=pkg.ref, agent=pkg.agent, task_id=None,
         _model=_forbid, http=_http, env={k: v for k, v in SKILL_ENV.items() if not k.endswith(("_KEY", "_TOKEN"))},
     )
+    if pkg.agent == "base":
+        __import__("agent_skills").bind_base_browser(ctx)
     out = await skala.run_skill(pkg, graduate.skill_payload(messages), ctx)
     if ctx.calls or ctx.cost_usd:
         raise RuntimeError("code candidate attempted paid work")
