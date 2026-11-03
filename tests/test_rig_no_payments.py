@@ -114,9 +114,10 @@ async def test_stale_confirmation_lease_recovers_same_saved_order_and_outbox(mon
 
 
 @pytest.mark.asyncio
-async def test_historical_provider_state_is_preserved_and_cannot_place_an_order(monkeypatch, tmp_path):
+@pytest.mark.parametrize("legacy_state", ["payment_pending", "payment_failed", "payment_refused", "captured", "refunded", "ordered"])
+async def test_historical_provider_state_is_preserved_and_cannot_place_an_order(monkeypatch, tmp_path, legacy_state):
     store, service, _, _, _ = await auto_shop(monkeypatch, tmp_path)
-    historical = {"state": "payment_pending", "payment": {"reference": "old-audit-reference"}}
+    historical = {"state": legacy_state, "payment": {"reference": "old-audit-reference"}}
     await store.add_quote(TENANT, "historical", {"locate_state": historical}, {})
     with pytest.raises(RigError):
         await service.confirm_store_payment(TENANT, "historical")
