@@ -539,7 +539,8 @@ async def test_connected_google_alert_intake_uses_binding_not_body_tenant(signin
         assert accepted.status_code == 200
         assert accepted.json()['receipt']['tenant_id'] == tenant
         assert accepted.json()['queued'] is False
-        assert (await client.post(path, json=event('placeholder-valid'), headers=headers)).status_code == 401
+        duplicate = await client.post(path, json=event('placeholder-valid'), headers=headers)
+        assert duplicate.status_code == 200 and duplicate.json()['duplicate'] is True
         rows = app.state.store.get_state(tenant, 'autumbra_workspace_alerts', [])
         assert len(rows) == 1
         assert app.state.store.get_state(other, 'autumbra_workspace_alerts', []) == []

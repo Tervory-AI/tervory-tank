@@ -92,13 +92,16 @@ def register(app, require_tank, bounded_json, tank_factory):
             raise HTTPException(401, 'Google push authentication required.')
         raw = await bounded_json(request, 64000)
         try:
-            await verify_google_push(raw, request.headers.get('authorization'), tank_factory(getattr(app.state, 'http', None)), config=binding)
+            await verify_google_push(raw, request.headers.get('authorization'), tank_factory(getattr(app.state, 'http', None)), config=binding, allow_duplicate=True)
             receipt = alert_metadata(raw, binding)
         except (WebhookRejected, ValueError, KeyError, TypeError):
             raise HTTPException(401, 'Google push authentication required.') from None
         tenant = binding['tenant_id']
         rows = app.state.store.get_state(tenant, 'autumbra_workspace_alerts', [])
-        rows = [row for row in rows if row['id'] != receipt['id']][-99:] + [receipt]
+        previous = next((row for row in rows if row['id'] == receipt['id']), None)
+        if previous is not None:
+            return {'accepted': True, 'stored': False, 'queued': False, 'duplicate': True, 'receipt': previous}
+        rows = rows[-99:] + [receipt]
         app.state.store.set_state(tenant, 'autumbra_workspace_alerts', rows)
         settings = set_hand(load_settings(app.state.store, tenant), 'google_workspace', connected=True)
         save_settings(app.state.store, settings)
