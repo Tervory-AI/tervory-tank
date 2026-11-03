@@ -1474,7 +1474,7 @@ class Adapter:
 from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServerArgs  # noqa: F401 -- backwards-compatible command exports
 
 
-MARKETING_PAID_TOOLS = frozenset({'post.create', 'gbp.reply.draft'})
+from command_tools.trigger import MARKETING_PAID_TOOLS as MARKETING_PAID_TOOLS
 ADAPTERS = build_adapters(globals())
 
 
