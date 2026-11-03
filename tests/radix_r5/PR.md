@@ -2,7 +2,7 @@
 
 An owned `/chats` upload can now be scanned by Radix's existing archive job after durable Confirm. `radix.repo.findings` reads that job for the caller's tenant and projects the approved Radix finding fields. The room adds offline Checkov checks alongside secrets, dependencies and static analysis.
 
-Implementation and offline proof are complete on `codex/radix-r5-repo-scan`. **Founder browser acceptance and CI's full Tank job remain pending. This is not a DONE claim.** Claude opens the PR from this branch; the founder merges. No approval of `scan.iac`, deployment or production-data change was performed.
+Implementation and offline proof are complete on `codex/radix-r5-repo-scan`. **Founder browser acceptance and CI's full Tank job remain pending. This is not a DONE claim.** Claude opened [PR #605](https://github.com/Tervory-AI/tervory-tank/pull/605); the founder merges. No approval of `scan.iac`, deployment or production-data change was performed.
 
 ## Changes and review locations
 
@@ -22,7 +22,7 @@ Implementation and offline proof are complete on `codex/radix-r5-repo-scan`. **F
 | `workspace/app/chats/presentation.ts:40` | Suppresses generic repo-result details so summaries and operational fields cannot appear outside the approved Radix projection. No component markup, CSS, static assets or visible copy was added. |
 | `tank/skills/scan.iac/1.0.0/skill.yaml:1`, `run.py:1`, `engine.py:1`, `CHANGELOG.md:1` | Candidate package with threshold 1.0. Engine is a byte copy of room scanner. Existing skill versions are untouched. |
 | `tank/skills/scan.iac/1.0.0/evals/cases.jsonl:1` | Five distinct cases with exact rule-set expectations captured from the real pinned Checkov in a network-disabled Radix container, including refusal evidence. |
-| `tank/skills/scan.iac/1.0.0/evals/fixtures/terraform/open.tf:1`, `fixtures/kubernetes/privileged.yaml:1`, `fixtures/docker/Dockerfile:1`, `fixtures/clean/Dockerfile:1`, `fixtures/clean/main.tf:1` | Actual fixture files; tests enforce equality with inline eval-file inputs. Fixtures are never displayed on a live product screen. |
+| `tank/skills/scan.iac/1.0.0/evals/fixtures/terraform/open.tf:1`, `fixtures/kubernetes/privileged-pod.fixture:1`, `fixtures/docker/root-container.fixture:1`, `fixtures/clean/Dockerfile:1`, `fixtures/clean/main.tf:1` | Actual fixture files; tests enforce equality with inline eval-file inputs. Fixtures are never displayed on a live product screen. |
 | `tests/test_rx1_scans.py:98`, `:118` | Adds byte-identity pair and Checkov image pin assertions. |
 | `tests/test_radix_iac.py:1` | Fake Checkov subprocess contract, own rule text, unknown severity, skipped paths, unavailable/failed/timeout evidence, non-blocking IaC, fixture equality, unsafe-input refusal and room auth/version limits. |
 | `tests/test_command_radix_repo.py:1` | Real disposable-Postgres Command/room tests: Confirm/no repeat, tar and zip, owned uploads, caller tenant, redaction, code receipts, malformed responses and actual persisted cross-tenant job refusal. Also verifies Tank's room-eval executor. |
@@ -70,7 +70,7 @@ Commands and complete captured outputs, including initial failures, are in [PROO
 - Local browser harness passed clipboard success/failure, eighth-finding expansion, hostile text escaping, repo unknown-severity projection and no horizontal overflow at 320/375/768/1440 pixels.
 - Initial two summary-contract test failures, one isolated-module Pydantic failure, missing test-import configuration and unused-import lint findings were corrected. Captured initial pytest failures are retained in proof. No unrelated origin/main failure was changed or suppressed.
 
-CI's `tank` job is the **full-suite test of record**, per the founder's follow-up. It remains pending the PR. No local full-Tank run or hosted CI pass is claimed. The builder checked PRs for this branch; the result was `[]`.
+CI's `tank` job is the **full-suite test of record**, per the founder's follow-up. The initial report above predates PR #605; current review validation and hosted results are recorded below. No local full-Tank run is substituted for CI.
 
 ## Screenshots and remaining founder acceptance
 
@@ -78,7 +78,7 @@ CI's `tank` job is the **full-suite test of record**, per the founder's follow-u
 
 Local-only fixture harness screenshots: [375px](local-browser-375.png), [1440px](local-browser-1440.png). These prove the existing component/projection behavior under controlled test data; they are not a live scan or founder acceptance.
 
-After Claude opens the PR, CI/review and the founder's merge:
+After CI/review and the founder's merge:
 
 1. In `/chats`, run the existing `skala.evals` tool for `scan.iac` version `1.0.0`; capture the pass in the founder's browser. Approval remains the founder's action in Skala.
 2. Upload one small tar/tar.gz/zip with Terraform, a planted fake key, vulnerable dependency and injection pattern. Send `radix.repo.scan` with that one upload attached. Confirm the existing card; the returned job ID appears as Scan ID in the approved pending state.
@@ -86,3 +86,20 @@ After Claude opens the PR, CI/review and the founder's merge:
 4. Under another tenant, read that ID and verify refusal. Capture the founder's screenshots and attach them to the PR.
 
 No production SQL, live scan or deployment has occurred in this task. The separate review thread's findings must be fixed on this same PR. R4's changes must be retained when merging any newer `origin/main`; each file's publication fetched and merged main before a serialized branch push. The builder never pushed to main and does not open or merge the PR.
+
+
+## #605 review fixes
+
+The initial implementation/proof above is retained as history. Review fixes are on this same branch and PR after merging `origin/main`; the merge retains both the Radix repository tools and incoming Zenas tools.
+
+- `tank/radix_repo.py:8` and the scan route: attachment ownership is checked before receipt creation. Both other-user and other-tenant tests upload a valid tar and a valid zip, assert the confirmed card fails with the existing dispatch response `404 {"detail":"Attachment not found"}`, verify `call_room` is never awaited, and verify no ledger row or snapshot receipt is written. The same-user non-archive case separately asserts the existing 422 archive-type refusal and its code receipt.
+- `workspace/app/chats/radix-presentation.ts:20`: an empty repository result with `scan_complete=false` projects the existing failed state (206:715). A completed zero-finding result still uses the approved zero-findings state. Partial scans with findings keep showing the findings. No wording or component markup changed. Unit and browser tests cover both empty states and retention of partial findings.
+- CI's older security job identified intentionally unsafe R5 fixture files as deployable Docker/Kubernetes source. Those stored data files now use `root-container.fixture` and `privileged-pod.fixture`; their actual eval filenames and bytes, expected Checkov rule sets and engine bytes are unchanged. No security policy or rule was disabled.
+
+Local review validation: **22 Command repo tests passed**, **16 IaC/secret/projection guards passed**, projection and browser checks passed, TypeScript and Ruff passed, and real network-disabled Radix room evals remained **5/5, score 1.0, eligible true, $0**. Exact commands and outputs: [REVIEW-PROOF.txt](REVIEW-PROOF.txt).
+
+### Hosted full-suite result
+
+CI's `tank` job is the full-suite test of record. Final review-head result: **pending** at this report checkpoint; the actual completed job result will be recorded here before handoff. [Current #605 head checks](https://github.com/Tervory-AI/tervory-tank/pull/605/checks).
+
+The founder's own `skala.evals` run, upload/Confirm/findings test and screenshots follow **after merge**. No founder acceptance or production change is claimed. The builder does not merge.
