@@ -2810,6 +2810,30 @@ BEGIN
 END
 $$;
 
+-- BEGIN trigger (new blocks for trigger go here)
+-- END trigger
+-- BEGIN base (new blocks for base go here)
+-- END base
+-- BEGIN tiger (new blocks for tiger go here)
+-- END tiger
+-- BEGIN market_lab (new blocks for market_lab go here)
+-- END market_lab
+-- BEGIN rig (new blocks for rig go here)
+-- END rig
+-- BEGIN tisan (new blocks for tisan go here)
+-- END tisan
+-- BEGIN radix (new blocks for radix go here)
+-- END radix
+-- BEGIN zenas (new blocks for zenas go here)
+-- END zenas
+-- BEGIN mcp (new blocks for mcp go here)
+-- END mcp
+-- BEGIN skala (new blocks for skala go here)
+-- END skala
+-- BEGIN worker (new blocks for worker go here)
+-- END worker
+-- BEGIN platform (new blocks for platform go here)
+-- END platform
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
