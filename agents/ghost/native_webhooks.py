@@ -39,9 +39,9 @@ def verify_cloudflare_notification(body: bytes, header: str | None) -> None:
     replay_once('cloudflare:' + hashlib.sha256(body).hexdigest(), 'edge')
 
 
-async def verify_google_push(body: bytes, authorization: str | None, tank) -> None:
-    audience = os.environ.get('AUTUMBRA_GOOGLE_PUSH_AUDIENCE', '').strip()
-    account = os.environ.get('AUTUMBRA_GOOGLE_PUSH_SERVICE_ACCOUNT', '').strip()
+async def verify_google_push(body: bytes, authorization: str | None, tank, *, config: dict | None = None) -> None:
+    audience = (config['audience'] if config is not None else os.environ.get('AUTUMBRA_GOOGLE_PUSH_AUDIENCE', '')).strip()
+    account = (config['service_account'] if config is not None else os.environ.get('AUTUMBRA_GOOGLE_PUSH_SERVICE_ACCOUNT', '')).strip()
     if not audience or not account or not authorization or not authorization.startswith('Bearer '):
         raise WebhookRejected('invalid webhook authentication')
     token = authorization[7:]
@@ -73,6 +73,8 @@ async def verify_google_push(body: bytes, authorization: str | None, tank) -> No
         subscription = envelope['subscription']
         if (not isinstance(message, str) or not 1 <= len(message) <= 200
                 or not isinstance(subscription, str) or not 1 <= len(subscription) <= 1000):
+            raise ValueError
+        if config is not None and subscription != config['subscription']:
             raise ValueError
         replay_once('google:' + audience + ':' + account + ':' + subscription + ':' + message,
                     'mailbox', expires_at=float(claims['exp']))
