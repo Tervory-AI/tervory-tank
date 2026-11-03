@@ -885,6 +885,7 @@ async def test_large_catalogue_continuation_input_is_only_a_run_reference(corrid
     payload = await corridor.pool.fetchval('SELECT input FROM agent_tiger.jobs WHERE id=$1',child)
     assert json.loads(payload) == {'root_job_id':ctx.job_id}
     assert len(payload.encode()) < 100
+    assert await corridor.pool.fetchval('SELECT pg_column_size(input) FROM agent_tiger.jobs WHERE id=$1',child) < 100
     # One catalogue copy; the cursor lives once on the run, never in jobs.
     assert await corridor.pool.fetchval("SELECT count(*) FROM agent_tiger.jobs WHERE tenant_id=$1 AND input ? 'products'",TENANT) == 1
     assert await corridor.pool.fetchval("SELECT count(*) FROM agent_tiger.jobs WHERE tenant_id=$1 AND input ? 'cursor'",TENANT) == 0
