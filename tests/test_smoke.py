@@ -12,7 +12,7 @@ import sys
 spec = importlib.util.spec_from_file_location("tank_main", pathlib.Path(__file__).parent.parent / "tank" / "main.py")
 mod = importlib.util.module_from_spec(spec)
 # main.py looks itself up in sys.modules while including routers.
-sys.modules.setdefault("tank_main", mod)
+sys.modules["tank_main"] = mod
 spec.loader.exec_module(mod)
 
 
