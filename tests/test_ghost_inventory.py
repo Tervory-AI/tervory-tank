@@ -202,10 +202,10 @@ def test_compose_adds_names_only_and_keeps_the_seal():
     env = room["services"]["agent-ghost"]["environment"]
     assert env["COOLIFY_TOKEN_GHOST"] == "${COOLIFY_TOKEN_GHOST:-}"
     assert env["COOLIFY_URL_GHOST"] == "${COOLIFY_URL_GHOST:-}"
-    for service in room["services"].values():
+    for name, service in room["services"].items():
         assert "ports" not in service and not service.get("privileged")
         assert not any("docker.sock" in str(v) for v in service.get("volumes", []))
-        assert service["networks"] == ["gw"]
+        assert service["networks"] == (["enforce_control"] if name == "enforce-lifecycle" else ["gw"])
     assert "COOLIFY_TOKEN_GHOST_ACTIONS" not in str(room)
 
 
