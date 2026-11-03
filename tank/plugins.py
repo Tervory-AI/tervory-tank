@@ -1,7 +1,6 @@
 """Bundled first-party manifests and tenant-only install records; no credentials."""
 from __future__ import annotations
 
-import json
 from dataclasses import replace
 from pathlib import Path
 from typing import Literal
@@ -112,6 +111,22 @@ async def listing(conn, actor):
     return {'count': len(result), 'plugins': result}
 
 
+async def prepare(action, actor, conn):
+    if action.tool == 'plugins.list':
+        return action
+    if not (actor.founder or actor.tenant_admin):
+        raise HTTPException(403, 'This tool is not available to this user')
+    body = PluginArgs.model_validate(action.arguments)
+    manifest = MANIFESTS.get((body.id, body.version))
+    if manifest is None or not visible(actor, manifest):
+        raise HTTPException(422, 'The action arguments are invalid')
+    if action.tool == 'plugins.install':
+        servers, skills = await readiness(conn, actor, manifest)
+        if not all(s['approved'] for s in servers) or not all(s['approved'] for s in skills):
+            raise HTTPException(422, 'The action arguments are invalid')
+    return action
+
+
 async def dispatch(action, actor, thread_id=None, card_id=None):
     from command import db, require_tool, dump
     from trigger_routes import code_receipt
@@ -134,7 +149,7 @@ async def dispatch(action, actor, thread_id=None, card_id=None):
             if action.tool == 'plugins.install':
                 servers, skills = await readiness(conn, actor, manifest)
                 if not all(s['approved'] for s in servers) or not all(s['approved'] for s in skills):
-                    raise HTTPException(422, 'The action arguments are invalid')
+                    return 422, {'ledger_id': str(await code_receipt(actor.tenant_id, action.tool))}
                 await conn.execute('INSERT INTO tank.plugin_installs(tenant_id,plugin_id,version,installed_by) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,plugin_id,version) DO NOTHING', actor.tenant_id, body.id, body.version, actor.user_id)
                 result = {'name': body.id, 'status': 'installed'}
             elif action.tool == 'plugins.remove':
