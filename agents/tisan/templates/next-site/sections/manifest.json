@@ -35,7 +35,7 @@
               "label": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 200
+                "maxLength": 40
               },
               "href": {
                 "type": "string",
@@ -58,7 +58,7 @@
             "text": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 2000
+              "maxLength": 600
             },
             "links": {
               "type": "array",
@@ -69,7 +69,7 @@
                   "label": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 200
+                    "maxLength": 40
                   },
                   "href": {
                     "type": "string",
@@ -151,12 +151,12 @@
           "heading": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200
+            "maxLength": 80
           },
           "body": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 2000
+            "maxLength": 600
           },
           "image": {
             "type": "object",
@@ -227,7 +227,7 @@
           "heading": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200
+            "maxLength": 80
           },
           "items": {
             "type": "array",
@@ -238,12 +238,12 @@
                 "title": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 200
+                  "maxLength": 80
                 },
                 "body": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 2000
+                  "maxLength": 400
                 }
               },
               "required": [
@@ -279,7 +279,7 @@
           "heading": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200
+            "maxLength": 80
           },
           "items": {
             "type": "array",
@@ -290,12 +290,12 @@
                 "name": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 200
+                  "maxLength": 80
                 },
                 "body": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 2000
+                  "maxLength": 400
                 },
                 "image": {
                   "type": "object",
@@ -329,7 +329,7 @@
               ]
             },
             "minItems": 1,
-            "maxItems": 24
+            "maxItems": 12
           }
         },
         "required": [
@@ -360,12 +360,12 @@
           "heading": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200
+            "maxLength": 80
           },
           "body": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 2000
+            "maxLength": 600
           },
           "image": {
             "type": "object",
@@ -423,7 +423,7 @@
           "heading": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200
+            "maxLength": 80
           },
           "items": {
             "type": "array",
@@ -434,12 +434,12 @@
                 "title": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 200
+                  "maxLength": 80
                 },
                 "body": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 2000
+                  "maxLength": 400
                 }
               },
               "required": [
@@ -475,7 +475,7 @@
           "heading": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200
+            "maxLength": 80
           },
           "items": {
             "type": "array",
@@ -491,7 +491,7 @@
                 "answer": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 2000
+                  "maxLength": 800
                 }
               },
               "required": [
@@ -500,7 +500,7 @@
               ]
             },
             "minItems": 1,
-            "maxItems": 30
+            "maxItems": 20
           }
         },
         "required": [
@@ -527,7 +527,7 @@
           "heading": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200
+            "maxLength": 80
           },
           "cta": {
             "type": "object",
@@ -573,12 +573,12 @@
           "heading": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200
+            "maxLength": 80
           },
           "body": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 2000
+            "maxLength": 600
           }
         },
         "required": []
@@ -601,7 +601,7 @@
           "heading": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200
+            "maxLength": 80
           },
           "images": {
             "type": "array",
@@ -626,7 +626,7 @@
               ]
             },
             "minItems": 1,
-            "maxItems": 24
+            "maxItems": 12
           }
         },
         "required": [
