@@ -134,12 +134,18 @@ class Retailer:
         auto_order = data.get("auto_order", previous.get("auto_order", False))
         if type(auto_order) is not bool:
             raise ValueError("The request is not valid.")
+        delivery = data.get("delivery", previous.get("delivery", {}))
+        if (not isinstance(delivery, dict) or delivery and (
+                set(delivery) != {"min_days", "max_days"}
+                or any(type(delivery[key]) is not int for key in ("min_days", "max_days"))
+                or not 0 <= delivery["min_days"] <= delivery["max_days"] <= 365)):
+            raise ValueError("The request is not valid.")
         await self.store.put_retailer(tenant, previous.get("slug") or tenant, email,
                                       previous.get("webhook"), name.strip(), theme=theme,
                                       quote_notice={key: validated_notice[key] for key in ("text", "url")}
                                       if validated_notice else None,
                                       locate_enabled=locate_enabled, blind_ship=blind_ship,
-                                      auto_order=auto_order)
+                                      auto_order=auto_order, delivery=delivery)
         return {"saved": True}
 
     async def embed_key(self, tenant: str, data: dict[str, Any]) -> dict:

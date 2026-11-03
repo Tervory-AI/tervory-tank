@@ -21,11 +21,12 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model, model_validator
 
 import command_repo
 from trigger_bot_contract import TOOLS as BOT_TOOLS
 from base_lists import FindArgs, SaveArgs, ListArgs, SendArgs
+from tisan_requests import TOOLS as TISAN_CLIENT_TOOLS, RequestIdArgs as TisanRequestIdArgs, FeedbackArgs as TisanFeedbackArgs
 from base_audit_commands import StartArgs as AuditStartArgs, CsvArgs as AuditCsvArgs, ReviewArgs as AuditReviewArgs
 from tenant_db import tenant_path
 from command_stream import AnswerText, TokenSink
@@ -41,7 +42,7 @@ TOOLS = {
     "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.to_crm"],
     "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.position"],
     "market_lab": ["market_lab.research", "market_lab.warnings", "market_lab.predictions", "market_lab.calibration", "market_lab.feeds", "market_lab.alerts.email", "market_lab.alerts.webhook", "market_lab.alerts.off"],
-    "rig": ["rig.search", "rig.ask"],
+    "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment"],
     "tisan": ["tisan.scaffold"],
     "radix": ["radix.scan", "radix.repo.scan", "radix.repo.findings"],
     "zenas": ["zenas.ask", "zenas.matters", "zenas.review", "zenas.watch.add", "zenas.watch.list", "zenas.watch.enable", "zenas.watch.disable"],
@@ -52,6 +53,7 @@ FOUNDER_TOOLS = ["base.audit.start", "base.audit.csv", "base.audit.review", "tri
                  "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
+FOUNDER_TOOLS += TISAN_CLIENT_TOOLS
 
 
 def db() -> Any:
@@ -115,9 +117,12 @@ def allowed_tools(actor: Actor) -> list[str]:
     squads = TOOLS.keys() if actor.founder else actor.squads & SQUADS
     founder_tools = [name for name in FOUNDER_TOOLS
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
-    voice_tools = TOOLS["trigger"] if actor.tenant_admin and not actor.founder else []
+    voice_tools = TOOLS["trigger"] + ["rig.quote.confirm_payment"] if actor.tenant_admin and not actor.founder else []
+    client_tools = TISAN_CLIENT_TOOLS if actor.tenant_admin and not actor.founder else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]
-                   if not tool.startswith("market_lab.alerts.") or actor.founder or actor.tenant_admin] + founder_tools + voice_tools + list(actor.mcp_tools))
+                   if (tool != "rig.quote.confirm_payment" and not tool.startswith("market_lab.alerts."))
+                   or actor.tenant_admin or actor.founder]
+                  + founder_tools + voice_tools + client_tools + list(actor.mcp_tools))
 
 
 def require_tool(actor: Actor, name: str) -> None:
@@ -397,6 +402,10 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
         row = await owned(conn, thread_id, actor)
     state = unpack(row["state"])
     for card in state.get("cards", {}).values():
+        if (card.get("tool") == "tisan.build" and card.get("status") == "confirmed"
+                and current_actor(actor).founder and isinstance(card.get("result"), dict)):
+            from tisan_requests import build_result
+            card["result"] = await build_result(actor.tenant_id, card["result"])
         if card.get("tool") == "tiger.match" and card.get("status") == "confirmed" and isinstance(card.get("result"), dict):
             from access import tiger_card_result
             card["result"] = await tiger_card_result(actor.tenant_id, card["result"])
@@ -484,6 +493,10 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
     if planned is not None:
         return planned
     from main import Message, RouteRequest, box_region, run_route
+    from tisan_requests import code_plan as tisan_code_plan
+    planned = await tisan_code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     planned = await tiger_code_plan(actor, messages, task_id)
     if planned is not None:
         return planned
@@ -1018,6 +1031,10 @@ class RigAskArgs(QuestionArgs):
     product_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_.:-]+$")
 
 
+class RigConfirmPaymentArgs(Body):
+    quote_id: str = Field(min_length=1, max_length=200)
+
+
 class SkillVersionArgs(Body):
     skill_id: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$")
     version: str = Field(max_length=50, pattern=r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$")
@@ -1044,6 +1061,13 @@ class TisanBuildArgs(Body):
     plan: dict[str, Any] | None = None
     copy: dict[str, str] = Field(default_factory=dict)
     media: dict[str, str] = Field(default_factory=dict)
+
+
+# Reuse the build contract's field constraints without exposing plan/copy/media.
+TisanRequestArgs = create_model('TisanRequestArgs', __base__=Body,
+    **{name: (TisanBuildArgs.model_fields[name].annotation, TisanBuildArgs.model_fields[name])
+       for name in ('name', 'slug', 'locale', 'brand')},
+    request=(str, Field(min_length=1, max_length=16000)))
 
 
 class SourceFile(Body):
@@ -1230,6 +1254,10 @@ from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServ
 
 
 ADAPTERS = {
+    "tisan.request": Adapter("POST", "/v1/command/tisan/request", TisanRequestArgs, "tisan.request"),
+    "tisan.preview": Adapter("GET", "/v1/command/tisan/preview", TisanRequestIdArgs, "tisan.preview"),
+    "tisan.feedback": Adapter("POST", "/v1/command/tisan/feedback", TisanFeedbackArgs, "tisan.feedback"),
+    "tisan.handover": Adapter("POST", "/v1/command/tisan/handover", TisanRequestIdArgs, "tisan.handover"),
     "base.audit.start": Adapter("POST", "/v1/command/base/audits/start", AuditStartArgs, "base.audit.start"),
     "base.audit.csv": Adapter("GET", "/v1/command/base/audits/export", AuditCsvArgs, "base.audit.csv"),
     "base.audit.review": Adapter("POST", "/v1/command/base/audits/review", AuditReviewArgs, "base.audit.review"),
@@ -1274,6 +1302,7 @@ ADAPTERS = {
     "market_lab.research": Adapter("POST", "/v1/research", QuestionArgs, "Research a market question", True, "paid_run"),
     "rig.search": Adapter("GET", "/v1/rig/search", QueryArgs, "Search the product catalogue"),
     "rig.ask": Adapter("POST", "/v1/rig/ask", RigAskArgs, "Ask about a product", True, "paid_run"),
+    "rig.quote.confirm_payment": Adapter("POST", "/v1/access/rig/admin/confirm-store-payment", RigConfirmPaymentArgs, "rig.quote.confirm_payment"),
     "tisan.scaffold": Adapter("POST", "/v1/skala/tisan.scaffold/run", ScaffoldArgs, "Create a site scaffold", False, "other", "tisan.scaffold"),
     "radix.domain.prove": Adapter("POST", "/v1/radix/passive/domains", RadixDomainArgs, "radix.domain.prove"),
     "radix.passive.scan": Adapter("POST", "/v1/radix/passive/scans", RadixPassiveArgs, "radix.passive.scan"),
@@ -1472,7 +1501,11 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, scope, None
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
-    if action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review"}:
+    if action.tool == "rig.quote.confirm_payment":
+        return adapter.method, path, {}, {"data": args}
+    if action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", *TISAN_CLIENT_TOOLS}:
+        if adapter.method == 'GET':
+            return adapter.method, path, args, None
         return adapter.method, path, {}, args  # Actor headers supply identity, never body fields.
     if adapter.method == "GET":
         return adapter.method, path, {**args, **scope}, None
@@ -1669,7 +1702,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 from market_lab_ml3 import confirmed
                 status, result = 200, await confirmed(action, actor, thread_id, card_id)
                 once = result.pop("_once", None)
-            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "radix.repo.scan"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"rig.quote.confirm_payment", "base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
@@ -1695,7 +1728,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 if refused is not None:
                     card["result"] = refused
                 detail = result.get("detail") if isinstance(result, dict) else None
-                card["error"] = (detail if isinstance(detail, str) and (action.tool.startswith("zenas.watch.")
+                card["error"] = (detail if isinstance(detail, str) and ((action.tool.startswith("zenas.watch.") and status in {403, 404, 422})
                                  or (action.tool == "radix.passive.scan" and detail in {"invalid artifact", "domain proof required"}))
                                  else "The action was refused or failed. It has not been retried.")
             await step(conn, row, state, {"step_id": card_id, "label": adapter.label,

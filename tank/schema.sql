@@ -2750,6 +2750,66 @@ DO $$ BEGIN
  END IF;
 END $$;
 
+-- Tisan T3: client requests and immutable revision/sign-off events, never publication.
+CREATE TABLE IF NOT EXISTS tank.tisan_requests (
+    tenant_id uuid NOT NULL,
+    request_id uuid NOT NULL,
+    actor text NOT NULL,
+    data jsonb NOT NULL,
+    state text NOT NULL CHECK (state IN ('requested','changes_requested','accepted')),
+    build integer CHECK (build > 0),
+    "commit" text CHECK ("commit" ~ '^[0-9a-f]{40}$'),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,request_id)
+);
+CREATE TABLE IF NOT EXISTS tank.tisan_request_events (
+    tenant_id uuid NOT NULL,
+    event_id uuid NOT NULL,
+    request_id uuid NOT NULL,
+    kind text NOT NULL CHECK (kind IN ('requested','changes_requested','accepted')),
+    actor text NOT NULL,
+    build integer CHECK (build > 0),
+    "commit" text CHECK ("commit" ~ '^[0-9a-f]{40}$'),
+    text text CHECK (length(text) BETWEEN 1 AND 4000),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,event_id),
+    FOREIGN KEY (tenant_id,request_id) REFERENCES tank.tisan_requests(tenant_id,request_id)
+);
+CREATE INDEX IF NOT EXISTS tisan_requests_tenant ON tank.tisan_requests(tenant_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS tisan_request_events_request ON tank.tisan_request_events(tenant_id,request_id,created_at);
+-- Follow personal_tokens exactly: join an existing rollout, never enable legacy RLS.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        ALTER TABLE tank.tisan_requests ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE tank.tisan_requests FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.tisan_requests'::regclass AND polname='tenant_access') THEN
+            CREATE POLICY tenant_access ON tank.tisan_requests FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.tisan_requests'::regclass AND polname='tenant_boundary') THEN
+            CREATE POLICY tenant_boundary ON tank.tisan_requests AS RESTRICTIVE FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        ALTER TABLE tank.tisan_request_events ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE tank.tisan_request_events FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.tisan_request_events'::regclass AND polname='tenant_access') THEN
+            CREATE POLICY tenant_access ON tank.tisan_request_events FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.tisan_request_events'::regclass AND polname='tenant_boundary') THEN
+            CREATE POLICY tenant_boundary ON tank.tisan_request_events AS RESTRICTIVE FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+    END IF;
+END
+$$;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
