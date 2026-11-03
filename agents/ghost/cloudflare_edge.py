@@ -26,17 +26,17 @@ class CloudflareProxyTransport(httpx.HTTPTransport):
 
 
 def proxy_answers() -> bool:
-    """Probe the exact permitted tunnel, never an alternate destination."""
+    """Probe the fixed proxy without admitting or consuming an upstream tunnel."""
     try:
         with socket.create_connection(("egress-proxy", 8080), timeout=1) as conn:
-            conn.sendall(b"CONNECT api.cloudflare.com:443 HTTP/1.1\r\nHost: api.cloudflare.com:443\r\n\r\n")
+            conn.sendall(b"GET /health HTTP/1.1\r\nHost: egress-proxy\r\nConnection: close\r\n\r\n")
             reply = b""
             while b"\r\n\r\n" not in reply and len(reply) < 8192:
                 chunk = conn.recv(1024)
                 if not chunk:
                     break
                 reply += chunk
-            return reply.startswith(b"HTTP/1.1 200 Connection Established\r\n")
+            return reply.startswith(b"HTTP/1.1 200 OK\r\n")
     except OSError:
         return False
 API_ROOT = "https://api.cloudflare.com/client/v4"

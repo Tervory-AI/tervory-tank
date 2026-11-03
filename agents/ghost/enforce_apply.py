@@ -32,10 +32,11 @@ def control_name(control: FixtureEdgeControl) -> str:
 
 
 def select_control(*, site: str, settings: ClientAutumbraSettings,
-                   control: FixtureEdgeControl | None = None) -> FixtureEdgeControl:
+                   control: FixtureEdgeControl | None = None,
+                   required_control: str | None = None) -> FixtureEdgeControl:
     """Select live control only behind all four approved gates."""
     from .cloudflare_edge import (
-        CloudflareEdgeControl, CloudflareProxyTransport, TOKEN_ENV, proxy_answers,
+        CloudflareEdgeControl, CloudflareEdgeError, CloudflareProxyTransport, TOKEN_ENV, proxy_answers,
     )
     from .site_health import health_configured, read_health
 
@@ -44,6 +45,21 @@ def select_control(*, site: str, settings: ClientAutumbraSettings,
         if edge.tenant_id != settings.tenant_id or edge.site != site:
             raise ValueError("Cloudflare control does not belong to this client and site.")
         return edge
+    # Existing shield ownership survives probe/configuration outages. Only new
+    # proposals may fall back to the fixture; approval and Undo fail and retry.
+    if required_control == "cloudflare":
+        if isinstance(edge, CloudflareEdgeControl):
+            if edge.tenant_id != settings.tenant_id or edge.site != site:
+                raise ValueError("Cloudflare control does not belong to this client and site.")
+            return edge
+        if not os.environ.get(TOKEN_ENV, "").strip():
+            raise CloudflareEdgeError("Cloudflare request failed.")
+        live = CloudflareEdgeControl(
+            tenant_id=settings.tenant_id, site=site, transport=CloudflareProxyTransport(),
+            token=os.environ[TOKEN_ENV], health_probe=lambda: read_health(site),
+        )
+        live.blocked.update(edge.blocked)
+        return live
     configured = bool(os.environ.get(TOKEN_ENV, "").strip())
     if not configured or zone_of(site) is None or not health_configured() or not proxy_answers():
         if isinstance(edge, CloudflareEdgeControl):
@@ -273,7 +289,7 @@ def undo_from_payload(
     """Undo via validated ThreatPayload door (from outside Enforce through the queue)."""
     if not isinstance(payload, ThreatPayload) or payload.action is not ThreatAction.undo_shield:
         raise TypeError("undo_from_payload requires action=undo_shield")
-    edge = select_control(site=payload.site, settings=settings, control=control)
+    edge = control or DEFAULT_CONTROL
     rule_id = (payload.rule_id or "").strip()
     if not rule_id and payload.prior_receipt_id and data_dir is not None:
         # Resolve rule_id from founder console / receipts on the queue box later;
@@ -295,6 +311,9 @@ def undo_from_payload(
             "tenant_id": settings.tenant_id,
             **settings.receipt_stamp(),
         }
+    stored = next((row for row in edge.list_blocked() if row.get("rule_id") == rule_id), {})
+    edge = select_control(site=payload.site, settings=settings, control=edge,
+                          required_control=stored.get("control"))
     prior = {"id": payload.prior_receipt_id, "undo": {"rule_id": rule_id}, "tenant_id": settings.tenant_id}
     try:
         out = undo_applied(prior, control=edge, data_dir=data_dir)
@@ -375,7 +394,8 @@ def approve_pending(
         raise ValueError("pending shield belongs to another client")
     address = str(row.get("address") or "")
     site = str(row.get("site") or payload.site)
-    edge = select_control(site=site, settings=settings, control=control)
+    edge = select_control(site=site, settings=settings, control=control,
+                          required_control=row.get("control"))
     name = control_name(edge)
     if row.get("control", "fixture_edge") != name:
         raise LookupError("pending shield belongs to another control")

@@ -106,7 +106,7 @@ def test_real_local_proxy_refuses_every_other_destination(host):
         sink.close()
         return upstream
     proxy = Proxy(verified_host=host, allow_storage=False,
-                  resolve=lambda h: "1.1.1.1", connect=connect, max_requests_per_minute=120)
+                  resolve=lambda h: "1.1.1.1", connect=connect)
     server = Server(proxy).start()
     try:
         for target in [host+":443", "evil.example:443", "tank:443", "health-observer:443",

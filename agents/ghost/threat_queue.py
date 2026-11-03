@@ -489,9 +489,15 @@ def enforce_drain_once(
 
     transit = _queue_transit_seconds(payload)
 
+    from .cloudflare_edge import CloudflareEdgeError
+
     # Undo / approve doors — ThreatPayload only.
     if payload.action is ThreatAction.undo_shield:
-        receipt = undo_from_payload(payload, control=edge, settings=settings, data_dir=data_dir)
+        try:
+            receipt = undo_from_payload(payload, control=edge, settings=settings, data_dir=data_dir)
+        except CloudflareEdgeError:
+            queue.put(payload)
+            raise
         if transit is not None:
             stamp_budget(receipt, stage="queue_transit", seconds=transit)
         stamp_budget(receipt, stage="event_to_shield_e2e", seconds=time.perf_counter() - t_drain + (transit or 0))
@@ -499,7 +505,11 @@ def enforce_drain_once(
         return receipt
 
     if payload.action is ThreatAction.approve_shield:
-        receipt = approve_pending(payload, control=edge, settings=settings, data_dir=data_dir)
+        try:
+            receipt = approve_pending(payload, control=edge, settings=settings, data_dir=data_dir)
+        except CloudflareEdgeError:
+            queue.put(payload)
+            raise
         if transit is not None:
             stamp_budget(receipt, stage="queue_transit", seconds=transit)
         stamp_budget(receipt, stage="event_to_shield_e2e", seconds=time.perf_counter() - t_drain + (transit or 0))

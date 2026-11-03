@@ -119,3 +119,20 @@ appear in screenshots.
 
 Clearing the token setting returns Enforce to the fixture on its next deploy;
 it preserves real rule records and cannot pretend the fixture undid a real rule.
+
+## Review fix 1 — tunnel budget and pinned control
+
+`cloudflare_edge.proxy_answers` now uses GET /health. Approval and Undo select
+from the shield's recorded control even when the probe is down; a fixed
+Cloudflare error retains the action in the queue for retry. Durable ownership
+and pending approval records are retained on failure. The API proxy remains at
+Radix's unchanged limit of **6 tunnels/minute**: the regression forces one new
+tunnel per API call and needs **5** for propose/approve/Undo; 20 health probes
+consume **0** tunnels. No Enforce-specific rate increase is necessary.
+
+Command: `/home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python .proof/run_review.py tests/test_autumbra_a3_review.py tests/test_autumbra_cloudflare_hand.py tests/test_autumbra_cloudflare_live.py`
+Exit 0: **84 passed in 13.24s**. The wrapper strips provider credentials and
+database settings and restricts sockets to loopback. An initial invocation with
+the smaller local environment exited 4 because pytest-socket was absent; the
+existing CI environment supplied it. One old expectation was updated to the
+required fixed error when a real shield's token is unavailable.

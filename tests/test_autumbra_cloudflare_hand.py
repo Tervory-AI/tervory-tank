@@ -253,12 +253,14 @@ def test_other_tenant_cannot_use_cloudflare_control():
     assert not api.calls
 
 
-def test_fixture_cannot_claim_to_undo_a_persisted_cloudflare_rule(tmp_path):
+def test_fixture_cannot_claim_to_undo_a_persisted_cloudflare_rule(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN_ENFORCE", "")
     api = FakeCloudflare()
     receipt = apply_from_payload(payload(), settings=settings(), control=edge(api), data_dir=tmp_path)
     fixture = load_control(tmp_path, tenant_id=TENANT)
-    undone = undo_from_payload(undo_payload(receipt), settings=settings(), control=fixture, data_dir=tmp_path)
-    assert undone["outcome"] == "undo_failed" and fixture.list_blocked()
+    with pytest.raises(CloudflareEdgeError, match="Cloudflare request failed."):
+        undo_from_payload(undo_payload(receipt), settings=settings(), control=fixture, data_dir=tmp_path)
+    assert fixture.list_blocked()
     assert not any(method == "DELETE" for method, _ in api.calls)
 
 
