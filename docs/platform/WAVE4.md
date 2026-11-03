@@ -41,3 +41,13 @@ Validation: 2 focused tests passed (real PostgreSQL + offline Node transport), i
 B3 follow-up: promotion/rollback release their pool checkout before queueing validation, then reacquire a row lock and verify the policy snapshot before writing. The prospective proof is transaction-local; a passing replacement can resolve a failed current-policy roster check without weakening the barrier for other writers.
 
 Missing frames: founder tenant onboarding/home-region selection, unavailable-region state, and immutable-home/migration conflict state.
+
+## A8: deadline-bounded price scheduling
+
+Unattended, batch-eligible requests (interactive=false) use the durable queue unless standard/urgent was explicitly requested. Interactive calls keep their immediate response. Each request may name an absolute timezone-aware deadline_at, at most seven days out; omitted deadlines default to 48 hours. The scheduler compares configured offpeak windows/dates (including per-window charge_multiplier when supplied) with the already-authorized provider batch discount. It chooses the earliest cheapest feasible start for the selected policy model, including DST gaps/folds. Provider batches reserve their existing 24-hour completion window plus maintenance margin; batch and time discounts are never assumed to stack.
+
+The job persists not_before, deadline_at, mode and estimated charge multiplier. Maintenance rechecks current prices, the policy snapshot, tenant home and cost cap before dispatch. If no discounted window fits, direct execution may use the cheapest feasible known rate. Expired queued work fails without dispatch. Direct dispatch is bounded by the remaining deadline; interrupted or uncertain work is not replayed. Existing provider status/cancellation behavior remains; a provider completion window cannot guarantee remote availability. No new provider, alias, retry or price is invented. Expired batch items do not submit or use the existing fallback retry.
+
+Missing frames: deadline entry, scheduled start/price explanation, queued/expired status.
+
+A8 validation: 4 tests passed in 177.18s on this host: cheapest versus first window, deadline fallback, provider completion budget, DST gap/fold, persisted waiting, exactly one dispatch and expiry without dispatch. Price and provider boundaries were stubbed; SQL was real. A missing native-provider field in the initial test double was corrected before this passing run. No test retries or production retries were added.

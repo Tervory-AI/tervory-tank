@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 import batch_providers
+import price_windows
 from tenant_db import tenant_scope
 
 
@@ -37,6 +38,9 @@ class QueuedResponse(BaseModel):
     ledger_id: uuid.UUID
     status: str = 'queued'
     priority: str = 'offpeak'
+    not_before: datetime | None = None
+    deadline_at: datetime | None = None
+    dispatch_mode: str | None = None
 
 
 def now() -> datetime:
@@ -88,7 +92,7 @@ def usage_cost(info: dict, usage: dict, at: datetime) -> float | None:
         cached = int(cached)
         if min(count_in, count_out, cached) < 0 or cached > count_in:
             return None
-        multiplier = Decimal(str(settings['charge_multiplier'])) if window_open(settings, at) else Decimal(1)
+        multiplier = Decimal(str(price_windows.multiplier(settings, at)))
         if not 0 < multiplier <= 1:
             return None
         return float(multiplier * (
@@ -110,23 +114,27 @@ async def enqueue(tank, item, *, caller=None, task_id=None, model_override=None)
     # Validate scheduling metadata before storing a request, including deployed
     # /model/info metadata rather than assuming a config file exists in Tank.
     info = await model_info(tank, policy['model'])
-    window_open(info.get('offpeak'), now())
+    plan = price_windows.choose(info, at=now(), deadline=req.deadline_at,
+        batch_discount=float(prices['discount']) if batched else None)
+    if plan['dispatch_mode'] == 'direct' and tank._call_upper(item.messages, item.max_tokens, prices) > float(policy['max_cost_usd']):
+        raise HTTPException(409, 'Task cost cap prevents direct dispatch within the deadline')
     job_id = uuid.uuid4()
     snapshot = {'routing': policy, 'messages': item.messages, 'max_tokens': item.max_tokens,
                 'generation': item.generation, 'escalation': item.escalation,
                 'semantic_cache': item.cache_snapshot}
     async with tank.pool().acquire() as conn, conn.transaction():
         await conn.execute("""INSERT INTO tank.offpeak_jobs
-            (id,tenant_id,region,request,policy,caller,task_id,model_override)
-            VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6,$7,$8)""",
+            (id,tenant_id,region,request,policy,caller,task_id,model_override,not_before,deadline_at,dispatch_mode,scheduled_multiplier)
+            VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6,$7,$8,$9,$10,$11,$12)""",
             job_id, req.tenant_id, tank.box_region(), req.model_dump_json(), json.dumps(snapshot, default=str),
-            caller, task_id, model_override)
+            caller, task_id, model_override, plan['not_before'], plan['deadline_at'],
+            plan['dispatch_mode'], plan['scheduled_multiplier'])
         await conn.execute("""INSERT INTO tank.ledger
             (id,tenant_id,region,agent,skill,task_type,rung,model,priority,outcome,cost_status,task_id,offpeak_job_id)
             VALUES($1,$2,$3,$4,$5,$6,$7,$8,'offpeak','queued','not_set',$9,$1)""",
             job_id, req.tenant_id, tank.box_region(), req.agent, req.skill, req.task_type,
             policy['rung'], policy['model'], task_id)
-    return QueuedResponse(id=job_id, ledger_id=job_id)
+    return QueuedResponse(id=job_id, ledger_id=job_id, **{k: plan[k] for k in ('not_before','deadline_at','dispatch_mode')})
 
 
 async def label_batch(tank, queued: QueuedResponse, tenant_id) -> QueuedResponse:
@@ -146,6 +154,7 @@ async def status(tank, job_id, tenant_id, *, caller=None) -> dict:
     # the jobs it queued itself.
     async with tank.pool().acquire() as conn:
         row = await conn.fetchrow("""SELECT j.id,j.status,j.created_at,j.sent_at,j.finished_at,j.result,j.error,
+            j.not_before,j.deadline_at,j.dispatch_mode,j.scheduled_multiplier,
             coalesce(l.priority,'offpeak') AS priority,j.caller
             FROM tank.offpeak_jobs j LEFT JOIN tank.ledger l ON l.id=j.id AND l.tenant_id=j.tenant_id
             WHERE j.id=$1 AND j.tenant_id=$2 AND j.region=$3""", job_id, tenant_id, tank.box_region())
@@ -187,8 +196,22 @@ async def _process(tank, conn, job):
     prices = await tank._batch_price(policy['model'])
     batched = not policy.get('moa_enabled') and batch_providers.compatible(prices, snapshot['messages'], snapshot['generation'])
     info = await model_info(tank, policy['model'])
-    if not batched and not window_open(info.get('offpeak'), now()):
+    stamp = now()
+    deadline = job['deadline_at'] or job['created_at'] + price_windows.DEFAULT_WAIT
+    if stamp >= deadline:
+        await _finish(tank, conn, job, error='deadline_exceeded')
         return
+    plan = price_windows.choose(info, at=stamp, deadline=deadline,
+        batch_discount=float(prices['discount']) if batched else None)
+    await conn.execute('''UPDATE tank.offpeak_jobs SET not_before=$3,deadline_at=$4,
+        dispatch_mode=$5,scheduled_multiplier=$6 WHERE id=$1 AND tenant_id=$2''',
+        job['id'], job['tenant_id'], plan['not_before'], deadline, plan['dispatch_mode'], plan['scheduled_multiplier'])
+    if stamp < plan['not_before']:
+        return
+    batched = plan['dispatch_mode'] == 'batch'
+    # Preserve the original absolute deadline in the provider batch snapshot.
+    req = req.model_copy(update={'deadline_at': deadline})
+    await __import__('tenant_regions').local(tank, req.tenant_id, req.home_region)
     if job['task_id']:
         await tank._check_route_task(req, job['task_id'])
     if batched:
@@ -207,9 +230,10 @@ async def _process(tank, conn, job):
     await conn.execute("""UPDATE tank.offpeak_jobs SET status='dispatching',sent_at=$3
         WHERE id=$1 AND tenant_id=$2""", job['id'], job['tenant_id'], sent_at)
     try:
-        result = await tank.run_route(req, caller=job['caller'], task_id=job['task_id'],
+        async with asyncio.timeout(max(0.001, (deadline-now()).total_seconds())):
+            result = await tank.run_route(req, caller=job['caller'], task_id=job['task_id'],
             model_override=job['model_override'], _paid_policy=policy, _prior_escalation=snapshot['escalation'],
-            _paid_limit=float(policy['max_cost_usd']), _offpeak_dispatch=True, _receipt_id=job['id'], _deferred_snapshot=snapshot)
+            _paid_limit=float(policy['max_cost_usd']), _offpeak_dispatch=True, _receipt_id=job['id'], _deferred_snapshot={**snapshot, 'dispatch_multiplier': plan['scheduled_multiplier']})
         await _finish(tank, conn, job, result.model_dump(mode='json'))
     except WindowClosed:
         await conn.execute("UPDATE tank.offpeak_jobs SET status='queued',sent_at=NULL WHERE id=$1 AND tenant_id=$2", job['id'], job['tenant_id'])

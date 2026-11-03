@@ -3024,3 +3024,9 @@ DO $$ BEGIN
   END IF;
  END IF;
 END $$;
+
+-- A8: absolute deadlines and persisted price-window decisions, including restarts.
+ALTER TABLE tank.offpeak_jobs ADD COLUMN IF NOT EXISTS deadline_at timestamptz;
+ALTER TABLE tank.offpeak_jobs ADD COLUMN IF NOT EXISTS not_before timestamptz;
+ALTER TABLE tank.offpeak_jobs ADD COLUMN IF NOT EXISTS dispatch_mode text CHECK(dispatch_mode IN ('batch','direct'));
+ALTER TABLE tank.offpeak_jobs ADD COLUMN IF NOT EXISTS scheduled_multiplier double precision;

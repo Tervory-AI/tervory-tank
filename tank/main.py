@@ -63,7 +63,7 @@ from command_stream import StreamFailure, TokenSink, completion as stream_comple
 import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 import batch_providers
 import prompt_cache
@@ -657,6 +657,7 @@ class Message(BaseModel):
 
 
 class RouteRequest(BaseModel):
+    deadline_at: AwareDatetime | None = None
     complex_request: bool = False
     interactive: bool = True
     tenant_id: uuid.UUID
@@ -1223,11 +1224,11 @@ async def run_route(
     Used directly by /v1/route and in the background by tasks."""
     await _check_route_task(req, task_id)
     box = box_region()
-    await __import__("tenant_regions").local(__import__("sys").modules[__name__], req.tenant_id, req.home_region)
     foreign = home_region_refusal(call_home(req.home_region, box), box)
     if foreign:
         # Empty, unknown, or the other region's text is not written.
         raise HTTPException(status_code=403, detail=foreign)
+    await __import__("tenant_regions").local(__import__("sys").modules[__name__], req.tenant_id, req.home_region)
     client_text = "\n".join(m.content for m in req.messages)
     pool_read = await zenas_pool_prompt(
         client_text, caller=caller, task_type=req.task_type, skill=req.skill
@@ -1395,8 +1396,16 @@ async def run_route(
     await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
     price_info = await priority_queue.model_info(__import__("sys").modules[__name__], model) if priority == "offpeak" else None
     sent_at = priority_queue.now()
-    if _offpeak_dispatch and not priority_queue.window_open(price_info.get("offpeak"), sent_at):
-        raise priority_queue.WindowClosed()
+    if req.deadline_at is not None and sent_at >= req.deadline_at:
+        raise HTTPException(408, "Work deadline exceeded before dispatch")
+    if _offpeak_dispatch:
+        expected = (_deferred_snapshot or {}).get("dispatch_multiplier")
+        if expected is None:
+            closed = not priority_queue.window_open(price_info.get("offpeak"), sent_at)
+        else:
+            closed = priority_queue.price_windows.multiplier(price_info.get("offpeak"), sent_at) > expected
+        if closed:
+            raise priority_queue.WindowClosed()
     if _receipt_id is not None:
         async with pool().acquire() as conn:
             await conn.execute("""UPDATE tank.ledger SET outcome='sent',sent_at=$3
@@ -2616,10 +2625,10 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
 async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     if caller:
         body = body.model_copy(update={"agent": caller})
-    await __import__("tenant_regions").local(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
     foreign = home_region_refusal(call_home(body.home_region, box_region()), box_region())
     if foreign:
         raise HTTPException(403, foreign)
+    await __import__("tenant_regions").local(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
     if "#moa." in body.task_type:
         raise HTTPException(403, "Submit the original task; MoA seats are internal")
     row = await load_policy(body.task_type, body.tenant_id)
@@ -2644,13 +2653,10 @@ async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
 
 
 def _background_batch(body: RouteRequest, row: dict[str, Any]) -> bool:
-    """priority=batch with interactive=false: background work nobody waits on.
-
-    Only this explicit pair defers, so every interactive call (the default) is
-    answered at once as before; urgent/standard, or interactive=true, is the
-    opt-out for an urgent run. MoA policies keep the foreground route.
-    """
-    return (body.priority or row["priority"]) == "batch" and not body.interactive and not row.get("moa_enabled")
+    """Unattended eligible work may wait; explicit standard/urgent opts out."""
+    priority = body.priority or row["priority"]
+    eligible_default = body.priority is None and row.get("batch_eligible") and priority != "urgent"
+    return not body.interactive and not row.get("moa_enabled") and (priority == "batch" or bool(eligible_default))
 
 
 @app.get("/v1/route/jobs/{job_id}")
@@ -2847,15 +2853,19 @@ async def _batch_fallback(conn: Any, batch: Any, item: Any) -> None:
     req = RouteRequest.model_validate(_batch_obj(item["request"]))
     remaining = float(snapshot["routing"]["max_cost_usd"]) - float(item["reserved_usd"])
     try:
+        if req.deadline_at is not None and priority_queue.now() >= req.deadline_at:
+            raise HTTPException(408, "Work deadline exceeded; no retry dispatched")
         current = await load_policy(req.task_type, req.tenant_id)
         if str(current["updated_at"]) != str(snapshot["routing"]["updated_at"]):
             raise HTTPException(409, "Policy changed before retry")
         remaining = min(remaining, float(current["max_cost_usd"])-float(item["reserved_usd"]))
-        result = await run_route(req, caller=batch["caller"], _paid_policy=snapshot["routing"],
-                                 _prior_escalation=snapshot["escalation"], _paid_limit=remaining,
-                                 _offpeak_dispatch=bool(snapshot.get("offpeak_job_id")),
-                                 _receipt_id=uuid.UUID(snapshot["offpeak_job_id"]) if snapshot.get("offpeak_job_id") else None,
-                                 _deferred_snapshot=snapshot if snapshot.get("offpeak_job_id") else None)
+        timeout = (req.deadline_at-priority_queue.now()).total_seconds() if req.deadline_at else None
+        async with asyncio.timeout(timeout):
+            result = await run_route(req, caller=batch["caller"], _paid_policy=snapshot["routing"],
+                                     _prior_escalation=snapshot["escalation"], _paid_limit=remaining,
+                                     _offpeak_dispatch=bool(snapshot.get("offpeak_job_id")),
+                                     _receipt_id=uuid.UUID(snapshot["offpeak_job_id"]) if snapshot.get("offpeak_job_id") else None,
+                                     _deferred_snapshot=snapshot if snapshot.get("offpeak_job_id") else None)
         await conn.execute("""UPDATE tank.ledger SET batch=true,batch_id=$3,
             batch_baseline_cost_usd=cost_usd,batch_discount_usd=0 WHERE id=$1 AND tenant_id=$2""",
             result.ledger_id, req.tenant_id, batch["id"])
@@ -2943,6 +2953,11 @@ async def _process_batch(conn: Any, batch: Any) -> None:
                 continue
             snapshot, prices = _batch_obj(item["policy"]), _batch_obj(item["prices"])
             req = RouteRequest.model_validate(_batch_obj(item["request"]))
+            await __import__("tenant_regions").local(__import__("sys").modules[__name__], req.tenant_id, req.home_region)
+            if req.deadline_at is not None and (req.deadline_at-priority_queue.now()).total_seconds() < priority_queue.price_windows.BATCH_SECONDS:
+                await conn.execute("""UPDATE tank.batch_items SET status='failed',error='deadline_exceeded'
+                    WHERE batch_id=$1 AND tenant_id=$2 AND item_id=$3""", batch["id"], batch["tenant_id"], item["item_id"])
+                continue
             current = await load_policy(req.task_type, req.tenant_id)
             if str(current["updated_at"]) != str(snapshot["routing"]["updated_at"]):
                 raise ValueError("policy_changed")
@@ -2951,6 +2966,10 @@ async def _process_batch(conn: Any, batch: Any) -> None:
                 raise ValueError("provider_not_allowed")
             lines.append(json.dumps({"custom_id": str(item["item_id"]), "method": "POST", "url": "/v1/chat/completions",
                 "body": {"model": prices["native"], "messages": snapshot["messages"], "max_tokens": snapshot["max_tokens"], **snapshot["generation"]}}))
+        if not lines:
+            await conn.execute("""UPDATE tank.batches SET status='failed',error='deadline_exceeded',finished_at=now()
+                WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"])
+            return
         await conn.execute("""UPDATE tank.offpeak_jobs SET sent_at=now() WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"])
         await conn.execute("""UPDATE tank.ledger SET outcome='sent',sent_at=now()
             WHERE offpeak_job_id=$1 AND tenant_id=$2 AND outcome='queued'""", batch["id"], batch["tenant_id"])
@@ -3070,10 +3089,11 @@ async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
 @tenant_path("body")
 async def create_task(body: TaskCreate) -> dict[str, Any]:
     box = box_region()
-    home = await __import__("tenant_regions").local(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
+    home = call_home(body.home_region, box)
     foreign = home_region_refusal(home, box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
+    home = await __import__("tenant_regions").local(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
     text = "\n".join(m.content for m in body.messages)
     early = model_call_refusal(
         text, None, box=box, tenant_id=str(body.tenant_id), task_type=body.task_type
@@ -3445,10 +3465,11 @@ async def run_one_skill(
     caller: str | None = Depends(require_key),
 ) -> dict[str, Any]:
     box = box_region()
-    home = await __import__("tenant_regions").local(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
+    home = call_home(body.home_region, box)
     foreign = home_region_refusal(home, box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
+    home = await __import__("tenant_regions").local(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
     token = _skill_home.set(home)
     try:
         return await _run_one_skill(skill_id, body, caller)
@@ -3758,7 +3779,7 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     tenant_ids = {str(value) for value in tenant_values if value}
     if len(tenant_ids) > 1:
         raise HTTPException(422, "A request must belong to one workspace")
-    if tenant_ids:
+    if tenant_ids and path != "tenants":
         try:
             owner = uuid.UUID(next(iter(tenant_ids)))
         except ValueError:
