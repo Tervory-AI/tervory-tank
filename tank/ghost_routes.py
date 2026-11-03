@@ -141,18 +141,41 @@ async def enforce_list(x_tervory_tenant: uuid.UUID = Header()):
     return {**response.json(), "ledger_id": str(ledger_id), "cost_usd": 0}
 
 
+async def enforce_write_result(response, actor, tool):
+    if response.status_code != 200:
+        return Response(response.content, status_code=response.status_code, media_type="application/json")
+    result = response.json()
+    outcome = (result.get("receipt") or {}).get("outcome", "unknown")
+    if outcome not in {"created", "destroyed", "absent"}:
+        raise HTTPException(409, f"Enforce outcome {outcome}; check Coolify before repeating")
+    from trigger_routes import code_receipt
+    return {**result, "ledger_id": str(await code_receipt(actor.tenant_id, tool, agent="ghost")), "cost_usd": 0}
+
+
 @router.post("/autumbra/enforce/create", dependencies=[Depends(admin.require_admin)])
-async def enforce_create(body: EnforceTenant):
+async def enforce_create(body: EnforceTenant, request: Request):
+    from command import identity, require_tool
+    from trigger_commands import confirmation
+    actor = await identity(request)
+    tool = "autumbra.enforce.create"
+    require_tool(actor, tool)
+    confirmation(actor, tool, body.model_dump(mode="json"))
     response = await call_room("POST", "ghost", "/ghost/autumbra/enforce/plan-create",
                                body={"tenant_id": str(body.tenant_id), "execute": True}, timeout=150)
-    return Response(response.content, status_code=response.status_code, media_type="application/json")
+    return await enforce_write_result(response, actor, tool)
 
 
 @router.post("/autumbra/enforce/destroy", dependencies=[Depends(admin.require_admin)])
-async def enforce_destroy(body: EnforceTenant):
+async def enforce_destroy(body: EnforceTenant, request: Request):
+    from command import identity, require_tool
+    from trigger_commands import confirmation
+    actor = await identity(request)
+    tool = "autumbra.enforce.destroy"
+    require_tool(actor, tool)
+    confirmation(actor, tool, body.model_dump(mode="json"))
     response = await call_room("POST", "ghost", "/ghost/autumbra/enforce/plan-destroy",
                                body={"tenant_id": str(body.tenant_id), "execute": True}, timeout=90)
-    return Response(response.content, status_code=response.status_code, media_type="application/json")
+    return await enforce_write_result(response, actor, tool)
 
 
 # ---------- Autumbra owner undo (public email link → workspace → Tank → Watch) ----------
