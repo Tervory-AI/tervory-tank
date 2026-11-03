@@ -202,6 +202,12 @@ def test_seal_checks_enforce_observer_and_both_proxies(tmp_path, fault):
     import sys
     from test_room_seal import FAKE_DOCKER
     data = json.loads((ROOT / "tests/fixtures/seal_check/sealed.json").read_text())
+    # A2 requires Watch to exist as well as the connected Enforce services.
+    data["networks"]["tervory-gw-ghost"] = False
+    for service in ("agent-ghost", "ghost-browser"):
+        data["containers"]["placeholder-" + service] = dict(
+            uuid="placeholder-watch", resource="agent-ghost", project="placeholder-watch",
+            service=service, name="placeholder-" + service, networks=["tervory-gw-ghost"])
     attached = {
         "enforce": ["custom-enforce"],
         "egress-proxy": ["custom-enforce", "a3_egress"],

@@ -9,7 +9,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 import httpx
@@ -477,14 +477,15 @@ async def list_observations(tenant_id: UUID = Query(), url: str = Query()) -> di
 
 
 @app.get("/alerts")
-async def list_alerts(tenant_id: UUID = Query(), url: str | None = Query(default=None)) -> dict[str, Any]:
+async def list_alerts(tenant_id: UUID = Query(), url: str | None = Query(default=None),
+                      kind: Literal["price", "stock", "new_product", "below_cost", "market_gap"] | None = Query(default=None)) -> dict[str, Any]:
     page = None
     if url is not None:
         try:
             page = check_url(url)
         except BadWatch as exc:
             raise _watch_http(exc) from exc
-    rows = await _store().list_alerts(str(tenant_id), page)
+    rows = await _store().list_alerts(str(tenant_id), page, kind)
     return {"alerts": rows}
 
 

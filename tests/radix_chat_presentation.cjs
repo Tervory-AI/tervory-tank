@@ -29,3 +29,43 @@ console.log('PASS Radix allowlist, eight findings, no invented status, non-Radix
 
 const scan = presentCard({summary:"Scan",card_id:"scan",kind:"other",tool:"radix.passive.scan",arguments:{url:"https://example.test/",commit:"abc"},result:{scan_id:"real-scan"}},false);
 assert.equal(scan.radix.target,"https://example.test/");assert.equal(scan.radix.scan_id,"real-scan");
+
+for (const founder of [false, true]) {
+  const repo = presentCard({summary:'radix.repo.findings',card_id:'repo',kind:'other',tool:'radix.repo.findings',arguments:{scan_id:'placeholder-repo-id'},status:'confirmed',result:{
+    scan_id:'placeholder-repo-id',status:'complete',findings:[...findings,{tool:'scan.iac',severity:'unknown',rule:'CKV_AWS_24',file:'open.tf',line:7,remediation:'placeholder Checkov text'}],
+    summary:'placeholder-summary-hidden',critical:98765,tools:['placeholder-hidden-tools'],tool_status:{'scan.iac':'run'},scan_complete:true,
+    ledger_id:'placeholder-hidden-ledger',cost_usd:0,
+  }},founder);
+  assert.equal(repo.radix.kind,'findings');
+  assert.equal(repo.radix.findings.length,9);
+  assert.equal(repo.radix.findings[8].severity,'unknown');
+  assert.equal(repo.radix.findings[8].remediation,'placeholder Checkov text');
+  assert.equal(repo.radix.critical,undefined);
+  assert.deepEqual(repo.results,[]);
+  for (const hidden of ['placeholder-summary-hidden','98765','placeholder-hidden-tools','tool_status','scan_complete','placeholder-hidden-ledger']) assert(!JSON.stringify(repo).includes(hidden));
+  for (const status of ['pending','running','failed','complete']) {
+    const projected = presentCard({summary:'radix.repo.findings',card_id:'state',kind:'other',tool:'radix.repo.findings',result:{scan_id:'placeholder-id',status}},founder);
+    assert.equal(projected.radix.status,status);
+    assert.equal(projected.radix.findings,undefined);
+  }
+  const queued = presentCard({summary:'radix.repo.scan',card_id:'queued',kind:'other',tool:'radix.repo.scan',result:{scan_id:'placeholder-job-id',status:'pending'}},founder);
+  assert.equal(queued.radix.kind,'scan');
+  assert.equal(queued.radix.scan_id,'placeholder-job-id');
+  assert.equal(queued.radix.status,'pending');
+  const empty = presentCard({summary:'radix.repo.findings',card_id:'empty',kind:'other',tool:'radix.repo.findings',result:{scan_id:'placeholder-job-id',status:'complete',findings:[]}},founder);
+  assert.deepEqual(empty.radix.findings,[]);
+}
+console.log('PASS repo tools reuse approved states, unknown severity, nine findings and hidden operational fields');
+
+for (const founder of [false, true]) {
+  for (const [scan_complete, rows, expected] of [[false, [], 'failed'], [true, [], 'complete'], [false, findings, 'complete']]) {
+    const card = presentCard({summary:'radix.repo.findings',card_id:'placeholder-completion',kind:'other',tool:'radix.repo.findings',status:'confirmed',result:{
+      scan_id:'placeholder-id',status:'complete',scan_complete,findings:rows,
+      tool_status:{'scan.iac':scan_complete?'run':'not run'},
+    }},founder);
+    assert.equal(card.radix.status,expected);
+    assert.equal(card.radix.findings.length,rows.length);
+    assert(!JSON.stringify(card).includes('scan_complete'));
+  }
+}
+console.log('PASS empty incomplete scans use failed state; complete empty scans and partial findings retain their approved states');
