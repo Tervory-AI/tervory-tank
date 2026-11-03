@@ -395,3 +395,32 @@ async def test_restricted_foreground_body_cannot_select_the_second_host(routing,
     assert gateway[-1]["model"] == "kimi-lite-direct" and gateway[-1]["disable_fallbacks"] is True
     assert "fallbacks" not in gateway[-1] and answer.model == "kimi-lite"
     assert answer.execution["model"] == "kimi-lite"
+
+
+@pytest.mark.asyncio
+async def test_policy_confirm_card_shows_exact_data_through_existing_fields(routing, monkeypatch):
+    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "founder-placeholder")
+    monkeypatch.setattr(main, "TANK_API_KEY", "placeholder")
+    headers = {"x-tank-key": "placeholder", "x-tervory-tenant": str(TENANT), "x-tervory-user": "founder-placeholder"}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://placeholder", headers=headers) as client:
+        thread = (await client.post("/v1/command/threads", json={})).json()["thread_id"]
+        args = {"task_type": TASK, "fallbacks": ["haiku"], "default": True}
+        proposed = await client.post(f"/v1/command/threads/{thread}/actions",
+            json={"tool": "tank.policy.fallbacks", "arguments": args})
+        assert proposed.status_code == 200, proposed.text
+        card = proposed.json()
+        assert card["status"] == "pending" and json.loads(card["arguments"]["brief_markdown"]) == args
+        assert (await read(routing))["fallbacks"] is None
+        confirmed = await client.post(f"/v1/command/cards/{card['card_id']}", json={"action": "confirm"})
+        assert confirmed.status_code == 200, confirmed.text
+        assert (await read(routing))["fallbacks"] == ["haiku"]
+        read_card = await client.post(f"/v1/command/threads/{thread}/actions",
+            json={"tool": "tank.policy", "arguments": {"task_type": TASK, "default": True}})
+        assert read_card.status_code == 200, read_card.text
+        read_id = read_card.json()["card_id"]
+        reply = await client.post(f"/v1/command/cards/{read_id}", json={"action": "confirm"})
+        assert reply.status_code == 200, reply.text
+        snapshot = (await client.get(f"/v1/command/threads/{thread}")).json()
+        data = next(card for card in snapshot["cards"] if card["card_id"] == read_id)["result"]
+        shown = json.loads(data["text"])
+        assert shown["model"] == "kimi-lite" and shown["fallbacks"] == ["haiku"]
