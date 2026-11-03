@@ -570,8 +570,9 @@ class CourtTextPair(BaseModel):
 @router.post("/zenas/court-text")
 async def save_court_text_pair(body: CourtTextPair, request: Request) -> dict[str, bool]:
     """Accept only code-split official court text from the regional Zenas room."""
+    from main import TANK_API_KEY
     supplied = request.headers.get("x-tank-key", "")
-    expected = os.environ.get("TANK_KEY_ZENAS", "")
+    expected = TANK_API_KEY
     if not supplied or not expected or not hmac.compare_digest(supplied, expected):
         raise HTTPException(401, "Room authentication required")
     if runtime().box_region() != "za" or body.source_id not in OFFICIAL_ZA_CASE_SOURCES:

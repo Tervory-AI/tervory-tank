@@ -51,6 +51,7 @@ TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
 
 FOUNDER_TOOLS = ["base.audit.start", "base.audit.csv", "base.audit.review", "trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
                  "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
+                 "training.status",
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
 FOUNDER_TOOLS += TISAN_CLIENT_TOOLS
@@ -1296,6 +1297,7 @@ from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServ
 
 
 ADAPTERS = {
+    "training.status": Adapter("GET", "/v1/training/status", EmptyArgs, "training.status"),
     "tisan.request": Adapter("POST", "/v1/command/tisan/request", TisanRequestArgs, "tisan.request"),
     "tisan.preview": Adapter("GET", "/v1/command/tisan/preview", TisanRequestIdArgs, "tisan.preview"),
     "tisan.feedback": Adapter("POST", "/v1/command/tisan/feedback", TisanFeedbackArgs, "tisan.feedback"),
@@ -1557,6 +1559,8 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         args = {"start": (end - timedelta(days=args["days"])).isoformat(), "end": end.isoformat()}
     if action.tool == "trigger.scorecard":
         return adapter.method, path, scope, None
+    if action.tool == "training.status":
+        return adapter.method, path, {}, None
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
     if action.tool == "rig.quote.confirm_payment":
@@ -1611,6 +1615,9 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
                             for row in result.get("items", [])]}
         result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="zenas"))
     if action.tool == "zenas.watch.list" and 200 <= response.status_code < 300:
+        from trigger_routes import code_receipt
+        result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="zenas"))
+    if action.tool == "training.status" and 200 <= response.status_code < 300:
         from trigger_routes import code_receipt
         result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="zenas"))
     if action.tool == "radix.domain.prove" and 200 <= response.status_code < 300:
