@@ -1571,12 +1571,18 @@ async def _tiger_card_result(tenant, result):
         if job is None:
             return result
         progress = await conn.fetchval('SELECT progress FROM agent_tiger.match_runs WHERE tenant_id=$1 AND job_id=$2', tenant, root)
+        discovery = progress or job['result'] or {}
+        if isinstance(discovery, str):
+            discovery = json.loads(discovery)
+        if discovery.get('status', job['status']) in {'running','queued'}:
+            active = uuid.UUID(discovery['continuation_id']) if discovery.get('continuation_id') else root
+            state = await conn.fetchval('SELECT status FROM agent_tiger.jobs WHERE tenant_id=$1 AND id=$2', tenant, active)
+            if state == 'failed':
+                discovery = {**discovery, 'status':'failed', 'failed_job_id':str(active)}
+                await conn.execute('UPDATE agent_tiger.match_runs SET progress=$3::jsonb WHERE tenant_id=$1 AND job_id=$2', tenant, root, json.dumps(discovery))
         matches = await conn.fetch("""SELECT DISTINCT ON (match_id) match_id,evidence
             FROM agent_tiger.match_sightings WHERE tenant_id=$1 AND root_job_id=$2 ORDER BY match_id,job_id LIMIT 100""", tenant, root)
         count = await conn.fetchval('SELECT count(DISTINCT match_id) FROM agent_tiger.match_sightings WHERE tenant_id=$1 AND root_job_id=$2', tenant, root)
-    discovery = progress or job['result'] or {}
-    if isinstance(discovery, str):
-        discovery = json.loads(discovery)
     update = {k:v for k,v in result.items() if k != 'text'}
     update.update(status=discovery.get('status', job['status']),
                   matches=[json.loads(r['evidence']) if isinstance(r['evidence'], str) else r['evidence'] for r in matches],
