@@ -242,7 +242,7 @@ async def test_initialize_discovery_call_json_and_sse(runtime, server, sse, monk
     action = command.validate_action(command.PlannedAction(tool=TOOL, arguments={'repository': 'Tervory-AI/tervory-tank'}), actor)
     status, result = await connections.dispatch(action, actor)
     assert status == 200 and 'One offline issue' in result['text'] and uuid.UUID(result['ledger_id'])
-    assert runtime.store.receipts == [(OWNER, 'us-east', TOOL, None)]
+    assert runtime.store.receipts == [(OWNER, 'us-east', TOOL, None, 'trigger')]
     assert all('authorization' not in headers for headers, _ in server.calls)
     assert all(sni == 'mcp.example.test' for _, sni in server.pinned)
     assert all(call[0]['accept'] == 'application/json, text/event-stream' for call in server.calls)
