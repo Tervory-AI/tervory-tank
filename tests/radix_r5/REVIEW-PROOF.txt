@@ -126,3 +126,33 @@ fixture configurations as source. Existing security rules were not changed or
 suppressed. Stored sample filenames are now root-container.fixture and
 privileged-pod.fixture; eval inputs still use Dockerfile and privileged.yaml with
 the exact same bytes. Fixture equality tests and real room evals pass.
+
+
+Full-suite follow-up:
+CI run 41646538953 at 790a8214, Tank job 125953648505, failed:
+3 failed, 6651 passed, 42 skipped, 1804 subtests passed in 828.21s.
+https://github.com/Tervory-AI/tervory-tank/actions/runs/41646538953/job/125953648505
+Failures: old three-scanner compliance expectation; scan.iac incorrectly included
+in generic Tank-local evals; room test collided with Tiger's cached gold_sources.
+These are R5-specific. No unrelated baseline failure was changed or suppressed.
+
+$ mkdir -p .git/r5-review/main-proof && git archive origin/main | tar -x -C .git/r5-review/main-proof && .git/r5-venv/bin/python -m pytest -q .git/r5-review/main-proof/tests/test_skills_offline.py .git/r5-review/main-proof/tests/test_rx4_compliance.py --disable-socket --allow-hosts=127.0.0.1,localhost,::1 > .git/r5-review/main-baseline.log 2>&1
+RESULT: exit 0; fresh origin/main archive at ecef216b, before later main merge.
+...............................                                          [100%]
+31 passed in 128.64s (0:02:08)
+
+$ git diff --exit-code ecef216b origin/main -- tests/test_skills_offline.py tests/test_rx4_compliance.py tank/skills
+RESULT: exit 0 after origin/main advanced to 63fbb176; these baseline files are unchanged.
+
+$ .git/r5-venv/bin/python -m pytest -q tests/test_skills_offline.py tests/test_rx4_compliance.py tests/test_radix_iac.py --disable-socket --allow-hosts=127.0.0.1,localhost,::1 > .git/r5-review/ci-fixes.log 2>&1
+RESULT: exit 0
+............................................                             [100%]
+44 passed in 118.37s (0:01:58)
+
+The room-only scan.iac package now follows the same generic-harness exclusion as
+Tisan's room-only skills. Real Checkov cases are not made clean or waived: they
+remain evaluated through Radix /evals/run at threshold 1.0, with the image proof
+above. The room test deliberately seeds a foreign cached module to reproduce
+the cross-room worker collision, then loads Radix's own imports in test scope.
+The compliance assertion now requires all four scanners and still excludes live
+compliance fetches. Production scanner/engine behavior is unchanged.
