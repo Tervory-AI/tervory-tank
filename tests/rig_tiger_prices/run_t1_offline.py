@@ -3,14 +3,12 @@
 No production DSN is read. pytest-socket prohibits outside network access.
 """
 from pathlib import Path
-import asyncio
 import os
 import socket
 import subprocess
 import sys
 from urllib.parse import urlsplit
 
-import asyncpg
 import pgserver
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,9 +19,9 @@ with socket.socket() as reservation:
 
 # pgserver initializes and owns this disposable cluster. Restart the same cluster
 # with a loopback listener because the existing Rig suite requires a TCP DSN.
-ctl = Path(pgserver.__file__).parent / 'pginstall/bin/pg_ctl'
-subprocess.run([str(ctl), '-D', str(server.pgdata), 'restart', '-m', 'fast',
-                '-o', f'-h 127.0.0.1 -p {port}'], check=True, capture_output=True)
+pgserver.pg_ctl(['restart', '-m', 'fast', '-l', str(server.log),
+                 '-o', f'-h 127.0.0.1 -p {port}'], pgdata=server.pgdata,
+                user=server.system_user, timeout=15)
 user = urlsplit(server.get_uri()).username
 # No password, API key, production address or credential lookup is involved.
 env = {**os.environ, 'POOL_SCHEMA_DATABASE_URL': f'postgresql://{user}@127.0.0.1:{port}/postgres'}
