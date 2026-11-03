@@ -112,3 +112,29 @@ Missing Figma frames (backend built; no new screens implemented):
 - Google Workspace Alert Center topic/subscription guide, audience and push
   identity fields, customer binding, waiting-for-push and verified states.
 - Connection replacement/disconnect confirmation and expired/revoked states.
+
+## M21 — measured receipt budgets
+
+Every persisted queue receipt has `speed_budget_summary`, including refusals,
+quarantine and approvals that did not run an edge stage. Each stage is explicitly
+passed, exceeded or not_run; absent stages never count as measured success.
+The existing limits remain decision 2s, confirmed shield write 10s, health 30s,
+Undo end-to-end 60s, queue transit 5s and event-to-shield 15s. Exceeded stages are
+retained as failures rather than clamped or omitted.
+
+The Watch decision elapsed time crosses the typed queue door as a bounded timing
+field. The Enforce receipt adds that to its decision and confirmed-shield time,
+plus measured queue transit. `timing_origin` says whether that producer timing
+exists; manually queued acceptance probes start at the queue. Approval timing
+starts with the approval event, excluding the human's waiting time. A failed
+post-shield health check does not inflate the already-confirmed shield timing.
+Undo is measured as Undo, not as a new shield.
+
+Cloudflare receipts contain `edge_requests`: measured elapsed time, method and
+status for the actual adapter requests, including zone lookup, rule lookup/write
+and owned-rule Undo. They contain no token, raw provider body or URL query.
+`health_probe` records the verified real GET's duration and post-write start time.
+`measurement_path` distinguishes real_edge, fixture and no_edge. MockTransport
+tests exercise the adapter but are not deployed-edge measurements. After deploy,
+record actual receipt JSON and edge evidence as described in the dogfood runbook;
+no live budget success is claimed by this build.
