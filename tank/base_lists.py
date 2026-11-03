@@ -2,7 +2,7 @@
 
 import json
 from datetime import date
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from base_evidence import field, public_url, row_fields
@@ -181,12 +181,12 @@ def build_router() -> APIRouter:
         return {**data, "ledger_id": await receipt(actor.tenant_id, tool), "cost_usd": 0}
 
     @router.get("/find")
-    async def find(args: FindArgs = Depends(), actor: Actor = Depends(identity)):
+    async def find(args: Annotated[FindArgs, Depends()], actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.find")
         return await result(actor, "base.find", preview(await store().find(actor.tenant_id, args)))
 
     @router.post("/save")
-    async def save(args: SaveArgs, actor: Actor = Depends(identity)):
+    async def save(args: SaveArgs, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.list.save")
         confirmation(actor, "base.list.save", args.model_dump(mode="json", exclude_none=True))
         filters = FindArgs.model_validate(args.model_dump(exclude={"name"}))
@@ -194,32 +194,32 @@ def build_router() -> APIRouter:
         return await result(actor, "base.list.save", {**saved, "url": "https://app.tervory.com/base/download?list_id=" + str(saved["list_id"])})
 
     @router.get("")
-    async def lists(actor: Actor = Depends(identity)):
+    async def lists(actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.lists")
         return await result(actor, "base.lists", {"items": await store().lists(actor.tenant_id)})
 
     @router.get("/show")
-    async def show(list_id: UUID, actor: Actor = Depends(identity)):
+    async def show(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.list.show")
         saved = await store().show(actor.tenant_id, list_id)
         return await result(actor, "base.list.show", {"name": saved["name"], **preview(saved["records"])})
 
     @router.get("/export")
-    async def export(list_id: UUID, actor: Actor = Depends(identity)):
+    async def export(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.list.export")
         saved = await store().show(actor.tenant_id, list_id)
         return await result(actor, "base.list.export", {"total": len(saved["records"]),
                             "url": "https://app.tervory.com/base/download?list_id=" + str(list_id)})
 
     @router.get("/csv")
-    async def csv(list_id: UUID, actor: Actor = Depends(identity)):
+    async def csv(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.list.export")
         saved = await store().show(actor.tenant_id, list_id)
         return Response(export_records(saved["records"]), media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition": 'attachment; filename="base-list.csv"', "Cache-Control": "private, no-store"})
 
     @router.post("/to-crm")
-    async def to_crm(args: SendArgs, actor: Actor = Depends(identity)):
+    async def to_crm(args: SendArgs, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.list.to_crm")
         confirmation(actor, "base.list.to_crm", args.model_dump(mode="json", exclude_none=True))
         saved = await store().show(actor.tenant_id, args.list_id)
