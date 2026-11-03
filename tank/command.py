@@ -398,6 +398,10 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
         row = await owned(conn, thread_id, actor)
     state = unpack(row["state"])
     for card in state.get("cards", {}).values():
+        if (card.get("tool") == "tisan.build" and card.get("status") == "confirmed"
+                and current_actor(actor).founder and isinstance(card.get("result"), dict)):
+            from tisan_requests import build_result
+            card["result"] = await build_result(actor.tenant_id, card["result"])
         if card.get("tool") == "tiger.match" and card.get("status") == "confirmed" and isinstance(card.get("result"), dict):
             from access import tiger_card_result
             card["result"] = await tiger_card_result(actor.tenant_id, card["result"])
