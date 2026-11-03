@@ -501,8 +501,6 @@ def test_provider_urls_never_fall_back_to_internal_hmac(provider, monkeypatch):
 @pytest.mark.asyncio
 async def test_connected_google_alert_intake_uses_binding_not_body_tenant(signing, monkeypatch, tmp_path):
     import base64
-    from types import SimpleNamespace
-    from agents.ghost.provider_intake import INDEX_TENANT
     public, token = signing
     tenant, other = '00000000-0000-0000-0000-000000000608', '00000000-0000-0000-0000-000000000609'
     ident = '00000000-0000-0000-0000-000000000610'
