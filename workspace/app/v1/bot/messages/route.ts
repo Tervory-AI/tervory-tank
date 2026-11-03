@@ -38,7 +38,9 @@ export async function POST(request: Request) {
     const body = new Uint8Array(size);
     let offset = 0;
     for (const part of chunks) { body.set(part, offset); offset += part.byteLength; }
-    const response = await fetch(new URL("/v1/bot/messages", base), {
+    const target = key.split(".")[1] === "za" ? process.env.TANK_URL_ZA : base;
+    if (!target) return empty(503);
+    const response = await fetch(new URL("/v1/bot/messages", target), {
       method: "POST", body, redirect: "error", cache: "no-store",
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(90000)]),
       headers: { "content-type": "application/json", "origin": origin, "x-bot-key": key },
