@@ -148,8 +148,22 @@ def project(item: dict) -> dict:
         UUID(item["id"])
     except ValueError:
         raise HTTPException(502, "Invalid CRM response") from None
-    return {key: value for key, value in item.items() if key in FIELDS and
-            (value is None or isinstance(value, (str, bool, int, float)))}
+    return {key: projected(value) for key, value in item.items() if key in FIELDS}
+
+
+def projected(value, depth=0):
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value[:20000] if isinstance(value, str) else value
+    if depth >= 4:
+        return None
+    if isinstance(value, list):
+        return [projected(item, depth+1) for item in value[:200]]
+    if isinstance(value, dict):
+        safe = {'id', 'name', 'title', 'first_name', 'last_name', 'email', 'phone', 'company_name',
+                'description', 'quantity', 'unit_price', 'price', 'amount', 'total', 'subtotal',
+                'tax_rate', 'tax_amount', 'discount', 'currency', 'product', 'sku', 'value', 'label'}
+        return {key: projected(item, depth+1) for key, item in value.items() if key in safe}
+    return None
 
 
 @router.get("/{resource}")
