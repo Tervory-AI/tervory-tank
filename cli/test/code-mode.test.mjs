@@ -91,8 +91,8 @@ test('new file diff requires a missing-file read; malformed/context-mismatched d
   await assert.rejects(f.edit('test.txt', add, io()));
   await f.read('test.txt'); assert.equal((await f.edit('test.txt', add, io())).applied, true);
   assert.equal(await readFile(join(f.root, 'test.txt'), 'utf8'), 'test\n');
-  assert.throws(() => applyDiff('different\n', patch, 'file.txt'));
-  assert.throws(() => applyDiff('old\n', patch.replace('b/file.txt', 'b/../outside.txt'), 'file.txt'));
+  await assert.rejects(applyDiff('different\n', patch, 'file.txt', false, f.root));
+  await assert.rejects(applyDiff('old\n', patch.replace('b/file.txt', 'b/../outside.txt'), 'file.txt', false, f.root));
 });
 
 test('commands show in full, require y and cannot run non-interactively; cwd and output cap', async () => {
