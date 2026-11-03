@@ -11,7 +11,7 @@ import time
 import httpx
 import jwt
 
-ISSUER = 'https://auth.za.tervory.com'
+ISSUER = 'https://auth-za.tervory.com'
 APP = {
     'name': 'Tervory CLI', 'redirectUris': ['http://127.0.0.1/callback'],
     'responseTypes': ['OIDC_RESPONSE_TYPE_CODE'],
@@ -137,7 +137,7 @@ def main(bootstrap: Path = Path('/bootstrap')):
     assertion = jwt.encode({'iss': key['userId'], 'sub': key['userId'], 'aud': ISSUER,
                             'iat': now, 'exp': now + 60}, key['key'], algorithm='RS256',
                            headers={'kid': key['keyId']})
-    with httpx.Client(base_url='http://zitadel-api:8080', headers={'Host': 'auth.za.tervory.com'},
+    with httpx.Client(base_url='http://zitadel-api:8080', headers={'Host': 'auth-za.tervory.com'},
                       timeout=30, trust_env=False, follow_redirects=False) as client:
         response = client.post('/oauth/v2/token', data={
             'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer', 'assertion': assertion,
