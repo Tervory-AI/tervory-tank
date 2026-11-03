@@ -26,7 +26,8 @@ def social_network(url: str) -> str | None:
         host = (urlsplit(url).hostname or "").lower()
     except ValueError:
         return None
-    return next((name for name, hosts in SOCIAL_NETWORKS.items()
+    networks = {**SOCIAL_NETWORKS, "pinterest": ("pinterest.com",), "yelp": ("yelp.com",)}
+    return next((name for name, hosts in networks.items()
                  if any(host == domain or host.endswith("." + domain) for domain in hosts)), None)
 
 
@@ -164,7 +165,7 @@ def row_fields(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
             matches += observed_emails
         if matches and checks.get("email_domain_matches_site") is not False:
             add_values(result, "email", matches, url, checked)
-        matches = [link for link in wanted_links if public_url(link) in observed.get("links", [])]
+        matches = [link for link in wanted_links if social_profile(link) and public_url(link) in observed.get("links", [])]
         if same_site:
             matches += [link for link in observed.get("links", []) if social_profile(link)]
         if matches:
