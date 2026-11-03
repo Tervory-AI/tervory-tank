@@ -432,12 +432,13 @@ def test_public_app_drops_jobs_and_docs() -> None:
 def test_room_compose_policy_and_skills_match() -> None:
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     services = compose["services"]
+    assert "tiger" not in services
     corridor = compose["networks"]["tervory-gw-rig"]
     assert corridor["name"] == "tervory-gw-rig"
     assert "external" not in corridor
     for name in ("tank", "postgres", "hermes"):
         assert "tervory-gw-rig" in services[name]["networks"]
-    for name in ("redis", "qdrant", "litellm", "searxng", "tiger", "workspace", "agent-roles"):
+    for name in ("redis", "qdrant", "litellm", "searxng", "workspace", "agent-roles"):
         assert "tervory-gw-rig" not in (services[name].get("networks") or [])
     assert services["tank"]["environment"]["TANK_KEY_RIG"] == "${TANK_KEY_RIG:-}"
     assert services["hermes"]["environment"]["TANK_KEY_RIG"] == "${TANK_KEY_RIG:-}"
