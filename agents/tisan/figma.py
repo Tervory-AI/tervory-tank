@@ -531,6 +531,8 @@ def normalise_rest(file_key: str, node_id: str, nodes_payload: dict[str, Any], v
     page, frames, components, uses = components_from_document(document)
     if document.get("type") != "CANVAS":
         page = {"id": node_id, "name": str(document.get("name") or page.get("name") or "")}
+    else:
+        page = {**page, "id": node_id}
     variables, gaps, known = variables_from_rest(variables_payload)
     measured = {frame["frameId"]: frame for frame in visual_frames(document, variables_payload)}
     frames = [{**frame, **({"visual": measured[frame["id"]]} if frame["id"] in measured else {})} for frame in frames]
@@ -1099,6 +1101,7 @@ def _store(reading: dict[str, Any], tenant: str, data_root: Path | None) -> str:
     if readings not in folder.resolve().parents:
         raise FigmaError("refusing to write outside this tenant's readings")
     path = folder / f"{node_id}.json"
+    assert path.resolve().parent == folder.resolve()
     stored = path.relative_to(root).as_posix()
     reading["stored"] = stored
     path.write_text(json.dumps(reading, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -1161,6 +1164,7 @@ async def execute(
     tenant_id: str,
     *,
     data_root: Path | None = None,
+    live: bool = False,
 ) -> dict[str, Any]:
     """Read this tenant's paired live page, or the offline Tervory fixture."""
     if not isinstance(payload, dict):
@@ -1169,10 +1173,10 @@ async def execute(
     node_id = normalise_node_id(payload.get("node_id"))
     tenant = _tenant(str(tenant_id))
     token = os.environ.get("FIGMA_TOKEN", "").strip()
-    if not token and file_key == TERVORY_FILE_KEY:
+    if file_key == TERVORY_FILE_KEY and (not live or not (token and _paired(tenant, file_key))):
         source = load_fixture(node_id)
     else:
-        if not _paired(tenant, file_key):
+        if not live or not _paired(tenant, file_key):
             raise FigmaError(_UNPAIRED)
         if not token:
             raise FigmaError(_REQUEST_FAILED)
