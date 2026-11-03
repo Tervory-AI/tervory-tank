@@ -80,8 +80,9 @@ def test_rig_does_not_read_room_files():
     assert "rigCatalogueCounts" in page
     assert "rigCatalogueCounts" in tank
     assert "/v1/rig/catalogues" in tank
-    assert "Rig did not answer" in _text(APP / "rig" / "lab.tsx")
     joined = _tree(APP / "rig")
+    # The error copy moved from lab.tsx to the search view and its API route.
+    assert "Rig did not answer" in _text(APP / "rig" / "search-view.tsx")
     assert "readFileSync" not in joined
     assert "/v1/rig/search" in joined
     assert "/v1/rig/ask" in joined

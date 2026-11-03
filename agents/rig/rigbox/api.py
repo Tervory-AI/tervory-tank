@@ -44,15 +44,19 @@ class AskIn(BaseModel):
 
 
 class LinkIn(BaseModel):
+    model_config = {"extra": "forbid"}
     url: str = ""
     note: str = ""
     contact: dict[str, Any] | None = None
+    notice_version: str | None = Field(default=None, max_length=64)
 
 
 class QuoteIn(BaseModel):
+    model_config = {"extra": "forbid"}
     setup: dict[str, Any] | None = None
     product_id: str | None = None
     contact: dict[str, Any] = Field(default_factory=dict)
+    notice_version: str | None = Field(default=None, max_length=64)
 
 
 class CompareIn(BaseModel):
@@ -192,6 +196,62 @@ async def search(
     return _ok(request, body)
 
 
+class LocateIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    product_id: str = Field(min_length=1, max_length=200)
+
+
+@router.post("/locate")
+async def locate(request: Request, payload: LocateIn) -> Response:
+    await _auth(request)
+    body = await _service(request).locate(_tenant(request), payload.product_id)
+    return _ok(request, body)
+
+
+class LocateAcceptIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    product_id: str = Field(min_length=1, max_length=200)
+    hold: str = Field(min_length=1, max_length=200)
+    payment_token: str = Field(min_length=1, max_length=200)
+    contact: dict[str, Any] = Field(default_factory=dict)
+    notice_version: str | None = Field(default=None, max_length=64)
+    # Blind ship only: where the other store ships the parcel.
+    delivery: dict[str, Any] | None = None
+
+
+@router.post("/locate/confirm")
+async def locate_confirm(request: Request, payload: LocateIn) -> Response:
+    """Live re-check of the located offer. Returns a short-lived signed hold."""
+    await _auth(request)
+    body = await _service(request).locate_confirm(_tenant(request), payload.product_id)
+    return _ok(request, body)
+
+
+@router.post("/locate/accept")
+async def locate_accept(request: Request, payload: LocateAcceptIn) -> Response:
+    """Backend Accept: test-mode payment, then a sandbox-only order. No UI."""
+    await _auth(request)
+    service = _service(request)
+    if not hasattr(service, "locate_accept"):
+        raise RigError("unavailable", "Ordering from other stores is not available.", 503)
+    body = await service.locate_accept(_tenant(request), payload.model_dump())
+    return _ok(request, body)
+
+
+@router.post("/locate/payments/webhook")
+async def locate_payment_webhook(request: Request) -> Response:
+    """Payment provider webhook. HMAC signature, no shopper key. Test mode only."""
+    service = _service(request)
+    if not hasattr(service, "payment_webhook"):
+        raise RigError("unavailable", "Payments are not available.", 503)
+    from rigbox.payments import SIGNATURE_HEADER, WEBHOOK_MAX_BYTES
+    body = await request.body()
+    if len(body) > WEBHOOK_MAX_BYTES:
+        raise RigError("signature", "The webhook could not be verified.", 400)
+    result = await service.payment_webhook(body, request.headers.get(SIGNATURE_HEADER) or "")
+    return _ok(request, result)
+
+
 @router.post("/search-events")
 async def settled_search(request: Request, payload: SearchEventIn) -> Response:
     await _auth(request)
@@ -248,10 +308,23 @@ async def ask(request: Request, payload: AskIn) -> Response:
     return _ok(request, body)
 
 
+@router.get("/privacy-notice")
+async def privacy_notice(request: Request) -> Response:
+    await _auth(request)
+    from rigbox.quotes.notice import notice
+
+    retailer = await _service(request).store.retailer(_tenant(request)) or {}
+    response = _ok(request, {"notice": notice(retailer.get("quote_notice"))})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @router.post("/link-quote")
 async def link_quote(request: Request, payload: LinkIn) -> Response:
     await _auth(request)
     kwargs = {"contact": payload.contact} if payload.contact is not None else {}
+    if payload.notice_version is not None:
+        kwargs["notice_version"] = payload.notice_version
     if request.state.rig_hold_quote:
         kwargs["hold"] = True
     body = await _service(request).link_quote(_tenant(request), payload.url, payload.note, **kwargs)
@@ -263,7 +336,8 @@ async def quote(request: Request, payload: QuoteIn) -> Response:
     await _auth(request)
     body = await _service(request).quote(
         _tenant(request),
-        {"setup": payload.setup, "product_id": payload.product_id, "contact": payload.contact},
+        {"setup": payload.setup, "product_id": payload.product_id, "contact": payload.contact,
+         "notice_version": payload.notice_version},
         **({"hold": True} if request.state.rig_hold_quote else {}),
     )
     return _ok(request, body)
@@ -314,3 +388,66 @@ async def _count(request: Request, event: str) -> None:
     counts = getattr(_service(request), "quote_store", None)
     if counts is not None:
         await counts.count(_tenant(request), event)
+
+
+class SupplySourceIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    id: str = Field(min_length=1, max_length=200)
+    approved: bool
+    priority: int = 0
+    max_offer_age_seconds: int = Field(gt=0)
+    provider: str = Field(default="", max_length=200)
+    site: str = Field(default="", max_length=200)
+    feed_id: str = Field(default="", max_length=200)
+    # Blind ship: this source must pack a neutral slip (no own branding or invoice).
+    neutral_slip_required: bool = False
+    # Auto-order: the source's real vendor name and the inbox that takes its orders.
+    vendor_name: str = Field(default="", max_length=200)
+    order_email: str = Field(default="", max_length=254)
+
+
+class SupplyImportIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    source_id: str = Field(min_length=1, max_length=200)
+    record: dict[str, Any]
+    contents: str = Field(max_length=8_000_000)
+    seen_at: str
+
+
+class SupplyMapIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    product_sku: str = Field(min_length=1, max_length=200)
+    source_id: str = Field(min_length=1, max_length=200)
+    offer_sku: str = Field(min_length=1, max_length=200)
+
+
+async def _supply_operation(request: Request, operation: str, payload: BaseModel) -> Response:
+    from rigbox.locate import SupplyStore
+    await _admin(request)
+    store = SupplyStore(_service(request).store)
+    data = payload.model_dump()
+    try:
+        if operation == "source":
+            await store.source(_tenant(request), data)
+        elif operation == "import":
+            return _ok(request, await store.import_catalogue(_tenant(request), **data))
+        else:
+            await store.map_sku(_tenant(request), **data)
+    except (ValueError, TypeError, KeyError, OverflowError):
+        raise RigError("invalid", "The request is not valid.", 422) from None
+    return _ok(request, {"ok": True})
+
+
+@router.post("/admin/supply/sources")
+async def supply_source(request: Request, payload: SupplySourceIn) -> Response:
+    return await _supply_operation(request, "source", payload)
+
+
+@router.post("/admin/supply/import")
+async def supply_import(request: Request, payload: SupplyImportIn) -> Response:
+    return await _supply_operation(request, "import", payload)
+
+
+@router.post("/admin/supply/sku-map")
+async def supply_map(request: Request, payload: SupplyMapIn) -> Response:
+    return await _supply_operation(request, "map", payload)

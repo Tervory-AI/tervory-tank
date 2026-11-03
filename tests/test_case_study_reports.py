@@ -82,8 +82,13 @@ def figures(report):
 def assert_complete(report, product):
     specs = (*TANK, *PRODUCTS[product])
     found = figures(report)
-    assert len(found) == len(specs)
-    assert set(found) == {spec.id for spec in specs}
+    expected = {spec.id for spec in specs}
+    if product == "base":
+        expected.update(f"base.vs_apollo.{field}.{outcome}"
+                        for field in ("website", "phone", "email")
+                        for outcome in ("matches", "base_only", "apollo_only", "disagreements", "neither", "records_compared"))
+        expected.add("base.vs_apollo.coverage")
+    assert set(found) == expected
     for spec in specs:
         assert found[spec.id]["type"] == spec.type
         assert found[spec.id]["unit"] == spec.unit
@@ -412,8 +417,16 @@ async def test_optional_audit_uses_upstream_measurement_and_only_this_tenants_ve
     module.measure = measure
     monkeypatch.setitem(sys.modules, "base_audit", module)
     async with pool.acquire() as conn:
-        await conn.execute("CREATE TABLE tank.base_audits(tenant_id uuid,id uuid,verdicts jsonb,reviewed_at timestamptz)")
-        await conn.execute("INSERT INTO tank.base_audits VALUES($1,$2,'{\"own\":\"correct\"}',$3),($4,$5,'{\"other\":\"wrong\"}',$3)", A, uuid.uuid4(), AT, B, uuid.uuid4())
+        # tank.base_audits ships in schema.sql (#390): write real rows, one campaign per tenant.
+        records = json.dumps([{"n": i} for i in range(200)])
+        for tenant, verdicts in ((A, {"own": "correct"}), (B, {"other": "wrong"})):
+            campaign = await conn.fetchval(
+                """INSERT INTO tank.base_campaigns(tenant_id,request_id,name,selection,created_by)
+                   VALUES($1,$2,'fixture','{}'::jsonb,'test') RETURNING id""", tenant, uuid.uuid4())
+            await conn.execute(
+                """INSERT INTO tank.base_audits(tenant_id,campaign_id,seed,population_size,population_sha256,
+                   records,verdicts,created_by,reviewed_at) VALUES($1,$2,1,200,'fixture',$3::jsonb,$4::jsonb,'test',$5)""",
+                tenant, campaign, records, json.dumps(verdicts), AT)
     measured = figures(await read(client, "base"))["base.measured_accuracy"]
     assert called == [{"own": "correct"}]
     assert (measured["value"], measured["lower"], measured["upper"]) == (80, 70, 90)

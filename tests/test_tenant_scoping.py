@@ -90,6 +90,28 @@ def _sql_arg(call: ast.Call) -> ast.AST | None:
     return None
 
 
+# Routes whose whole body hands tenant_id to a function in another tank module.
+# The guard checks that function's SQL instead.
+DELEGATES = {"route_job": ("priority_queue.py", "status")}
+
+
+def _delegate_scoped(route: str, problems: list[str]) -> bool:
+    module, name = DELEGATES[route]
+    path = MAIN.with_name(module)
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    constants = _string_constants(tree)
+    func = next(n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name)
+    saw = False
+    for child in ast.walk(func):
+        if not _is_sql_call(child):
+            continue
+        saw = True
+        text = _sql_text(_sql_arg(child), constants)  # type: ignore[arg-type]
+        if text is None or "tenant_id" not in text:
+            problems.append(f"{route}: {module}:{name} runs SQL without tenant_id")
+    return saw
+
+
 def test_v1_routes_with_tenant_id_scope_their_sql() -> None:
     tree = ast.parse(MAIN.read_text(encoding="utf-8"), filename=str(MAIN))
     constants = _string_constants(tree)
@@ -113,6 +135,8 @@ def test_v1_routes_with_tenant_id_scope_their_sql() -> None:
                 problems.append(f"{node.name}: SQL passed to conn.{child.func.attr} is not a readable string")  # type: ignore[union-attr]
             elif "tenant_id" not in text:
                 problems.append(f"{node.name}: SQL missing tenant_id:\n{text.strip()[:240]}")
+        if not saw_sql and node.name in DELEGATES:
+            saw_sql = _delegate_scoped(node.name, problems)
         if not saw_sql:
             problems.append(f"{node.name}: takes tenant_id but runs no SQL the guard can see")
     assert guarded, "expected at least one /v1/ route with a tenant_id parameter"

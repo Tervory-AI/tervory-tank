@@ -347,5 +347,17 @@ def _load_app():
     spec = importlib.util.spec_from_file_location("radix_app_rx1", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # app.py does a bare "from gold_sources import attach"; another room's gold_sources
+    # may be cached in this worker, so load with Radix's folder first and restore after.
+    room = str(ROOT / "agents" / "radix")
+    cached = sys.modules.pop("gold_sources", None)
+    sys.path.insert(0, room)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(room)
+        if cached is not None:
+            sys.modules["gold_sources"] = cached
+        else:
+            sys.modules.pop("gold_sources", None)
     return module

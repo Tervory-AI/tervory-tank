@@ -47,6 +47,8 @@ async def store(request):
     try:
         async with pool.acquire() as conn:
             await conn.execute(f'CREATE SCHEMA {schema}')
+            # tiger/schema.sql always writes agent_tiger.memory_* (the room schema exists in production).
+            await conn.execute('CREATE SCHEMA IF NOT EXISTS agent_tiger')
             await watcher.ensure_tables(conn, schema)
             await watcher.ensure_tables(conn, schema)
         yield watcher.PgStore(pool, schema)

@@ -205,6 +205,13 @@ CANDIDATES = {
     ("base.find_site", "1.7.0"),
     ("base.contacts", "1.1.0"),
     ("ffl.profile", "1.1.0"),
+    # Eval-only refusal patches start as candidates too.
+    ("base.find_site", "1.7.1"),
+    ("base.contacts", "1.1.1"),
+    ("ffl.profile", "1.1.1"),
+    # Base B1 (#585): unapproved until the founder approves them in /skala.
+    ("base.contacts", "1.2.0"),
+    ("base.verify", "1.2.0"),
 }
 
 
@@ -354,6 +361,9 @@ async def test_the_agent_is_pinned_to_approved_versions_and_a_candidate_run_is_r
         ("base.find_site", "1.7.0"),
         ("base.contacts", "1.1.0"),
         ("ffl.profile", "1.1.0"),
+        ("base.find_site", "1.7.1"),
+        ("base.contacts", "1.1.1"),
+        ("ffl.profile", "1.1.1"),
     ):
         body = tank.SkillRun(tenant_id=tenant, input={"name": "Example"}, version=version, preview=False)
         with pytest.raises(tank.HTTPException) as caught:

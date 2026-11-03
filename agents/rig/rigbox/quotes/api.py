@@ -23,7 +23,9 @@ async def analytics(request: Request, since: date | None = None):
     await _admin(request)
     start = since or datetime.now(timezone.utc).date() - timedelta(days=30)
     counts = await _service(request).quote_store.analytics(_tenant(request), start)
-    return _ok(request, {"since": start.isoformat(), "counts": counts})
+    from rigbox.supply_accounting import analytics as supply_analytics
+    supply = await supply_analytics(_service(request), _tenant(request), start)
+    return _ok(request, {"since": start.isoformat(), "counts": counts, "supply": supply})
 
 
 @router.get("/quotes/{quote_id}/delivery")
@@ -93,3 +95,25 @@ async def embed_key(request: Request, payload: EmbedOrigins):
 
 def mount(application: FastAPI) -> None:
     application.include_router(router)
+
+
+class SaleReceiptIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    receipt_id: str = Field(min_length=1, max_length=200)
+    quote_id: str = Field(min_length=1, max_length=200)
+    product_id: str = Field(min_length=1, max_length=200)
+    amount: str = Field(min_length=1, max_length=40)
+    currency: str = Field(min_length=3, max_length=3)
+    source_ref: str = Field(min_length=1, max_length=200)
+    received_at: str = Field(min_length=1, max_length=50)
+
+
+@router.post("/supply/sale-receipts")
+async def sale_receipt(request: Request, payload: SaleReceiptIn):
+    from rigbox.supply_accounting import record_receipt
+    await _admin(request)
+    try:
+        created = await record_receipt(_service(request), _tenant(request), payload.model_dump())
+    except ValueError:
+        raise RigError("invalid", "The request is not valid.", 422) from None
+    return _ok(request, {"created": created})

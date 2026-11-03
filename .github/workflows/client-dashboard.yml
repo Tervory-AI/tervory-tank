@@ -1,0 +1,78 @@
+name: client-dashboard
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/client-dashboard.yml'
+      - 'tests/client-dashboard*'
+      - 'workspace/app/page.tsx'
+      - 'workspace/app/dashboard*'
+      - 'workspace/app/control/dashboard.css'
+      - 'workspace/app/tasks/page.tsx'
+      - 'workspace/app/shell.tsx'
+      - 'workspace/app/squad-links.tsx'
+      - 'workspace/app/product-nav.ts'
+      - 'workspace/app/globals.css'
+      - 'workspace/app/tank/proof/savings-set.tsx'
+      - 'workspace/package*.json'
+      - 'workspace/app/fonts/**'
+      - 'workspace/public/brand/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/client-dashboard.yml'
+      - 'tests/client-dashboard*'
+      - 'workspace/app/page.tsx'
+      - 'workspace/app/dashboard*'
+      - 'workspace/app/control/dashboard.css'
+      - 'workspace/app/tasks/page.tsx'
+      - 'workspace/app/shell.tsx'
+      - 'workspace/app/squad-links.tsx'
+      - 'workspace/app/product-nav.ts'
+      - 'workspace/app/globals.css'
+      - 'workspace/app/tank/proof/savings-set.tsx'
+      - 'workspace/package*.json'
+      - 'workspace/app/fonts/**'
+      - 'workspace/public/brand/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: client-dashboard-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: workspace/package-lock.json
+      - name: Install workspace and isolated browser tools
+        run: |
+          npm --prefix workspace ci --no-audit --no-fund
+          npm install --prefix "$RUNNER_TEMP/dashboard-browser" --no-audit --no-fund esbuild@0.28.2 playwright@1.64.1
+          "$RUNNER_TEMP/dashboard-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Render actual dashboard with isolated data fixtures
+        run: node tests/client-dashboard-f06.cjs
+      - name: Exercise mounted dashboard and own-task focus at 375 and 1440 pixels
+        env:
+          F06_ESBUILD_PATH: ${{ runner.temp }}/dashboard-browser/node_modules/esbuild
+          F06_PLAYWRIGHT_PATH: ${{ runner.temp }}/dashboard-browser/node_modules/playwright
+          F06_SCREENSHOT_DIR: ${{ runner.temp }}/dashboard-screenshots
+        run: node tests/client-dashboard-browser.mjs
+      - name: Retain isolated browser evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: client-dashboard-${{ github.sha }}
+          path: ${{ runner.temp }}/dashboard-screenshots
+          if-no-files-found: warn
+          retention-days: 14

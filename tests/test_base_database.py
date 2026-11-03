@@ -309,7 +309,8 @@ async def test_sql_numbers_keep_priced_cost_and_link_only_excluded_receipts(data
     cost = result["costs"][0]
     assert cost["unpriced"] == 1 and cost["verified_records"] == 1
     assert cost["vendors"] == ["brave.search"]
-    assert Decimal(cost["known_cost_usd"]) == Decimal(cost["cost_per_verified_record"]) == Decimal("0.000792")
+    assert Decimal(cost["known_cost_usd"]) == Decimal("0.000792")
+    assert cost["cost_per_verified_record"] is None
     assert cost["cost_usd"] is None and cost["status"] == "price not set"
     assert (await numbers(store, OTHER, ["TX"], ["01"], False))["costs"] == []
     receipts = await ledger_page(store, TENANT, "TX", "2026-10", 1, ["01"], False, 0, 100, "not_set")

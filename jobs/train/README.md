@@ -141,13 +141,19 @@ quota. An unavailable bucket never appears as an empty bucket.
 
 ### Founder setup and proof after merge
 
-The main Boston compose declares `r2-backup` behind the `r2-backup` profile.
-Normal deployment leaves it off. After deployment, confirm in Coolify and
-Compose profile/service status that `r2-backup` is not running. It uses only the
-uploads pair, the existing Boston database login, and an encrypted-only spool volume. The founder must
-set the public `R2_BACKUP_RECIPIENT` on the worker after merge, verify the
-recipient independently, then explicitly enable/deploy that worker. There is
-no private-key setting or mount. The ZA stack declares opt-in `r2-backup-za`
+The main Boston compose keeps the founder-enabled `r2-backup` in normal
+deployments, without a profile flag or a manual repair after each Tank redeploy.
+Its `unless-stopped` policy also keeps it running after worker/host restarts.
+It uses only the uploads pair, the existing Boston database login, and an
+encrypted-only spool volume. Existing Coolify settings must retain
+`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID_UPLOADS`, `R2_SECRET_ACCESS_KEY_UPLOADS`,
+`R2_BACKUP_RECIPIENT`, `DATABASE_URL`, `QDRANT_URL` and `QDRANT_API_KEY`;
+the founder supplies values and independently verifies the public recipient.
+There is no private-key setting or mount. Startup still fails closed on invalid
+configuration. The worker schedules its next run at 02:00 UTC after a restart;
+it does not immediately catch up a missed run. Health proves configuration
+readiness only: dated R2 manifests and independent restore evidence are still
+required to prove backup success. The ZA stack declares opt-in `r2-backup-za`
 (profile `r2-backup-za`) that writes encrypted dumps to `R2_BUCKET_ZENAS_ZA`
 (`tervory-zenas-za`). Founder setup and prove-restore:
 `docs/cursor/ZA-R2-BACKUP-PROVE-RESTORE.md`. Before switching Boston backups

@@ -153,3 +153,16 @@
 .cw-card-details dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .cw-confirm[data-status="unknown"], .cw-confirm[data-status="failed"] { border-left: 3px solid #E80008; }
 .cw-files small { display: block; font-size: 11px; }
+
+/* Founder-approved Radix result cards: Figma 205:6112, 1 Nov 2026. */
+.cw-radix { display:flex; flex-direction:column; gap:16px; min-width:0; padding:24px; background:white; color:var(--cw-navy); font-size:15px; line-height:1.45; overflow-wrap:anywhere; }
+.cw-radix h3 { font-family:var(--font-jost),sans-serif; font-size:24px; font-weight:300; margin:0; }
+.cw-radix p { margin:0; white-space:pre-wrap; }
+.cw-radix-field { display:flex; flex-direction:column; align-items:flex-start; gap:8px; min-width:0; }
+.cw-radix code { font-family:var(--font-mono),monospace; font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere; user-select:text; max-width:100%; }
+.cw-radix button { align-self:flex-start; }
+.cw-radix-finding { padding:16px; background:var(--cw-tint); border-radius:8px; min-width:0; }
+.cw-radix-finding summary { cursor:pointer; overflow-wrap:anywhere; }
+.cw-radix-finding p { margin-top:8px; }
+@media (max-width:600px) { .cw-radix { padding:24px; } }
+.cw-radix-finding summary .cw-meta { display:block; margin-top:8px; overflow-wrap:anywhere; }

@@ -13,6 +13,8 @@ import logging
 
 IDS = frozenset({"trigger.proselint", "trigger.languagetool", "trigger.agent_style",
                  "trigger.house_style", "trigger.readability", "trigger.voice_check", "tiger.playbook"})
+VERSIONS = {skill_id: "1.0.0" for skill_id in IDS}
+VERSIONS["trigger.languagetool"] = "1.1.0"
 log = logging.getLogger(__name__)
 
 
@@ -25,7 +27,7 @@ def guard_preview(skill_id, caller, preview):
 async def stage_ready(tank):
     pending = []
     for skill_id in sorted(IDS):
-        pkg = tank._packages.get((skill_id, "1.0.0"))
+        pkg = tank._packages.get((skill_id, VERSIONS[skill_id]))
         if pkg is None:
             continue
         async with tank.pool().acquire() as conn:

@@ -12,7 +12,7 @@ import httpx
 from chassis.tank import TankClient
 from fastapi import Depends, FastAPI, Header, HTTPException
 
-from trigger.service import CheckIn, WriteIn, check_text, write
+from trigger.service import CheckIn, CheckerIn, WriteIn, check_text, write
 from trigger.voice import VoiceStore
 
 
@@ -60,7 +60,7 @@ async def post_write(body: WriteIn):
 
 
 @app.post("/skala/languagetool", dependencies=[Depends(authorized)])
-async def skala_languagetool(body: CheckIn):
+async def skala_languagetool(body: CheckerIn):
     """Transport only: the approved package owns rule/result interpretation."""
     import hashlib
     import json

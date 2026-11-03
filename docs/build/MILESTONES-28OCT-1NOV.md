@@ -44,7 +44,7 @@ Written by Claude, Tue 27 Oct, 20:10 PT. Claude is unavailable until Sunday, so 
 
 ```
 RULES (founder, non-negotiable):
-1. Product first. No sign-in work, pricing, keys, Stripe, credits or spend caps.
+1. Product first. No sign-in work, pricing, keys, Stripe, credits or spend caps. Exception: Rig Locate checkout (test-mode payment, sandbox supplier order) is built, and runs only when a store switches it on.
 2. Figma first. Nothing new goes on any page without an approved Figma frame, matched to the character. Do not add text, buttons, empty states or error wording. If you need one, stop and report it.
 3. No sample, demo or fixture data on any live screen, and no made-up copy.
 4. No model calls where code can do the job, and none to check work.

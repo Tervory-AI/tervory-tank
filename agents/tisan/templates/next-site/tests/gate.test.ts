@@ -12,7 +12,7 @@ const { sitePaths: lighthousePaths } = createRequire(import.meta.url)(
 test("linked pages are paths from the site file", () => {
   const paths = sitePaths();
   expect(paths.length).toBeGreaterThan(0);
-  expect(paths[0]).toBe("/");
+  expect(paths).toContain("/privacy");
   for (const path of paths) {
     expect(path.startsWith("/")).toBe(true);
   }

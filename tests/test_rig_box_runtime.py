@@ -3,6 +3,8 @@
 RIG2_HERMES_IMAGE=tervory-rig-brain:cloud pytest -q tests/test_rig_box_runtime.py
 No production credentials or paid model calls are used.
 """
+
+from rig_fixture_loader import load_catalogue
 import asyncio
 import json
 import os
@@ -29,7 +31,7 @@ def test_real_hermes_answers_from_standin_catalogue_with_tank_receipts(tmp_path,
     from rigbox.service import Service
     from rigbox.store import MemoryStore
     catalogue = Service(MemoryStore())
-    loaded = asyncio.run(catalogue.load_folder(ROOT / "agents/rig/catalogues/second"))
+    loaded = asyncio.run(load_catalogue(catalogue, ROOT / "tests/fixtures/rig_catalogues/second"))
     tenant, task, key = loaded["tenant_id"], str(uuid.uuid4()), uuid.uuid4().hex
     monkeypatch.setenv("TANK_KEY_RIG", key)
     pool = Pool()

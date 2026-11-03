@@ -227,6 +227,9 @@ def _chunk_from_mapping(row: dict) -> Chunk:
 
 class Store(Protocol):
     async def record_source(self, source: SourceSpec) -> None: ...
+    async def close_collapsed(
+        self, source_id: str, jurisdiction: str, citation: str, hashes: set[str], titles: set[str], *, on: date
+    ) -> int: ...
 
     async def get_source(self, source_id: str) -> SourceSpec | None: ...
 
@@ -294,6 +297,25 @@ class Store(Protocol):
     async def stored_bytes(self) -> int: ...
 
 
+def url_replaces(doc: LegalDocument, source: SourceSpec | None = None) -> bool:
+    """A South African judgment file holds one judgment, so a new document from
+    the same source and file replaces an open one stored under another citation.
+
+    The citation is the document's identity. When a parser fix changes the
+    citation it reads from a file (the first neutral citation in the body was
+    often a case the judgment cites), the old row must close, not stay beside it.
+
+    Some adapters (SAFLII, the official-site loaders) record the source's own
+    page as the URL of every document they read, so that URL names a listing,
+    not one judgment file, and must never close the other cases from it.
+    """
+    url = (doc.url or "").strip()
+    if not (doc.jurisdiction == "za" and doc.kind == "case" and url):
+        return False
+    canonical = (source.canonical_url if source is not None else "") or ""
+    return url.rstrip("/") != canonical.strip().rstrip("/")
+
+
 def _require_source(source: SourceSpec | None, doc: LegalDocument) -> SourceSpec:
     if source is None:
         raise LicenceError("record the source and its terms before storing text")
@@ -328,7 +350,6 @@ class MemoryStore:
     async def upsert_version(self, doc: LegalDocument, chunks: list[Chunk], *, on: date) -> bool:
         _guard_home(self.home_region, jurisdiction=doc.jurisdiction)
         source = _require_source(self.sources.get(doc.source_id), doc)
-        del source
         if doc.known_from is None:
             doc.known_from = on
         same = [
@@ -360,12 +381,43 @@ class MemoryStore:
             old = self.docs[version_id]
             old.effective_to = plan.close_on
             old.status = "superseded"
+        if url_replaces(doc, source):
+            for item in self.docs.values():
+                if (
+                    item.source_id == doc.source_id
+                    and item.jurisdiction == doc.jurisdiction
+                    and item.kind == doc.kind
+                    and item.url == doc.url
+                    and item.id != doc.id
+                    and item.effective_to is None
+                ):
+                    item.effective_to = on
+                    item.status = "superseded"
         self.docs[doc.version_id] = doc
         for chunk in chunks:
             if chunk.jurisdiction != doc.jurisdiction:
                 raise LicenceError("chunk jurisdiction does not match the document")
             self.chunks[chunk.chunk_id] = chunk
         return True
+
+    async def close_collapsed(
+        self, source_id: str, jurisdiction: str, citation: str, hashes: set[str], titles: set[str], *, on: date
+    ) -> int:
+        """Close open rows of ``citation`` that hold one of its split children's text or heading."""
+        _guard_home(self.home_region, jurisdiction=jurisdiction)
+        closed = 0
+        for item in self.docs.values():
+            if (
+                item.source_id == source_id
+                and item.jurisdiction == jurisdiction
+                and item.citation == citation
+                and item.effective_to is None
+                and (item.content_hash in hashes or item.title in titles)
+            ):
+                item.effective_to = on
+                item.status = "superseded"
+                closed += 1
+        return closed
 
     async def record_link(self, source_id: str, url: str, reason: str) -> None:
         _guard_home(self.home_region)
@@ -706,7 +758,46 @@ class PostgresStore:
                     for chunk in chunks
                 ],
             )
+            if url_replaces(doc, source):
+                await self._conn.execute(
+                    """
+                    UPDATE zenas_pool.documents
+                    SET effective_to = $1, status = 'superseded'
+                    WHERE source_id = $2 AND jurisdiction = $3 AND kind = $4 AND url = $5
+                      AND document_id <> $6 AND effective_to IS NULL
+                    """,
+                    on,
+                    doc.source_id,
+                    doc.jurisdiction,
+                    doc.kind,
+                    doc.url,
+                    doc.id,
+                )
         return True
+
+    async def close_collapsed(
+        self, source_id: str, jurisdiction: str, citation: str, hashes: set[str], titles: set[str], *, on: date
+    ) -> int:
+        """Close open rows of ``citation`` that hold one of its split children's text or heading."""
+        _guard_home(self.home_region, jurisdiction=jurisdiction)
+        result = await self._conn.execute(
+            """
+            UPDATE zenas_pool.documents
+            SET effective_to = $1, status = 'superseded'
+            WHERE source_id = $2 AND jurisdiction = $3 AND citation = $4 AND effective_to IS NULL
+              AND (content_hash = ANY($5::text[]) OR title = ANY($6::text[]))
+            """,
+            on,
+            source_id,
+            jurisdiction,
+            citation,
+            sorted(hashes),
+            sorted(titles),
+        )
+        try:
+            return int(str(result).split()[-1])
+        except (ValueError, IndexError):
+            return 0
 
     async def record_link(self, source_id: str, url: str, reason: str) -> None:
         _guard_home(self.home_region)

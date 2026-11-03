@@ -13,6 +13,13 @@ NAMES = {m["model_name"] for m in CONFIG["model_list"]}
 def test_every_model_has_a_price_and_a_key_from_the_environment() -> None:
     for m in CONFIG["model_list"]:
         info = m.get("model_info") or {}
+        if info.get("build_only"):
+            # The ChatGPT sign-in (docs/ops/CHATGPT-BUILD-MODEL.md): no API key, no
+            # per-token price, and Tank keeps it off customer traffic.
+            assert m["model_name"].startswith("build-"), m["model_name"]
+            assert m["litellm_params"]["model"].startswith("chatgpt/"), m["model_name"]
+            assert "api_key" not in m["litellm_params"], m["model_name"]
+            continue
         assert info.get("input_cost_per_token", 0) > 0, m["model_name"]
         assert info.get("output_cost_per_token", 0) > 0, m["model_name"]
         assert str(m["litellm_params"]["api_key"]).startswith("os.environ/"), m["model_name"]
@@ -50,8 +57,13 @@ def test_fallbacks_run_cheapest_available_first() -> None:
 
 
 def test_policy_seeds_and_the_switch_name_roster_models() -> None:
-    seeded = set(re.findall(r"\('[a-z0-9_.]+',\s*\d+,\s*'([a-z0-9-]+)'", SCHEMA))
-    switched = set(re.findall(r"THEN '([a-z0-9-]+)'", SCHEMA)) | set(re.findall(r"ELSE '([a-z0-9-]+)'", SCHEMA))
+    rows = re.findall(r"\('[a-z0-9_.]+',\s*(\d+),\s*'([a-z0-9-]+)'", SCHEMA)
+    # Rung 3 runs code, not a model: its seeds name the marker "code" (trigger.check).
+    assert all(rung == "3" for rung, model in rows if model == "code")
+    seeded = {model for rung, model in rows if not (rung == "3" and model == "code")}
+    # Only CASE expressions that pick a model; other CASEs map product names (ghost -> autumbra).
+    picks = " ".join(st for st in SCHEMA.split(";") if re.search(r"\bmodel\b", st))
+    switched = set(re.findall(r"THEN '([a-z0-9-]+)'", picks)) | set(re.findall(r"ELSE '([a-z0-9-]+)'", picks))
     assert seeded and switched
     assert seeded <= NAMES, seeded - NAMES
     assert switched <= NAMES, switched - NAMES

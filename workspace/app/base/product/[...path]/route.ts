@@ -1,5 +1,6 @@
 import { currentTenant } from "@/lib/tenant";
 import { baseProductRequest } from "@/lib/tank";
+import { isWorkspaceOrigin } from "@/lib/workspace-origin";
 
 export const dynamic = "force-dynamic";
 const READ = new Set(["reference", "numbers", "records", "records.csv", "ledger", "comparison"]);
@@ -18,7 +19,7 @@ async function route(request: Request, context: Context): Promise<Response> {
   for (const [key, value] of url.searchParams) if (FILTERS.has(key)) query.set(key, value);
   let body: Record<string, unknown> | undefined;
   if (request.method === "POST") {
-    if (request.headers.get("origin") !== url.origin) return Response.json({ detail: "Open this form in your workspace." }, { status: 403 });
+    if (!isWorkspaceOrigin(request)) return Response.json({ detail: "Open this form in your workspace." }, { status: 403 });
     const text = await request.text();
     if (Buffer.byteLength(text) > 2_100_000) return Response.json({ detail: "This file is too large." }, { status: 413 });
     try {

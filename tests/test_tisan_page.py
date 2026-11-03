@@ -88,7 +88,9 @@ def test_example_values_stay_and_secrets_are_dots():
     assert "fetch(" not in source
     assert "api.figma.com" not in source
     assert "sk-" not in source
-    assert "matters" not in source.lower()
+    assert 'href="/matters">Projects</a>' in source
+    # The shared Projects destination is allowed; no room-specific Matters UI.
+    assert "matters" not in source.lower().replace('href="/matters"', "")
     assert 'label: "Skala"' in NAV.read_text(encoding="utf-8")
     assert '"/tisan"' in NAV.read_text(encoding="utf-8")
     assert '"/market-lab"' in NAV.read_text(encoding="utf-8")

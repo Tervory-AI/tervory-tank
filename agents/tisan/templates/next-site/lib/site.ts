@@ -1,21 +1,3 @@
-export type PageLink = {
-  href: string;
-  label: string;
-};
-
-export const site: {
-  name: string;
-  locale: string;
-  logoUrl: string | null;
-  pages: PageLink[];
-} = {
-  name: "Next site",
-  locale: "en",
-  logoUrl: null,
-  pages: [
-    { href: "/", label: "Home" },
-    { href: "/about", label: "About" },
-    { href: "/contact", label: "Contact" },
-    { href: "/privacy", label: "Privacy" },
-  ],
-};
+// Locale is replaced by the existing scaffold. Visible content belongs only
+// in content/site.json; no default site name, navigation or logo text is seeded.
+export const site = { locale: "en" };

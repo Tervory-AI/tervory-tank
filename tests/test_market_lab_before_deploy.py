@@ -165,6 +165,8 @@ def _load_named(module_name: str, path: Path):
 
 def test_research_with_no_passages_makes_no_model_call_and_costs_nothing(monkeypatch) -> None:
     """An unconfigured web research rung returns no sources at zero model cost."""
+    # Other test modules set DATABASE_URL at import; these cases run without a database.
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     skill_run = _load_named(
         "market_research_run_no_sources",
         ROOT / "tank" / "skills" / "market.research" / "1.0.0" / "run.py",
@@ -244,6 +246,8 @@ def test_research_with_no_passages_makes_no_model_call_and_costs_nothing(monkeyp
 @pytest.mark.parametrize("question,key", [("", "test-room"), ("   ", "test-room"),
                                          ("Public question", None), ("Public question", "  ")])
 def test_empty_or_unconfigured_research_keeps_no_sources_without_tank(monkeypatch, question, key):
+    # Other test modules set DATABASE_URL at import; these cases run without a database.
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     sys.path.insert(0, str(ROOT / "agents" / "_chassis"))
     from core import research_adapter
 

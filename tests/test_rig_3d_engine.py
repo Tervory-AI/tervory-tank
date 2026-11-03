@@ -27,7 +27,7 @@ from rigbox.three_d.api import mount  # noqa: E402
 from rigbox.three_d.contracts import Assembly, Job, Review, Report  # noqa: E402
 from rigbox.three_d.engine import check_artifact  # noqa: E402
 from rigbox.three_d.forge import BrainForge  # noqa: E402
-from rigbox.three_d.sample import TENANT, WITHOUT_3D, PUBLIC_KEY, PLAIN_KEY, seed  # noqa: E402
+from fixtures.rig_three_d.sample import TENANT, WITHOUT_3D, PUBLIC_KEY, PLAIN_KEY, seed  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -284,7 +284,7 @@ async def test_forge_relay_contract_and_failure_do_not_leak_upstream(rig):
     from rigbox.three_d.contracts import Anchor
     from rigbox.three_d.forge import wire_job
     request = job(cost_cap_usd=1, anchors={"reviewed": Anchor(position_mm=(0,0,0), quaternion=(0,0,0,1))})
-    fixture = (ROOT / "agents/rig/rigbox/three_d/fixtures/centre.glb").read_bytes()
+    fixture = (ROOT / "tests/fixtures/rig_three_d/models/centre.glb").read_bytes()
     calls = []
     class Files:
         async def stage(self, value):
@@ -350,7 +350,7 @@ def test_photos_only_rejects_cad_and_model_suffixes(suffix):
 
 
 def test_fixture_glbs_match_their_report_and_are_compressed():
-    root = ROOT / "agents/rig/rigbox/three_d/fixtures"
+    root = ROOT / "tests/fixtures/rig_three_d/models"
     for path in root.glob("*.glb"):
         data = path.read_bytes()
         report = Report(**json.loads(path.with_suffix(".json").read_text()), sha256=hashlib.sha256(data).hexdigest(),
@@ -393,7 +393,7 @@ async def test_unapproved_fit_cannot_gain_mounts_or_enter_assembly(rig):
 
 def test_glb_cannot_cause_external_fetch_even_with_a_matching_checksum():
     import struct
-    path = ROOT / "agents/rig/rigbox/three_d/fixtures/centre.glb"
+    path = ROOT / "tests/fixtures/rig_three_d/models/centre.glb"
     data = path.read_bytes(); length = struct.unpack_from("<I", data, 12)[0]
     doc = json.loads(data[20:20+length]); doc["images"] = [{"uri": "https://invalid.example/texture.png"}]
     encoded = json.dumps(doc).encode(); encoded += b" " * (-len(encoded) % 4)

@@ -46,14 +46,14 @@ def test_za_compose_is_a_tank_stack_with_its_own_stores() -> None:
         "postgres", "redis", "qdrant", "hermes", "litellm", "tank", "agent-roles",
         "r2-backup-za",
     }
-    assert data["services"]["r2-backup-za"]["profiles"] == ["r2-backup-za"]
+    assert not data["services"]["r2-backup-za"].get("profiles")
     for name, service in data["services"].items():
         assert service["environment"]["TANK_REGION"] == "za", name
     assert data["networks"]["default"]["name"] == "tervory-za"
     assert data["networks"]["tervory-gw-zenas"]["name"] == "tervory-gw-zenas"
     assert "external" not in data["networks"]["default"]
     assert "external" not in data["networks"]["tervory-gw-zenas"]
-    assert set(data["volumes"]) == {"za_pgdata", "za_redisdata", "za_qdrantdata", "za_backups", "za_r2_backup_spool"}
+    assert set(data["volumes"]) == {"za_pgdata", "za_redisdata", "za_qdrantdata", "za_backups", "za_r2_backup_spool", "za_litellm_chatgpt_token"}
     assert "tervory-gw-zenas" in data["services"]["postgres"]["networks"]
     assert "tervory-gw-zenas" in data["services"]["tank"]["networks"]
     assert "tervory-gw-zenas" in data["services"]["hermes"]["networks"]
@@ -75,6 +75,8 @@ def test_za_zenas_room_is_its_own_resource_on_the_corridor() -> None:
     room = yaml.safe_load(ROOM_COMPOSE)
     assert set(room["services"]) == {"agent-zenas", "pool-loader"}
     assert room["networks"]["gw"] == {"external": True, "name": "tervory-gw-zenas"}
+    # Contracts are assembled inside agent-zenas; no Docassemble network or resource.
+    assert set(room["networks"]) == {"gw"}
     for name, service in room["services"].items():
         assert service["environment"]["TANK_REGION"] == "za", name
         assert service["networks"] == ["gw"], name

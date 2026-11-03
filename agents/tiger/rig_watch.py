@@ -30,6 +30,63 @@ async def ensure_rig_tables(conn, schema: str) -> None:
     await conn.execute(f'CREATE INDEX IF NOT EXISTS rig_targets_url ON {schema}.rig_targets(tenant_id,url)')
 
 
+# Rig Locate confirm re-reads one watched page now. Same 45 second browser
+# budget as Tiger's renders (#458). Read only: no observation, alert or delivery.
+CHECK_NOW_BUDGET_S = 45
+
+
+async def check_now(store, tenant_id: str, url: str, render, extract, fetch_text, *,
+                    budget: float = CHECK_NOW_BUDGET_S, clock=None) -> dict:
+    """One live reading of a page Tiger already watches for this tenant.
+
+    Answers available / unavailable only from an explicit schema.org stock
+    state with a stated price (confirmed_value). Everything else is unknown.
+    """
+    from datetime import timezone
+    from urllib.parse import urlsplit
+
+    from watch import ROBOTS_TOKEN, robots_allows
+
+    now = (clock or (lambda: datetime.now(timezone.utc)))()
+    unknown = lambda reason: {"status": "unknown", "reason": reason, "url": url}  # noqa: E731
+    watch = await store.get_watch(tenant_id, url)
+    if watch is None or not watch.get("enabled"):
+        return unknown("not_watched")
+    parts = urlsplit(url)
+    try:
+        robots = await asyncio.wait_for(fetch_text(f"{parts.scheme}://{parts.netloc}/robots.txt"), 10)
+    except Exception:
+        return unknown("robots_unavailable")
+    if not robots_allows(robots or "", url, ROBOTS_TOKEN):
+        return unknown("robots")
+    try:
+        page = await asyncio.wait_for(render(url), budget)
+    except Exception:
+        return unknown("timeout")
+    if not isinstance(page, dict) or not page.get("ok") or page.get("challenge") or not page.get("html"):
+        return unknown("blocked" if isinstance(page, dict) and page.get("challenge") else "unreadable")
+    try:
+        extracted = await asyncio.wait_for(extract(page["html"], url), 15)
+    except Exception:
+        return unknown("unreadable")
+    items = [item for item in (extracted or {}).get("items") or [] if isinstance(item, dict)]
+    if len(items) != 1:
+        return unknown("unreadable" if not items else "ambiguous")
+    item = items[0]
+    value = confirmed_value({"method": item.get("method") or extracted.get("method"),
+                             "product_name": item.get("name"), "availability": item.get("availability"),
+                             "price": item.get("price"), "currency": item.get("currency")})
+    if value is None:
+        return unknown("unconfirmed")
+    result = {"status": "available" if value["active"] else "unavailable", "url": url,
+              "checked_at": now.isoformat(), "method": str(item.get("method") or extracted.get("method") or "")}
+    if value["active"]:
+        result.update(price=value["price"], currency=value["currency"])
+    if item.get("gtin"):
+        result["gtin"] = str(item["gtin"])
+    return result
+
+
 def confirmed_value(observation: dict) -> dict | None:
     if (observation.get('method') in {None, 'blocked', 'robots', 'error', 'none', 'unread'}
             or observation.get('issue') or not observation.get('product_name')):

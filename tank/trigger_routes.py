@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hmac
 import os
 import re
 from types import SimpleNamespace
@@ -38,16 +39,30 @@ async def code_plan(actor: Actor, messages: list[dict], task_id: UUID | None):
     proposed = await plan(actor, last.get("content", ""), task_id)
     if proposed is not None:
         return SimpleNamespace(content=json.dumps(proposed, ensure_ascii=False), ledger_id=await code_receipt(actor.tenant_id, "command.turn", task_id=task_id))
-    match = re.fullmatch(r"\s*trigger(?:\.check|[, ]+check)(?:\s+(?:this\s+)?paragraph)?\s*:\s*(.+)",
-                         last.get("content", ""), re.IGNORECASE | re.DOTALL)
+    prefix = r"\s*trigger(?:\.check|[, ]+check)(?:\s+(?:this\s+)?paragraph)?\s*:\s*"
+    match = re.fullmatch(prefix + r"(.+)", last.get("content", ""), re.IGNORECASE | re.DOTALL)
     if not match:
         return None
     actor = await authorized_actor(actor)
     require_tool(actor, "trigger.check")
-    if len(match[1]) > 20000:
+    text = match[1]
+    if task_id and text.startswith("Attachment "):
+        # The existing composer accepts text files longer than its message box.
+        # Read the owned turn to remove only its real attachment transport label.
+        from command import db, unpack
+        async with db().acquire() as conn:
+            raw = await conn.fetchval("SELECT state FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND state->>'active_turn'=$3",
+                                      actor.tenant_id, actor.user_id, str(task_id))
+        source = unpack(raw or {}).get("messages", [])
+        source = source[-1] if source else {}
+        attached = source.get("attachments", [])
+        if (re.fullmatch(prefix, source.get("content", ""), re.IGNORECASE | re.DOTALL)
+                and len(attached) == 1 and isinstance(attached[0].get("text"), str)):
+            text = attached[0]["text"]
+    if len(text) > 32000:
         raise HTTPException(422, "Text exceeds the checker limit")
     content = json.dumps({"text": "trigger.check", "actions": [
-        {"tool": "trigger.check", "arguments": {"text": match[1]}}]}, ensure_ascii=False)
+        {"tool": "trigger.check", "arguments": {"text": text}}]}, ensure_ascii=False)
     return SimpleNamespace(content=content, ledger_id=await code_receipt(actor.tenant_id, "command.turn", task_id=task_id))
 
 
@@ -91,6 +106,32 @@ async def zenas_draft(body: dict, actor: Actor):
     return JSONResponse(data, status_code=response.status_code)
 
 
+@router.get("/copy/{write_id}")
+async def accepted_copy(write_id: UUID, tenant_id: UUID, request: Request):
+    """Tisan can read only confirmed, currently accepted copy in its job tenant."""
+    from main import box_region, pool
+    expected = os.environ.get("TANK_KEY_TISAN", "")
+    supplied = request.headers.get("x-tank-key", "")
+    if not expected or not supplied or not hmac.compare_digest(expected.encode(), supplied.encode()):
+        raise HTTPException(401, "Room authentication required")
+    if request.headers.get("x-tervory-tenant") != str(tenant_id):
+        raise HTTPException(403, "Tenant mismatch")
+    if request.headers.get("x-tervory-home-region") != box_region():
+        raise HTTPException(403, "This conversation must stay on its home box")
+    async with pool().acquire() as conn:
+        row = await conn.fetchrow("""SELECT w.draft FROM tank.trigger_writes w
+            WHERE w.id=$1 AND w.tenant_id=$2 AND w.feedback_status='accepted'
+            AND EXISTS (SELECT 1 FROM tank.command_threads t
+                CROSS JOIN LATERAL jsonb_each(t.state->'cards') c
+                WHERE t.tenant_id=w.tenant_id AND c.value->>'tool'='trigger.write'
+                AND c.value->>'status'='confirmed'
+                AND c.value->'result'->>'write_id'=w.id::text)""", write_id, tenant_id)
+    if row is None:
+        raise HTTPException(404, "Writing record unavailable")
+    return JSONResponse({"write_id": str(write_id), "tenant_id": str(tenant_id), "text": row["draft"]},
+                        headers={"Cache-Control": "private, no-store"})
+
+
 @router.post("/{operation}")
 async def invoke(operation: str, request: Request, actor: Annotated[Actor, Depends(identity)]):
     from command import TriggerCheckArgs, TriggerWriteArgs, TriggerVoiceShowArgs, TriggerVoiceSetArgs, TriggerVoiceRollbackArgs, TriggerFeedbackArgs
@@ -123,6 +164,8 @@ async def invoke(operation: str, request: Request, actor: Annotated[Actor, Depen
                 data = await room("voice/commit", {k: v for k, v in {**body, "tenant_id": str(actor.tenant_id), "operation_id": str(operation_id)}.items() if k != "brief_markdown"})
         return {**data, "text": json.dumps(data, ensure_ascii=False, indent=2), "model_calls": 0,
                 "ledger_id": str(await code_receipt(actor.tenant_id, "trigger." + operation)), "cost_usd": 0}
+    from trigger_commands import confirmation
+    confirmation(actor, "trigger." + operation, body)
     data = await room(operation, {**body, "tenant_id": str(actor.tenant_id)})
     if operation == "write" and data.get("delegate") == "zenas.draft":
         response = await zenas_draft(body, actor)

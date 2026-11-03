@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from rig_fixture_loader import load_catalogue
+
+import hashlib
 import importlib.util
 import json
 import sys
@@ -20,9 +23,9 @@ from rigbox.page_route import mount_page  # noqa: E402
 from rigbox.service import RecordingHandoff, Service, hash_key  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
-EXAMPLE = ROOT / "agents" / "rig" / "catalogues" / "example"
-DEMO = ROOT / "agents" / "rig" / "catalogues" / "customnation"
-ARCHON = ROOT / "agents" / "rig" / "catalogues" / "archon"
+EXAMPLE = ROOT / "tests" / "fixtures" / "rig_catalogues" / "example"
+DEMO = ROOT / "tests" / "fixtures" / "rig_catalogues" / "lumaworks"
+ARCHON = ROOT / "tests" / "fixtures" / "rig_catalogues" / "aurora"
 PAGE = ROOT / "agents" / "rig" / "rigbox" / "page"
 ORIGIN = "https://rig.tervory.com"
 PRODUCT = "Example Rifle 308 20in"
@@ -132,7 +135,8 @@ def test_rig_app_serves_a_search_page() -> None:
     assert "live distributor keys are off" not in html
     assert "Demo · keys off" not in html
     assert "Archon Type B" not in html
-    assert 'src="/page/v5/rig.js"' in html
+    digest = hashlib.sha256((PAGE / "v5/rig.js").read_bytes()).hexdigest()
+    assert f'src="/page/v5/assets/{digest}/rig.js"' in html
     assert "api-base" not in html
 
 
@@ -140,9 +144,9 @@ def test_rig_app_serves_a_search_page() -> None:
 async def test_offline_fixture_search_stays_available_without_live_page_defaults() -> None:
     store = MemoryStore()
     service = Service(store, Models(), RecordingHandoff())
-    demo = await service.load_folder(DEMO)
-    example = await service.load_folder(EXAMPLE)
-    archon = await service.load_folder(ARCHON)
+    demo = await load_catalogue(service, DEMO)
+    example = await load_catalogue(service, EXAMPLE)
+    archon = await load_catalogue(service, ARCHON)
     assert demo["keys"] == 1
     assert example["keys"] == 1
     assert archon["keys"] == 1
@@ -170,12 +174,12 @@ async def test_offline_fixture_search_stays_available_without_live_page_defaults
     assert client.get("/house").status_code == 200
     found = client.get(
         "/v1/rig/search",
-        params={"q": "Staccato", "limit": 12},
+        params={"q": "LumaWorks", "limit": 12},
         headers={"X-Rig-Key": demo_key, "Origin": ORIGIN},
     )
     assert found.status_code == 200
     names = [item["name"] for item in found.json()["results"]]
-    assert names[0] == "Staccato C2"
+    assert names[0] == "LumaWorks C2"
     assert all("Example" not in name for name in names)
     archon_hit = client.get(
         "/v1/rig/search",
@@ -262,7 +266,7 @@ async def test_shopper_and_dealer_pages_and_only_approved_fits_show() -> None:
 
     models.complete = complete
     service = Service(store, models, RecordingHandoff())
-    report = await service.load_folder(EXAMPLE)
+    report = await load_catalogue(service, EXAMPLE)
     assert report["keys"] == 1
     await store.put_key(TENANT, hash_key(ADMIN), "admin", [])
     await store.upsert_product(
@@ -386,3 +390,66 @@ async def test_shopper_and_dealer_pages_and_only_approved_fits_show() -> None:
     assert WIDGET not in after_setups.text
     assert after_setups.json()["setups"][0]["total"]["amount"] == 35297
     assert models.calls == []
+
+
+@pytest.mark.parametrize("url", ["/", "/v5", "/v5/cn", "/v5?skin=cn"])
+def test_page_asset_urls_survive_a_stale_legacy_cache(monkeypatch, tmp_path, url):
+    """A new HTML response must not reuse a cached URL for changed bytes."""
+    import re
+    import shutil
+    from rigbox import page_route
+
+    source = PAGE / "v5"
+    for name in ("index.html", "rig.css", "rig.js"):
+        (tmp_path / name).write_bytes((source / name).read_bytes())
+    shutil.copytree(source / "assets", tmp_path / "assets")
+    monkeypatch.setattr(page_route, "_V5", tmp_path)
+    # No configured store or credentials are needed for the published shell.
+    monkeypatch.delenv("RIG_WIDGET_PUBLISHABLE_KEY", raising=False)
+    app = FastAPI()
+    mount_page(app)
+    client = TestClient(app)
+    original = client.get(url)
+    assert original.headers["cache-control"] == "no-store"
+    urls = re.findall(r'(?:href|src)="(/page/v5/assets/[^"]+)"', original.text)
+    assert len(urls) == 2
+    cache = {path: client.get(path).content for path in urls}
+    css_url = next(path for path in urls if path.endswith("rig.css"))
+    js_url = next(path for path in urls if path.endswith("rig.js"))
+    assert client.get(css_url).headers["cache-control"] == "public, max-age=31536000, immutable"
+    legacy_cached = client.get("/page/v5/rig.css").content
+    assert client.get("/page/v5/rig.css").headers["cache-control"] == "no-cache"
+    changed = legacy_cached + b"\n/* offline deployment revision */\n"
+    (tmp_path / "rig.css").write_bytes(changed)
+    (tmp_path / "assets" / (hashlib.sha256(changed).hexdigest() + "-rig.css")).write_bytes(changed)
+    updated = client.get(url)
+    expected = f"/page/v5/assets/{hashlib.sha256(changed).hexdigest()}/rig.css"
+    assert expected in updated.text and css_url not in updated.text
+    assert js_url in updated.text  # Unchanged assets retain their cache identity.
+    assert expected not in cache
+    fetched = client.get(expected)
+    assert fetched.status_code == 200 and fetched.content == changed
+    assert hashlib.sha256(fetched.content).hexdigest() in expected
+    assert legacy_cached != fetched.content
+    old_response = client.get(css_url)
+    assert old_response.status_code == 200 and old_response.content == legacy_cached
+    assert hashlib.sha256(old_response.content).hexdigest() in css_url
+    # Corrupt archives cannot impersonate an immutable object.
+    (tmp_path / "assets" / (hashlib.sha256(legacy_cached).hexdigest() + "-rig.css")).write_bytes(changed)
+    assert client.get(css_url).status_code == 404
+    archived = tmp_path / "assets" / (hashlib.sha256(legacy_cached).hexdigest() + "-rig.css")
+    outside = tmp_path / "outside.css"
+    outside.write_bytes(legacy_cached)
+    archived.unlink()
+    archived.symlink_to(outside)
+    assert client.get(css_url).status_code == 404
+    assert client.get("/page/v5/assets/not-a-digest/rig.css").status_code == 404
+    assert client.get("/page/v5/assets/anything/index.html").status_code == 404
+    assert client.get(url).text == updated.text
+
+
+@pytest.mark.parametrize("name", ["rig.css", "rig.js"])
+def test_current_assets_have_retained_published_objects(name):
+    data = (PAGE / "v5" / name).read_bytes()
+    digest = hashlib.sha256(data).hexdigest()
+    assert (PAGE / "v5/assets" / f"{digest}-{name}").read_bytes() == data

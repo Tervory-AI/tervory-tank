@@ -170,7 +170,8 @@ def test_osv_is_fetched_only_at_build_and_the_seal_is_unchanged() -> None:
     compose = (RADIX / "docker-compose.yml").read_text(encoding="utf-8")
     assert compose.startswith("# coolify: raw compose")
     assert "ports:" not in compose
-    assert "mem_limit: 256m" in compose
+    # #426 raised the room cap to 1 GiB for ZAP (JVM capped at 512 MiB).
+    assert "mem_limit: 1g" in compose
     assert "proxy-link:\n    internal: true" in compose
 
 
