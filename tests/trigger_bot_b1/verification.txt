@@ -1,0 +1,460 @@
+Trigger B1 captured offline verification
+Captured output has trailing whitespace stripped; result content is unchanged.
+Work directory: /workspace/codex-trigger-b1
+Branch: codex/trigger-b1-bot
+Included main: d6004c8d1f0110cc74fc7bbeaae4144277ca6758
+Final implementation/test head: 0d40e841babf856edde821c65281df31a2ad4194
+Later commits add only this evidence and PR.md.
+
+Database tests used only the disposable codex-trigger-b1-test-20261102
+Postgres 16.15 container on 127.0.0.1:32800 (trust auth, tmpfs, 768 MiB, 1 CPU).
+B1 database tests create/drop bot_b1_<uuid> databases in that container.
+No production database connection or SQL was used. Inputs are offline fakes,
+never placed on a live screen. Model routes/indexes/SMTP/upstreams are fake.
+The socket-blocked run allows only loopback and Unix sockets.
+
+Every completed file was committed and pushed on this sole branch. Before each
+push: git fetch origin main && git merge origin/main. Every fetch/push succeeded.
+Normal main merges retained both sides, including main d6004c8d; no force push,
+main push, live deployment or merge into main occurred. Claude opens the PR.
+
+
+Combined suite; source head 91eb4b6f642668f615223acc60afa00337fd9fe2
+$ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank:tests:.b1deps POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32800/postgres /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q -rs -p no:cacheprovider tests/trigger_bot_b1 tests/trigger_first_build tests/trigger_second_build tests/trigger_gate2 tests/test_trigger_crm.py tests/test_command.py tests/test_command_streaming.py tests/test_command_repo_tools.py tests/test_workers_command.py tests/command_acceptance_20261031/test_cross_lane.py tests/trigger_crm_acceptance_20261031/test_combined.py tests/test_command_1b_workspace.py tests/test_command_radix.py tests/test_command_squads_ui.py --tb=short > .b1tmp/all-final.txt 2>&1
+............................................................s........... [ 18%]
+........................................................................ [ 36%]
+........................................................................ [ 54%]
+........................................................................ [ 72%]
+........................................................................ [ 90%]
+........ssss.........................                                    [100%]
+=============================== warnings summary ===============================
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "WriteIn" shadows an attribute in parent "CheckerIn"
+    warnings.warn(
+
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+  /workspace/codex-trigger-b1/tank/main.py:753: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+  /workspace/codex-trigger-b1/tank/main.py:810: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+  /workspace/codex-trigger-b1/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+  /workspace/codex-trigger-b1/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+  /workspace/codex-trigger-b1/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+  /workspace/codex-trigger-b1/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/trigger_crm_acceptance_20261031/test_combined.py:18: Explicit frozen backend/Workspace assembly required; see EVIDENCE.md
+SKIPPED [1] tests/trigger_first_build/test_trigger.py:337: Requires isolated room and LanguageTool containers
+SKIPPED [1] tests/command_acceptance_20261031/test_cross_lane.py:138: Requires assembled CLI/Workspace and local-only client dependencies
+SKIPPED [1] tests/command_acceptance_20261031/test_cross_lane.py:203: Requires assembled CLI/Workspace and local-only client dependencies
+SKIPPED [1] tests/command_acceptance_20261031/test_cross_lane.py:210: Requires assembled CLI/Workspace and local-only client dependencies
+SKIPPED [1] tests/command_acceptance_20261031/test_cross_lane.py:226: Requires assembled CLI/Workspace and local-only client dependencies
+392 passed, 6 skipped, 15 warnings in 98.56s (0:01:38)
+
+
+Final B1 with outside sockets blocked; source head 0d40e841babf856edde821c65281df31a2ad4194
+$ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank:tests:.b1deps POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32800/postgres /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q -p no:cacheprovider --disable-socket --allow-hosts=127.0.0.1,localhost --allow-unix-socket tests/trigger_bot_b1 --tb=short > .b1tmp/b1-network-blocked.txt 2>&1
+......................................                                   [100%]
+=============================== warnings summary ===============================
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+  /workspace/codex-trigger-b1/tank/main.py:753: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+  /workspace/codex-trigger-b1/tank/main.py:810: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+  /workspace/codex-trigger-b1/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+  /workspace/codex-trigger-b1/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+  /workspace/codex-trigger-b1/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/trigger_bot_b1/test_database.py::test_startup_refuses_bypass_tenant_role_before_schema_and_bot_task
+  /workspace/codex-trigger-b1/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+38 passed, 14 warnings in 5.15s
+
+
+Enabled CLI/CRM local acceptance; source head 0d40e841babf856edde821c65281df31a2ad4194
+$ CRM_ASSEMBLED_ROOT=/workspace/codex-trigger-b1 COMMAND_ACCEPTANCE_CLIENTS=1 COMMAND_TEST_TOOLS=/workspace/codex-trigger-b1/workspace/node_modules PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank:tests:.b1deps POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32800/postgres /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q -rs -p no:cacheprovider tests/command_acceptance_20261031/test_cross_lane.py tests/trigger_crm_acceptance_20261031/test_combined.py --tb=short > .b1tmp/client-acceptance-final.txt 2>&1
+........                                                                 [100%]
+=============================== warnings summary ===============================
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/command_acceptance_20261031/test_cross_lane.py::test_cli_public_adapter_reaches_real_tank_with_cancel_barrier
+  /workspace/codex-trigger-b1/tank/main.py:753: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/command_acceptance_20261031/test_cross_lane.py::test_cli_public_adapter_reaches_real_tank_with_cancel_barrier
+tests/command_acceptance_20261031/test_cross_lane.py::test_cli_public_adapter_reaches_real_tank_with_cancel_barrier
+tests/command_acceptance_20261031/test_cross_lane.py::test_cli_public_adapter_reaches_real_tank_with_cancel_barrier
+tests/command_acceptance_20261031/test_cross_lane.py::test_cli_public_adapter_reaches_real_tank_with_cancel_barrier
+tests/command_acceptance_20261031/test_cross_lane.py::test_cli_public_adapter_reaches_real_tank_with_cancel_barrier
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/command_acceptance_20261031/test_cross_lane.py::test_cli_public_adapter_reaches_real_tank_with_cancel_barrier
+  /workspace/codex-trigger-b1/tank/main.py:810: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/command_acceptance_20261031/test_cross_lane.py::test_cli_public_adapter_reaches_real_tank_with_cancel_barrier
+  /workspace/codex-trigger-b1/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/command_acceptance_20261031/test_cross_lane.py::test_cli_public_adapter_reaches_real_tank_with_cancel_barrier
+  /workspace/codex-trigger-b1/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/command_acceptance_20261031/test_cross_lane.py::test_cli_public_adapter_reaches_real_tank_with_cancel_barrier
+  /workspace/codex-trigger-b1/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/command_acceptance_20261031/test_cross_lane.py::test_cli_public_adapter_reaches_real_tank_with_cancel_barrier
+  /workspace/codex-trigger-b1/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 passed, 14 warnings in 18.30s
+
+
+Existing Rig routes; source head 91eb4b6f642668f615223acc60afa00337fd9fe2
+$ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank:tests:.b1deps /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q -rs -p no:cacheprovider tests/test_rig.py tests/test_rig_proxy.py --tb=short > .b1tmp/rig-regression.txt 2>&1
+.................                                                        [100%]
+=============================== warnings summary ===============================
+tests/test_rig_proxy.py::test_rig_routes_are_reads_and_use_the_workspace_key
+  /workspace/codex-trigger-b1/tank/main.py:753: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_rig_proxy.py::test_rig_routes_are_reads_and_use_the_workspace_key
+tests/test_rig_proxy.py::test_rig_routes_are_reads_and_use_the_workspace_key
+tests/test_rig_proxy.py::test_rig_routes_are_reads_and_use_the_workspace_key
+tests/test_rig_proxy.py::test_rig_routes_are_reads_and_use_the_workspace_key
+tests/test_rig_proxy.py::test_rig_routes_are_reads_and_use_the_workspace_key
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_rig_proxy.py::test_rig_routes_are_reads_and_use_the_workspace_key
+  /workspace/codex-trigger-b1/tank/main.py:810: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_rig_proxy.py::test_rig_routes_are_reads_and_use_the_workspace_key
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+tests/test_rig_proxy.py::test_rig_routes_are_reads_and_use_the_workspace_key
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+tests/test_rig_proxy.py::test_rig_routes_are_reads_and_use_the_workspace_key
+  /home/ammosync/.codex/tervory-audit-20261101/venv312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/test_rig_proxy.py::test_rig_routes_are_reads_and_use_the_workspace_key
+  /workspace/codex-trigger-b1/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/test_rig_proxy.py::test_rig_routes_are_reads_and_use_the_workspace_key
+  /workspace/codex-trigger-b1/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_rig_proxy.py::test_rig_routes_are_reads_and_use_the_workspace_key
+  /workspace/codex-trigger-b1/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_rig_proxy.py::test_rig_routes_are_reads_and_use_the_workspace_key
+  /workspace/codex-trigger-b1/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+17 passed, 14 warnings in 4.34s
+
+
+Pinned Django WSGI
+$ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tank:tests:.b1deps /home/ammosync/trigger-crm-venv312/bin/python -m pytest -q -p no:cacheprovider tests/test_trigger_crm_wsgi.py --tb=short > .b1tmp/wsgi-final.txt 2>&1
+....                                                                     [100%]
+4 passed in 1.46s
+
+
+Existing locked CLI packages
+$ npm ci --ignore-scripts --no-audit --no-fund --prefix cli > .b1tmp/cli-packages.txt 2>&1
+
+added 5 packages in 1s
+
+
+Static / actual Workspace transport checks; COMMAND_TEST_TOOLS=/workspace/codex-trigger-b1/workspace/node_modules
+$ Commands and exits captured individually below.
+$ /home/ammosync/trigger-crm-venv312/bin/ruff check tank/trigger_bot.py tank/trigger_bot_api.py tank/trigger_bot_contract.py tank/trigger_bot_engine.py tank/trigger_bot_grounding.py tank/trigger_bot_shared.py tank/trigger_bot_sources.py tests/trigger_bot_b1
+All checks passed!
+exit: 0
+$ git diff --check origin/main
+exit: 0
+$ node tests/trigger_bot_b1/public_contract.cjs
+PASS bot public transport: exact origin, bounded body, isolated regions, no Workspace identity forwarding, no fallback, CORS match
+exit: 0
+$ workspace/node_modules/.bin/tsc --noEmit --incremental false -p workspace/tsconfig.json
+exit: 0
+PASS yaml.safe_load: both Compose files parse and forward only setting names
+
+
+Compose validation, executed inside the captured static-check Python wrapper:
+from pathlib import Path
+import yaml
+names=['SMTP_HOST','SMTP_PORT','SMTP_USER','SMTP_PASSWORD','SMTP_FROM','TRIGGER_BOT_HANDOVER_ADDRESSES']
+for path in ('docker-compose.yml','docker-compose.za.yml'):
+    env=yaml.safe_load(Path(path).read_text())['services']['tank']['environment']
+    assert all(env[name]=='${'+name+':-}' for name in names)
+Result: PASS. Only configuration names/interpolation syntax were inspected.
+
+Initial failures (superseded, not passes):
+- Initial B1 unit run: 5 failures, caused by missing urlsplit in the reused
+  issuer imports and missing local jsonschema test dependency/PYTHONPATH.
+  Corrected import and dependency path; 24 original unit cases passed, then
+  the expanded final suite passed 38 cases with outside sockets blocked.
+- Initial disposable-DB run: 4 passed, 2 failed. Reused Rig limiter expects
+  route, not bucket; corrected the new DDL and test query. Startup import
+  needed explicit offline placeholder environment names before import;
+  corrected the test setup. Next DB run passed all 6 original cases.
+- Existing Trigger/Command initial run: 231 passed, 1 skipped, 1 failed.
+  The first-build policy test assumed exactly two trigger.* task policies.
+  Kept its original assertions scoped to write/check; added an explicit B1
+  database assertion for route reuse and disabled cache. Combined run green
+  apart from its declared environment skips, as captured above.
+- New FAQ receipt test initially used max_tokens instead of existing column
+  max_tokens_out; corrected test, then passed.
+- New primitive parity test initially normalized table names incorrectly,
+  then pointed at quotes/reserve.py instead of rigbox/reserve.py. Corrected
+  only test lookup/normalization; final AST parity test passes unchanged
+  issuer/limiter/mailer implementations.
+- Enabled CLI acceptance initially: 5 failed, 3 passed, because csv-parse was
+  absent from cli/node_modules. Installed existing lockfile packages using
+  the exact npm ci command above. Re-run: 8 passed, no skips.
+- A shell edit attempt used unavailable `python` and returned
+  `/bin/bash: line 1: python: command not found`; reran that edit with python3.
+- git diff --check found an extra final blank line in the new contract file;
+  removed it. Final diff check exits 0.
+
+Remaining proof gap, not a pass:
+tests/trigger_first_build/test_trigger.py::test_real_room_with_internal_languagetool
+requires TRIGGER_INTERNAL_CHECKER_TEST=1 plus an isolated Trigger room and its
+pinned internal LanguageTool container. That test remains skipped. The five
+other skips in the combined run were subsequently enabled in the 8-pass run.
+
+Founder test screenshots: NONE. No founder session/proof was supplied.
+Actual SMTP delivery/configuration, live Custom Nation prices/source URLs,
+10 real questions, two approved corrections repeated at $0, and cross-tenant
+browser proof remain unverified. No live changes or model calls were used to
+check this work. This is not completion under the founder's acceptance rule.
