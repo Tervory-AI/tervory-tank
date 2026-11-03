@@ -279,28 +279,60 @@ async function smoke(origin, paths) {
   let timer;
   const code = await new Promise((resolve) => {
     // Do not inherit proxy, cloud, dashboard or telemetry settings.
-    const child = spawn("k6", ["run", "--config", output, "--address", "127.0.0.1:0", "--no-usage-report", "--quiet", "scripts/smoke.k6.js"], {
-      env: { PATH: process.env.PATH, HOME: process.env.HOME,
-        TISAN_CHECK_ORIGIN: origin, TISAN_CHECK_PAGES: JSON.stringify(paths),
-        K6_WEB_DASHBOARD: "false" },
-      stdio: "ignore",
-    });
-    timer = setTimeout(() => { child.kill("SIGKILL"); resolve(124); }, 15000);
+    const child = spawn(
+      "k6",
+      [
+        "run",
+        "--config",
+        output,
+        "--address",
+        "127.0.0.1:0",
+        "--no-usage-report",
+        "--quiet",
+        "scripts/smoke.k6.js",
+      ],
+      {
+        env: {
+          PATH: process.env.PATH,
+          HOME: process.env.HOME,
+          TISAN_CHECK_ORIGIN: origin,
+          TISAN_CHECK_PAGES: JSON.stringify(paths),
+          K6_WEB_DASHBOARD: "false",
+        },
+        stdio: "ignore",
+      },
+    );
+    timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      resolve(124);
+    }, 15000);
     child.on("error", () => resolve(127));
     child.on("exit", (code) => resolve(code));
   });
   clearTimeout(timer);
   try {
     const result = JSON.parse(readFileSync(output, "utf8"));
-    if (result.name !== "k6" || !Array.isArray(result.pages) ||
-        result.pages.length !== paths.length || result.pages.some((row, i) =>
-          row.page !== paths[i] || typeof row.ok !== "boolean" ||
-          !Number.isFinite(row.p95_ms) || row.p95_ms < 0 || !(row.requests > 0)))
+    if (
+      result.name !== "k6" ||
+      !Array.isArray(result.pages) ||
+      result.pages.length !== paths.length ||
+      result.pages.some(
+        (row, i) =>
+          row.page !== paths[i] ||
+          typeof row.ok !== "boolean" ||
+          !Number.isFinite(row.p95_ms) ||
+          row.p95_ms < 0 ||
+          !(row.requests > 0),
+      )
+    )
       throw new Error("incomplete smoke result");
-    result.ok = code === 0 && result.ok === true &&
+    result.ok =
+      code === 0 &&
+      result.ok === true &&
       result.pages.every((row) => row.ok && row.status === 200 && row.failures === 0);
-    result.summary = result.pages.map((row) =>
-      `${row.page}: ${row.ok ? 200 : "failed"}; p95 ${row.p95_ms.toFixed(2)} ms`).join("; ");
+    result.summary = result.pages
+      .map((row) => `${row.page}: ${row.ok ? 200 : "failed"}; p95 ${row.p95_ms.toFixed(2)} ms`)
+      .join("; ");
     return result;
   } catch {
     return { name: "k6", ok: false, pages: [], summary: "local k6 smoke unavailable" };
