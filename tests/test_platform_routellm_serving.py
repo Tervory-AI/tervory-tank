@@ -199,3 +199,25 @@ async def test_revalidation_resolves_target_and_records_concrete_model(monkeypat
     sql, args = statements[-1]
     assert 'routellm_status' in sql and args[6] == 'placeholder-weak'
     assert args[-1] == 'served' and args[-5] == .2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('already_in_messages', [False, True])
+async def test_weak_refusal_checks_policy_system_prompt(monkeypatch, already_in_messages):
+    row = promoted()
+    row['system_prompt'] = 'placeholder-system'
+    seen = []
+    tank = tank_stub()
+    def refusal(text, model, **kwargs):
+        seen.append((text, model))
+        return 'placeholder-refused' if 'placeholder-system' in text else None
+    tank.model_call_refusal = refusal
+    def unexpected(_prompt):
+        pytest.fail('the refused weak model must not be scored')
+    monkeypatch.setattr(routing, 'score', unexpected)
+    messages = [{'role': 'user', 'content': 'placeholder-user'}]
+    if already_in_messages:
+        messages.insert(0, {'role': 'system', 'content': row['system_prompt']})
+    result = await routing.serve(tank, row, messages, tenant_id=TENANT)
+    assert result['model'] == 'placeholder-strong'
+    assert seen == [('placeholder-system\nplaceholder-user', 'placeholder-weak')]
