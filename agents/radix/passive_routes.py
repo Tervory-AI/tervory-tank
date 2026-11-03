@@ -53,6 +53,7 @@ class Watch(Domain):
 
 
 async def execute(store, body: Scan, *, scanner=collect, http=None, watched=False, ident=None) -> dict:
+    queued = ident is not None
     ident = ident or (await store.create(body.tenant_id, body.target, body.artifact, watched=True) if watched else await store.create(body.tenant_id, body.target, body.artifact))
     lease = {'tenant_id': str(body.tenant_id), 'scan_id': str(ident)}
     async with httpx.AsyncClient(trust_env=False, timeout=15) if http is None else http as client:
@@ -64,6 +65,10 @@ async def execute(store, body: Scan, *, scanner=collect, http=None, watched=Fals
                 with tempfile.TemporaryDirectory(prefix='radix-passive-') as directory:
                     findings = await scanner(body.target, Path(directory))
                 await store.complete(body.tenant_id, ident, findings)
+                if queued:
+                    # Other events may already have later pending rows. A queued
+                    # run reports its own completion, not the latest origin gate.
+                    return {'scan_id': str(ident), 'status': 'complete', 'findings': findings}
                 result = await store.gate(body.tenant_id, body.target, body.artifact)
                 if result.get('scan_id') != str(ident):
                     raise RuntimeError('assessment superseded')
