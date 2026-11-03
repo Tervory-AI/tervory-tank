@@ -20,7 +20,7 @@ with socket.socket() as reservation:
 # pgserver initializes and owns this disposable cluster. Restart the same cluster
 # with a loopback listener because the existing Rig suite requires a TCP DSN.
 pgserver.pg_ctl(['restart', '-m', 'fast', '-l', str(server.log),
-                 '-o', f'-h 127.0.0.1 -p {port}'], pgdata=server.pgdata,
+                 '-o', f'-h 127.0.0.1 -p {port} -k {server.pgdata}'], pgdata=server.pgdata,
                 user=server.system_user, timeout=15)
 user = urlsplit(server.get_uri()).username
 # No password, API key, production address or credential lookup is involved.
