@@ -14,7 +14,6 @@ from urllib.parse import urlencode
 
 from .client_settings import ClientAutumbraSettings, load_settings
 from .owner_email import (
-    DEFAULT_FIXTURE_TRANSPORT,
     build_owner_update,
     send_owner_update,
 )
