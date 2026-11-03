@@ -1,0 +1,35 @@
+# CI-only synthetic topology; no published ports and no outbound network.
+x-placeholder-service: &placeholder-service
+  image: tervory-autumbra-a2:placeholder
+  build:
+    context: ../../agents
+    dockerfile: ghost/Dockerfile
+  pull_policy: never
+  command: [python, -c, 'import time; time.sleep(600)']
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  dns: [127.0.0.1]
+services:
+  enforce:
+    <<: *placeholder-service
+    environment:
+      AUTUMBRA_ROLE: enforce
+    networks: [placeholder-client]
+  placeholder-other-client:
+    <<: *placeholder-service
+    networks:
+      placeholder-other:
+        aliases: [agent-other, autumbra-enforce-other]
+  placeholder-hub:
+    <<: *placeholder-service
+    networks:
+      placeholder-hub:
+        aliases: [tank, postgres, hermes, workspace, redis, qdrant, litellm, tiger, base, market_lab]
+networks:
+  placeholder-client:
+    internal: true
+  placeholder-other:
+    internal: true
+  placeholder-hub:
+    internal: true
