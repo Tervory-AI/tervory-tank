@@ -205,3 +205,21 @@ test('git status and diff work without exposing secret-file contents', async () 
   assert(status.output.includes('file.txt')); assert(diff.output.includes('+changed'));
   assert(!diff.output.includes('private-git-canary'));
 });
+
+test('cancelling at command approval stops execution and any following model turn', async () => {
+  const f = await folder(); const controller = new AbortController(); let calls = 0;
+  const token = 'tv1.us-east.' + '1'.repeat(32) + '.' + 'x'.repeat(43);
+  await assert.rejects(run(['code', f.root], { store: { get: async () => token },
+    io: { interactive: true, signal: controller.signal, write() {}, prompt: async label => {
+      if (label.startsWith('Run')) { controller.abort(); return 'y'; }
+      return 'run a test';
+    } },
+    transport: async url => {
+      if (url.endsWith('/threads')) return Response.json({ thread_id: 'thread' });
+      calls++;
+      return Response.json({ answer: '', requests: [{ name: 'run_command', arguments: { command: 'printf wrong > cancel-marker' } }] });
+    },
+  }), /cancelled/);
+  assert.equal(calls, 1);
+  await assert.rejects(readFile(join(f.root, 'cancel-marker')));
+});
