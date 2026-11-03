@@ -56,3 +56,16 @@ for (const founder of [false, true]) {
   assert.deepEqual(empty.radix.findings,[]);
 }
 console.log('PASS repo tools reuse approved states, unknown severity, nine findings and hidden operational fields');
+
+for (const founder of [false, true]) {
+  for (const [scan_complete, rows, expected] of [[false, [], 'failed'], [true, [], 'complete'], [false, findings, 'complete']]) {
+    const card = presentCard({summary:'radix.repo.findings',card_id:'placeholder-completion',kind:'other',tool:'radix.repo.findings',status:'confirmed',result:{
+      scan_id:'placeholder-id',status:'complete',scan_complete,findings:rows,
+      tool_status:{'scan.iac':scan_complete?'run':'not run'},
+    }},founder);
+    assert.equal(card.radix.status,expected);
+    assert.equal(card.radix.findings.length,rows.length);
+    assert(!JSON.stringify(card).includes('scan_complete'));
+  }
+}
+console.log('PASS empty incomplete scans use failed state; complete empty scans and partial findings retain their approved states');
