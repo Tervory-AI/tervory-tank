@@ -12,6 +12,7 @@ export async function POST(request: Request) {
     const body = JSON.parse(raw);
     if (typeof body.vault !== "string" || typeof body.connection_id !== "string") return new Response(null, { status: 422 });
     const tenant = await activeTenant();
+    if (!tenant) return new Response(null, { status: 401, headers: { "Cache-Control": "no-store" } });
     const upstream = await commandRequest(tenant, "mcp/oauth/start", {
       method: "POST", body: JSON.stringify({ vault: body.vault, connection_id: body.connection_id }),
     });
