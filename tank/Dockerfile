@@ -15,6 +15,7 @@ RUN --mount=type=secret,id=proxy_ca \
 # Every Tank module is copied by pattern, so a PR that adds a module never edits this line
 # (it used to be a hand-kept list that clashed on almost every Tank PR).
 COPY *.py schema.sql cl100k_base.tiktoken cl100k_base.LICENSE ./
+COPY command_tools ./command_tools
 COPY fonts ./fonts
 COPY skills ./skills
 RUN useradd -m tank && chown -R tank /app
