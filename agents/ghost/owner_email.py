@@ -108,13 +108,10 @@ def build_owner_update(
         stacks.append(name)
         linked_stacks.append(_link(name, str(item["advisory_url"])))
     if not stacks:
-        stack_list = "software"
         stack_list_linked = "software"
     elif len(stacks) == 1:
-        stack_list = stacks[0]
         stack_list_linked = linked_stacks[0]
     else:
-        stack_list = ", ".join(stacks[:-1]) + " and " + stacks[-1]
         stack_list_linked = ", ".join(linked_stacks[:-1]) + " and " + linked_stacks[-1]
 
     # Lead sentence always states what happened. Critical / fix-PR / campaign
