@@ -95,6 +95,7 @@ async def record(tank: Any, result: dict, by: str | None = None) -> dict:
         "model": job["model"], "old_model": job["old_model"], "task_type": job["task_type"],
         "policy_tenant_id": str(job["policy_tenant_id"]) if job["policy_tenant_id"] else None,
         "revalidation_id": str(job["id"]), "eval_id": str(eval_id),
+        "roster_hash": job.get("preflight_hash"),
         "score": result["score"], "passed": result["passed"], "total": result["total"],
         "validated": gate, "validated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -117,7 +118,7 @@ async def record(tank: Any, result: dict, by: str | None = None) -> dict:
             state = await conn.fetchval("SELECT state FROM tank.skills WHERE id=$1 AND version=$2",
                                         job["skill_id"], job["version"])
             # Passing a new model never approves or restores a demoted version.
-            new_state = "staging" if state == "approved" and not gate else state
+            new_state = "staging" if state == "approved" and not gate and not job.get("preflight_hash") else state
             await conn.execute(
                 """UPDATE tank.skills SET last_eval_score=$3,last_eval_at=now(),state=$4,
                 models_validated=models_validated || $5::jsonb,updated_at=now()
@@ -163,7 +164,7 @@ async def drain(tank: Any, limit: int = 20) -> int:
                 token = ACTIVE.set(job)
                 try:
                     pkg = tank.get_package(job["skill_id"], job["version"])
-                    if pkg.task_type != job["task_type"]:
+                    if pkg.task_type is not None and pkg.task_type != job["task_type"]:
                         raise ValueError("Package task type changed")
                     # The exact handler used by /v1/skala/{id}/{version}/evals.
                     await tank.run_skill_evals(pkg.id, pkg.version)

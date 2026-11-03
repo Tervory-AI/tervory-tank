@@ -1,3 +1,5 @@
+-- Transaction-local exemption for this idempotent schema/seed batch only.
+SET LOCAL tank.schema_apply='on';
 -- Tank schema. Applied by Tank on every start; every statement is idempotent.
 -- Build Pack v2, "Tank — the centrepiece": ledger, policy, evals, tasks.
 
@@ -2188,7 +2190,13 @@ BEGIN
       (tenant_id,policy_tenant_id,task_type,old_model,model,policy,skill_id,version)
     SELECT '00000000-0000-0000-0000-000000000001'::uuid,
            NEW.tenant_id,NEW.task_type,previous,NEW.model,to_jsonb(NEW),s.id,s.version
-      FROM tank.skills s WHERE s.task_type=NEW.task_type AND s.state='approved';
+      FROM tank.skills s WHERE s.task_type=NEW.task_type AND s.state='approved'
+      AND NOT EXISTS(SELECT 1 FROM tank.skill_revalidations r WHERE r.tenant_id='00000000-0000-0000-0000-000000000001'::uuid
+        AND r.skill_id=s.id AND r.version=s.version AND r.preflight_hash IS NOT NULL
+        AND r.policy_tenant_id IS NOT DISTINCT FROM NEW.tenant_id AND r.model=NEW.model
+        AND r.completed_at IS NOT NULL AND r.error IS NULL
+        AND r.policy->>'system_prompt' IS NOT DISTINCT FROM NEW.system_prompt
+        AND (r.policy->>'max_tokens_out')::integer=NEW.max_tokens_out);
     RETURN NEW;
 END;
 $$;
@@ -2916,4 +2924,74 @@ DO $$ BEGIN
                 WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
         END IF;
     END IF;
+END $$;
+
+-- B3/A31: a fingerprint binds the served roster, approved package bytes and eval policies.
+CREATE TABLE IF NOT EXISTS tank.roster_checks (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    fingerprint text NOT NULL,
+    roster_hash text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,region,fingerprint)
+);
+CREATE TABLE IF NOT EXISTS tank.roster_heads (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    fingerprint text NOT NULL,
+    roster_hash text NOT NULL,
+    PRIMARY KEY(tenant_id,region)
+);
+ALTER TABLE tank.skill_revalidations ADD COLUMN IF NOT EXISTS preflight_hash text;
+CREATE UNIQUE INDEX IF NOT EXISTS skill_preflight_once ON tank.skill_revalidations
+    (tenant_id,preflight_hash,skill_id,version,COALESCE(policy_tenant_id,'00000000-0000-0000-0000-000000000000'::uuid))
+    WHERE preflight_hash IS NOT NULL;
+-- Every policy writer, including automatic promotion and shadow configuration,
+-- observes the roster barrier. The startup observer creates it before serving.
+CREATE OR REPLACE FUNCTION tank.require_roster_validation() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,tank AS $$ BEGIN
+    IF current_setting('tank.schema_apply',true)='on' THEN
+        IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+        RETURN NEW;
+    END IF;
+    IF EXISTS(SELECT 1 FROM tank.roster_heads h JOIN tank.skill_revalidations r
+        ON r.tenant_id=h.tenant_id AND r.preflight_hash=h.fingerprint
+        WHERE h.tenant_id='00000000-0000-0000-0000-000000000001'::uuid
+        AND (r.completed_at IS NULL OR r.error IS NOT NULL)) THEN
+        RAISE EXCEPTION 'models_validation_required' USING ERRCODE='P0409';
+    END IF;
+    IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+    RETURN NEW;
+END $$;
+CREATE OR REPLACE TRIGGER policy_roster_validation BEFORE INSERT OR UPDATE OR DELETE ON tank.policy
+    FOR EACH ROW EXECUTE FUNCTION tank.require_roster_validation();
+
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.roster_checks ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.roster_checks FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.roster_checks'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.roster_checks AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+   CREATE POLICY tenant_access ON tank.roster_checks FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  ALTER TABLE tank.roster_heads ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tank.roster_heads FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='tank.roster_heads'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON tank.roster_heads AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+   CREATE POLICY tenant_access ON tank.roster_heads FOR ALL TO PUBLIC
+    USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
 END $$;

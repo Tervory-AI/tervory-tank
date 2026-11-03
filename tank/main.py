@@ -918,6 +918,7 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
         problem = graduate.code_candidate_problem(body.model, state=await skill_state(*parsed), task_type=pkg.task_type, on_disk=True)
         if problem:
             raise HTTPException(409, problem)
+    await __import__("roster_validation").ensure(__import__("sys").modules[__name__], body.model_dump())
     async with pool().acquire() as conn:
         await conn.execute(
             """
@@ -943,6 +944,8 @@ async def delete_tenant_policy(task_type: str, tenant_id: uuid.UUID) -> dict[str
     """Remove one tenant's own policy row so that tenant follows the platform default again.
     The platform default row (tenant_id null) is never deleted here. Used to switch a build
     tenant back off a build-only model after a test run."""
+    await __import__("roster_validation").ensure(__import__("sys").modules[__name__],
+        {"task_type": task_type, "tenant_id": tenant_id}, remove=True)
     async with pool().acquire() as conn:
         status = await conn.execute(
             "DELETE FROM tank.policy WHERE task_type=$1 AND tenant_id=$2", task_type, tenant_id,
@@ -1956,6 +1959,9 @@ async def _load_evidence(conn: Any, policy: dict[str, Any]) -> graduate.Evidence
 
 async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by: str) -> None:
     task_type = before["task_type"]
+    if move.action in {"promote", "rollback"}:
+        await __import__("roster_validation").ensure(__import__("sys").modules[__name__],
+            {**before, **move.policy, "tenant_id": None})
     if move.action == "promote" and is_build_only_model(move.policy.get("model")):
         log.warning("graduation %s: build-only model not promoted", task_type)
         return
@@ -2395,7 +2401,7 @@ async def promote(task_type: str, body: PromoteBody) -> dict[str, Any]:
 async def rollback(task_type: str, body: PromoteBody) -> dict[str, Any]:
     async with pool().acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT model, previous_model FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL",
+            "SELECT * FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL",
             task_type,
         )
         if row is None or not row["previous_model"]:
@@ -2403,6 +2409,8 @@ async def rollback(task_type: str, body: PromoteBody) -> dict[str, Any]:
         if graduate.router_cannot_serve(row["previous_model"]):
             raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
         rung, semantic = _rung_for(row["previous_model"])
+        await __import__("roster_validation").ensure(__import__("sys").modules[__name__],
+            {**dict(row), "model": row["previous_model"], "rung": rung})
         await conn.execute(
             """
             UPDATE tank.policy
@@ -4727,6 +4735,8 @@ app.include_router(memory_router)
 
 # B3: process committed model changes through the existing skill-eval handler.
 __import__("skala_revalidation").install(app, __import__("sys").modules[__name__])
+
+__import__("roster_validation").install(app, __import__("sys").modules[__name__])
 
 __import__("morning_report").install(app, __import__("sys").modules[__name__])
 
