@@ -721,3 +721,21 @@ async def test_agent_role_has_t1_privileges_in_both_deployment_orders(database,r
             await conn.execute('REASSIGN OWNED BY agent_tiger TO postgres')
             await conn.execute('DROP OWNED BY agent_tiger')
             await conn.execute('DROP ROLE agent_tiger')
+
+@pytest.mark.asyncio
+async def test_catalogue_fetch_uses_separate_robot_and_sitemap_caps(corridor,monkeypatch):
+    source = '<urlset>' + '<url><loc>'+PAGE+'</loc></url>' + ' ' * 150000 + '</urlset>'
+    async def respond(request):
+        return httpx.Response(200,text=source if request.url.path != '/robots.txt' else 'x'*150000)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        monkeypatch.setattr(corridor.agent.app.state,'http',client)
+        sitemap = await corridor.agent._fetch_text(SITE+'/map.xml',catalogue=True)
+        robots = await corridor.agent._fetch_text(SITE+'/robots.txt',catalogue=True)
+    assert sitemap['text'] == source and not sitemap['truncated']
+    assert len(robots['text']) == 100000 and robots['truncated']
+
+
+def test_serialized_card_bound_includes_escaped_text_duplicate():
+    result = access.tiger_bounded_card({'products':[{'sku':'\\"'*2000} for _ in range(100)],'has_more':False},'products')
+    assert len(json.dumps(result).encode()) < 256000
+    assert result['has_more'] and result['products']
