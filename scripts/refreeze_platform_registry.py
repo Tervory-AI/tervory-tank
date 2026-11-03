@@ -56,7 +56,7 @@ def without_teachers(registry):
 def finish():
     helper = (ROOT / HELPER).read_text()
     origin = re.search(r"ORIGIN_COMMIT = '([a-f0-9]+)'", helper).group(1)
-    first = git('rev-list', '--reverse', origin + '..HEAD').splitlines()[0]
+    first = git('log', '--reverse', '--format=%H', '--diff-filter=A', origin + '..HEAD', '--', HELPER).splitlines()[0]
     baseline = json.loads(git('show', first + ':' + GOLDEN))
     assert baseline['origin_commit'] == origin
     current = capture(ROOT)
@@ -76,7 +76,6 @@ def prepare():
     assert not git('status', '--porcelain'), 'Commit changes before refreezing'
     helper = (ROOT / HELPER).read_text()
     previous = re.search(r"ORIGIN_COMMIT = '([a-f0-9]+)'", helper).group(1)
-    old_first = git('rev-list', '--reverse', previous + '..HEAD').splitlines()[0]
     backup = 'codex/platform-registry-before-refreeze-' + str(int(time.time()))
     git('branch', backup, 'HEAD')
     git('fetch', 'origin', 'main')
@@ -96,7 +95,7 @@ def prepare():
             git('worktree', 'remove', '--force', str(root))
     print(f'Backup: {backup}; new first freeze: {freeze}', flush=True)
     # Old golden-only updates are superseded. Product/move commits replay normally.
-    commits = git('rev-list', '--reverse', old_first + '..HEAD').splitlines()
+    commits = git('rev-list', '--reverse', origin + '..HEAD').splitlines()
     skip = []
     for commit in commits:
         files = set(git('diff-tree', '--no-commit-id', '--name-only', '-r', commit).splitlines())
@@ -108,7 +107,7 @@ def prepare():
         editor.chmod(0o700)
         import os
         env = {**os.environ, 'GIT_SEQUENCE_EDITOR': str(editor)}
-        result = subprocess.run(['git', 'rebase', '-i', '--onto', freeze, old_first], cwd=ROOT, env=env)
+        result = subprocess.run(['git', 'rebase', '-i', '--onto', freeze, origin], cwd=ROOT, env=env)
     if result.returncode:
         print('Resolve conflicts preserving current main, then git rebase --continue. For golden/helper conflicts keep the new first freeze version. Run this script finish after rebase.', file=sys.stderr)
         raise SystemExit(result.returncode)
