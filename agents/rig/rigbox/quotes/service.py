@@ -213,7 +213,7 @@ class QuoteService(Service):
         if old["state"] == "store_confirmed":
             # An active worker owns this quote. A lost worker may be resumed
             # only after the supplier operation's bounded timeout has elapsed.
-            if datetime.fromisoformat(old["attempted_at"]) > now - timedelta(minutes=15):
+            if old.get("attempted_at") and datetime.fromisoformat(old["attempted_at"]) > now - timedelta(minutes=15):
                 return response(old)
         retailer = await self.store.retailer(tenant_id) or {}
         auto = old.get("auto_order", retailer.get("auto_order") is True)
@@ -244,10 +244,14 @@ class QuoteService(Service):
             order = await self.fulfilment.place_located_order(
                 tenant_id=tenant_id, quote_id=quote_id, located=located, price=state["price"],
                 ship={"address": payload["ship_to"]} if payload.get("ship_to") else None)
-        except Exception:
-            # A lost database response may mean the order exists. Never cancel
-            # or create a different one: a person must inspect this quote.
-            await record(state="needs_person", needs_review=True)
+        except Exception as exc:
+            # Stable order/PO numbers make placement safe to resume after a
+            # transient failure, including a response lost after the insert.
+            # Release only our own lease; a takeover is handled by the corridor.
+            if isinstance(exc, DeliveryError) and str(exc) in {"order_mismatch", "order_rejected"}:
+                await record(state="needs_person", needs_review=True)
+            else:
+                await record(attempted_at=None, attempt_id=None)
             return response(state)
         await record(order=order["order"]["number"], purchase_order=order["purchase_order"]["number"])
         if auto:
