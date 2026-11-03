@@ -78,7 +78,7 @@ def build_result(ctx) -> dict:
         "scan_id": str(ctx.job_id),
         "tenant_id": str(ctx.tenant_id),
         "ref": shown_ref,
-        "summary": summarize(shown_ref, findings) if tool_status[iac.TOOL] == "run" else None,
+        "summary": summarize(shown_ref, findings) + (" scan.iac: not run." if tool_status[iac.TOOL] != "run" else ""),
         "tool_status": tool_status,
         "scan_complete": tool_status[iac.TOOL] == "run",
         "deploy_blocked": critical > 0,
