@@ -884,6 +884,8 @@ ACTION_TIMEOUT = 180
 
 
 def action_timeout(tool: str | None) -> int:
+    if tool == "trigger.write.batch":
+        return 25 * 120 + ACTION_TIMEOUT
     return 390 if tool == "radix.passive.scan" else ACTION_TIMEOUT
 
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
@@ -1367,9 +1369,10 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     if current_actor(actor).founder:
         headers["X-Tervory-Admin"] = actor.user_id
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tank.internal",
-                                 follow_redirects=False, timeout=ACTION_TIMEOUT) as client:
+                                 follow_redirects=False, timeout=action_timeout(action.tool)) as client:
         response = await client.request(method, path, params=params, json=body, headers=headers)
-    if len(response.content) > 256000:
+    response_limit = 25 * 256000 * 2 if action.tool == "trigger.write.batch" else 256000
+    if len(response.content) > response_limit:
         raise ValueError("Tool response is too large; outcome needs reconciliation")
     result = response.json()
     if action.tool == "radix.domain.prove" and 200 <= response.status_code < 300:
