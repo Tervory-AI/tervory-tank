@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, time, timedelta, timezone
-from email.message import EmailMessage
 import json
 import logging
 import os
 import smtplib
 import ssl
+from datetime import UTC, datetime, time, timedelta
+from email.message import EmailMessage
 from zoneinfo import ZoneInfo
 
 from gold import PLATFORM_TENANT
@@ -24,7 +24,7 @@ def window(at: datetime):
     if local < end:
         return None
     start = datetime.combine(local.date() - timedelta(days=1), time(7), PACIFIC)
-    return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
+    return start.astimezone(UTC), end.astimezone(UTC)
 
 
 def configured():
@@ -53,11 +53,11 @@ async def deploys(start: datetime, end: datetime) -> dict:
                     rows = json.loads(data)["workflow_runs"]
                     runs.extend({"id": row["id"], "commit": row["head_sha"], "status": row["status"],
                                  "conclusion": row.get("conclusion"), "created_at": row["created_at"]}
-                                for row in rows if start <= datetime.fromisoformat(row["created_at"].replace("Z", "+00:00")) < end)
+                                for row in rows if start <= datetime.fromisoformat(row["created_at"]) < end)
                     if len(rows) < 100:
                         return {"available": True, "runs": runs}
         return {"available": True, "runs": runs, "truncated": True}
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- isolate report transport/source failure
         log.warning("Morning report deployment read: %s", type(exc).__name__)
         return {"available": False, "reason": "deployment history unavailable", "runs": []}
 
@@ -108,7 +108,7 @@ def send(mail: EmailMessage):
 async def process(tank, at: datetime | None = None):
     if not configured():
         return
-    period = window(at or datetime.now(timezone.utc))
+    period = window(at or datetime.now(UTC))
     if period is None:
         return
     start, end = period
@@ -130,7 +130,7 @@ async def process(tank, at: datetime | None = None):
             status = "uncertain"
             await asyncio.wait_for(asyncio.to_thread(send, message(report)), timeout=65)
             status = "sent"
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 -- isolate report transport/source failure
             log.warning("Morning report: %s", type(exc).__name__)
         finally:
             async with tank.pool().acquire() as conn:
@@ -143,7 +143,7 @@ async def loop(tank):
     while True:
         try:
             await process(tank)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 -- isolate report transport/source failure
             log.warning("Morning report scheduler: %s", type(exc).__name__)
         await asyncio.sleep(30)
 
@@ -153,7 +153,7 @@ def install(app, tank):
     from gold import require_reviewer
 
     @app.get('/v1/platform/morning-report')
-    async def latest(actor=Depends(require_reviewer)):
+    async def latest(actor=Depends(require_reviewer)):  # noqa: B008 -- FastAPI dependency
         if not actor.founder:
             raise HTTPException(404, 'not found')
         with tenant_scope(PLATFORM_TENANT):

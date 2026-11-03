@@ -1,15 +1,15 @@
 """Real SQL report claims; the SMTP boundary is stubbed, never contacted."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 
-import pytest
 import morning_report as report
+import pytest
 from gold import PLATFORM_TENANT
 from test_tank_tenant_boundaries import boundary  # noqa: F401
 
 
 def test_pacific_schedule_and_dst():
-    assert report.window(datetime(2026, 11, 3, 14, 59, tzinfo=timezone.utc)) is None
+    assert report.window(datetime(2026, 11, 3, 14, 59, tzinfo=UTC)) is None
     for stamp, hours in [('2026-03-08T14:00:00+00:00', 23), ('2026-11-01T15:00:00+00:00', 25)]:
         start, end = report.window(datetime.fromisoformat(stamp))
         assert (end-start).total_seconds() == hours*3600
@@ -24,7 +24,7 @@ async def test_durable_claim_and_report(boundary, monkeypatch, fails):  # noqa: 
     monkeypatch.setattr(report, 'deploys', AsyncMock(return_value={'available': False, 'runs': []}))
     send = Mock(side_effect=TimeoutError() if fails else None)
     monkeypatch.setattr(report, 'send', send)
-    clock = datetime(2026, 11, 3, 15, tzinfo=timezone.utc)
+    clock = datetime(2026, 11, 3, 15, tzinfo=UTC)
     await report.process(b.tank, clock)
     await report.process(b.tank, clock)
     assert send.call_count == 1
