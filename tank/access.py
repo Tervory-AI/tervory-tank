@@ -1530,10 +1530,12 @@ async def tiger_position(actor: Actor = Depends(identity)):
 
 
 def tiger_bounded_card(result, field):
-    while len(json.dumps(result, ensure_ascii=False, default=str).encode()) > 110000 and result[field]:
+    while True:
+        card = {**result, 'text': json.dumps(result, ensure_ascii=False, default=str)}
+        if len(json.dumps(card, ensure_ascii=False, default=str).encode()) <= 240000 or not result[field]:
+            return card
         result[field].pop()
         result['has_more'] = True
-    return {**result, 'text': json.dumps(result, ensure_ascii=False, default=str)}
 
 
 async def tiger_card_result(tenant, result: dict) -> dict:
