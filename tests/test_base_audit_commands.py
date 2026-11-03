@@ -15,6 +15,7 @@ import base_audit_commands as commands
 import command
 from base_audit import audit_csv, checked_verdicts, measure
 from trigger_commands import CONFIRMED
+from test_base_audit import audit_db, campaign  # noqa: F401 -- register shared isolated PostgreSQL fixture
 
 TENANT, OTHER, CAMPAIGN, AUDIT, ATTACHMENT = (uuid4() for _ in range(5))
 USER = "placeholder-founder"
@@ -94,7 +95,7 @@ def binding(tool, args):
 
 
 @pytest.mark.asyncio
-async def test_start_requires_confirm_and_reuses_store_seed(corridor):
+async def test_start_requires_confirm_and_returns_store_result(corridor):
     app, state, _ = corridor
     args = {"campaign_id": str(CAMPAIGN), "seed": 42}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://placeholder", headers=HEADERS) as client:
@@ -103,11 +104,10 @@ async def test_start_requires_confirm_and_reuses_store_seed(corridor):
         token = binding("base.audit.start", args)
         try:
             first = await client.post("/v1/command/base/audits/start", json=args)
-            second = await client.post("/v1/command/base/audits/start", json=args)
         finally:
             CONFIRMED.reset(token)
-        assert first.status_code == second.status_code == 200
-        assert first.json()["audit_id"] == second.json()["audit_id"] == str(AUDIT)
+        assert first.status_code == 200
+        assert first.json()["audit_id"] == str(AUDIT)
         assert first.json()["histogram"]["verified_records"] == 240
         assert first.json()["ledger_id"] and first.json()["cost_usd"] == 0
 
@@ -174,3 +174,48 @@ def test_adapters_supply_actor_identity_without_body_scope(monkeypatch):
         _, _, params, body = command.adapter_request(action, ACTOR)
         assert params == {} and body == args
         assert not command.ADAPTERS[tool].paid
+
+
+def test_workspace_audit_download_preserves_bytes_and_status():
+    import subprocess
+    from pathlib import Path
+    result = subprocess.run(["node", "tests/base_audit_download.cjs"],
+                            cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.asyncio
+async def test_start_same_seed_uses_real_saved_audit(audit_db, monkeypatch):
+    pool, rt, _ = audit_db
+    campaign_id, _ = await campaign(pool, tenant=TENANT)
+    monkeypatch.setattr(command, "db", lambda: pool)
+    monkeypatch.setenv("TANK_API_KEY", "placeholder")
+    monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", USER)
+    async def receipt(tenant, tool):
+        assert (tenant, tool) == (TENANT, "base.audit.start")
+        return str(uuid4())
+    monkeypatch.setattr(commands, "receipt", receipt)
+    app = FastAPI()
+    app.include_router(commands.build_router())
+    app.dependency_overrides[command.identity] = lambda: ACTOR
+    args = {"campaign_id": str(campaign_id), "seed": 42}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://placeholder", headers=HEADERS) as client:
+        assert (await client.post("/v1/command/base/audits/start", json=args)).status_code == 409
+        token = binding("base.audit.start", args)
+        try:
+            first = await client.post("/v1/command/base/audits/start", json=args)
+            second = await client.post("/v1/command/base/audits/start", json=args)
+        finally:
+            CONFIRMED.reset(token)
+    assert first.status_code == second.status_code == 200, (first.text, second.text)
+    assert first.json()["audit_id"] == second.json()["audit_id"]
+    from uuid import UUID
+    store = commands.AuditStore(rt)
+    original = await store.get(TENANT, campaign_id, UUID(first.json()["audit_id"]))
+    reopened = await store.create(TENANT, campaign_id, 42, USER)
+    assert reopened["id"] == original["id"]
+    assert len(original["records"]) == 200 and reopened["records"] == original["records"]
+    assert reopened["population_sha256"] == original["population_sha256"]
+    async with pool.acquire() as conn:
+        count = await conn.fetchval("SELECT count(*) FROM tank.base_audits WHERE tenant_id=$1 AND campaign_id=$2 AND seed=$3", TENANT, campaign_id, 42)
+    assert count == 1
