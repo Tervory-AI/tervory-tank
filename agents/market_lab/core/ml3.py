@@ -1,5 +1,4 @@
 """Private Market Lab reads and alert delivery through the existing Tank corridor."""
-from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException
