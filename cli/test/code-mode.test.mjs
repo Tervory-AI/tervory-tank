@@ -181,3 +181,27 @@ test('fake Tank can request a missing-file read, explicit edit and explicit test
   const execution = JSON.parse(results.at(-1).find(r => r.name === 'run_command').output).result;
   assert.equal(execution.code, 0); assert(execution.output.includes('# pass 1'));
 });
+
+test('all repository live-key families and assigned-secret lines are redacted', () => {
+  // Synthetic values assembled at runtime, never credentials or live data.
+  const samples = [
+    '-----BEGIN ' + 'PRIVATE KEY-----', 'AKIA' + '0'.repeat(16), 'ghp_' + 'a'.repeat(24),
+    'github_pat_' + 'a'.repeat(24), 'xoxb-' + 'a'.repeat(12), 'sk-ant-' + 'a'.repeat(12),
+    'sk-' + 'a'.repeat(24), ...['sk', 'pk', 'rk'].map(prefix => prefix + '_live_' + 'a'.repeat(12)),
+    'AIza' + 'a'.repeat(30), 'eyJ' + 'a'.repeat(20) + '.' + 'a'.repeat(10) + '.' + 'a'.repeat(10),
+    ...['API_KEY', 'secret-key', 'client_secret', 'password', 'passwd', 'access_token', 'auth-token']
+      .map(name => name + '=' + 'a'.repeat(14)),
+  ];
+  for (const value of samples) assert.equal(redactSecrets(value), '[redacted]');
+});
+
+test('git status and diff work without exposing secret-file contents', async () => {
+  const f = await folder();
+  execFileSync('git', ['add', 'file.txt'], { cwd: f.root });
+  await writeFile(join(f.root, 'file.txt'), 'changed\n');
+  await writeFile(join(f.root, '.env'), 'private-git-canary');
+  const status = await f.tool({ name: 'git', arguments: { action: 'status' } }, io());
+  const diff = await f.tool({ name: 'git', arguments: { action: 'diff' } }, io());
+  assert(status.output.includes('file.txt')); assert(diff.output.includes('+changed'));
+  assert(!diff.output.includes('private-git-canary'));
+});
