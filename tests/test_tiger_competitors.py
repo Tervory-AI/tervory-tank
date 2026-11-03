@@ -751,3 +751,16 @@ async def test_sitemap_challenge_fragments_use_browser_detector(marker):
     result = await CatalogueDiscovery(fetch,render,gate,publish).run([SITE],[OWN])
     assert result['sites'][0]['status'] == 'human_check' and recorded == [True]
     assert gate.calls.count(SITE+'/sitemap.xml') == 2
+
+@pytest.mark.asyncio
+async def test_position_arithmetic_includes_competitors_beyond_twentieth(corridor):
+    urls = [SITE+'/products/'+str(i).zfill(3) for i in range(21)]
+    await corridor.pool.executemany("""INSERT INTO agent_tiger.matches(tenant_id,sku,url,method,identifiers,seen_on,state)
+        VALUES($1,'own',$2,'gtin','{}',$2,'confirmed')""", [(TENANT,url) for url in urls])
+    await corridor.pool.executemany("""INSERT INTO agent_tiger.observations(tenant_id,url,price,currency,method)
+        VALUES($1,$2,$3,'USD','jsonld')""", [(TENANT,url,1 if i == 20 else 12) for i,url in enumerate(urls)])
+    response = await corridor.client.get('/v1/access/tiger/position')
+    assert response.status_code == 200
+    row = response.json()['products'][0]
+    assert len(row['competitors']) == 21 and row['rank'] == 22
+    assert row['cheapest']['url'] == urls[-1] and row['difference'] == '14.00'
