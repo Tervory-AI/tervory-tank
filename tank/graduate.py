@@ -468,6 +468,8 @@ def rollback_if_dropped(policy: dict[str, Any], evidence: Evidence, now: datetim
         return Move("hold", _copied(policy), None)
     ceiling = _float(policy.get("max_reject_rate"), DEFAULT_MAX_REJECT)
     bar = _float(policy.get("eval_threshold"), DEFAULT_THRESHOLD)
+    if str(policy.get("model") or "").startswith("routellm:"):
+        bar = max(bar, DEFAULT_THRESHOLD)
     reasons: list[str] = []
     if evidence.judged > 0 and round(evidence.rejected / evidence.judged, 4) > round(ceiling, 4):
         reasons.append("client rejections are above the bar")
