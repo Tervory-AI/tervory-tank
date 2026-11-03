@@ -27,7 +27,9 @@ def fixes(store, tenant):
             brief = brief_for(match)
         except (PatchBurned, ValueError, TypeError):
             continue
-        items.append({'id': match['id'], 'package': brief.package,
+        items.append({'id': match['id'], 'name': brief.package, 'status': brief.severity.value,
+                      'summary': f"{brief.from_version} → {brief.to_version} · {match.get('advisory_id') or ''} · {match['id']}",
+                      'package': brief.package,
                       'from_version': brief.from_version, 'to_version': brief.to_version,
                       'advisory_id': match.get('advisory_id'), 'severity': brief.severity.value})
     return {'items': items}
