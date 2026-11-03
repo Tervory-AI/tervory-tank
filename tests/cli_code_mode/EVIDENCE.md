@@ -5,6 +5,91 @@ Branch: `codex/cli-code-mode`. Work is isolated at
 No PR has been opened by this job. No merge or deployment was performed.
 **Offline verification is not founder acceptance.**
 
+## PR #598 review fixes — 3 November 2026
+
+The existing PR is <https://github.com/Tervory-AI/tervory-tank/pull/598>.
+Main was merged at `e8ac46fd` (both schema additions retained), then refreshed
+and merged at `dc7cd7c0` (`origin/main` = `cf95a07e`). No push to main.
+The implementation notes below this review section describe earlier runs;
+they are not a claim that founder acceptance has happened.
+
+| Review | File and verified line | Result |
+| --- | --- | --- |
+| 1 | `cli/src/code-tools.mjs:33,78,112,340`; `cli/test/code-mode.test.mjs:201` | Every Git subprocess uses global literal pathspec mode, including scratch application. Ignored tracked names come from `ls-files`, because `check-ignore` rejects global literal mode. Tracked `.e*` cannot include tracked `.env` in a diff. |
+| 2 | `cli/src/code-tools.mjs:314`; `cli/test/code-mode.test.mjs:236` | Status uses `--ignore-submodules=all`. Registered/committed submodule has a distinct clean driver and a same-size edit: removing the flag was independently verified to execute its marker command. Fixed status and diff leave both markers absent. |
+| 3 | `cli/src/code-tools.mjs:27,94,196`; `cli/test/code-mode.test.mjs:261` | Missing-file canonical parent plus basename is checked both when resolving and immediately before rename. `.git` is case-insensitive. Tests cover direct `lnk -> .git` creation, approval-time ancestor swaps, and `.GIT`. |
+| 4 | `cli/src/code-tools.mjs:65,78`; `cli/test/code-mode.test.mjs:280` | Repository Git directory and work tree are pinned after discovery. An approved command creates a nested repository; subsequent list/status/diff still use the original one. Scratch Git has its own explicit directory/work-tree pair. |
+| 5a | `cli/src/code-tools.mjs:33` | Removed the shell option; spawn uses literal `shell: false`. |
+| 5b | `.github/workflows/cli.yml:51`; `cli/src/code-tools.mjs:218` | Ephemeral Ubuntu runner enables unprivileged namespaces when its AppArmor knob exists, then requires a successful Bubblewrap probe. External hosted Node installation is bound read-only and named before approval. PR fake-tank passed (links below). |
+| 5c | `tests/test_perplexity_research.py:414,431` | Added command.code to the additive seed set and compared every copied policy field with command.turn. Targeted test passes; full offline suite is being run, without excluding this test. |
+| 6 | `cli/test/code-mode.test.mjs:150` | Confinement command must return 0 and print `sandbox-ok`, as well as hide canaries. A failed sandbox cannot pass. |
+| 7 | `cli/src/code-tools.mjs:218,287`; `cli/README.md:50`; `tests/cli_code_mode/worker-proof.mjs:1` | Leading external Node/Python/pytest runner resolves to only its own read-only runtime directories. Venv base Python is included; intermediate links are recreated without mounting their host parent. No HOME/config/SSH/keychain directory is mounted. Actual worker terminal record runs the existing schema test file after y: 2 passed. |
+| 8 | `cli/src/code-mode.mjs:9,22,32`; `tank/command.py:1720,1791`; `tests/test_command_code.py:128` | Prompt UUID plus continuation flag stores the user message once. Bounded redacted history (40 entries / 200,000 UTF-8 bytes) includes earlier prompts, answers, names/arguments as DATA. Backend tests prove three rounds store one user message/three receipts and no history in state/events/tasks. CLI test exercises eviction across 60 offline prompts. |
+| 9 | `tank/command.py:1752`; `tests/test_command_code.py:169,180` | Prose is an answer with no tool requests; fenced JSON is decoded. Structured or malformed tool proposals retain strict tool/argument validation. A real route test accepts prose and retains paid ledger receipts. |
+
+### Commands and observed results for the review
+
+All commands ran in `/workspace/codex-cli-code-mode` unless a working directory
+is explicitly stated. `.task-tmp` is ignored and contains only local test
+artifacts/dependencies. PostgreSQL is the owned disposable `cli-code-mode-tests`
+container on loopback port 55468; no production data was queried or changed.
+
+- `git fetch origin && git checkout codex/cli-code-mode && git merge origin/main`:
+  schema conflict resolved retaining both additions; schema tests 2 passed.
+- `git fetch origin && git merge origin/main`: clean later merge of MCP work,
+  `dc7cd7c0`; every push was preceded by `git merge origin/main`.
+- `TMPDIR="$PWD/.task-tmp" node --test cli/test/code-mode.test.mjs`:
+  19 passed before the extra runtime-link case; its targeted run then passed.
+- `TMPDIR="$PWD/.task-tmp" npm test --prefix cli`: under concurrent host load,
+  79/81 passed, two deadline failures (regex worker and existing redirect test).
+- `TMPDIR="$PWD/.task-tmp" node --expose-gc --test --test-concurrency=1 cli/test/*.test.mjs`:
+  **82 passed, 0 failed**, 87.839 seconds. Later strengthened submodule/history
+  tests each passed separately with the exact commands below.
+- `TMPDIR="$PWD/.task-tmp" node --test --test-name-pattern='clean/process' cli/test/code-mode.test.mjs`:
+  1 passed; same-size submodule edit, distinct driver, registered submodule.
+- `TMPDIR="$PWD/.task-tmp" node --test --test-name-pattern='session history' cli/test/code-mode.test.mjs`:
+  1 passed, including 60 prompts and byte/entry limits.
+- `TMPDIR="$PWD/.task-tmp" node --test --test-name-pattern='external|missing files|Git reads|confinement|approved command' cli/test/code-mode.test.mjs`:
+  5 passed (read-only runtime, intermediate links, pinned repository, hook escape,
+  command confinement).
+- `TMPDIR="$PWD/.task-tmp" PYTHONPATH=.task-tmp/deps:tank:tests POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55468/pooltest /home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q tests/test_command_code.py`:
+  **15 passed**, 46.38 seconds, including real mocked-upstream router/ledger tests.
+- Same environment/interpreter with `-m pytest -q tests/test_perplexity_research.py::test_schema_applies_twice_and_preserves_policy`:
+  **1 passed**, 9.03 seconds.
+- `/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'`: passed.
+- `sh .github/scripts/cli_version_guard.sh origin/main`: passed, 0.1.1 → 0.2.0.
+- `git diff --check`: passed. AST source extraction of `run_route` versus
+  `git show origin/main:tank/main.py`: byte-identical.
+
+Ubuntu CI proof before the final merge/docs refresh:
+[fake-tank passed](https://github.com/Tervory-AI/tervory-tank/actions/runs/41618528889/job/125857964762).
+The prior security run including Semgrep also
+[passed](https://github.com/Tervory-AI/tervory-tank/actions/runs/41616631339/job/125852066593).
+These links identify the tested revisions; current-head CI remains separately visible on the PR.
+
+### Real worker terminal proof and acceptance boundary
+
+Exact recorded command (real stdin/stdout TTY):
+
+```sh
+script -qefc 'env TERVORY_NO_UPDATE_CHECK=1 CODE_PROOF_PYTHON=/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python node --import ./tests/cli_code_mode/worker-proof.mjs cli/bin/tervory.mjs code /workspace/codex-cli-code-mode' .task-tmp/worker-proof.typescript
+```
+
+Inputs: `Run the repository's schema test file.`, then literal `y`, then `/exit`.
+The full entrypoint transcript is committed as `worker-test.txt`: the complete
+Python command and both runtime directories appear before the approval;
+`tests/test_schema.py` reports **2 passed in 0.23s**, CLI exit 0.
+This is the real CLI entrypoint and actual Bubblewrap/test execution on the
+worker. Only keychain/HTTP are offline stubs. There was no live token read,
+provider request, invented charge or production thread. `Receipt pending`
+is the actual offline display, not proof of a real receipt.
+
+The founder's live worker question, `/chats` receipt and screenshots are still
+missing. No offline test or rendered log is claimed as that founder test.
+No browser screenshot has been fabricated. No merge/deployment was performed.
+Additional terminal wording introduced by the review: `Read-only runner: {path}`.
+The requested directory names are displayed before the existing Run prompt.
+
 ## Result and file map
 
 `tervory code [folder]` uses the existing keychain token and fixed regional
