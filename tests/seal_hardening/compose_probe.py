@@ -46,7 +46,7 @@ def inside():
             texts = []
             for service in ("baseline", "tiger-ocr"):
                 request = urllib.request.Request("http://" + service + ":3000/ocr", data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
-                with urllib.request.urlopen(request, timeout=30) as response:
+                with urllib.request.urlopen(request, timeout=120) as response:
                     texts.append(json.load(response)["text"])
             rows.append([png.stem, *texts])
         print(json.dumps(rows))
