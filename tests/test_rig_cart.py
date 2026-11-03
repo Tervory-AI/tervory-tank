@@ -89,6 +89,7 @@ class Live:
 
 
 async def setup(monkeypatch):
+    monkeypatch.setenv('RIG_LOCATE_ORDER_MODE', 'sandbox')
     monkeypatch.setenv('RIG_LOCATE_HOLD_SECRET', 'offline-price-hold-fixture-' * 2)
     store, fake = MemoryStore(), Woo()
     await store.put_retailer(TENANT, 'invented-us-store', None, None, locate_enabled=True)
@@ -115,15 +116,17 @@ async def setup(monkeypatch):
     service.locate_checker = Live()
     calls = []
 
-    async def confirmed(tenant, payload):
-        # Contract fake for the parallel branch's shared idempotent step.
-        if payload['reference'] not in {call[1]['reference'] for call in calls}:
-            calls.append((tenant, payload))
-    service.store_confirms_payment = confirmed
     async def platforms(tenant, config):
         return Platform(client, config, CREDS)
     clock = [NOW]
     cart = Cart(service, platforms, clock=lambda: clock[0])
+    placement = cart.fulfilment.place_located_order
+    async def place(**kwargs):
+        result = await placement(**kwargs)
+        if kwargs['quote_id'] not in {call[1]['quote_id'] for call in calls}:
+            calls.append((kwargs['tenant_id'], kwargs))
+        return result
+    cart.fulfilment.place_located_order = place
     await cart.connect(TENANT, config)
     return cart, fake, config, calls, clock, client
 
@@ -205,7 +208,7 @@ async def test_expiry_release_and_late_signed_payment_honoured_once(monkeypatch)
         await cart.webhook(TENANT, raw, signed(raw))
         raw2 = b'{"id":1,"changed":true}'
         await cart.webhook(TENANT, raw2, signed(raw2))
-        assert len(calls) == 1 and calls[0][1]['kind'] == 'locate'
+        assert len(calls) == 1 and calls[0][1]['quantity'] == 1
         assert (await cart.order(TENANT, SESSION, result['id']))['late_payment'] is True
         with pytest.raises(CommerceError, match='not_found'):
             await cart.order(TENANT, 'other-session-' * 4, result['id'])
@@ -322,12 +325,6 @@ async def test_shared_confirmation_gate_paid_retry_and_quote_switch_recovery(mon
     cart, fake, _, calls, clock, client = await setup(monkeypatch)
     try:
         await cart.add(TENANT, SESSION, 'stock', 1)
-        shared = cart.service.store_confirms_payment
-        del cart.service.store_confirms_payment
-        with pytest.raises(CommerceError, match='store_confirmation_unavailable'):
-            await cart.checkout(TENANT, SESSION)
-        assert not fake.orders
-        cart.service.store_confirms_payment = shared
         checkout = await cart.checkout(TENANT, SESSION)
         await cart.connect(TENANT, {'mode': 'quote'})
         clock[0] += timedelta(seconds=300)
@@ -336,10 +333,120 @@ async def test_shared_confirmation_gate_paid_retry_and_quote_switch_recovery(mon
         fake.orders['1'].update(status='processing', date_paid=clock[0].isoformat())
         raw = b'{"id":1}'
         await cart.webhook(TENANT, raw, signed(raw))
-        assert len(calls) == 1
+        assert len(calls) == 0  # Store stock needs no supplier order.
         config = await cart.store.commerce_config(TENANT)
         await cart.store.save_commerce_config(TENANT, {**config, 'mode': 'cart'})
         assert (await cart.checkout(TENANT, SESSION))['id'] == checkout['id']
         assert len(fake.orders) == 1
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_mixed_cart_concurrent_webhooks_and_readback_use_one_located_order(monkeypatch):
+    cart, fake, _, calls, _, client = await setup(monkeypatch)
+    try:
+        for sku in ('stock', 'located', 'back'):
+            await cart.add(TENANT, SESSION, sku, 3, back_order=sku == 'back')
+        checkout = await cart.checkout(TENANT, SESSION)
+        fake.orders['1'].update(status='processing', date_paid=NOW.isoformat())
+        raw = b'{"id":1}'
+        await asyncio.gather(cart.webhook(TENANT, raw, signed(raw)),
+                             cart.webhook(TENANT, raw, signed(raw)),
+                             cart.order(TENANT, SESSION, checkout['id']))
+        result = await cart.order(TENANT, SESSION, checkout['id'])
+        assert result['state'] == 'placed' and len(calls) == 1
+        row = await cart.rows.get(TENANT, checkout['id'])
+        assert row['lines'][2]['fulfilment_state'] == 'back_order'
+        reference = 'cart:' + checkout['id'] + ':' + row['lines'][1]['id']
+        saved = await cart.store.locate_order(TENANT, reference)
+        assert saved['purchase_order']['quantity'] == 3
+        assert saved['purchase_order']['state'] == 'draft'
+        assert await cart.store.locate_order(OTHER, reference) is None
+        assert calls[0][1]['quote_id'] == reference
+        for value in ('Private Supplier', 'private-supplier.example', 'unit_cost'):
+            assert value not in json.dumps(result)
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('error,expected', [('order_unavailable', 'paid_pending'),
+                                          ('order_mismatch', 'needs_person'),
+                                          ('order_rejected', 'needs_person')])
+async def test_placement_failure_releases_only_own_lease_and_retries(monkeypatch, error, expected):
+    from rigbox.quotes.senders import DeliveryError
+    cart, fake, _, calls, _, client = await setup(monkeypatch)
+    try:
+        await cart.add(TENANT, SESSION, 'located', 2)
+        checkout = await cart.checkout(TENANT, SESSION)
+        real = cart.fulfilment.place_located_order
+        async def lost_response(**kwargs):
+            if error == 'order_unavailable':
+                await real(**kwargs)  # Response lost after the durable insert.
+            raise DeliveryError(error)
+        cart.fulfilment.place_located_order = lost_response
+        fake.orders['1'].update(status='processing', date_paid=NOW.isoformat())
+        raw = b'{"id":1}'
+        await cart.webhook(TENANT, raw, signed(raw))
+        row = await cart.rows.get(TENANT, checkout['id'])
+        assert row['state'] == expected and row['attempt_id'] is None
+        cart.fulfilment.place_located_order = real
+        await cart.webhook(TENANT, raw, signed(raw))
+        row = await cart.rows.get(TENANT, checkout['id'])
+        assert row['state'] == ('placed' if expected == 'paid_pending' else 'needs_person')
+        assert len(calls) == (1 if expected == 'paid_pending' else 0)
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_cart_auto_order_sends_once_and_quote_default_quantity_stays_one(monkeypatch, tmp_path):
+    from rigbox.fulfilment import RigOrders
+    cart, fake, _, _, _, client = await setup(monkeypatch)
+    (tmp_path / 'placeholder-outbox').mkdir()
+    monkeypatch.setenv('RIG_LOCATE_OUTBOX_DIR', str(tmp_path / 'placeholder-outbox'))
+    try:
+        retailer = await cart.store.retailer(TENANT)
+        await cart.store.put_retailer(TENANT, retailer['name'], retailer.get('email'), None,
+                                     locate_enabled=True, auto_order=True)
+        await cart.add(TENANT, SESSION, 'located', 2)
+        checkout = await cart.checkout(TENANT, SESSION)
+        row = await cart.rows.get(TENANT, checkout['id'])
+        line = row['lines'][0]
+        quote_id = 'placeholder-quote'
+        await RigOrders(cart.store).place_located_order(tenant_id=TENANT, quote_id=quote_id,
+            located=line['located'], price={'amount': line['price'], 'currency': 'USD'})
+        assert (await cart.store.locate_order(TENANT, quote_id))['purchase_order']['quantity'] == 1
+        fake.orders['1'].update(status='processing', date_paid=NOW.isoformat())
+        raw = b'{"id":1}'
+        await cart.webhook(TENANT, raw, signed(raw))
+        await cart.webhook(TENANT, raw, signed(raw))
+        reference = 'cart:' + checkout['id'] + ':' + line['id']
+        assert (await cart.store.locate_order(TENANT, reference))['purchase_order']['state'] == 'sent'
+        assert len(list((tmp_path / 'placeholder-outbox').rglob('*.eml'))) == 1
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_stolen_cart_lease_returns_current_row(monkeypatch):
+    cart, fake, _, _, clock, client = await setup(monkeypatch)
+    try:
+        await cart.add(TENANT, SESSION, 'located', 1)
+        checkout = await cart.checkout(TENANT, SESSION)
+        row = await cart.rows.get(TENANT, checkout['id'])
+        row['state'] = 'paid_pending'
+        await cart.rows.put(TENANT, row['id'], row)
+        real = cart.fulfilment.place_located_order
+        async def takeover(**kwargs):
+            current = await cart.rows.get(TENANT, row['id'])
+            clock[0] += timedelta(minutes=16)
+            cart.fulfilment.place_located_order = real
+            await cart._fulfil(TENANT, current)
+            return await real(**kwargs)
+        cart.fulfilment.place_located_order = takeover
+        assert (await cart._fulfil(TENANT, row))['state'] == 'placed'
+        assert (await cart.rows.get(TENANT, row['id']))['state'] == 'placed'
     finally:
         await client.aclose()
