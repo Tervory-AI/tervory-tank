@@ -58,3 +58,43 @@ git diff --check
 Result: exit 0.
 
 Broader lint on tank/trigger_bot.py additionally reports its pre-existing import order (SmtpMailer, PgRateLimits); unchanged by this review.
+
+Initial CI at 11543517:
+https://github.com/Tervory-AI/tervory-tank/actions/runs/41644010519/job/125944654818
+2 failed, 6746 passed, 42 skipped, 125 warnings, 1799 subtests passed in 887.73s.
+- Real change failure: tests/test_schema.py::test_schema_statements_are_idempotent rejected the standalone DELETE statement. Corrected: orphan deletion now occurs only inside the absent-FK guard in the DO block, before adding that FK.
+- Untouched Rig screenshot mismatch: tests/test_rig_landing_overflow.py::test_decorative_overflow_preserves_viewport[landing-tervory-375]. Exact screenshot hashes in that CI log. No page/test changed to suppress it.
+
+CI isolation at 11543517:
+https://github.com/Tervory-AI/tervory-tank/actions/runs/41644011275/job/125944965071
+393 passed, zero skips, including tests/test_tenant_rls.py; RLS matrix 239 tables across 13 schemas.
+
+Main ecef216b merged; code_receipt conflict resolved retaining both main's agent argument and B1's transaction connection. Exact revised local harness:
+import os
+from pathlib import Path
+import subprocess
+import sys
+import pgserver
+
+server = pgserver.get_server(Path('.git/rereview-pg'), cleanup_mode='delete')
+uri = server.get_uri()
+# Fixture databases are disposable; no configured runtime connection is read.
+for name in ('POOL_SCHEMA_DATABASE_URL', 'MEMORY_TEST_DATABASE_URL'):
+    os.environ[name] = uri
+result = subprocess.run([sys.executable, '-m', 'pytest', '-q', '-ra',
+    'tests/trigger_bot_b1', 'tests/test_schema.py', 'tests/test_command_zenas_z3.py', 'tests/test_tisan_builder_interfaces.py::test_policy_survives_actual_schema_generator',
+    'tests/test_agent_memory_records.py::test_all_agent_schema_files_use_one_generator',
+    '--disable-socket', '--allow-unix-socket', '--allow-hosts=127.0.0.1,localhost,::1'], check=False)
+server.cleanup()
+sys.exit(result.returncode)
+
+Command: .venv/bin/python .git/run-rereview.py
+Result: 162 passed, zero skipped, 14 warnings in 109.43s.
+Includes all B1, tests/test_schema.py, tests/test_command_zenas_z3.py and both schema-generator checks.
+
+Screenshot investigation command:
+.venv/bin/python -m pytest -q -ra tests/test_rig_landing_overflow.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+Result: 8 failed due to this host's system Chromium GPU crash, not assertion results.
+Retry using cached Playwright headless shell (no browser/test/page changes):
+READ1_CHROMIUM_EXECUTABLE=/home/ammosync/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell .venv/bin/python -m pytest -q -ra tests/test_rig_landing_overflow.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+Result: 8 passed in 17.89s.
