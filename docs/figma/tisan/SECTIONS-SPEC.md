@@ -14,6 +14,8 @@ Footer max labels now contain exactly 40 non-padding characters and wrap inside 
 
 The existing no-logo 390/768 masters now show the closed menu control with no logo space; separate open masters show left-aligned links. Desktop remains expanded nav only, left-aligned. Skip links are visually hidden at rest in every header. Dedicated keyboard-focus specimens at 390 and 1440 show the skip link and its focus outline. Existing master and review root IDs are retained. These corrections await founder approval; they do not inherit the short designs' **Approved 3 Nov** status.
 
+Polish after the re-check: desktop footer `199:594` now uses a fixed 32px gap between the text box (bottom y=176) and links (top y=208), with link labels flush to the text edge. Its height hugs to 512px. No-logo menu-open/menu-close labels in `276:5621`, `276:5657`, `310:37135` and `310:37170` align left at the content edge, matching the open links; their 240px targets remain. All node IDs are retained and these changes still await founder approval. Visual readback checked linked review instances at both widths and the desktop footer. Updated captures: `nov3-polish-footer-1440.png`, `nov3-polish-menu-closed-390.png`, `nov3-polish-menu-closed-768.png`, `nov3-polish-menu-open-390.png`, `nov3-polish-menu-open-768.png`. They supersede the corresponding round 2 captures below.
+
 ## Frame index
 
 All 42 original max section-master root IDs are retained: fourteen families at 390, 768 and 1440. Their 84 A/B max review instances remain linked. The twelve reusable max item masters were also brought to the same limits and type. The following existing review-instance index remains valid; each cell is **short A / short B ; max A / max B**.
