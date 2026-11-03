@@ -14,7 +14,7 @@ database = _database
 ROOT = Path(__file__).resolve().parents[1]
 
 def load(name):
-    spec = importlib.util.spec_from_file_location(name, ROOT / 'jobs/train' / f'{name}.py')
+    spec = importlib.util.spec_from_file_location(name, ROOT / 'tank/training_jobs' / f'{name}.py')
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

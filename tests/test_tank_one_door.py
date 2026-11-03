@@ -176,9 +176,19 @@ def scan(root: Path) -> list[Finding]:
     findings = []
     for file in source_files(root):
         relative = file.relative_to(root).as_posix()
-        if relative.startswith("tank/") or file.suffix not in EXTENSIONS or not file.is_file():
+        if file.suffix not in EXTENSIONS or not file.is_file():
             continue
         text = file.read_text(encoding="utf-8")
+        if relative == "tank/training_jobs/run.py":
+            # Tank owns this one paid-compute boundary. Audit only the submit
+            # call here; provider credentials and SDK imports remain inside Tank.
+            findings.extend(
+                item for item in python_findings(relative, text)
+                if item.kind == "paid compute"
+            )
+            continue
+        if relative.startswith("tank/"):
+            continue
         findings.extend(python_findings(relative, text) if file.suffix == ".py" else other_findings(relative, text))
     return findings
 
@@ -214,14 +224,7 @@ EXCEPTIONS: dict[tuple[str, str, str], tuple[int, str]] = {
     ('hermes/law_routes.py', 'model/paid endpoint', '682052aabab5db9c'): (1, 'Internal endpoint reuses the pinned CPU encoder; Zenas-only authentication and box jurisdiction checks precede encoding.'),
     ('tests/zenas_za_meaning_search/test_hermes_law.py', 'model/paid endpoint', '682052aabab5db9c'): (2, 'In-process ASGI requests with a stub encoder and local Qdrant; outbound sockets are disabled.'),
     ('hermes/embeddings.py', 'model invocation', 'f6436138f93f0a6c'): (1, 'Founder-authorized pinned CPU encoder, fixed local files only; no runtime download or external inference API.'),
-    ('jobs/train/run.py', 'paid compute', '9383fcb131f6eb27'): (1, 'DEFERRED F4: platform training CLI submits paid HF jobs and writes the ledger directly.'),
-    ('jobs/train/run.py', 'paid compute reference', '951be89b581263a9'): (1, 'DEFERRED F4: platform training CLI submits paid HF jobs and writes the ledger directly.'),
-    ('jobs/train/run.py', 'provider import', 'bb1b5c7642961828'): (1, 'DEFERRED F4: platform training CLI submits paid HF jobs and writes the ledger directly.'),
-    ('jobs/train/run.py', 'provider/brain setting', 'fc74ec3718038794'): (2, 'DEFERRED F4: platform training CLI submits paid HF jobs and writes the ledger directly.'),
-    ('jobs/train/train.py', 'provider import', '4ea94efc39f7e458'): (1, 'Training job downloads artifacts and uploads private weights; no inference API call.'),
-    ('jobs/train/train.py', 'provider import', '14eddeff25615d4c'): (1, 'Training job downloads artifacts and uploads private weights; no inference API call.'),
-    ('jobs/train/train.py', 'provider import', 'bb1b5c7642961828'): (1, 'Training job downloads artifacts and uploads private weights; no inference API call.'),
-    ('jobs/train/train.py', 'provider/brain setting', 'fc74ec3718038794'): (1, 'Training job downloads artifacts and uploads private weights; no inference API call.'),
+    ('tank/training_jobs/run.py', 'paid compute', '71e2d2652eb1b27a'): (1, 'Tank-owned HF Jobs submit is founder-confirmed, spend-capped, and protected by advisory lock 871228 plus a durable reservation.'),
     ('litellm/config.yaml', 'configured endpoint', '4eca9db60dcd6816'): (14, 'The Tank-owned provider backend roster; keys are environment references.'),
     ('litellm/config.za.yaml', 'configured endpoint', '4eca9db60dcd6816'): (14, 'The ZA Tank-owned provider backend roster; keys are environment references.'),
     ('researcher/app.py', 'model/paid endpoint', '9f3fd5c68c992e75'): (1, 'Exact loopback destination guard; the local adapter forwards model work only to Tank /v1/route.'),
@@ -299,7 +302,8 @@ def test_audited_sites_are_independent_of_checkout_root(tmp_path: Path) -> None:
     paths = {
         "agents/_brain/runner.py", "agents/base/app.py", "agents/base/room.py",
         "agents/base/sources/context_dev.py", "agents/rig/forge/gpu/reconstruct.py",
-        "researcher/app.py", "tests/market_lab_gpt_researcher/test_researcher.py",
+        "researcher/app.py", "tank/training_jobs/run.py",
+        "tests/market_lab_gpt_researcher/test_researcher.py",
     }
     expected = Counter({identity: count for identity, (count, _) in EXCEPTIONS.items() if identity[0] in paths})
     for directory, prefix in (("clone-one", ""), ("different parent/clone-two", "\n# relocated checkout\n")):

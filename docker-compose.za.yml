@@ -127,8 +127,7 @@ services:
 
   tank:
     build:
-      context: .
-      dockerfile: tank/Dockerfile
+      context: ./tank
       args:
         # Coolify sets SOURCE_COMMIT at image build. GIT_SHA overrides it for a local build.
         SOURCE_COMMIT: ${SOURCE_COMMIT:-}

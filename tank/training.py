@@ -607,7 +607,7 @@ async def _training_readiness(conn: Any, body: TrainingRunRequest) -> dict[str, 
 
 async def _training_quote(body: TrainingRunRequest) -> dict[str, Any]:
     from huggingface_hub import HfApi
-    from jobs.train.run import estimate, training_hardware
+    from training_jobs.run import estimate, training_hardware
     flavor = training_hardware(body.agent)
     api = HfApi(token=os.environ["HF_TOKEN"])
     hardware = await asyncio.to_thread(
@@ -650,7 +650,7 @@ async def training_run(
     quote = await _training_quote(body)
     if quote.get("status") != "ready":
         return quote
-    from jobs.train.run import run
+    from training_jobs.run import run
     from types import SimpleNamespace
 
     return await run(SimpleNamespace(
@@ -668,7 +668,7 @@ async def training_receipt(
     if not os.environ.get("HF_TOKEN") or not os.environ.get("HF_ORG"):
         return {"status": "Hugging Face training is not configured"}
     from huggingface_hub import HfApi
-    from jobs.train.run import record_receipt
+    from training_jobs.run import record_receipt
 
     api = HfApi(token=os.environ["HF_TOKEN"])
     job = await asyncio.to_thread(
