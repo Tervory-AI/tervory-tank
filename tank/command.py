@@ -42,6 +42,8 @@ from command_tools import build_tools, build_founder_tools, build_set, build_adm
 TOOLS = build_tools()
 TENANT_ADMIN_TOOLS = build_admin_tools()
 ADMIN_ONLY_TOOLS = build_set("ADMIN_ONLY_TOOLS")
+# REQUEST_BODY_TOOLS alone includes tisan.preview; CONFIRMED alone includes
+# rig.quote.confirm_payment, tiger.match* and radix.repo.scan.
 REQUEST_BODY_TOOLS = build_set("REQUEST_BODY_TOOLS")
 CONFIRMED = build_set("CONFIRMED")
 

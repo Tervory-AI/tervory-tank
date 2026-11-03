@@ -1513,7 +1513,10 @@ async def run_route(
 
     # BEGIN ROUTELLM SERVING RECEIPT
     if outcome == "delivered" and routellm_decision is not None:
-        await routellm_shadow.record_served(__import__("sys").modules[__name__], req.tenant_id, ledger_id, routellm_decision)
+        try:
+            await routellm_shadow.record_served(__import__("sys").modules[__name__], req.tenant_id, ledger_id, routellm_decision)
+        except Exception as exc:
+            log.error("%s", type(exc).__name__)
     # END ROUTELLM SERVING RECEIPT
     if outcome == "failed":
         upstream: Any = "provider error" if holds_identifier else (data or r.text[:500])
