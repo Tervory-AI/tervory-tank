@@ -59,9 +59,56 @@ The reader makes at most two GETs: the requested node and local variables at `ap
 
 Figma restricts the [Variables REST API](https://developers.figma.com/docs/rest-api/variables/) to Enterprise access (see the [local variables endpoint](https://developers.figma.com/docs/rest-api/variables-endpoints/)). A variables 403 still reads the node with `variables_payload=None`: `collections_known` stays false and missing values remain gaps. Other HTTP errors, timeouts, malformed data, and oversized bodies return the fixed `Figma request failed` error. Without a token, only the recorded Tervory fixture `agents/tisan/fixtures/tervory-landing.json` remains available for offline builds and tests.
 
-Deploy this compose as Raw Compose, as the Ghost proxy pattern does, so Coolify cannot add an outbound app network. Preserve the existing room data volume when switching deployment mode. Deployment routing is unchanged: `.github/scripts/deploy_changed.py:wanted` maps `agents/tisan/docker-compose.yml` to `agent-tisan`; `.github/scripts/room_setup.py` configures `/agents/tisan` with `/docker-compose.yml`. The room image keeps its repository-root context. The proxy alone uses `context: ..` and `dockerfile: radix/Dockerfile`, resolving to the existing `agents/` context and all of that Dockerfile's COPY sources. No Radix Dockerfile or proxy limits change.
+Deploy this compose as Raw Compose, as the Ghost proxy pattern does, so Coolify cannot add an outbound app network. The external data volume is pinned to `lblbn0wjaz30hhdur9l3pylg_agent-tisan-data`, verified read-only on the running room, so the Raw Compose switch retains its saved data. Deployment routing is unchanged: `.github/scripts/deploy_changed.py:wanted` maps `agents/tisan/docker-compose.yml` to `agent-tisan`; `.github/scripts/room_setup.py` configures `/agents/tisan` with `/docker-compose.yml`. The room image keeps its repository-root context. The proxy alone uses `context: ..` and `dockerfile: radix/Dockerfile`, resolving to the existing `agents/` context and all of that Dockerfile's COPY sources. No Radix Dockerfile or proxy limits change.
 
 Skill `tisan.figma/1.1.0` awaits founder approval in Skala; earlier versions are untouched.
+
+### J2 gate 1 verification (3 Nov 2026)
+
+Ran from `/workspace/codex-tisan-w3`, branch `codex/tisan-w3`, Python 3.12.16. No live job, model call, deploy, production SQL, or live-data mutation was performed. The local HTTPS tests use test-only TLS material and placeholder credentials. The REST eval payload adapts the saved MCP recording and does not claim a fresh Figma REST capture.
+
+Commands and results:
+
+```bash
+.venv/bin/python -m pytest tests/test_tisan_figma_live.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --maxfail=1
+# 23 passed; includes Skala's evaluator: 9/9 cases, eligible=true, score=1.0, cost_usd=0, no model calls.
+
+TISAN_TEST_PLAYWRIGHT=/workspace/codex-tisan-w3/.venv/tisan-browser/node_modules/playwright PLAYWRIGHT_BROWSERS_PATH=/home/ammosync/.cache/ms-playwright .venv/bin/python -m pytest tests/test_tisan_*.py tests/tisan_promotion/ tests/test_c10_rooms.py tests/test_secrets.py -q -rs --disable-socket --allow-hosts=127.0.0.1,localhost
+# 284 passed, 16 skipped, 15 existing warnings, 86.39s.
+# Skips: 14 optional local/CI PostgreSQL cases and 2 opt-in npm build cases.
+# Existing Chromium promotion tests are enabled and pass.
+
+.venv/bin/python -m pytest tests/test_room_seal.py::test_raw_compose_files_need_nothing_from_coolify -q --disable-socket --allow-hosts=127.0.0.1,localhost
+# 7 passed.
+
+node --test tests/tisan_gold_actions.test.cjs
+# 1 passed.
+
+docker compose --env-file /dev/null -f agents/tisan/docker-compose.yml config --no-interpolate --quiet
+# Exit 0. Compose validation only; a new Docker image was not built here.
+
+git diff --check origin/main...HEAD
+# Exit 0.
+git diff --exit-code origin/main HEAD -- agents/radix/Dockerfile agents/radix/egress.py tank/skills/tisan.figma/1.0.1
+# Exit 0: Radix and the approved skill version are unchanged.
+```
+
+The initial wider run (`.venv/bin/python -m pytest tests/test_tisan_*.py tests/tisan_promotion/ tests/test_c10_rooms.py tests/test_room_seal.py tests/test_secrets.py -q --disable-socket --allow-hosts=127.0.0.1,localhost --maxfail=3`) produced 384 passed, 19 skipped, and 2 failures: TypeScript was absent for an existing Node test, and Raw Compose required a pinned volume name. Both were corrected; the commands above recheck each failure. Earlier collection attempts needed the existing dependencies installed, including pinned `selectolax==0.3.27` and `jiter==0.18.0`. The new integration tests initially exposed a missing compiled `collections_known` field; it was fixed and the final checks above pass. Test dependencies live only in ignored `.venv/` and `workspace/node_modules/`; repository manifests were not changed.
+
+Read-only live mount/config proof:
+
+```bash
+docker ps -q --filter label=com.docker.compose.service=agent-tisan | xargs -r docker inspect --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Type}} {{.Name}}{{end}}{{end}}'
+# volume lblbn0wjaz30hhdur9l3pylg_agent-tisan-data
+
+docker ps -q --filter label=com.docker.compose.service=agent-tisan | xargs -r docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}} {{index .Config.Labels "com.docker.compose.project.config_files"}}'
+# /artifacts/fdy2ohg2htosrx6zha51gi0e/agents/tisan /artifacts/fdy2ohg2htosrx6zha51gi0e/agents/tisan/docker-compose.yml
+```
+
+`test_deploy_routing_and_all_proxy_copy_sources_resolve` extracts and executes the existing `deploy_changed.py:wanted` function without importing its credential-bearing module setup: this compose maps to `(False, {'agent-tisan'}, False)`. It also verifies the room setup paths and every local Radix Dockerfile COPY source under `agents/`. The complete gate includes `tank/skills/`, so deploy-on-merge also selects the main/ZA stacks and Tisan regional copies according to its existing rules. No deployment logic was changed. Both requested topology tests now assert the exact room/proxy/network membership.
+
+Pending after review: Claude opens the PR; final-head Tank/Workspace CI results must be recorded there. The founder approves `tisan.figma/1.1.0`, supplies `FIGMA_TOKEN` and `TISAN_FIGMA_FILES` in Coolify, and the operator enables Raw Compose before deployment. Founder-browser acceptance and screenshots are still pending: run `tisan.figma` through the existing `/chats` Confirm card for a paired page and an unpaired file in the founder's workspace. The local intercepted browser tests are regression evidence, not that acceptance proof. No PR was opened or merged by this builder.
+
 
 The recorded page has no spacing variables, no font family, weight, or line height, and the Button component has no hover, active, disabled, or error state. Those are gaps. The reader does not fill them in.
 
