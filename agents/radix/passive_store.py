@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS agent_radix.passive_scans (
  PRIMARY KEY (tenant_id,id),
  FOREIGN KEY (tenant_id,domain) REFERENCES agent_radix.passive_domains(tenant_id,domain)
 );
+ALTER TABLE agent_radix.passive_scans ADD COLUMN IF NOT EXISTS checks jsonb;
 ALTER TABLE agent_radix.passive_scans ADD COLUMN IF NOT EXISTS watched boolean NOT NULL DEFAULT false;
 ALTER TABLE agent_radix.passive_scans ADD COLUMN IF NOT EXISTS changes jsonb;
 ALTER TABLE agent_radix.passive_scans ADD COLUMN IF NOT EXISTS previous_scan_id uuid;
@@ -63,6 +64,11 @@ CREATE TABLE IF NOT EXISTS agent_radix.regulation_runs (
  next_attempt timestamptz NOT NULL DEFAULT now(),
  PRIMARY KEY (tenant_id,domain,event_id),
  UNIQUE (tenant_id,scan_id)
+);
+CREATE TABLE IF NOT EXISTS agent_radix.page_hashes (
+ tenant_id uuid NOT NULL, scan_id uuid NOT NULL, domain text NOT NULL,
+ url text NOT NULL, sha256 text NOT NULL CHECK (sha256 ~ '^[a-f0-9]{64}$'),
+ PRIMARY KEY (tenant_id,scan_id,url)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS passive_one_running
  ON agent_radix.passive_scans ((true)) WHERE status='running';
@@ -109,8 +115,8 @@ def compare_findings(current: list[dict], previous: list[dict]) -> dict:
     # A check is namespaced by its scanner. An item is its URL/file and line.
     # A changed severity retires the old finding and introduces the new one.
     def identity(item):
-        return (item.get('tool'), item.get('rule'), item.get('file'),
-                item.get('line') or 0, item.get('severity'))
+        return (item.get('tool'), item.get('rule'), item.get('item') or item.get('file'),
+                0 if item.get('item') else item.get('line') or 0, item.get('severity'))
     old = {identity(item): item for item in previous}
     new = {identity(item): item for item in current}
     return {'new': [item for key, item in new.items() if key not in old],
@@ -130,14 +136,17 @@ class RuleText(HTMLParser):
 def report_finding(row) -> dict:
     item = dict(row)
     encoded = item.pop('fix', None)
-    texts = json.loads(encoded).get(item['rule'], {}) if encoded else {}
+    data = json.loads(encoded) if encoded else {}
+    texts = data.get(item['rule'], {})
+    if '_measured' in data:
+        item.update(data['_measured'])
     for field in ('explanation', 'remediation'):
         text = texts.get(field)
         if text:
             parser = RuleText()
             parser.feed(text)
             item[field] = ' '.join(' '.join(parser.parts).split())
-        else:
+        elif '_measured' not in data:
             item[field] = f"No rule text for {item['rule']}."
     return item
 
@@ -218,7 +227,7 @@ class Store:
             await conn.execute("""UPDATE agent_radix.passive_scans SET status='error'
               WHERE tenant_id=$1 AND id=$2 AND status IN ('pending','running')""", tenant, ident)
 
-    async def complete(self, tenant: UUID, ident: UUID, findings: list[dict]) -> None:
+    async def complete(self, tenant: UUID, ident: UUID, findings: list[dict], *, measurements=None) -> None:
         from scanlib.store import ensure_findings, insert_findings
         high = sum(f['severity'] == 'high' for f in findings)
         critical = sum(f['severity'] == 'critical' for f in findings)
@@ -238,11 +247,14 @@ class Store:
                 changes = compare_findings([report_finding(f) for f in findings], previous)
                 await insert_findings(conn, 'agent_radix', str(tenant), str(ident), findings)
                 row = await conn.fetchrow("""UPDATE agent_radix.passive_scans
-                  SET status='complete',high=$3,critical=$4,completed_at=now(),changes=$5::jsonb,previous_scan_id=$6
+                  SET status='complete',high=$3,critical=$4,completed_at=now(),changes=$5::jsonb,previous_scan_id=$6,checks=$7::jsonb
                   WHERE tenant_id=$1 AND id=$2 AND status='running'
-                  AND lease_until>now() RETURNING id""", tenant, ident, high, critical, json.dumps(changes, default=str), prior)
+                  AND lease_until>now() RETURNING id""", tenant, ident, high, critical, json.dumps(changes, default=str), prior, json.dumps((measurements or {}).get('checks', {})))
                 if row is None:
                     raise RuntimeError('scan lease expired')
+                for url, digest in ((measurements or {}).get('page_hashes') or {}).items():
+                    await conn.execute('''INSERT INTO agent_radix.page_hashes(tenant_id,scan_id,domain,url,sha256)
+                      VALUES($1,$2,$3,$4,$5)''', tenant, ident, domain, url, digest)
         from chassis.events import publish
         for ordinal, finding in enumerate(findings):
             await publish(str(tenant), 'radix.finding', f'{ident}:{ordinal}',
@@ -289,10 +301,10 @@ class Store:
     async def changes(self, tenant: UUID, domain: str) -> dict:
         domain = domain_name(domain)
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow("""SELECT id,status,completed_at,changes,previous_scan_id,
+            row = await conn.fetchrow("""SELECT id,status,completed_at,changes,previous_scan_id,checks,
               (SELECT jsonb_build_object('event_id',r.event_id,'facts',r.facts,
                 'checks',jsonb_build_array('comply.gdpr','cookie-missing-flags'),
-                'browser_cookies_checked',false)
+                'browser_cookies_checked',coalesce(checks->'browser'->>'status'='complete',false))
                FROM agent_radix.regulation_runs r WHERE r.tenant_id=$1 AND r.scan_id=passive_scans.id) AS regulation_event
               FROM agent_radix.passive_scans WHERE tenant_id=$1 AND domain=$2
               ORDER BY created_at DESC,id DESC LIMIT 1""", tenant, domain)
@@ -300,6 +312,8 @@ class Store:
             return {'status': 'pending'}
         result = {'scan_id': str(row['id']), 'status': 'failed' if row['status'] == 'error' else row['status'],
                   'completed_at': row['completed_at'], 'previous_scan_id': str(row['previous_scan_id']) if row['previous_scan_id'] else None}
+        if row.get('checks') is not None:
+            result['checks'] = json.loads(row['checks']) if isinstance(row['checks'], str) else row['checks']
         if row.get('regulation_event') is not None:
             event = row['regulation_event']
             result['regulation_event'] = json.loads(event) if isinstance(event, str) else event
@@ -309,6 +323,15 @@ class Store:
             result.update(delta or {'new': [], 'fixed': [], 'unchanged': []})
             result['findings'] = await self.findings(tenant, row['id'])
         return result
+
+    async def previous_hashes(self, tenant: UUID, domain: str) -> dict:
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("""SELECT url,sha256 FROM agent_radix.page_hashes
+              WHERE tenant_id=$1 AND domain=$2 AND scan_id=(
+                SELECT id FROM agent_radix.passive_scans WHERE tenant_id=$1 AND domain=$2
+                AND status='complete' AND checks->'pages'->>'status'='complete'
+                ORDER BY completed_at DESC,id DESC LIMIT 1)""", tenant, domain)
+        return {r['url']:r['sha256'] for r in rows}
 
     async def gate(self, tenant: UUID, target: str, artifact: str) -> dict:
         target_url(target)
