@@ -55,7 +55,7 @@ FOUNDER_TOOLS = ["base.audit.start", "base.audit.csv", "base.audit.review", "tri
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
 FOUNDER_TOOLS += TISAN_CLIENT_TOOLS
 FOUNDER_TOOLS += ["autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy",
-                  "autumbra.fixes", "autumbra.fix.approve"]
+                  "autumbra.fixes", "autumbra.fix.approve", "autumbra.blocks", "autumbra.blocks.share"]
 
 
 def db() -> Any:
@@ -936,6 +936,14 @@ MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 MAX_THREAD_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 
+class BlockTenantArgs(Body):
+    tenant_id: uuid.UUID
+
+
+class BlockShareArgs(BlockTenantArgs):
+    record_ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
+
+
 class FixMatchArgs(Body):
     match_id: uuid.UUID
 
@@ -1247,6 +1255,8 @@ from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServ
 
 
 ADAPTERS = {
+    "autumbra.blocks": Adapter("GET", "/v1/ghost/autumbra/blocks", BlockTenantArgs, "autumbra.blocks"),
+    "autumbra.blocks.share": Adapter("POST", "/v1/ghost/autumbra/blocks/share", BlockShareArgs, "autumbra.blocks.share"),
     "autumbra.fixes": Adapter("GET", "/v1/ghost/autumbra/fixes", EmptyArgs, "autumbra.fixes"),
     "autumbra.fix.approve": Adapter("POST", "/v1/ghost/autumbra/fix/approve", FixMatchArgs, "autumbra.fix.approve"),
     "autumbra.enforce.list": Adapter("GET", "/v1/ghost/autumbra/enforce/list", EmptyArgs, "autumbra.enforce.list"),
@@ -1491,7 +1501,7 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, scope, None
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
-    if action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy", "autumbra.fixes", "autumbra.fix.approve", *TISAN_CLIENT_TOOLS}:
+    if action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy", "autumbra.fixes", "autumbra.fix.approve", "autumbra.blocks", "autumbra.blocks.share", *TISAN_CLIENT_TOOLS}:
         if adapter.method == 'GET':
             return adapter.method, path, args, None
         return adapter.method, path, {}, args  # Actor headers supply identity, never body fields.
@@ -1685,7 +1695,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if action.tool.startswith("mcp."):
                 from mcp_connections import dispatch
                 status, result = await dispatch(action, actor)
-            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan", "autumbra.enforce.create", "autumbra.enforce.destroy", "autumbra.fix.approve"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan", "autumbra.enforce.create", "autumbra.enforce.destroy", "autumbra.fix.approve", "autumbra.blocks.share"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
@@ -1862,14 +1872,20 @@ async def autumbra_enforce_code_plan(actor: Actor, messages: list[dict], task_id
     tool = parts[0]
     fields = {"autumbra.enforce.list": None, "autumbra.enforce.create": "tenant_id",
               "autumbra.enforce.destroy": "tenant_id", "autumbra.fixes": None,
-              "autumbra.fix.approve": "match_id"}
+              "autumbra.fix.approve": "match_id", "autumbra.blocks": "tenant_id",
+              "autumbra.blocks.share": "record_ids"}
     if tool not in fields:
         return None
     actor = await authorized_actor(actor)
     require_tool(actor, tool)
-    if len(parts) != (1 if fields[tool] is None else 2):
-        raise HTTPException(422, "Use: autumbra.enforce.create|destroy <tenant-uuid>")
-    arguments = {} if fields[tool] is None else {fields[tool]: parts[1]}
+    if tool == "autumbra.blocks.share":
+        if len(parts) < 3:
+            raise HTTPException(422, "The action arguments are invalid")
+        arguments = {"tenant_id": parts[1], "record_ids": parts[2:]}
+    else:
+        if len(parts) != (1 if fields[tool] is None else 2):
+            raise HTTPException(422, "Use: autumbra.enforce.create|destroy <tenant-uuid>")
+        arguments = {} if fields[tool] is None else {fields[tool]: parts[1]}
     action = validate_action(PlannedAction(tool=tool, arguments=arguments), actor)
     ledger = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent="ghost")
     return SimpleNamespace(content=dump({"text": tool, "actions": [action.model_dump(mode="json")]}), ledger_id=ledger)
