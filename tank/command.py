@@ -21,7 +21,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model, field_validator, model_validator
 
 import command_repo
 from trigger_bot_contract import TOOLS as BOT_TOOLS
@@ -45,7 +45,7 @@ TOOLS = {
     "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment"],
     "tisan": ["tisan.scaffold"],
     "radix": ["radix.scan", "radix.repo.scan", "radix.repo.findings"],
-    "zenas": ["zenas.ask", "zenas.matters", "zenas.review", "zenas.watch.add", "zenas.watch.list", "zenas.watch.enable", "zenas.watch.disable"],
+    "zenas": ["zenas.ask", "zenas.matters", "zenas.draft", "zenas.review", "zenas.watch.add", "zenas.watch.list", "zenas.watch.enable", "zenas.watch.disable"],
 }
 TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
 
@@ -1113,6 +1113,29 @@ class ReviewArgs(Body):
     matter_id: uuid.UUID | None = None
 
 
+class ZenasDraftArgs(Body):
+    template: str = Field(min_length=1, max_length=100)
+    jurisdiction: str = Field(min_length=1, max_length=80)
+    terms: dict[str, str] = Field(default_factory=dict)
+    text: str = Field(min_length=1, max_length=20000)
+    matter_id: uuid.UUID | None = None
+
+    @field_validator("template")
+    @classmethod
+    def existing_template(cls, value: str) -> str:
+        from zenas_commands import drafting_templates
+        if value not in drafting_templates():
+            raise ValueError("unknown drafting template")
+        return value
+
+    @field_validator("terms")
+    @classmethod
+    def short_terms(cls, value: dict[str, str]) -> dict[str, str]:
+        if any(not key.strip() or len(key) > 100 or len(item) > 2000 for key, item in value.items()):
+            raise ValueError("invalid drafting terms")
+        return value
+
+
 class TigerMatchArgs(Body):
     match_id: uuid.UUID
 
@@ -1293,6 +1316,7 @@ ADAPTERS = {
     "radix.scan": Adapter("POST", "/v1/skala/scan.static/run", ScanArgs, "Scan supplied source text", False, "other", "scan.static"),
     "zenas.ask": Adapter("POST", "/v1/zenas/answers", ZenasAskArgs, "Ask a civil law question", True, "paid_run"),
     "zenas.matters": Adapter("POST", "/v1/zenas/matters", MatterArgs, "Create a matter"),
+    "zenas.draft": Adapter("POST", "/v1/zenas/drafts", ZenasDraftArgs, "Draft a document", True, "paid_run"),
     "zenas.watch.add": Adapter("POST", "/v1/zenas/regulations/watches", ZenasWatchAddArgs, "zenas.watch.add"),
     "zenas.watch.list": Adapter("GET", "/v1/zenas/regulations/watches", EmptyArgs, "zenas.watch.list"),
     "zenas.watch.enable": Adapter("POST", "/v1/zenas/regulations/watches/{watch_id}", ZenasWatchIdArgs, "zenas.watch.enable"),
@@ -1472,6 +1496,12 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         args["created_by"] = actor.user_id
     elif action.tool == "zenas.matters":
         args.update(created_by=actor.user_id, user_id=actor.user_id)
+    elif action.tool == "zenas.draft":
+        from zenas_commands import draft_payload
+        args = draft_payload(tenant_id=str(actor.tenant_id), home_region=box_region(),
+                             template=args["template"], jurisdiction=args["jurisdiction"],
+                             terms=args["terms"], text=args["text"],
+                             matter_id=args.get("matter_id"))
     elif action.tool == "market_lab.research":
         args["home_region"] = box_region()
     if action.tool == "ledger.savings":
@@ -1501,6 +1531,9 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     import httpx
     from main import app, TANK_API_KEY
     actor = await authorized_actor(actor)
+    if action.tool == "zenas.draft":
+        from trigger_commands import confirmation
+        confirmation(actor, action.tool, action.arguments)
     method, path, params, body = adapter_request(action, actor)
     headers = {"X-Tank-Key": TANK_API_KEY, "X-Tervory-User": actor.user_id,
                "X-Tervory-Tenant": str(actor.tenant_id)}
@@ -1517,6 +1550,10 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     if len(response.content) > response_limit:
         raise ValueError("Tool response is too large; outcome needs reconciliation")
     result = response.json()
+    if action.tool == "zenas.draft" and 200 <= response.status_code < 300:
+        from trigger_routes import code_receipt
+        result = {**result, "status": result.get("state"), "summary": result.get("legal_notice")}
+        result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="zenas"))
     if action.tool == "zenas.watch.list" and 200 <= response.status_code < 300:
         from trigger_routes import code_receipt
         result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="zenas"))
@@ -1677,7 +1714,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if action.tool.startswith("mcp."):
                 from mcp_connections import dispatch
                 status, result = await dispatch(action, actor)
-            elif action.tool.startswith("trigger.") or action.tool in {"rig.quote.confirm_payment", "base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"zenas.draft", "rig.quote.confirm_payment", "base.list.save", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
@@ -1703,7 +1740,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 if refused is not None:
                     card["result"] = refused
                 detail = result.get("detail") if isinstance(result, dict) else None
-                card["error"] = (detail if isinstance(detail, str) and ((action.tool.startswith("zenas.watch.") and status in {403, 404, 422})
+                card["error"] = (detail if isinstance(detail, str) and (((action.tool.startswith("zenas.watch.") or action.tool == "zenas.draft") and status in {403, 404, 422})
                                  or (action.tool == "radix.passive.scan" and detail in {"invalid artifact", "domain proof required"}))
                                  else "The action was refused or failed. It has not been retried.")
             await step(conn, row, state, {"step_id": card_id, "label": adapter.label,
