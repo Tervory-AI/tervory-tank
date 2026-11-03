@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+import urllib.error
 
 ROOT = Path("/source") if len(sys.argv) > 1 and sys.argv[1] == "inside" else Path(__file__).resolve().parents[2]
 
@@ -46,8 +47,12 @@ def inside():
             texts = []
             for service in ("baseline", "tiger-ocr"):
                 request = urllib.request.Request("http://" + service + ":3000/ocr", data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
-                with urllib.request.urlopen(request, timeout=120) as response:
-                    texts.append(json.load(response)["text"])
+                try:
+                    with urllib.request.urlopen(request, timeout=120) as response:
+                        texts.append([response.status, json.load(response).get("text", "")])
+                except urllib.error.HTTPError as error:
+                    # The unchanged skill treats non-200 OCR replies as no text.
+                    texts.append([error.code, ""])
             rows.append([png.stem, *texts])
         print(json.dumps(rows))
 
@@ -108,13 +113,19 @@ def run():
             spec = importlib.util.spec_from_file_location("price_ocr", ROOT / "tank/skills/tiger.price_ocr/1.0.1/run.py")
             skill = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(skill)
+            import asyncio
+            from types import SimpleNamespace
             count = 0
             for name, before, after in rows:
-                url = "https://example.test/" + name
-                old_items = skill.prices_from_text(before, url)
-                new_items = skill.prices_from_text(after, url)
-                assert old_items == new_items, name
-                count += bool(new_items)
+                payload = {"png_base64": "already-sent-offline-png", "url": "https://example.test/" + name}
+                async def result(reply):
+                    async def post(url, **kwargs):
+                        assert url == "http://tiger-ocr:3000/ocr"
+                        return SimpleNamespace(status_code=reply[0], json=lambda: {"text": reply[1]})
+                    return await skill.run(payload, SimpleNamespace(env={"TIGER_URL": "http://tiger-ocr:3000"}, http=SimpleNamespace(post=post)))
+                old_result, new_result = asyncio.run(result(before)), asyncio.run(result(after))
+                assert old_result == new_result, name
+                count += bool(new_result["items"])
             assert count > 0, "PNG parity must include actual extracted prices"
             print(f"Tank /ocr: {len(rows)} existing PNG cases produce identical items ({count} with prices)", flush=True)
             peak = call(*cmd, "exec", "-T", "tiger-ocr", "python", "-c", "from pathlib import Path; print(Path('/sys/fs/cgroup/memory.peak').read_text().strip())")
