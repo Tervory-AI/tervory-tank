@@ -17,9 +17,9 @@ from fastapi.responses import JSONResponse
 router = APIRouter(prefix="/v1/trigger", tags=["trigger"])
 
 
-async def code_receipt(tenant_id: UUID, task: str, *, task_id: UUID | None = None, agent: str = "trigger") -> UUID:
+async def code_receipt(tenant_id: UUID, task: str, *, task_id: UUID | None = None, agent: str = "trigger", conn=None) -> UUID:
     from main import box_region, pool
-    return await pool().fetchval(
+    return await (conn if conn is not None else pool()).fetchval(
         "INSERT INTO tank.ledger(tenant_id,region,agent,task_type,rung,model,cost_usd,"
         "tokens_in,tokens_out,task_id) "
         "VALUES($1,$2,$5,$3,3,'code',0,0,0,$4) RETURNING id",
