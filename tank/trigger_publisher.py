@@ -115,7 +115,11 @@ async def publish_due(runtime):
     admin = runtime.admin_pool()
     with tenant_scope(None, administrative=True):
         tenants = await admin.fetch('''SELECT DISTINCT tenant_id FROM tank.trigger_posts
-            WHERE channel='gbp' AND planned_at<=now() AND (state='scheduled' OR state='failed') LIMIT 100''')
+            WHERE channel='gbp' AND planned_at<=now() AND (
+                (delivery='inflight' AND lease_until<now()) OR
+                (delivery='pending' AND attempts<3 AND (state='scheduled' OR
+                    (state='failed' AND retryable AND retry_at<=now()))))
+            ORDER BY tenant_id LIMIT 100''')
     for row in tenants:
         with tenant_scope(row['tenant_id']):
             await Publisher(Marketing(runtime.pool())).once(row['tenant_id'])
