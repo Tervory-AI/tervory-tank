@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 from types import SimpleNamespace
 
 import pytest
+import asyncpg
 from fastapi import HTTPException
 
 import command
@@ -91,6 +92,9 @@ async def test_skill_and_connection_status_and_no_credentials(api, monkeypatch):
         with pytest.raises(HTTPException) as error:
             await plugins.prepare(command.PlannedAction(tool='plugins.install', arguments=ARGS), actor, conn)
         assert error.value.status_code == 422
+        await conn.execute("INSERT INTO tank.skills(id,version,agent,state) VALUES('placeholder','1.0.0','placeholder','approved')")
+        assert (await plugins.listing(conn, actor))['plugins'][0]['skills'][0]['approved']
+        assert await plugins.prepare(command.PlannedAction(tool='plugins.install', arguments=ARGS), actor, conn)
 
 
 @pytest.mark.asyncio
@@ -105,9 +109,12 @@ async def test_code_mode_requires_install_and_never_offers_another_tenants_tools
         authorized = await command.authorized_actor(actor, conn, include_mcp=True)
         assert len(authorized.mcp_tools) == 1
         assert not (await plugins.code_actor(authorized, conn)).mcp_tools
+        assert (await plugins.listing(conn, actor))['plugins'][0]['status'] == 'ready'
         await conn.execute('INSERT INTO tank.plugin_installs(tenant_id,plugin_id,version,installed_by) VALUES($1,$2,$3,$4)', TENANT, 'github', '1.0.0', 'placeholder-founder')
         enabled = await plugins.code_actor(authorized, conn)
         assert list(enabled.mcp_tools) == ['mcp.12345678.list_pull_requests']
+        writes = command.replace(authorized, mcp_tools={name: {**tool, 'access': 'write'} for name, tool in authorized.mcp_tools.items()})
+        assert not (await plugins.code_actor(writes, conn)).mcp_tools
     ledger = uuid.uuid4()
     await pool.execute("INSERT INTO tank.ledger(id,tenant_id,agent,task_type,model,cost_usd) VALUES($1,$2,'orchestrator','command.code','code',0)", ledger, TENANT)
     route = AsyncMock(return_value=SimpleNamespace(ledger_id=ledger, content=json.dumps({'requests': [{'name': 'tervory', 'arguments': {'tool': 'mcp.12345678.list_pull_requests', 'arguments': {}}}]})))
@@ -143,6 +150,11 @@ async def test_plugin_rls_follows_staged_and_enforced_rollout(command_pool):  # 
                 await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(TENANT))
                 rows = await conn.fetch('SELECT tenant_id FROM tank.plugin_installs')
                 assert [row['tenant_id'] for row in rows] == [TENANT]
+            with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                async with conn.transaction():
+                    await conn.execute('SET LOCAL ROLE placeholder_plugin_role')
+                    await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(TENANT))
+                    await conn.execute("INSERT INTO tank.plugin_installs(tenant_id,plugin_id,version,installed_by) VALUES($1,'placeholder','1.0.0','placeholder-founder')", OTHER)
         finally:
             await conn.execute('DROP OWNED BY placeholder_plugin_role')
             await conn.execute('DROP ROLE placeholder_plugin_role')
