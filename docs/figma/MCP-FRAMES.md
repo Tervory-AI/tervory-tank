@@ -1,14 +1,14 @@
 # MCP Figma register
 
-Updated 3 Nov 2026 from the founder correction brief and the 11:37 PT ruling.
+Updated 3 Nov 2026 for the founder rule 9 follow-up. The explicit navy-primary-button ruling supersedes the previous treatment of controls as backgrounds.
 
 [Figma page 7 · MCP](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=230-9). All 44 original frame IDs remain. Added 24 missing states, for 68 frames total.
 
-3 frames: **Approved 3 Nov**. The other 65 frames contain changed or new wording and say **Changed after approval, awaiting founder**.
+2 frames: **Approved 3 Nov**. The other 66 frames say **Changed after approval, awaiting founder**. Frame 231:12680 and notice 231:12682 now carry the latter label.
 
-The latest ruling supersedes earlier dark action fills: every surface on this page is light, including action buttons. White surfaces use navy #001840 text. Remove server confirmation uses #b91c1c text and stroke on white. Brand red #E80008 is confined to logo image assets.
+Rule 9: page surfaces remain light. The 52 main controls (Approve, Add, Add server, Add connection, Try again and Sign in with the provider) have navy #001840 fills and white labels. Deny, Cancel, Disconnect and Revoke remain white with navy text. Remove server styling is unchanged. Brand red #E80008 remains confined to logo image assets.
 
-CRM Action 93:4, Field 93:6 and white navigation 182:9119 / 180:8387 (mobile variant 180:8467) are reused. Shared main components and production code were not changed. Organization is consistent in copy and layer names.
+CRM Action 93:4, Field 93:6 and white navigation 182:9119 / 180:8387 (mobile variant 180:8467) are reused. Shared main components and production code were not changed. The shared CRM navigation and its Close button were not edited. Organization is consistent in copy and layer names. All 56 duplicate content identity/logo blocks were removed; 28 Rig/Tisan text nodes were preserved outside those blocks.
 
 Preserved intro IDs 239:102 and 239:110. Removed choice blocks 239:95 and 239:103, including 239:96 and old wording 231:11802 / 231:11840. Removed return-host field instances 231:10280 / 231:10330.
 
@@ -16,18 +16,18 @@ Revoke confirmations cover computer and app rows on desktop/mobile. All 12 exist
 
 ## Verification
 
-All 68 frames passed: no dark surface fills, horizontal content overflow, stale wording, 14px cards, off-grid content spacing, wrong fonts or missing in-app navigation. Button labels have at least 6.47:1 contrast. Field edges measure at least 3.83:1 on white and 3.54:1 on #f4f6fa. Text uses Jost Light and Inter. Mobile content scrolls as needed; consent actions remain pinned.
+All 68 frames passed the rule 9 audit: correct primary/secondary palettes, no duplicate content logos, correct terminology and heading colors, correct address typography, no horizontal content overflow, wrong fonts or dark non-control content surfaces. All 38 section headings (10 MCP servers, 28 MCP connections) use #3d4a66. Both server addresses use Inter Regular 14. Button labels measure at least 17.44:1 contrast. All six toggles have #76839a track strokes with at least 3.11:1 contrast against their light track fills and navy knobs; on is right, off is left, with existing Allowed / Not allowed labels. Field edges retain the previous verified contrast. Mobile content scrolls as needed; consent actions remain pinned.
 
-[Every changed node and all new words](MCP-CHANGES-20261103.md) · [Changes JSON](mcp-evidence-20261103/changes.json) · [Before](mcp-evidence-20261103/before.json) · [After](mcp-evidence-20261103/after.json) · [Validation](mcp-evidence-20261103/validation.json) · [Full mutation records](mcp-evidence-20261103/operations.json). Additional hidden navigation IDs are listed from operation records because final reads do not return them.
+[Rule 9: every changed and removed node, plus exact wording changes](MCP-RULE9-20261103.md) · [Rule 9 changes JSON](mcp-evidence-rule9-20261103/changes.json) · [Before](mcp-evidence-rule9-20261103/before.json) · [After](mcp-evidence-rule9-20261103/after.json) · [Validation](mcp-evidence-rule9-20261103/validation.json) · [Operations](mcp-evidence-rule9-20261103/operations.json). The previous pass remains recorded in [its historical change list](MCP-CHANGES-20261103.md).
+
+Wording: recognize replaces recognise in the four intro nodes. The computer row now uses [Computer], Computer, and Computer name as the computer reported it. No other production wording was added. The Add server notice now says Changed after approval, awaiting founder.
 
 ## Screenshots
 
-- [control-desktop](mcp-evidence-20261103/control-desktop.png)
-- [consent-mobile](mcp-evidence-20261103/consent-mobile.png)
-- [rig-mobile](mcp-evidence-20261103/rig-mobile.png)
-- [sign-in-failed-mobile](mcp-evidence-20261103/sign-in-failed-mobile.png)
-- [disconnect-mobile](mcp-evidence-20261103/disconnect-mobile.png)
-- [server-unreachable-mobile](mcp-evidence-20261103/server-unreachable-mobile.png)
+- [Control panel desktop](mcp-evidence-rule9-20261103/control-desktop.png)
+- [Control panel mobile](mcp-evidence-rule9-20261103/control-mobile.png)
+- [Rig mobile](mcp-evidence-rule9-20261103/rig-mobile.png)
+- [Consent mobile with pinned primary Approve](mcp-evidence-rule9-20261103/consent-mobile.png)
 
 ## Frames
 
@@ -73,7 +73,7 @@ All 68 frames passed: no dark surface fills, horizontal content overflow, stale 
 | [`231:12541`](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=231-12541) | Tisan Plugins / MCP connections / Expanded / Mobile / Changed after approval, awaiting founder | `465:48551` |
 | [`231:12578`](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=231-12578) | Founder MCP servers / Servers / Desktop / Changed after approval, awaiting founder | `465:48656` |
 | [`231:12629`](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=231-12629) | Founder MCP servers / Servers / Mobile / Changed after approval, awaiting founder | `465:48743` |
-| [`231:12680`](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=231-12680) | Founder MCP servers / Add server / Desktop / Approved 3 Nov | `465:48828` |
+| [`231:12680`](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=231-12680) | Founder MCP servers / Add server / Desktop / Changed after approval, awaiting founder | `465:48828` |
 | [`231:12712`](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=231-12712) | Founder MCP servers / Add server / Mobile / Changed after approval, awaiting founder | `465:48912` |
 | [`231:12744`](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=231-12744) | Founder MCP servers / Remove server / Desktop / Changed after approval, awaiting founder | `465:48997` |
 | [`231:12774`](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=231-12774) | Founder MCP servers / Remove server / Mobile / Changed after approval, awaiting founder | `465:49081` |

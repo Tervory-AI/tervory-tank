@@ -1,0 +1,1494 @@
+{
+  "frameCount": 68,
+  "inAppFrames": 56,
+  "primaryCount": 52,
+  "secondaryCount": 44,
+  "headingCount": 38,
+  "minimumButtonContrast": 17.43533248076366,
+  "minimumToggleStrokeContrast": 3.1065572413481775,
+  "issues": {
+    "primary": [],
+    "secondary": [],
+    "headings": [],
+    "identities": [],
+    "copy": [],
+    "addresses": [],
+    "overflow": [],
+    "darkSurfaces": [],
+    "fonts": [],
+    "label": [],
+    "toggle": []
+  },
+  "frames": [
+    {
+      "id": "231:10255",
+      "name": "Connect consent / Pending / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 871,
+      "nodeCount": 37,
+      "types": {
+        "FRAME": 12,
+        "RECTANGLE": 1,
+        "TEXT": 20,
+        "INSTANCE": 4
+      }
+    },
+    {
+      "id": "231:10306",
+      "name": "Connect consent / Pending / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 957,
+      "nodeCount": 31,
+      "types": {
+        "FRAME": 10,
+        "RECTANGLE": 1,
+        "TEXT": 18,
+        "INSTANCE": 2
+      }
+    },
+    {
+      "id": "231:10356",
+      "name": "Connect consent / Approved / Desktop / Approved 3 Nov",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 229,
+      "nodeCount": 6,
+      "types": {
+        "FRAME": 3,
+        "RECTANGLE": 1,
+        "TEXT": 2
+      }
+    },
+    {
+      "id": "231:10376",
+      "name": "Connect consent / Approved / Mobile / Approved 3 Nov",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 213,
+      "nodeCount": 6,
+      "types": {
+        "FRAME": 3,
+        "RECTANGLE": 1,
+        "TEXT": 2
+      }
+    },
+    {
+      "id": "231:10396",
+      "name": "Connect consent / Denied / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 269,
+      "nodeCount": 7,
+      "types": {
+        "FRAME": 3,
+        "RECTANGLE": 1,
+        "TEXT": 3
+      }
+    },
+    {
+      "id": "231:10416",
+      "name": "Connect consent / Denied / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 253,
+      "nodeCount": 7,
+      "types": {
+        "FRAME": 3,
+        "RECTANGLE": 1,
+        "TEXT": 3
+      }
+    },
+    {
+      "id": "231:10436",
+      "name": "Connect consent / Invalid / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 269,
+      "nodeCount": 7,
+      "types": {
+        "FRAME": 3,
+        "RECTANGLE": 1,
+        "TEXT": 3
+      }
+    },
+    {
+      "id": "231:10456",
+      "name": "Connect consent / Invalid / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 253,
+      "nodeCount": 7,
+      "types": {
+        "FRAME": 3,
+        "RECTANGLE": 1,
+        "TEXT": 3
+      }
+    },
+    {
+      "id": "231:10476",
+      "name": "Connect consent / Expired / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 269,
+      "nodeCount": 7,
+      "types": {
+        "FRAME": 3,
+        "RECTANGLE": 1,
+        "TEXT": 3
+      }
+    },
+    {
+      "id": "231:10496",
+      "name": "Connect consent / Expired / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 253,
+      "nodeCount": 7,
+      "types": {
+        "FRAME": 3,
+        "RECTANGLE": 1,
+        "TEXT": 3
+      }
+    },
+    {
+      "id": "231:10516",
+      "name": "Connect consent / ZA founder refusal / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 335,
+      "nodeCount": 9,
+      "types": {
+        "FRAME": 3,
+        "RECTANGLE": 1,
+        "TEXT": 4,
+        "INSTANCE": 1
+      }
+    },
+    {
+      "id": "231:10539",
+      "name": "Connect consent / ZA founder refusal / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 391,
+      "nodeCount": 9,
+      "types": {
+        "FRAME": 3,
+        "RECTANGLE": 1,
+        "TEXT": 4,
+        "INSTANCE": 1
+      }
+    },
+    {
+      "id": "231:11794",
+      "name": "CLI sign-ins and connected apps / Connected / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 548,
+      "nodeCount": 22,
+      "types": {
+        "FRAME": 10,
+        "TEXT": 12
+      }
+    },
+    {
+      "id": "231:11832",
+      "name": "CLI sign-ins and connected apps / Connected / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 742,
+      "nodeCount": 22,
+      "types": {
+        "FRAME": 10,
+        "TEXT": 12
+      }
+    },
+    {
+      "id": "231:11870",
+      "name": "Rig Plugins / MCP connections / Saved with a token / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 664,
+      "nodeCount": 18,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 12,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:11900",
+      "name": "Rig Plugins / MCP connections / Saved with a token / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 668,
+      "nodeCount": 18,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 12,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:11930",
+      "name": "Rig Plugins / MCP connections / Needs sign-in / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 588,
+      "nodeCount": 16,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 10,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:11958",
+      "name": "Rig Plugins / MCP connections / Needs sign-in / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 572,
+      "nodeCount": 16,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 10,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:11986",
+      "name": "Rig Plugins / MCP connections / Connected / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 588,
+      "nodeCount": 16,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 10,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12014",
+      "name": "Rig Plugins / MCP connections / Connected / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 572,
+      "nodeCount": 16,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 10,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12042",
+      "name": "Rig Plugins / MCP connections / Sign-in failed / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 628,
+      "nodeCount": 17,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 11,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12070",
+      "name": "Rig Plugins / MCP connections / Sign-in failed / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 612,
+      "nodeCount": 17,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 11,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12098",
+      "name": "Rig Plugins / MCP connections / Server not approved by Tervory / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 632,
+      "nodeCount": 17,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 11,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12124",
+      "name": "Rig Plugins / MCP connections / Server not approved by Tervory / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 640,
+      "nodeCount": 17,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 11,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12150",
+      "name": "Rig Plugins / MCP connections / Expanded / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 764,
+      "nodeCount": 25,
+      "types": {
+        "FRAME": 7,
+        "TEXT": 15,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12187",
+      "name": "Rig Plugins / MCP connections / Expanded / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 828,
+      "nodeCount": 25,
+      "types": {
+        "FRAME": 7,
+        "TEXT": 15,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12224",
+      "name": "Tisan Plugins / MCP connections / Saved with a token / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 664,
+      "nodeCount": 18,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 12,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12254",
+      "name": "Tisan Plugins / MCP connections / Saved with a token / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 668,
+      "nodeCount": 18,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 12,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12284",
+      "name": "Tisan Plugins / MCP connections / Needs sign-in / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 588,
+      "nodeCount": 16,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 10,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12312",
+      "name": "Tisan Plugins / MCP connections / Needs sign-in / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 572,
+      "nodeCount": 16,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 10,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12340",
+      "name": "Tisan Plugins / MCP connections / Connected / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 588,
+      "nodeCount": 16,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 10,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12368",
+      "name": "Tisan Plugins / MCP connections / Connected / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 572,
+      "nodeCount": 16,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 10,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12396",
+      "name": "Tisan Plugins / MCP connections / Sign-in failed / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 628,
+      "nodeCount": 17,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 11,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12424",
+      "name": "Tisan Plugins / MCP connections / Sign-in failed / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 612,
+      "nodeCount": 17,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 11,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12452",
+      "name": "Tisan Plugins / MCP connections / Server not approved by Tervory / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 632,
+      "nodeCount": 17,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 11,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12478",
+      "name": "Tisan Plugins / MCP connections / Server not approved by Tervory / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 640,
+      "nodeCount": 17,
+      "types": {
+        "FRAME": 3,
+        "TEXT": 11,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12504",
+      "name": "Tisan Plugins / MCP connections / Expanded / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 764,
+      "nodeCount": 25,
+      "types": {
+        "FRAME": 7,
+        "TEXT": 15,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12541",
+      "name": "Tisan Plugins / MCP connections / Expanded / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 828,
+      "nodeCount": 25,
+      "types": {
+        "FRAME": 7,
+        "TEXT": 15,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12578",
+      "name": "Founder MCP servers / Servers / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 604,
+      "nodeCount": 41,
+      "types": {
+        "FRAME": 16,
+        "TEXT": 17,
+        "INSTANCE": 5,
+        "ELLIPSE": 3
+      }
+    },
+    {
+      "id": "231:12629",
+      "name": "Founder MCP servers / Servers / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 972,
+      "nodeCount": 41,
+      "types": {
+        "FRAME": 16,
+        "TEXT": 17,
+        "INSTANCE": 5,
+        "ELLIPSE": 3
+      }
+    },
+    {
+      "id": "231:12680",
+      "name": "Founder MCP servers / Add server / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 512,
+      "nodeCount": 17,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 9,
+        "INSTANCE": 4
+      }
+    },
+    {
+      "id": "231:12712",
+      "name": "Founder MCP servers / Add server / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 496,
+      "nodeCount": 17,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 9,
+        "INSTANCE": 4
+      }
+    },
+    {
+      "id": "231:12744",
+      "name": "Founder MCP servers / Remove server / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 446,
+      "nodeCount": 15,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 8,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "231:12774",
+      "name": "Founder MCP servers / Remove server / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 430,
+      "nodeCount": 15,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 8,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "468:26067",
+      "name": "Computers and connected apps / Revoke Computer / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 394,
+      "nodeCount": 15,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 8,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "468:26173",
+      "name": "Computers and connected apps / Revoke Computer / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 420,
+      "nodeCount": 15,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 8,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "468:26207",
+      "name": "Computers and connected apps / Revoke App / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 394,
+      "nodeCount": 15,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 8,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "468:26313",
+      "name": "Computers and connected apps / Revoke App / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 420,
+      "nodeCount": 15,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 8,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "468:26347",
+      "name": "Rig Plugins / Disconnect / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 394,
+      "nodeCount": 15,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 8,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "468:26455",
+      "name": "Rig Plugins / Disconnect / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 378,
+      "nodeCount": 15,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 8,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "468:26491",
+      "name": "Tisan Plugins / Disconnect / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 394,
+      "nodeCount": 15,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 8,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "468:26599",
+      "name": "Tisan Plugins / Disconnect / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 378,
+      "nodeCount": 15,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 8,
+        "INSTANCE": 3
+      }
+    },
+    {
+      "id": "468:27698",
+      "name": "Rig Plugins / Add connection / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 460,
+      "nodeCount": 17,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 9,
+        "INSTANCE": 4
+      }
+    },
+    {
+      "id": "468:27804",
+      "name": "Rig Plugins / Empty / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 372,
+      "nodeCount": 9,
+      "types": {
+        "FRAME": 2,
+        "TEXT": 6,
+        "INSTANCE": 1
+      }
+    },
+    {
+      "id": "468:27919",
+      "name": "Rig Plugins / Add connection / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 444,
+      "nodeCount": 17,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 9,
+        "INSTANCE": 4
+      }
+    },
+    {
+      "id": "468:27953",
+      "name": "Rig Plugins / Empty / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 356,
+      "nodeCount": 9,
+      "types": {
+        "FRAME": 2,
+        "TEXT": 6,
+        "INSTANCE": 1
+      }
+    },
+    {
+      "id": "468:27996",
+      "name": "Tisan Plugins / Add connection / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 460,
+      "nodeCount": 17,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 9,
+        "INSTANCE": 4
+      }
+    },
+    {
+      "id": "468:28102",
+      "name": "Tisan Plugins / Empty / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 372,
+      "nodeCount": 9,
+      "types": {
+        "FRAME": 2,
+        "TEXT": 6,
+        "INSTANCE": 1
+      }
+    },
+    {
+      "id": "468:28217",
+      "name": "Tisan Plugins / Add connection / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 444,
+      "nodeCount": 17,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 9,
+        "INSTANCE": 4
+      }
+    },
+    {
+      "id": "468:28251",
+      "name": "Tisan Plugins / Empty / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 356,
+      "nodeCount": 9,
+      "types": {
+        "FRAME": 2,
+        "TEXT": 6,
+        "INSTANCE": 1
+      }
+    },
+    {
+      "id": "468:30889",
+      "name": "Founder MCP servers / Add server / Bad address / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 552,
+      "nodeCount": 18,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 10,
+        "INSTANCE": 4
+      }
+    },
+    {
+      "id": "468:30996",
+      "name": "Founder MCP servers / Add server / Bad address / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 536,
+      "nodeCount": 18,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 10,
+        "INSTANCE": 4
+      }
+    },
+    {
+      "id": "468:31031",
+      "name": "Founder MCP servers / Add server / Duplicate / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 552,
+      "nodeCount": 18,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 10,
+        "INSTANCE": 4
+      }
+    },
+    {
+      "id": "468:31138",
+      "name": "Founder MCP servers / Add server / Duplicate / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 536,
+      "nodeCount": 18,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 10,
+        "INSTANCE": 4
+      }
+    },
+    {
+      "id": "468:31173",
+      "name": "Founder MCP servers / Add server / Unreachable / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 552,
+      "nodeCount": 18,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 10,
+        "INSTANCE": 4
+      }
+    },
+    {
+      "id": "468:31280",
+      "name": "Founder MCP servers / Add server / Unreachable / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 560,
+      "nodeCount": 18,
+      "types": {
+        "FRAME": 4,
+        "TEXT": 10,
+        "INSTANCE": 4
+      }
+    },
+    {
+      "id": "468:31315",
+      "name": "Computers and connected apps / Empty / Desktop / Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 900,
+      "contentHeight": 220,
+      "nodeCount": 5,
+      "types": {
+        "FRAME": 2,
+        "TEXT": 3
+      }
+    },
+    {
+      "id": "468:31427",
+      "name": "Computers and connected apps / Empty / Mobile / Changed after approval, awaiting founder",
+      "width": 375,
+      "height": 812,
+      "contentHeight": 294,
+      "nodeCount": 5,
+      "types": {
+        "FRAME": 2,
+        "TEXT": 3
+      }
+    }
+  ],
+  "headings": [
+    "231:11879",
+    "231:11909",
+    "231:11939",
+    "231:11967",
+    "231:11995",
+    "231:12023",
+    "231:12051",
+    "231:12079",
+    "231:12107",
+    "231:12133",
+    "231:12159",
+    "231:12196",
+    "231:12233",
+    "231:12263",
+    "231:12293",
+    "231:12321",
+    "231:12349",
+    "231:12377",
+    "231:12405",
+    "231:12433",
+    "231:12461",
+    "231:12487",
+    "231:12513",
+    "231:12550",
+    "231:12599",
+    "231:12650",
+    "231:12701",
+    "231:12733",
+    "468:27814",
+    "468:27963",
+    "468:28112",
+    "468:28261",
+    "468:30901",
+    "468:31008",
+    "468:31043",
+    "468:31150",
+    "468:31185",
+    "468:31292"
+  ],
+  "buttons": [
+    {
+      "id": "231:10302",
+      "label": "Approve",
+      "primary": true
+    },
+    {
+      "id": "231:10304",
+      "label": "Deny",
+      "primary": false
+    },
+    {
+      "id": "231:10352",
+      "label": "Approve",
+      "primary": true
+    },
+    {
+      "id": "231:10354",
+      "label": "Deny",
+      "primary": false
+    },
+    {
+      "id": "465:45828",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:11898",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "465:45915",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:11928",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "465:46003",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:11956",
+      "label": "Sign in with the provider",
+      "primary": true
+    },
+    {
+      "id": "465:46090",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:11984",
+      "label": "Sign in with the provider",
+      "primary": true
+    },
+    {
+      "id": "465:46179",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12012",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "465:46266",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12040",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "465:46354",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12068",
+      "label": "Try again",
+      "primary": true
+    },
+    {
+      "id": "465:46442",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12096",
+      "label": "Try again",
+      "primary": true
+    },
+    {
+      "id": "465:47221",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "465:47311",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "465:47402",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12176",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "465:47489",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12213",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "465:47577",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12252",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "465:47664",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12282",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "465:47752",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12310",
+      "label": "Sign in with the provider",
+      "primary": true
+    },
+    {
+      "id": "465:47839",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12338",
+      "label": "Sign in with the provider",
+      "primary": true
+    },
+    {
+      "id": "465:47927",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12366",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "465:48014",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12394",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "465:48102",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12422",
+      "label": "Try again",
+      "primary": true
+    },
+    {
+      "id": "465:48190",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12450",
+      "label": "Try again",
+      "primary": true
+    },
+    {
+      "id": "465:48279",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "465:48369",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "465:48460",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12530",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "465:48547",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "231:12567",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "231:12627",
+      "label": "Add server",
+      "primary": true
+    },
+    {
+      "id": "231:12678",
+      "label": "Add server",
+      "primary": true
+    },
+    {
+      "id": "231:12708",
+      "label": "Add",
+      "primary": true
+    },
+    {
+      "id": "231:12710",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "231:12740",
+      "label": "Add",
+      "primary": true
+    },
+    {
+      "id": "231:12742",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "231:12772",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "231:12802",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:26083",
+      "label": "Revoke",
+      "primary": false
+    },
+    {
+      "id": "468:26084",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:26189",
+      "label": "Revoke",
+      "primary": false
+    },
+    {
+      "id": "468:26190",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:26223",
+      "label": "Revoke",
+      "primary": false
+    },
+    {
+      "id": "468:26224",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:26329",
+      "label": "Revoke",
+      "primary": false
+    },
+    {
+      "id": "468:26330",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:26363",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "468:26364",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:26471",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "468:26472",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:26507",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "468:26508",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:26615",
+      "label": "Disconnect",
+      "primary": false
+    },
+    {
+      "id": "468:26616",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:27714",
+      "label": "Add",
+      "primary": true
+    },
+    {
+      "id": "468:27715",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:27816",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "468:27935",
+      "label": "Add",
+      "primary": true
+    },
+    {
+      "id": "468:27936",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:27965",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "468:28012",
+      "label": "Add",
+      "primary": true
+    },
+    {
+      "id": "468:28013",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:28114",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "468:28233",
+      "label": "Add",
+      "primary": true
+    },
+    {
+      "id": "468:28234",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:28263",
+      "label": "Add connection",
+      "primary": true
+    },
+    {
+      "id": "468:30905",
+      "label": "Add",
+      "primary": true
+    },
+    {
+      "id": "468:30906",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:31012",
+      "label": "Add",
+      "primary": true
+    },
+    {
+      "id": "468:31013",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:31047",
+      "label": "Add",
+      "primary": true
+    },
+    {
+      "id": "468:31048",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:31154",
+      "label": "Add",
+      "primary": true
+    },
+    {
+      "id": "468:31155",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:31189",
+      "label": "Add",
+      "primary": true
+    },
+    {
+      "id": "468:31190",
+      "label": "Cancel",
+      "primary": false
+    },
+    {
+      "id": "468:31296",
+      "label": "Add",
+      "primary": true
+    },
+    {
+      "id": "468:31297",
+      "label": "Cancel",
+      "primary": false
+    }
+  ],
+  "toggles": [
+    {
+      "id": "231:12607",
+      "on": true,
+      "track": "I231:12607;60:10404",
+      "knob": "I231:12607;60:10405",
+      "knobX": 23,
+      "trackFill": "#e2e8f0",
+      "stroke": "#76839a",
+      "strokeContrast": 3.1065572413481775
+    },
+    {
+      "id": "231:12615",
+      "on": true,
+      "track": "I231:12615;60:10404",
+      "knob": "I231:12615;60:10405",
+      "knobX": 23,
+      "trackFill": "#e2e8f0",
+      "stroke": "#76839a",
+      "strokeContrast": 3.1065572413481775
+    },
+    {
+      "id": "231:12623",
+      "on": false,
+      "track": "I231:12623;60:10402",
+      "knob": "I231:12623;60:10403",
+      "knobX": 9,
+      "trackFill": "#f4f6fa",
+      "stroke": "#76839a",
+      "strokeContrast": 3.539624453665949
+    },
+    {
+      "id": "231:12658",
+      "on": true,
+      "track": "I231:12658;60:10404",
+      "knob": "I231:12658;60:10405",
+      "knobX": 23,
+      "trackFill": "#e2e8f0",
+      "stroke": "#76839a",
+      "strokeContrast": 3.1065572413481775
+    },
+    {
+      "id": "231:12666",
+      "on": true,
+      "track": "I231:12666;60:10404",
+      "knob": "I231:12666;60:10405",
+      "knobX": 23,
+      "trackFill": "#e2e8f0",
+      "stroke": "#76839a",
+      "strokeContrast": 3.1065572413481775
+    },
+    {
+      "id": "231:12674",
+      "on": false,
+      "track": "I231:12674;60:10402",
+      "knob": "I231:12674;60:10403",
+      "knobX": 9,
+      "trackFill": "#f4f6fa",
+      "stroke": "#76839a",
+      "strokeContrast": 3.539624453665949
+    }
+  ]
+}
