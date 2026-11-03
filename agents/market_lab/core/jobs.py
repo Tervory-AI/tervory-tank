@@ -321,7 +321,8 @@ async def perform_research(
     clock = _clock(now)
     payload: dict[str, Any] = {"question": question}
     if passages is not None:
-        payload["passages"] = passages
+        from core.evidence import gated_facts
+        payload["passages"] = await gated_facts(ledger, tenant_id, passages, now=clock)
     if model_text is not None:
         payload["model_text"] = model_text
     answer = research_answer(payload)
