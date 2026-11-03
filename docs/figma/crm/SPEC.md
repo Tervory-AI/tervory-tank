@@ -33,7 +33,7 @@ Invoice Items and Payments are tables on detail screens. Items: Item, Quantity, 
 
 ## Actions and confirmations
 
-Action labels are centred. Confirm is navy primary for non-destructive operations; only Delete confirmations are red. The Confirm specimen in 93:3 / 93:4 is centred and navy primary. Delete actions are destructive and last after ordinary actions. Existing action order remains consistent within each record type; Invoice actions are Send, Mark paid, Record payment. All existing confirmation steps and frame IDs remain.
+Action labels are centred. Confirm uses a white surface with navy text and outline for non-destructive operations; only Delete confirmations are red. The Confirm specimen in 93:3 / 93:4 is centred with a white surface and navy text and outline. Delete actions are destructive and last after ordinary actions. Existing action order remains consistent within each record type; Invoice actions are Send, Mark paid, Record payment. All existing confirmation steps and frame IDs remain.
 
 Every confirmation shows a record name or number. Send includes Recipient email. Convert includes Quote number, Total and Currency. Delete payment includes Invoice number, Amount and Payment date; Delete line item includes Invoice number, Item, Quantity and Unit price. Convert always shows [Currency], not an em-dash. No internal Reference is shown.
 
@@ -1034,3 +1034,15 @@ In master 180:8549, footer label nodes I180:8464;43:410 (desktop 180:8387) and I
 git fetch origin codex/crm-design passed. git diff --check and git diff --check origin/main...HEAD passed. The SPEC change was committed and git push origin codex/crm-design passed. Figma checks: all 18 Delete Confirms have visible resolved red fills and white labels; all ten non-destructive Confirms remain navy; Contacts coverage is 116/116; the moved frame has zero frame/component overlaps; both menu master footer labels are Account settings.
 
 Authoring screenshots inspected Delete line item at 1440 and 375, Contacts lower fields at both sizes and the desktop menu master. These are design checks, not a founder-browser acceptance test. The founder's acceptance remains outstanding. No application code, API call, production record or deployment was changed.
+
+## Fix round 4 · contrast, geometry and light CRM · 3 November
+
+**Changed after approval, awaiting founder.** The founder's 11:37 PT ruling permits dark backgrounds only on homepages. This CRM page now uses white surfaces with navy text and outlines throughout, including menu active states, mobile bars and non-destructive Confirm controls. Red #b91c1c is reserved for Delete. The current requirements in this section supersede earlier dark-band/navy-fill guidance above.
+
+The [complete correction register](evidence/2026-11-03-fix4/README.md) records all directly written IDs, new header IDs, exact new words, contrast calculations, structural checks and seven desktop/mobile screenshots. Existing frame IDs and approved wording are preserved except for the explicitly proposed address-ownership wording, marked **Changed after approval, awaiting founder**.
+
+Inputs use #848da3 (3.3228:1 on white; 3.0711:1 on #f4f6fa). Payment inputs and all Record cards/panels have 8px corners. Field padding is 16px; compact mobile-card fields retain zero padding. Menu targets are at least 44px tall. Invoice headers reuse list header component 43:389 with 16px padding; mobile-wrapping invoice headers are 72px high. Full name fills the primary card column on all six Lead/Contact mobile cards.
+
+Address ownership is proposed as Client's billing address line / city / state or region / postcode / country, distinguished from Address / City / State or region / Postcode / Country on this invoice or on this quote. Bracketed value slots follow those labels. Bill-to name, email and phone retain their existing wording.
+
+No 20px, 32px or 40px padding/gap remains. Sixteen existing 104px mobile confirmation bottom clearances remain and are [listed exactly](evidence/2026-11-03-fix4/spacing-exceptions.json), preserving clearance above pinned confirmation footers. These are explicitly reported exceptions to the 0/8/16/24 spacing rule. Founder acceptance remains outstanding.
