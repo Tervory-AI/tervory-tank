@@ -17,7 +17,8 @@ from test_command import api, runtime, command_pool, TENANT, OTHER  # noqa: F401
 PLUGIN = plugins.MANIFESTS['github', '1.0.0']
 URL = PLUGIN.servers[0].url
 ARGS = {'name': 'github', 'version': '1.0.0'}
-IDENT = '12345678-abcd-4000-8000-000000000001'
+IDENT = str(uuid.uuid5(uuid.NAMESPACE_URL, 'placeholder-plugin-connection'))
+TOOL = f'mcp.{uuid.UUID(IDENT).hex[:8]}.list_pull_requests'
 
 
 def test_manifests_load_and_bad_manifest_fails(tmp_path):
@@ -41,7 +42,7 @@ async def approve(pool, tools=None):
 async def test_list_install_remove_confirm_receipts_and_tenant_boundary(api, runtime):  # noqa: F811
     client, pool = api
     runtime.pool = lambda: pool
-    actor = command.Actor(TENANT, 'founder', True)
+    actor = command.Actor(TENANT, 'placeholder-founder', True)
     async with pool.acquire() as conn:
         before = await plugins.listing(conn, actor)
     assert before['items'][0]['status'] == 'not_ready'
@@ -83,7 +84,7 @@ async def test_skill_and_connection_status_and_no_credentials(api, monkeypatch):
     manifest = PLUGIN.model_copy(update={'skills': ['placeholder@1.0.0']})
     monkeypatch.setattr(plugins, 'MANIFESTS', {('github', '1.0.0'): manifest})
     await approve(pool)
-    actor = command.Actor(TENANT, 'founder', True)
+    actor = command.Actor(TENANT, 'placeholder-founder', True)
     await pool.execute("INSERT INTO tank.vault_items(tenant_id,vault,kind,name,metadata,sealed,mcp_state) VALUES($1,'radix.vault','connections',$2,$3::jsonb,$4,'needs_sign_in')", TENANT, IDENT, json.dumps({'server_url': URL}), 'placeholder-never-returned')
     async with pool.acquire() as conn:
         listing = await plugins.listing(conn, actor)
@@ -99,13 +100,15 @@ async def test_skill_and_connection_status_and_no_credentials(api, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_code_mode_requires_install_and_never_offers_another_tenants_tools(api, monkeypatch):  # noqa: F811
+async def test_code_mode_requires_install_and_never_offers_another_tenants_tools(api, monkeypatch, runtime):  # noqa: F811
     client, pool = api
+    runtime.pool = lambda: pool
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder,placeholder-founder')
     await approve(pool)
     tools = [{'name': 'list_pull_requests', 'description': 'placeholder read', 'inputSchema': {'type': 'object'}}]
     for tenant, ident in [(TENANT, IDENT), (OTHER, str(uuid.UUID(int=456)))]:
         await pool.execute("INSERT INTO tank.vault_items(tenant_id,vault,kind,name,metadata,mcp_tools,mcp_discovered_at,mcp_state) VALUES($1,'radix.vault','connections',$2,$3::jsonb,$4::jsonb,now(),'connected')", tenant, ident, json.dumps({'server_url': URL}), json.dumps(tools))
-    actor = command.Actor(TENANT, 'founder', True)
+    actor = command.Actor(TENANT, 'placeholder-founder', True)
     async with pool.acquire() as conn:
         authorized = await command.authorized_actor(actor, conn, include_mcp=True)
         assert len(authorized.mcp_tools) == 1
@@ -113,19 +116,37 @@ async def test_code_mode_requires_install_and_never_offers_another_tenants_tools
         assert (await plugins.listing(conn, actor))['items'][0]['status'] == 'ready'
         await conn.execute('INSERT INTO tank.plugin_installs(tenant_id,plugin_id,version,installed_by) VALUES($1,$2,$3,$4)', TENANT, 'github', '1.0.0', 'placeholder-founder')
         enabled = await plugins.code_actor(authorized, conn)
-        assert list(enabled.mcp_tools) == ['mcp.12345678.list_pull_requests']
+        assert list(enabled.mcp_tools) == [TOOL]
         writes = command.replace(authorized, mcp_tools={name: {**tool, 'access': 'write'} for name, tool in authorized.mcp_tools.items()})
         assert not (await plugins.code_actor(writes, conn)).mcp_tools
     ledger = uuid.uuid4()
     await pool.execute("INSERT INTO tank.ledger(id,tenant_id,agent,task_type,model,cost_usd) VALUES($1,$2,'orchestrator','command.code','code',0)", ledger, TENANT)
-    route = AsyncMock(return_value=SimpleNamespace(ledger_id=ledger, content=json.dumps({'requests': [{'name': 'tervory', 'arguments': {'tool': 'mcp.12345678.list_pull_requests', 'arguments': {}}}]})))
+    route = AsyncMock(return_value=SimpleNamespace(ledger_id=ledger, content=json.dumps({'requests': [{'name': 'tervory', 'arguments': {'tool': TOOL, 'arguments': {}}}]})))
     monkeypatch.setattr(command, 'route_code', route)
     thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
     response = await client.post(f'/v1/command/threads/{thread}/code-turn', json={'text': 'placeholder read PRs'})
     assert response.status_code == 200, response.text
     assert response.json()['cards'][0]['status'] == 'pending'
-    assert 'mcp.12345678.list_pull_requests' in route.call_args.args[1][0]['content']
-    await pool.execute('DELETE FROM tank.plugin_installs WHERE tenant_id=$1', TENANT)
+    assert TOOL in route.call_args.args[1][0]['content']
+    code_card = response.json()['cards'][0]
+    snapshot = (await client.get(f'/v1/command/threads/{thread}')).json()
+    assert snapshot['cards'][0]['origin'] == 'code'
+    chat_card = (await client.post(f'/v1/command/threads/{thread}/actions', json={
+        'tool': TOOL, 'arguments': {}})).json()
+    # Exercise actual plugins.remove Confirm, then revoke the saved code proposal.
+    removal = (await client.post(f'/v1/command/threads/{thread}/actions', json={
+        'tool': 'plugins.remove', 'arguments': ARGS})).json()
+    removed = await client.post(f"/v1/command/cards/{removal['card_id']}", json={'action': 'confirm'})
+    assert removed.status_code == 200 and removed.json()['status'] == 'confirmed'
+    assert not await pool.fetchval('SELECT count(*) FROM tank.plugin_installs WHERE tenant_id=$1', TENANT)
+    dispatch = AsyncMock(return_value=(200, {'status': 'placeholder'}))
+    monkeypatch.setattr(command, 'dispatch_action', dispatch)
+    denied = await client.post(f"/v1/command/cards/{code_card['card_id']}", json={'action': 'confirm'})
+    assert denied.status_code == 403
+    dispatch.assert_not_called()
+    # Removing the plugin narrows code mode only; ordinary chat keeps its MCP catalogue.
+    async with pool.acquire() as conn:
+        assert chat_card['tool'] in (await command.authorized_actor(actor, conn, include_mcp=True)).mcp_tools
     route.return_value.ledger_id = uuid.uuid4()
     await pool.execute("INSERT INTO tank.ledger(id,tenant_id,agent,task_type,model,cost_usd) VALUES($1,$2,'orchestrator','command.code','code',0)", route.return_value.ledger_id, TENANT)
     response = await client.post(f'/v1/command/threads/{thread}/code-turn', json={'text': 'placeholder read PRs again'})
@@ -187,6 +208,36 @@ async def test_code_plugin_connection_identity_includes_the_vault():
     for vault, expected in [('tisan.vault', False), ('radix.vault', True)]:
         conn = SimpleNamespace(fetch=AsyncMock(side_effect=[[{'plugin_id': 'github', 'version': '1.0.0'}], rows]))
         tool = {'name': 'list_pull_requests', 'vault': vault, 'connection_id': IDENT, 'access': 'read'}
-        actor = command.Actor(TENANT, 'placeholder-founder', True, mcp_tools={'mcp.12345678.list_pull_requests': tool})
+        actor = command.Actor(TENANT, 'placeholder-founder', True, mcp_tools={TOOL: tool})
         assert bool((await plugins.code_actor(actor, conn)).mcp_tools) is expected
         assert all(call.args[1] == TENANT and 'tenant_id=$1' in call.args[0] for call in conn.fetch.call_args_list)
+
+
+@pytest.mark.parametrize('extra', [
+    'code_mode: false\n',
+    'servers:\n  - url: https://api.githubcopilot.com/mcp/\n    tools:\n      list_issues: read\n      list_issues: write\n',
+])
+def test_duplicate_yaml_keys_are_refused(tmp_path, extra):
+    target = tmp_path / 'github/1.0.0'
+    target.mkdir(parents=True)
+    import yaml
+    content = yaml.safe_dump(PLUGIN.model_dump())
+    (target / 'plugin.yaml').write_text(content + extra)
+    with pytest.raises(ValueError, match='Duplicate YAML key'):
+        plugins.load_manifests(tmp_path)
+
+
+def test_manifest_loader_stays_safe_and_rejects_merged_duplicates(tmp_path):
+    target = tmp_path / 'github/1.0.0'
+    target.mkdir(parents=True)
+    import yaml
+    for content in ['!!python/object/apply:os.system ["placeholder"]', 'placeholder: &base {code_mode: true}\n<<: *base\ncode_mode: false\n']:
+        (target / 'plugin.yaml').write_text(content)
+        with pytest.raises((ValueError, yaml.YAMLError)):
+            plugins.load_manifests(tmp_path)
+
+
+def test_nested_duplicate_tool_access_keys_are_refused():
+    import yaml
+    with pytest.raises(ValueError, match='Duplicate YAML key'):
+        yaml.load('tools:\n  placeholder: read\n  placeholder: write\n', Loader=plugins.ManifestLoader)
