@@ -195,7 +195,7 @@ async def test_approved_scrape_block_survives_into_pipeline_row_without_archive_
         @app.post("/v1/skala/{skill}/run")
         async def run(skill: str, body: dict[str, Any]) -> dict[str, Any]:
             package = finder if skill == "base.find_site" else pkg
-            ctx = SimpleNamespace(http=upstream, env={}, task_id=None)
+            ctx = SimpleNamespace(http=upstream, env={}, task_id=None, tenant_id=uuid.UUID(body["tenant_id"]))
             req = SimpleNamespace(tenant_id=uuid.UUID(body["tenant_id"]), home_region="us-east", preview=False, input=body["input"])
             await agent_skills.guard_base_run(tank, package, req, ctx)
             return await skala.run_skill(package, req.input, ctx)
