@@ -14,7 +14,7 @@ import base_lists as lists
 import command
 import httpx
 import pytest
-from base_metrics import export_records
+from base_metrics import csv_text, export_records
 from fastapi import FastAPI
 from test_base_lists import OTHER, RECORD, STAMP, TENANT, Pool, record
 
@@ -40,7 +40,7 @@ def test_projection_retains_individual_sources_and_drops_unsourced_products():
               product(source_url="javascript:placeholder"), product(checked_at=" "), "placeholder"]
     before = deepcopy(values)
     result = projected(values)
-    assert result["fields"]["products"] == lists.field([first, second], first["source_url"], first["checked_at"])
+    assert result["fields"]["products"] == lists.field([first, second], second["source_url"], second["checked_at"])
     assert values == before
     for value in ([], None, "placeholder", {"name": "placeholder"}, [product(source_url=None)], [product(checked_at=None)]):
         assert "products" not in projected(value)["fields"]
@@ -166,3 +166,56 @@ def test_products_adapter_is_read_only_scoped_and_uses_existing_confirmation_flo
 def test_products_workspace_download_and_existing_card_labels():
     result = subprocess.run(["node", "tests/base_list_products.cjs"], cwd=ROOT, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+
+def test_preview_omits_products_without_changing_the_saved_snapshot():
+    row = projected([product()])
+    before = deepcopy(row)
+    preview = lists.preview([row])["records"][0]
+    assert "products" not in preview["fields"]
+    assert "products" not in json.loads(preview["summary"])
+    assert row == before and row["fields"]["products"]["value"] == [product()]
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_product_cutoff_uses_oldest_observation_in_either_order(reverse):
+    products = [product(), product(source_url="https://placeholder.example/older", checked_at="2026-10-01")]
+    row = projected(list(reversed(products)) if reverse else products)
+    assert row["fields"]["products"]["checked_at"] == "2026-10-01"
+    assert row["fields"]["products"]["source_url"] == "https://placeholder.example/older"
+    assert not lists.matches(row, lists.FindArgs(checked_on_or_after="2026-10-02"))
+    assert lists.matches(row, lists.FindArgs(checked_on_or_after="2026-10-01"))
+
+
+def test_products_alone_cannot_create_a_confidence_tier():
+    row = lists.project({"id": RECORD, "raw": {}, "updated_at": STAMP, "passes": {"7": {"placeholder": True}},
+                         "profile": {"products": {"value": [product()]},
+                                     "tier": {"value": "ready", "source": "verify"}}})
+    assert row["fields"]["products"]["verified"]
+    assert "confidence_tier" not in row["fields"]
+
+
+@pytest.mark.parametrize("url,expected", [("https://placeholder.example/item?placeholder=query#fragment", "https://placeholder.example/item"),
+                                           ("javascript:placeholder", None), (None, None)])
+def test_product_url_normalization_applies_to_projection_and_saved_csv(url, expected):
+    original = product(url=url, source_url="https://placeholder.example/catalogue?placeholder=query#fragment")
+    normalized = lists.sourced_products([original])[0]
+    assert normalized["url"] == expected
+    assert normalized["source_url"] == "https://placeholder.example/catalogue"
+    assert original["source_url"].endswith("#fragment")
+    row = record()
+    row["fields"]["products"] = lists.field([original], "https://placeholder.example/catalogue", STAMP)
+    output = lists.product_rows([row])[0]
+    assert output["url"] == expected and output["source_url"] == "https://placeholder.example/catalogue"
+
+
+@pytest.mark.parametrize("prefix", ["+", "-", "@", "\t"])
+@pytest.mark.parametrize("column", ["sku", "brand", "url"])
+def test_products_csv_neutralizes_formula_prefixes(prefix, column):
+    row = record()
+    row["fields"]["products"] = lists.field([product(**{column: prefix + "placeholder"})],
+                                              "https://placeholder.example/catalogue", STAMP)
+    text = csv_text(lists.product_rows([row]), lists.PRODUCT_COLUMNS)
+    cells = list(csv.DictReader(io.StringIO(text.lstrip("\ufeff"))))
+    assert cells[0][column] == ("" if column == "url" else "'" + prefix + "placeholder")
