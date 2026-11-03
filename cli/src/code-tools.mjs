@@ -144,7 +144,7 @@ export class CodeFolder {
       }
       const bytes = Buffer.alloc(LIMITS.fileBytes + 1); const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
       if (bytesRead > LIMITS.fileBytes) throw refused();
-      const raw = bytes.subarray(0, bytesRead); const text = new TextDecoder('utf-8', { fatal: true }).decode(raw);
+      const raw = bytes.subarray(0, bytesRead); const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(raw);
       if (text.includes('\0')) throw refused();
       await this.path(name);
       return { bytes: raw, text };
@@ -488,7 +488,7 @@ export async function applyDiff(before, patch, name, creating = false, root = pr
     if ((await git(['apply', '--unidiff-zero', '--whitespace=nowarn'])).code !== 0) throw refused();
     const target = resolve(scratch, 'target'); const stat = await lstat(target);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > LIMITS.fileBytes) throw refused();
-    const result = new TextDecoder('utf-8', { fatal: true }).decode(await readFile(target));
+    const result = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(await readFile(target));
     if (result.includes('\0')) throw refused();
     return result;
   } finally { await rm(scratch, { recursive: true, force: true }); }
