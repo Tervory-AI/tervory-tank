@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fsPromises from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { mkdtemp, writeFile, readFile, mkdir, symlink, rm, copyFile, chmod } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createServer, createConnection } from 'node:net';
@@ -122,7 +123,7 @@ test('fake Tank code loop uses existing region/token, redacts results and never 
   const f = await folder();
   const secret = 'ghp_' + 'B'.repeat(24);
   await writeFile(join(f.root, 'file.txt'), `safe\n${secret}\n`);
-  const token = 'tv1.za.' + '1'.repeat(32) + '.' + 'x'.repeat(43);
+  const token = 'tv1.za.' + '1'.repeat(32) + '.' + ('placeholder' + 'x'.repeat(43)).slice(0, 43);
   const received = []; let output = ''; let prompts = ['inspect file', '/exit'];
   await run(['code', f.root], { store: { get: async () => token },
     io: { interactive: true, prompt: async () => prompts.shift(), write: value => { output += value; } },
@@ -169,7 +170,7 @@ test('approved command cannot read secret paths, outside symlinks or inherited h
 
 test('fake Tank can request a missing-file read, explicit edit and explicit test run without a new sign-in', async () => {
   const f = await folder();
-  const token = 'tv1.us-east.' + '1'.repeat(32) + '.' + 'x'.repeat(43);
+  const token = 'tv1.us-east.' + '1'.repeat(32) + '.' + ('placeholder' + 'x'.repeat(43)).slice(0, 43);
   const requests = [
     { name: 'read_file', arguments: { path: 'small.test.mjs' } },
     { name: 'propose_edit', arguments: { path: 'small.test.mjs', diff: '--- /dev/null\n+++ b/small.test.mjs\n@@ -0,0 +1,2 @@\n+import test from "node:test";\n+test("small test", () => {});\n' } },
@@ -221,7 +222,7 @@ test('git status and diff work without exposing secret-file contents', async () 
 
 test('cancelling at command approval stops execution and any following model turn', async () => {
   const f = await folder(); const controller = new AbortController(); let calls = 0;
-  const token = 'tv1.us-east.' + '1'.repeat(32) + '.' + 'x'.repeat(43);
+  const token = 'tv1.us-east.' + '1'.repeat(32) + '.' + ('placeholder' + 'x'.repeat(43)).slice(0, 43);
   await assert.rejects(run(['code', f.root], { store: { get: async () => token },
     io: { interactive: true, signal: controller.signal, write() {}, prompt: async label => {
       if (label.startsWith('Run')) { controller.abort(); return 'y'; }
@@ -286,14 +287,14 @@ test('missing files and approval-time ancestor swaps cannot create Git hooks', a
   await assert.rejects(f.read('.GIT/hooks/new'));
 });
 
-test('Git reads remain pinned when an approved command creates a nested repository', async () => {
+test('Git reads remain pinned after a nested repository appears', async () => {
   const f = await folder();
   await mkdir(join(f.root, 'selected'));
   await writeFile(join(f.root, 'selected/original.txt'), 'parent tracked\n');
   execFileSync('git', ['add', 'selected/original.txt'], { cwd: f.root });
   const selected = await CodeFolder.create(join(f.root, 'selected'));
-  const initialized = await selected.tool({ name: 'run_command', arguments: { command: 'git init -q' } }, io());
-  assert.equal(initialized.code, 0, initialized.output);
+  // Simulate another process creating the nested repository: Seatbelt refuses .git writes.
+  execFileSync('git', ['init', '-q'], { cwd: selected.root });
   await writeFile(join(selected.root, 'original.txt'), 'changed parent\n');
   const status = await selected.tool({ name: 'git', arguments: { action: 'status' } }, io());
   assert(status.output.includes('AM original.txt'), status.output);
@@ -316,13 +317,15 @@ test('external Node runtime is read-only, named before approval and cannot expos
   const neighbor = await f.tool({ name: 'run_command', arguments: { command: `${node} -e 'console.log("runner-ok"); try { console.log(require("fs").readFileSync("${runtime}/bin/.npmrc", "utf8")); } catch {}'` } }, io());
   assert.equal(neighbor.code, 0, neighbor.output); assert(neighbor.output.includes('runner-ok'));
   assert(!neighbor.output.includes('neighbor-file-canary'));
+  const beforeHash = createHash('sha256').update(await readFile(node)).digest('hex');
   const write = await f.tool({ name: 'run_command', arguments: { command: `${node} -e 'require("fs").writeFileSync("${node}", "wrong")'` } }, io());
-  assert.notEqual(write.code, 0); assert.match(write.output, /EROFS|EPERM|EACCES|[Rr]ead-only|[Oo]peration not permitted/); await assert.rejects(readFile(join(runtime, 'bin/wrong')));
+  assert.notEqual(write.code, 0);
+  assert.equal(createHash('sha256').update(await readFile(node)).digest('hex'), beforeHash);
 });
 
 test('session history is bounded, redacted and transient; continuation rounds share one prompt id', async () => {
   const f = await folder();
-  const token = 'tv1.za.' + '1'.repeat(32) + '.' + 'x'.repeat(43);
+  const token = 'tv1.za.' + '1'.repeat(32) + '.' + ('placeholder' + 'x'.repeat(43)).slice(0, 43);
   const secret = 'ghp_' + 'C'.repeat(24);
   const received = []; const prompts = ['first prompt', `second prompt ${secret}`, '/exit'];
   await run(['code', f.root], { store: { get: async () => token }, io: {
@@ -420,13 +423,13 @@ test('code catalogue cards use Confirm, follow the thread and return redacted re
     const f = await folder();
     const placeholderSecret = 'ghp_' + 'placeholder'.repeat(3);
     await writeFile(join(f.root, 'AGENTS.md'), `Branches use codex/task.\n${placeholderSecret}\n`);
-    const token = 'tv1.us-east.' + '1'.repeat(32) + '.' + 'x'.repeat(43);
+    const token = 'tv1.us-east.' + '1'.repeat(32) + '.' + ('placeholder' + 'x'.repeat(43)).slice(0, 43);
     const prompts = ['read findings', answer, '/exit'];
-    const requests = []; let turns = 0; let action;
-    const card = { card_id: 'placeholder-card', tool: 'radix.repo.findings', status: 'pending', summary: 'Read findings' };
+    const requests = []; let turns = 0; let action; let shown = '';
+    const card = { card_id: 'placeholder-card', tool: 'radix.repo.findings', status: 'pending', summary: 'Read findings', arguments: { scan_id: 'placeholder-scan' } };
     const stored = { ...card, status: answer === 'y' ? 'confirmed' : 'cancelled', result: { text: placeholderSecret } };
     await run(['code', f.root], { store: { get: async () => token },
-      io: { interactive: true, write() {}, prompt: async () => prompts.shift() ?? null },
+      io: { interactive: true, write: value => { shown += value; }, prompt: async () => prompts.shift() ?? null },
       transport: async (url, init) => {
         if (url.endsWith('/threads')) return Response.json({ thread_id: 'placeholder-thread' });
         if (url.endsWith('/code-turn')) {
@@ -443,6 +446,7 @@ test('code catalogue cards use Confirm, follow the thread and return redacted re
         assert(url.endsWith('/threads/placeholder-thread'));
         return Response.json({ cards: [stored], steps: [{ step_id: card.card_id, status: 'done' }] });
       } });
+    assert(shown.includes(JSON.stringify({ tool: card.tool, arguments: card.arguments }) + '\n'));
     assert.equal(action, answer === 'y' ? 'confirm' : 'cancel');
     const result = JSON.parse(requests[1].tool_results[0].output).result;
     assert.equal(result.tool, card.tool);
@@ -452,7 +456,7 @@ test('code catalogue cards use Confirm, follow the thread and return redacted re
   }
 });
 
-test('project notes use the git root and refuse oversized notes before sending', async () => {
+test('project notes use the git root and skip invalid files without aborting', async () => {
   const f = await folder();
   await mkdir(join(f.root, 'child'));
   await writeFile(join(f.root, 'AGENTS.md'), 'placeholder notes');
@@ -465,9 +469,16 @@ test('project notes use the git root and refuse oversized notes before sending',
   const prompts = ['hello', '/exit'];
   await codeSession(tank, join(f.root, 'child'), 'auto', { interactive: true, write() {}, prompt: async () => prompts.shift() }, () => [], x => x);
   assert.deepEqual(bodies[0].history, [{ kind: 'project', content: 'placeholder notes' }]);
-  await writeFile(join(f.root, 'AGENTS.md'), 'x'.repeat(200001));
-  await assert.rejects(codeSession(tank, f.root, 'auto', io(), () => [], x => x));
-  assert.equal(bodies.length, 1);
+  for (const kind of ['oversized', 'symlink', 'non-UTF8']) {
+    await rm(join(f.root, 'AGENTS.md'), { force: true });
+    if (kind === 'symlink') await symlink(join(f.root, 'file.txt'), join(f.root, 'AGENTS.md'));
+    else await writeFile(join(f.root, 'AGENTS.md'), kind === 'oversized' ? 'x'.repeat(200001) : Buffer.from([0xff]));
+    const inputs = ['placeholder prompt', '/exit']; let shown = '';
+    await codeSession(tank, f.root, 'auto', { ...io(), write: value => { shown += value; }, prompt: async () => inputs.shift() }, () => [], x => x);
+    assert(shown.includes('AGENTS.md skipped: Code tool refused.\n'));
+    assert.deepEqual(bodies.at(-1).history, []);
+  }
+  assert.equal(bodies.length, 4);
   await assert.rejects(codeSession(tank, f.root, 'auto', io('y', false), () => [], x => x));
 });
 
@@ -623,12 +634,129 @@ test('undo restores the exact UTF-8 bytes, including a byte-order mark', async (
   assert.deepEqual(await readFile(join(f.root, 'file.txt')), original);
 });
 
-test('an explicitly non-interactive Confirm cancels without reading a yes', async () => {
+test('Confirm without an explicit interactive true cancels without reading a yes', async () => {
+  for (const interactive of [false, undefined, null, 1, 'true']) {
   const { confirmCard } = await import('../src/client.mjs');
   const requests = [];
   const result = await confirmCard({ json: async (path, body) => { requests.push({ path, body }); return { status: 'cancelled' }; } },
     { card_id: 'placeholder-card', summary: 'placeholder summary' },
-    { interactive: false, write() {}, prompt: async () => { throw Error('must not prompt'); } });
+    { interactive, write() {}, prompt: async () => { throw Error('must not prompt'); } });
   assert.equal(result.status, 'cancelled');
   assert.deepEqual(requests, [{ path: '/v1/command/cards/placeholder-card', body: { action: 'cancel' } }]);
+  }
+});
+
+
+test('hard-linked files are refused by local reads', async () => {
+  const f = await folder(); const outside = join(work, 'placeholder-hardlink');
+  await writeFile(outside, 'placeholder private contents');
+  await fsPromises.link(outside, join(f.root, 'x'));
+  await assert.rejects(f.read('x'), /Code tool refused/);
+});
+
+test('non-Linux read rechecks the opened file identity after reading', async () => {
+  const f = await folder(); const original = fsPromises.open;
+  const descriptor = Object.getOwnPropertyDescriptor(process, 'platform');
+  try {
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    fsPromises.open = async (...args) => {
+      const handle = await original(...args);
+      const read = handle.read.bind(handle);
+      handle.read = async (...readArgs) => {
+        const result = await read(...readArgs);
+        await fsPromises.rename(join(f.root, 'file.txt'), join(f.root, 'placeholder-old'));
+        await writeFile(join(f.root, 'file.txt'), 'old\n');
+        return result;
+      };
+      return handle;
+    };
+    syncBuiltinESMExports();
+    await assert.rejects(f.raw('file.txt'), /Code tool refused/);
+  } finally { fsPromises.open = original; syncBuiltinESMExports(); Object.defineProperty(process, 'platform', descriptor); }
+});
+
+test('rename identity mismatch refuses and still rolls back independent files', async () => {
+  const { f, diff, names } = await changeSet(); const rename = f.renameFile.bind(f); let calls = 0;
+  f.renameFile = async (source, target) => {
+    await rename(source, target);
+    if (++calls === 2) {
+      await fsPromises.unlink(target);
+      await writeFile(target, 'placeholder concurrent replacement\n');
+    }
+  };
+  await assert.rejects(f.edit(null, diff, io()), /Code tool refused/);
+  assert.equal(await readFile(join(f.root, names[0]), 'utf8'), 'old\n');
+  assert.equal(await readFile(join(f.root, names[1]), 'utf8'), 'placeholder concurrent replacement\n');
+  assert.equal(await readFile(join(f.root, names[2]), 'utf8'), 'old\n');
+});
+
+test('parent swap during rename cannot write through the replacement symlink', async () => {
+  const f = await folder(); const parent = join(f.root, 'placeholder-parent');
+  const outside = await mkdtemp(join(work, 'placeholder-parent-outside-'));
+  await mkdir(parent); await writeFile(join(parent, 'file.txt'), 'old\n');
+  await writeFile(join(outside, 'file.txt'), 'placeholder outside\n'); await f.read('placeholder-parent/file.txt');
+  const rename = f.renameFile.bind(f);
+  f.renameFile = async (source, target) => {
+    await fsPromises.rename(parent, parent + '-moved');
+    await symlink(outside, parent);
+    await rename(source.replace('placeholder-parent/', 'placeholder-parent-moved/'), target.replace('placeholder-parent/', 'placeholder-parent-moved/'));
+  };
+  await assert.rejects(f.edit('placeholder-parent/file.txt', patch.replaceAll('a/file.txt', 'a/placeholder-parent/file.txt').replaceAll('b/file.txt', 'b/placeholder-parent/file.txt'), io()), /Code tool refused/);
+  assert.equal(await readFile(join(outside, 'file.txt'), 'utf8'), 'placeholder outside\n');
+});
+
+test('sandbox denies home, secret directories, git config, outside reads and Unix sockets', async () => {
+  const f = await folder(); const home = homedir();
+  await mkdir(join(home, '.ssh'), { recursive: true });
+  const directories = [home, join(home, '.ssh')];
+  if (process.platform === 'darwin') { await mkdir(join(home, 'Library/Keychains'), { recursive: true }); directories.push(join(home, 'Library/Keychains')); }
+  for (const name of ['.ssh', 'keychains', 'keyrings']) {
+    await mkdir(join(f.root, name)); await writeFile(join(f.root, name, 'placeholder'), 'placeholder private');
+    await assert.rejects(f.read(name + '/placeholder'));
+  }
+  const outside = join(work, 'placeholder-outside-read'); await writeFile(outside, 'placeholder outside');
+  // Place the socket inside the allowed folder: even filesystem-reachable Unix sockets must be denied.
+  const socketPath = join(f.root, 'placeholder.sock');
+  const server = createServer(socket => socket.end()); server.listen(socketPath); await once(server, 'listening');
+  try {
+    const control = createConnection(socketPath); await once(control, 'connect'); control.end();
+    const source = `const fs=require("fs"),net=require("net");
+      for(const p of ${JSON.stringify(directories)}) { try { fs.readdirSync(p); process.exit(21); } catch {} }
+      for(const p of ${JSON.stringify(['.git/config', outside, '.ssh/placeholder', 'keychains/placeholder', 'keyrings/placeholder'])}) {
+        try { if(fs.readFileSync(p).length) process.exit(22); } catch {}
+      }
+      const s=net.connect(${JSON.stringify(socketPath)}); s.on("connect",()=>process.exit(23)); s.on("error",()=>console.log("placeholder-confined"));`;
+    const prepared = await f.prepareCommand('node -e ' + "'" + source + "'");
+    const result = await f.command(prepared.command, io(), 10000, prepared.mounts);
+    assert.equal(result.code, 0, result.output); assert(result.output.includes('placeholder-confined'));
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('Darwin denies hard links to an outside file', { skip: process.platform !== 'darwin' }, async () => {
+  const f = await folder(); const outside = join(work, 'placeholder-darwin-link');
+  await writeFile(outside, 'placeholder outside');
+  const result = await f.command(`ln '${outside}' ./x`, io(), 10000);
+  assert.notEqual(result.code, 0, result.output); await assert.rejects(readFile(join(f.root, 'x')));
+});
+
+test('Darwin kills background descendants when the command exits', { skip: process.platform !== 'darwin' }, async () => {
+  const f = await folder();
+  for (const redirect of ['', '>/dev/null 2>&1']) {
+    const result = await f.command(`(sleep 2; touch marker) ${redirect} &`, io(), 10000);
+    assert.equal(result.code, 0, result.output);
+    await new Promise(resolve => setTimeout(resolve, 2300));
+    await assert.rejects(readFile(join(f.root, 'marker')));
+  }
+});
+
+test('AWS assignments and complete or truncated PEM blocks are redacted', async () => {
+  const begin = '-----BEGIN ' + 'PRIVATE KEY-----', end = '-----END ' + 'PRIVATE KEY-----';
+  const placeholder = `${begin}\nplaceholder-private-body\n${end}`;
+  assert.equal(redactSecrets(`safe\n${placeholder}\nafter`), 'safe\n[redacted]\nafter');
+  assert.equal(redactSecrets(`${begin}\nplaceholder-private-body`), '[redacted]');
+  assert.equal(redactSecrets('aws_secret_access_key=placeholder-long-value'), '[redacted]');
+  const f = await folder();
+  const source = `process.stdout.write(${JSON.stringify(begin + '\nplaceholder-private-body\n' + end + '\n')})`;
+  const result = await processOutput(process.execPath, ['-e', source], { cwd: f.root });
+  assert.equal(result.output, '[redacted]\n');
 });
