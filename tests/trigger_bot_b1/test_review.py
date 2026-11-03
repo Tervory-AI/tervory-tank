@@ -202,11 +202,63 @@ async def test_mail_visitor_and_tenant_hold_keeps_handover_without_send(database
     assert sender.send.await_count == 5
     result = await bot.ask(A, 'Help', address='198.51.100.2')
     assert result['notification'] == 'sent'
-    from trigger_bot_shared import PgRateLimits
-    limit = PgRateLimits(database)
-    # Fill the separate tenant budget with unique visitor addresses.
-    for number in range(594):
-        assert not (await limit.consume(str(A), f'visitor-{number}', '/v1/trigger/bot/handover')).hold
+    # Seed the real tenant ceiling, including the next window to avoid minute-boundary flakes.
+    async with database.acquire() as conn, conn.transaction():
+        window = await conn.fetchval("SELECT floor(extract(epoch FROM clock_timestamp())/60)::bigint")
+        for current in (window, window + 1):
+            await conn.execute('''INSERT INTO tank.trigger_bot_windows(tenant_id,window_id,salt)
+                VALUES($1,$2,$3) ON CONFLICT DO NOTHING''', A, current, b'offline-test-salt')
+            await conn.execute('''INSERT INTO tank.trigger_bot_limits(tenant_id,window_id,route,client_hash,hits)
+                VALUES($1,$2,'quotes',$3,600) ON CONFLICT(tenant_id,window_id,route,client_hash)
+                DO UPDATE SET hits=600''', A, current, b'')
     result = await bot.ask(A, 'Help', address='198.51.100.3')
     assert result['state'] == 'handed_over' and result['notification'] == 'held'
     assert sender.send.await_count == 6
+
+
+@pytest.mark.asyncio
+async def test_queue_states_lease_and_removal_win(database, monkeypatch):
+    service = ingestion.Sources(database, 'us-east', Index())
+    identity = await service.add(A, uuid4(), 'website', 'Store', 'https://store.invalid/')
+    status = lambda: database.fetchval('SELECT status FROM tank.trigger_bot_sources WHERE tenant_id=$1 AND id=$2', A, identity)
+    assert await status() == 'queued'
+    async def crawl(url):
+        assert await status() == 'indexing'
+        # A second worker cannot acquire a still-live indexing lease.
+        await service.refresh(A, identity)
+        return [{'text': 'Store policy', 'url': url}]
+    monkeypatch.setattr(ingestion, 'crawl', crawl)
+    await service.refresh(A, identity)
+    assert await status() == 'ready'
+    monkeypatch.setattr(ingestion, 'crawl', AsyncMock(side_effect=ValueError('offline')))
+    with pytest.raises(ValueError):
+        await service.refresh(A, identity)
+    assert await status() == 'failed'
+    async def remove(url):
+        await database.execute("UPDATE tank.trigger_bot_sources SET status='removed' WHERE tenant_id=$1 AND id=$2", A, identity)
+        return [{'text': 'Removed text', 'url': url}]
+    monkeypatch.setattr(ingestion, 'crawl', remove)
+    await service.refresh(A, identity)
+    assert await status() == 'removed'
+    assert not await service.search(A, 'Removed text')
+
+
+@pytest.mark.asyncio
+async def test_bot_confirm_card_uses_main_adapter_and_bot_prepare(database, monkeypatch):
+    import command
+    actor = command.Actor(A, 'review-admin', True)
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', actor.user_id)
+    action = command.PlannedAction(tool='trigger.bot.source.add', arguments={
+        'kind': 'website', 'title': 'Store', 'url': 'https://store.invalid/'})
+    row = {'tenant_id': A, 'user_id': actor.user_id, 'thread_id': uuid4()}
+    state = {'cards': {}, 'messages': []}
+    monkeypatch.setattr(command, 'event', AsyncMock())
+    monkeypatch.setattr(command, 'step', AsyncMock())
+    # Generic Trigger preparation must never swallow a bot action after the merge.
+    monkeypatch.setattr('trigger_commands.prepare', AsyncMock(side_effect=AssertionError('wrong adapter')))
+    async with database.acquire() as conn:
+        card = await command.propose_action(conn, row, state, action, actor)
+    assert card['tool'] == action.tool and card['status'] == 'pending'
+    assert card['kind'] == command.action_adapter(action, actor).kind
+    assert command.public_card(card)['arguments']['url'] == 'https://store.invalid/'
+    command.event.assert_awaited_once()
