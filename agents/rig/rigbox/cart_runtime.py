@@ -16,14 +16,25 @@ class Platforms:
         # Reuse the rooms' existing public-address check. Never follow redirects
         # with store credentials. Tests replace this boundary, not live DNS.
         try:
-            await asyncio.to_thread(check_url, config['site'])
             response = await self.http.post(self.tank._base + '/v1/vaults/rig.vault/commerce/resolve',
                 headers={'x-rig-retailer-key': os.environ.get('RIG_RETAILER_KEY', '')},
                 json={'tenant_id': str(tenant), 'name': config['vault_name']},
                 timeout=20, follow_redirects=False)
             if response.status_code != 200:
                 raise ValueError()
-            return Platform(self.http, config, response.json()['credential'])
+            credential = response.json()['credential']
+            if config.get('platform') == 'bigcommerce' and not config.get('site'):
+                import re
+                store_hash = config.get('store_hash', '')
+                if not re.fullmatch('[a-z0-9]+', store_hash):
+                    raise ValueError()
+                store = await self.http.get('https://api.bigcommerce.com/stores/' + store_hash + '/v2/store',
+                    headers={'X-Auth-Token': credential['access_token']}, timeout=20, follow_redirects=False)
+                if store.status_code != 200:
+                    raise ValueError()
+                config['site'] = store.json()['secure_url']
+            await asyncio.to_thread(check_url, config['site'])
+            return Platform(self.http, config, credential)
         except Exception:
             raise CommerceError('connection_unavailable') from None
 
