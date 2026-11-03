@@ -32,6 +32,8 @@ def load(relative):
 
 
 CONTACTS = load("tank/skills/base.contacts/1.2.0/run.py")
+
+
 @pytest.fixture(autouse=True, params=["1.2.0", "1.3.0"])
 def contacts_version(request, monkeypatch):
     monkeypatch.setitem(globals(), "CONTACTS", load(f"tank/skills/base.contacts/{request.param}/run.py"))
@@ -320,8 +322,9 @@ async def test_normal_domain_still_makes_exactly_one_mx_request():
 @pytest.mark.parametrize("skill,version,total", [("base.contacts", "1.3.0", 20),
                                                  ("base.site_signals", "1.0.1", 8)])
 async def test_b6_offline_evals_are_eligible(skill, version, total):
-    import skala
     import httpx
+    import skala
+
     packages = skala.load_packages()
     pkg = packages[(skill, version)]
     requested = []
