@@ -6,7 +6,7 @@ Tisan is the developer and the designer. It builds and checks the work a tenant 
 
 Own Coolify resource. Base directory `/agents/tisan`. Compose location `/docker-compose.yml`. No public domain. Predefined network: isolated network only.
 
-Standard room, same pattern as the template. The only corridor is `tervory-gw-tisan`. Tisan can reach Tank, Postgres, and Hermes. Nothing else joins that corridor.
+Standard room, same pattern as the template. Its corridor is `tervory-gw-tisan`, reaching Tank, Postgres, and Hermes. Its only additional network is the internal `figma_internal` link to `figma-egress-proxy`. Only that proxy joins `egress`; the room has no other route out.
 
 Login `agent_tisan`. Schema `agent_tisan`. Key `TANK_KEY_TISAN` on Tank and on Hermes.
 
@@ -53,7 +53,15 @@ Skill `tisan.figma` (job kind `figma`). It reads one page and returns named colo
 
 `file_key` defaults to the Tervory file. `node_id` defaults to page `0:1`, "Landing — Desktop & Mobile". `2:11` is the desktop frame and `6:45` is the mobile frame. The tenant is the job's `tenant_id`. The reading is stored at `/data/readings/<tenant>/<file_key>/<node>.json`.
 
-The room's only network is `tervory-gw-tisan`. A live Figma call would need a route to the public internet, and this room does not get one. The reader uses the recorded fixture `agents/tisan/fixtures/tervory-landing.json`, captured from the Figma connection on 17 Oct 2026. It does not call Figma. The fixture has the resolved variable values and no collection names. `FIGMA_TOKEN` is a name in `.env.example` only. The room does not receive it.
+Live reads require the founder's `FIGMA_TOKEN` and `TISAN_FIGMA_FILES`, both filled in by name in Coolify. The latter is a comma-separated list of `<tenant id>=<file key>` pairs; only a pair matching the job's own `tenant_id` permits a read. Pairing is checked before any request, including for the Tervory file when a token is set. Payloads cannot choose a token, proxy, host, or tenant identity.
+
+The reader makes at most two GETs: the requested node and local variables at `api.figma.com`, using `X-Figma-Token` through the fixed `figma-egress-proxy:8080` proxy. Environment proxies are ignored; redirects and retries are disabled. Each request has a 20-second wall-clock deadline and a 5 MB decoded-response ceiling. The unchanged Radix proxy has its own stricter 1 MB tunnel ceiling and existing rate/concurrency limits; those may refuse a read before the reader ceiling. Its only allowed host is `api.figma.com`, with SNI checked and storage access disabled. No raw response, header, or token is logged or stored; only the compiled tenant reading is saved.
+
+Figma restricts the [Variables REST API](https://developers.figma.com/docs/rest-api/variables/) to Enterprise access (see the [local variables endpoint](https://developers.figma.com/docs/rest-api/variables-endpoints/)). A variables 403 still reads the node with `variables_payload=None`: `collections_known` stays false and missing values remain gaps. Other HTTP errors, timeouts, malformed data, and oversized bodies return the fixed `Figma request failed` error. Without a token, only the recorded Tervory fixture `agents/tisan/fixtures/tervory-landing.json` remains available for offline builds and tests.
+
+Deploy this compose as Raw Compose, as the Ghost proxy pattern does, so Coolify cannot add an outbound app network. Preserve the existing room data volume when switching deployment mode. Deployment routing is unchanged: `.github/scripts/deploy_changed.py:wanted` maps `agents/tisan/docker-compose.yml` to `agent-tisan`; `.github/scripts/room_setup.py` configures `/agents/tisan` with `/docker-compose.yml`. The room image keeps its repository-root context. The proxy alone uses `context: ..` and `dockerfile: radix/Dockerfile`, resolving to the existing `agents/` context and all of that Dockerfile's COPY sources. No Radix Dockerfile or proxy limits change.
+
+Skill `tisan.figma/1.1.0` awaits founder approval in Skala; earlier versions are untouched.
 
 The recorded page has no spacing variables, no font family, weight, or line height, and the Button component has no hover, active, disabled, or error state. Those are gaps. The reader does not fill them in.
 
