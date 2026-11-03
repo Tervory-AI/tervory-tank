@@ -26,7 +26,8 @@ def _catalog(rows: list, fallbacks: list) -> dict:
 async def catalog(tank: Any) -> dict:
     """Only retain public names, deployment IDs, hosts and configured chains."""
     global _CACHE
-    key = (tank.LITELLM_URL, id(tank._http), str(tank._roster_path()))
+    path = Path(tank._roster_path())
+    key = (tank.LITELLM_URL, id(tank._http), str(path), path.stat().st_mtime_ns if path.is_file() else None)
     if _CACHE is not None and _CACHE[0] == key and time.monotonic() - _CACHE[1] < 300:
         return _CACHE[2]
     if tank._http is not None and hasattr(tank._http, "get"):
@@ -42,11 +43,12 @@ async def catalog(tank: Any) -> dict:
             return data
         except (KeyError, TypeError, ValueError, AttributeError, httpx.HTTPError):
             pass
-    path = Path(tank._roster_path())
     if path.is_file():
         import yaml
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        return _catalog(raw.get("model_list", []), (raw.get("litellm_settings") or {}).get("fallbacks", []))
+        data = _catalog(raw.get("model_list", []), (raw.get("litellm_settings") or {}).get("fallbacks", []))
+        _CACHE = (key, time.monotonic(), data)
+        return data
     # No metadata must never mean unchecked gateway defaults or unknown hosts.
     return {"groups": {}, "chains": {}}
 
