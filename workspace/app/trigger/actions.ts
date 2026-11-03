@@ -20,7 +20,7 @@ export async function readTrigger(path:string) {
 export async function proposeTrigger(tool:string,arguments_:Record<string,unknown>) {
  return (await commandRequest(await identity(),"trigger/console/propose",{method:"POST",body:JSON.stringify({tool,arguments:arguments_})})).json();
 }
-export async function confirmTrigger(thread:string,card:string) {
+export async function confirmTrigger(thread:string,card:string,action:"confirm"|"cancel"="confirm") {
  if (![thread,card].every(v=>/^[a-f0-9-]{36}$/.test(v))) throw new Error("This item is unavailable.");
- return (await commandRequest(await identity(),`cards/${card}`,{method:"POST",body:JSON.stringify({action:"confirm"})})).json();
+ return (await commandRequest(await identity(),`cards/${card}`,{method:"POST",body:JSON.stringify({action})})).json();
 }
