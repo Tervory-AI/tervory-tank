@@ -25,11 +25,19 @@ TOKEN = 'placeholder-coolify-token'
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def owned(tenant, app_uuid):
+    return {'name': lifecycle.project_name(tenant), 'uuid': app_uuid, 'status': 'exited',
+            'description': 'autumbra-enforce:' + tenant, 'build_pack': 'dockercompose',
+            'git_repository': 'https://github.com/Tervory-AI/tervory-tank.git',
+            'docker_compose_location': '/agents/ghost/docker-compose.enforce.yml'}
+
+
 class FakeAPI:
     def __init__(self):
         self.rows = []
         self.calls = []
         self.failure = None
+        self.failure_method = None
 
     def __call__(self, request):
         self.calls.append(request)
@@ -39,13 +47,13 @@ class FakeAPI:
         if request.method == 'GET':
             assert path == '/applications'  # No settings, env, logs, deployment reads.
             return httpx.Response(200, json=self.rows)
-        if self.failure:
+        if self.failure and (self.failure_method is None or self.failure_method == request.method):
             if self.failure == 'timeout':
                 raise httpx.ReadTimeout('placeholder timeout', request=request)
             return httpx.Response(self.failure, json={'error': TOKEN})
         if request.method == 'POST':
             body = json.loads(request.content)
-            row = {'name': body['name'], 'uuid': 'placeholder-app', 'status': 'exited'}
+            row = {**body, 'uuid': 'placeholder-app', 'status': 'exited'}
             self.rows.append(row)
             return httpx.Response(201, json={'uuid': row['uuid']})
         if request.method == 'DELETE':
@@ -81,6 +89,7 @@ async def test_create_four_values_only_and_no_deploy_or_secret_leak(caplog):
                     'environment_name': 'placeholder-test', 'github_app_uuid': 'placeholder-source',
                     'git_repository': 'https://github.com/Tervory-AI/tervory-tank.git',
                     'git_branch': 'main', 'build_pack': 'dockercompose', 'name': lifecycle.project_name(A),
+                    'description': 'autumbra-enforce:' + A,
                     'docker_compose_location': '/agents/ghost/docker-compose.enforce.yml',
                     'instant_deploy': False, 'is_auto_deploy_enabled': False}
     patch = next(r for r in api.calls if r.method == 'PATCH')
@@ -112,15 +121,15 @@ async def test_duplicate_refused_and_cap_uses_coolify_count(monkeypatch):
 @pytest.mark.asyncio
 async def test_destroy_exact_tenant_and_absent():
     api = FakeAPI()
-    api.rows = [{'name': lifecycle.project_name(A), 'uuid': 'placeholder-a', 'status': 'exited'},
-                {'name': lifecycle.project_name(B), 'uuid': 'placeholder-b', 'status': 'exited'}]
+    api.rows = [owned(A, 'placeholder-a'),
+                owned(B, 'placeholder-b')]
     async with httpx.AsyncClient(transport=httpx.MockTransport(api)) as http:
         service = backend(http)
         assert (await service.destroy(lifecycle.plan_destroy(A)))['outcome'] == 'destroyed'
         assert (await service.destroy(lifecycle.plan_destroy(A)))['outcome'] == 'absent'
     deletes = [r for r in api.calls if r.method == 'DELETE']
     assert len(deletes) == 1 and deletes[0].url.path.endswith('/placeholder-a')
-    assert dict(deletes[0].url.params) == {'delete_configurations': 'true', 'delete_volumes': 'true',
+    assert dict(deletes[0].url.params) == {'delete_configurations': 'true', 'delete_volumes': 'false',
                                          'delete_connected_networks': 'true', 'docker_cleanup': 'false'}
     assert [r['uuid'] for r in api.rows] == ['placeholder-b']
 
@@ -133,7 +142,7 @@ async def test_ambiguous_mutation_unknown_no_retry(action, failure, caplog):
     api = FakeAPI()
     api.failure = failure
     if action == 'destroy':
-        api.rows = [{'name': lifecycle.project_name(A), 'uuid': 'placeholder-a', 'status': 'exited'}]
+        api.rows = [owned(A, 'placeholder-a')]
     async with httpx.AsyncClient(transport=httpx.MockTransport(api)) as http:
         service = backend(http)
         plan = lifecycle.plan_create(A, existing_count=0) if action == 'create' else lifecycle.plan_destroy(A)
@@ -198,13 +207,11 @@ async def test_founder_only_tools_propose_confirm_without_model(tool, monkeypatc
     action = command.PlannedAction.model_validate(json.loads(proposal.content)['actions'][0])
     assert action.tool == name
     assert command.adapter_request(action, actor)[3] == (None if tool == 'list' else {'tenant_id': B})
-    member = command.Actor(uuid.UUID(A), 'placeholder-member', False)
+    member = command.Actor(uuid.UUID(A), 'placeholder-member', False, tenant_admin=True)
     with pytest.raises(HTTPException) as error:
         await command.autumbra_enforce_code_plan(member, [{'role': 'user', 'content': text}], None)
     assert error.value.status_code == 403
     # Creating the pending proposal never calls a room.
-    source = (ROOT / 'tank/command.py').read_text()
-    assert '"autumbra.enforce.create", "autumbra.enforce.destroy"}' in source
 
 
 @pytest.mark.asyncio
@@ -214,6 +221,8 @@ async def test_tank_admin_boundary_and_list_receipt(monkeypatch):
     monkeypatch.setenv('TANK_API_KEY', 'placeholder-workspace-key')
     monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
     room = AsyncMock(return_value=httpx.Response(200, json={'applications': []}))
+    actor = command.Actor(uuid.UUID(A), 'placeholder-founder', True)
+    monkeypatch.setattr(command, 'identity', AsyncMock(return_value=actor))
     monkeypatch.setattr(ghost_routes, 'call_room', room)
     receipt = AsyncMock(return_value=uuid.UUID(B))
     monkeypatch.setattr(trigger_routes, 'code_receipt', receipt)
@@ -229,9 +238,19 @@ async def test_tank_admin_boundary_and_list_receipt(monkeypatch):
         result = await client.get('/v1/ghost/autumbra/enforce/list', headers=headers)
         assert result.json()['cost_usd'] == 0 and result.json()['ledger_id'] == B
         receipt.assert_awaited_once_with(uuid.UUID(A), 'autumbra.enforce.list', agent='ghost')
+        from trigger_commands import CONFIRMED
         for action in ('create', 'destroy'):
-            result = await client.post('/v1/ghost/autumbra/enforce/' + action, headers=headers, json={'tenant_id': B})
-            assert result.status_code == 200
+            room.reset_mock()
+            path = '/v1/ghost/autumbra/enforce/' + action
+            result = await client.post(path, headers=headers, json={'tenant_id': B})
+            assert result.status_code == 409 and not room.called
+            room.return_value = httpx.Response(200, json={'receipt': {'outcome': 'created' if action == 'create' else 'destroyed'}})
+            token = CONFIRMED.set((actor.tenant_id, actor.user_id, uuid.UUID(B), 'autumbra.enforce.' + action, {'tenant_id': B}))
+            try:
+                result = await client.post(path, headers=headers, json={'tenant_id': B})
+            finally:
+                CONFIRMED.reset(token)
+            assert result.status_code == 200 and result.json()['cost_usd'] == 0
             assert room.call_args.kwargs['body'] == {'tenant_id': B, 'execute': True}
 
 
@@ -242,7 +261,7 @@ async def test_configured_room_uses_live_count_and_requires_room_key(tmp_path, m
     monkeypatch.setenv('TANK_KEY', 'placeholder-room-key')
     monkeypatch.setenv('DATA_DIR', str(tmp_path))
     api = FakeAPI()
-    api.rows = [{'name': lifecycle.project_name(B), 'uuid': 'placeholder-b', 'status': 'exited'}]
+    api.rows = [owned(B, 'placeholder-b')]
     async with httpx.AsyncClient(transport=httpx.MockTransport(api)) as http:
         service = backend(http)
         monkeypatch.setattr(lifecycle.CoolifyEnforceBackend, 'from_env', classmethod(lambda cls, _: service))
@@ -290,3 +309,47 @@ def test_coolify_setting_messages_keep_tisan_defaults():
         with pytest.raises(lifecycle.Refused, match='AUTUMBRA_COOLIFY_URL'):
             lifecycle.Coolify(unused, 'http://placeholder.invalid', TOKEN,
                              url_setting='AUTUMBRA_COOLIFY_URL', token_setting='AUTUMBRA_COOLIFY_TOKEN')
+
+
+@pytest.mark.asyncio
+async def test_foreign_resource_is_never_deleted():
+    api = FakeAPI()
+    api.rows = [{'name': lifecycle.project_name(A), 'uuid': 'placeholder-foreign', 'status': 'exited'}]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(api)) as http:
+        with pytest.raises(lifecycle.Refused, match='not created by Autumbra'):
+            await backend(http).destroy(lifecycle.plan_destroy(A))
+    assert all(r.method == 'GET' for r in api.calls)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('method,outcome', [('POST', 'refused'), ('PATCH', 'created_unconfigured')])
+async def test_definite_refusal_classification(method, outcome):
+    api = FakeAPI()
+    api.failure, api.failure_method = 422, method
+    async with httpx.AsyncClient(transport=httpx.MockTransport(api)) as http:
+        result = await backend(http).create(lifecycle.plan_create(A, existing_count=0))
+    assert result['outcome'] == outcome
+    if method == 'PATCH':
+        assert result['uuid'] == 'placeholder-app'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', ['unknown', 'refused', 'created_unconfigured'])
+async def test_uncertain_outcome_is_not_a_success(outcome):
+    actor = command.Actor(uuid.UUID(A), 'placeholder-founder', True)
+    with pytest.raises(HTTPException) as error:
+        await ghost_routes.enforce_write_result(httpx.Response(200, json={'receipt': {'outcome': outcome}}), actor, 'autumbra.enforce.create')
+    assert error.value.status_code == 409
+    assert error.value.detail == 'Enforce outcome ' + outcome + '; check Coolify before repeating'
+
+
+@pytest.mark.asyncio
+async def test_redirect_is_not_followed():
+    calls = []
+    def redirect(request):
+        calls.append(request)
+        return httpx.Response(302, headers={'Location': 'https://placeholder-other.invalid'})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(redirect)) as http:
+        with pytest.raises(lifecycle.Refused):
+            await backend(http).list()
+    assert len(calls) == 1
