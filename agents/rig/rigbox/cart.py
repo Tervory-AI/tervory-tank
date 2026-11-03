@@ -181,13 +181,16 @@ class Cart:
                 raise CommerceError('empty_cart')
             if cart.get('checkout'):
                 old = await self.rows.get(tenant, cart['checkout'])
-                if old and old['state'] not in ('expired', 'paid'):
+                if old and old['state'] != 'expired':
                     return public_checkout(old)
                 cart['checkout'] = None
+                expired = True
+            else:
+                expired = False
             platform = await self.platform(tenant, config)
             checked = []
             for line in cart['lines']:
-                if not await Holds(self.store).peek(tenant, line['hold_id'], self.clock()):
+                if not expired and not await Holds(self.store).peek(tenant, line['hold_id'], self.clock()):
                     raise CommerceError('hold_expired')
                 fresh = await self._line(tenant, config, platform, line['product_id'], line['quantity'],
                                          line['kind'] == 'back_order')
