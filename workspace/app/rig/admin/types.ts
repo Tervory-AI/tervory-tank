@@ -9,5 +9,9 @@ export type RetailerPanel = {
   fits: FitReview[]; missed_searches: { query: string; count: number }[]; receipts: FeedReceipt[];
 };
 export type MappingPreview = { preview_id?: string; fields: string[]; columns: Record<string, string>; required: string[] };
-export type AdminResult = { ok: boolean; message: string; deleted?: number; panel?: RetailerPanel; mapping?: MappingPreview; embed?: { publishable_key: string; snippet: string; origins: string[] } };
+export type AdminResult = { commerce?: CommerceResult; ok: boolean; message: string; deleted?: number; panel?: RetailerPanel; mapping?: MappingPreview; embed?: { publishable_key: string; snippet: string; origins: string[] } };
 export type AdminOperation = "commerce-connect" | "commerce-orders" | "store-delivery" | "connect" | "import" | "delete-products" | "refresh" | "mapping" | "confirm-mapping" | "settings" | "embed-keys" | "price-rule" | "exchange-rate" | "templates" | "approve" | "reject" | "suggest";
+
+export type CartLine = { id: string; product_id: string; title: string; quantity: number; price: string; currency: string; kind: "stock" | "locate" | "back_order"; delivery: { min_days?: number; max_days?: number; ship_days?: number; eta?: string; status?: string } };
+export type CartOrder = { id: string; state: string; expires_at: string; payment_confirmed: boolean; number?: string; total?: string; currency?: string; late_payment?: boolean; lines: CartLine[] };
+export type CommerceResult = { saved?: boolean; platform?: string; site?: string; store_hash?: string; delivery?: { min_days?: number; max_days?: number; ship_days?: number }; orders?: CartOrder[] };
