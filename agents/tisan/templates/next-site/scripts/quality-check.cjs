@@ -273,6 +273,42 @@ async function lighthouse(origin, paths, proxyUrl) {
   };
 }
 
+async function smoke(origin, paths) {
+  const output = join(process.cwd(), ".k6-check.json");
+  rmSync(output, { force: true });
+  let timer;
+  const code = await new Promise((resolve) => {
+    // Do not inherit proxy, cloud, dashboard or telemetry settings.
+    const child = spawn("k6", ["run", "--no-usage-report", "--quiet", "scripts/smoke.k6.js"], {
+      env: { PATH: process.env.PATH, HOME: process.env.HOME,
+        TISAN_CHECK_ORIGIN: origin, TISAN_CHECK_PAGES: JSON.stringify(paths),
+        K6_WEB_DASHBOARD: "false" },
+      stdio: "ignore",
+    });
+    timer = setTimeout(() => { child.kill("SIGKILL"); resolve(124); }, 15000);
+    child.on("error", () => resolve(127));
+    child.on("exit", (code) => resolve(code));
+  });
+  clearTimeout(timer);
+  try {
+    const result = JSON.parse(readFileSync(output, "utf8"));
+    if (result.name !== "k6" || !Array.isArray(result.pages) ||
+        result.pages.length !== paths.length || result.pages.some((row, i) =>
+          row.page !== paths[i] || typeof row.ok !== "boolean" ||
+          !Number.isFinite(row.p95_ms) || row.p95_ms < 0 || !(row.requests > 0)))
+      throw new Error("incomplete smoke result");
+    result.ok = code === 0 && result.ok === true &&
+      result.pages.every((row) => row.ok && row.status === 200 && row.failures === 0);
+    result.summary = result.pages.map((row) =>
+      `${row.page}: ${row.ok ? 200 : "failed"}; p95 ${row.p95_ms.toFixed(2)} ms`).join("; ");
+    return result;
+  } catch {
+    return { name: "k6", ok: false, pages: [], summary: "local k6 smoke unavailable" };
+  } finally {
+    rmSync(output, { force: true });
+  }
+}
+
 async function run() {
   const paths = pages();
   if (!paths.length) throw new Error("no pages to check");
@@ -306,7 +342,8 @@ async function run() {
     }
     const [accessibility, links] = await browserChecks(origin, paths, proxyUrl);
     const lh = await lighthouse(origin, paths, proxyUrl);
-    report = [accessibility, lh, links];
+    const k6 = await smoke(origin, paths);
+    report = [accessibility, lh, links, k6];
   } finally {
     server.kill("SIGTERM");
     if (server.exitCode === null)
@@ -331,4 +368,4 @@ if (require.main === module)
       console.error("local quality checks unavailable");
       process.exitCode = 1;
     });
-module.exports = { pages, proxyFor, lighthouseScores, browserChecks, lighthouse, run };
+module.exports = { pages, proxyFor, lighthouseScores, browserChecks, lighthouse, smoke, run };
