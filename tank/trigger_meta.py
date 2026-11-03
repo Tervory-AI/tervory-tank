@@ -49,7 +49,7 @@ def scrub(message, redactions):
     if not isinstance(message, str):
         return None
     for value in redactions:
-        if value:
+        if isinstance(value, str) and value:
             message = message.replace(value, '')
     # Provider messages are data. Remove URLs and credential-like assignments,
     # including values not present verbatim in our current connection bundle.
@@ -98,7 +98,7 @@ class Meta(Google):
             await conn.execute('''INSERT INTO tank.trigger_meta_states(tenant_id,state_hash,user_id,generation,sealed,expires_at)
                 VALUES($1,$2,$3,$4,$5,$6)''', actor.tenant_id, digest, actor.user_id, generation, encrypted, utc_now()+timedelta(minutes=10))
         params = {'client_id': config['client_id'], 'redirect_uri': REDIRECT, 'response_type': 'code',
-                  'scope': ','.join(PERMISSIONS), 'state': state}
+                  'scope': ','.join(PERMISSIONS), 'state': state, 'auth_type': 'rerequest'}
         return {'url': AUTH + '?' + urlencode(params)}
 
     async def callback(self, actor, state, code, error=None):
@@ -166,7 +166,7 @@ class Meta(Google):
                     raise MetaFailure(502)
                 if 'CREATE_CONTENT' not in tasks:
                     continue
-                name = scrub(item.get('name'), (token, settings()['client_secret']))
+                name = scrub(item.get('name'), (token, settings()['client_secret'], item.get('access_token')))
                 rows.append({'page_id': item['id'], 'name': name,
                              **({'access_token': credential(item.get('access_token'))} if include_tokens else {})})
             paging = data.get('paging', {})
@@ -252,7 +252,10 @@ class Meta(Google):
                     created = datetime.fromisoformat(item['created_time'])
                     if created.utcoffset() is None or not re.fullmatch(re.escape(page_id) + r'_[0-9]+', item['id']):
                         raise ValueError()
-                    rows.append({'name': item['id'], 'summary': item.get('message'), 'created': created})
+                    message = item.get('message')
+                    if message is not None and not isinstance(message, str):
+                        raise ValueError()
+                    rows.append({'name': item['id'], 'summary': message, 'created': created})
                 except (KeyError, TypeError, ValueError, AttributeError):
                     raise MetaFailure(502) from None
             paging = data.get('paging', {})
