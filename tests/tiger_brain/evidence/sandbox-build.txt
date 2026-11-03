@@ -1,0 +1,6 @@
+#9 exporting manifest list sha256:ee58a889d29fcb03bec032789bdcabec108cf9397d2e9a7cecb67e17a9472c6d 0.1s done
+#9 naming to docker.io/library/codex-tiger-sandbox-proof:tg3
+#9 naming to docker.io/library/codex-tiger-sandbox-proof:tg3 done
+#9 unpacking to docker.io/library/codex-tiger-sandbox-proof:tg3
+#9 unpacking to docker.io/library/codex-tiger-sandbox-proof:tg3 2.3s done
+#9 DONE 9.2s
