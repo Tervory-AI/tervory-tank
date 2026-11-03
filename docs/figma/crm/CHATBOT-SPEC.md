@@ -247,3 +247,12 @@ Privacy notice wording is intentionally absent. The visible awaiting founder dec
 Answers may use only the active client's allowed catalogue, FAQs and documents, and each source must belong to that same client. No-source messages lead to the configured hand-over route. Do not infer sources for visitor or human messages. The proposed plain slots map to the existing lead/quote fields; they are not claimed deployed chat API paths.
 
 Chatwoot is the existing/free inbox and widget engine from the brief, subject to the founder's adapter/branding decision. This design adds no backend, data write, deployment or model API call. Structure and authoring screenshot checks validate the proposal; the founder's visual acceptance is required before build.
+
+
+## Authoring verification · 3 November
+
+Menu destinations were checked on both pages, including both mobile drawers and the new Google posts and Post detail entries. Same-page destinations navigate in the prototype; cross-page entries link to the corresponding Figma frame. Schedule confirmation returns to the approved Composer. Drawer scroll content ends with 16px clearance above the 240px-wide pinned block when scrolled to the end.
+
+Commands run in `/workspace/codex-crm-marketing-chat-design`: `git fetch origin` (passed); `git diff --check` (passed); `git status --short` (only these two SPEC documents); `git push origin codex/crm-marketing-chat-design` (passed after each documentation commit). Figma checks inspected frame bounds, field sets, prototype destinations and mirrored SPEC text. Authoring screenshots covered Channels 375, Google posts 1440, calendar 1440, review detail 1440, approved Composer 375, lead form 375, Answer and Sending. These are authoring checks, not screenshots of a founder acceptance test. Founder browser acceptance remains outstanding.
+
+Shared changed controls: action family `266:3038` (primary `266:3032`, secondary `266:3034`, destructive `266:3036`); navigation family `266:3212` (desktop `266:3039`, mobile `266:3125`). Component variant words Primary, Secondary and Destructive are design metadata. The complete changed screen node register is above; original root IDs are retained. Approval captions are outside product screens.
