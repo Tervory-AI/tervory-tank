@@ -110,6 +110,9 @@ def test_eval_refuses_unhanded_or_unsafe_files(files):
 
 @pytest.mark.asyncio
 async def test_room_eval_auth_and_exact_skill_version(monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / 'agents/radix'))
+    # Other room tests import a sibling gold_sources under the same bare name.
+    monkeypatch.delitem(sys.modules, 'gold_sources', raising=False)
     spec = importlib.util.spec_from_file_location('placeholder_radix_r5_app', ROOT / 'agents/radix/app.py')
     room = importlib.util.module_from_spec(spec)
     monkeypatch.setitem(sys.modules, spec.name, room)
