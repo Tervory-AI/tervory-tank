@@ -56,6 +56,8 @@ async def main():
             check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         https=ThreadingHTTPServer(('127.0.0.1',0),Page)
         context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version=ssl.TLSVersion.TLSv1_2
+        context.maximum_version=ssl.TLSVersion.TLSv1_3
         context.load_cert_chain(directory/'placeholder.pem',directory/'placeholder.key')
         https.socket=context.wrap_socket(https.socket,server_side=True)
         threading.Thread(target=https.serve_forever,daemon=True).start()
