@@ -8,6 +8,7 @@ import json
 import uuid
 import zipfile
 from unittest.mock import AsyncMock
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -33,6 +34,7 @@ async def repo_api(api, runtime, monkeypatch):
     real_tank = importlib.util.module_from_spec(spec)
     monkeypatch.setitem(sys.modules, spec.name, real_tank)
     spec.loader.exec_module(real_tank)
+    runtime.tank = real_tank
     runtime.pool = lambda: pool
     runtime.RouteRequest = real_tank.RouteRequest
     runtime._record_local = real_tank._record_local
@@ -199,3 +201,43 @@ def test_client_catalogue_and_no_injected_authority(runtime):
         for key in ('tenant_id', 'user_id', 'confirmed', 'source'):
             with pytest.raises(HTTPException):
                 command.validate_action(command.PlannedAction(tool=tool, arguments={**args, key: 'placeholder'}), actor)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('broken', ['missing-findings', 'non-list-findings', 'bad-json'])
+async def test_malformed_room_result_is_not_a_clean_scan(repo_api, broken):
+    client, _, runtime = repo_api
+    data = {'id': str(JOB), 'tenant_id': str(TENANT), 'kind': 'scan', 'status': 'done',
+            'result': {'scan_id': str(JOB), 'tenant_id': str(TENANT)}}
+    if broken == 'non-list-findings':
+        data['result']['findings'] = 'placeholder-private'
+    response = httpx.Response(200, text='placeholder-private') if broken == 'bad-json' else httpx.Response(200, json=data)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: response)) as http:
+        runtime._http = http
+        result = await client.get('/v1/command/radix/repo/findings', params={'scan_id': str(JOB)})
+    assert result.status_code == 503
+    assert result.json()['cost_usd'] == 0 and result.json()['ledger_id']
+    assert 'findings' not in result.json() and 'placeholder-private' not in result.text
+
+
+@pytest.mark.asyncio
+async def test_tank_room_eval_uses_radix_key_and_existing_executor(repo_api, monkeypatch):
+    _, _, runtime = repo_api
+    requests = []
+    def room(request):
+        requests.append(request)
+        assert str(request.url) == 'http://agent-radix:8000/evals/run'
+        assert request.headers['X-Tank-Key'] == 'placeholder-room-auth'
+        assert json.loads(request.content) == {'skill_id': 'scan.iac', 'version': '1.0.0',
+            'tenant_id': str(TENANT), 'input': {'files': []}}
+        return httpx.Response(200, json={'status': 'not run', 'refused': True})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(room)) as http:
+        monkeypatch.setattr(runtime.tank, '_http', http)
+        pkg = SimpleNamespace(id='scan.iac',version='1.0.0')
+        ctx = SimpleNamespace(tenant_id=TENANT)
+        result = await runtime.tank.run_room_eval(pkg, {'files': []}, ctx)
+        assert result == {'status': 'not run', 'refused': True}
+        monkeypatch.delenv('TANK_KEY_RADIX')
+        with pytest.raises(RuntimeError, match='eval room is unavailable'):
+            await runtime.tank.run_room_eval(pkg, {'files': []}, ctx)
+        assert len(requests) == 1
