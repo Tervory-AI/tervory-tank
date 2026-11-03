@@ -1,4 +1,6 @@
 """Second-review regressions, offline except for disposable local PostgreSQL."""
+import json
+
 import asyncpg
 import pytest
 from test_database import A, B, B1
@@ -35,7 +37,8 @@ async def test_currency_prices_require_live_rig(text):
     route.assert_not_awaited()
     assert grounded({'answer': text, 'passage_ids': [str(POINT)]},
                     [passage(text='1299 targets and 1 of 299 boxes')]) is None
-    assert grounded({'answer': text, 'passage_ids': [str(POINT)]}, [passage(text=text)]) or text.startswith('R')
+    evidence = passage(kind='rig', text=json.dumps({'price': '1299', 'currency': 'ZAR'})) if text.startswith('R') else passage(text=text)
+    assert grounded({'answer': text, 'passage_ids': [str(POINT)]}, [evidence])
 
 
 @pytest.mark.parametrize('code', ['ZAR', 'USD', 'EUR', 'GBP', 'NAD', 'BWP', 'AUD', 'CAD'])
@@ -53,7 +56,7 @@ def test_ordinary_words_are_not_dates(text):
     assert grounded({'answer': text, 'passage_ids': [str(POINT)]}, [passage(text='Returns within 30 days')])
 
 
-@pytest.mark.parametrize('text', ['May 5', '5 May', 'May 2026', '2026 May'])
+@pytest.mark.parametrize('text', ['May 5', '5 May', 'May 2026', '2026 May', '5   May', 'May\t5'])
 def test_may_adjacent_to_day_or_year_requires_date_evidence(text):
     assert DATES.search(text)
     output = {'answer': text, 'passage_ids': [str(POINT)]}
@@ -84,3 +87,8 @@ async def test_limit_migration_cleans_orphans_is_idempotent_and_cascades(databas
     with pytest.raises(asyncpg.ForeignKeyViolationError):
         await database.execute('''INSERT INTO tank.trigger_bot_limits(tenant_id,window_id,route,client_hash,hits)
             VALUES($1,3,'browse',$2,1)''', A, b'placeholder')
+
+
+def test_may_date_order_is_normalized_and_non_day_numbers_are_not_dates():
+    assert not DATES.search('999 May')
+    assert grounded({'answer': '5 May', 'passage_ids': [str(POINT)]}, [passage(text='May 5')])
