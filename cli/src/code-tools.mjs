@@ -89,7 +89,7 @@ export class CodeFolder {
         options.push('-c', key + (key.endsWith('.required') ? '=false' : '='));
       }
     }
-    return processOutput('git', [...options, ...args], { ...environment, input, outputBytes: ['ls-files', 'check-ignore'].includes(args[0]) ? 8_388_608 : LIMITS.outputBytes, delimiter: args.includes('-z') ? '\0' : '\n' });
+    return processOutput('git', [...options, ...args], { ...environment, input, outputBytes: args[0] === 'ls-files' ? 8_388_608 : LIMITS.outputBytes, delimiter: args.includes('-z') ? '\0' : '\n' });
   }
   async path(name, { missing = false } = {}) {
     if (typeof name !== 'string' || !name || /[\x00-\x1f\x7f]/.test(name) || name.includes('\\')) throw refused();
@@ -111,7 +111,9 @@ export class CodeFolder {
     const result = await this.git(['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', '.']);
     if (result.code !== 0) throw refused();
     const names = result.output.split('\0'); names.pop();
-    const ignored = await this.git(['check-ignore', '--no-index', '-z', '--stdin'], names.join('\0') + '\0');
+    // check-ignore rejects Git's global literal mode; ls-files supplies the
+    // same ignored tracked names without parsing user-controlled pathspecs.
+    const ignored = await this.git(['ls-files', '-z', '--cached', '--ignored', '--exclude-standard', '--', '.']);
     if (![0, 1].includes(ignored.code) || ignored.truncated) throw refused();
     const excluded = new Set(ignored.output.split('\0'));
     const files = [];
@@ -239,9 +241,8 @@ export class CodeFolder {
     for (const root of roots) {
       if (inside('/usr', root) || inside(this.root, root)) continue;
       if (root === '/' || root === process.env.HOME || inside(root, process.env.HOME ?? '/') || secretPath(root)
-          || root.split(sep).some(part => ['.config', '.ssh', '.local/share/keyrings', 'keychains'].includes(part.toLowerCase()))) throw refused();
-      // Refuse an installation containing credential stores instead of mounting
-      // and masking it: only the runner's own directory can be read-only bound.
+          || root.split(sep).some(part => ['.config', '.ssh', 'keyrings', 'keychains'].includes(part.toLowerCase()))) throw refused();
+      // Mask secret filenames inside the read-only runtime as in the work tree.
       const scan = async directory => {
         for (const entry of await readdir(directory, { withFileTypes: true })) {
           if (secretPath(entry.name) || ['.config', '.ssh', 'keychains', 'keyrings'].includes(entry.name.toLowerCase())) {
