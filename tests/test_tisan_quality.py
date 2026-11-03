@@ -120,3 +120,28 @@ def test_browser_cache_environment_is_forwarded_without_tank_credentials(scaffol
     env = scaffold._check_env()
     assert env['PLAYWRIGHT_BROWSERS_PATH'] == '/opt/tisan-browser'
     assert 'TANK_KEY' not in env
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(__import__('os').environ.get('TISAN_RUN_QUALITY_BUILD') != '1', reason='explicit real offline quality build')
+async def test_real_builder_passes_all_four_quality_gates(tmp_path):
+    builder = load('q1_real_builder', ROOT / 'agents/tisan/builder.py')
+    plan = {'nav': [{'href': '/contact'}], 'ui': {}, 'pages': [
+        {'name': 'contact', 'path': '/contact', 'sections': []},
+        {'name': 'privacy', 'path': '/privacy', 'sections': []}]}
+    payload = {'name': 'Quality fixture', 'slug': 'quality-fixture', 'pages': ['contact', 'privacy'],
+               'brand': {'colours': {'ink': '#001840', 'paper': '#F4F6FB', 'accent': '#E80008', 'line': '#B8BFD0'},
+                         'fonts': {'heading': 'Jost', 'body': 'Inter'}}, 'plan': plan}
+    payload['copy'] = {slot[0]: str(__import__('uuid').uuid4()) for slot in builder.slots(plan, builder.manifest()) if not slot[5]}
+    def accepted(request):
+        return httpx.Response(200, json={'tenant_id': TENANT, 'write_id': request.url.path.rsplit('/', 1)[-1], 'text': 'Accepted test-only content'})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(accepted)) as copy_http, httpx.AsyncClient(transport=transport([])) as scan_http:
+        result = await builder.execute(payload, TENANT, http=copy_http, tank=TankClient('http://tank.test', 'test-auth', 'tisan', scan_http), data_root=tmp_path)
+    proof_path = __import__('os').environ.get('TISAN_QUALITY_PROOF')
+    if proof_path:
+        Path(proof_path).write_text(json.dumps(result, indent=2))
+    assert result['ok'] is True, result.get('detail')
+    assert [row['name'] for row in result['checks']][-4:] == ['accessibility', 'lighthouse', 'links', 'secrets']
+    assert all(row['ok'] for row in result['checks'])
+    assert len(result['results']) == 4
+    assert not any('quality-secrets.fixture' in file for file in result['files'])
