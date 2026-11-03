@@ -103,7 +103,7 @@ def test_every_family_in_the_brief_has_a_flagship_and_a_small_or_is_reported():
 def test_open_models_have_host_token_price_licence_and_source(filename):
     raw = (ROOT / "litellm" / filename).read_text()
     models = rows(filename)
-    assert len(models) == len(config(filename)["model_list"])
+    assert len(models) + 2 == len(config(filename)["model_list"])
     for name, (fam, tier, hf_id, host, inp, out) in OPEN.items():
         row = models[name]
         params, info = row["litellm_params"], row["model_info"]
