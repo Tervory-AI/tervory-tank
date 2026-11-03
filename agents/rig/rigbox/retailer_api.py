@@ -12,6 +12,7 @@ from chassis.tenant_db import activate_tenant, tenant_scope
 
 from rigbox.retailer import Retailer
 from rigbox.service import RigError
+from rigbox.quotes.senders import DeliveryError
 
 router = APIRouter()
 OPERATIONS = {"confirm-store-payment", "panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger", "watch-tenants", "watch-products", "watch-context"}
@@ -56,7 +57,18 @@ async def retailer_operation(operation: str, request: Request) -> JSONResponse:
                     or not 1 <= len(data["quote_id"]) <= 200):
                 raise ValueError()
             from rigbox.quotes.privacy import shopper_body
-            result = shopper_body(await service.confirm_store_payment(tenant, data["quote_id"]))
+            try:
+                confirmation = await service.confirm_store_payment(tenant, data["quote_id"])
+            except DeliveryError:
+                # A worker may have lost its lease to a newer confirmation.
+                # Return only this tenant's durable state, never the stale one.
+                current = await service.store.quote_for(tenant, data["quote_id"])
+                if not current:
+                    raise RigError("not_found", "The request is not valid.", 404) from None
+                payload = current["payload"]
+                confirmation = {"request_id": data["quote_id"], "confirmed": True,
+                                "state": payload["locate_state"]["state"], "items": [payload["product"]]}
+            result = shopper_body(confirmation)
         elif operation == "panel":
             result = await retailer.panel(tenant)
         elif operation == "settings":
