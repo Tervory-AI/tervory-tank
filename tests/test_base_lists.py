@@ -286,3 +286,44 @@ async def test_base_corridor_authority_requires_own_confirmed_card(monkeypatch):
             await trigger_crm.authority(Actor(TENANT, base.user_id, False, frozenset({"tiger"})))
     finally:
         CONFIRMED.reset(token)
+
+
+# Reuse the platform's explicitly local, rolled-back PostgreSQL fixture in CI.
+from test_base_database import database  # noqa: F401
+
+
+@pytest.mark.asyncio
+async def test_saved_list_real_postgres_snapshot_and_rls(database):  # noqa: F811 - reused pytest fixture
+    from pathlib import Path
+
+    import asyncpg
+    conn, runtime = database
+    store = lists.Store(runtime.pool())
+    rows = [record()]
+    async def find(tenant, filters):
+        return deepcopy(rows)
+    store.find = find
+    saved = await store.save(TENANT, "Invented list", lists.FindArgs(state="DC"))
+    rows.clear()
+    assert (await store.show(TENANT, saved["list_id"]))["records"] == [record()]
+    with pytest.raises(HTTPException):
+        await store.show(OTHER, saved["list_id"])
+    # Join a simulated existing rollout only inside this fixture transaction.
+    await conn.execute("ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY")
+    await conn.execute((Path(__file__).resolve().parents[1] / "tank/schema.sql").read_text())
+    role = "b4_" + uuid4().hex
+    await conn.execute(f'CREATE ROLE "{role}" NOLOGIN NOSUPERUSER NOBYPASSRLS')
+    await conn.execute(f'GRANT USAGE ON SCHEMA tank TO "{role}"')
+    await conn.execute(f'GRANT SELECT,INSERT ON tank.base_saved_lists TO "{role}"')
+    await conn.execute(f'SET LOCAL ROLE "{role}"')
+    try:
+        await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(OTHER))
+        assert await conn.fetchval("SELECT count(*) FROM tank.base_saved_lists WHERE list_id=$1", saved["list_id"]) == 0
+        with pytest.raises(asyncpg.InsufficientPrivilegeError):
+            async with conn.transaction():
+                await conn.execute("INSERT INTO tank.base_saved_lists(tenant_id,name,filters,record_ids,records) "
+                                   "VALUES($1,'invented','{}',ARRAY[]::uuid[],'[]')", TENANT)
+        await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(TENANT))
+        assert await conn.fetchval("SELECT count(*) FROM tank.base_saved_lists WHERE list_id=$1", saved["list_id"]) == 1
+    finally:
+        await conn.execute("RESET ROLE")
