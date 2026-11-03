@@ -5,7 +5,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
   const target = new URL(process.argv[2]);
   if (target.protocol !== 'https:' || target.port || target.pathname !== '/' || target.search || target.username || target.password) throw Error('invalid target');
   const browser = await chromium.launch({headless:true, proxy:{server:'http://radix-passive-proxy:8082'}, args:[
-    '--disable-quic','--disable-background-networking','--disable-component-update',
+    '--proxy-bypass-list=<-loopback>','--disable-quic','--disable-background-networking','--disable-component-update',
     '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
     '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE radix-passive-proxy'
   ]});
@@ -40,6 +40,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
       for(const h of await response.headersArray()) if(h.name.toLowerCase()==='set-cookie') observed.push(metadata(h.value,response.url()));
     })()));
     let refused = 0, clientRefused = 0;
+    await context.routeWebSocket('**/*', route => {clientRefused++; route.close();});
     await context.route('**/*', async route => {
       const u = new URL(route.request().url());
       if (u.protocol !== 'https:' || (u.port && u.port !== '443') || u.username || u.password) {
