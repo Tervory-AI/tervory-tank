@@ -2856,15 +2856,9 @@ DO $$ BEGIN
 END $$;
 
 -- Trigger B3: WhatsApp conversation identities, durable inbound claims and free-tier budget.
--- Founder-authorized widening of the existing channel constraint; no data is removed.
-DO $$ BEGIN
- IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='tank.trigger_bot_conversations'::regclass
-   AND conname='trigger_bot_conversations_channel_check' AND pg_get_constraintdef(oid) LIKE '%whatsapp%') THEN
-  ALTER TABLE tank.trigger_bot_conversations DROP CONSTRAINT IF EXISTS trigger_bot_conversations_channel_check;
-  ALTER TABLE tank.trigger_bot_conversations ADD CONSTRAINT trigger_bot_conversations_channel_check
-   CHECK(channel IN ('web','whatsapp'));
- END IF;
-END $$;
+-- Preserve the legacy web-only channel check; identify the delivery transport additively.
+ALTER TABLE tank.trigger_bot_conversations ADD COLUMN IF NOT EXISTS transport
+ text NOT NULL DEFAULT 'web' CHECK(transport IN ('web','whatsapp'));
 ALTER TABLE tank.trigger_bot_conversations ADD COLUMN IF NOT EXISTS whatsapp_sealed text;
 CREATE TABLE IF NOT EXISTS tank.trigger_whatsapp_months (
  tenant_id uuid NOT NULL, phone_number_id text NOT NULL, month date NOT NULL,
