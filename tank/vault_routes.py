@@ -48,6 +48,35 @@ def public_url(value) -> str:
 def build_router(tank):
     router = APIRouter(prefix='/v1/vaults')
 
+    @router.post('/rig.vault/commerce/resolve')
+    async def rig_commerce_resolve(request: Request):
+        # The existing private retailer corridor, never a browser response.
+        # Reuse the vault's tenant/name AAD; no second encryption or key store.
+        expected = os.environ.get('RIG_RETAILER_KEY', '')
+        supplied = request.headers.get('x-rig-retailer-key', '')
+        if not expected or not supplied or not hmac.compare_digest(expected.encode(), supplied.encode()):
+            return JSONResponse({'error': {'code': 'unauthorized'}}, status_code=401)
+        data = await body(request)
+        try:
+            owner = uuid.UUID(str(data['tenant_id']))
+            name = clean(data['name'], 100)
+        except (ValueError, KeyError, TypeError):
+            return JSONResponse({'error': {'code': 'invalid'}}, status_code=422)
+        activate_tenant(owner)
+        async with tank.pool().acquire() as conn:
+            enabled = await conn.fetchval("SELECT 1 FROM tank.tenant_squad WHERE tenant_id=$1 AND agent='rig'", owner)
+            encrypted = await conn.fetchval("SELECT sealed FROM tank.vault_items WHERE tenant_id=$1 AND vault='rig.vault' AND kind='secrets' AND name=$2", owner, name) if enabled else None
+        if not encrypted:
+            return JSONResponse({'error': {'code': 'not_found'}}, status_code=404)
+        try:
+            value = open_seal(encrypted, f'plugins:v1:{owner}:rig.vault:secret:{name}')['value']
+            credential = json.loads(value)
+            if not isinstance(credential, dict):
+                raise ValueError()
+        except Exception:
+            return JSONResponse({'error': {'code': 'unavailable'}}, status_code=503)
+        return JSONResponse({'credential': credential}, headers={'Cache-Control': 'no-store'})
+
     async def authorize(request: Request, vault: str, tenant) -> tuple[uuid.UUID, str, str]:
         key = request.headers.get('x-tank-key', '')
         if not key or not tank.TANK_API_KEY or not hmac.compare_digest(key.encode(), tank.TANK_API_KEY.encode()):

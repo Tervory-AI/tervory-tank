@@ -13,7 +13,9 @@ import pytest
 from fastapi import FastAPI
 
 from test_rig_cn_archon import _archon, TENANT
-from rigbox import api, cn, page_route, recall
+from rigbox import api, guided_search as guidance, page_route, recall
+from rigbox.vocabulary import using
+from pathlib import Path
 from rigbox.service import Service
 from rigbox.store import MemoryStore
 
@@ -100,12 +102,14 @@ async def test_100000_space_searches_finish_under_one_second_through_the_real_ro
 
 
 def test_parsers_collapse_spaces_before_the_reported_expressions():
-    spaces = ' ' * 100_000
-    start = time.perf_counter()
-    assert cn._parse_constraints('under' + spaces + 'R25000') == cn._parse_constraints('under R25000')
-    assert cn._rewrite_fit_question('does the optic' + spaces + 'fit the type b?') == 'optic for type b'
-    assert cn._fit_answer('does optic' + spaces + 'fit type b?', [], [], {}, 12) is None
-    assert cn._split_clauses('type b' + spaces + '+ rmr', []) == ['type b', 'rmr']
-    assert cn._meaningful('9x19', set()) is False
-    assert recall.parts_of('optic' + spaces + 'and light for type b') == recall.parts_of('optic and light for type b')
-    assert time.perf_counter() - start < 1
+    record = Path(__file__).parent / 'fixtures/rig_catalogues/aurora/publish.json'
+    with using(json.loads(record.read_text())['shop']['vocabulary']):
+        spaces = ' ' * 100_000
+        start = time.perf_counter()
+        assert guidance._parse_constraints('under' + spaces + 'R25000') == guidance._parse_constraints('under R25000')
+        assert guidance._rewrite_fit_question('does the optic' + spaces + 'fit the type b?') == 'optic for type b'
+        assert guidance._fit_answer('does optic' + spaces + 'fit type b?', [], [], {}, 12) is None
+        assert guidance._split_clauses('type b' + spaces + '+ rmr', []) == ['type b', 'rmr']
+        assert guidance._meaningful('9x19', set()) is False
+        assert recall.parts_of('optic' + spaces + 'and light for type b') == recall.parts_of('optic and light for type b')
+        assert time.perf_counter() - start < 1
