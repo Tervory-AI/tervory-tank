@@ -55,7 +55,7 @@ async def test_base_render_stays_in_its_room(monkeypatch, skill, version, payloa
             if mode == "base":
                 assert request.headers["X-Task-ID"] == str(task)
             return httpx.Response(200, json={"ok": True, "html": html, "text": "Routing Observatory", "title": "Routing Observatory", "final_url": "https://routing.example", "status": 200})
-        return httpx.Response(200, text="<html><body></body></html>", headers={"content-type": "text/html"})
+        raise httpx.ReadTimeout("offline slow page", request=request)
 
     async def noop(*args, **kwargs):
         return None
@@ -105,4 +105,4 @@ async def test_ocr_unchanged_png_cases_use_ocr_corridor(monkeypatch):
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
         monkeypatch.setattr(main, "_http", client)
         out = await skala.run_skill(pkg, {"png_base64": "offline", "url": "https://routing.example"}, main.make_ctx(pkg, uuid.uuid4()))
-    assert seen and out["items"][0]["price"] == 12.5
+    assert seen and out["items"][0]["price"] == "12.50"
