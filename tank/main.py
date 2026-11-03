@@ -833,23 +833,13 @@ async def _startup() -> None:
     await _warn_unapproved_policy_pins()
     global _batch_task
     _batch_task = asyncio.create_task(_batch_loop())
-    global _bot_task
-    from trigger_bot import refresh_loop
-    _bot_task = asyncio.create_task(refresh_loop(__import__("sys").modules[__name__]))
-    global _marketing_task
-    from trigger_publisher import publish_loop
-    _marketing_task = asyncio.create_task(publish_loop(__import__("sys").modules[__name__]))
+    await __import__("routes_registry").startup_products(__import__("sys").modules[__name__])
 
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
     _graduated_sa_models.discard(_OWN_ZA_MODEL)
-    if _bot_task:
-        _bot_task.cancel()
-        await asyncio.gather(_bot_task, return_exceptions=True)
-    if _marketing_task:
-        _marketing_task.cancel()
-        await asyncio.gather(_marketing_task, return_exceptions=True)
+    await __import__("routes_registry").shutdown_products(__import__("sys").modules[__name__])
     if _batch_task:
         _batch_task.cancel()
         await asyncio.gather(_batch_task, return_exceptions=True)
@@ -4259,32 +4249,8 @@ async def mark_billing_event_handled(body: BillingEventHandled) -> dict[str, boo
     return {"handled": result == "UPDATE 1"}
 
 
-app.include_router(__import__("admin").router)
-app.include_router(__import__("controls").router)
-app.include_router(__import__("workers_status").router)
-app.include_router(__import__("workers_status").founder_router)
-app.include_router(__import__("dashboards").router)
+__import__("routes_registry").register_routes(__import__("sys").modules[__name__], 'early')
 
-app.include_router(__import__("gold").router)
-app.include_router(__import__("training").router)
-app.include_router(__import__("storage").router)
-app.include_router(__import__("bench").router)
-app.include_router(__import__("proof").router)
-app.include_router(routellm_shadow.router)
-app.include_router(__import__("proof").client_router)
-app.include_router(__import__("case_studies").router)
-app.include_router(__import__("event_bus").router)
-app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
-app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
-app.include_router(__import__("base_lists").build_router())
-app.include_router(__import__("base_compare").build_router())
-app.include_router(__import__("base_campaign_commands").build_router(__import__("sys").modules[__name__]))
-app.include_router(__import__("tiger_watch_commands").build_router())
-app.include_router(__import__("tiger_alerts").build_router())
-app.include_router(__import__("tisan_requests").build_router())
-app.include_router(__import__("base_audit_commands").build_router())
-app.include_router(__import__("rig_brain_routes").build_router(__import__("sys").modules[__name__]))
-app.include_router(__import__("moa").router)
 
 
 @app.get("/v1/training/graduation")
@@ -4761,48 +4727,27 @@ async def market_quarantine_act(
     return {**payload, "models": models}
 
 # GHOST-1: isolated founder panel, room checks, sealed Radix handoff and bounded recovery.
-app.include_router(__import__("ghost_routes").router)
+__import__("routes_registry").register_routes(__import__("sys").modules[__name__], 'late')
 # MODELS-2: research stays in its own module; generic routing is unchanged.
-__import__("research").register(app, globals())
 
 # COMMAND-1A: conversation routes live in their own module.
-app.include_router(__import__("command").router)
-__import__("personal_tokens").register(app)
-__import__("mcp_server").register(app)
-app.include_router(__import__("trigger_routes").router)
-app.include_router(__import__("trigger_marketing_api").router)
-app.include_router(__import__("trigger_crm").router)
-app.include_router(__import__("trigger_bot_api").router)
-app.include_router(__import__("trigger_console").router)
-app.include_router(__import__("trigger_widget").router)
 
 # ACCESS-1: scoped connections and browser-only credential handoff.
-app.include_router(__import__("access").router)
 
 # RIG-5F: additive GPU reservation and receipt routes.
-app.include_router(__import__("rig_forge_routes").build_router(__import__("sys").modules[__name__]))
 
 # RIG-5: additive Workspace proxy registration.
-app.include_router(__import__("rig_three_d").build_router(__import__("sys").modules[__name__]))
 
-app.include_router(__import__("market_lab_routes").build_router(__import__("sys").modules[__name__]))
-app.include_router(__import__("radix_passive_routes").build_router(__import__("sys").modules[__name__]))
 
 # Tenant-specific semantic-cache approval; no policy promotion is automatic.
-app.include_router(semantic_cache.build_router(__import__("sys").modules[__name__]))
 
 # Free room checker intake uses the existing registry, evals and founder approval.
-__import__("skala_intake").install(app, __import__("sys").modules[__name__])
 
-app.include_router(__import__("vault_routes").build_router(__import__("sys").modules[__name__]))
-app.include_router(__import__("mcp_client_oauth").router)
 
 # D1-D3 memory: founder-only record/publication corridor.
-from memory_routes import router as memory_router
-app.include_router(memory_router)
+from memory_routes import router as memory_router  # noqa: F401 -- compatibility export
 
 # B3: process committed model changes through the existing skill-eval handler.
-__import__("skala_revalidation").install(app, __import__("sys").modules[__name__])
 
 # Bind only accepted endpoint arguments after existing authentication dependencies.
 bind_tenant_endpoints(app)
