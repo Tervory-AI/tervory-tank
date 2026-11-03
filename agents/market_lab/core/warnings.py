@@ -114,7 +114,7 @@ async def run(
                     "href": source_link(doc_id),
                     "fingerprint": fingerprint,
                 }
-                pending_pattern = changed or previous.get("pattern_pending", False)
+                pending_pattern = changed or previous.get("pattern_pending", True)
                 if pending_pattern and memory is not None:
                     pending_patterns.append((pair_key, config, stats, doc_id))
                 summary["pattern_pending"] = pending_pattern

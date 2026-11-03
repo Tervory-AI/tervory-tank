@@ -4,7 +4,8 @@ The approved destinations are lokd.co.za and this account's R2 host, on 443.
 Each has separate byte, duration, concurrency and rate limits. The proxy resolves
 that name, refuses any answer that is not a public address, and connects to
 the one address from that lookup. It does not resolve again. TLS stays between
-the caller and the site: this process tunnels bytes and does not change SNI.
+the caller and the site: this process tunnels bytes and does not change SNI. Opt-in SNI admission
+checks the first ClientHello against verified_host before forwarding any bytes.
 
 A missing, invalid, or revoked policy refuses every tunnel. The process does
 not read a proxy address or a resolver from the request.
@@ -214,6 +215,7 @@ class Proxy:
         verified_host: str = APPROVED_HOST,
         allow_storage: bool = True,
         active: Callable[[], bool] | None = None,
+        require_sni: bool = False,
     ) -> None:
         self._resolve = resolve
         self._connect = connect
@@ -224,6 +226,7 @@ class Proxy:
         self._max_bytes = max_response_bytes
         self._max_duration = max_duration_seconds
         self._verified_host = verified_host
+        self._require_sni = require_sni
         self._active_lease = active or (lambda: True)
         self._lock = threading.Lock()
         self._times: list[float] = []
@@ -266,12 +269,20 @@ class Proxy:
                 if not routable(pinned):
                     self._refuse(conn)
                     return
-                upstream = self._connect(pinned, APPROVED_PORT)
-                conn.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
-                # Count bytes already read after CONNECT against the same upload cap.
                 limit = STORAGE_BOUNDS["max_response_bytes"] if is_storage else self._max_bytes
                 if len(rest) > limit:
                     return
+                if self._require_sni:
+                    conn.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                    verified = self._verified_client_hello(conn, rest, limit)
+                    if verified is None:
+                        self._refuse(conn)
+                        return
+                    rest = verified
+                    upstream = self._connect(pinned, APPROVED_PORT)
+                else:
+                    upstream = self._connect(pinned, APPROVED_PORT)
+                    conn.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
                 if rest:
                     upstream.sendall(rest)
                 self._relay(conn, upstream, is_storage, len(rest))
@@ -285,6 +296,48 @@ class Proxy:
             return
         finally:
             conn.close()
+
+    def _verified_client_hello(self, conn: socket.socket, initial: bytes, limit: int) -> bytes | None:
+        """Use OpenSSL's ClientHello parser; never terminate the real TLS session.
+
+        The temporary parser has no certificate/key. Its SNI callback aborts
+        parsing deliberately; no generated server bytes are sent to the client.
+        Only the untouched, bounded client bytes are forwarded after an exact
+        match. Fragmented records are handled by the existing TLS implementation.
+        """
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        matched = False
+        def name_seen(obj, name, ctx):
+            nonlocal matched
+            matched = name == self._verified_host
+            return ssl.ALERT_DESCRIPTION_UNRECOGNIZED_NAME
+        context.set_servername_callback(name_seen)
+        incoming = ssl.MemoryBIO()
+        parser = context.wrap_bio(incoming, ssl.MemoryBIO(), server_side=True)
+        data = bytearray(initial)
+        pending = initial
+        maximum = min(limit, 65536)
+        deadline = time.monotonic() + min(5.0, self._max_duration)
+        while len(data) <= maximum and time.monotonic() < deadline:
+            if pending:
+                incoming.write(pending)
+                try:
+                    parser.do_handshake()
+                except ssl.SSLWantReadError:
+                    pass
+                except ssl.SSLError:
+                    return bytes(data) if matched else None
+                else:
+                    return None
+            remaining = maximum - len(data)
+            if remaining <= 0:
+                return None
+            conn.settimeout(max(0.001, deadline - time.monotonic()))
+            pending = conn.recv(min(4096, remaining))
+            if not pending:
+                return None
+            data.extend(pending)
+        return None
 
     def _admit(self, storage: bool = False) -> bool:
         now = self._now()

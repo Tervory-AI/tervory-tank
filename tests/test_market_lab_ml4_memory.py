@@ -48,11 +48,19 @@ async def test_private_save_fake_encoder_founder_only_publish_and_other_tenant_s
     monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'placeholder-founder')
     monkeypatch.setenv('TANK_KEY_' + m.agent.upper(), 'placeholder-room')
     app = create_app(InMemoryStore(), Encoder(), records=m.records)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://placeholder-hermes') as http:
+    mutations = []
+    async def requested(request):
+        if request.method in {'DELETE', 'POST'}:
+            mutations.append((request.method, request.url.path, dict(request.url.params)))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://placeholder-hermes',
+                                event_hooks={'request': [requested]}) as http:
         client = MemoryClient(base_url='http://placeholder-hermes', api_key='placeholder-room', agent=m.agent, http=http)
         config, document = plan()['pairs'][0], str(uuid4())
         assert await remember(client, m.tenant, config, STATS, document)
-        assert await remember(client, m.tenant, config, STATS, document)
+        before = list(mutations)
+        # A second watch has different private evidence, but the same pair claim.
+        assert await remember(client, m.tenant, config, STATS, str(uuid4()))
+        assert mutations == before  # Neither forget nor remember for identical claims.
         own = await client.records(m.tenant)
         assert len(own) == 1 and own[0]['kind'] == 'warning_pattern'
         assert own[0]['evidence'] == [document]
@@ -94,4 +102,32 @@ async def test_private_save_fake_encoder_founder_only_publish_and_other_tenant_s
         assert records[0]['tenant_id'] == PLATFORM_TENANT
         assert document not in json.dumps(records) and m.tenant not in json.dumps(records)
         assert m.records.encoder.calls == before
+
+        # Replacement uses the same client ID; the explicitly published copy
+        # retains its own ID, original claim and platform owner unchanged.
+        published_before = records
+        changed = {**STATS, 'episode_count': 4, 'hits': 3, 'hit_rate': .75}
+        new_document = str(uuid4())
+        before = len(mutations)
+        assert await remember(client, m.tenant, config, changed, new_document)
+        assert mutations[before:] == [
+            ('DELETE', '/memories/' + own[0]['id'], {'tenant_id': m.tenant}),
+            ('POST', '/memories', {}),
+        ]
+        replaced = await client.records(m.tenant)
+        assert len(replaced) == 1 and replaced[0]['id'] == own[0]['id']
+        assert json.loads(replaced[0]['claim']) == claim(config, changed)
+        assert replaced[0]['evidence'] == [new_document]
+        assert await client.records(m.other, tier='platform') == published_before
+        assert await client.records(m.other) == []
+
+        # Every configured pair fits Hermes's existing 50-row SQL listing.
+        pairs = plan()['pairs']
+        assert len(pairs) < 50
+        for pair in pairs[1:]:
+            assert await remember(client, m.tenant, pair, STATS, str(uuid4()))
+        listed = await listing(client, m.tenant, plan())
+        assert len(listed['patterns']) == len(pairs)
+        assert {row['claim']['pair_id'] for row in listed['patterns']} == {pair['id'] for pair in pairs}
+        assert len({row['id'] for row in listed['patterns']}) == len(pairs)
         assert gateway_calls == []
