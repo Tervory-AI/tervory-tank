@@ -222,10 +222,10 @@ async def rotate_refresh(presented: str, *, audience: str, client_id: str | None
         async with command.db().acquire() as conn:
             # Rotation: the presented refresh token and the old access token stop working.
             token_id = await conn.fetchval(
-                "UPDATE tank.personal_tokens SET token_hash=$4,expires_at=$5,refresh_hash=$6,refresh_expires_at=$7 "
-                "WHERE tenant_id=$1 AND region=$2 AND refresh_hash=$3 AND revoked_at IS NULL "
-                "AND audience=$8 AND client_id IS NOT DISTINCT FROM $9 "
-                "AND refresh_expires_at > now() RETURNING token_id",
+                """UPDATE tank.personal_tokens SET token_hash=$4,expires_at=$5,refresh_hash=$6,refresh_expires_at=$7
+                WHERE tenant_id=$1 AND region=$2 AND refresh_hash=$3 AND revoked_at IS NULL
+                AND audience=$8 AND client_id IS NOT DISTINCT FROM $9
+                AND refresh_expires_at > now() RETURNING token_id""",
                 tenant, box, pat.digest(presented), pat.digest(access), issued + ACCESS_TTL,
                 pat.digest(rotated), issued + REFRESH_TTL, audience, client_id)
     if token_id is None:
@@ -259,8 +259,10 @@ async def revoke(request: Request) -> JSONResponse:
     with tenant_scope(tenant):
         async with command.db().acquire() as conn:
             await conn.execute(
-                f"UPDATE tank.personal_tokens SET revoked_at=coalesce(revoked_at,now()) "
-                f"WHERE tenant_id=$1 AND region=$2 AND {column}=$3 AND audience='cli'", tenant, box, pat.digest(token))
+                """UPDATE tank.personal_tokens SET revoked_at=coalesce(revoked_at,now())
+                WHERE tenant_id=$1 AND region=$2 AND audience='cli'
+                AND (($4='token_hash' AND token_hash=$3) OR ($4='refresh_hash' AND refresh_hash=$3))""",
+                tenant, box, pat.digest(token), column)
     # RFC 7009: the same answer whether or not the token existed.
     return JSONResponse({"revoked": True}, headers=NO_STORE)
 
