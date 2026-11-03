@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import asyncio
-from html.parser import HTMLParser
-from datetime import datetime, timezone
 import json
+import logging
 import re
-from urllib.parse import urljoin, urlsplit, urldefrag
+from datetime import UTC, datetime
+from html.parser import HTMLParser
+from urllib.parse import urldefrag, urljoin, urlsplit
 from urllib.robotparser import RobotFileParser
 from uuid import UUID, uuid5
 
@@ -68,7 +69,7 @@ async def crawl(url: str, get=public_get) -> list[dict]:
         page.feed(body.decode('utf-8', 'replace'))
         text = ' '.join(' '.join(page.text).split())
         if text:
-            pages.append({'url': current, 'title': current, 'text': text, 'checked_at': datetime.now(timezone.utc)})
+            pages.append({'url': current, 'title': current, 'text': text, 'checked_at': datetime.now(UTC)})
         pending.extend(urldefrag(urljoin(current, link))[0] for link in page.links[:500])
     return pages
 
@@ -83,7 +84,7 @@ class BotIndex(VectorIndex):
             'tenant_id': str(tenant), 'region': region, 'encoder_id': ENCODER_ID})], wait=True)
 
     async def query(self, tenant: UUID, region: str, text: str):
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
         name = 'trigger_bot_' + tenant.hex
         if not await self.client.collection_exists(name):
             return []
@@ -149,7 +150,7 @@ class Sources:
                         (tenant_id,id,source_id,text,url,title,kind,sku,product_id,question,approved_answer,checked_at)
                         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)''', tenant, point, source, text,
                         page.get('url'), page.get('title', row['title']), row['kind'], page.get('sku'),
-                        page.get('product_id'), page.get('question'), page.get('approved_answer'), page.get('checked_at', datetime.now(timezone.utc)))
+                        page.get('product_id'), page.get('question'), page.get('approved_answer'), page.get('checked_at', datetime.now(UTC)))
                 await conn.execute('''UPDATE tank.trigger_bot_sources SET status='ready',checked_at=now(),
                     next_check=now()+interval '7 days' WHERE tenant_id=$1 AND id=$2''', tenant, source)
         except Exception:
@@ -167,7 +168,8 @@ class Sources:
         lexical = [{**dict(r), 'score': len(terms & set(re.findall(r'\w+', r['text'].casefold()))) / max(1, len(terms))} for r in rows]
         try:
             points = await self.index.query(tenant, self.region, question)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 — fail closed at service boundary
+            logging.getLogger(__name__).warning('Bot vector lookup unavailable (%s)', type(exc).__name__)
             points = []  # Full-text evidence stays authoritative; never query another tenant.
         scores = dict(points)
         vector_rows = await self.pool.fetch(sql + 'AND p.id=ANY($2::uuid[])', tenant, list(scores)) if scores else []
