@@ -685,6 +685,11 @@ def create_app() -> FastAPI:
             **result,
         }
 
+    @app.get("/ghost/patch/fixes", dependencies=[Depends(require_tank)])
+    async def patch_fixes():
+        from .fix_approval import fixes
+        return fixes(app.state.store, PLATFORM_TENANT)
+
     @app.post("/ghost/patch/from-match", dependencies=[Depends(require_tank)])
     async def patch_from_match(request: Request):
         """CONNECT: advisory match fixture → PatchBrief → draft/dry-run plan. Never merges."""
@@ -696,7 +701,13 @@ def create_app() -> FastAPI:
         if not isinstance(data, dict):
             raise HTTPException(422, PATCH_BURN_DETAIL)
         try:
-            return connect_match_to_plan(data)
+            from .fix_approval import stored_match, brief_for
+            if set(data) == {"match_id"}:
+                data = stored_match(app.state.store, PLATFORM_TENANT, str(data["match_id"]))
+            brief_for(data)
+            result = connect_match_to_plan(data)
+            pr_url = (result.get("result") or {}).get("pr_url")
+            return {**result, **({"pr_url": pr_url} if pr_url else {})}
         except PatchBurned:
             raise HTTPException(422, PATCH_BURN_DETAIL) from None
 
