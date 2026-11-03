@@ -1,12 +1,12 @@
 ..                                                                       [100%]
 =============================== warnings summary ===============================
 tank/main.py:754
-  /repo/tank/main.py:754: DeprecationWarning: 
+  /repo/tank/main.py:754: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 ../usr/local/lib/python3.12/site-packages/fastapi/applications.py:4723
@@ -14,21 +14,21 @@ tank/main.py:754
 ../usr/local/lib/python3.12/site-packages/fastapi/applications.py:4723
 ../usr/local/lib/python3.12/site-packages/fastapi/applications.py:4723
 ../usr/local/lib/python3.12/site-packages/fastapi/applications.py:4723
-  /usr/local/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /usr/local/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tank/main.py:814
-  /repo/tank/main.py:814: DeprecationWarning: 
+  /repo/tank/main.py:814: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 ../usr/local/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
@@ -44,39 +44,39 @@ tank/main.py:814
     warnings.warn(
 
 tank/agent_skills.py:531
-  /repo/tank/agent_skills.py:531: DeprecationWarning: 
+  /repo/tank/agent_skills.py:531: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tank/skala_intake.py:71
-  /repo/tank/skala_intake.py:71: DeprecationWarning: 
+  /repo/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tank/skala_intake.py:77
-  /repo/tank/skala_intake.py:77: DeprecationWarning: 
+  /repo/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tank/skala_revalidation.py:192
-  /repo/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /repo/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
