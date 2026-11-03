@@ -23,7 +23,7 @@ Branch: `codex/tiger-competitors`. Tested implementation: `556809f8`, including 
 | [app.py:148](../../agents/tiger/app.py#L148) | Subsequent checks for a confirmed catalogue match use `tiger.price_structured` and disable the screenshot/model fallback. Existing supplier/ordinary watch behavior remains on its original path. |
 | [schema.sql:2337](../../tank/schema.sql#L2337) | Additive/idempotent `agent_tiger.matches`, `match_runs`, and public host counters. Tenant tables use the same legacy-safe RLS activation sentinel and permissive/restrictive policies as `tank.personal_tokens`. Checked [Tank startup:753](../../tank/main.py#L753): schema runs through the existing admin-or-legacy connection and existing role validation. No startup, queue worker, policy lifecycle or cache edits. |
 | [trigger_routes.py:20](../../tank/trigger_routes.py#L20) | Approved shared-helper change: optional keyword `agent='trigger'`, passed as `$5` in literal SQL. Existing callers keep their signature and attribution. Tiger uses `agent='tiger'`; receipts have the same zero-token/code/$0 ledger shape as `trigger.check`. |
-| [test_tiger_competitors.py:1](../test_tiger_competitors.py#L1), [legacy corridor:59](test_prices.py#L59), [opt-in test:105](test_prices.py#L105), [wiring:490](../test_tiger.py#L490), [runner:1](run_t1_offline.py#L1) | Synthetic tests for receipt attribution, GTIN validation, evidence refusal, suggested/confirmed/rejected states, tenant isolation, position arithmetic, robots, human checks, search forms, host limits, anonymous browser requests, durable chat results and RLS. Update the handler contract for the added job. Run database tests on an existing free PostgreSQL image with `pg_trgm`. |
+| [test_tiger_competitors.py:1](../test_tiger_competitors.py#L1), [legacy corridor:59](test_prices.py#L59), [opt-in test:105](test_prices.py#L105), [wiring:491](../test_tiger.py#L491), [runner:1](run_t1_offline.py#L1) | Synthetic tests for receipt attribution, GTIN validation, evidence refusal, suggested/confirmed/rejected states, tenant isolation, position arithmetic, robots, human checks, search forms, host limits, anonymous browser requests, durable chat results and RLS. Update the handler contract for the added job. Run database tests on an existing free PostgreSQL image with `pg_trgm`. |
 
 Position uses competition ranking: `1 + competitors priced below the store`. Difference is own price minus the cheapest matched competitor in the same currency. Other currencies, missing prices and unreadable pages remain in the source data but are excluded from arithmetic. No currency conversion is invented. Each competitor includes its URL, latest price, stock and observation time.
 
@@ -52,6 +52,8 @@ git diff origin/main --check
 ```
 
 **All exit 0.** [Static output and exact commands](evidence/tiger_t1_focused_and_static.txt).
+
+Captured output files retain the test/error content; trailing whitespace was trimmed for repository checks.
 
 ## Clean-main comparison of the six failures
 
