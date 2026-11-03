@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import shutil
@@ -103,8 +104,7 @@ async def test_scaffold_cli_loads_skala_packages_and_cannot_run_unimplemented_co
 
 
 @pytest.mark.asyncio
-async def test_scaffold_packages_register_as_candidates_without_approval(tmp_path, monkeypatch):
-    import main as tank
+async def test_scaffold_packages_register_as_candidates_without_approval(tmp_path):
     from contextlib import asynccontextmanager
 
     scaffold("throwaway", tmp_path)
@@ -122,9 +122,13 @@ async def test_scaffold_packages_register_as_candidates_without_approval(tmp_pat
         async def acquire(self):
             yield conn
 
-    monkeypatch.setattr(tank, "_packages", packages)
-    monkeypatch.setattr(tank, "pool", lambda: Pool())
-    await tank.register_packages()
+    # Execute the unchanged registry function with an offline connection double;
+    # importing all of Tank would require unrelated runtime settings.
+    tree = ast.parse((ROOT / "tank/main.py").read_text())
+    function = next(node for node in tree.body if isinstance(node, ast.AsyncFunctionDef) and node.name == "register_packages")
+    scope = {"_packages": packages, "pool": lambda: Pool()}
+    exec(compile(ast.Module(body=[function], type_ignores=[]), "tank/main.py", "exec"), scope)
+    await scope["register_packages"]()
     insertions = [(query, args) for query, args in calls if "INSERT INTO tank.skills" in query]
     assert {args[0] for _, args in insertions} == {"throwaway.ingest", "throwaway.profile"}
     # The existing registry uses the database default 'candidate'; it never sets state.
