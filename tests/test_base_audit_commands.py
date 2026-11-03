@@ -185,8 +185,9 @@ def test_workspace_audit_download_preserves_bytes_and_status():
 
 
 @pytest.mark.asyncio
-async def test_start_same_seed_uses_real_saved_audit(audit_db, monkeypatch):
-    pool, rt, _ = audit_db
+@pytest.mark.usefixtures("audit_db")
+async def test_start_same_seed_uses_real_saved_audit(request, monkeypatch):
+    pool, rt, _ = request.getfixturevalue("audit_db")
     campaign_id, _ = await campaign(pool, tenant=TENANT)
     monkeypatch.setattr(command, "db", lambda: pool)
     monkeypatch.setenv("TANK_API_KEY", "placeholder")
