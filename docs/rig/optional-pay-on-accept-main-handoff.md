@@ -264,7 +264,7 @@ The latest public `task_complete` at 2026-11-03T16:47:59.307Z explicitly acknowl
 | `tank/command.py:44`, `:118`, `:1018`, `:1262`, `:1461`, `:1655` | Tool registration, admin/founder exposure, strict arguments, adapter and confirmed dispatch; preserved stopped-owner patch. |
 | `tank/access.py:938` | Existing confirmation corridor checks tool authority; other operations retain the Rig squad gate. |
 | `tests/test_command.py:1408`, `:1430`, `:1469` | Ordinary-member denial/admin/founder exposure, required Confirm and $0 code receipt, other-tenant 404 through confirmed admin dispatch. |
-| `tests/test_rig_no_payments.py:120`, `:131`, `:134`, `:156`, `:163`, `:174`, `:198`, `:227`, `:241` | Explicit placeholder test data. |
+| `tests/test_rig_no_payments.py:193`, `:204`, `:207`, `:229`, `:236`, `:247`, `:271`, `:300`, `:314` | Explicit placeholder test data. |
 
 After merge, the founder fills these setting names only: `RIG_LOCATE_ORDER_MODE`, `RIG_RETAILER_KEY`, `RIG_LOCATE_OUTBOX_DIR` for auto-order, plus the store's delivery range through existing retailer settings.
 
@@ -286,3 +286,21 @@ git diff --check
 ```
 
 Results: the three new Command tests pass (`3 passed, 99 deselected`); the separate no-payments suite passes (`16 passed`). Lint and whitespace pass. The initial new permission test omitted its runtime fixture; that test harness issue was corrected before these passing runs.
+
+
+Before the first push, re-fetch found newer remote commits `e8ad7ca1`, `401130a1`, `a651d586`. All were preserved with a branch merge; overlapping placeholder-only conflicts in `tests/test_rig_no_payments.py` use the remote version, including its transient/permanent-error/lost-lease tests. Main was merged exactly once in this fresh continuation, at the end, from fetched commit `dc270ec75be61f2cafa783937f57114614526ffb`.
+
+```sh
+git fetch origin codex/rig-no-payments main
+git merge --no-edit origin/codex/rig-no-payments
+# Resolve overlapping placeholder edits by preserving the newer remote test file.
+git show origin/codex/rig-no-payments:tests/test_rig_no_payments.py > tests/test_rig_no_payments.py
+git add tests/test_rig_no_payments.py
+git commit -m "Merge newer no-payments branch work and preserve regression tests"
+git merge --no-edit dc270ec75be61f2cafa783937f57114614526ffb
+TMPDIR=/workspace/fresh-rig-nopay-0845/.rig-validation PYTHONPATH=.rig-validation/python-overlay:agents/_chassis:agents/rig POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32864/postgres RIG_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32864/postgres /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python -m pytest tests/test_rig_confirmation_command.py tests/test_rig_no_payments.py tests/test_command.py -k 'rig_confirmation or confirmation_tool or confirm_card or test_rig_no_payments' -q --tb=short --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+/home/ammosync/trigger-crm-venv312/bin/ruff check tank/command.py tank/access.py tests/test_command.py tests/test_rig_confirmation_command.py tests/test_rig_no_payments.py --select E9,F
+git diff --check dc270ec75be61f2cafa783937f57114614526ffb...HEAD
+```
+
+Final merged-code focused result: **26 passed, 83 deselected, 3 warnings in 16.66s**. Lint and whitespace pass. Final-head CI evidence is maintained in PR #613 so recording its result does not create another untested head.
