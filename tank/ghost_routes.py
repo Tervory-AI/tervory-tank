@@ -299,8 +299,9 @@ async def ghost_memory(method, path, *, body=None, params=None):
 
 
 @router.get("/autumbra/memory/records", dependencies=[Depends(require_ghost)])
-async def ghost_memory_records(tenant_id: uuid.UUID, tier: Literal["client", "platform"] = "client"):
-    return await ghost_memory("GET", "/records", params={"tenant_id": str(tenant_id), "tier": tier, "agent": "ghost"})
+async def ghost_memory_records(tenant_id: uuid.UUID, tier: Literal["client", "platform"] = "client",
+                               limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0)):
+    return await ghost_memory("GET", "/records", params={"tenant_id": str(tenant_id), "tier": tier, "agent": "ghost", "limit": limit, "offset": offset})
 
 
 @router.post("/autumbra/memory/memories", dependencies=[Depends(require_ghost)])
