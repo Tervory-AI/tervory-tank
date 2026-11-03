@@ -2283,6 +2283,37 @@ INSERT INTO tank.policy(task_type,rung,model,cache_scope,max_tokens_out,eval_thr
 VALUES ('tisan.plan',1,'luna','tenant',3000,0.99,200,false)
 ON CONFLICT DO NOTHING;
 
+-- B4 saved Base lists: immutable tenant-owned record/evidence snapshots.
+CREATE TABLE IF NOT EXISTS tank.base_saved_lists (
+    list_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    name text NOT NULL CHECK (length(name) BETWEEN 1 AND 120),
+    filters jsonb NOT NULL,
+    record_ids uuid[] NOT NULL,
+    records jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS base_saved_lists_tenant ON tank.base_saved_lists(tenant_id,created_at DESC);
+-- Follow personal_tokens: join an existing RLS rollout, never start one.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+        ALTER TABLE tank.base_saved_lists ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE tank.base_saved_lists FORCE ROW LEVEL SECURITY;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.base_saved_lists'::regclass AND polname='tenant_access') THEN
+            CREATE POLICY tenant_access ON tank.base_saved_lists FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='tank.base_saved_lists'::regclass AND polname='tenant_boundary') THEN
+            CREATE POLICY tenant_boundary ON tank.base_saved_lists AS RESTRICTIVE FOR ALL TO PUBLIC
+                USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+                WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+        END IF;
+    END IF;
+END
+$$;
+
 -- Trigger W1 provenance remains in the existing tenant-private tables.
 ALTER TABLE tank.trigger_writes ADD COLUMN IF NOT EXISTS format text;
 ALTER TABLE tank.trigger_writes ADD COLUMN IF NOT EXISTS accepted_write_ids uuid[] NOT NULL DEFAULT '{}';
