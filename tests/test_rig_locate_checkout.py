@@ -138,7 +138,7 @@ async def test_confirm_issues_hold_from_live_price_without_supplier_fields():
     # (45 + 5) * 18 / 0.8 from the live price, not the imported 40.
     assert public["price"] == {"amount": "1125.00", "currency": "ZAR"}
     assert checker.calls == [(TENANT, "other-store", "RSR|POF90307")]
-    assert set(shopper_body(public)) == {"status", "eta", "price", "expires_at", "hold"}
+    assert set(shopper_body(public)) == {"status", "eta", "ship_days", "price", "expires_at", "hold"}
     assert "other-store" not in json.dumps(shopper_body(public)) and "RSR" not in json.dumps(public)
     assert read_token(SECRET, TENANT, public["hold"], datetime.now(timezone.utc)) == result["hold_id"]
 
