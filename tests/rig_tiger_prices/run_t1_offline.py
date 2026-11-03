@@ -25,7 +25,8 @@ try:
         raise RuntimeError('Disposable PostgreSQL did not become ready')
     address = subprocess.check_output(['docker','port',name,'5432/tcp'],text=True).strip()
     assert address.startswith('127.0.0.1:')
-    env = {**os.environ,'POOL_SCHEMA_DATABASE_URL':f'postgresql://postgres@{address}/postgres'}
+    uri = f'postgresql://postgres@{address}/postgres'
+    env = {**os.environ,'POOL_SCHEMA_DATABASE_URL':uri,'TIGER_MAIL_TEST_DATABASE_URL':uri}
     command = [sys.executable,'-m','pytest',*map(str,sorted((ROOT/'tests').glob('test_tiger*.py'))),
         'tests/rig_tiger_prices','-q','--tb=short','--timeout=90','--disable-socket',
         '--allow-unix-socket','--allow-hosts=127.0.0.1,::1']
