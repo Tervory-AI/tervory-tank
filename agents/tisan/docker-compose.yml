@@ -74,6 +74,8 @@ services:
 
 volumes:
   agent_tisan_data:
+    external: true
+    name: lblbn0wjaz30hhdur9l3pylg_agent-tisan-data
 
 networks:
   gw:
