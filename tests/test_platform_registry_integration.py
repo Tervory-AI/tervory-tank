@@ -222,6 +222,10 @@ async def test_teachers_sources_counts_receipt_and_tenant_isolation(serving, mon
     response = await real.client.get('/v1/training/teachers', headers=headers,
         params={'skill_id': 'placeholder.skill', 'tenant_id': str(foreign)})
     assert response.status_code == 200, response.text
+    for invalid_skill in ('placeholder', 'placeholder.' + 'x' * 188, ''):
+        invalid = await real.client.get('/v1/training/teachers', headers=headers,
+                                       params={'skill_id': invalid_skill})
+        assert invalid.status_code == 422, invalid.text
     result = response.json()
     assert result['count'] == len(result['items']) == len(truth) * 2
     for version in ('1.0.0', '2.0.0'):
