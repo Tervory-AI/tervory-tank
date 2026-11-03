@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 from typing import Any
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -14,6 +15,22 @@ from core.ledger import PostgresLedger
 
 from core.evidence import current_revisions, usable_points
 from core.pure import series_fetch
+
+log = logging.getLogger(__name__)
+
+
+def event_day(event: object) -> date | None:
+    value = event.get("date") if isinstance(event, dict) else None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value).date()
+        except ValueError:
+            pass
+    return None
 
 
 def decoded(value: Any) -> Any:
@@ -41,6 +58,7 @@ async def series(ledger: PostgresLedger, tenant: str, now: datetime) -> dict[str
     collected = {}
     weather = {}
     weather_title = None
+    skipped_events = 0
     for record in records:
         doc = decoded(record["content"])
         if doc.get("kind") == "warning_evidence":
@@ -48,7 +66,11 @@ async def series(ledger: PostgresLedger, tenant: str, now: datetime) -> dict[str
         if doc.get("source_id") == "noaa_alerts":
             weather_title = doc["name"]
             for index, event in enumerate(doc.get("events") or []):
-                stamp = str(event["date"])[:10]
+                observed_day = event_day(event)
+                if observed_day is None:
+                    skipped_events += 1
+                    continue
+                stamp = observed_day.isoformat()
                 if event.get("kind") != "severe_weather" or stamp > now.date().isoformat():
                     continue
                 # One alert can have several state rows and appear in many snapshots.
@@ -86,6 +108,8 @@ async def series(ledger: PostgresLedger, tenant: str, now: datetime) -> dict[str
                 "row": index,
                 "href": f"/market-lab/sources/{doc['id']}?row={index}#point-{index}",
             }
+    if skipped_events:
+        log.warning("Skipped %d stored weather events without a usable date", skipped_events)
     if weather:
         # Missing collection days remain missing; no zero counts are invented.
         title = weather_title
