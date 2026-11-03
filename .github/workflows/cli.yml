@@ -178,9 +178,6 @@ jobs:
     defaults:
       run:
         shell: bash
-    env:
-      # Use task-owned runner storage, never the shared worker's /tmp.
-      TMPDIR: ${{ runner.temp }}/cli-w4-tests
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
@@ -190,7 +187,8 @@ jobs:
           cache-dependency-path: cli/package-lock.json
       - name: Prepare GNU archive tools and consistent Git fixtures
         run: |
-          mkdir -p "$TMPDIR"
+          mkdir -p "$RUNNER_TEMP/cli-w4-tests"
+          echo "TMPDIR=$RUNNER_TEMP/cli-w4-tests" >> "$GITHUB_ENV"
           echo 'C:\Program Files\Git\usr\bin' >> "$GITHUB_PATH"
           git config --global core.autocrlf false
           git config --global core.symlinks true
