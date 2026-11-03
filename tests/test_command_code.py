@@ -192,7 +192,7 @@ def test_code_tool_proposals_remain_strict(content):
 
 def test_code_tervory_limits_and_actor_permissions():
     member = command.Actor(TENANT, 'placeholder-member', False, frozenset({'radix'}))
-    request = {'name': 'tervory', 'arguments': {'tool': 'radix.repo.findings', 'arguments': {}}}
+    request = {'name': 'tervory', 'arguments': {'tool': 'radix.repo.findings', 'arguments': {'scan_id': str(uuid.UUID(int=123))}}}
     assert len(command.code_plan(json.dumps({'requests': [request] * 6}), member).requests) == 6
     with pytest.raises(ValueError):
         command.code_plan(json.dumps({'requests': [request] * 7}), member)
@@ -209,7 +209,7 @@ async def test_code_tervory_pending_card_project_privacy_and_no_dispatch(api, mo
     ledger = uuid.uuid4()
     await pool.execute("INSERT INTO tank.ledger(id,tenant_id,agent,task_type,model,cost_usd) "
                        "VALUES($1,$2,'orchestrator','command.code','placeholder-model',0)", ledger, TENANT)
-    request = {'name': 'tervory', 'arguments': {'tool': 'radix.repo.findings', 'arguments': {}}}
+    request = {'name': 'tervory', 'arguments': {'tool': 'radix.repo.findings', 'arguments': {'scan_id': str(uuid.UUID(int=123))}}}
     route = AsyncMock(return_value=SimpleNamespace(ledger_id=ledger, content=json.dumps({'requests': [request]})))
     dispatch = AsyncMock()
     monkeypatch.setattr(command, 'route_code', route)
