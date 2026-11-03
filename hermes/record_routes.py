@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Query
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -85,9 +85,11 @@ def register_record_routes(app, records, resolve_agent):
         agent: str | None = None,
         tier: Literal["client", "platform"] = "client",
         x_tank_key: str = Header(default=""),
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
     ):
         selected = resolve_agent(identify(x_tank_key), agent, write=False)
-        return {"memories": await ready(selected).list(selected, str(tenant_id), tier)}
+        return {"memories": await ready(selected).list(selected, str(tenant_id), tier, limit, offset)}
 
     @app.get("/reference-corpora")
     async def references(
