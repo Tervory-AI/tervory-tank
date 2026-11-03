@@ -45,7 +45,15 @@ def eval_context(tank: Any, pkg: Any, ctx: Any) -> Any:
         receipt: dict = {}
         started = time.perf_counter()
         cost, outcome, error = 0.0, "unverified", None
+        routellm_decision = None
+        served_decision = None
         try:
+            if str(target).startswith("routellm:"):
+                import routellm_shadow
+                routellm_decision = await routellm_shadow.serve(
+                    tank, {**policy, "model": target}, messages, tenant_id=owner,
+                    task_type=job["task_type"], skill=pkg.ref)
+                target = routellm_decision["model"]
             if tank.graduate.is_skill(target):
                 request = tank.RouteRequest(tenant_id=owner, agent=pkg.agent,
                     task_type=job["task_type"], skill=pkg.ref + "#preview",
@@ -62,6 +70,7 @@ def eval_context(tank: Any, pkg: Any, ctx: Any) -> Any:
                 # Existing Tank helper: disables provider fallbacks when receipt
                 # is supplied and refuses an answer from a different model.
                 content, cost = await tank._llm(target, messages, max_tokens, receipt=receipt)
+                served_decision = routellm_decision
             return {"content": content, "cost_usd": cost}
         except Exception:
             ctx.calls += 1  # SkillContext counts successful calls on return.
@@ -74,12 +83,19 @@ def eval_context(tank: Any, pkg: Any, ctx: Any) -> Any:
                 await conn.execute(
                     """INSERT INTO tank.ledger
                     (tenant_id,region,agent,skill,task_type,rung,model,priority,tokens_in,tokens_out,
-                     cost_usd,latency_ms,cache_hit,outcome,error)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7,'standard',$8,$9,$10,$11,false,$12,$13)""",
+                     cost_usd,latency_ms,cache_hit,outcome,error,
+                     routellm_model,routellm_score,routellm_threshold,routellm_weak_model,routellm_config,routellm_status)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,'standard',$8,$9,$10,$11,false,$12,$13,$14,$15,$16,$17,$18,$19)""",
                     PLATFORM_TENANT, tank.box_region(), pkg.agent, pkg.ref + "#preview",
                     job["task_type"], 3 if tank.graduate.is_skill(target) else 1, target,
                     receipt.get("tokens_in", 0), receipt.get("tokens_out", 0), cost,
                     int((time.perf_counter() - started) * 1000), outcome, error,
+                    served_decision["model"] if served_decision else None,
+                    served_decision["score"] if served_decision else None,
+                    served_decision["threshold"] if served_decision else None,
+                    served_decision["weak_model"] if served_decision else None,
+                    served_decision["config"] if served_decision else None,
+                    "served" if served_decision else None,
                 )
     ctx._model = model
     return ctx
