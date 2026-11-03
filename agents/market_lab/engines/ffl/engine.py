@@ -20,18 +20,99 @@ from typing import Any
 # client tenant is named on the job.
 PLATFORM_TENANT = "00000000-0000-0000-0000-000000000001"
 
-# FRED series ids. The feeds package links these and refuses a database copy.
-FRED_COSTS = [
-    {"role": "copper", "ref": "PCOPPUSDM", "feeds_id": "fred_pcoppusdm"},
-    {"role": "zinc", "ref": "PZINCUSDM", "feeds_id": "fred_pzincusdm"},
-    {"role": "lead", "ref": "PLEADUSDM", "feeds_id": "fred_pleadusdm"},
-    {"role": "freight", "ref": "TSIFRGHT", "feeds_id": "fred_tsifrght"},
-]
+def _fields(value: Any, required: str, optional: str = "") -> None:
+    required_keys, optional_keys = set(required.split()), set(optional.split())
+    if not isinstance(value, dict) or not required_keys <= value.keys() or value.keys() - required_keys - optional_keys:
+        raise ValueError("invalid supply map fields")
 
-SURGE = {"window": 6, "z_threshold": 2.0, "pct_threshold": 0.25}
 
-# Response-rate targets written onto each recommendation, scored 90 days later.
-RESPONSE_TARGETS = {"increase": 5.0, "hold": 3.0, "reduce": 1.0}
+def load_map(path: Any = None) -> dict[str, Any]:
+    """Reject malformed configuration before any collection or warning runs."""
+    import json
+    import math
+    from pathlib import Path
+
+    def unique(items: list) -> dict:
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError("duplicate supply map field")
+            result[key] = value
+        return result
+
+    data = json.loads(Path(path or Path(__file__).with_name("supply_map.json")).read_text(), object_pairs_hook=unique)
+    _fields(data, "plan warnings")
+    spec, warnings = data["plan"], data["warnings"]
+    _fields(spec, "supply demand population costs surge bindings response_targets")
+    _fields(warnings, "signals outcomes pairs")
+    for role, required in {
+        "supply": "source prefix unit per_capita note",
+        "demand": "source prefix unit note",
+        "population": "source prefix unit",
+        "costs": "role ref feeds_id adapter source store unit",
+    }.items():
+        if not isinstance(spec[role], list) or not spec[role]:
+            raise ValueError("missing supply map entries")
+        for item in spec[role]:
+            _fields(item, required)
+            if any(not isinstance(v, str) or not v for k, v in item.items() if k not in {"per_capita", "store"}):
+                raise ValueError("invalid supply map value")
+            if role == "supply" and type(item["per_capita"]) is not bool:
+                raise ValueError("invalid per capita flag")
+            if role == "costs" and (item["source"] != "fred" or item["adapter"] != "fred" or item["store"] is not False):
+                raise ValueError("FRED must remain linked and never stored")
+    _fields(spec["surge"], "window z_threshold pct_threshold")
+    _fields(spec["response_targets"], "increase hold reduce")
+    _fields(spec["bindings"], "supply demand population competitors")
+    for entries in spec["bindings"].values():
+        if not isinstance(entries, list) or not entries:
+            raise ValueError("missing supply map bindings")
+        for item in entries:
+            _fields(item, "source prefix")
+            if any(not isinstance(v, str) or not v for v in item.values()):
+                raise ValueError("invalid supply map binding")
+    for key, optional in (("signals", "ref kind"), ("outcomes", "note")):
+        if not isinstance(warnings[key], list) or not warnings[key]:
+            raise ValueError("missing warning entries")
+        for item in warnings[key]:
+            _fields(item, "source label", optional)
+            if any(not isinstance(v, str) or not v for v in item.values()):
+                raise ValueError("invalid warning entry")
+    if not isinstance(warnings["pairs"], list) or not warnings["pairs"]:
+        raise ValueError("missing warning pairs")
+    upstream = {item["source"] for item in warnings["signals"]}
+    downstream = {item["source"] for item in warnings["outcomes"]}
+    ids = set()
+    for pair in warnings["pairs"]:
+        _fields(pair, "id source ref label downstream_source direction outcome_direction baseline_value outcome_pct outcome_words prediction_words min_episodes window z_threshold pct_threshold min_lag_days max_lag_days max_gap_days")
+        if pair["source"] not in upstream or pair["downstream_source"] not in downstream or pair["id"] in ids:
+            raise ValueError("unknown warning source or duplicate pair")
+        ids.add(pair["id"])
+        for key in "id source ref label downstream_source outcome_words prediction_words".split():
+            if not isinstance(pair[key], str) or not pair[key]:
+                raise ValueError("invalid warning pair value")
+        if pair["direction"] not in {"drop", "surge"} or pair["outcome_direction"] not in {"drop", "surge"}:
+            raise ValueError("invalid warning direction")
+        for key in "min_episodes window min_lag_days max_lag_days max_gap_days".split():
+            if type(pair[key]) is not int or pair[key] <= 0:
+                raise ValueError("invalid warning window")
+        if pair["min_lag_days"] > pair["max_lag_days"]:
+            raise ValueError("invalid warning lag")
+        for key in "baseline_value outcome_pct z_threshold pct_threshold".split():
+            if type(pair[key]) not in (int, float) or not math.isfinite(pair[key]) or pair[key] <= 0:
+                raise ValueError("invalid warning threshold")
+    for values in (spec["surge"], spec["response_targets"]):
+        if any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0 for v in values.values()):
+            raise ValueError("invalid plan threshold")
+    if type(spec["surge"]["window"]) is not int:
+        raise ValueError("invalid plan window")
+    return data
+
+
+# Retain the existing module exports, with configuration owned by the data file.
+SURGE = load_map()["plan"]["surge"]
+RESPONSE_TARGETS = load_map()["plan"]["response_targets"]
+FRED_COSTS = [{k: row[k] for k in ("role", "ref", "feeds_id")} for row in load_map()["plan"]["costs"]]
 
 
 def plan() -> dict[str, Any]:
@@ -41,47 +122,7 @@ def plan() -> dict[str, Any]:
         "feeds": [source.id for source in sources("ffl") if source.allow_bulk],
         "linked_pages": [source.id for source in sources("ffl") if not source.allow_bulk],
         "engine": "ffl",
-        "supply": [
-            {
-                "source": "listing_counts",
-                "prefix": "count:state:",
-                "unit": "listings",
-                "per_capita": True,
-                "note": "Active licences per state from the ATF monthly lists",
-            }
-        ],
-        "demand": [
-            {
-                "source": "upload",
-                "prefix": "applications:",
-                "unit": "applications",
-                "note": "Founder per-state licence-application history",
-            },
-            {
-                "source": "check_counts",
-                "prefix": "total:",
-                "unit": "checks",
-                "note": "Monthly FBI NICS background-check counts per state",
-            },
-        ],
-        "population": [
-            {"source": "census_population", "prefix": "population:state:", "unit": "people"}
-        ],
-        "costs": [
-            {**item, "adapter": "fred", "source": "fred", "store": False, "unit": "index"}
-            for item in FRED_COSTS
-        ],
-        "surge": dict(SURGE),
-        "bindings": {
-            "supply": [{"source": "listing_counts", "prefix": "count:state:"}],
-            "demand": [
-                {"source": "upload", "prefix": "applications:"},
-                {"source": "check_counts", "prefix": "total:"},
-            ],
-            "population": [{"source": "census_population", "prefix": "population:state:"}],
-            "competitors": [{"source": "competitor", "prefix": "competitors:"}],
-        },
-        "response_targets": dict(RESPONSE_TARGETS),
+        **load_map()["plan"],
     }
 
 
