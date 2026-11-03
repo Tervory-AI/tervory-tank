@@ -1,116 +1,176 @@
 # Rig cart (US) — Proposed, not approved
 
-Page: [10 · Rig cart (US)](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=289-13919), node `289:13919`. Every frame name and visible review bar says **Proposed, not approved**. The bar marks the values as illustrative and Figma only; every added word awaits founder approval. There is no runtime implementation or new live copy.
+Page: [10 · Rig cart (US)](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=289-13919), node `289:13919`. Branch: `codex/rig-cart-figma`. Design-check revision: 3 November 2026.
 
-Branch: `codex/rig-cart-figma`. Baseline source commit: `d6004c8d1f0110cc74fc7bbeaae4144277ca6758`. Only this document is committed. Claude opens the PR; the founder merges.
+All 52 frames and their review bars remain **Proposed, not approved**. Copy below is proposed for founder approval. Illustrative values exist only in Figma, not on a live screen. This branch changes only this register relative to main; no widget, admin, payment, credential or other runtime code is changed.
 
-## Frame map — one line per frame
+## Frame register
 
-| Screen | Node ID | Size | Existing source component reused |
+The original 38 frame IDs are retained. All 94 distinct node IDs named in the review still resolve, including text removed from visible layouts by hiding it. Fourteen additional frames cover seven desktop/mobile pairs. Heights below come from the final canvas, not the original generator.
+
+| Screen | Node ID | Size | Existing source reused |
 | --- | --- | --- | --- |
-| S01a · Product · store stock | [291:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-9) | 1440 × 960 | Widget .card / .price-row / .actions; page/search.css button.card and .price; store theme variables |
-| S01a · Product · store stock | [291:26](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-26) | 375 × 960 | Widget .card / .price-row / .actions; page/search.css button.card and .price; store theme variables |
-| S01b · Product · longer delivery | [291:43](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-43) | 1440 × 960 | Same product card, price and action as S01a; only the delivery text changes; store theme variables |
-| S01b · Product · longer delivery | [291:60](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-60) | 375 × 960 | Same product card, price and action as S01a; only the delivery text changes; store theme variables |
-| S01c · Product · back order | [291:77](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-77) | 1440 × 960 | Widget .card, .actions, .btn-accent and .btn-ghost; product/back-order status text |
-| S01c · Product · back order | [291:97](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-97) | 375 × 960 | Widget .card, .actions, .btn-accent and .btn-ghost; product/back-order status text |
-| S02 · Item added to cart | [291:117](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-117) | 1440 × 960 | Widget .chosen, .ack, .price-row and .actions; original product card and store theme |
-| S02 · Item added to cart | [291:140](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-140) | 375 × 960 | Widget .chosen, .ack, .price-row and .actions; original product card and store theme |
-| S03 · Your cart | [291:163](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-163) | 1440 × 1495 | Widget .part/.chosen/.price-row; store page .product-layout/.bundle/.bundle-parts; .field and .actions |
-| S03 · Your cart | [291:223](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-223) | 375 × 1718 | Widget .part/.chosen/.price-row; store page .product-layout/.bundle/.bundle-parts; .field and .actions |
-| S04 · Going to store checkout | [291:283](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-283) | 1440 × 960 | Widget .panel/.status/.actions and primary/ghost buttons; store page .bundle; no checkout/payment form |
-| S04 · Going to store checkout | [291:302](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-302) | 375 × 960 | Widget .panel/.status/.actions and primary/ghost buttons; store page .bundle; no checkout/payment form |
-| S05a · Payment window ended · rechecking | [291:321](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-321) | 1440 × 1665 | Same cart components as S03; .status/.ack; existing disabled .btn state; checkout disabled while rechecking |
-| S05a · Payment window ended · rechecking | [291:384](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-384) | 375 × 1937 | Same cart components as S03; .status/.ack; existing disabled .btn state; checkout disabled while rechecking |
-| S05b · Cart rechecked · changes found | [291:447](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-447) | 1440 × 1633 | Same cart components as S03; .status/.ack; existing .part text and price rows for changes |
-| S05b · Cart rechecked · changes found | [291:511](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-511) | 375 × 1970 | Same cart components as S03; .status/.ack; existing .part text and price rows for changes |
-| S06a · Order complete | [291:575](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-575) | 1440 × 1198 | Widget .ack/.chosen/.price-row; store page .bundle and .bundle-parts; original product card instances |
-| S06a · Order complete | [291:598](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-598) | 375 × 1162 | Widget .ack/.chosen/.price-row; store page .bundle and .bundle-parts; original product card instances |
-| S06b · Checkout not completed | [291:621](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-621) | 1440 × 960 | Widget .status/.panel/.actions; primary/ghost buttons; no payment fields |
-| S06b · Checkout not completed | [291:640](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-640) | 375 × 960 | Widget .status/.panel/.actions; primary/ghost buttons; no payment fields |
-| A07-choose · Shop platform · not connected | [291:8053](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8053) | 1440 × 960 | RetailerAdmin .retailer-header/.retailer-card, Source select, .retailer-notice and existing buttons |
-| A07-choose · Shop platform · not connected | [291:8075](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8075) | 375 × 960 | RetailerAdmin .retailer-header/.retailer-card, Source select, .retailer-notice and existing buttons |
-| A07-shopify · Shopify · enter credentials | [291:8097](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8097) | 1440 × 960 | RetailerAdmin form/label/input, existing Shopify secret-key input pattern, .retailer-primary |
-| A07-shopify · Shopify · enter credentials | [291:8124](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8124) | 375 × 960 | RetailerAdmin form/label/input, existing Shopify secret-key input pattern, .retailer-primary |
-| A07-woo · WooCommerce · enter credentials | [291:8151](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8151) | 1440 × 960 | RetailerAdmin form/label/input and existing WooCommerce username/consumer-key + password/secret pattern |
-| A07-woo · WooCommerce · enter credentials | [291:8182](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8182) | 375 × 960 | RetailerAdmin form/label/input and existing WooCommerce username/consumer-key + password/secret pattern |
-| A07-big · BigCommerce · enter credentials | [291:8213](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8213) | 1440 × 960 | RetailerAdmin form/label/input pattern, with proposed BigCommerce store-hash/access-token labels |
-| A07-big · BigCommerce · enter credentials | [291:8240](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8240) | 375 × 960 | RetailerAdmin form/label/input pattern, with proposed BigCommerce store-hash/access-token labels |
-| A07-testing · Shop platform · testing | [291:8267](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8267) | 1440 × 960 | RetailerAdmin .retailer-card/.retailer-notice and native disabled button opacity |
-| A07-testing · Shop platform · testing | [291:8288](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8288) | 375 × 960 | RetailerAdmin .retailer-card/.retailer-notice and native disabled button opacity |
-| A07-connected · Shop platform · connected | [291:8309](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8309) | 1440 × 960 | RetailerAdmin .retailer-card/.retailer-notice/.retailer-actions; saved credential values omitted |
-| A07-connected · Shop platform · connected | [291:8333](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8333) | 375 × 960 | RetailerAdmin .retailer-card/.retailer-notice/.retailer-actions; saved credential values omitted |
-| A07-failed · Shop platform · connection failed | [291:8357](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8357) | 1440 × 960 | RetailerAdmin .retailer-notice.is-error/.retailer-actions; saved credential values omitted |
-| A07-failed · Shop platform · connection failed | [291:8381](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8381) | 375 × 960 | RetailerAdmin .retailer-notice.is-error/.retailer-actions; saved credential values omitted |
-| A08 · Orders | [291:8405](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8405) | 1440 × 1006 | RetailerAdmin .retailer-history article and .retailer-actions; original mobile stacked history layout |
-| A09 · Store delivery time | [291:8444](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8444) | 1440 × 960 | RetailerAdmin .retailer-card, settings form/label/input, .retailer-hint and .retailer-primary |
-| A08 · Orders | [291:8464](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8464) | 375 × 974 | RetailerAdmin .retailer-history article and .retailer-actions; original mobile stacked history layout |
-| A09 · Store delivery time | [291:8503](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8503) | 375 × 960 | RetailerAdmin .retailer-card, settings form/label/input, .retailer-hint and .retailer-primary |
+| S01a · Product · store stock | [291:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-9) | 1440 × 960 | Widget product/chosen card, price and actions |
+| S01a · Product · store stock | [291:26](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-26) | 375 × 960 | Widget product/chosen card, price and actions |
+| S01b · Product · longer delivery | [291:43](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-43) | 1440 × 960 | Widget product/chosen card, price and actions |
+| S01b · Product · longer delivery | [291:60](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-60) | 375 × 960 | Widget product/chosen card, price and actions |
+| S01c · Product · back order | [291:77](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-77) | 1440 × 960 | Widget product/chosen card, price and actions |
+| S01c · Product · back order | [291:97](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-97) | 375 × 960 | Widget product/chosen card, price and actions |
+| S02 · Item added to cart | [291:117](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-117) | 1440 × 960 | Widget product/chosen card, price and actions |
+| S02 · Item added to cart | [291:140](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-140) | 375 × 960 | Widget product/chosen card, price and actions |
+| S03 · Your cart | [291:163](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-163) | 1440 × 1393 | Widget card, field, price, notice and actions |
+| S03 · Your cart | [291:223](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-223) | 375 × 1616 | Widget card, field, price, notice and actions |
+| S04 · Going to store checkout | [291:283](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-283) | 1440 × 960 | Widget status/panel, timer panel and actions |
+| S04 · Going to store checkout | [291:302](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-302) | 375 × 960 | Widget status/panel, timer panel and actions |
+| S05a · Payment window ended · rechecking | [291:321](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-321) | 1440 × 1501 | Widget card, field, price, notice and actions |
+| S05a · Payment window ended · rechecking | [291:384](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-384) | 375 × 1781 | Widget card, field, price, notice and actions |
+| S05b · Cart rechecked · changes found | [291:447](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-447) | 1440 × 1517 | Widget card, field, price, notice and actions |
+| S05b · Cart rechecked · changes found | [291:511](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-511) | 375 × 1797 | Widget card, field, price, notice and actions |
+| S06a · Paid order with back order | [291:575](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-575) | 1440 × 1222 | Widget paid notice and product-card instances |
+| S06a · Paid order with back order | [291:598](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-598) | 375 × 1206 | Widget paid notice and product-card instances |
+| S06b · Checkout not completed | [291:621](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-621) | 1440 × 960 | Widget status/panel, timer panel and actions |
+| S06b · Checkout not completed | [291:640](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-640) | 375 × 960 | Widget status/panel, timer panel and actions |
+| A07-choose · Shop platform · not connected | [291:8053](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8053) | 1440 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-choose · Shop platform · not connected | [291:8075](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8075) | 375 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-shopify · Shopify · enter credentials | [291:8097](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8097) | 1440 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-shopify · Shopify · enter credentials | [291:8124](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8124) | 375 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-woo · WooCommerce · enter credentials | [291:8151](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8151) | 1440 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-woo · WooCommerce · enter credentials | [291:8182](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8182) | 375 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-big · BigCommerce · enter credentials | [291:8213](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8213) | 1440 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-big · BigCommerce · enter credentials | [291:8240](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8240) | 375 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-testing · Shop platform · testing | [291:8267](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8267) | 1440 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-testing · Shop platform · testing | [291:8288](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8288) | 375 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-connected · Shop platform · connected | [291:8309](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8309) | 1440 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-connected · Shop platform · connected | [291:8333](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8333) | 375 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-failed · Shop platform · connection failed | [291:8357](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8357) | 1440 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-failed · Shop platform · connection failed | [291:8381](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8381) | 375 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
+| A08 · Orders | [291:8405](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8405) | 1440 × 960 | RetailerAdmin stacked history and actions |
+| A09 · Store delivery time | [291:8444](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8444) | 1440 × 960 | RetailerAdmin numeric label/inputs and preview |
+| A08 · Orders | [291:8464](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8464) | 375 × 960 | RetailerAdmin stacked history and actions |
+| A09 · Store delivery time | [291:8503](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=291-8503) | 375 × 960 | RetailerAdmin numeric label/inputs and preview |
+| S03-empty · Empty cart | [318:60926](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=318-60926) | 1440 × 960 | Widget card, field, price, notice and actions |
+| S03-empty · Empty cart | [318:60992](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=318-60992) | 375 × 960 | Widget card, field, price, notice and actions |
+| S05c · Item unavailable after recheck | [318:61058](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=318-61058) | 1440 × 1561 | Widget card, field, price, notice and actions |
+| S05c · Item unavailable after recheck | [318:61123](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=318-61123) | 375 × 1821 | Widget card, field, price, notice and actions |
+| S05d · Cart rechecked without changes | [318:61188](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=318-61188) | 1440 × 1497 | Widget card, field, price, notice and actions |
+| S05d · Cart rechecked without changes | [318:61252](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=318-61252) | 375 × 1757 | Widget card, field, price, notice and actions |
+| S06c · Payment received after window | [321:6200](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=321-6200) | 1440 × 1222 | Widget paid notice and product-card instances |
+| S06c · Payment received after window | [321:6233](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=321-6233) | 375 × 1206 | Widget paid notice and product-card instances |
+| S04-error · Store checkout unavailable | [321:6266](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=321-6266) | 1440 × 960 | Widget status/panel, timer panel and actions |
+| S04-error · Store checkout unavailable | [321:6285](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=321-6285) | 375 × 960 | Widget status/panel, timer panel and actions |
+| A08-late · Order paid after window | [321:6304](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=321-6304) | 1440 × 960 | RetailerAdmin stacked history and actions |
+| A08-late · Order paid after window | [321:6343](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=321-6343) | 375 × 961 | RetailerAdmin stacked history and actions |
+| A07-choose-open · Choose a platform · open | [321:6382](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=321-6382) | 1440 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
+| A07-choose-open · Choose a platform · open | [321:6410](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=321-6410) | 375 × 960 | RetailerAdmin card, label/input, select, notice and buttons |
 
-## Required behavior shown
+## Design-check resolutions
 
-- Rig never takes payment. Add to cart is a Rig cart on the store's own site. Checkout leaves for that store's own shop-platform checkout; no card, bank, billing or payment-entry form is drawn inside Rig. The handoff explicitly states who takes payment.
-- Result cases use the same product, price and FIND A PRODUCT heading. Store stock has 2–3 business days; the other available case changes only the delivery time to 7–10 business days. No shopper content identifies a supplier or says which source fulfils the item. Back order shows no confirmed delivery date and offers Back order or Leave. Case names in the review bars are Figma annotations, not shopper copy.
-- Added state shows the product added to this store's Rig cart, quantity and total, with View cart / Keep shopping. The larger cart illustrates subsequent selections: one tripod, two straps and one pouch. Every line has quantity, unit price, line total, and its delivery time or back-order notice.
-- Original cart: $120 + (2 × $25) + $35 = $205. The checkout handoff states a five-minute payment window. The displayed 05:00 / 03:42 times are static Figma state illustrations, not claimed running timers.
-- Expired window has a separate Checking frame with Checkout disabled. The following rechecked frame shows the tripod price changing $120 → $125, its delivery 2–3 → 7–10 business days, and total $205 → $210. Checkout can continue only after the depicted recheck, with a new five-minute payment window described in the draft wording.
-- Paid return and admin paid order #1001 match the rechecked cart: tripod $125 × 1, strap $25 × 2, pouch $35 × 1, total $210. Back-order delivery remains unconfirmed after payment. Not-completed return says no completed payment has been confirmed, retains the cart and shows time remaining.
-- Admin platform selection includes Shopify, WooCommerce, BigCommerce and Other. Separate blank credential forms cover Shopify, WooCommerce and BigCommerce, followed by testing, connected and failed examples. These are proposed connector views, not claims that checkout connectors already exist. Existing catalogue feed connections are not relabelled as working checkout integrations. Other platform support is a selection proposal; no invented connector implementation is claimed.
-- Credential values are never supplied. Inputs are blank and represent the store typing them. Testing/connected/failed states omit credential values entirely and state that saved credentials are hidden. No actual credential was typed, viewed, generated, saved or tested.
-- Admin orders show Paid, Waiting for payment with 03:42 left, Window expired, Back ordered and Needs a person. Review order is the manual-action proposal; no automatic payment confirmation is invented.
-- Delivery setting belongs to one store and covers its own stock, with a 2–3 business-day example matching the original product case. Products needing longer retain a longer per-line delivery time. South Africa / Custom Nation quote → invoice → EFT is excluded from every frame.
+| Review item | Resolution |
+| --- | --- |
+| 1 | S05a/S05b shopper headings are YOUR CART. State names remain only in Figma annotations and notices. |
+| 2 | A07/A09 state subtitles are hidden. A08 has one Orders page heading; its duplicate subtitle and card heading are hidden. Existing IDs remain. |
+| 3–4 | Shopper copy uses “this store’s”; the store-name token is consistently `{STORE NAME}`. |
+| 5 | The six original cart summary headings are SUMMARY. |
+| 6 | Every S03/S05a/S05b line has one outer card with consistent 18px padding. Product and detail groups are transparent, borderless inner groups; no two-card split remains. |
+| 7 | The changed-line notice sits immediately after the changed price in the same card. It uses Source Sans 3 SemiBold and the existing ink token. The delivery change is included there. |
+| 8 | S06a shows quantity × unit price, “each”, and a line total on all three lines. The earlier register’s claim was ahead of the canvas; the canvas now actually contains those totals. |
+| 9 | S06a says ORDER RECEIVED and explicitly names the back-ordered pouch. A08 #1001 says Paid · Includes back order and flags the pouch. Payment confirmation does not claim all fulfilment is complete. |
+| 10 | A08 “03:42 left” uses Inter Regular, the admin body face. |
+| 11 | #1003 says Unpaid order cancelled, shows $205.00, and explains that the next checkout re-checks price and stock. |
+| 12 | The four flagged disabled buttons use ink on the existing light background, with opacity 1. Shopper label contrast is 15.31:1; admin is 16.12:1. |
+| 13 | All ten flagged mobile admin buttons and their action rows are 305px wide. |
+| 14–15 | S04 shows the five-minute duration and says the window starts at this store’s checkout, with no pre-Continue countdown. S06b uses the same panel treatment for TIME LEFT / 03:42; its page heading is YOUR CART, leaving one not-completed notice. |
+| 16 | A07-choose is a closed select with chevron. A07-choose-open shows its option list. Only Shopify, WooCommerce and BigCommerce appear. The old Other text is hidden, with its node ID retained. |
+| 17 | Each credential form identifies its own platform admin as the source and Rig admin as the place to type the values. All credential fields remain blank. |
+| 18a | S03-empty adds empty cart at both widths. |
+| 18b | S05c adds an unavailable-after-recheck line with active Back order / Leave actions on that line; checkout remains disabled pending that choice. |
+| 18c | S05d adds a recheck with no changes, retaining the original price and delivery. |
+| 18d | S06c and A08-late add the shopper return and admin row for payment received after the window. The order proceeds at its original held total of $205.00. |
+| 18e | S04-error adds a store-checkout-unavailable hand-off state with Try again / Back to cart. It says the five-minute window has not started. |
+| 18f | Existing S05a now explicitly says the unpaid store order was cancelled before rechecking. |
+| 19 | Primitive section `289:13940` is resized to contain all seven source primitives, including `289:13949`, `289:13953` and `289:13957`. |
+| 20 | The six FIND A PRODUCT layers and the paid-total/order-history layers named in the review now match their displayed text. |
+| 21 | Rig is right-aligned in every shopper header, including the new frames. |
+| 22 | A09 has separate minimum and maximum business-day number fields. The preview is “Delivery: 2–3 business days”. Longer delivery comes from Locate ship_days/eta; there is no supplier-delivery setting. |
+| 23 | All illustrative values are registered below. Every added frame is linked above. |
 
-## Source, brand and component fidelity
+## Proposed wording for founder approval
 
-Required directories were all present: `agents/rig/rigbox/quotes/widget`, `agents/rig/rigbox/page`, `workspace/app/rig/admin`. Read sources include the shipped widget UMD and manifest, `quotes/rebuild-widget.sh`, `docs/rig/widget-source.patch`, store `index.html`, `search.css`, `search.js`, v5 README/CSS, and admin `retailer-admin.tsx`, `retailer-admin.css`, `products.tsx`.
+Paid order with an outstanding back order (S06a): **ORDER RECEIVED**. Notice: “Payment was received by {STORE NAME}. Your lens pouch is back ordered; its delivery date is not confirmed.” The item name is a product slot, not fixed product copy.
 
-Shopper frames reuse the **existing widget neutral store skin**, not the Custom Nation skin: canvas #f4f5f7; ink #1c1e21; accent #1d4e89; muted #5c6370; line #d5d8de; white card/on-accent; 10px radius. Fonts are the widget's actual Newsreader SemiBold heading and Source Sans 3 body, not a substituted Tervory font. The displayed {STORE NAME} is a configurable store-name placeholder, not an invented brand or fake logo. Product images were not fabricated; the existing text/card and chosen-product patterns are used.
+Credential instructions: “Get this store’s credentials from its Shopify admin, then enter them here in Rig admin. Saved credentials stay hidden.” The WooCommerce and BigCommerce versions name their respective platform admin. These are design proposals; no credential has been typed, read, generated, saved or tested.
 
-The source theme already supports store overrides. Missing Figma bindings were represented in collection `289:13920` (Rig cart / Existing neutral widget store theme) with source-named `--rig-*` variables, semantic colour aliases, explicit scopes and CSS `var(--rig-...)` syntax. The neutral values are only the existing skin's review fallback; a store's theme overrides replace them. Existing client/Chatbot or Tisan tokens were not passed off as Rig store branding.
+Expired unpaid order (S05a): “The unpaid store order was cancelled. We’re checking current prices and stock before checkout can continue.”
 
-Admin keeps its actual navy #001840, paper #F4F6FB, line #B8BFD0, red #E80008, Jost Light and Inter. Mobile gutters/cards and error left border follow `retailer-admin.css`. Existing `42:*` and `164:17` variables are reused. Credential field geometry is reused; no credential values exist.
+Late payment (S06c): “This store received your payment after the 5-minute window ended. Your order is going through. Your lens pouch remains back ordered.”
 
-No matching published Rig widget composite or Code Connect files were found. The existing Rig case-study frame `51:3510` was inspected, but its reporting tiles/charts are not shopper-cart components. Only missing Figma representations of existing code primitives were created, in a separate source-component section, with instances inside the review frames:
+Hand-off failure (S04-error): “We could not open this store’s checkout. You can try again or return to your cart.” Follow-up: “Prices and stock will be checked again before the next checkout. The 5-minute window has not started.”
 
-- `289:13941` / `289:13943`: widget .btn-accent / .btn-ghost.
-- `289:13945` / `289:13947`: existing admin primary / secondary button styles.
-- `289:13949` / `289:13953`: widget .field / admin label-input.
-- `289:13957`: existing widget .card/.chosen product text/price/delivery pattern.
+Empty, unavailable-line and unchanged-recheck copy in the linked frames is also proposed, not approved. State labels in review bars and frame names are annotations, not shopper/admin headings.
 
-All text is editable. The UI is auto-layout containers, text, existing-source component instances and dividers; no flattened full-UI screenshot is embedded. Original pages/components were not modified. No unrelated library work was done.
+## Every illustrative value is a slot
 
-## Validation and review status
+| Shown value | Slot / meaning |
+| --- | --- |
+| `{STORE NAME}` | The actual store display name. The one consistent store-name token. |
+| COMPACT TRIPOD / “tripod” | Product title slot for the first line. |
+| CAMERA STRAP / “strap” | Product title slot for the second line. |
+| LENS POUCH / “lens pouch” / “pouch” | Product title slot for the back-ordered line, including notices and admin rows. |
+| CT-01, CS-02, LP-03 | Those products’ SKU slots. |
+| $120.00, $125.00 | Original and rechecked first-line unit-price slots. |
+| $25.00, $35.00 | Second- and third-line unit-price slots. |
+| $120.00, $125.00, $50.00, $35.00 | Computed line-total slots: quantity × held unit price. |
+| $120.00 | Single-item cart-total slot in the added state. |
+| $205.00, $210.00 | Original/rechecked cart totals and unpaid/paid order-amount slots. |
+| Quantity 1, 2, 1 | Editable quantity slots for the three cart lines; the single-item state also uses 1. |
+| “3 lines · 4 items” | Computed count slots, not fixed copy for every cart. |
+| 2–3 business days | Store-stock minimum/maximum delivery slots; A09’s numeric fields show 2 and 3. |
+| 7–10 business days | Per-line longer-delivery slots from the Locate offer; no admin setting is proposed for this. |
+| #1001, #1002, #1003, #1004, #1005 | Order-number slots, not real orders. |
+| 03:42 / “03:42 left” | Remaining-time slot, shown after checkout starts. |
+| 00:00 | Expired-timer slot in the cancelled admin order. |
 
-- 38 review frames: 19 at 1440 and 19 at 375. Coverage is 20 shopper frames and 18 admin frames. All have the requested approval label.
-- Final complete audit: 666 visible text nodes, zero frame/parent text overflow, correct widget versus admin font families, and no complete-UI raster. The last product-heading correction only shortened six headings to identical source wording and was visually checked on the longer-delivery mobile frame.
-- Initial visual review found inherited input widths extending outside mobile cards. The shared field components were corrected, then relevant mobile compositions were checked again. Mobile admin padding and notice/error styling were also corrected to the source CSS.
-- Full-view screenshots inspected: desktop cart `291:163`, mobile rechecked cart `291:511`, handoff `291:302`, connected `291:8333`, orders `291:8464`, credential form `291:8182`, failure `291:8381`, delivery setting `291:8503`, final paid return `291:598`, back order `291:97`, platform choice `291:8053`, testing `291:8288`, and final longer-delivery result `291:60`.
-- These are agent visual checks of proposed Figma designs. Founder browser review/approval and screenshots of that test remain pending; none are claimed. Static design frames do not prove a working cart, timer, connector or payment callback.
-- No application tests were run because no application file changed. No live data, secrets, environment values or payment settings were changed. Nothing merged or deployed.
+The five-minute payment window is a product rule, not an editable illustrative setting. Shopify, WooCommerce and BigCommerce are platform choices, not sample stores. Blank credential fields are not example values.
 
-## Commands and results
+Original arithmetic: $120 + (2 × $25) + $35 = $205. Rechecked arithmetic: $125 + (2 × $25) + $35 = $210. S06a / #1001 uses the rechecked $210 order and still identifies the pouch as back ordered. S06c / A08-late #1002 uses the original $205 order, with $120 first-line unit/line price and 2–3-day delivery. A payment arriving late does not adopt a newer cart’s price.
 
-Required first command, exit 0:
+## Source and style fidelity
+
+The source directories remain `agents/rig/rigbox/quotes/widget`, `agents/rig/rigbox/page` and `workspace/app/rig/admin`. The existing register’s source inspection covered the shipped widget UMD/manifest, store search CSS and markup, and retailer admin TSX/CSS. No matching Code Connect files were found in these directories.
+
+This revision inspected the existing page and its source primitives, and searched the subscribed libraries for Rig cart/checkout and retailer-platform-select composites. No matches were returned. Existing on-page Rig components were reused rather than substituting unrelated kit components.
+
+Shopper frames retain the neutral store skin: Newsreader SemiBold headings, Source Sans 3 body, existing `--rig-*` variables from collection `289:13920`, white cards, ink #1c1e21, canvas #f4f5f7, accent #1d4e89, muted #5c6370, line #d5d8de and 10px radius. The values are the source skin’s fallback; store overrides remain store-owned. No fake logo or product image was introduced.
+
+Admin retains Jost Light / Inter, navy #001840, paper #F4F6FB, line #B8BFD0 and red #E80008 through the existing variables. The flagged timer uses body Inter. The original source primitives remain `289:13941` / `289:13943` (widget buttons), `289:13945` / `289:13947` (admin buttons), `289:13949` / `289:13953` (fields) and `289:13957` (product card).
+
+All content remains editable Figma text, auto-layout containers and source-component instances. No screenshot was flattened into a deliverable. No supplier identity, URL or cost, payment-entry form, card wording, ZA content or EFT flow is present in shopper frames. Rig never takes payment.
+
+## Verification and exact commands
+
+Figma session: `fdb69eb8-048a-49b3-b7d4-148e49e783d2`. Tool calls returned created/mutated IDs. Final structural checks found 52 frames, no missing original frame IDs, all 94 reviewer-referenced IDs present, no visible “your store’s” or mixed-case store token, no horizontal text overflow, all ten flagged button widths 305px, disabled contrasts 15.31:1 / 16.12:1, and no source primitives outside their section. The shopper content check uses word boundaries, so TIME LEFT is not misclassified as EFT.
+
+Composition screenshots were visually inspected for changed cart, paid/back-ordered return, number inputs, open select, cancelled/rechecking, timer return, admin orders, unavailable line, late paid return, checkout failure, hand-off, empty cart and unchanged recheck. Targeted post-fix screenshots confirm active Back order, readable error typography and cancelled admin wording. These are Figma review screenshots, not founder live-store acceptance screenshots.
+
+Exact repository commands for this review:
 
 ```sh
-git clone https://github.com/Tervory-AI/tervory-tank.git /workspace/codex-rig-cart-figma && cd /workspace/codex-rig-cart-figma && git fetch origin main && git checkout -B codex/rig-cart-figma origin/main && git config user.name 'Codex' && git config user.email 'codex@users.noreply.github.com' && ls -ld agents/rig/rigbox/quotes/widget agents/rig/rigbox/page workspace/app/rig/admin
-```
-
-Read-only source inspection used `cat AGENTS.md`, `rg --files` on the three required directories, `sed -n '1,210p' workspace/app/rig/admin/retailer-admin.tsx`, `cat workspace/app/rig/admin/retailer-admin.css`, `sed -n '1,160p' workspace/app/rig/admin/products.tsx`, `cat agents/rig/rigbox/quotes/widget/manifest.json`, `sed -n '1,180p' agents/rig/rigbox/page/index.html`, `cat agents/rig/rigbox/page/search.css`, `cat agents/rig/rigbox/quotes/rebuild-widget.sh`, `sed -n '1,120p' agents/rig/rigbox/page/v5/README.md`, and source-token extraction with Python. Searches returning no nested AGENTS/Code Connect matches did not indicate a missing required file. All required source directories existed.
-
-Initial document commit/push succeeded: `6402d2cc`. The branch upstream was then set by `git branch --set-upstream-to=origin/codex/rig-cart-figma codex/rig-cart-figma`. Figma operations returned their created/mutated IDs and audit results in this task. Transient scripts and manifests under `.git/rig-design/` are untracked orchestration, not repository deliverables.
-
-Final commands:
-
-```sh
-python3 .git/rig-design/document.py
+git status --short
+git branch --show-current
+cat AGENTS.md
+cat docs/figma/RIG-CART-FRAMES.md
+git fetch origin main codex/rig-cart-figma
+git merge origin/main
+git config user.name 'Codex'
+git config user.email 'codex@users.noreply.github.com'
+git fetch origin main && git merge origin/main && git push origin codex/rig-cart-figma
 git diff --check
 git add docs/figma/RIG-CART-FRAMES.md
-git commit -m 'docs(figma): map all US Rig cart and store-admin proposals'
-git push origin codex/rig-cart-figma
+git commit -m 'docs(figma): register corrected Rig cart proposals and missing states'
+git fetch origin main && git merge origin/main && git push origin codex/rig-cart-figma
 git diff --check origin/main...HEAD
 git diff --name-only origin/main...HEAD
 git status --short --branch
 ```
 
-The command output in this task records the exact results. Allowed changed file: `docs/figma/RIG-CART-FRAMES.md` only. Proposed words await the founder before implementation.
+Main refreshes were clean; the intermediate merge push succeeded at `79317ef9`. Final command results are reported in the task. Scripts and audit JSON under `.git/rig-design/` are untracked orchestration, not repository deliverables. No runtime tests were required for this Figma/register-only revision. Claude opens the PR; founder approval and merge are still outstanding.
