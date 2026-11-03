@@ -176,6 +176,17 @@ async def zenas(conn, tenant, region, start, end, figures):
 
 
 async def trigger(conn, tenant, region, start, end, figures):
+    if await exists(conn, "tank.trigger_posts"):
+        published = await conn.fetchval("""SELECT count(*) FROM tank.trigger_posts p
+            JOIN tank.ledger l ON l.tenant_id=p.tenant_id AND l.id=p.ledger_id
+            WHERE p.tenant_id=$1 AND l.region=$2 AND p.state='published'
+            AND p.published_at >= $3 AND p.published_at < $4""", tenant, region, start, end)
+        put(figures, "trigger.published_posts", published, "tank.trigger_posts.published_at")
+    if await exists(conn, "tank.trigger_gbp_replies"):
+        replies = await conn.fetchval("""SELECT count(*) FROM tank.trigger_gbp_replies r
+            JOIN tank.ledger l ON l.tenant_id=r.tenant_id AND l.id=r.ledger_id
+            WHERE r.tenant_id=$1 AND l.region=$2 AND r.sent_at >= $3 AND r.sent_at < $4""", tenant, region, start, end)
+        put(figures, "trigger.review_replies", replies, "tank.trigger_gbp_replies.sent_at")
     row = await conn.fetchrow("""SELECT count(*) AS drafts,
         count(*) FILTER(WHERE feedback='accepted' AND feedback_at<$4) AS accepted,
         count(*) FILTER(WHERE feedback IN ('accepted','rejected') AND feedback_at<$4) AS reviewed
