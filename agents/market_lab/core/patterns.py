@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from uuid import NAMESPACE_URL, uuid5
 
 
 FIELDS = {"pair_id", "upstream_source", "upstream_ref", "downstream_source",
           "lag_days", "episodes", "hits", "hit_rate"}
+log = logging.getLogger(__name__)
 
 
 def claim(config: dict, stats: dict) -> dict:
@@ -26,12 +28,32 @@ def claim(config: dict, stats: dict) -> dict:
 
 
 async def remember(memory: object, tenant: str, config: dict, stats: dict, document_id: str) -> bool:
-    text = json.dumps(claim(config, stats), sort_keys=True, separators=(",", ":"))
-    # A retry after a lost HTTP response addresses the same existing Hermes row.
-    identity = str(uuid5(NAMESPACE_URL, tenant + ":warning_pattern:" + document_id))
-    saved = await memory.remember(tenant, text, "warning_pattern", document_id,
-                                  evidence=[document_id], record_id=identity)
-    return bool(isinstance(saved, dict) and saved.get("id"))
+    value = claim(config, stats)
+    text = json.dumps(value, sort_keys=True, separators=(",", ":"))
+    identity = str(uuid5(NAMESPACE_URL, tenant + ":warning_pattern:" + config["id"]))
+    try:
+        rows = await memory.records(tenant, tier="client")
+        current = next((row for row in rows if str(row.get("id")) == identity
+                        and str(row.get("tenant_id")) == tenant
+                        and row.get("tier") == "client"), None)
+        if current is not None:
+            try:
+                identical = json.loads(current["claim"]) == value
+            except (KeyError, TypeError, ValueError):
+                identical = False
+            if identical:
+                return True  # Also covers a successful save whose response was lost.
+            # Forget exactly this tenant's client record. Published copies have
+            # separate IDs and are never read or deleted by this write path.
+            await memory.forget(identity, tenant)
+        saved = await memory.remember(tenant, text, "warning_pattern", document_id,
+                                      evidence=[document_id], record_id=identity)
+        return isinstance(saved, dict) and str(saved.get("id")) == identity
+    except Exception as exc:
+        # Keep the durable pending flag, including when forget succeeded but
+        # save failed. The next run inserts into that same now-empty identity.
+        log.warning("pattern memory pending (%s)", type(exc).__name__)
+        return False
 
 
 async def listing(memory: object, tenant: str, plan: dict) -> dict:
