@@ -225,3 +225,19 @@ the schema-block move; it was removed and the full-range check then passed.
 The disposable test container was removed. The original checkout and ignored
 validation/source evidence remain preserved. The working tree is clean after
 pushing the evidence commit; the new head is reported in the chat.
+
+## Waiting for Figma
+
+Founder direction after the gate-2 stop authorises proceeding with these gaps:
+
+- Shopify A07: webhook-signing app client secret field, label and instructions.
+- WooCommerce A07: separately configured webhook-signing secret field, label and instructions.
+- BigCommerce A07: webhook-signing app client secret field, label and instructions.
+- A08/A08-late: wording for a placement failure after confirmed payment. Until approved, show the existing status pill and omit the untrue payment-status sentence for that state.
+
+The A07 forms keep exactly the approved visible fields. The backend accepts a
+future `credential.webhook_secret` through the existing sealed vault path and
+preserves an already saved value when the approved form omits it. An absent
+signing value fails webhook verification closed; it is never substituted with
+an access token, generated, returned or logged. These gaps no longer block gates
+2 or 3 under the founder's explicit instruction. Main is not merged again.
