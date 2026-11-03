@@ -6,12 +6,12 @@ from fastapi import HTTPException
 
 
 async def code_plan(actor, messages, task_id=None):
-    from command import db, require_tool, unpack, validate_action, PlannedAction
-    from main import RouteRequest, _record_local
-
     last = messages[-1] if messages else {}
     if last.get('role') != 'user' or not re.match(r'\s*radix\.(?:watch|unwatch|watches|changes)\b', last.get('content', ''), re.I):
         return None
+    # Import only for Radix commands, so other turns never load main through this planner.
+    from command import db, require_tool, unpack, validate_action, PlannedAction
+    from main import RouteRequest, _record_local
     source = last
     if task_id:
         async with db().acquire() as conn:
