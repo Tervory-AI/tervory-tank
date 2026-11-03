@@ -3,7 +3,7 @@ import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -15,7 +15,10 @@ from trigger_bot import Bot
 from trigger_bot_contract import SourceAdd, SourceRemove
 from trigger_bot_grounding import grounded, normalized_origin
 from trigger_bot_shared import FailedKeyLimits, MemoryRateLimits, LimitDecision, client_address
-from test_database import database, Index, A
+import test_database
+from test_database import Index, A
+
+database = test_database.database
 from test_engine import answer, passage, POINT
 
 

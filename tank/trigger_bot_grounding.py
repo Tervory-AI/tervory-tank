@@ -12,8 +12,6 @@ from typing import Any
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from semantic_cache import NUMBER
-
 PASSAGE_THRESHOLD = 0.35
 FAQ_THRESHOLD = 0.92
 MAX_PASSAGES = 6
