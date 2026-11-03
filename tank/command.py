@@ -1583,6 +1583,10 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if action.tool.startswith("mcp."):
                 from mcp_connections import dispatch
                 status, result = await dispatch(action, actor)
+            elif action.tool.startswith("market_lab.alerts."):
+                from market_lab_ml3 import confirmed
+                status, result = 200, await confirmed(action, actor, thread_id, card_id)
+                once = result.pop("_once", None)
             elif action.tool.startswith("trigger.") or action.tool in {"base.list.save", "base.list.to_crm"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
