@@ -7,8 +7,17 @@ const origin = __ENV.TISAN_CHECK_ORIGIN;
 if (!/^http:\/\/127\.0\.0\.1:[1-9][0-9]*$/.test(origin))
   throw new Error("loopback origin required");
 const paths = JSON.parse(__ENV.TISAN_CHECK_PAGES);
-if (!Array.isArray(paths) || !paths.length || paths.some((path) =>
-  typeof path !== "string" || !path.startsWith("/") || path.startsWith("//") || /[\\\u0000-\u0020\u007f?#{},]/.test(path)))
+if (
+  !Array.isArray(paths) ||
+  !paths.length ||
+  paths.some(
+    (path) =>
+      typeof path !== "string" ||
+      !path.startsWith("/") ||
+      path.startsWith("//") ||
+      /[\\\u0000-\u0020\u007f?#{},]/.test(path),
+  )
+)
   throw new Error("local page paths required");
 const pageOk = new Rate("page_ok");
 const pageTime = new Trend("page_time", true);
@@ -42,8 +51,16 @@ export function handleSummary(data) {
     const status = data.metrics[`page_ok{page:${page}}`]?.values;
     const requests = data.metrics[`page_requests{page:${page}}`]?.values?.count || 0;
     const p95_ms = data.metrics[`page_time{page:${page}}`]?.values?.["p(95)"];
-    return { page, ok: requests > 0 && status?.rate === 1, status: status?.rate === 1 ? 200 : null,
-      requests, failures: status?.fails ?? requests, p95_ms: p95_ms ?? null };
+    return {
+      page,
+      ok: requests > 0 && status?.rate === 1,
+      status: status?.rate === 1 ? 200 : null,
+      requests,
+      failures: status?.fails ?? requests,
+      p95_ms: p95_ms ?? null,
+    };
   });
-  return { ".k6-check.json": JSON.stringify({ name: "k6", ok: pages.every((row) => row.ok), pages }) };
+  return {
+    ".k6-check.json": JSON.stringify({ name: "k6", ok: pages.every((row) => row.ok), pages }),
+  };
 }
