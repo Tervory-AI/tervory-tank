@@ -69,13 +69,15 @@ def visitor(monkeypatch, tmp_path):
         async def get(self, url, **kwargs):
             h.robots_calls.append(url)
             h.request_options.append(kwargs)
-            async def body(): return h.robots_text.encode()
-            return SimpleNamespace(status=h.status, headers={}, body=body)
+            async def body(): return (h.robots_text if url.endswith('/robots.txt') else h.html).encode()
+            return SimpleNamespace(status=h.status, headers={'location': h.redirect} if h.redirect else {}, body=body)
     class Context:
         request = Request()
         async def route(self,pattern,handler): self.handler=handler; h.request_handler=handler
         async def new_page(self): return Page(self)
-        async def storage_state(self,**kwargs): pass
+        async def storage_state(self,**kwargs):
+            from pathlib import Path
+            Path(kwargs['path']).write_text('{}')
     class Browser:
         async def new_context(self,**kwargs): h.context_options=kwargs; return Context()
         async def close(self): pass
