@@ -1,10 +1,32 @@
 # Tiger T1: catalogue competitors and price position
 
-PR #599, branch `codex/tiger-competitors`, includes main `b2fa83bd` (#598), including `305b833b` (#589). The merges keep Trigger's format tool, Tiger's matching tools, main's identity/Trigger schema changes, and CLI code mode. The founder merges.
+PR #599, branch `codex/tiger-competitors`, includes main `ecef216b` (#602), including `b2fa83bd` (#598) and `305b833b` (#589). The merges keep Trigger's format tool, Tiger's matching tools, main's identity/Trigger schema changes, and CLI code mode. The founder merges.
 
 Tiger reads the tenant's saved Tiger Source sites and Rig's catalogue, discovers public product pages using sitemaps and GTIN searches, and returns matches and price position through existing `/chats` cards. Valid GTIN identity confirms automatically; brand plus MPN stays suggested until Confirm. Titles and competitor SKUs never prove identity. Confirmed matches use existing feed links and ordinary six-hour watches. Receipts use literal parameterized SQL, cost $0 and explicitly record `tiger`; existing callers still record `trigger`.
 
 No model calls, paid search, production SQL, deployment, new UI or runtime configuration changes were performed. Founder-browser acceptance and screenshots remain missing.
+
+## Re-review at a2b5e9c1
+
+| Item | Change and proof |
+| --- | --- |
+| 1 | [schema.sql:88](../../agents/tiger/schema.sql#L88) checks SELECT, INSERT and UPDATE separately for each of the four T1 tables and grants only when any privilege is missing. Existing RLS changes already check pg_class flags; policy creation checks pg_policies; column/index/table creation uses native IF NOT EXISTS. Ordinary repeated migrations therefore do not rewrite existing T1 catalog rows. [Concurrent test:955](../test_tiger_competitors.py#L955) runs the complete ordinary watch migration as non-superuser/non-BYPASSRLS agent_tiger after the actual _ownership pass: eight connections × twenty runs, both with RLS off and on, **320 runs, zero errors**. Table and policy xmin values remain unchanged. [Privilege repair:993](../test_tiger_competitors.py#L993) revokes only UPDATE on one table, verifies it is restored, and verifies the other tables' catalog rows are untouched. Existing run-twice and non-owner BYPASSRLS-admin tests remain. |
+| 2 | [rig_watch.py:487](../../agents/tiger/rig_watch.py#L487) applies the same string, length, nonzero and GS1 check-digit rules as Tank's tiger_gtin before queuing/reserving searches. Invalid SKUs are skipped inside the bounded local loop. [Test:1012](../test_tiger_competitors.py#L1012) skips 200 invalid SKUs then reserves only the valid SKU's search; it covers a wrong check digit, zeros, wrong length, nonstring and missing values. |
+| 3 | [app.py:262](../../agents/tiger/app.py#L262) retains finished-site warning details only in the single mutable match_runs.progress row. The cursor's finished-site summaries and each jobs.result contain warning_count, never those warning lists. Active-site warnings remain only in its cursor until completion; the transaction moves them into progress along with the next cursor/result. [Test:1030](../test_tiger_competitors.py#L1030) runs forty real persisted slices with three finished sites and 600 warnings, preserves every warning in run progress, and verifies every result's JSON and PostgreSQL storage size stay below **2,048 bytes**, with total result storage below 40 × 2,048 bytes. |
+
+**Focused result: 86 passed, 3 warnings, exit 0, 187.23 seconds.** This includes the existing isolation, reader, receipt, no-model and role-migration cases plus all re-review regressions. Both Ruff commands and both whitespace checks pass. An initial run stopped at a test-fixture assertion because its supposedly invalid GTIN had a valid check digit; the fixture was corrected and the entire focused suite rerun successfully.
+
+Exact commands from `/workspace/codex-tiger-t1`:
+
+```sh
+TMPDIR=/workspace/codex-tiger-t1-round2-tmp .venv/bin/python tests/rig_tiger_prices/run_t1_offline.py tests/test_tiger_competitors.py --maxfail=1
+.venv/bin/ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+.venv/bin/ruff check agents/tiger/app.py agents/tiger/rig_watch.py --select E9,F
+git diff --check
+git diff origin/main --check
+```
+
+**CI is the full-suite test of record.** The exact final-head SHA, hosted tank job link, conclusion and full-suite counts are recorded in [PR #599's Final-head CI validation](https://github.com/Tervory-AI/tervory-tank/pull/599) after that head's run completes. That job runs the unchanged `.github/scripts/offline_suite.py`; the older results below are historical, not substitutes for final-head CI.
 
 ## Round-two fixes
 
@@ -33,7 +55,7 @@ Catalogue browser requests use anonymous contexts without loading/saving cookies
 
 Every match/card/read/write is tenant scoped. Sightings bind the actual slice and root jobs, so cards use their own evidence. Position returns at most 100 matched SKUs, includes every competitor for each returned SKU within the serialized card limit, and reports pagination. Rank is 1 plus cheaper comparable competitors; difference is own price minus cheapest comparable competitor. Missing prices and different currencies are excluded from arithmetic. Existing watch readers/OCR and handmade-watch settings remain intact.
 
-## Validation
+## Round-two validation (historical)
 
 **Hosted Tank offline suite: PASS on merge head `3e40f87f59e4aef127e15f51b3fc5d9bea1c0dc3`.** [tank job](https://github.com/Tervory-AI/tervory-tank/actions/runs/41633493659/job/125909376296): main **6,675 passed, 42 skipped, 1,799 subtests passed**; tiger_g5 **46 passed**; zenas_regulation_alerts **40 passed**. All three runs exited 0; the entrypoint finished in 875 seconds. Workspace, security and command acceptance also passed. The exact final documentation-head SHA, tank conclusion and job link are recorded in [PR #599 validation](https://github.com/Tervory-AI/tervory-tank/pull/599) after that head's CI completes.
 
