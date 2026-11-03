@@ -5,61 +5,8 @@ import hashlib
 
 
 def plan() -> dict[str, Any]:
-    return {
-        "signals": [
-            {
-                "source": "port_los_angeles",
-                "ref": "teu",
-                "label": "Port of Los Angeles container volume",
-            },
-            {"source": "bts_freight", "ref": "tsifrght", "label": "Freight volume"},
-            {"source": "eia_diesel", "label": "Diesel prices"},
-            {
-                "source": "noaa_alerts",
-                "label": "Severe weather notices",
-                "kind": "notice",
-            },
-            {"source": "legiscan", "label": "Legislation", "kind": "notice"},
-            {"source": "world_bank_commodities", "label": "Commodity prices"},
-        ],
-        "outcomes": [
-            {"source": "listing_counts", "label": "Licence counts"},
-            {
-                "source": "check_counts",
-                "label": "Background-check counts",
-                "note": "These are not sales.",
-            },
-            {"source": "tiger_price", "label": "Watched product prices"},
-            {"source": "tiger_stock", "label": "Watched product availability"},
-        ],
-        # First chain only. No causal claim is inferred from a past association.
-        "pairs": [
-            {
-                "id": f"{source}:availability",
-                "source": source,
-                "ref": ref,
-                "label": label,
-                "downstream_source": "tiger_stock",
-                "direction": "drop",
-                "outcome_direction": "drop",
-                "baseline_value": 2,
-                "outcome_pct": 0.25,
-                "outcome_words": "became unavailable",
-                "prediction_words": "may become unavailable",
-                "min_episodes": 3,
-                "window": 6,
-                "z_threshold": 2.0,
-                "pct_threshold": 0.15,
-                "min_lag_days": 7,
-                "max_lag_days": 84,
-                "max_gap_days": 14,
-            }
-            for source, ref, label in [
-                ("port_los_angeles", "teu", "Port of Los Angeles container volume"),
-                ("bts_freight", "tsifrght", "Freight volume"),
-            ]
-        ],
-    }
+    from engines.ffl.engine import load_map
+    return load_map()["warnings"]
 
 
 def product_series(watch: dict, observations: list[dict]) -> list[dict]:
