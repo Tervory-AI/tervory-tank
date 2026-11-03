@@ -221,7 +221,10 @@ class Meta(Google):
         _, bundle = await self.bundle(tenant, conn=conn)
         if any(value in url for value in (*bundle.values(), settings()['client_secret']) if isinstance(value, str) and value):
             raise MetaFailure(502)
-        parsed = urlsplit(url)
+        try:
+            parsed = urlsplit(url)
+        except ValueError:
+            raise MetaFailure(502) from None
         if (parsed.scheme != 'https' or parsed.netloc not in {'www.facebook.com', 'facebook.com', 'm.facebook.com'}
                 or parsed.username or parsed.password or 'access_token' in parsed.query.lower()):
             raise MetaFailure(502)
