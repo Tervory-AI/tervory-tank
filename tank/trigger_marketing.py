@@ -196,9 +196,10 @@ class Marketing:
             AND ($4::date IS NULL OR (planned_at AT TIME ZONE time_zone)::date >= $4)
             AND ($5::date IS NULL OR (planned_at AT TIME ZONE time_zone)::date < $5)
             ORDER BY planned_at NULLS LAST,created_at,id LIMIT 500''', tenant, args.state, args.channel, args.start, args.end)
-        items = []
+        items, link_reads = [], 0
         for row in rows:
-            if row['channel'] == 'facebook' and row['state'] == 'published' and row['platform_id'] and not row['platform_url']:
+            if link_reads < 3 and row['channel'] == 'facebook' and row['state'] == 'published' and row['platform_id'] and not row['platform_url']:
+                link_reads += 1
                 try:
                     binding = await self.meta.location(tenant)
                     if (binding['location'], binding['generation']) == (row['location'], row['connection_generation']):
