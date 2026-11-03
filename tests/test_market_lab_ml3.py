@@ -327,3 +327,21 @@ async def test_room_feeds_returns_registered_key_names_without_values(monkeypatc
     assert response.status_code == 200
     assert response.json()['feeds'][0]['key_name'] == 'EIA_API_KEY'
     assert 'placeholder-private-value' not in response.text
+
+
+@pytest.mark.asyncio
+async def test_confirmed_alert_setup_ensures_existing_tenant_warning_jobs(monkeypatch):
+    from core import ml3 as room
+    import chassis.db
+    ensure = AsyncMock()
+    monkeypatch.setattr(chassis.db, 'ensure_schedules', ensure)
+    @asynccontextmanager
+    async def context(): yield SimpleNamespace(conn=SimpleNamespace())
+    app = FastAPI()
+    app.include_router(room.build_router(key_ok=lambda value: value == 'placeholder-room', ledger_context=context, engine='ffl'))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://placeholder') as http:
+        response = await http.post('/market/ml3/alerts', json={'tenant_id': str(OTHER)}, headers={'x-tank-key': 'placeholder-room'})
+    assert response.status_code == 200
+    schedules = ensure.await_args.args[2]
+    assert {row['kind'] for row in schedules} == {'refresh', 'opportunities', 'resolve', 'alerts'}
+    assert all(row['tenant_id'] == str(OTHER) for row in schedules)
