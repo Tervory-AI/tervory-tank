@@ -71,7 +71,8 @@ def main() -> None:
     secret = os.environ[SECRET_ENV]
     if not secret:
         raise RuntimeError("Health signing is not configured.")
-    HEALTH_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir = Path("/data")
+    output_dir.mkdir(parents=True, exist_ok=True)
     transport = httpx.HTTPTransport(proxy="http://health-egress-proxy:8080")
     with httpx.Client(transport=transport, trust_env=False, timeout=5,
                       follow_redirects=False) as client:
@@ -79,7 +80,7 @@ def main() -> None:
             for site in HEALTH_URLS:
                 result = observe_once(client, site)
                 signature = hmac.new(secret.encode(), canonical(result), hashlib.sha256).hexdigest()
-                path = HEALTH_DIR / (site + ".json")
+                path = output_dir / (site + ".json")
                 temporary = path.with_suffix(".tmp")
                 temporary.write_text(json.dumps({"result": result, "signature": signature}))
                 temporary.replace(path)
