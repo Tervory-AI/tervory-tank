@@ -16,7 +16,7 @@ import httpx
 import pytest
 from base_metrics import export_records
 from fastapi import FastAPI
-from test_base_lists import Pool, STAMP, TENANT, OTHER, RECORD, record
+from test_base_lists import OTHER, RECORD, STAMP, TENANT, Pool, record
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -66,7 +66,7 @@ async def test_products_survive_saved_snapshot_without_changing_main_csv():
     store = lists.Store(pool)
     row = record()
     original = export_records([row]).encode()
-    row["fields"].update(projected([product()])["fields"])
+    row["fields"]["products"] = projected([product()])["fields"]["products"]
     async def scan(conn, tenant, filters, ids=None):
         assert tenant == TENANT and filters.has_products is True
         yield deepcopy(row)
