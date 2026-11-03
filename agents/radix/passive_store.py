@@ -267,8 +267,12 @@ class Store:
                       VALUES($1,$2,$3,$4,$5)''', tenant, ident, domain, url, digest)
         from chassis.events import publish
         for ordinal, finding in enumerate(findings):
+            # The bus uses its fixed severity vocabulary; keep the tool's own
+            # severity unchanged in findings (axe also reports serious).
+            event_severity = finding['severity'] if finding['severity'] in {
+                'critical','high','medium','low','info','unknown'} else 'unknown'
             await publish(str(tenant), 'radix.finding', f'{ident}:{ordinal}',
-                          {'scan_id': str(ident), 'ordinal': ordinal, 'severity': finding['severity']})
+                          {'scan_id': str(ident), 'ordinal': ordinal, 'severity': event_severity})
 
     async def watch(self, tenant: UUID, domain: str, interval: str, *, run_now: bool = True) -> dict:
         domain = domain_name(domain)
