@@ -576,11 +576,13 @@ async def teachers(skill_id: str, actor: Reviewer = Depends(require_reviewer)) -
     async with runtime().pool().acquire() as conn:
         rows = await conn.fetch(
             """SELECT s.version,s.task_type,p.teacher_model,count(p.id) AS count,max(p.created_at) AS newest_created_at
-            FROM tank.skills s LEFT JOIN tank.training_pairs p
+            FROM tank.skills s
+            LEFT JOIN tank.agent_skill_submissions owner ON owner.skill_id=s.id AND owner.version=s.version
+            LEFT JOIN tank.training_pairs p
               ON p.tenant_id=$2 AND p.region=$3 AND p.agent=s.agent
               AND (p.task_type=s.task_type OR p.task_type=s.id)
               AND p.active AND p.polarity='positive'
-            WHERE s.id=$1
+            WHERE s.id=$1 AND (owner.skill_id IS NULL OR (owner.tenant_id=$2 AND owner.region=$3))
             GROUP BY s.version,s.task_type,p.teacher_model
             ORDER BY s.version,p.teacher_model NULLS FIRST""", args.skill_id, actor.tenant, runtime().box_region())
         ledger_id = await code_receipt(actor.tenant, "skala.teachers", agent="tank", conn=conn)
