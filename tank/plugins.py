@@ -52,10 +52,27 @@ class Manifest(BaseModel):
         return values
 
 
+class ManifestLoader(yaml.SafeLoader):
+    """Safe YAML with no ambiguous duplicate keys, including merged mappings."""
+
+    def construct_mapping(self, node, deep=False):
+        self.flatten_mapping(node)
+        seen = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            try:
+                if key in seen:
+                    raise ValueError('Duplicate YAML key')
+                seen.add(key)
+            except TypeError as error:
+                raise ValueError('Invalid YAML key') from error
+        return super().construct_mapping(node, deep=deep)
+
+
 def load_manifests(root: Path = ROOT) -> dict[tuple[str, str], Manifest]:
     manifests = {}
     for path in sorted(root.glob('*/*/plugin.yaml')):
-        manifest = Manifest.model_validate(yaml.safe_load(path.read_text(encoding='utf-8')))
+        manifest = Manifest.model_validate(yaml.load(path.read_text(encoding='utf-8'), Loader=ManifestLoader))
         key = (manifest.id, manifest.version)
         if key != (path.parent.parent.name, path.parent.name) or key in manifests:
             raise ValueError('Plugin path does not match manifest')
