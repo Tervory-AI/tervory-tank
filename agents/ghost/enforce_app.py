@@ -27,7 +27,7 @@ from .durable_shields import (
     read_shields_table,
     restart_drop_receipts,
 )
-from .enforce_apply import expire_pending_approvals
+from .enforce_apply import expire_pending_approvals, select_control
 from .fixture_edge import DEFAULT_CONTROL, FixtureEdgeControl
 from .never_block import ActionCap
 from .store import Store
@@ -154,6 +154,9 @@ def _boot_durable_control(app: FastAPI) -> list[dict[str, Any]]:
             )
         )
     control = load_control(data_dir, tenant_id=tenant_id)
+    cfg = load_enforce_client_settings()
+    site = control.site or cfg.site_name
+    control = select_control(site=site, settings=cfg, control=control)
     restored = {r["rule_id"]: r for r in control.list_blocked()}
     # If somehow restored is smaller than the table we read, emit per-shield drops.
     receipts.extend(
@@ -212,6 +215,12 @@ def drain_once_for_enforce(
         edge = getattr(target.state, "control", None)
     if edge is None:
         edge = DEFAULT_CONTROL
+    # Empty queue polls must not consume the approved proxy's tunnel budget.
+    # A fixture can be promoted once work arrives after the proxy started.
+    if getattr(edge, "control_name", "fixture_edge") != "cloudflare" and any((q.root / "inbox").glob("*.json")):
+        edge = select_control(site=edge.site or cfg.site_name, settings=cfg, control=edge)
+        if target is not None:
+            target.state.control = edge
     cap = action_cap
     if cap is None and target is not None:
         cap = getattr(target.state, "action_cap", None)
@@ -343,7 +352,7 @@ def create_enforce_app() -> FastAPI:
             "ok": True,
             "role": "enforce",
             "tank_key_configured": bool(os.environ.get("TANK_KEY", "").strip()),
-            "control": "fixture_edge",
+            "control": getattr(app.state.control, "control_name", "fixture_edge"),
             "blocked": len(app.state.control.list_blocked()),
             "shield_mode": app.state.settings.shield_mode.value,
             "tenant_id": app.state.settings.tenant_id,

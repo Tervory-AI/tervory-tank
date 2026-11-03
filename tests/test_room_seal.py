@@ -243,7 +243,10 @@ elif args[:1] == ["inspect"]:
     print("|".join([c["uuid"], c.get("resource", ""), c["service"], c.get("project", c["uuid"]), "/" + c["name"],
                     "".join(n + " " for n in sorted(c["networks"]))]))
 elif args[:2] == ["network", "inspect"]:
-    print("true" if data["networks"][args[-1]] else "false")
+    if '.Labels' in args[args.index('-f') + 1]:
+        print(data.get('network_labels', {}).get(args[-1], '|'))
+    else:
+        print("true" if data["networks"][args[-1]] else "false")
 else:
     sys.exit("fake docker: refused " + " ".join(args))
 '''
@@ -549,6 +552,24 @@ def add_autumbra_placements(data):
         'project': 'placeholder-enforce', 'name': 'placeholder-enforce',
         'networks': ['placeholder-enforce-private'],
     }
+    data['networks'].update({'placeholder-enforce-egress': False,
+                             'placeholder-health-private': True, 'placeholder-health-egress': False})
+    labels = data.setdefault('network_labels', {})
+    for network, logical in [('placeholder-enforce-private', 'enforce_internal'),
+                             ('placeholder-enforce-egress', 'egress'),
+                             ('placeholder-health-private', 'health_internal'),
+                             ('placeholder-health-egress', 'health_egress')]:
+        labels[network] = 'placeholder-enforce|' + logical
+    for service, networks in {
+        'egress-proxy': ['placeholder-enforce-private', 'placeholder-enforce-egress'],
+        'health-observer': ['placeholder-health-private'],
+        'health-egress-proxy': ['placeholder-health-private', 'placeholder-health-egress'],
+    }.items():
+        data['containers']['placeholder-' + service] = {
+            'uuid': 'placeholder-enforce', 'resource': 'autumbra-enforce-placeholder',
+            'service': service, 'project': 'placeholder-enforce',
+            'name': 'placeholder-' + service, 'networks': networks,
+        }
     return data
 
 
@@ -577,4 +598,4 @@ def test_autumbra_enforce_without_internal_network_fails(tmp_path):
     path = tmp_path / 'placeholder-public-enforce.json'
     path.write_text(json.dumps(data))
     result = run_seal_check(tmp_path, str(path), include_autumbra=False)
-    assert result.returncode == 1 and 'NOT SEALED' in result.stdout
+    assert result.returncode == 1 and 'LEAK:' in result.stdout

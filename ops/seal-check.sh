@@ -71,6 +71,18 @@ declare -A APP_SERVICES=() # uuid/service -> 1
 APPS=()
 FORMAT='{{index .Config.Labels "coolify.applicationUuid"}}|{{index .Config.Labels "coolify.resourceName"}}|{{index .Config.Labels "com.docker.compose.service"}}|{{index .Config.Labels "com.docker.compose.project"}}|{{.Name}}|{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}'
 
+# Identify raw per-client Enforce projects before validating their proxy services.
+declare -A ENFORCE_PROJECTS=() CONTAINER_LINES=()
+for id in $ids; do
+  if ! line="$("$DOCKER" inspect -f "$FORMAT" "$id" 2>&1)"; then
+    echo "seal-check: docker inspect $id failed: $line" >&2
+    exit 2
+  fi
+  IFS='|' read -r uuid resource service project name networks <<<"$line"
+  CONTAINER_LINES[$id]="$line"
+  [[ "$service" == enforce ]] && ENFORCE_PROJECTS[$project]=1
+done
+
 FLAG=""
 internal_flag() {  # sets FLAG; no subshell, so the cache and exit 2 both hold
   local net="$1" out
@@ -85,10 +97,7 @@ internal_flag() {  # sets FLAG; no subshell, so the cache and exit 2 both hold
 }
 
 for id in $ids; do
-  if ! line="$("$DOCKER" inspect -f "$FORMAT" "$id" 2>&1)"; then
-    echo "seal-check: docker inspect $id failed: $line" >&2
-    exit 2
-  fi
+  line="${CONTAINER_LINES[$id]}"
   IFS='|' read -r uuid resource service project name networks <<<"$line"
   name="${name#/}"
   if [[ -z "$uuid" ]]; then
@@ -104,6 +113,9 @@ for id in $ids; do
   fi
   [[ -n "$resource" ]] && APP_RESOURCE[$uuid]="$resource"
   APP_SERVICES["$uuid/$service"]=1
+  if [[ "$service" == enforce && -z "${APP_ROOM[$uuid]}" ]]; then
+    APP_ROOM[$uuid]="autumbra-enforce"
+  fi
   if [[ "$service" == agent-* && -z "${APP_ROOM[$uuid]}" ]]; then
     APP_ROOM[$uuid]="$service"
   fi
@@ -120,6 +132,39 @@ for id in $ids; do
       outward+=("$net")
     fi
   done
+  if [[ -n "${ENFORCE_PROJECTS[$project]+set}" ]]; then
+    logical_expected=""
+    case "$service" in
+      enforce) logical_expected="enforce_internal" ;;
+      egress-proxy) logical_expected="enforce_internal egress" ;;
+      health-observer) logical_expected="health_internal" ;;
+      health-egress-proxy) logical_expected="health_internal health_egress" ;;
+    esac
+    if [[ -n "$logical_expected" ]]; then
+      seen=""
+      for net in $networks; do
+        if ! meta="$("$DOCKER" network inspect -f '{{index .Labels "com.docker.compose.project"}}|{{index .Labels "com.docker.compose.network"}}' "$net" 2>&1)"; then
+          echo "seal-check: docker network inspect $net failed: $meta" >&2
+          exit 2
+        fi
+        IFS='|' read -r net_project logical <<<"$meta"
+        internal_flag "$net"
+        expected_internal=true
+        [[ "$logical" == egress || "$logical" == health_egress ]] && expected_internal=false
+        if [[ "$net_project" != "$project" || " $logical_expected " != *" $logical "* || "$FLAG" != "$expected_internal" || " $seen " == *" $logical "* ]]; then
+          APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }LEAK: $name on $net"
+        fi
+        seen+=" $logical"
+      done
+      for logical in $logical_expected; do
+        if [[ " $seen " != *" $logical "* ]]; then
+          APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }NOT SEALED: $name missing $logical"
+        fi
+      done
+      (( on_internal )) && APP_SEALED[$uuid]=$(( APP_SEALED[$uuid] + 1 ))
+      continue
+    fi
+  fi
   # Check exact compose attachments even if a required internal network was removed.
   # Rig's public API keeps its existing app proxy network; Trigger gets only its
   # corridor/checkers, and Radix passive-egress gets only gw/proxy-link/egress.
@@ -220,7 +265,7 @@ is_expected() {
 for uuid in "${ROOMS[@]}"; do
   room="${ROOM_NAME[$uuid]}"
   if [[ "$room" == "agent-ghost" || "$room" == "autumbra-enforce" ]]; then
-    required_services="enforce"
+    required_services="enforce egress-proxy health-observer health-egress-proxy"
     [[ "$room" == "agent-ghost" ]] && required_services="agent-ghost ghost-browser"
     for required in $required_services; do
       if [[ -z "${APP_SERVICES[$uuid/$required]+set}" ]]; then
