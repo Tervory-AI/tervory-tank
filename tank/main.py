@@ -1284,6 +1284,16 @@ async def run_route(
     route_seat = req.task_type.partition("#moa.")[2] if seat else (
         "pinned" if req.task_type == "command.turn" and model_override is not None else None)
     model = str(policy["model"]).strip()
+    # BEGIN ROUTELLM SERVING RESOLUTION
+    routellm_decision = policy.get("_routellm_served")
+    if model.startswith("routellm:"):
+        routellm_decision = await routellm_shadow.serve(
+            __import__("sys").modules[__name__], policy, [m.model_dump() for m in req.messages],
+            tenant_id=req.tenant_id, priority=req.priority or policy["priority"],
+            task_type=req.task_type, skill=req.skill, caller=caller, pool_read=pool_read)
+        policy = routellm_shadow.serving_policy(policy, routellm_decision)
+        model = str(policy["model"])
+    # END ROUTELLM SERVING RESOLUTION
     # skill: and cache: are not model names. Do not send them to LiteLLM.
     if graduate.router_cannot_serve(model):
         raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
@@ -1547,6 +1557,10 @@ async def run_route(
             sent_at, _receipt_id, cost_status, cache_read, cache_write,
         )
 
+    # BEGIN ROUTELLM SERVING RECEIPT
+    if outcome == "delivered" and routellm_decision is not None:
+        await routellm_shadow.record_served(__import__("sys").modules[__name__], req.tenant_id, ledger_id, routellm_decision)
+    # END ROUTELLM SERVING RECEIPT
     if outcome == "failed":
         upstream: Any = "provider error" if holds_identifier else (data or r.text[:500])
         raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "upstream": upstream})
@@ -1900,7 +1914,8 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
 _POLICY_MOVE = """
     SELECT task_type, model, candidate_model, previous_model, rung, eval_threshold,
            min_shadow_samples, max_reject_rate, auto_promote, field_floors,
-           semantic_cache, promoted_at, number_tolerance, shadow_rate, held_swap_id, fallbacks
+           semantic_cache, promoted_at, number_tolerance, shadow_rate, held_swap_id, fallbacks,
+           routellm_weak_model, routellm_threshold
     FROM tank.policy
     WHERE task_type=$1 AND tenant_id IS NULL
 """
