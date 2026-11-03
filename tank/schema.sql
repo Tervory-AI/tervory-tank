@@ -2503,14 +2503,14 @@ CREATE TABLE IF NOT EXISTS tank.trigger_bot_windows (
  tenant_id uuid NOT NULL, window_id bigint NOT NULL, salt bytea NOT NULL,
  PRIMARY KEY(tenant_id,window_id)
 );
--- Remove legacy counters whose short-lived window has already expired.
-DELETE FROM tank.trigger_bot_limits l
- WHERE NOT EXISTS (SELECT 1 FROM tank.trigger_bot_windows w
-                   WHERE w.tenant_id=l.tenant_id AND w.window_id=l.window_id);
 DO $$ BEGIN
  IF NOT EXISTS (SELECT 1 FROM pg_constraint
                 WHERE conrelid='tank.trigger_bot_limits'::regclass
                   AND conname='trigger_bot_limits_window_fk') THEN
+  -- Clean legacy orphans once, before enforcing the window relationship.
+  DELETE FROM tank.trigger_bot_limits l
+   WHERE NOT EXISTS (SELECT 1 FROM tank.trigger_bot_windows w
+                     WHERE w.tenant_id=l.tenant_id AND w.window_id=l.window_id);
   ALTER TABLE tank.trigger_bot_limits ADD CONSTRAINT trigger_bot_limits_window_fk
    FOREIGN KEY (tenant_id,window_id)
    REFERENCES tank.trigger_bot_windows(tenant_id,window_id) ON DELETE CASCADE;
