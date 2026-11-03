@@ -43,9 +43,16 @@ All URLs below were checked on 3 November 2026:
   Business Verification and App Review.
 - [Revocation](https://developers.facebook.com/docs/facebook-login/guides/permissions/request-revoke/#revokelogin):
   `DELETE /me/permissions` invalidates the user's app authorisation. Disconnect
-  clears ciphertext only after confirmed revocation or explicit token-invalid
-  evidence. This revocation applies to that Facebook user's app grant, so other
+  clears ciphertext only after confirmed revocation. Failed revocation retains
+  the sealed grant for recovery. This revocation applies to that Facebook user's app grant, so other
   connections using the same user grant may also become invalid.
+- [Graph error handling](https://developers.facebook.com/docs/graph-api/guides/error-handling/):
+  structured transient refusals use M1's three-attempt exponential backoff. A
+  timeout, malformed response or unstructured server failure after a send stays
+  uncertain, without automatic replay.
+- [Page-owned published posts](https://developers.facebook.com/docs/graph-api/reference/page/published_posts/):
+  confirmed reconciliation scans this Page's posts with bounded cursor pagination
+  and the claim time, rather than following token-bearing pagination URLs.
 - [Page post reference](https://developers.facebook.com/docs/graph-api/reference/page-post/):
   read the returned ID's `permalink_url`; do not invent a Page/post URL.
 - [Instagram content publishing](https://developers.facebook.com/docs/instagram-platform/content-publishing/):
