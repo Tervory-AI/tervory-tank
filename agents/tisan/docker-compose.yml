@@ -1,8 +1,7 @@
-# coolify: raw compose
 # Tisan, the developer and designer. Deploy this file as its own Coolify resource.
 # Build context is the repository root to reuse ops/live_check.mjs.
-# The room reaches Figma only through its dedicated internal proxy link.
-# Deploy as Raw Compose so Coolify adds no outbound app network.
+# The Figma reader code path uses the dedicated proxy link.
+# The external gw bridge is not a network-level egress seal.
 # Created once on the server: docker network create tervory-gw-tisan
 
 services:
@@ -55,7 +54,7 @@ services:
       - >-
         from egress import Proxy, Server, private_bind_address, system_resolve;
         allowed = 'api.figma.com';
-        proxy = Proxy(verified_host=allowed, allow_storage=False, require_sni=True,
+        proxy = Proxy(verified_host=allowed, allow_storage=False, require_sni=True, max_response_bytes=5_000_000,
           resolve=lambda host: system_resolve(host, verified_host=allowed));
         Server(proxy, host=private_bind_address(), port=8080).serve_forever()
     restart: unless-stopped
@@ -74,8 +73,6 @@ services:
 
 volumes:
   agent_tisan_data:
-    external: true
-    name: lblbn0wjaz30hhdur9l3pylg_agent-tisan-data
 
 networks:
   gw:
