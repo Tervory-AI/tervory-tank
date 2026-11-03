@@ -51,8 +51,10 @@ END $$;
 
 -- A new snapshot is written only on acknowledged -> quoted. Later state/mail
 -- updates retain it, and legacy quoted records without a snapshot remain readable.
-CREATE OR REPLACE FUNCTION agent_tisan.keep_quote_snapshot() RETURNS trigger
-LANGUAGE plpgsql AS $$ BEGIN
+DO $install$ BEGIN
+    IF to_regprocedure('agent_tisan.keep_quote_snapshot()') IS NULL THEN
+        EXECUTE $ddl$CREATE FUNCTION agent_tisan.keep_quote_snapshot() RETURNS trigger
+LANGUAGE plpgsql AS $body$ BEGIN
     IF TG_OP='INSERT' THEN
         IF NEW.quote_amount IS NOT NULL OR NEW.quote_currency IS NOT NULL
             OR NEW.valid_until IS NOT NULL OR NEW.quote_message IS NOT NULL THEN
@@ -73,7 +75,9 @@ LANGUAGE plpgsql AS $$ BEGIN
         END IF;
     END IF;
     RETURN NEW;
-END $$;
+END $body$;$ddl$;
+    END IF;
+END $install$;
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_trigger
         WHERE tgrelid='agent_tisan.quote_requests'::regclass AND tgname='quote_snapshot_once') THEN
