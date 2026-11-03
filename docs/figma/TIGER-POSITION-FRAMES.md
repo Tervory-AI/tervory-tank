@@ -1,5 +1,7 @@
 # Tiger follow-up correction — navy borders and Cheapest line height
 
+**Approved 3 Nov 2026, 15:20 PT** (Claude, under the founder's 3 Nov 13:28 delegation to approve the basics): all ten frames listed below, at this commit, including the two copied "Last attempt" strings. Current status: **Approved**. The Tiger thread builds TG2 from these frames.
+
 Branch `codex/tiger-figma`; starting commit `881a2ab6`. Implemented the founder’s two follow-up corrections in Figma. All existing IDs and every text string are preserved. No nodes created or removed. No new words. Current status stays **Changed after approval, awaiting founder**. Only this register is committed; production code and deployments are unchanged.
 
 ## Directly edited nodes — 14
