@@ -390,7 +390,13 @@ async def test_admin_read_uses_only_actor_binding_and_receipts(setup, monkeypatc
         assert req.headers['authorization'] == 'Bearer dummy-crm-token'
         assert req.headers['X-Tervory-CRM-Organization'] == ORG
         item = {'id': str(RECORD), 'title': 'placeholder-record'}
-        return httpx.Response(200, json={key: item} if req.url.path.endswith(str(RECORD) + '/') else {'results': [item], 'count': 1})
+        if req.url.path.endswith(str(RECORD) + '/'):
+            payload = {key: item}
+        elif resource == 'leads':
+            payload = {'open_leads': {'open_leads': [item], 'leads_count': 1}, 'close_leads': {'close_leads': [], 'leads_count': 0}}
+        else:
+            payload = {'results': [item], 'count': 1}
+        return httpx.Response(200, json=payload)
     fake_transport(monkeypatch, upstream)
     for suffix, task in [('', 'trigger.crm.list'), ('/' + str(RECORD), 'trigger.crm.get')]:
         response = await request(setup, path='/v1/trigger/crm/' + resource + suffix)
