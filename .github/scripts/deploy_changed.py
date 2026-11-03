@@ -39,7 +39,7 @@ MAIN_HEAD = os.environ.get("MAIN_HEAD", "").strip().lower()
 
 # Paths that rebuild the main stack (Tank, Workspace, LiteLLM, Hermes, SearXNG, site, shared compose).
 MAIN_PREFIXES = (
-    "tank/", "workspace/", "litellm/", "hermes/", "db/", "searxng/", "tiger/", "site/", "tor/",
+    "tank/", "workspace/", "litellm/", "hermes/", "db/", "searxng/", "site/", "tor/",
     "docker-compose.yml",
     # Backup workers live in the main and ZA stacks (r2-backup, r2-backup-za).
     "docker-compose.za.yml", "jobs/train/backup.py", "jobs/train/r2_archive.py",
@@ -84,7 +84,7 @@ def changed_paths() -> list[str]:
 
 def wanted(paths: list[str]) -> tuple[bool, set[str], bool]:
     main = any(p.startswith(MAIN_PREFIXES) for p in paths)
-    rooms: set[str] = set()
+    rooms: set[str] = {"agent-tiger"} if any(p.startswith("tiger/") for p in paths) else set()
     every_room = any(p.startswith(ALL_ROOMS_PREFIXES) for p in paths)
     for p in paths:
         parts = p.split("/")
