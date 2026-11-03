@@ -376,7 +376,9 @@ def test_reads_do_not_rebuild_and_rollup_sql_is_bounded():
     assert "ts >= $1::timestamptz" in admin.FEEDBACK_SQL
     assert admin.rejection_cutoff(date(2026, 10, 13)) == datetime(2026, 9, 13, tzinfo=timezone.utc)
     main = (Path(__file__).resolve().parents[1] / "tank" / "main.py").read_text()
-    assert 'app.include_router(__import__("admin").router)' in main
+    from routes_registry import ROUTES
+    assert ('early', 'admin', 'router', None, True) in ROUTES
+    assert main.count(".register_routes(__import__(\"sys\").modules[__name__], 'early')") == 1
 
 
 def test_schema_additions_are_idempotent():

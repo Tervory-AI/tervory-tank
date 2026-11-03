@@ -65,6 +65,26 @@ the PR after execution. CI is the full-suite test of record. No prohibited
 parallel offline suite or 50-run loop was run locally. Founder live acceptance
 remains after merge/deploy; it is not claimed here.
 
+CI contract alignment discovered by the first full run
+Initial run 41722853463 at d5972b6b found stale tests for the mechanical move:
+three source assertions expected router includes in main.py, and the pinned
+routing fixture lacked the two reviewed blocks. A schema-generator round trip
+also inserted a blank separator before generated memory.
+- tests/test_founder_console.py:379 and tests/test_bucket1_integration.py:42 now
+  require the exact early registry entry and one early registration call.
+- tests/test_workers_2.py:307 requires exactly the two worker routers, in order,
+  and one early registration call. Other assertions remain intact.
+- tests/tenant_rls/run_route.pinned now includes only the two reviewed hooks.
+  Before changing it, its full AST was asserted equal to run_route with exactly
+  those hooks removed. The whole-body comparison in test_tenant_rls.py is intact;
+  the independent unchanged-rest SHA256 check remains green.
+- tank/schema.sql moves one blank separator from before the comment regions to
+  before generated memory. No existing SQL statement moves or changes. The real
+  generator is now byte-idempotent. Golden normalization still matches main after
+  excluding the teacher ALTER; finish updated only that column's blank placement.
+Focused contract verification: 81 passed in 17.09s. Finish: 1 passed in 7.84s.
+No scanner exceptions, skipped checks or retry behavior were added.
+
 Final re-freeze, only when authorized
 .venv312/bin/python scripts/refreeze_platform_registry.py prepare
 # Resolve any rebase conflicts preserving main and git rebase --continue.
