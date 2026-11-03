@@ -62,7 +62,7 @@ async def propose(body: Proposal, actor: Annotated[command.Actor, Depends(comman
     thread = await command.create_thread(command.NewThread(title='Trigger'), actor)
     async with command.editing(UUID(str(thread['thread_id'])), actor) as (conn, row, state):
         card = await command.propose_action(conn, row, state, action, actor)
-    return {'thread_id': thread['thread_id'], 'card': command.public_card(card)}
+    return {'thread_id': thread['thread_id'], 'card': command.public_card(card), 'preview': card_preview(card)}
 
 
 @router.get('/crm/{resource}')
@@ -232,3 +232,33 @@ def local_schedule(arguments):
     except (ValueError, KeyError, TypeError, ZoneInfoNotFoundError):
         raise HTTPException(422) from None
     return values
+
+
+def card_preview(card):
+    """Render the same server-prepared payload Confirm will execute, not stale page props."""
+    tool, args = card['tool'], card['arguments']
+    try:
+        stored = json.loads(args.get('brief_markdown', '{}'))
+    except (ValueError, TypeError):
+        stored = {}
+    if not isinstance(stored, dict):
+        stored = {}
+    row = {**stored, **{key: value for key, value in args.items() if key not in {'brief_markdown', 'expected_digest'}}}
+    if tool == 'trigger.post.schedule':
+        when = datetime.fromisoformat(row['planned_at'])
+        return [('Post title', stored.get('title')), ('Approved revision', stored.get('approved_revision')),
+                ('Channels', stored.get('channel')), ('Date', when.date().isoformat()),
+                ('Time zone', row['time_zone']), ('Time', when.timetz().isoformat())]
+    if tool.startswith('trigger.post.'):
+        return [('Post title', row.get('title')), ('Text', row.get('text')), ('Channels', row.get('channel')),
+                ('Saved voice', row.get('voice_revision')), ('Checker findings', row.get('report'))]
+    labels = {'enabled': 'Bot', 'opening_hours': 'Opening hours', 'time_zone': 'Time zone', 'greeting': 'Greeting',
+              'handover_rules': 'Hand-over rules', 'no_source_message': 'No-source message',
+              'handover_message': 'Hand-over message', 'conversation_id': 'Conversation', 'person': 'Person',
+              'text': 'Reply', 'draft_id': 'Lead draft' if '.lead.' in tool else 'Quote draft',
+              'first_name': 'First name', 'last_name': 'Last name', 'email': 'Email', 'phone': 'Phone',
+              'description': 'Notes', 'title': 'Title', 'request': 'Request', 'quantity': 'Quantity',
+              'product_id': 'Product', 'contact': 'Contact', 'source_ref': 'Source conversation',
+              'location_title': 'Account', 'page_name': 'Account', 'location': 'Profile', 'page_id': 'Account',
+              'review_id': 'Review', 'report': 'Checker findings'}
+    return [(label, row[key]) for key, label in labels.items() if key in row]
