@@ -345,8 +345,7 @@ def tls_findings(cert: dict[str, Any] | None, protocol: str | None, url: str = H
     name_matches = host in names
     if not name_matches:
         try:
-            ssl.match_hostname(cert, host)
-            name_matches = True
+            name_matches = any(ssl._dnsname_match(name, host) for name in names)
         except (ssl.CertificateError, ValueError):
             pass
     if not name_matches:
