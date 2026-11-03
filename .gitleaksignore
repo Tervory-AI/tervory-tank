@@ -52,3 +52,6 @@ b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/l
 
 # Rig Locate #463: dummy live-shaped string in a refusal test (fixed in the next commit); not a credential. Pending reviewer triage.
 a2f2eca3669fd496070eeaf3536f054b6054d5e3:tests/test_rig_locate_checkout.py:stripe-access-token:260
+
+# PR #591: a Figma file key (public in every share link), not a credential; field renamed in e773434f. Claude-reviewed 3 Nov 2026.
+ce6839dc30c0562b4f5507ee241206fe4de7bbba:docs/figma/tisan/nov3-r2-audit.json:generic-api-key:3
