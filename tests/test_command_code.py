@@ -204,7 +204,7 @@ def test_code_tervory_limits_and_actor_permissions():
 
 
 @pytest.mark.asyncio
-async def test_code_tervory_pending_card_project_privacy_and_no_dispatch(api, monkeypatch):
+async def test_code_tervory_pending_card_project_privacy_and_no_dispatch(api, monkeypatch):  # noqa: F811
     client, pool = api
     ledger = uuid.uuid4()
     await pool.execute("INSERT INTO tank.ledger(id,tenant_id,agent,task_type,model,cost_usd) "
@@ -235,3 +235,11 @@ async def test_code_tervory_pending_card_project_privacy_and_no_dispatch(api, mo
     denied = await client.post(f'/v1/command/threads/{thread}/code-turn', json={'text': 'denied'})
     assert denied.status_code == 422
     assert len((await client.get(f'/v1/command/threads/{thread}')).json()['cards']) == 1
+
+
+def test_code_multifile_edit_schema_and_utf8_limit():
+    diff = ''.join('--- a/' + name + '\n+++ b/' + name + '\n@@ -1 +1 @@\n-old\n+new\n' for name in ['placeholder-a', 'placeholder-b', 'placeholder-c'])
+    request = command.code_plan(json.dumps({'requests': [{'name': 'propose_edit', 'arguments': {'diff': diff}}]})).requests[0]
+    assert request.arguments['path'] is None and request.arguments['diff'] == diff
+    with pytest.raises(ValueError):
+        command.CodeEditArgs(diff='é' * 100001)
