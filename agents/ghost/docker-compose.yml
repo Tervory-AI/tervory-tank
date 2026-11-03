@@ -1,4 +1,3 @@
-# coolify: raw compose
 # Autumbra Watch — shared, tenant-scoped. Gateway network + browser.
 # Reaches Tank and public threat sources. No Cloudflare write credential.
 # No production DB login, model key, control-plane key or Docker socket.
