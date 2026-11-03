@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import secrets
 from datetime import datetime
 from typing import Literal
@@ -183,8 +184,7 @@ def build_router(tank):
 
     @router.get("/v1/market-lab/intel")
     async def intel(request: Request, x_tank_key: str = Header(default="")):
-        agent = await tank.require_key(request, x_tank_key)
-        if agent != "ghost":
+        if not command.key_matches(x_tank_key, os.environ.get("TANK_KEY_GHOST", "")):
             actor = await command.identity(request)
             if not actor.founder:
                 raise HTTPException(403, "This tool is not available to this user")
@@ -203,7 +203,7 @@ def build_router(tank):
         return JSONResponse(jsonable_encoder({"records": rows[page * limit:(page + 1) * limit], "total": len(rows), "ledger_id": str(ledger_id), "cost_usd": 0}), headers={"Cache-Control": "private, no-store"})
 
     async def room_only(request: Request, x_tank_key: str = Header(default="")):
-        if await tank.require_key(request, x_tank_key) != "market_lab":
+        if not command.key_matches(x_tank_key, os.environ.get("TANK_KEY_MARKET_LAB", "")):
             raise HTTPException(401, "Room key required")
 
     @router.post("/v1/market-lab/internal/alerts/{operation}", dependencies=[Depends(room_only)])
