@@ -1,3 +1,14 @@
+# Historical stop — resolved by the founder on 3 November 2026
+
+The founder approved scheduling an approved GBP post with `limit: none`;
+Google's length rejection is terminal for automatic retry, and editing returns
+it to draft. That decision supersedes the Marketing SPEC's missing-limit line.
+M1 implementation continued on this same branch. Current rule, operations and
+acceptance boundaries are in [TRIGGER-GBP.md](../../docs/ops/TRIGGER-GBP.md).
+The original stop record below is retained as history, not current status.
+
+---
+
 # Trigger M1 — stopped at the scheduling contract
 
 3 November 2026. No M1 engine, channel connection, page, visible wording,
