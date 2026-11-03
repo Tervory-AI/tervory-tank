@@ -75,6 +75,7 @@ const run = promisify(execFile);
  * current version and switch the `current` link. Nothing changes on any failure.
  */
 export async function update({ transport, io, version, root = PACKAGE_ROOT, tar = 'tar' }) {
+  if (process.platform === 'win32') throw new Error('Update refused: on Windows, verify and extract the signed release archive again.');
   const release = await installedRelease(root);
   if (!release) throw new Error(`Update is only available for copies installed with: ${INSTALL_HINT}`);
   if (version !== undefined && !VERSION.test(version)) throw new Error('Update failed: invalid version.');
