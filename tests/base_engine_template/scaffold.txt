@@ -1,0 +1,27 @@
+Command (throwaway id, temporary repository only):
+.venv/bin/python agents/base/engines/new_engine.py throwaway --root /tmp/p5-engine-proof-q0bknnjv
+Exit: 0
+/tmp/p5-engine-proof-q0bknnjv/agents/base/engines/throwaway
+/tmp/p5-engine-proof-q0bknnjv/tank/skills/throwaway.ingest
+/tmp/p5-engine-proof-q0bknnjv/tank/skills/throwaway.profile
+
+Skala verification command (Python arguments represented as a list):
+['.venv/bin/python', '-c', 'import sys; from pathlib import Path; sys.path.insert(0,"tank"); from skala import load_packages; print(sorted(load_packages(Path(sys.argv[1])/"tank/skills")))', '/tmp/p5-engine-proof-q0bknnjv']
+Exit: 0
+[('throwaway.ingest', '1.0.0'), ('throwaway.profile', '1.0.0')]
+
+Generated files:
+agents/base/engines/throwaway/__init__.py
+agents/base/engines/throwaway/engine.json
+agents/base/engines/throwaway/gold_lists.json
+agents/base/engines/throwaway/reference.py
+tank/skills/throwaway.ingest/1.0.0/data/site.json
+tank/skills/throwaway.ingest/1.0.0/evals/cases.jsonl
+tank/skills/throwaway.ingest/1.0.0/run.py
+tank/skills/throwaway.ingest/1.0.0/skill.yaml
+tank/skills/throwaway.profile/1.0.0/data/site.json
+tank/skills/throwaway.profile/1.0.0/evals/cases.jsonl
+tank/skills/throwaway.profile/1.0.0/run.py
+tank/skills/throwaway.profile/1.0.0/skill.yaml
+
+No real vertical was scaffolded in tank/skills. No approval operation was run.
