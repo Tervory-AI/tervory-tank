@@ -346,9 +346,9 @@ def test_room_is_wired_and_client_queries_are_tenant_scoped() -> None:
 
     script = (ROOT / "agents" / "check_isolation.sh").read_text(encoding="utf-8")
     subprocess.check_call(["sh", "-n", str(ROOT / "agents" / "check_isolation.sh")])
-    assert 'if [ "$base_corridor" -eq 1 ] && [ "$host" = "tiger" ]' in script
+    assert 'mark 0 "tiger resolves"' not in script
     assert 'if [ "$base_corridor" -eq 1 ] && [ "$host" = "searxng" ]' in script
-    assert '[ "$net" = "tervory-gw-base" ] && has_part "$short" tiger' in script
+    assert '[ "$net" = "tervory-gw-base" ] && has_part "$short" tiger' not in script
     assert '[ "$net" = "tervory-gw-base" ] && has_part "$short" searxng' in script
     assert '[ "$net" = "tervory-gw-tiger" ] && has_part "$short" tiger' in script
     assert "gateway $net holds only this agent, tank, postgres, hermes, tiger, and searxng" in script
