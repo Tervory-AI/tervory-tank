@@ -12,7 +12,10 @@ async function identity() {
 }
 export async function readTrigger(path:string) {
  if (!/^(crm\/(leads|contacts|estimates|invoices)(\/[a-f0-9-]{36})?|marketing\/(channels|posts|composer|calendar|reviews)|bot\/(settings|inbox))(\?record_id=[a-f0-9-]{36})?$/.test(path)) throw new Error("This item is unavailable.");
- return (await commandRequest(await identity(),`trigger/console/${path}`)).json();
+ const actor=await identity();
+ const result=await (await commandRequest(actor,`trigger/console/${path}`)).json();
+ if(path==="bot/settings")result.settings={name:actor.orgName,...result.settings};
+ return result;
 }
 export async function proposeTrigger(tool:string,arguments_:Record<string,unknown>) {
  return (await commandRequest(await identity(),"trigger/console/propose",{method:"POST",body:JSON.stringify({tool,arguments:arguments_})})).json();
