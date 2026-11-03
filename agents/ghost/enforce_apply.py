@@ -57,6 +57,7 @@ def select_control(*, site: str, settings: ClientAutumbraSettings,
         live = CloudflareEdgeControl(
             tenant_id=settings.tenant_id, site=site, transport=CloudflareProxyTransport(),
             token=os.environ[TOKEN_ENV], health_probe=lambda: read_health(site),
+            fresh_health_probe=lambda after: read_health(site, after=after, wait_seconds=60),
         )
         live.blocked.update(edge.blocked)
         return live
@@ -74,9 +75,17 @@ def select_control(*, site: str, settings: ClientAutumbraSettings,
     live = CloudflareEdgeControl(
         tenant_id=settings.tenant_id, site=site, transport=CloudflareProxyTransport(),
         token=os.environ[TOKEN_ENV], health_probe=lambda: read_health(site),
+        fresh_health_probe=lambda after: read_health(site, after=after, wait_seconds=60),
     )
     live.blocked.update(edge.blocked)
     return live
+
+
+def _health_after_apply(edge: FixtureEdgeControl, row: dict | None = None) -> bool:
+    from .cloudflare_edge import CloudflareEdgeControl
+    if row is not None and isinstance(edge, CloudflareEdgeControl):
+        return edge.health_check(applied_after=row["applied_at"])
+    return edge.health_check()
 
 
 def _apply_shield(edge: FixtureEdgeControl, *, site: str, kind: str,
@@ -214,7 +223,7 @@ def apply_from_payload(
     stamp_budget(receipt, stage="decision_to_shield", seconds=time.perf_counter() - t1)
 
     t2 = time.perf_counter()
-    healthy = edge.health_check()
+    healthy = _health_after_apply(edge, receipt.get("applied_record") if applied else None)
     stamp_budget(receipt, stage="health_check", seconds=time.perf_counter() - t2)
     receipt["health_ok"] = healthy
 
@@ -260,7 +269,15 @@ def undo_applied(
     stored = next((r for r in edge.list_blocked() if r.get("rule_id") == str(rule_id)), {})
     if stored.get("control", name) != name:
         raise LookupError("shield belongs to another control")
-    row = edge.undo(str(rule_id))
+    from .cloudflare_edge import CloudflareEdgeError
+    try:
+        row = edge.undo(str(rule_id))
+    except CloudflareEdgeError as exc:
+        # Preserve the exact owned Undo when a health-triggered Undo loses its
+        # proxy. Queue retry must not replay an already completed approval.
+        exc.retry_undo = {"rule_id": str(rule_id), "site": stored["site"],
+                          "tenant_id": edge.tenant_id, "prior_receipt_id": receipt.get("id")}
+        raise
     _persist(data_dir, edge)
     out = {
         "id": str(uuid4()),
@@ -312,6 +329,14 @@ def undo_from_payload(
             **settings.receipt_stamp(),
         }
     stored = next((row for row in edge.list_blocked() if row.get("rule_id") == rule_id), {})
+    if not stored and data_dir is not None:
+        from .durable_shields import read_shields_table
+        table, _ = read_shields_table(data_dir)
+        if table and table.get("tenant_id") == settings.tenant_id:
+            candidate = (table.get("blocked") or {}).get(rule_id)
+            if isinstance(candidate, dict) and candidate.get("site") == payload.site:
+                stored = candidate
+                edge.blocked[rule_id] = dict(candidate)
     edge = select_control(site=payload.site, settings=settings, control=edge,
                           required_control=stored.get("control"))
     prior = {"id": payload.prior_receipt_id, "undo": {"rule_id": rule_id}, "tenant_id": settings.tenant_id}
@@ -431,7 +456,7 @@ def approve_pending(
 
     stamp_budget(receipt, stage="decision_to_shield", seconds=shield_seconds)
     t_health = time.perf_counter()
-    receipt["health_ok"] = edge.health_check()
+    receipt["health_ok"] = _health_after_apply(edge, applied_row)
     stamp_budget(receipt, stage="health_check", seconds=time.perf_counter() - t_health)
     if not receipt["health_ok"]:
         receipt["auto_undo"] = undo_applied(receipt, control=edge, data_dir=data_dir)

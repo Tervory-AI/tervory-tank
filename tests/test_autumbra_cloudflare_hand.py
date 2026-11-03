@@ -83,7 +83,8 @@ class FakeCloudflare:
 
 def edge(api, health=lambda: True):
     return CloudflareEdgeControl(tenant_id=TENANT, site="tervory.com",
-                                 transport=httpx.MockTransport(api), health_probe=health)
+                                 transport=httpx.MockTransport(api), health_probe=health,
+                                 fresh_health_probe=lambda after: health())
 
 
 def settings(mode=ApplyMode.auto_when_checks_pass):

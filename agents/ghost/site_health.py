@@ -32,34 +32,55 @@ def health_configured(site: str | None = None) -> bool:
             and configured_site is not None and (site is None or site == configured_site))
 
 
-def read_health(site: str) -> bool:
-    """Accept only a fresh, authenticated success for the fixed URL."""
+def _read_result(site: str) -> dict | None:
+    """Read only authenticated, bounded, recent results, including failures."""
     try:
         secret = os.environ.get(SECRET_ENV, "")
         if not secret or site not in HEALTH_URLS:
-            return False
+            return None
         path = HEALTH_DIR / (site + ".json")
         if path.stat().st_size > 4096:
-            return False
+            return None
         envelope = json.loads(path.read_text())
         result = envelope["result"]
         expected = hmac.new(secret.encode(), canonical(result), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected, envelope["signature"]):
-            return False
+            return None
         age = time.time() - result["checked_at"]
-        return (set(result) == {"site", "url", "ok", "status", "ms", "checked_at"}
-                and result["site"] == site and result["url"] == HEALTH_URLS[site]
-                and result["ok"] is True and type(result["status"]) is int
-                and 200 <= result["status"] < 400
-                and math.isfinite(result["ms"]) and result["ms"] >= 0
-                and 0 <= age <= 30)
+        if (set(result) != {"site", "url", "ok", "status", "ms", "checked_at"}
+                or result["site"] != site or result["url"] != HEALTH_URLS[site]
+                or type(result["ok"]) is not bool
+                or not math.isfinite(result["ms"]) or result["ms"] < 0
+                or not 0 <= age <= 30):
+            return None
+        return result
     except (OSError, ValueError, KeyError, TypeError, OverflowError):
-        return False
+        return None
+
+
+def read_health(site: str, *, after: float | None = None, wait_seconds: float = 0) -> bool:
+    """Require a signed result strictly after apply, waiting at most 60 seconds.
+
+    Pre-apply success or failure cannot judge the new rule. An authenticated
+    post-apply failure is immediately false; missing/invalid results wait only
+    until the fixed deadline, then fail closed for automatic Undo.
+    """
+    deadline = time.monotonic() + min(60.0, max(0.0, wait_seconds))
+    while True:
+        result = _read_result(site)
+        if result is not None and (after is None or result["checked_at"] > after):
+            return (result["ok"] is True and type(result["status"]) is int
+                    and 200 <= result["status"] < 400)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(1.0, remaining))
 
 
 def observe_once(client: httpx.Client, site: str) -> dict:
     url = HEALTH_URLS[site]
     started = time.monotonic()
+    checked_at = time.time()
     status = None
     try:
         # Streaming discards the body; redirects and cookie persistence are disabled.
@@ -72,7 +93,7 @@ def observe_once(client: httpx.Client, site: str) -> dict:
         client.cookies.clear()
     return {"site": site, "url": url, "ok": status is not None and 200 <= status < 400,
             "status": status, "ms": round((time.monotonic() - started) * 1000, 3),
-            "checked_at": time.time()}
+            "checked_at": checked_at}
 
 
 def main() -> None:

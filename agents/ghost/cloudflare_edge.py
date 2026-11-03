@@ -8,6 +8,7 @@ from __future__ import annotations
 import ipaddress
 import re
 import socket
+import time
 from typing import Callable
 
 import httpx
@@ -64,7 +65,8 @@ class CloudflareEdgeControl(FixtureEdgeControl):
     control_name = "cloudflare"
 
     def __init__(self, *, tenant_id: str, site: str, transport: httpx.BaseTransport,
-                 token: str = "", health_probe: Callable[[], bool] | None = None):
+                 token: str = "", health_probe: Callable[[], bool] | None = None,
+                 fresh_health_probe: Callable[[float], bool] | None = None):
         self._zone(site)
         if not isinstance(transport, (httpx.MockTransport, CloudflareProxyTransport)):
             raise CloudflareEdgeError("Cloudflare egress is not approved.")
@@ -75,6 +77,7 @@ class CloudflareEdgeControl(FixtureEdgeControl):
             headers={"Authorization": "Bearer " + token} if token else {},
         )
         self._health_probe = health_probe
+        self._fresh_health_probe = fresh_health_probe
 
     @staticmethod
     def _zone(site: str) -> str:
@@ -145,7 +148,7 @@ class CloudflareEdgeControl(FixtureEdgeControl):
                 "control": self.control_name, "rule_id": rule_id, "zone_id": zone_id,
                 "ruleset_id": ruleset_id, "site": site, "ref": ref, "kind": kind,
                 "address": address, "path": request.path, "up_at": _now(),
-                "expression": rule["expression"],
+                "expression": rule["expression"], "applied_at": time.time(),
             }
             self.blocked[rule_id] = row
             return dict(row)
@@ -173,8 +176,10 @@ class CloudflareEdgeControl(FixtureEdgeControl):
             del self.blocked[rule_id]
             return {**row, "ended_at": _now(), "state": "undone"}
 
-    def health_check(self) -> bool:
+    def health_check(self, *, applied_after: float | None = None) -> bool:
         try:
+            if applied_after is not None:
+                return self._fresh_health_probe is not None and self._fresh_health_probe(applied_after) is True
             return self._health_probe is not None and self._health_probe() is True
         except Exception:
             return False

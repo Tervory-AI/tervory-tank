@@ -188,7 +188,7 @@ def test_signed_health_failure_automatically_undoes(monkeypatch, tmp_path, failu
         path.unlink()
     api = FakeCloudflare()
     control = edge(api)
-    control._health_probe = lambda: health.read_health("tervory.com")
+    control._fresh_health_probe = lambda after: health.read_health("tervory.com")
     receipt = apply_from_payload(payload("rate_limit"), settings=settings(), control=control)
     assert receipt["outcome"] == "auto_undone_health_failed"
     assert receipt["control"] == "cloudflare"

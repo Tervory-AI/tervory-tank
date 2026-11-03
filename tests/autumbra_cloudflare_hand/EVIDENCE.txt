@@ -104,3 +104,11 @@ FOUNDER ITEMS STILL OUTSTANDING
 A2 production email, founder-managed Coolify setting values, a clean deployed
 seal, and the founder's M24 browser screenshots remain outstanding. No live
 Cloudflare mutation, inbox delivery or founder browser acceptance is claimed.
+
+REVIEW FIXES AT THE NEW HEAD
+Command: /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/bin/python .proof/run_review.py tests/test_autumbra_a3_review.py tests/test_autumbra_cloudflare_hand.py tests/test_autumbra_cloudflare_live.py tests/test_bucket1_radix.py tests/test_radix_passive.py
+Exit: 0. Summary: 182 passed, 6 skipped in 37.91s. Quota-free probes, pinned
+control/retry, exact opt-in SNI, project-only idle observer, and post-apply
+signed health with a virtual 60-second deadline are covered. Commands/results
+for each independently pushed fix are recorded in PR.md. CI tank on the final
+review-fix head is recorded in the GitHub PR body after completion.

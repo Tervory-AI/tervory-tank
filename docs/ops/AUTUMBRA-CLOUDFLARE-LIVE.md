@@ -38,7 +38,8 @@ Cloudflare references: [zone lookup](https://developers.cloudflare.com/api/resou
 
 After the founder merges, deploy this client's existing raw Compose resource
 from `agents/ghost/docker-compose.enforce.yml`. Build both existing images:
-Ghost for Enforce/observer and Radix for the proxies. Docker Engine must support
+Ghost for Enforce/observer and Radix for the proxies. Both proxies require the exact allowed TLS SNI in addition to the CONNECT host.
+Docker Engine must support
 Compose `interface_name` (28.1 or later).
 
 This adds `egress-proxy`, `health-observer` and `health-egress-proxy` to that
@@ -60,11 +61,18 @@ In Coolify's browser terminal for this client's Enforce container, run:
 python -c 'from ghost.site_health import read_health; print(read_health("tervory.com"))'
 ```
 
-Require `True`. The observer GETs only `https://tervory.com/`, without a request
+Require `True`. With a blank secret or blank/unsupported SITE_NAME, the observer
+logs one fixed line and sleeps without requests until the project is configured
+and redeployed. A configured observer fetches only this project's SITE_NAME.
+The observer GETs only `https://tervory.com/`, without a request
 body, cookies or redirects. Its only persisted result fields are
 `site, url, ok, status, ms, checked_at`, with an HMAC signature. Missing, unsigned,
-tampered, failed or more-than-30-second-old results are false. A false health
-callback after an apply automatically undoes the owned rule. API connectivity
+tampered, failed or more-than-30-second-old results are false. After an apply, Enforce waits up to 60 seconds for an authenticated result
+whose probe started strictly after the rule's confirmed apply time. A prior
+success cannot approve the new rule. A fresh failed result, or no qualifying
+result within that deadline, automatically undoes the owned rule. Proxy errors
+retain that exact Undo for retry; approval and Undo never switch its control to
+the fixture. Health waiting is recorded separately in the receipt's health stage. API connectivity
 is never substituted for site health.
 
 Enforce chooses Cloudflare only with all four gates: configured token,
