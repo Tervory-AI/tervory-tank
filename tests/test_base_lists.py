@@ -346,3 +346,52 @@ def test_workspace_download_preserves_bytes_and_existing_batch_behavior():
     result = subprocess.run(["node", "tests/base_lists_download.cjs"],
                             cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.asyncio
+async def test_crm_concurrency_is_five_and_results_stay_in_list_order(monkeypatch):
+    import asyncio
+
+    import trigger_crm
+    active = peak = 0
+    monkeypatch.setattr(trigger_crm, "binding", lambda actor: None)
+    async def upstream(actor, resource, method="GET", **kwargs):
+        nonlocal active, peak
+        if method == "GET":
+            return {"open_leads": {"open_leads": [], "leads_count": 0},
+                    "close_leads": {"close_leads": [], "leads_count": 0}}
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.005)
+        active -= 1
+        return {"lead_obj": {"id": str(uuid4())}}
+    monkeypatch.setattr(trigger_crm, "upstream", upstream)
+    rows = []
+    for index in range(13):
+        row = record()
+        row["record_id"] = str(uuid4())
+        row["fields"]["email"] = evidence([f"invented{index}@quality.example"])
+        row["fields"]["website"] = evidence(f"https://invented{index}.example/")
+        rows.append(row)
+    sent = await crm.send(SimpleNamespace(tenant_id=TENANT), rows)
+    assert peak == 5 and active == 0
+    assert [row["record_id"] for row in sent] == [row["record_id"] for row in rows]
+    assert all(row["status"] == "created" for row in sent)
+    from command import action_timeout
+    assert action_timeout("base.list.to_crm") == 60 + 20 * 45 + 60
+
+
+def test_new_sql_is_literal_with_bound_runtime_arguments():
+    import ast
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    count = 0
+    for filename in ("tank/base_lists.py", "tests/base_lists_scale.py", "tests/test_base_lists.py"):
+        for node in ast.walk(ast.parse((root / filename).read_text())):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in {
+                "execute", "fetch", "fetchrow", "fetchval", "cursor"}:
+                assert isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str), filename
+                if len(node.args) > 1:
+                    assert "$1" in node.args[0].value, filename
+                count += 1
+    assert count >= 15
