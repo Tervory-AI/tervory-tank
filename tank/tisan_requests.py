@@ -183,3 +183,30 @@ def build_router():
         return await result(actor, 'tisan.handover', await Store(db()).move(actor.tenant_id, actor.user_id, operation,
                             args.request_id, 'accepted'))
     return router
+
+
+async def build_result(tenant: UUID, result: dict) -> dict:
+    """Hydrate a long build's existing card through the existing room job read."""
+    from main import _http
+    if result.get('kind') != 'build' or result.get('status') not in ('queued', 'running'):
+        return result
+    key = os.environ.get('TANK_KEY_TISAN', '')
+    if _http is None or not key:
+        return result
+    try:
+        job_id = str(UUID(result['job_id']))
+        response = await _http.get('http://agent-tisan:8000/jobs/' + job_id,
+            params={'tenant_id': str(tenant)}, headers={'X-Tank-Key': key,
+                'X-Tervory-Tenant': str(tenant)}, timeout=10, follow_redirects=False)
+        if response.status_code != 200 or len(response.content) > 256000:
+            return result
+        job = response.json()
+        if (str(UUID(job['tenant_id'])) != str(tenant) or str(UUID(job['id'])) != job_id
+                or job.get('kind') != 'build' or job.get('status') != 'done' or not isinstance(job.get('result'), dict)):
+            return result
+        measured = {k: v for k, v in job['result'].items() if k in {
+            'slug', 'name', 'ok', 'checks', 'detail', 'archive', 'build', 'memory_id', 'refused',
+            'copy_needed', 'media_needed', 'token_set', 'files'}}
+        return {**result, **measured, 'status': 'done'}
+    except (httpx.HTTPError, ValueError, TypeError, KeyError):
+        return result
