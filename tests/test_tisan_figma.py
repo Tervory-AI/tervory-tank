@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 FIGMA_PATH = ROOT / "agents" / "tisan" / "figma.py"
@@ -348,15 +349,15 @@ def test_rest_payload_resolves_aliases_and_does_not_read_raw_fills() -> None:
 @pytest.mark.asyncio
 async def test_the_room_reads_the_fixture_and_does_not_call_out(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     figma = _load()
-    monkeypatch.setenv("FIGMA_TOKEN", "super-secret-token")
+    monkeypatch.delenv("FIGMA_TOKEN", raising=False)
     reading = await figma.execute({"node_id": "0-1"}, TENANT, data_root=tmp_path)
     dumped = json.dumps(reading)
-    assert "super-secret-token" not in dumped
+    assert "placeholder-figma-token" not in dumped
     assert reading["source"] == "fixture"
     assert reading["tokens"]["colour"]["accent-default"] == "#e80008"
     assert reading["stored"] == f"readings/{TENANT}/{FILE_KEY}/0-1.json"
-    assert "super-secret-token" not in (tmp_path / reading["stored"]).read_text(encoding="utf-8")
-    with pytest.raises(figma.FigmaError, match="recorded Tervory page only"):
+    assert "placeholder-figma-token" not in (tmp_path / reading["stored"]).read_text(encoding="utf-8")
+    with pytest.raises(figma.FigmaError, match="not paired with this tenant"):
         await figma.execute({"file_key": "a" * 22}, TENANT, data_root=tmp_path)
     with pytest.raises(figma.FigmaError):
         await figma.execute({"file_key": "../secrets"}, TENANT, data_root=tmp_path)
@@ -366,23 +367,42 @@ async def test_the_room_reads_the_fixture_and_does_not_call_out(tmp_path: Path, 
         await figma.execute({}, "../tenant", data_root=tmp_path)
 
 
-def test_room_has_no_path_to_figma_and_copies_the_reader() -> None:
+def test_room_reaches_only_figma_through_the_locked_proxy_and_copies_the_reader() -> None:
     reader = FIGMA_PATH.read_text(encoding="utf-8")
-    assert "api.figma.com" not in reader
-    assert "httpx" not in reader
+    assert "api.figma.com" in reader
+    assert "trust_env=False" in reader
     docker = (ROOT / "agents" / "tisan" / "Dockerfile").read_text(encoding="utf-8")
     assert "COPY agents/tisan/figma.py /app/figma.py" in docker
     assert "COPY agents/tisan/fixtures /app/fixtures" in docker
     assert "TISAN_FIGMA_FIXTURE=/app/fixtures/tervory-landing.json" in docker
     compose = (ROOT / "agents" / "tisan" / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "FIGMA_TOKEN" not in compose
-    assert "api.figma.com" not in compose
+    box = yaml.safe_load(compose)
+    assert list(box["services"]) == ["agent-tisan", "figma-egress-proxy"]
+    assert list(box["networks"]) == ["gw", "figma_internal", "egress"]
+    assert box["networks"]["figma_internal"] == {"internal": True}
+    assert box["networks"]["egress"] == {}
+    room = box["services"]["agent-tisan"]
+    assert room["networks"] == ["gw", "figma_internal"]
+    assert room["environment"]["FIGMA_TOKEN"] == "${FIGMA_TOKEN:-}"
+    assert room["environment"]["TISAN_FIGMA_FILES"] == "${TISAN_FIGMA_FILES:-}"
+    proxy = box["services"]["figma-egress-proxy"]
+    assert proxy["networks"] == {"figma_internal": {"interface_name": "radix-link"}, "egress": {}}
+    assert proxy["build"] == {"context": "..", "dockerfile": "radix/Dockerfile"}
+    assert proxy["mem_limit"] == "128m" and proxy["cpus"] == 0.25
+    assert proxy["read_only"] is True and proxy["cap_drop"] == ["ALL"]
+    assert proxy["security_opt"] == ["no-new-privileges:true"]
+    assert "ports" not in proxy and "volumes" not in proxy
+    command = proxy["command"][-1]
+    assert "allowed = 'api.figma.com'" in command
+    assert "allow_storage=False, require_sni=True" in command
+    assert "system_resolve(host, verified_host=allowed)" in command
+    assert "Server(proxy, host=private_bind_address(), port=8080)" in command
     assert "name: tervory-gw-tisan" in compose
     example = (ROOT / ".env.example").read_text(encoding="utf-8")
     assert any(line.strip() == "FIGMA_TOKEN=" for line in example.splitlines())
     readme = (ROOT / "agents" / "tisan" / "README.md").read_text(encoding="utf-8")
     assert "tisan.figma" in readme
-    assert "does not call Figma" in readme
+    assert "figma-egress-proxy" in readme
     app = (ROOT / "agents" / "tisan" / "app.py").read_text(encoding="utf-8")
     assert '"figma": figma' in app
     recorded = json.loads(FIXTURE.read_text(encoding="utf-8"))
