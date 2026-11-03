@@ -204,9 +204,10 @@ async def accept_webhook(provider: str, body: bytes, *, headers, tank) -> dict[s
     """Existing signed callers retain HMAC; native provider requests fail closed."""
     signature = headers.get('x-autumbra-signature') or headers.get('cf-webhook-signature')
     if signature or provider.strip().lower() in {'edge', 'mailbox', 'host_firewall'}:
-        return accept_signed(provider, body, signature=signature,
-                             timestamp=headers.get('x-autumbra-timestamp'),
-                             nonce=headers.get('x-autumbra-nonce'))
+        envelope = accept_signed(provider, body, signature=signature,
+                                 timestamp=headers.get('x-autumbra-timestamp'),
+                                 nonce=headers.get('x-autumbra-nonce'))
+        return {**envelope, 'authenticated_by': 'hmac'}
     from .native_webhooks import verify_cloudflare_notification, verify_google_push
     key = provider.strip().lower()
     bucket = 'edge' if key == 'cloudflare' else 'mailbox' if key in {'google', 'google_workspace'} else 'unknown'
@@ -223,4 +224,4 @@ async def accept_webhook(provider: str, body: bytes, *, headers, tank) -> dict[s
         _drops['google'] = _drops['mailbox']
         raise
     return {'provider': bucket, 'requested_provider': key, 'bytes': len(body),
-            'accepted': True, 'stored': False}
+            'accepted': True, 'stored': False, 'authenticated_by': 'native'}
