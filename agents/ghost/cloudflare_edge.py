@@ -1,4 +1,4 @@
-"""Enforce-only Rulesets control. Live transport remains sealed pending egress approval.
+"""Enforce-only Rulesets control. Live transport uses only the fixed per-client proxy.
 
 Only fixed rules from shields.rule_for cross this adapter. No raw logs, models,
 provider response bodies, or credentials belong in its durable shield table.
@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+import socket
 from typing import Callable
 
 import httpx
@@ -14,9 +15,30 @@ import httpx
 from .fixture_edge import FixtureEdgeControl, _now
 from .shields import ALLOWED_ZONES, PHASES, ShieldRequest, rule_for, zone_of
 
-# A code hold, deliberately not an environment switch. A separately reviewed
-# egress change must replace this hold and provide an approved health probe.
-CLOUDFLARE_EGRESS_APPROVED = False
+PROXY_URL = "http://egress-proxy:8080"
+
+
+class CloudflareProxyTransport(httpx.HTTPTransport):
+    """Fixed proxy; no ambient configuration or direct fallback."""
+
+    def __init__(self):
+        super().__init__(proxy=PROXY_URL, retries=0)
+
+
+def proxy_answers() -> bool:
+    """Probe the exact permitted tunnel, never an alternate destination."""
+    try:
+        with socket.create_connection(("egress-proxy", 8080), timeout=1) as conn:
+            conn.sendall(b"CONNECT api.cloudflare.com:443 HTTP/1.1\r\nHost: api.cloudflare.com:443\r\n\r\n")
+            reply = b""
+            while b"\r\n\r\n" not in reply and len(reply) < 8192:
+                chunk = conn.recv(1024)
+                if not chunk:
+                    break
+                reply += chunk
+            return reply.startswith(b"HTTP/1.1 200 Connection Established\r\n")
+    except OSError:
+        return False
 API_ROOT = "https://api.cloudflare.com/client/v4"
 TOKEN_ENV = "CLOUDFLARE_API_TOKEN_ENFORCE"
 
@@ -34,8 +56,7 @@ def _id(value: object) -> str:
 class CloudflareEdgeControl(FixtureEdgeControl):
     """Same durable apply/undo/health interface as the fixture, scoped to one site.
 
-    While egress is held, only httpx.MockTransport is accepted. This prevents
-    direct construction from bypassing the runtime selector's sealed default.
+    Only the fixed proxy transport or an offline MockTransport is accepted.
     Site health is supplied by an approved probe; absent/failed probes fail closed.
     API reachability alone is never reported as site health.
     """
@@ -45,7 +66,7 @@ class CloudflareEdgeControl(FixtureEdgeControl):
     def __init__(self, *, tenant_id: str, site: str, transport: httpx.BaseTransport,
                  token: str = "", health_probe: Callable[[], bool] | None = None):
         self._zone(site)
-        if not CLOUDFLARE_EGRESS_APPROVED and not isinstance(transport, httpx.MockTransport):
+        if not isinstance(transport, (httpx.MockTransport, CloudflareProxyTransport)):
             raise CloudflareEdgeError("Cloudflare egress is not approved.")
         super().__init__(tenant_id=tenant_id, site=site)
         self._client = httpx.Client(
