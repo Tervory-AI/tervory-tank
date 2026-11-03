@@ -241,3 +241,30 @@ async def test_tank_room_eval_uses_radix_key_and_existing_executor(repo_api, mon
         with pytest.raises(RuntimeError, match='eval room is unavailable'):
             await runtime.tank.run_room_eval(pkg, {'files': []}, ctx)
         assert len(requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_real_room_job_query_is_tenant_scoped(repo_api):
+    from chassis.app import create_app
+    from chassis.db import ensure_schema
+    client, pool, runtime = repo_api
+    async with pool.acquire() as conn:
+        await ensure_schema(conn, 'radix')
+    room = create_app(agent='radix', handlers={})
+    room.state.pool = pool
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(room), base_url='http://agent-radix:8000') as http:
+        runtime._http = http
+        queued = await http.post('/jobs', json={'tenant_id': str(TENANT), 'kind': 'scan', 'input': {}})
+        assert queued.status_code == 201
+        scan_id = queued.json()['id']
+        saved = {'scan_id': scan_id, 'tenant_id': str(TENANT), 'findings': [],
+                 'summary': 'placeholder-private-summary', 'critical': 0}
+        async with pool.acquire() as conn:
+            await conn.execute("UPDATE agent_radix.jobs SET status='done',result=$3::jsonb WHERE id=$1 AND tenant_id=$2",
+                               uuid.UUID(scan_id), TENANT, json.dumps(saved))
+        own = await client.get('/v1/command/radix/repo/findings', params={'scan_id': scan_id})
+        assert own.status_code == 200 and own.json()['status'] == 'complete'
+        assert own.json()['findings'] == []
+        foreign = await client.get('/v1/command/radix/repo/findings', params={'scan_id': scan_id},
+                                   headers={'x-tervory-tenant': str(OTHER)})
+        assert foreign.status_code == 404 and 'placeholder-private-summary' not in foreign.text
