@@ -1,7 +1,8 @@
 # Trigger W1: formats, tenant learning, revisions and catalogue batches
 
 Branch: `codex/trigger-w1-writing`. Own clone: `/workspace/codex-trigger-w1`.
-Implementation/test checkpoint: `4820572088ea40fbe6ee35a83370f953a4839219`; subsequent handoff changes are documentation.
+Initial implementation/test checkpoint: `4820572088ea40fbe6ee35a83370f953a4839219`.
+Review fixes and their verification are recorded below.
 Claude opens the PR. Founder merges. No main push, deployment, production SQL,
 real model call, live tenant mutation or founder-computer work was performed.
 
@@ -14,7 +15,7 @@ rule described below. No Trigger page or Workspace UI file was changed.
 
 | File and line | Result |
 |---|---|
-| `agents/trigger/formats.py:5`, `:20`, `:40`, `:56` | Nine fixed formats; official source/date metadata, reused exact X weighted counter, code `over_limit` findings with exact count, preserved total/200-finding truncation. |
+| `agents/trigger/formats.py:9`, `:24`, `:125`, `:140` | Nine fixed formats; official source/date metadata, local X weighted counter, code `over_limit` findings with exact count, preserved total/200-finding truncation. |
 | `agents/trigger/service.py:17`, `:28`, `:64` | Optional format; format/limit in the existing draft request; tenant examples/change notes labelled guidance, not instructions or product facts; original voice version on revisions; check every draft through existing free checkers and existing `trigger.write` route. |
 | `agents/trigger/voice_history.py:30`, `:45`, `:71` | Append literal chosen change requests to Rules while preserving other voice fields. Existing preview hash, expected revision, Confirm and immutable-version commit remain in use. |
 | `agents/trigger/app.py:81`, `:94` | Existing internal voice preview/commit accepts those exact Rules. No new room endpoint/provider/config setting. |
@@ -26,7 +27,7 @@ rule described below. No Trigger page or Workspace UI file was changed.
 | `tank/command.py:35`, `:886`, `:1054`, `:1108`, `:1179`, `:1344`, `:1374`, `:1530` | Same founder/tenant-admin catalogue/access; typed tool adapters; GET query scope; bounded batch timeout/result envelope; confirmed changes propose a separate paid revision Confirm card. |
 | `tank/schema.sql:2337` | Additive/idempotent columns on existing writes, composite tenant/parent FK, recent-format index. Exact personal-token rollout condition, permissive/restrictive tenant policies, ENABLE/FORCE RLS. Legacy RLS remains off. |
 | `tank/case_study_sources.py:178` | Existing draft figure includes `drafts_using_accepted_examples`; batch/revision checker/feedback evidence follows distinct confirmed tenant/region receipts. |
-| `agents/trigger/requirements.txt:2`, `tank/requirements-dev.txt:42`, `agents/trigger/ATTRIBUTION.md:14` | Reuse MIT twitter-text-parser 3.0.0; pin setuptools 80.9.0 because that parser imports pkg_resources. Same pins in offline CI. No new provider or paid service. |
+| `agents/trigger/requirements.txt:1`, `tank/requirements-dev.txt:42`, `agents/trigger/ATTRIBUTION.md:14` | Proselint remains; twitter-text-parser and its vulnerable setuptools pin are removed. Local stdlib counting uses pinned official matching data with Apache/MIT notices. No replacement package, provider or paid service. |
 | `agents/trigger/README.md:47` | Existing-card usage, counting semantics and acceptance boundaries. |
 | `tests/test_trigger_w1.py:26` | Fifteen offline contracts with disposable Postgres and fake Tank: formats/counts/truncation, tenant/format selection, parent/original voice, literal learned Rules/Cancel/Confirm/stale rejection, per-row facts, Rig entitlement/GET, 25 receipts, accepted next-batch provenance, scorecard figures, RLS rollout and unconfirmed/member refusal. |
 | `tests/trigger_second_build/test_second.py:120` | Helper selects the card created by the current turn, rather than an older pending revision. Original feedback/no-extra-model assertions remain intact. |
@@ -40,8 +41,8 @@ The existing `trigger.write` route still owns all actual draft calls.
 - LinkedIn: [official post help](https://www.linkedin.com/help/linkedin/answer/a527226)
   states 3,000 characters. Report explicitly counts Unicode code points.
 - Standard X post: [official counting rules](https://docs.x.com/fundamentals/counting-characters)
-  specify 280 weighted characters. The MIT parser handles NFC, CJK, URLs and
-  compound emoji; the tests include those cases. No paid long-post assumption.
+  specify 280 weighted characters. Local stdlib code handles NFC, official weight
+  ranges, URLs and compound emoji, with all official weighted conformance cases. No paid long-post assumption.
 - Meta description: [Google Search Central](https://developers.google.com/search/docs/appearance/snippet)
   explicitly states no fixed length limit; display truncation is separate.
 - Google Business Profile: [official LocalPost reference](https://developers.google.com/my-business/reference/rest/v4/accounts.locations.localPosts)
@@ -210,3 +211,107 @@ git diff --check
 
 Each finished file was committed, origin/main fetched and merged, then pushed to
 `codex/trigger-w1-writing`. No model, database, live copy or UI operation was used.
+
+
+## PR #595 security-CI fix — 2026-11-03
+
+Pulled Claude's `d0021069` before editing. Removed `twitter-text-parser==3.0.0`
+and `setuptools==80.9.0` from `agents/trigger/requirements.txt`, eliminating the
+introduced pins associated with PYSEC-2026-3447, GHSA-h35f-9h28-mq5c and
+GHSA-xmj3-9gf7-h52w. No replacement Python package or setuptools version is added.
+Historical install commands above describe the earlier implementation only.
+
+`agents/trigger/formats.py:59`–`:125` now counts in local stdlib code using NFC,
+the four official weight-one ranges/default weight two, and URL weight 23.
+Pinned official TLDs and lightweight punycode label checks identify URLs without
+DNS. The generated official Twemoji expression identifies compound emoji in
+UTF-16 units; unmatched spans are weighted as Unicode code points. No parser
+package, Node process, network or model executes at runtime.
+
+- `agents/trigger/sources/x_text.json`: extracted official v3 configuration/TLD
+  alternatives and Twemoji matching expression, with both upstream commit IDs.
+- `tests/trigger_w1/twitter-text-weighted.json`: all 42 official weighted-length
+  cases from `conformance/validate.yml`, with unchanged texts/expectations,
+  original source SHA-256 and pinned URL. Only YAML-to-JSON extraction changes.
+- `tests/test_trigger_x_length.py`: 22 current v3 cases through the public X
+  format/checker, 20 preserved legacy-v2 cases through the undiscounted primitive,
+  range boundaries, URL/emoji edges, and a subprocess proving all 42 cases with
+  `python -S` (site packages disabled). 68 tests total.
+- `agents/trigger/ATTRIBUTION.md:14` and `sources/x_text-LICENSE.txt`: full Apache-2.0
+  and MIT licences/notices, extraction/adaptation details and exact sources.
+
+Merged `origin/main` through `3fc94027` (Base B4), preserving both catalogues and
+both action-timeout branches in `tank/command.py`. The Base saved-list schema and
+Trigger provenance block both remain **above** the unchanged generated agent
+memory block. A direct comparison with `hermes.record_schema.generated_block`
+passed. No main push, deployment, model call or production SQL was used.
+
+Exact verification commands (own clone; task-owned loopback disposable Postgres):
+
+```bash
+PYTHONPATH=agents python3 -S - <<'PYTHON'
+import json
+from pathlib import Path
+from trigger.formats import _x_length
+for group, cases in json.loads(Path('tests/trigger_w1/twitter-text-weighted.json').read_text())['tests'].items():
+    for case in cases:
+        assert _x_length(case['text'], discount_emoji='DiscountedEmoji' in group) == case['expected']['weightedLength']
+PYTHON
+# PASS: all 42 official cases with site packages disabled.
+
+TMPDIR="$PWD/.w1-tmp" PYTHONPATH="$PWD/.w1-tmp/site" \
+/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q \
+  tests/test_trigger_x_length.py --disable-socket --tb=short
+# 68 passed in 0.46s.
+
+RUNNER_TEMP="$PWD/.w1-tmp" GITHUB_PATH="$PWD/.w1-tmp/security-path" \
+GITHUB_WORKSPACE="$PWD" bash .github/scripts/install-security-tools.sh
+# PASS: repository-pinned gitleaks and OSV release checksums verified.
+PATH="$PWD/.w1-tmp/security-bin:$PATH" TMPDIR="$PWD/.w1-tmp" \
+/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m unittest \
+  discover -s tests/ci_security -p test_security.py -v
+# All 41 security gate policy tests passed in 15.935s.
+PATH="$PWD/.w1-tmp/security-bin:$PATH" TMPDIR="$PWD/.w1-tmp" \
+/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python \
+  .github/scripts/security_scan.py osv --base origin/main \
+  --output "$PWD/.w1-tmp/x-security-results"
+# osv: clean. Zero NEW findings against origin/main 3fc94027.
+# The scanner also reports 202 existing baseline findings, not introduced here.
+PATH="$PWD/.w1-tmp/security-bin:$PATH" TMPDIR="$PWD/.w1-tmp" \
+/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python \
+  .github/scripts/security_scan.py gitleaks --base origin/main \
+  --output "$PWD/.w1-tmp/x-security-results"
+# gitleaks: clean.
+
+docker run -d --name trigger-w1-x-pg -e POSTGRES_HOST_AUTH_METHOD=trust \
+  -p 127.0.0.1::5432 postgres:16
+docker port trigger-w1-x-pg 5432/tcp
+# 127.0.0.1:32805; disposable, no volume or production data.
+npm install --prefix .w1-tmp/node --no-save --package-lock=false \
+  --ignore-scripts --no-audit --no-fund typescript@5.9.3
+# PASS: existing Workspace lockfile's version, test-folder tooling only.
+NODE_PATH="$PWD/.w1-tmp/node/node_modules" node tests/base_lists_download.cjs
+# PASS: saved-list CSV byte preservation and existing batch download behavior.
+
+TMPDIR="$PWD/.w1-tmp" PYTHONPATH="$PWD/.w1-tmp/site" \
+NODE_PATH="$PWD/.w1-tmp/node/node_modules" \
+POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32805/postgres \
+BASE_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:32805/postgres \
+/home/ammosync/.codex/tervory-audit-20261101/venv312/bin/python -m pytest -q \
+  tests/trigger_first_build tests/trigger_second_build tests/trigger_gate2 \
+  tests/test_trigger*.py tests/test_command.py tests/test_base_lists.py \
+  --disable-socket --allow-hosts=127.0.0.1 --allow-unix-socket --tb=short -ra
+# 357 passed, 2 skipped, 15 warnings in 203.78s (0:03:23).
+```
+
+Initial verification setup issues were resolved without product changes: an
+unfiltered unit run blocked asyncio's Unix socketpair; the final command explicitly
+allows local Unix sockets while blocking outside sockets/DNS. The broad merge run
+initially lacked the lockfile's TypeScript test dependency. Security-policy tests
+initially lacked the pinned gitleaks executable; installing the existing CI tools
+resolved that. No environment issue was counted as a product pass.
+
+Lint and `git diff --check` passed. The source/test checkpoint is `80656f02`;
+subsequent evidence/handoff commits change documentation only. Actual outputs and
+OSV gate JSON are in [x-security-verification.txt](x-security-verification.txt).
+The founder-browser acceptance conditions above remain pending.
