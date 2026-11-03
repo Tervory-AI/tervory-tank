@@ -92,71 +92,71 @@ E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists
 
 tests/test_tiger_alerts_read.py::test_kind_filter_and_one_tiger_zero_receipt[memory-new_product]
 tests/test_tiger_alerts_read.py::test_all_five_saved_kinds_and_data_only_counts[memory]
-  /repo/tank/main.py:754: DeprecationWarning: 
+  /repo/tank/main.py:754: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/test_tiger_alerts_read.py: 10 warnings
-  /usr/local/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /usr/local/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tests/test_tiger_alerts_read.py::test_kind_filter_and_one_tiger_zero_receipt[memory-new_product]
 tests/test_tiger_alerts_read.py::test_all_five_saved_kinds_and_data_only_counts[memory]
-  /repo/tank/main.py:814: DeprecationWarning: 
+  /repo/tank/main.py:814: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tests/test_tiger_alerts_read.py::test_kind_filter_and_one_tiger_zero_receipt[memory-new_product]
 tests/test_tiger_alerts_read.py::test_all_five_saved_kinds_and_data_only_counts[memory]
-  /repo/tank/agent_skills.py:531: DeprecationWarning: 
+  /repo/tank/agent_skills.py:531: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 tests/test_tiger_alerts_read.py::test_kind_filter_and_one_tiger_zero_receipt[memory-new_product]
 tests/test_tiger_alerts_read.py::test_all_five_saved_kinds_and_data_only_counts[memory]
-  /repo/tank/skala_intake.py:71: DeprecationWarning: 
+  /repo/tank/skala_intake.py:71: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/test_tiger_alerts_read.py::test_kind_filter_and_one_tiger_zero_receipt[memory-new_product]
 tests/test_tiger_alerts_read.py::test_all_five_saved_kinds_and_data_only_counts[memory]
-  /repo/tank/skala_intake.py:77: DeprecationWarning: 
+  /repo/tank/skala_intake.py:77: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tests/test_tiger_alerts_read.py::test_kind_filter_and_one_tiger_zero_receipt[memory-new_product]
 tests/test_tiger_alerts_read.py::test_all_five_saved_kinds_and_data_only_counts[memory]
-  /repo/tank/skala_revalidation.py:192: DeprecationWarning: 
+  /repo/tank/skala_revalidation.py:192: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/test_command.py::test_moa_seat_requires_override_and_loads_parent_policy[command.turn#moa.seat_1]
