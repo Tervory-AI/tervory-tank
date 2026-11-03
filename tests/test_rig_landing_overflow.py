@@ -34,7 +34,7 @@ async def test_decorative_overflow_preserves_viewport(real_chromium, tmp_path, w
     # Install and pause before navigation so page timers/RAF cannot advance
     # between the geometry, accessibility and byte-exact screenshot checks.
     await page.clock.install(time='2024-01-01T00:00:00Z')
-    await page.clock.pause_at('2024-01-01T00:00:00Z')
+    await page.clock.pause_at('2024-01-02T00:00:00Z')
     await page.goto('http://rig.test/', wait_until='networkidle')
     await page.evaluate('document.fonts.ready')
     await page.evaluate('''view => {
