@@ -1,8 +1,8 @@
 """Tenant vault MCP catalogue, founder approvals, and zero-dollar receipts."""
 from __future__ import annotations
 
+import asyncio
 import json
-import time
 import uuid
 from datetime import datetime, timezone
 from typing import Literal
@@ -11,7 +11,9 @@ import jsonschema
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from mcp_client import Client, Refused, SignInRequired, TOOL_NAME
+from mcp_client import Client, Refused, ResponseTooLarge, SignInRequired, TOOL_NAME
+
+DISCOVERY_TIMEOUT = 20
 
 VAULTS = {f'{room}.vault': room for room in ('base', 'tiger', 'rig', 'tisan', 'radix', 'zenas')}
 VAULTS['lab.vault'] = 'market_lab'
@@ -80,16 +82,21 @@ def credentials(row) -> dict:
     return open_seal(row['sealed'], context(row)) if row.get('sealed') else {}
 
 
-async def state(row, value: str):
-    async with db().acquire() as conn:
-        await conn.execute("UPDATE tank.vault_items SET mcp_state=$4 WHERE tenant_id=$1 AND vault=$2 AND kind='connections' AND name=$3", row['tenant_id'], row['vault'], row['name'], value)
+async def state(row, value: str, *, conn=None):
+    if conn is None:
+        async with db().acquire() as connection:
+            return await state(row, value, conn=connection)
+    # A failed request may finish after another request renewed the connection.
+    await conn.execute("UPDATE tank.vault_items SET mcp_state=$4 WHERE tenant_id=$1 AND vault=$2 AND kind='connections' AND name=$3 AND sealed IS NOT DISTINCT FROM $5", row['tenant_id'], row['vault'], row['name'], value, row.get('sealed'))
 
 
-async def store_credentials(row, value: dict, *, mcp_state: str):
+async def store_credentials(row, value: dict, *, mcp_state: str, conn=None):
+    if conn is None:
+        async with db().acquire() as connection:
+            return await store_credentials(row, value, mcp_state=mcp_state, conn=connection)
     from vault import seal
     encrypted = seal(value, context(row))
-    async with db().acquire() as conn:
-        status = await conn.execute("UPDATE tank.vault_items SET sealed=$4,mcp_state=$5 WHERE tenant_id=$1 AND vault=$2 AND kind='connections' AND name=$3 AND sealed IS NOT DISTINCT FROM $6", row['tenant_id'], row['vault'], row['name'], encrypted, mcp_state, row.get('sealed'))
+    status = await conn.execute("UPDATE tank.vault_items SET sealed=$4,mcp_state=$5 WHERE tenant_id=$1 AND vault=$2 AND kind='connections' AND name=$3 AND sealed IS NOT DISTINCT FROM $6", row['tenant_id'], row['vault'], row['name'], encrypted, mcp_state, row.get('sealed'))
     if status != 'UPDATE 1':
         raise Refused('MCP connection changed')
     row['sealed'] = encrypted
@@ -112,7 +119,34 @@ async def bearer(row) -> tuple[str | None, list[str]]:
     return token, [value for key, value in data.items() if key in {'token', 'access_token', 'refresh_token', 'client_secret'} and isinstance(value, str) and value]
 
 
+async def authenticated(row, gate, operation):
+    token, secrets = await bearer(row)
+    client = Client(row['metadata']['server_url'], gate, token)
+    try:
+        await client.initialize()
+        return await operation(client), secrets
+    except SignInRequired:
+        if row['metadata']['auth_type'] != 'provider':
+            raise
+        from mcp_oauth import refresh
+        await refresh(row, credentials(row), force=True)
+        token, renewed_secrets = await bearer(row)
+        retry = Client(row['metadata']['server_url'], gate, token)
+        retry.received_bytes = client.received_bytes
+        await retry.initialize()
+        return await operation(retry), secrets + renewed_secrets
+
+
 async def discover(actor, vault: str, ident: str, *, force=False) -> list[dict]:
+    try:
+        async with asyncio.timeout(DISCOVERY_TIMEOUT):
+            return await _discover(actor, vault, ident, force=force)
+    except TimeoutError:
+        # The row was saved before discovery; a missing timestamp marks it unfinished.
+        return []
+
+
+async def _discover(actor, vault: str, ident: str, *, force=False) -> list[dict]:
     row = await connection(actor, vault, ident)
     try:
         server = await approved(row['metadata']['server_url'])
@@ -122,17 +156,18 @@ async def discover(actor, vault: str, ident: str, *, force=False) -> list[dict]:
     cached_at = row.get('mcp_discovered_at')
     if not force and row['mcp_state'] == 'connected' and cached_at and (datetime.now(timezone.utc) - cached_at).total_seconds() < 3600:
         return [tool for tool in row['mcp_tools'] if tool['name'] in server['allowed_tools']]
+    async with db().acquire() as conn:
+        await conn.execute("UPDATE tank.vault_items SET mcp_tools='[]'::jsonb,mcp_discovered_at=NULL WHERE tenant_id=$1 AND vault=$2 AND kind='connections' AND name=$3", actor.tenant_id, vault, ident)
     async def gate():
         await approved(server['url'])
     try:
-        token, secrets = await bearer(row)
-        client = Client(server['url'], gate, token)
-        await client.initialize()
-        tools = await client.tools(server['allowed_tools'])
+        tools, secrets = await authenticated(row, gate, lambda client: client.tools(server['allowed_tools']))
         # A hostile endpoint cannot reflect an authentication value into planner data.
         tools = redact(tools, secrets)
     except SignInRequired:
         await state(row, 'needs_sign_in')
+        return []
+    except ResponseTooLarge:
         return []
     except Refused:
         await state(row, 'sign_in_failed')
@@ -155,21 +190,31 @@ def redact(value, secrets: list[str]):
 
 
 async def catalogue(actor, conn=None) -> dict[str, dict]:
+    try:
+        async with asyncio.timeout(DISCOVERY_TIMEOUT):
+            return await _catalogue(actor, conn)
+    except TimeoutError:
+        return {}
+
+
+async def _catalogue(actor, conn=None) -> dict[str, dict]:
     if conn is None:
         async with db().acquire() as connection:
-            return await catalogue(actor, connection)
+            return await _catalogue(actor, connection)
     # No cross-tenant lookup, including founders: the selected workspace owns the vault.
-    rows = await conn.fetch("""SELECT v.vault,v.name,v.mcp_tools,s.allowed_tools FROM tank.vault_items v
+    rows = await conn.fetch("""SELECT v.vault,v.name,v.mcp_tools,v.mcp_discovered_at,s.allowed_tools FROM tank.vault_items v
         JOIN tank.mcp_servers s ON s.url=v.metadata->>'server_url'
-        WHERE v.tenant_id=$1 AND v.kind='connections' AND v.mcp_state='connected'
-        AND v.mcp_discovered_at > now()-interval '1 hour'""", actor.tenant_id)
+        WHERE v.tenant_id=$1 AND v.kind='connections' AND v.mcp_state='connected'""", actor.tenant_id)
     result, collisions = {}, set()
     for row in rows:
         vault = row['vault']
         if vault not in VAULTS or (not actor.founder and VAULTS[vault] not in actor.squads):
             continue
         allowed = unpack(row['allowed_tools'])
-        for tool in unpack(row['mcp_tools']):
+        cached_at = row['mcp_discovered_at']
+        tools = (unpack(row['mcp_tools']) if cached_at and (datetime.now(timezone.utc) - cached_at).total_seconds() < 3600
+                 else await discover(actor, vault, row['name'], force=False))
+        for tool in tools:
             if tool['name'] not in allowed:
                 continue
             name = f"mcp.{uuid.UUID(row['name']).hex[:8]}.{tool['name']}"
@@ -187,11 +232,8 @@ def validate(tool: dict, arguments: dict):
 
 
 async def receipt(actor, name: str) -> str:
-    from main import box_region
-    async with db().acquire() as conn:
-        ident = await conn.fetchval("""INSERT INTO tank.ledger(tenant_id,region,agent,task_type,rung,model,cost_usd,tokens_in,tokens_out)
-            VALUES($1,$2,'tank',$3,3,'code',0,0,0) RETURNING id""", actor.tenant_id, box_region(), name)
-    return str(ident)
+    from trigger_routes import code_receipt
+    return str(await code_receipt(actor.tenant_id, name))
 
 
 async def dispatch(action, actor) -> tuple[int, dict]:
@@ -229,10 +271,8 @@ async def dispatch(action, actor) -> tuple[int, dict]:
             raise Refused('MCP tool refused')
     ledger_id = await receipt(actor, name)  # Persist even if the external call fails.
     try:
-        token, secrets = await bearer(row)
-        client = Client(server['url'], gate, token)
-        await client.initialize()
-        result = redact(await client.call(tool['name'], args), secrets)
+        result, secrets = await authenticated(row, gate, lambda client: client.call(tool['name'], args))
+        result = redact(result, secrets)
         # Bound the result retained in the Confirm card, independently of transport size.
         if len(json.dumps(result).encode()) > 64_000:
             result = {'content': [{'type': 'text', 'text': json.dumps(result, ensure_ascii=False)[:12000]}]}
