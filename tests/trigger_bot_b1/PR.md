@@ -100,3 +100,11 @@ Exact commands, heads and captured results are in `retention-verification.txt`.
 Privacy-notice wording is unchanged and remains for the founder's own words.
 No new UI, copy or screenshot is fabricated. Founder-browser acceptance and
 screenshots remain missing as stated above.
+
+Review-addition verification at code/test head
+`cd5cc92191ea4eaf928d5a7e2879c7b6c20d0613`: **576 passed, 2 skipped** in the
+current combined Trigger/Command/B1 run. All seven retention tests are included.
+The skipped CRM WSGI module passed **4 tests** in its separate pinned Django
+runtime. The real Trigger room/LanguageTool-container check remains unrun.
+Earlier failing setup runs and their corrections remain in
+`retention-verification.txt`; no skipped or failed run is relabelled a pass.
