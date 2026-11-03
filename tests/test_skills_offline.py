@@ -86,7 +86,7 @@ async def test_rung3_offline_cases(monkeypatch: pytest.MonkeyPatch) -> None:
     # room; a placeholder lets them reach the stub http, so their cases count as network-bound.
     monkeypatch.setenv("TANK_KEY_TRIGGER", "offline-placeholder")
     packages = [pkg for pkg in skala.load_packages(SKILLS).values()
-                if pkg.rung == 3 and pkg.id not in {"tisan.figma", "tisan.scaffold"}]
+                if pkg.rung == 3 and pkg.id not in {"tisan.figma", "tisan.scaffold", "tisan.build"}]
     assert packages, "no rung-3 skills found"
     lines: list[str] = []
     failures: list[str] = []

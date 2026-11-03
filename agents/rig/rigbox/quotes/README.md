@@ -192,7 +192,7 @@ Use an npm cache inside `/workspace` if the default home cache is not writable.
 For the credential-free sample API, from the Tank root:
 
 ```sh
-PYTHONPATH=agents/rig python -m uvicorn rigbox.quotes.sample:app --host 127.0.0.1 --port 8001 --no-access-log
+PYTHONPATH=tests:agents/rig python -m uvicorn fixtures.rig_quote_sample:app --host 127.0.0.1 --port 8001 --no-access-log
 ```
 
 `GET /health` must return `sample: true`; the internal `/widget/test` page calls

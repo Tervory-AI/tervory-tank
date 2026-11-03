@@ -1,4 +1,5 @@
 import "server-only";
+import type { Region } from "@/app/api/zenas/tank";
 import { mootPublishedMatches } from "@/lib/tank";
 
 export type MatchRecord = {
@@ -53,10 +54,10 @@ function validMatch(row: Record<string, unknown>): boolean {
  * Private and offline rows are excluded, but broken public data is never called empty.
  * Never return upstream error details or unknown fields to a public component.
  */
-export async function listPublishedMatches(matchId?: string): Promise<PublishedMatchesResult> {
+export async function listPublishedMatches(matchId?: string, region: Region = "us-east"): Promise<PublishedMatchesResult> {
   let response: unknown;
   try {
-    response = await mootPublishedMatches(matchId);
+    response = await mootPublishedMatches(matchId, undefined, region);
   } catch (error) {
     return { status: error instanceof SyntaxError ? "malformed" : "unavailable" };
   }
@@ -78,9 +79,9 @@ export async function listPublishedMatches(matchId?: string): Promise<PublishedM
   return matches.length ? { status: "available", matches } : { status: "empty", matches: [] };
 }
 
-export async function getMatch(matchId: string): Promise<MatchResult> {
+export async function getMatch(matchId: string, region: Region = "us-east"): Promise<MatchResult> {
   if (!UUID.test(matchId)) return { status: "missing" };
-  const result = await listPublishedMatches(matchId);
+  const result = await listPublishedMatches(matchId, region);
   if (result.status === "unavailable" || result.status === "malformed") return result;
   const match = result.matches.find(row => row.matchId === matchId);
   return match ? { status: "available", match } : { status: "missing" };

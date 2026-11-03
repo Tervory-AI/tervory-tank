@@ -387,6 +387,9 @@ class SupplySourceIn(BaseModel):
     feed_id: str = Field(default="", max_length=200)
     # Blind ship: this source must pack a neutral slip (no own branding or invoice).
     neutral_slip_required: bool = False
+    # Auto-order: the source's real vendor name and the inbox that takes its orders.
+    vendor_name: str = Field(default="", max_length=200)
+    order_email: str = Field(default="", max_length=254)
 
 
 class SupplyImportIn(BaseModel):

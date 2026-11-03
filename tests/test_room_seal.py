@@ -428,3 +428,102 @@ def test_rig_missing_service_cannot_claim_sealed(tmp_path, service):
     result = run_seal_check(tmp_path, str(path))
     assert result.returncode == 1 and f"NOT FOUND: {service}" in result.stdout
     assert "agent-rig (riguuid): sealed" not in result.stdout
+
+
+def trigger_radix_placements() -> dict:
+    """Sample docker inspect output plus the existing four sealed rooms."""
+    data = json.loads((FIXTURES / "sealed.json").read_text())
+    data["networks"].update({
+        "tervory-gw-trigger": False,
+        "triggerproject_checkers": True,
+    })
+    for service, networks in {
+        "agent-trigger": ["tervory-gw-trigger", "triggerproject_checkers"],
+        "trigger-languagetool": ["triggerproject_checkers"],
+    }.items():
+        data["containers"][service] = {
+            "uuid": "triggeruuid", "resource": "agent-trigger", "project": "triggerproject",
+            "service": service, "name": "triggerproject-" + service + "-1", "networks": networks,
+        }
+    data["containers"]["passive-egress"] = {
+        "uuid": "radixuuid", "resource": "agent-radix", "project": "radixuuid",
+        "service": "passive-egress", "name": "radixuuid-passive-egress-1",
+        "networks": ["tervory-gw-radix", "radixuuid_proxy-link", "radixuuid_egress"],
+    }
+    return data
+
+
+def test_trigger_radix_samples_match_the_declared_compose_networks():
+    samples = trigger_radix_placements()["containers"]
+    for room, services in (("trigger", ("agent-trigger", "trigger-languagetool")),
+                           ("radix", ("passive-egress",))):
+        compose = yaml.safe_load((ROOT / f"agents/{room}/docker-compose.yml").read_text())
+        for service in services:
+            row = samples[service]
+            declared = {compose["networks"][key].get("name", row["project"] + "_" + key)
+                        for key in compose["services"][service]["networks"]}
+            assert set(row["networks"]) == declared
+    assert "EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig)" in SEAL_CHECK.read_text()
+
+
+def test_trigger_radix_exact_placements_pass(tmp_path):
+    path = tmp_path / "trigger-radix-sealed.json"
+    path.write_text(json.dumps(trigger_radix_placements()))
+    result = run_seal_check(tmp_path, str(path))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "agent-trigger (triggeruuid): sealed" in result.stdout
+    assert "agent-radix (radixuuid): sealed" in result.stdout
+    assert "LEAK" not in result.stdout and "NOT SEALED" not in result.stdout
+
+
+@pytest.mark.parametrize("service", ["agent-trigger", "trigger-languagetool", "passive-egress"])
+@pytest.mark.parametrize("extra_internal", [False, True], ids=["outward", "internal"])
+def test_trigger_radix_each_extra_network_is_a_leak(tmp_path, service, extra_internal):
+    data = trigger_radix_placements()
+    data["networks"]["unexpected"] = extra_internal
+    data["containers"][service]["networks"].append("unexpected")
+    path = tmp_path / "trigger-radix-extra.json"
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path))
+    assert result.returncode == 1, result.stdout + result.stderr
+    name = data["containers"][service]["name"]
+    assert f"LEAK: {name} on unexpected" in result.stdout
+
+
+@pytest.mark.parametrize("service,network", [
+    ("agent-trigger", "triggerproject_checkers"),
+    ("trigger-languagetool", "triggerproject_checkers"),
+    ("passive-egress", "radixuuid_proxy-link"),
+    ("passive-egress", "tervory-gw-radix"),
+    ("passive-egress", "radixuuid_egress"),
+])
+def test_trigger_radix_missing_declared_attachment_fails(tmp_path, service, network):
+    data = trigger_radix_placements()
+    data["containers"][service]["networks"].remove(network)
+    path = tmp_path / "trigger-radix-missing.json"
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path))
+    assert result.returncode == 1, result.stdout + result.stderr
+    name = data["containers"][service]["name"]
+    assert f"NOT SEALED: {name} missing {network}" in result.stdout
+
+
+@pytest.mark.parametrize("network", ["triggerproject_checkers", "radixuuid_proxy-link", "tervory-gw-radix"])
+def test_trigger_radix_private_network_must_stay_internal(tmp_path, network):
+    data = trigger_radix_placements()
+    data["networks"][network] = False
+    path = tmp_path / "trigger-radix-not-internal.json"
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path))
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert f"on non-internal {network}" in result.stdout
+
+
+def test_languagetool_cannot_join_the_trigger_corridor(tmp_path):
+    data = trigger_radix_placements()
+    data["containers"]["trigger-languagetool"]["networks"].append("tervory-gw-trigger")
+    path = tmp_path / "languagetool-corridor.json"
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path))
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "LEAK: triggerproject-trigger-languagetool-1 on tervory-gw-trigger" in result.stdout

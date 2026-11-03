@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from statistics import median
 from typing import Any
 
-from core.pure import surge_detect, shift_detect
+from core.predictions import classify
 
 
 def day(point: dict) -> date:
@@ -41,12 +41,8 @@ def analyze(
 ) -> dict[str, Any]:
     up = sorted((p for p in upstream if day(p) <= as_of), key=day)
     down = sorted((p for p in downstream if day(p) <= as_of), key=day)
-    options = {k: config[k] for k in ("window", "z_threshold", "pct_threshold")}
-    events = surge_detect({"points": up, **options})["events"]
-    # Keep the existing shift classification alongside the series' raw movement.
-    shifts = shift_detect({"areas": [{"area": "series", "points": up}], **options})[
-        "events"
-    ]
+    baseline = classify(up, config)
+    events, shifts = baseline["events"], baseline["shifts"]
     shift_by_date = {item["date"]: item["kind"] for item in shifts}
     by_date = {str(p["date"]): (i, p) for i, p in enumerate(up)}
     selected, last_end = [], None

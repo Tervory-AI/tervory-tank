@@ -169,17 +169,38 @@ class QuoteService(Service):
             raise RigError("invalid", "A payment is required.", 422)
         # Blind ship (per store, off by default): validate the address before
         # the hold is taken, so a bad address never burns the held price.
-        blind = (await self.store.retailer(tenant_id) or {}).get("blind_ship") is True
+        retailer = await self.store.retailer(tenant_id) or {}
+        blind = retailer.get("blind_ship") is True
         ship_to = ship_address(body.get("delivery")) if blind else None
+        # Optional auto-order (per store, off by default): sandbox outbox only.
+        auto = retailer.get("auto_order") is True
+        if auto:
+            from rigbox import supplier_orders
+            try:
+                supplier_orders.outbox()
+            except DeliveryError:
+                raise RigError("unavailable", "Ordering from other stores is not available.", 503) from None
+            if not (hasattr(self.fulfilment, "send_supplier_order") and hasattr(self.fulfilment, "cancel")):
+                raise RigError("unavailable", "Ordering from other stores is not available.", 503)
         now = datetime.now(timezone.utc)
         try:
             hold_id = read_token(secret, tenant_id, str(body.get("hold") or ""), now)
         except LocateRefused as exc:
             raise RigError("hold", "That price has expired. Check availability again.", 410
                            if str(exc) == "hold_expired" else 422) from None
-        held = await Holds(self.store).take(tenant_id, hold_id, now)
+        holds = Holds(self.store)
+        if auto:
+            # No real vendor or order inbox for this source: refuse before the
+            # hold is taken (so the shopper's held price is not burned) and
+            # before any payment.
+            peeked = await holds.peek(tenant_id, hold_id, now)
+            if peeked is not None and not supplier_orders.supplier_ready(peeked["private"]["source"]):
+                raise RigError("unavailable", "Ordering from other stores is not available.", 503)
+        held = await holds.take(tenant_id, hold_id, now)
         if held is None or held["product_id"] != row["sku"]:
             raise RigError("hold", "That price has expired. Check availability again.", 410)
+        if auto and not supplier_orders.supplier_ready(held["private"]["source"]):
+            raise RigError("unavailable", "Ordering from other stores is not available.", 503)
         price = held["public"]["price"]
         product = dict(await self.product(tenant_id, row["sku"]))
         product["price"] = dict(price)
@@ -229,6 +250,42 @@ class QuoteService(Service):
             raise RigError("order", "The order could not be placed. The payment was refunded.", 502) from None
         await record(state="ordered", ordered_at=datetime.now(timezone.utc).isoformat(),
                      order=order["order"]["number"], purchase_order=order["purchase_order"]["number"])
+        if auto:
+            try:
+                supplied = await self.fulfilment.send_supplier_order(
+                    tenant_id=tenant_id, quote_id=quote_id, store_name=retailer.get("name") or "",
+                    store_email=retailer.get("email"))
+            except DeliveryError as exc:
+                # Cancel Rig's order and unsent PO, then refund. cancel refuses
+                # (returns "sent") when the supplier already has the PO: then
+                # the order stands and nothing is refunded.
+                # send_supplier_order checks order mode and the outbox before it
+                # writes anything, so those two refusals prove nothing was sent.
+                cancelled = await self.fulfilment.cancel(
+                    tenant_id, quote_id, f"supplier_order_failed:{exc}",
+                    unsent=str(exc) in ("outbox_not_configured", "order_mode"))
+                if cancelled == "unknown":
+                    # Rig can't tell whether the supplier has the PO, so it
+                    # neither cancels nor refunds. The order and payment stand
+                    # until a person or a later reconcile settles it.
+                    await record(state="supplier_order_unconfirmed", error=str(exc))
+                    body = {"request_id": quote_id, "state": "ordered", "price": price,
+                            "payment": {"reference": charge.reference, "test": True}}
+                    if ship_to is not None:
+                        body["ships_direct"] = True
+                    return body
+                if cancelled != "sent":
+                    refunded = await payments.refund(provider, charge, "supplier_order_failed")
+                    await record(state="supplier_order_failed_refunded", error=str(exc),
+                                 refund={"status": refunded.status})
+                    raise RigError("order", "The order could not be placed. The payment was refunded.", 502) from None
+                supplied = {"purchase_order": {"state": "sent"},
+                            "supplier_order": {"channel": "email", "transport": "sandbox_outbox",
+                                               "duplicate": True, "reconciled": True}}
+            sent = supplied["supplier_order"]
+            await record(state="supplier_ordered", supplier_ordered_at=datetime.now(timezone.utc).isoformat(),
+                         purchase_order_state=supplied["purchase_order"]["state"],
+                         supplier_order={key: sent.get(key) for key in ("channel", "transport", "file", "duplicate")})
         body = {"request_id": quote_id, "state": "ordered", "price": price,
                 "payment": {"reference": charge.reference, "test": True}}
         if ship_to is not None:

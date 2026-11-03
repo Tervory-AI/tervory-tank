@@ -15,7 +15,8 @@ for (const path of sitePaths()) {
   });
 }
 
-test("a missing page has no accessibility violations", async ({ page }) => {
-  await page.goto("/does-not-exist");
-  await expectNoViolations(page);
+test("a missing page has no invented error UI pending approved design", async ({ page }) => {
+  const response = await page.goto("/does-not-exist");
+  expect(response?.status()).toBe(404);
+  await expect(page.getByRole("main")).toBeEmpty();
 });

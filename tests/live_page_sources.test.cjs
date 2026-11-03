@@ -16,7 +16,7 @@ const otherId = 'b634c3df-a3e3-4d25-86ea-0286d63ba4c9';
 const match = { matchId: id, published: true, title: 'Published civil appeal', fairnessReading: 'split', judgmentOrder: 'appeal_dismissed', reveal: '' };
 
 // Compile with the workspace's installed compiler, replacing only framework/transport boundaries.
-function harness(fetch) {
+function harness(fetch, env = {}) {
   const cache = new Map();
   const calls = [];
   const notFound = () => { throw new Error('NEXT_NOT_FOUND'); };
@@ -48,14 +48,14 @@ function harness(fetch) {
     }
     new Function('require', 'module', 'exports', 'fetch', 'process', js)(requireSource, module, module.exports,
       async (url, options) => { calls.push({ url: String(url), method: options?.method }); return fetch(url, options); },
-      { env: {} });
+      { env });
     return module.exports;
   }
   return { load: name => load(path.join(workspace, name)), calls };
 }
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status });
 const failed = () => response({}, 503);
-const render = async (h, page, props) => renderToStaticMarkup(await h.load(page).default(props));
+const render = async (h, page, props = {}) => renderToStaticMarkup(await h.load(page).default(props));
 
 // These replace the old tests that asserted a production fixture store was public.
 test('Moot index reads published room matches through Tank, with US home and no cache', async () => {
@@ -231,4 +231,40 @@ test('feed review displays supplied feed and state label and never serializes th
   const missing = quarantineFromResponse(200, { batches: [{ ...row, series_name: undefined }] });
   assert.equal(missing.error, QUARANTINE_ERROR);
   assert.deepEqual(missing.batches, []);
+});
+
+
+test('ZA public reads use the existing regional connection and never fall back to Boston', async () => {
+  const env = { TANK_URL_ZA: 'https://za.example', TANK_API_KEY_ZA: 'offline-za' };
+  const h = harness((url, options) => {
+    assert.equal(options.cache, 'no-store');
+    assert.equal(options.redirect, 'error');
+    assert.equal(options.headers['x-tank-key'], 'offline-za');
+    return response({ matches: [match, { ...match, matchId: otherId, published: false }] });
+  }, env);
+  const result = await h.load('app/moot/store.ts').listPublishedMatches(undefined, 'za');
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { status: 'available', matches: [match] });
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0].url, 'https://za.example/v1/zenas/moot/published?home_region=za');
+  const html = await render(h, 'app/moot/page.tsx', { searchParams: Promise.resolve({ region: 'za' }) });
+  assert.match(html, new RegExp(`/moot/${id}\\?region=za`));
+  assert.doesNotMatch(html, new RegExp(otherId));
+  assert.equal((await h.load('app/moot/store.ts').getMatch(otherId, 'za')).status, 'missing');
+});
+
+test('missing ZA connection returns nothing and makes no request', async () => {
+  const h = harness(() => { throw new Error('must not fetch'); });
+  assert.deepEqual(await h.load('app/moot/store.ts').listPublishedMatches(undefined, 'za'), { status: 'empty', matches: [] });
+  assert.equal(h.calls.length, 0);
+});
+
+test('US public read keeps its existing endpoint', async () => {
+  const h = harness(() => response({ matches: [] }));
+  await h.load('app/moot/store.ts').listPublishedMatches();
+  assert.equal(h.calls[0].url, 'http://tank:8000/v1/zenas/moot/published?home_region=us-east');
+});
+
+test('canonical Moot redirect preserves the ZA query', () => {
+  const { mootCanonicalRedirectUrl } = harness(() => { throw new Error('must not fetch'); }).load('lib/product-hosts.ts');
+  assert.equal(mootCanonicalRedirectUrl('app.tervory.com', '/moot', '?region=za'), 'https://zenas.tervory.com/moot?region=za');
 });

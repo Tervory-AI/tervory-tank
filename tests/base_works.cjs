@@ -28,6 +28,7 @@ function load(relative) {
   const module = { exports: {} };
   const requireFile = (name) => {
     if (mocks[name]) return mocks[name];
+    if (name === '@/app/api/zenas/tank') return load('workspace/app/api/zenas/tank.ts');
     if (name === '@/lib/tank') return load('workspace/lib/tank.ts');
     if (name === '@/lib/workspace-origin') return load('workspace/lib/workspace-origin.ts');
     if (name.startsWith('.')) return load(path.relative(root, path.resolve(path.dirname(file), name + '.ts')));

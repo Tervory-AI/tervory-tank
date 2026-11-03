@@ -41,8 +41,9 @@ TOOLS = {
     "radix": ["radix.scan"],
     "zenas": ["zenas.ask", "zenas.matters", "zenas.review"],
 }
-FOUNDER_TOOLS = ["skala.list", "skala.evals", "skala.approve", "skala.retire",
-                 "ledger.receipts", "ledger.savings", "worker.build", "repo.prs", "repo.pr", "repo.file"]
+FOUNDER_TOOLS = ["trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
+                 "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
+                 "radix.domain.prove", "radix.passive.scan", "radix.findings"]
 
 
 def db() -> Any:
@@ -72,9 +73,15 @@ def key_matches(presented: str, expected: str) -> bool:
 
 
 async def identity(request: Request) -> Actor:
-    from main import TANK_API_KEY, box_region
+    from main import TANK_API_KEY
     if not key_matches(request.headers.get("x-tank-key", ""), TANK_API_KEY):
         raise HTTPException(401, "Workspace authentication required")
+    return await signed_in_actor(request)
+
+
+async def signed_in_actor(request: Request) -> Actor:
+    """The Clerk-derived user and tenant headers. Call only after the service key is checked."""
+    from main import box_region
     user = request.headers.get("x-tervory-user", "").strip()
     tenant = request.headers.get("x-tervory-tenant")
     if not user:
@@ -99,7 +106,7 @@ def allowed_tools(actor: Actor) -> list[str]:
     squads = TOOLS.keys() if actor.founder else actor.squads & SQUADS
     founder_tools = [name for name in FOUNDER_TOOLS
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
-    voice_tools = ["trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"] if actor.tenant_admin and not actor.founder else []
+    voice_tools = TOOLS["trigger"] if actor.tenant_admin and not actor.founder else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]] + founder_tools + voice_tools)
 
 
@@ -223,6 +230,46 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
     }
 
 
+# Engine and model names, provider models and price-book rows are founder-only (as in
+# the Workspace receipt). Customers get the dollar figures and the "What Auto would
+# have cost" label, never a serving, baseline, requested or Auto model name. Customer
+# views are allowlists, so a field added later stays founder-only until listed here.
+# Durable state is not rewritten.
+MODEL_NAME_KEYS = frozenset({"model", "baseline_model", "auto_model", "requested_model"})
+CUSTOMER_RECEIPT_KEYS = frozenset({
+    "step_id", "ledger_id", "tokens_in", "tokens_out", "cost_usd", "baseline_cost_usd", "saved_usd",
+    "cost_status", "baseline_status", "auto_cost_usd", "auto_cost_status", "auto_priced_at",
+    "auto_cost_label", "auto_cost_basis",
+})
+CUSTOMER_STEP_DROP = frozenset({"auto_comparison", "requested_model", "model"})
+CUSTOMER_MESSAGE_KEYS = frozenset({"message_id", "role", "content", "attachments", "repeatable"})
+
+
+def public_receipt(receipt: dict, founder: bool) -> dict:
+    return receipt if founder else {k: v for k, v in receipt.items() if k in CUSTOMER_RECEIPT_KEYS}
+
+
+def public_step(payload: dict, founder: bool) -> dict:
+    # auto_comparison is the frozen policy model and its price book row.
+    return payload if founder else {k: v for k, v in payload.items() if k not in CUSTOMER_STEP_DROP}
+
+
+def public_message(message: dict, founder: bool) -> dict:
+    return message if founder else {k: v for k, v in message.items() if k in CUSTOMER_MESSAGE_KEYS}
+
+
+def public_event(kind: str, data: dict, founder: bool) -> dict:
+    if founder:
+        return data
+    if kind == "receipt":
+        return {**data, "rows": [public_receipt(r, False) for r in data.get("rows", [])]}
+    if kind == "step":
+        return public_step(data, False)
+    if kind == "message":
+        return public_message(data, False)
+    return data
+
+
 def totals(rows: list[dict]) -> dict:
     complete = all(r["saved_usd"] is not None for r in rows)
     return {
@@ -242,6 +289,17 @@ def thread_totals(state: dict) -> dict:
             "saved_usd": None if pending else recorded["saved_usd"],
             "receipt_status": "pending" if pending else "recorded",
             "recorded_spent_usd": sum(r["cost_usd"] for r in state["receipts"] if r["cost_usd"] is not None)}
+
+
+@router.get("/models")
+async def models(actor: Actor = Depends(identity)) -> list[dict]:
+    # The roster carries provider models and prices: founders only. Everyone else
+    # (Workspace session or CLI token) gets a plain 404, as if the route did not exist.
+    actor = await authorized_actor(actor)
+    if not actor.founder:
+        raise HTTPException(404, "Not Found")
+    from main import list_models
+    return await list_models()
 
 
 @router.get("/tools")
@@ -329,12 +387,34 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
         row = await owned(conn, thread_id, actor)
     state = unpack(row["state"])
     amounts = thread_totals(state)
+    founder = current_actor(actor).founder
     return {"thread": {"thread_id": str(thread_id), "title": row["title"], "updated_at": row["updated_at"],
                        "spent_usd": amounts["cost_usd"], "saved_usd": amounts["saved_usd"], "receipt_status": amounts["receipt_status"],
                        "recorded_spent_usd": amounts["recorded_spent_usd"]},
-            "messages": state["messages"], "steps": list(state["steps"].values()),
+            "messages": [public_message(m, founder) for m in state["messages"]],
+            "steps": [public_step(s, founder) for s in state["steps"].values()],
             "cards": [public_card(c) for c in state["cards"].values()],
-            "receipts": state["receipts"]}
+            "receipts": [public_receipt(r, founder) for r in state["receipts"]], "seq": row["seq"]}
+
+
+@router.get("/tasks/{task_id}/receipts")
+async def task_receipts(task_id: uuid.UUID, actor: Actor = Depends(identity)) -> dict:
+    async with db().acquire() as conn:
+        task = await conn.fetchrow(
+            "SELECT t.ledger_id,to_jsonb(l) AS data FROM tank.tasks t "
+            "LEFT JOIN tank.ledger l ON l.id=t.ledger_id AND l.tenant_id=t.tenant_id "
+            "WHERE t.id=$1 AND t.tenant_id=$2 AND t.created_by=$3",
+            task_id, actor.tenant_id, actor.user_id,
+        )
+    if task is None:
+        raise HTTPException(404, "no such task for this tenant")
+    if task["ledger_id"] is not None and task["data"] is None:
+        raise HTTPException(409, "Receipt evidence is missing or outside this tenant")
+    rows = [receipt_row(unpack(task["data"]), str(task_id))] if task["data"] is not None else []
+    founder = current_actor(actor).founder
+    return {"rows": [public_receipt(r, founder) for r in rows], "totals": totals(rows) if rows else
+            {"cost_usd": None, "baseline_cost_usd": None, "saved_usd": None},
+            "status": "recorded" if rows and rows[0]["cost_usd"] is not None else "pending"}
 
 
 @router.patch("/threads/{thread_id}")
@@ -350,6 +430,7 @@ def sse(kind: str, data: dict) -> str:
 
 
 async def replay(thread_id: uuid.UUID, actor: Actor, after: int, *, turn_id: str | None = None):
+    founder = current_actor(actor).founder
     while True:
         async with db().acquire() as conn:
             row = await conn.fetchrow(
@@ -364,7 +445,7 @@ async def replay(thread_id: uuid.UUID, actor: Actor, after: int, *, turn_id: str
         for item in events:
             data = unpack(item["data"])
             after = data["seq"]
-            yield sse(item["kind"], data)
+            yield sse(item["kind"], public_event(item["kind"], data, founder))
         if len(events) == 500:
             continue
         if turn_id is None or row["active_turn"] != turn_id:
@@ -511,7 +592,8 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
                 await receipt_pending(conn, row, turn_id)
             await step(conn, row, state, {**state["steps"][turn_id], "label": "Answer failed", "status": "failed",
                                           "receipt_status": "pending" if pending else "recorded" if receipt_known else "not_started"})
-            message = (f"The pinned model {model} did not answer. Pinned models never fall back; choose Auto or another model."
+            # Never echo the pinned name: this text is stored on the task and streamed.
+            message = ("The pinned model did not answer. Pinned models never fall back; choose Auto or another model."
                        if model not in (None, "auto") and answer is None else
                        "The answer could not be completed. Check routing policy and service availability.")
             await conn.execute(
@@ -525,6 +607,10 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
 @router.post("/threads/{thread_id}/turn")
 async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity)):
     if body.model not in (None, "auto"):
+        # Pinning is founder-only. The refusal names no model and does not say whether
+        # the requested name exists on the roster.
+        if not current_actor(actor).founder:
+            raise HTTPException(403, "Only Auto is available on this account")
         from main import list_models
         if body.model not in {m["name"] for m in await list_models()}:
             raise HTTPException(422, "Model is not on the roster")
@@ -616,7 +702,7 @@ async def card_action(card_id: uuid.UUID, body: CardAction, actor: Actor = Depen
         # Recover a crashed process without replaying an uncertain side effect.
         if card["status"] == "executing":
             started = datetime.fromisoformat(card["started_at"])
-            if (datetime.now(timezone.utc) - started).total_seconds() > ACTION_TIMEOUT + 30:
+            if (datetime.now(timezone.utc) - started).total_seconds() > action_timeout(card.get("tool")) + 30:
                 card.update(status="unknown", retry_safe=False, error="The action outcome is unknown. Do not repeat it until checked.")
                 card["receipt_status"] = "pending"
                 await step(conn, row, state, {"step_id": str(card_id), "label": "Action outcome unknown",
@@ -795,6 +881,11 @@ async def get_followups(build_id: uuid.UUID, after: int = Query(default=0, ge=0)
 MAX_PLAN_BYTES = 64_000
 MAX_ACTIONS = 4
 ACTION_TIMEOUT = 180
+
+
+def action_timeout(tool: str | None) -> int:
+    return 390 if tool == "radix.passive.scan" else ACTION_TIMEOUT
+
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 MAX_THREAD_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
@@ -897,16 +988,45 @@ class SkillVersionArgs(Body):
     version: str = Field(max_length=50, pattern=r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$")
 
 
+class ScaffoldPage(Body):
+    name: str = Field(min_length=1, max_length=40)
+    copy: uuid.UUID | None = None
+
+
 class ScaffoldArgs(Body):
     name: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9-]+$")
-    pages: list[str] | None = Field(default=None, min_length=1, max_length=20)
+    pages: list[str | ScaffoldPage] | None = Field(default=None, min_length=1, max_length=20)
     brand: dict[str, Any]
+
+
+class TisanBuildArgs(Body):
+    name: str = Field(min_length=1, max_length=80)
+    slug: str = Field(min_length=1, max_length=60, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    locale: str = Field(default="en", pattern=r"^[a-z]{2}(?:-[A-Z]{2})?$")
+    brand: dict[str, Any]
+    request: str | None = Field(default=None, min_length=1, max_length=16000)
+    plan: dict[str, Any] | None = None
+    copy: dict[str, str] = Field(default_factory=dict)
+    media: dict[str, str] = Field(default_factory=dict)
 
 
 class SourceFile(Body):
     path: str = Field(min_length=1, max_length=200)
     text: str = Field(max_length=20000)
+
+
+class RadixDomainArgs(Body):
+    domain: str = Field(min_length=1, max_length=253)
+
+
+class RadixPassiveArgs(Body):
+    url: str = Field(max_length=300)
+    commit: str = Field(default="", max_length=200)
+
+
+class RadixFindingsArgs(Body):
+    scan_id: uuid.UUID
 
 
 class ScanArgs(Body):
@@ -930,10 +1050,12 @@ class ReviewArgs(Body):
 
 
 class TriggerCheckArgs(Body):
-    text: str = Field(min_length=1, max_length=20000)
+    # The existing 32,000-byte action envelope remains authoritative.
+    text: str = Field(min_length=1, max_length=32000)
 
 
 class TriggerWriteArgs(TriggerCheckArgs):
+    text: str = Field(min_length=1, max_length=20000)
     document_type: Literal["copy", "article", "document", "legal"] = "copy"
     register: str | None = Field(default=None, max_length=100)
     template: str | None = Field(default=None, max_length=100)
@@ -975,6 +1097,18 @@ class TriggerFeedbackArgs(Body):
         return self
 
 
+class TriggerCRMWriteArgs(Body):
+    resource: Literal["leads", "contacts", "estimates", "invoices"]
+    record_id: uuid.UUID | None = None
+    data: dict[str, Any] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def pinned_crm_contract(self):
+        from trigger_crm import validate_data
+        validate_data(self.resource, self.data, self.record_id is not None)
+        return self
+
+
 class SavingsArgs(Body):
     days: int = Field(default=30, ge=1, le=365)
 
@@ -1000,6 +1134,7 @@ class Adapter:
 
 
 ADAPTERS = {
+    "trigger.crm.write": Adapter("POST", "/v1/trigger/crm/write", TriggerCRMWriteArgs, "trigger.crm.write"),
     "trigger.voice.show": Adapter("POST", "/v1/trigger/voice.show", TriggerVoiceShowArgs, "trigger.voice.show"),
     "trigger.voice.set": Adapter("POST", "/v1/trigger/voice.set", TriggerVoiceSetArgs, "trigger.voice.set"),
     "trigger.voice.rollback": Adapter("POST", "/v1/trigger/voice.rollback", TriggerVoiceRollbackArgs, "trigger.voice.rollback"),
@@ -1017,6 +1152,10 @@ ADAPTERS = {
     "rig.search": Adapter("GET", "/v1/rig/search", QueryArgs, "Search the product catalogue"),
     "rig.ask": Adapter("POST", "/v1/rig/ask", RigAskArgs, "Ask about a product", True, "paid_run"),
     "tisan.scaffold": Adapter("POST", "/v1/skala/tisan.scaffold/run", ScaffoldArgs, "Create a site scaffold", False, "other", "tisan.scaffold"),
+    "radix.domain.prove": Adapter("POST", "/v1/radix/passive/domains", RadixDomainArgs, "radix.domain.prove"),
+    "radix.passive.scan": Adapter("POST", "/v1/radix/passive/scans", RadixPassiveArgs, "radix.passive.scan"),
+    "radix.findings": Adapter("GET", "/v1/radix/passive/scans/{scan_id}/findings", RadixFindingsArgs, "radix.findings"),
+    "tisan.build": Adapter("POST", "/v1/skala/tisan.build/run", TisanBuildArgs, "tisan.build", False, "other", "tisan.build"),
     "radix.scan": Adapter("POST", "/v1/skala/scan.static/run", ScanArgs, "Scan supplied source text", False, "other", "scan.static"),
     "zenas.ask": Adapter("POST", "/v1/zenas/answers", ZenasAskArgs, "Ask a civil law question", True, "paid_run"),
     "zenas.matters": Adapter("POST", "/v1/zenas/matters", MatterArgs, "Create a matter"),
@@ -1051,7 +1190,11 @@ def validate_action(action: PlannedAction, actor: Actor) -> PlannedAction:
     # arbitrary URLs/HTTP methods, approval flags, and path traversal segments.
     try:
         args = schema.model_validate(action.arguments).model_dump(mode="json", exclude_none=True)
-    except ValidationError:
+    except ValidationError as error:
+        if action.tool == "radix.passive.scan" and any(
+            item["loc"] == ("commit",) for item in error.errors()
+        ):
+            raise HTTPException(422, "invalid artifact") from None
         raise HTTPException(422, "The action arguments are invalid") from None
     return PlannedAction(tool=action.tool, arguments=args)
 
@@ -1086,6 +1229,15 @@ def planning_message(actor: Actor) -> dict:
 
 def public_card(card: dict) -> dict:
     return {k: v for k, v in card.items() if k not in {"payload", "evidence_ids"}}
+
+
+@router.post("/threads/{thread_id}/actions")
+async def propose_tool(thread_id: uuid.UUID, body: PlannedAction, actor: Actor = Depends(identity)) -> dict:
+    async with editing(thread_id, actor) as (conn, row, state):
+        actor = await authorized_actor(actor, conn)
+        action = validate_action(body, actor)
+        card = await propose_action(conn, row, state, action, actor)
+    return public_card(card)
 
 
 async def propose_action(conn: Any, row: dict, state: dict, action: PlannedAction, actor: Actor | None = None) -> dict:
@@ -1128,6 +1280,10 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
     args = dict(action.arguments)
     path = adapter.path
     scope = {"tenant_id": str(actor.tenant_id)}
+    if action.tool == "radix.passive.scan":
+        args = {"target": args["url"], "artifact": "commit:" + args["commit"]}
+    elif action.tool == "radix.findings":
+        path = path.format(scan_id=args.pop("scan_id"))
     if action.tool.startswith("zenas."):
         scope["home_region"] = box_region()
     if "{skill_id}" in path:
@@ -1163,6 +1319,9 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     method, path, params, body = adapter_request(action, actor)
     headers = {"X-Tank-Key": TANK_API_KEY, "X-Tervory-User": actor.user_id,
                "X-Tervory-Tenant": str(actor.tenant_id)}
+    if action.tool in {"radix.domain.prove", "radix.passive.scan", "radix.findings"}:
+        from main import box_region
+        headers.update({"X-Tervory-Squad": "radix", "X-Tervory-Region": box_region()})
     headers["X-Tervory-Role"] = "org:admin" if actor.tenant_admin else ""
     if current_actor(actor).founder:
         headers["X-Tervory-Admin"] = actor.user_id
@@ -1172,6 +1331,10 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     if len(response.content) > 256000:
         raise ValueError("Tool response is too large; outcome needs reconciliation")
     result = response.json()
+    if action.tool == "radix.domain.prove" and 200 <= response.status_code < 300:
+        result = {key: result[key] for key in ("name", "value", "expires_at")}
+    elif action.tool == "radix.passive.scan" and 200 <= response.status_code < 300:
+        result = {"scan_id": result["scan_id"]}
     if action.tool == "ledger.receipts" and 200 <= response.status_code < 300:
         rows = result.get("ledger", [])
         if not isinstance(rows, list) or any(str(row.get("tenant_id")) != str(actor.tenant_id) for row in rows):
@@ -1303,7 +1466,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
         # Recheck immediately before dispatch; a queued card is not authority.
         require_tool(current_actor(actor), action.tool)
         attempted = True
-        async with asyncio.timeout(ACTION_TIMEOUT):
+        async with asyncio.timeout(action_timeout(action.tool)):
             if action.tool.startswith("trigger."):
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
@@ -1321,7 +1484,10 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             if card["status"] == "confirmed":
                 card["result"] = result
             else:
-                card["error"] = "The action was refused or failed. It has not been retried."
+                detail = result.get("detail") if isinstance(result, dict) else None
+                card["error"] = (detail if action.tool == "radix.passive.scan"
+                                 and isinstance(detail, str) and detail in {"invalid artifact", "domain proof required"}
+                                 else "The action was refused or failed. It has not been retried.")
             await step(conn, row, state, {"step_id": card_id, "label": adapter.label,
                                           "actor": action.tool.split('.')[0],
                                           "status": "done" if card["status"] == "confirmed" else "failed",

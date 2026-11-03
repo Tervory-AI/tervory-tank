@@ -14,7 +14,6 @@ COPY rig/gold_sources.py /app/gold_sources.py
 COPY rig/schema.sql /app/schema.sql
 COPY rig/english-20k.txt /app/english-20k.txt
 COPY rig/shopping.txt /app/shopping.txt
-COPY rig/catalogues /app/catalogues
 USER agent
 ENV AGENT_NAME=rig \
     DATA_DIR=/data \

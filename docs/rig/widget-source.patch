@@ -1,0 +1,281 @@
+diff --git a/tests/custom-nation-privacy-slot.test.ts b/tests/custom-nation-privacy-slot.test.ts
+new file mode 100644
+index 0000000..ace3d8b
+--- /dev/null
++++ b/tests/custom-nation-privacy-slot.test.ts
+@@ -0,0 +1,49 @@
++import { expect, it } from "vitest";
++import { customNation, neutral } from "../widget/src/theme/themes";
++import { renderView, type View } from "../widget/src/ui/render";
++
++it.each([customNation, neutral])("keeps the $id privacy slot empty and hidden while wording is unavailable", (theme) => {
++  const state: View = {
++    theme, screen: "home", query: "", results: [], selectedId: null,
++    product: null, setups: [], activeTier: null, graph: null, expanded: [],
++    swap: null, askQuestion: "", askAnswer: null, askCites: "", linkUrl: "",
++    linkRequestId: null, linkError: null, quote: null, message: null,
++    customizedTiers: [],
++  };
++  expect(renderView(state)).not.toContain("data-quote-privacy");
++  state.quote = {
++    kind: "setup", title: "Offline setup", totalLabel: "", name: "", email: "",
++    error: null, requestId: null,
++  };
++  const quote = renderView(state);
++  expect(quote.match(/<div data-quote-privacy hidden><\/div>/g)).toHaveLength(1);
++  expect(quote).toContain(`${theme.copy.quoteSend}</button>\n      <div data-quote-privacy hidden></div>`);
++  state.quote = null;
++  state.screen = "missing";
++  const link = renderView(state);
++  expect(link.match(/<div data-quote-privacy hidden><\/div>/g)).toHaveLength(1);
++  expect(link).toContain(`${theme.copy.requestQuote}</button>\n      <div data-quote-privacy hidden></div>`);
++});
++
++
++it.each([customNation, neutral])("renders only store-supplied escaped notice text in both forms for $id", (theme) => {
++  const state: View = {
++    theme, screen: "missing", query: "", results: [], selectedId: null,
++    product: null, setups: [], activeTier: null, graph: null, expanded: [],
++    swap: null, askQuestion: "", askAnswer: null, askCites: "", linkUrl: "",
++    linkRequestId: null, linkError: null, quote: null, message: null,
++    customizedTiers: [], noticeReady: true,
++    notice: {text: '<script>alert("policy")</script> & policy', url: 'https://shop.example.test/privacy?x="value"', version: "offline-version"},
++  };
++  for (const screen of ["missing", "home"] as const) {
++    state.screen = screen;
++    state.quote = screen === "home" ? {kind: "product", title: "Offline", totalLabel: "", name: "", email: "", error: null, requestId: null} : null;
++    const html = renderView(state);
++    expect(html).toContain('data-quote-privacy><a href="https://shop.example.test/privacy?x=&quot;value&quot;"');
++    expect(html).toContain('&lt;script&gt;alert(&quot;policy&quot;)&lt;/script&gt; &amp; policy');
++    expect(html).not.toContain('<script>');
++    state.noticeReady = false;
++    expect(renderView(state)).toMatch(/type="submit" disabled/);
++    state.noticeReady = true;
++  }
++});
+diff --git a/tests/rig4.test.ts b/tests/rig4.test.ts
+index 884811b..91369d5 100644
+--- a/tests/rig4.test.ts
++++ b/tests/rig4.test.ts
+@@ -28 +28 @@ describe("RIG-4 live data and delivery", () => {
+-  it.each(["results", "explore"] as const)("labels %s only when sample is true", (screen) => {
++  it.each(["results", "explore"] as const)("omits retired badges on %s regardless of data flags", (screen) => {
+@@ -30 +30 @@ describe("RIG-4 live data and delivery", () => {
+-    expect(renderView(view(true, screen))).toContain("SAMPLE DATA");
++    expect(renderView(view(true, screen))).not.toContain("SAMPLE DATA");
+@@ -75 +75 @@ it("uses themed delivery text, including requests needing store attention", () =
+-it("has one sample label, selected state, and singular setup wording", () => {
++it("has no retired labels, preserves selection and singular setup wording", () => {
+@@ -77 +77 @@ it("has one sample label, selected state, and singular setup wording", () => {
+-  expect(renderView(state).match(/SAMPLE DATA/g)).toHaveLength(1);
++  expect(renderView(state)).not.toContain("SAMPLE DATA");
+@@ -83 +83 @@ it("has one sample label, selected state, and singular setup wording", () => {
+-  expect(renderView(state).match(/SAMPLE DATA/g)).toHaveLength(1);
++  expect(renderView(state)).not.toContain("SAMPLE DATA");
+@@ -87 +87 @@ it("has one sample label, selected state, and singular setup wording", () => {
+-  expect(renderView(state).match(/SAMPLE DATA/g)).toHaveLength(1);
++  expect(renderView(state)).not.toContain("SAMPLE DATA");
+diff --git a/tests/smoke.spec.ts b/tests/smoke.spec.ts
+index f457783..873f6f4 100644
+--- a/tests/smoke.spec.ts
++++ b/tests/smoke.spec.ts
+@@ -50 +50 @@ test("main path at 1440 and 390", async ({ page }) => {
+-    await expect(page.getByText("SAMPLE DATA").first()).toBeVisible();
++    await expect(page.getByText("SAMPLE DATA")).toHaveCount(0);
+diff --git a/widget/src/api/client.ts b/widget/src/api/client.ts
+index b60cdc0..0695614 100644
+--- a/widget/src/api/client.ts
++++ b/widget/src/api/client.ts
+@@ -6,0 +7 @@ import type {
++  PrivacyNotice,
+@@ -46,0 +48,5 @@ export class RigClient {
++  async privacyNotice(): Promise<PrivacyNotice | null> {
++    if (this.usesMock) return null;
++    return (await this.request<{ notice: PrivacyNotice | null }>("/v1/rig/privacy-notice")).notice;
++  }
++
+@@ -102 +108 @@ export class RigClient {
+-      body: JSON.stringify({ url: body.url, note: body.note, ...(body.contact ? { contact: body.contact } : {}) }),
++      body: JSON.stringify({ url: body.url, note: body.note, ...(body.notice_version ? { notice_version: body.notice_version } : {}), ...(body.contact ? { contact: body.contact } : {}) }),
+@@ -109,0 +116 @@ export class RigClient {
++      ...(body.notice_version ? { notice_version: body.notice_version } : {}),
+diff --git a/widget/src/api/types.ts b/widget/src/api/types.ts
+index 346ca9f..d688271 100644
+--- a/widget/src/api/types.ts
++++ b/widget/src/api/types.ts
+@@ -76,0 +77,2 @@ export type AskResponse = {
++export type PrivacyNotice = { text: string; url: string; version: string };
++
+@@ -77,0 +80 @@ export type LinkQuoteRequest = {
++  notice_version?: string;
+@@ -89,0 +93 @@ export type QuoteRequest = {
++  notice_version?: string;
+diff --git a/widget/src/element.ts b/widget/src/element.ts
+index f6deaf4..8f0b658 100644
+--- a/widget/src/element.ts
++++ b/widget/src/element.ts
+@@ -5 +5 @@ import { RigError } from "./api/types";
+-import type { Contact, GraphResponse, Product, RequestAck, Setup } from "./api/types";
++import type { Contact, PrivacyNotice, GraphResponse, Product, RequestAck, Setup } from "./api/types";
+@@ -27,0 +28,2 @@ export class TervoryRig extends HTMLElement {
++  private notice: PrivacyNotice | null = null;
++  private noticeReady = false;
+@@ -120,0 +123,2 @@ export class TervoryRig extends HTMLElement {
++    this.notice = null;
++    this.noticeReady = false;
+@@ -124,0 +129,16 @@ export class TervoryRig extends HTMLElement {
++    this.refreshNotice();
++  }
++
++  private refreshNotice(): void {
++    this.noticeReady = false;
++    const client = this.client;
++    void client.privacyNotice().then((notice) => {
++      if (client !== this.client) return;
++      this.notice = notice;
++      this.noticeReady = true;
++      this.render();
++    }).catch((error: unknown) => {
++      if (client !== this.client) return;
++      this.message = this.errorText(error);
++      this.render();
++    });
+@@ -168,0 +189,2 @@ export class TervoryRig extends HTMLElement {
++      notice: this.notice,
++      noticeReady: this.noticeReady,
+@@ -801,0 +824 @@ export class TervoryRig extends HTMLElement {
++    this.refreshNotice();
+@@ -820,0 +844 @@ export class TervoryRig extends HTMLElement {
++    this.refreshNotice();
+@@ -837 +861 @@ export class TervoryRig extends HTMLElement {
+-    if (!this.quote || !this.quoteTarget || this.quote.pending || this.quote.requestId) return;
++    if (!this.noticeReady || !this.quote || !this.quoteTarget || this.quote.pending || this.quote.requestId) return;
+@@ -853,2 +877,2 @@ export class TervoryRig extends HTMLElement {
+-          ? await this.client.quote({ contact, product_id: target.productId })
+-          : await this.client.quote({ contact, setup });
++          ? await this.client.quote({ contact, notice_version: this.notice?.version, product_id: target.productId })
++          : await this.client.quote({ contact, notice_version: this.notice?.version, setup });
+@@ -868,0 +893 @@ export class TervoryRig extends HTMLElement {
++      if (error instanceof RigError && error.code === "notice_changed") this.refreshNotice();
+@@ -893,0 +919 @@ export class TervoryRig extends HTMLElement {
++    if (!this.noticeReady) return;
+@@ -926 +952 @@ export class TervoryRig extends HTMLElement {
+-      const response = await this.client.linkQuote({ url: this.linkUrl.trim(), note: "", contact });
++      const response = await this.client.linkQuote({ notice_version: this.notice?.version, url: this.linkUrl.trim(), note: "", contact });
+@@ -929,0 +956 @@ export class TervoryRig extends HTMLElement {
++      if (error instanceof RigError && error.code === "notice_changed") this.refreshNotice();
+diff --git a/widget/src/mock/unavailable.ts b/widget/src/mock/unavailable.ts
+index e551a60..c4eba52 100644
+--- a/widget/src/mock/unavailable.ts
++++ b/widget/src/mock/unavailable.ts
+@@ -2,2 +2,2 @@
+-// Stand-in for the sample catalogue in the script-tag (UMD) bundle.
+-// Retailer embeds must never ship sample data, so api-base="mock" is refused
++// Unconfigured API fallback for the script-tag (UMD) bundle.
++// Retailer embeds require a real API, so api-base="mock" is refused
+@@ -19 +19 @@ function refuse(): never {
+-    "Sample data is not part of this bundle. Set api-base to your Rig API.",
++    "Set api-base to your Rig API.",
+diff --git a/widget/src/theme/themes.ts b/widget/src/theme/themes.ts
+index 14e516d..13c9e97 100644
+--- a/widget/src/theme/themes.ts
++++ b/widget/src/theme/themes.ts
+@@ -107 +106,0 @@ export type Theme = {
+-    sampleLabel: string;
+@@ -151 +150 @@ export const customNation: Theme = {
+-    placeholder: "Search a make, model or part — e.g. Staccato, Leupold Mark 5, MDT ACC",
++    placeholder: "Search a make, model or part",
+@@ -153 +152 @@ export const customNation: Theme = {
+-    popular: ["Staccato", "Leupold", "Nightforce", "MDT", "TriggerTech", "Proof Research"],
++    popular: ["Leupold", "Nightforce", "MDT", "TriggerTech", "Proof Research"],
+@@ -164 +163 @@ export const customNation: Theme = {
+-      "One indicative total per setup. We confirm stock, permits and the final quotation in your client space. Prices shown are sample data until the US feeds are connected.",
++      "One indicative total per setup. We confirm stock, permits and the final quotation in your client space.",
+@@ -220 +218,0 @@ export const customNation: Theme = {
+-    sampleLabel: "SAMPLE DATA",
+@@ -276 +274 @@ export const neutral: Theme = {
+-    finePrint: "One indicative total per setup. The shop confirms stock and the final quotation. Prices shown are sample data.",
++    finePrint: "One indicative total per setup. The shop confirms stock and the final quotation.",
+@@ -332 +329,0 @@ export const neutral: Theme = {
+-    sampleLabel: "SAMPLE DATA",
+diff --git a/widget/src/three/index.html b/widget/src/three/index.html
+index 113c0f1..108b511 100644
+--- a/widget/src/three/index.html
++++ b/widget/src/three/index.html
+@@ -4 +4 @@
+-<body><main><h1>3D product view</h1><p>Sample models. Design review page.</p>
++<body><main><h1>3D product view</h1>
+diff --git a/widget/src/three/viewer.ts b/widget/src/three/viewer.ts
+index 9625631..573a4de 100644
+--- a/widget/src/three/viewer.ts
++++ b/widget/src/three/viewer.ts
+@@ -26 +26 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-    .rig-3d.kiosk h2{grid-column:1/-1;grid-row:1;margin:0}.rig-3d.kiosk .sample{grid-column:1/-1;grid-row:2;margin:0}
++    .rig-3d.kiosk h2{grid-column:1/-1;grid-row:1;margin:0}
+@@ -36 +35,0 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-  if (initial.sample) { const sample = node("p", "SAMPLE DATA"); sample.className = "sample"; root.append(sample); }
+diff --git a/widget/src/ui/render.ts b/widget/src/ui/render.ts
+index f466d03..629095a 100644
+--- a/widget/src/ui/render.ts
++++ b/widget/src/ui/render.ts
+@@ -1,2 +1,2 @@
+-import type { Contact, GraphResponse, Price, Product, RequestAck, Setup, SetupPart } from "../api/types";
+-import { detailOf, formatPrice, isSample, matchNote, summaryOf, whyLines } from "../api/format";
++import type { Contact, PrivacyNotice, GraphResponse, Price, Product, RequestAck, Setup, SetupPart } from "../api/types";
++import { detailOf, formatPrice, matchNote, summaryOf, whyLines } from "../api/format";
+@@ -22,0 +23,2 @@ export type View = {
++  notice?: PrivacyNotice | null;
++  noticeReady?: boolean;
+@@ -119 +120,0 @@ function results(view: View): string {
+-      ${view.results.some(isSample) ? sampleBadge(copy.sampleLabel) : ""}
+@@ -157 +158,2 @@ function missing(view: View): string {
+-      <button class="btn btn-accent" type="submit" ${view.linkPending || view.linkRequestId ? "disabled" : ""}>${esc(copy.requestQuote)}</button>
++      <button class="btn btn-accent" type="submit" ${view.linkPending || view.linkRequestId || view.noticeReady === false ? "disabled" : ""}>${esc(copy.requestQuote)}</button>
++      ${quotePrivacySlot(view)}
+@@ -169 +171 @@ function linkField(view: View, field: LinkField, label: string, type: string, va
+-      ${view.linkPending || view.linkRequestId ? "disabled" : ""}
++      ${view.linkPending || view.linkRequestId || view.noticeReady === false ? "disabled" : ""}
+@@ -190 +191,0 @@ function setupScreen(view: View): string {
+-        ${isSample(product) || view.setups.some((setup) => setup.parts.some((part) => isSample(part.product))) ? sampleBadge(copy.sampleLabel) : ""}
+@@ -330,2 +330,0 @@ function explore(view: View): string {
+-    ${[...(product ? [product] : []), ...branches.flatMap((branch) => branch.products)].some(isSample)
+-      ? sampleBadge(copy.sampleLabel, "sample sample-float") : ""}
+@@ -375,0 +375,8 @@ function askBox(view: View): string {
++function quotePrivacySlot(view: View): string {
++  const notice = view.notice;
++  if (!notice) return '<div data-quote-privacy hidden></div>';
++  // The store supplies plain text. Never interpolate policy HTML.
++  if (!/^https:\/\//i.test(notice.url)) return '<div data-quote-privacy hidden></div>';
++  return `<p data-quote-privacy><a href="${esc(notice.url)}" target="_blank" rel="noopener noreferrer">${esc(notice.text)}</a></p>`;
++}
++
+@@ -402 +409,2 @@ function quoteDialog(view: View): string {
+-      <button class="btn btn-accent" type="submit" ${quote.pending ? "disabled" : ""}>${esc(copy.quoteSend)}</button>
++      <button class="btn btn-accent" type="submit" ${quote.pending || view.noticeReady === false ? "disabled" : ""}>${esc(copy.quoteSend)}</button>
++      ${quotePrivacySlot(view)}
+@@ -427,3 +434,0 @@ function photo(product: Product, view: View, size: string): string {
+-function sampleBadge(label: string, className = "sample"): string {
+-  return `<span class="${className}">${esc(label)}</span>`;
+-}
+diff --git a/widget/src/ui/styles.ts b/widget/src/ui/styles.ts
+index 4a645fe..52b7acb 100644
+--- a/widget/src/ui/styles.ts
++++ b/widget/src/ui/styles.ts
+@@ -183,11 +182,0 @@ h1.title {
+-.sample {
+-  display: inline-block;
+-  background: var(--rig-badge);
+-  color: var(--rig-muted);
+-  font-size: 9px;
+-  font-weight: 600;
+-  letter-spacing: 0.08em;
+-  padding: 3px 6px;
+-  border-radius: var(--rig-radius);
+-  white-space: nowrap;
+-}
+@@ -301 +289,0 @@ h1.title {
+-.setup-head .sample:last-child { margin-left: auto; }
+@@ -653 +640,0 @@ h1.title {
+-.sample-float { position: absolute; left: 32px; bottom: 20px; background: rgba(255, 255, 255, 0.08); color: var(--rig-graph-muted); }
+@@ -666 +652,0 @@ h1.title {
+-  .sample-float { position: static; margin: 0 16px 16px; }
