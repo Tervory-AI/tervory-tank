@@ -163,7 +163,7 @@ jobs:
         working-directory: cli
       - name: Validate the Seatbelt profile on the macOS runner
         run: |
-          node --input-type=module -e 'import {seatbeltProfile} from "./cli/src/seatbelt.mjs"; import {writeFile} from "node:fs/promises"; await writeFile(process.env.RUNNER_TEMP + "/cli-w3.sb", (await seatbeltProfile(process.cwd())).replace("(deny default)", "(deny default (with report))"));'
+          node --input-type=module -e 'import {seatbeltProfile} from "./cli/src/seatbelt.mjs"; import {writeFile} from "node:fs/promises"; await writeFile(process.env.RUNNER_TEMP + "/cli-w3.sb", await seatbeltProfile(process.cwd()));'
           if /usr/bin/sandbox-exec -f "$RUNNER_TEMP/cli-w3.sb" /usr/bin/true; then
             exit 0
           fi
@@ -172,7 +172,7 @@ jobs:
           node --input-type=module -e 'import fs from "node:fs"; import {spawnSync} from "node:child_process"; const base=fs.readFileSync(process.env.RUNNER_TEMP + "/cli-w3.sb","utf8"); for (const [name,rule] of Object.entries({reads:"(allow file-read* file-map-executable)",sysctl:"(allow sysctl-read)",ioctl:"(allow file-ioctl)",fsctl:"(allow system-fsctl)",shared:"(allow ipc-posix*)",process:"(allow process*)",metadata:"(allow file-read-metadata)",mach:"(allow mach-lookup)",system:"(allow file-read* file-map-executable (subpath \"/System\"))",library:"(allow file-read* file-map-executable (subpath \"/Library\"))",database:"(allow file-read* (subpath \"/private/var/db\"))",existence:"(allow file-test-existence)",execution:"(allow process-exec)",syscall:"(allow system-mac-syscall)",all:"(allow default)"})) { const r=spawnSync("/usr/bin/sandbox-exec",["-p",base+"\n"+rule,"/usr/bin/true"],{encoding:"utf8"}); console.log(JSON.stringify({probe:name,status:r.status,signal:r.signal,stderr:r.stderr})); }'
           # Keep diagnostics to this disposable runner's probe crash fields.
           sleep 5
-          sudo /usr/bin/log show --last 2m --info --debug --style compact --predicate 'eventMessage CONTAINS "deny" OR eventMessage CONTAINS "ignition"' || true
+          sudo /usr/bin/log show --last 2m --info --debug --style compact --predicate '(eventMessage CONTAINS "true(" OR eventMessage CONTAINS "sandbox-exec(") AND (eventMessage CONTAINS "deny" OR eventMessage CONTAINS "ignition")' || true
           node --input-type=module -e 'import fs from "node:fs"; for (const dir of [process.env.HOME + "/Library/Logs/DiagnosticReports", "/Library/Logs/DiagnosticReports"]) { if (!fs.existsSync(dir)) continue; for (const file of fs.readdirSync(dir).filter(x => /^(true|sandbox-exec).*\.ips$/.test(x))) { const text = fs.readFileSync(dir + "/" + file,"utf8"); try { const r = JSON.parse(text.slice(text.indexOf("\n") + 1)); console.log(JSON.stringify({file,exception:r.exception,termination:r.termination,asi:r.asi,triggered:r.threads?.filter(t=>t.triggered)})); } catch { console.log("Probe crash report could not be parsed: " + file); } } }'
           exit 1
       - name: CLI tests including outside-write, secret-read and network confinement
