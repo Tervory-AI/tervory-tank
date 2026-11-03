@@ -200,3 +200,49 @@ def test_event_pairs_have_independent_measured_lag_histories():
         assert stats['lag_median'] == lag and stats['current'] is not None
         measured_lags.append(stats['lag_median'])
     assert measured_lags == [14, 35]
+
+
+@pytest.mark.asyncio
+async def test_curve_is_binned_tenant_scoped_zero_cost_and_never_uses_planner(database, monkeypatch):
+    import json
+    from contextlib import asynccontextmanager
+    import httpx
+    from fastapi import FastAPI
+    import command
+    import market_lab_ml3 as tank
+    from core.ml3 import build_router
+    from core.ledger import PostgresLedger
+    from test_market_lab_ml5 import original
+    owner = str(database.actor.tenant_id)
+    async with database.pool.acquire() as conn:
+        ledger = PostgresLedger(conn)
+        await ledger.apply_schema()
+        for confidence, outcome in ((.1, 'miss'), (.8, 'hit')):
+            row, resolved = original()
+            row['confidence'] = confidence
+            resolved.update(confidence=confidence, outcome=outcome)
+            await ledger.save_prediction(row)
+            await ledger.save_prediction(resolved)
+        @asynccontextmanager
+        async def context(): yield ledger
+        app = FastAPI()
+        app.include_router(build_router(key_ok=lambda key: key == 'placeholder-room', ledger_context=context, engine='ffl'))
+        async def corridor(operation, tenant):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://placeholder') as http:
+                reply = await http.post('/market/ml3/' + operation, json={'tenant_id': str(tenant)},
+                                        headers={'x-tank-key': 'placeholder-room'})
+                assert reply.status_code == 200
+                return reply.json()
+        monkeypatch.setattr(tank, 'room', corridor)
+        reply = await database.client.get('/v1/market-lab/reads/calibration.curve')
+        assert reply.status_code == 200
+        data = reply.json()
+        assert data['total'] == 1 and data['cost_usd'] == 0
+        bins = data['records'][0]['bins']
+        assert [(b['mean_confidence'], b['realised_rate'], b['count']) for b in bins] == [(.1, 0, 1), (.8, 1, 1)]
+        receipt = await database.pool.fetchrow('SELECT model,cost_usd,tenant_id FROM tank.ledger WHERE id=$1', UUID(data['ledger_id']))
+        assert receipt['model'] == 'code' and receipt['cost_usd'] == 0 and str(receipt['tenant_id']) == owner
+        other = await database.client.get('/v1/market-lab/reads/calibration.curve', headers={'x-placeholder-tenant': str(uuid4())})
+        assert other.json()['total'] == 0
+        answer = await command.route_turn(database.actor, [{'role': 'user', 'content': 'market_lab.calibration.curve'}])
+        assert json.loads(answer.content)['actions'] == [{'tool': 'market_lab.calibration.curve', 'arguments': {'limit': 20, 'page': 0}}]
