@@ -25,13 +25,22 @@ def session_id(token):
 
 
 def public_line(line):
-    return {k: line[k] for k in ('id', 'product_id', 'title', 'quantity', 'price', 'currency', 'kind', 'delivery')}
+    result = {k: line[k] for k in ('id', 'product_id', 'title', 'quantity', 'price', 'currency', 'kind', 'delivery')}
+    if line.get('unavailable'):
+        result['unavailable'] = True
+    if line.get('previous'):
+        result['previous'] = {key: line['previous'][key] for key in ('price', 'delivery')}
+    return result
 
 
 def public_checkout(row):
     result = {k: row[k] for k in ('id', 'state', 'expires_at')}
     if row['state'] == 'pending':
         result['checkout_url'] = row['remote']['url']
+    result['payment_confirmed'] = bool(row.get('paid_order_id'))
+    if row.get('remote'):
+        result.update(total=row.get('paid_total', row['remote']['total']), currency=row['remote']['currency'],
+                      number=row.get('paid_order_number', row['remote']['id']))
     if row.get('late_payment'):
         result['late_payment'] = True
     return result
@@ -77,11 +86,11 @@ class Cart:
             previous = await self.store.commerce_config(tenant)
             await self.store.save_commerce_config(tenant, {**previous, 'mode': 'quote'})
             return {'saved': True}
+        previous = await self.store.commerce_config(tenant)
+        config = {**previous, 'products': {}, 'delivery': {}, **config}
         if config.get('region') != 'US' or not config.get('vault_name') or not isinstance(config.get('products'), dict):
             raise CommerceError('config')
-        config = {**config, 'delivery': delivery(config.get('delivery'))}
-        if not config['delivery']:
-            raise CommerceError('delivery')
+        config = {**config, 'delivery': delivery(config['delivery']) if config['delivery'] else {}}
         # Reject supplier fields, card details and arbitrary platform payloads.
         for product in config['products'].values():
             if not isinstance(product, dict) or set(product) - {'product_id', 'variant_id'}:
@@ -92,10 +101,42 @@ class Cart:
             await self.store.save_commerce_config(tenant, config)
         return {'saved': True}
 
-    async def view(self, tenant, token):
-        await self.config(tenant)
-        row = await self.rows.get(tenant, session_id(token)) or {'lines': [], 'checkout': None}
-        return {'lines': [public_line(line) for line in row['lines']], 'checkout_id': row.get('checkout')}
+    async def view(self, tenant, token, *, product_id=None, recheck=False):
+        config = await self.config(tenant)
+        identity = session_id(token)
+        async with self.rows.lock(tenant, identity) as rows:
+            row = await rows.get(tenant, identity) or {'lines': [], 'checkout': None}
+            if recheck:
+                old = await self.rows.get(tenant, row['checkout']) if row.get('checkout') else None
+                if old and old['state'] != 'expired':
+                    raise CommerceError('cart_locked')
+                platform = await self.platform(tenant, config)
+                updated, state = [], 'unchanged'
+                for line in row['lines']:
+                    try:
+                        fresh = await self._line(tenant, config, platform, line['product_id'], line['quantity'],
+                                                 line['kind'] == 'back_order')
+                        fresh['id'] = line['id']
+                        if any(fresh[key] != line[key] for key in ('price', 'delivery', 'kind')):
+                            fresh['previous'] = {key: line[key] for key in ('price', 'delivery')}
+                            if state != 'unavailable':
+                                state = 'changed'
+                    except CommerceError as exc:
+                        if str(exc) not in {'stock', 'product'}:
+                            raise
+                        fresh = {**line, 'unavailable': True}
+                        state = 'unavailable'
+                    updated.append(fresh)
+                await self.rows.release(tenant, row['lines'], self.clock())
+                row.update(lines=updated, checkout=None, recheck_state=state)
+                await rows.put(tenant, identity, row)
+        result = {'lines': [public_line(line) for line in row['lines']], 'checkout_id': row.get('checkout'),
+                  'recheck_state': row.get('recheck_state')}
+        if product_id is not None:
+            preview = await self._line(tenant, config, await self.platform(tenant, config), product_id, 1, True)
+            result['product'] = public_line(preview)
+            await self.rows.release(tenant, [preview], self.clock())
+        return result
 
     async def _line(self, tenant, config, platform, sku, quantity, back_order=False):
         if type(quantity) is not int or not 1 <= quantity <= 100:
@@ -108,8 +149,12 @@ class Cart:
         line = {'id': 'li_' + secrets.token_hex(16), 'product_id': sku, 'title': product['name'],
                 'quantity': quantity, 'currency': product['currency']}
         mapping = config['products'].get(sku)
+        if mapping is None and hasattr(platform, 'product_mapping'):
+            mapping = await platform.product_mapping(sku)
         stock = await platform.stock(mapping) if mapping else None
         if stock and stock['available'] and (stock['quantity'] is None or stock['quantity'] >= quantity):
+            if not config['delivery']:
+                raise CommerceError('delivery')
             line.update(kind='stock', delivery=config['delivery'], price=stock['price'], platform_product=mapping)
             private = {'kind': 'stock'}
         else:
@@ -138,8 +183,6 @@ class Cart:
                 line['hold_id'] = checked['hold_id']
             elif available['public']['status'] == 'unavailable' and back_order is True:
                 # Back-order is explicit; price comes from the store's own public product.
-                if not needs_supply(product):
-                    raise CommerceError('stock')
                 shown = await self.service.product(tenant, sku)
                 if shown['price']['currency'] != line['currency']:
                     raise CommerceError('currency')
@@ -244,7 +287,8 @@ class Cart:
                 or money(order['merchandise']) != row['remote']['merchandise']
                 or order['currency'] != row['remote']['currency']):
             raise CommerceError('order_mismatch')
-        row.update(state='paid_pending', paid_order_id=order['order_id'], paid_total=money(order['total']),
+        row.update(state='paid_pending', paid_order_id=order['order_id'],
+                   paid_order_number=order.get('number', order['order_id']), paid_total=money(order['total']),
                    late_payment=self.clock() >= stamp(row['expires_at']))
 
     async def _fulfil(self, tenant, row):
