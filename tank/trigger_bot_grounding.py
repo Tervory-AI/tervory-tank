@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -16,7 +17,54 @@ from semantic_cache import NUMBER
 PASSAGE_THRESHOLD = 0.35
 FAQ_THRESHOLD = 0.92
 MAX_PASSAGES = 6
-PRICE_OR_STOCK = re.compile(r"\b(price|prices|cost|costs|stock|available|availability|inventory)\b|how much|[$£€]", re.IGNORECASE)
+CURRENCY = r'(?:[A-Z]{3}|R|[$£€]|(?i:rand|dollars?|euros?|pounds?))'
+AMOUNT = r'(?<![\w.])\d+(?:[, ]\d{3})*(?:\.\d+)?(?![\w.])'
+MONEY = re.compile(r'(?P<prefix>' + CURRENCY + r')\s*(?P<value>\d+(?:[, ]\d{3})*(?:\.\d+)?)(?!\w)|(?P<amount>' + AMOUNT + r')\s*(?P<suffix>' + CURRENCY + r')(?!\w)')
+PRICE_OR_STOCK = re.compile(
+    r'\b(price|prices|cost|costs|stock|available|availability|inventory)\b|how much|[$£€]'
+    r'|\b(?:sold out|out of stock|back[ -]?order|in stock|low stock)\b'
+    r'|\b(?:R|[A-Z]{3})\s*\d|\d[\d,. ]*\s*(?:[A-Z]{3}|rand|dollars?|euros?|pounds?)\b',
+    re.IGNORECASE)
+DATES = re.compile(r'\b(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?|Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|today|tomorrow|yesterday|tonight|weekends?|(?:next|last|this)\s+(?:week|month|year|day)|now|soon|later)\b', re.IGNORECASE)
+
+
+def decimal(value):
+    return Decimal(value.replace(',', '').replace(' ', ''))
+
+
+def money(text):
+    aliases = {'rand': 'ZAR', 'dollar': 'USD', 'dollars': 'USD', '$': 'USD',
+               'euro': 'EUR', 'euros': 'EUR', '€': 'EUR', 'pound': 'GBP', 'pounds': 'GBP', '£': 'GBP'}
+    return {(decimal(m['value'] or m['amount']), aliases.get((m['prefix'] or m['suffix']).lower(),
+             m['prefix'] or m['suffix'])) for m in MONEY.finditer(text)}
+
+
+def numeric_evidence(answer, cited):
+    source = ' '.join(p.text for p in cited)
+    supported = {decimal(m.group()) for m in re.finditer(AMOUNT, source)}
+    if any(decimal(m.group()) not in supported for m in re.finditer(AMOUNT, answer)):
+        return False
+    supported_money = set()
+    zar = False
+    for passage in cited:
+        supported_money.update(money(passage.text))
+        if passage.kind == 'rig':
+            try:
+                record = json.loads(passage.text)
+                currency = record.get('currency')
+                if currency and record.get('price') is not None:
+                    supported_money.add((decimal(str(record['price'])), currency))
+                    zar |= currency == 'ZAR'
+            except (ValueError, TypeError, AttributeError):
+                pass
+    for value, currency in money(answer):
+        if currency == 'R':
+            if not zar:
+                return False
+            currency = 'ZAR'
+        if (value, currency) not in supported_money:
+            return False
+    return True
 
 
 @dataclass(frozen=True)
@@ -74,15 +122,10 @@ def grounded(output: Any, passages: list[Passage]) -> tuple[str, list[Passage]] 
             return None
         by_id = {str(p.id): p for p in passages}
         cited = [by_id[value] for value in dict.fromkeys(ids)]
-        supported = {v.casefold() for v in NUMBER.findall(" ".join(p.text for p in cited))}
-        if any(v.casefold() not in supported for v in NUMBER.findall(answer)):
+        if not numeric_evidence(answer, cited):
             return None
-        dates = re.compile(r"\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|today|tomorrow|yesterday|January|February|March|April|May|June|July|August|September|October|November|December)\b", re.IGNORECASE)
         source_text = ' '.join(p.text for p in cited).casefold()
-        if not {token.casefold() for token in dates.findall(answer)} <= {token.casefold() for token in dates.findall(source_text)}:
-            return None
-        currencies = re.compile(r"[$£€]|(?<![A-Za-z])(?:[A-Z]{3}|R)(?=\s*\d|\b)")
-        if not set(currencies.findall(answer)) <= set(currencies.findall(' '.join(p.text for p in cited))):
+        if not {token.casefold() for token in DATES.findall(answer)} <= {token.casefold() for token in DATES.findall(source_text)}:
             return None
         # The engine owns links. A model cannot introduce a destination or a raw citation URL.
         if re.search(r"https?://|\]\(", answer, re.IGNORECASE):
