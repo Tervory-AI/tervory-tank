@@ -1,6 +1,9 @@
 """Client repo scans: real Command confirmation, upload ownership and code receipts."""
 import base64
 import io
+import importlib.util
+import sys
+from pathlib import Path
 import json
 import uuid
 import zipfile
@@ -12,7 +15,6 @@ import pytest_asyncio
 from fastapi import FastAPI, HTTPException
 
 import command
-import main as real_tank
 from test_command import TENANT, OTHER, runtime as runtime, command_pool as command_pool, api as api
 from test_radix_iac import fake_checkov as fake_checkov
 from test_rx1_scans import Ctx, _dirty, _tar, FIXTURE
@@ -24,6 +26,13 @@ JOB = uuid.UUID('33333333-3333-4333-8333-333333333333')
 @pytest_asyncio.fixture
 async def repo_api(api, runtime, monkeypatch):
     client, pool = api
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://postgres@127.0.0.1:55435/placeholder_test')
+    monkeypatch.setenv('LITELLM_MASTER_KEY', 'placeholder-unused')
+    monkeypatch.setenv('TANK_API_KEY', 'placeholder-unused')
+    spec = importlib.util.spec_from_file_location('placeholder_r5_tank', Path('tank/main.py'))
+    real_tank = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, real_tank)
+    spec.loader.exec_module(real_tank)
     runtime.pool = lambda: pool
     runtime.RouteRequest = real_tank.RouteRequest
     runtime._record_local = real_tank._record_local
