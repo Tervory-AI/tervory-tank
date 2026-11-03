@@ -2485,6 +2485,11 @@ CREATE TABLE IF NOT EXISTS tank.trigger_bot_config (
  handover_email text, origins jsonb NOT NULL DEFAULT '[]',
  operation_id uuid, updated_at timestamptz NOT NULL DEFAULT now()
 );
+-- Founder retention decision, 2026-11-03: last message + 12 calendar months.
+CREATE INDEX IF NOT EXISTS trigger_bot_message_age ON tank.trigger_bot_messages(tenant_id,conversation_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS trigger_bot_draft_conversation ON tank.trigger_bot_drafts(tenant_id,conversation_id);
+CREATE INDEX IF NOT EXISTS trigger_bot_retention_runs ON tank.ledger(tenant_id,ts DESC)
+ WHERE task_type='trigger.bot.retention';
 CREATE TABLE IF NOT EXISTS tank.trigger_bot_embed_keys (
  tenant_id uuid NOT NULL, key_hash text NOT NULL, region text NOT NULL,
  origins jsonb NOT NULL, revoked boolean NOT NULL DEFAULT false,
