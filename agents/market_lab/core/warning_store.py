@@ -40,11 +40,13 @@ async def series(ledger: PostgresLedger, tenant: str, now: datetime) -> dict[str
     )
     collected = {}
     weather = {}
+    weather_title = None
     for record in records:
         doc = decoded(record["content"])
         if doc.get("kind") == "warning_evidence":
             continue
         if doc.get("source_id") == "noaa_alerts":
+            weather_title = doc["name"]
             for index, event in enumerate(doc.get("events") or []):
                 stamp = str(event["date"])[:10]
                 if event.get("kind") != "severe_weather" or stamp > now.date().isoformat():
@@ -86,8 +88,7 @@ async def series(ledger: PostgresLedger, tenant: str, now: datetime) -> dict[str
             }
     if weather:
         # Missing collection days remain missing; no zero counts are invented.
-        from feeds.catalog import sources
-        title = next(spec.name for spec in sources("ffl") if spec.id == "noaa_alerts")
+        title = weather_title
         identity = "noaa_alerts:severe_weather:US"
         collected[identity] = {
             "id": identity, "source": "noaa_alerts", "ref": "severe_weather:US",
