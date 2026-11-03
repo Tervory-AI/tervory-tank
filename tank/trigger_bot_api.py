@@ -127,8 +127,8 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
-async def authority(actor, operation):
-    actor = await command.authorized_actor(actor)
+async def authority(actor, operation, conn=None):
+    actor = await command.authorized_actor(actor, conn)
     if not (actor.founder or actor.tenant_admin):
         raise HTTPException(403, 'This tool is not available to this user')
     command.require_tool(actor, 'trigger.bot.' + operation)
@@ -150,11 +150,11 @@ async def plan(actor, text, task_id):
                            ledger_id=await code_receipt(actor.tenant_id, 'command.turn', task_id=task_id))
 
 
-async def prepare(action, actor, state):
+async def prepare(action, actor, state, conn=None):
     operation = action.tool.removeprefix('trigger.bot.')
-    await authority(actor, operation)
+    await authority(actor, operation, conn)
     values = dict(action.arguments)
-    pool = runtime().pool()
+    pool = conn if conn is not None else runtime().pool()
     if operation == 'source.add' and values['kind'] == 'document':
         attachments = [a for m in state['messages'] if m['role'] == 'user'
                        for a in m.get('attachments', []) if a.get('name') == values['attachment_name']]
