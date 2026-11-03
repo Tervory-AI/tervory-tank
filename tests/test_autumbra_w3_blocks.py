@@ -327,3 +327,44 @@ async def test_tank_share_uses_existing_publish_policy_and_requires_confirm(monk
             assert sql.log == ['disabled', 'published']
         finally:
             CONFIRMED.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_live_epoch_applied_time_and_public_sources_only(standing):
+    s = standing
+    s.queues[A].write_receipt({'id': RID, 'tenant_id': A, 'applied': True,
+        'address': IP, 'timestamp': iso(NOW),
+        'applied_record': {'kind': 'block_ip', 'applied_at': NOW - 25 * 3600},
+        'source_url': 'https://www.cisa.gov/catalog?placeholder_private=customer'})
+    row = (await s.service.reconcile(A))[0]
+    fact = json.loads(row['claim'])
+    assert fact['applied_at'] == iso(NOW - 25 * 3600)
+    assert fact['public_sources'] == []
+    assert 'placeholder_private' not in json.dumps(s.memory.writes)
+
+
+@pytest.mark.asyncio
+async def test_approval_linked_undo_prevents_standing_record(standing):
+    s = standing
+    s.queues[A].write_receipt({'id': RID, 'prior_receipt_id': B, 'tenant_id': A,
+        'applied': True, 'address': IP, 'timestamp': iso(NOW - 25 * 3600),
+        'applied_record': {'kind': 'block_ip'}})
+    mark_undo_used(s.queues[A], prior_receipt_id=B, tenant_id=A)
+    assert await s.service.reconcile(A) == [] and not s.memory.writes
+
+
+@pytest.mark.asyncio
+async def test_existing_memory_client_pages_without_recall():
+    from chassis.memory import MemoryClient
+    offsets = []
+    def api(request):
+        assert request.url.path == '/records' and request.method == 'GET'
+        assert request.headers['X-Tank-Key'] == 'placeholder-memory-key'
+        offset = int(request.url.params['offset'])
+        offsets.append(offset)
+        count = 200 if offset == 0 else 1
+        return httpx.Response(200, json={'memories': [{'id': 'placeholder-' + str(offset + i)} for i in range(count)]})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(api)) as http:
+        memory = MemoryClient(base_url='http://placeholder', api_key='placeholder-memory-key', http=http)
+        assert len(await memory.records(A)) == 201
+    assert offsets == [0, 200]
