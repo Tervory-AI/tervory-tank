@@ -124,7 +124,7 @@ async def proposal(env, text, *, tenant=TENANT, user='founder', role='', thread=
         assert response.status_code == 200, response.text
         thread = response.json()['thread_id']
     before = (await env.client.get(f'/v1/command/threads/{thread}', headers=h)).json()
-    known = {c['card_id'] for c in before['cards']}
+    known = {c.get('card_id') for c in before['cards']}
     response = await env.client.post(f'/v1/command/threads/{thread}/turn', json={'text': text}, headers=h)
     assert response.status_code == 200
     snapshot = (await env.client.get(f'/v1/command/threads/{thread}', headers=h)).json()
