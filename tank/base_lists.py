@@ -1,5 +1,4 @@
 """Tenant-only Base find and immutable list snapshots. Code, never enrichment/model work."""
-from __future__ import annotations
 
 import json
 from datetime import date, datetime, timezone
@@ -193,7 +192,7 @@ def build_router() -> APIRouter:
         confirmation(actor, "base.list.save", args.model_dump(mode="json", exclude_none=True))
         filters = FindArgs.model_validate(args.model_dump(exclude={"name"}))
         saved = await store().save(actor.tenant_id, args.name, filters)
-        return await result(actor, "base.list.save", {**saved, "url": "/base/download?list_id=" + str(saved["list_id"])})
+        return await result(actor, "base.list.save", {**saved, "url": "https://app.tervory.com/base/download?list_id=" + str(saved["list_id"])})
 
     @router.get("")
     async def lists(actor: Actor = Depends(identity)):
@@ -211,7 +210,7 @@ def build_router() -> APIRouter:
         require_tool(actor, "base.list.export")
         saved = await store().show(actor.tenant_id, list_id)
         return await result(actor, "base.list.export", {"total": len(saved["records"]),
-                            "url": "/base/download?list_id=" + str(list_id)})
+                            "url": "https://app.tervory.com/base/download?list_id=" + str(list_id)})
 
     @router.get("/csv")
     async def csv(list_id: UUID, actor: Actor = Depends(identity)):
@@ -230,6 +229,11 @@ def build_router() -> APIRouter:
         ids = list(dict.fromkeys(str(value) for value in args.record_ids))
         if any(identity not in rows for identity in ids):
             raise HTTPException(404, "Not found")
-        return await result(actor, "base.list.to_crm", {"records": await send(actor, [rows[value] for value in ids])})
+        # Serialize our sends for a tenant so simultaneous confirmed cards see
+        # each other's completed leads when they check for duplicates.
+        async with db().acquire() as conn, conn.transaction():
+            await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", str(actor.tenant_id))
+            sent = await send(actor, [rows[value] for value in ids])
+        return await result(actor, "base.list.to_crm", {"records": sent})
 
     return router
