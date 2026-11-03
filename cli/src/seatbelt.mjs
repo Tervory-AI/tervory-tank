@@ -33,6 +33,8 @@ export async function seatbeltProfile(root, mounts = []) {
 (allow system-mac-syscall (require-all (mac-policy-name "Sandbox") (mac-syscall-number 67)))
 (allow file-read-metadata (path-ancestors "/System/Volumes/Data/private"))
 (allow file-read-metadata ${roots.map(path => `(path-ancestors ${quote(path)})`).join(' ')})
+; dyld opens the root directory while finding its shared cache; no descendants are granted.
+(allow file-read-data (literal "/"))
 (allow file-read-metadata (literal "/") (literal "/dev") (literal "/private") (literal "/private/var"))
 (allow file-read* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/random") (literal "/dev/urandom"))
 (allow file-read* file-write-data (subpath "/dev/fd"))
