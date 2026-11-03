@@ -15,15 +15,15 @@ Written by Claude on 1 Nov 2026 so that the three Tisan threads (sections, build
 
 The founder approved the short section designs on 3 November. The following limit revisions and redrawn max/optional states are **Changed after approval, awaiting founder** in Figma page `197:9`; unchanged specimens remain **Approved 3 Nov**. Sections, builder and publish consume this same manifest; no schema version, required field, optional slot, URL rule, minimum count or source-of-copy rule changes.
 
-| Content | Maximum characters |
-| --- | ---: |
-| Navigation label; footer link label | 40 |
-| Footer text | 600 |
-| Hero and all section headings | 80 |
-| Section body / intro | 600 |
-| Item title / product name | 80 |
-| Item body | 400 |
-| FAQ answer | 800 |
+| Content                             | Maximum characters |
+| ----------------------------------- | -----------------: |
+| Navigation label; footer link label |                 40 |
+| Footer text                         |                600 |
+| Hero and all section headings       |                 80 |
+| Section body / intro                |                600 |
+| Item title / product name           |                 80 |
+| Item body                           |                400 |
+| FAQ answer                          |                800 |
 
 Maximum counts: nav 8; footer links 12; features 12; products 12; steps 8; FAQ 20; gallery 12. Other bounds stay unchanged, including FAQ questions, CTA/UI labels and alt attributes (200), media sources (1000), link destinations (500), and the two-step minimum. `scripts/content-check.cjs` reads the manifest directly; its boundary tests accept each revised limit and reject one character/item over.
 
