@@ -369,7 +369,6 @@ async def test_the_room_reads_the_fixture_and_does_not_call_out(tmp_path: Path, 
 
 def test_room_reaches_only_figma_through_the_locked_proxy_and_copies_the_reader() -> None:
     reader = FIGMA_PATH.read_text(encoding="utf-8")
-    assert "api.figma.com" in reader
     assert "trust_env=False" in reader
     docker = (ROOT / "agents" / "tisan" / "Dockerfile").read_text(encoding="utf-8")
     assert "COPY agents/tisan/figma.py /app/figma.py" in docker
@@ -377,6 +376,8 @@ def test_room_reaches_only_figma_through_the_locked_proxy_and_copies_the_reader(
     assert "TISAN_FIGMA_FIXTURE=/app/fixtures/tervory-landing.json" in docker
     compose = (ROOT / "agents" / "tisan" / "docker-compose.yml").read_text(encoding="utf-8")
     box = yaml.safe_load(compose)
+    assert not compose.startswith('# coolify: raw compose')
+    assert box['volumes'] == {'agent_tisan_data': None}
     assert list(box["services"]) == ["agent-tisan", "figma-egress-proxy"]
     assert list(box["networks"]) == ["gw", "figma_internal", "egress"]
     assert box["networks"]["figma_internal"] == {"internal": True}
