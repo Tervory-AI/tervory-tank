@@ -39,6 +39,8 @@ Base skills use their own authenticated browser for every execution context, inc
 - `tests/test_b3_base_room.py:317-318`: old browser corridor assertions become old-service absence and Tank OCR attachment; obsolete Base DNS/network inventory expectations also updated.
 - `tests/test_room_seal.py`: OCR is a sealed raw-mode service. Fixture passes with its one internal network and returns `LEAK` for either extra internal or extra outbound attachment.
 - `tests/test_deploy_changed.py`: all four Tiger image-source paths deploy the Tiger room, with combined Tank changes still deploying main.
+- `tests/test_agent_chassis.py:574-576`: remove one further obsolete indexing of the removed main service and assert its absence.
+- `tests/test_base_public_http.py:206`: give the existing context fixture its real tenant field so the shared browser helper has the same contract as production.
 - `tests/test_seal_hardening_routes.py`: both specified Base versions actually execute a render-required preview, eval and Base-room run against mocked HTTP, with Base headers; no render goes to OCR. The OCR skill reaches its new `/ocr` URL.
 
 ## Verification status — not acceptance
@@ -53,7 +55,10 @@ Exact commands/results and raw logs are recorded in `VERIFICATION.txt` once the 
 - First Compose proof: network denials passed; price comparison failed because the OCR image does not contain Tank's `selectolax` dependency. The probe now parses on the test runner with Tank's pinned existing dependency.
 - Second Compose proof: network denials passed; OCR comparison exceeded its 30-second probe request timeout on the busy host. Probe-only timeout now allows 120 seconds; production timeouts are unchanged.
 - Third Compose proof: OCR exited at startup. Diagnostics were not retained by that run; the probe now captures its disposable service logs before cleanup on failure.
-- Full Tank offline suite: running; failures and a timed-out worker have been observed. **No green full-suite result is claimed.**
+- First full Tank attempt: main **3,823 passed, 7 failed, 8 skipped, 1 error**; the crashed worker stopped the main run early. Separate Tiger G5 **46 passed**; Zenas alerts **40 passed**. Full run exited 1 in 2,031 seconds. The stale chassis assertion was corrected; other diagnostics are retained.
+- Broader related run: **884 passed, 5 failed, 5 skipped**. One context fixture was missing its tenant field (corrected); four Tiger tests could not drop a role with dependencies left in a worker database after the interrupted full attempt. Fresh disposable Postgres rerun of that entire Tiger competitors file: **86 passed**. Corrected Base context plus routing rerun: **8 passed**. Nested Tiger suites: **68 passed, 1 skipped**.
+- Final full Tank offline rerun on fresh disposable Postgres, started at code head `6bf2b719737980f17b90d3da2b70d667c279dc68`: running. **No green full-suite result is claimed yet.**
+- Final local execution of the CI Compose test: **passed**. All **109 existing PNG cases** returned identical skill results, including **44 with prices**. OCR, agent, browser, gateway, Base and other-corridor network probes passed. Peak **309,702,656 bytes** (295.36 MiB), below `mem_limit: 1g`; `shm_size: 256m`. The cached main-head image's three application source hashes match this branch exactly. Test containers and networks were removed.
 - CI Compose peak memory: **pending**. No peak is invented. Claude opens the PR; this new workflow runs on that PR, and its log/peak must be added here.
 
 Main was merged before every push. Fresh main `8299ff94` merged cleanly, preserving both sides, while verification was in progress. Final-head verification is still required after all changes finish.
