@@ -87,6 +87,7 @@ def test_agent_compose_is_one_corridor_with_a_limit_and_a_healthcheck(
     assert proxy["mem_limit"] == "128m" and proxy["cpus"] == 0.25
     assert "allowed = 'api.figma.com'" in proxy["command"][-1]
     assert "allow_storage=False, require_sni=True" in proxy["command"][-1]
+    assert "max_response_bytes=5_000_000" in proxy["command"][-1]
     assert box["networks"]["gw"]["external"] is True
     assert box["networks"]["gw"]["name"] == corridor
     spec = box["services"][service]
