@@ -54,7 +54,8 @@ def verified(item: Any) -> bool:
 def sourced_products(value: Any) -> list[dict]:
     if not isinstance(value, list):
         return []
-    return [product for product in value if isinstance(product, dict)
+    return [{**product, "source_url": public_url(product.get("source_url")),
+             "url": public_url(product.get("url"))} for product in value if isinstance(product, dict)
             and public_url(product.get("source_url"))
             and isinstance(product.get("checked_at"), str) and product["checked_at"].strip()]
 
@@ -95,15 +96,16 @@ def project(row: dict) -> dict:
     # Categories not explicitly verified stay unavailable to filters/exports.
     if "engine_category" not in fields and verified(profile.get("categories")):
         fields["engine_category"] = profile["categories"]
-    products = profile.get("products")
-    products = sourced_products(products.get("value") if isinstance(products, dict) else products)
-    if products:
-        fields["products"] = field(products, public_url(products[0]["source_url"]), products[0]["checked_at"])
     tier = profile.get("tier") or {}
     inputs = [item for item in fields.values() if verified(item)]
     if tier.get("source") == "verify" and passes.get("7") and inputs:
         fields["confidence_tier"] = {**field(tier.get("value"), inputs[0]["source_url"], str(row["updated_at"])),
                                      "source": "base.verify", "inputs": inputs}
+    products = profile.get("products")
+    products = sourced_products(products.get("value") if isinstance(products, dict) else products)
+    if products:
+        oldest = min(products, key=lambda p: p["checked_at"].strip()[:10])
+        fields["products"] = field(products, public_url(oldest["source_url"]), oldest["checked_at"])
     return {"record_id": str(row["id"]), "name": (fields.get("name") or {}).get("value"),
             "licence_key": reference.get("licence_key"),
             "state": (fields.get("state") or {}).get("value"),
@@ -277,7 +279,7 @@ def preview(rows: list[dict]) -> dict:
         # or passive-detector internals. The saved/exported snapshot stays full.
         fields = {key: {part: item.get(part) for part in
                        ("value", "source_url", "checked_at", "confidence", "verified", "reason")}
-                  for key, item in row["fields"].items() if isinstance(item, dict)}
+                  for key, item in row["fields"].items() if isinstance(item, dict) and key != "products"}
         records.append({**row, "fields": fields, "summary": json.dumps(fields, ensure_ascii=False)})
     return {"total": len(rows), "records": records}
 
@@ -317,14 +319,16 @@ def build_router() -> APIRouter:
     async def show(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.list.show")
         saved = await store().show(actor.tenant_id, list_id)
-        costs = list_costs(await store().ledger(actor.tenant_id, saved["records"]))
+        costs = list_costs(await store().ledger(actor.tenant_id, saved["records"]),
+                           record_ids=[row["record_id"] for row in saved["records"]])
         return await result(actor, "base.list.show", {"name": saved["name"], **preview(saved["records"]), **costs})
 
     @router.get("/export")
     async def export(list_id: UUID, actor: Annotated[Actor, Depends(identity)]):
         require_tool(actor, "base.list.export")
         saved = await store().show(actor.tenant_id, list_id)
-        costs = list_costs(await store().ledger(actor.tenant_id, saved["records"]))
+        costs = list_costs(await store().ledger(actor.tenant_id, saved["records"]),
+                           record_ids=[row["record_id"] for row in saved["records"]])
         return await result(actor, "base.list.export", {"total": len(saved["records"]), **costs,
                             "url": "https://app.tervory.com/base/download?list_id=" + str(list_id)})
 
