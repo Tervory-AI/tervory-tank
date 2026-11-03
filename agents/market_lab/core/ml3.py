@@ -9,6 +9,7 @@ from core.intel import PLATFORM, latest
 from core.warnings import listing
 from core.warning_bridge import call
 from feeds.catalog import sources
+from feeds.keys import key_name_for
 
 
 class Read(BaseModel):
@@ -46,7 +47,7 @@ def build_router(*, key_ok, ledger_context, engine):
                         "misses": sum(r.get("outcome") == "miss" for r in rows)}
             if operation == "feeds":
                 result = await overview(ledger, tenant, engine)
-                names = {s.id: s.key_name for s in sources(engine)}
+                names = {s.id: key_name_for(s) for s in sources(engine)}
                 # Bound-key URLs and configuration values never leave this read.
                 feeds = [{**{k: f.get(k) for k in ("id", "name", "state", "rows", "checked_at", "document_id")},
                           "key_name": names.get(f["id"], "")} for f in result["feeds"]]
