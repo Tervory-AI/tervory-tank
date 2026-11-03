@@ -61,7 +61,7 @@ async def database():
         await conn.execute(store.DDL)
         from scanlib.store import ensure_findings
         await ensure_findings(conn, 'agent_radix')
-        await conn.execute('TRUNCATE agent_radix.passive_scans,agent_radix.passive_domains,agent_radix.findings')
+        await conn.execute('TRUNCATE agent_radix.passive_watches,agent_radix.passive_scans,agent_radix.passive_domains,agent_radix.findings')
     yield store.Store(pool)
     await pool.close()
 
