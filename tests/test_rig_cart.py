@@ -7,7 +7,6 @@ import sys
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -20,6 +19,7 @@ from rigbox.commerce import CommerceError, Platform, signature
 from rigbox.locate import SupplyStore
 from rigbox.locate_live import LiveResult
 from rigbox.store import MemoryStore
+from rigbox.service import Service
 
 TENANT = '20000000-0000-0000-0000-000000000001'
 OTHER = '20000000-0000-0000-0000-000000000002'
@@ -111,7 +111,8 @@ async def setup(monkeypatch):
     client = httpx.AsyncClient(transport=httpx.MockTransport(fake))
     config = {'mode': 'cart', 'region': 'US', 'delivery': {'ship_days': 2}, 'platform': 'woocommerce',
               'site': 'https://store.example', 'vault_name': 'store-platform', 'products': {'stock': {'product_id': 1}}}
-    service = SimpleNamespace(store=store, locate_checker=Live())
+    service = Service(store)
+    service.locate_checker = Live()
     calls = []
 
     async def confirmed(tenant, payload):
