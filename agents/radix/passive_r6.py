@@ -292,7 +292,7 @@ async def collect(target, directory, *, previous=None, budget=None, run=command,
                     path = directory / ('download-' + str(number))
                     path.write_bytes(files[url])
                     rc, out, err = await run(['/usr/bin/clamscan','--no-summary','--max-filesize=1M',str(path)],
-                                            directory, min(30,budget.remaining()))
+                                            directory, min(90,budget.remaining()))
                     if rc in {137, -9} or (rc == 2 and any(word in err.lower() for word in
                             (b'memory', b'allocat', b'map failed'))):
                         raise MemoryError
