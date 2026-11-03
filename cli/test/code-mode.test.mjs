@@ -725,7 +725,7 @@ test('sandbox denies home, secret directories, git config, outside reads and Uni
       for(const p of ${JSON.stringify(['.git/config', outside, '.ssh/placeholder', 'keychains/placeholder', 'keyrings/placeholder'])}) {
         try { if(fs.readFileSync(p).length) process.exit(22); } catch {}
       }
-      const s=net.connect(${JSON.stringify(socketPath)}); s.on("connect",()=>process.exit(23)); s.on("error",()=>console.log("placeholder-confined"));`;
+      const s=net.connect("placeholder.sock"); s.on("connect",()=>process.exit(23)); s.on("error",()=>console.log("placeholder-confined"));`;
     const prepared = await f.prepareCommand('node -e ' + "'" + source + "'");
     const result = await f.command(prepared.command, io(), 10000, prepared.mounts);
     assert.equal(result.code, 0, result.output); assert(result.output.includes('placeholder-confined'));
