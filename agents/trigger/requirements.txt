@@ -1,1 +1,2 @@
 proselint==0.16.0
+twitter-text-parser==3.0.0
