@@ -2283,6 +2283,21 @@ INSERT INTO tank.policy(task_type,rung,model,cache_scope,max_tokens_out,eval_thr
 VALUES ('tisan.plan',1,'luna','tenant',3000,0.99,200,false)
 ON CONFLICT DO NOTHING;
 
+-- G3: founder-owned MCP approval registry (global, deliberately no tenant/RLS).
+CREATE TABLE IF NOT EXISTS tank.mcp_servers (
+    url text PRIMARY KEY,
+    name text NOT NULL,
+    allowed_tools jsonb NOT NULL CHECK (jsonb_typeof(allowed_tools)='object'),
+    approved_by text NOT NULL,
+    approved_at timestamptz NOT NULL DEFAULT now()
+);
+-- Existing vault row/RLS scope protects cached discovery and sealed OAuth state.
+-- Plugin status is deliberately unchanged; mcp_state has its own lifecycle.
+ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_state text NOT NULL DEFAULT 'not_approved'
+    CHECK (mcp_state IN ('not_approved','needs_sign_in','connected','sign_in_failed'));
+ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_tools jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_discovered_at timestamptz;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
@@ -2333,18 +2348,3 @@ CREATE TABLE IF NOT EXISTS agent_tank.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
-
--- G3: founder-owned MCP approval registry (global, deliberately no tenant/RLS).
-CREATE TABLE IF NOT EXISTS tank.mcp_servers (
-    url text PRIMARY KEY,
-    name text NOT NULL,
-    allowed_tools jsonb NOT NULL CHECK (jsonb_typeof(allowed_tools)='object'),
-    approved_by text NOT NULL,
-    approved_at timestamptz NOT NULL DEFAULT now()
-);
--- Existing vault row/RLS scope protects cached discovery and sealed OAuth state.
--- Plugin status is deliberately unchanged; mcp_state has its own lifecycle.
-ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_state text NOT NULL DEFAULT 'not_approved'
-    CHECK (mcp_state IN ('not_approved','needs_sign_in','connected','sign_in_failed'));
-ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_tools jsonb NOT NULL DEFAULT '[]'::jsonb;
-ALTER TABLE tank.vault_items ADD COLUMN IF NOT EXISTS mcp_discovered_at timestamptz;
