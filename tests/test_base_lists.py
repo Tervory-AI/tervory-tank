@@ -239,3 +239,50 @@ def test_rls_follows_personal_tokens_without_starting_rollout():
     assert "ENABLE ROW LEVEL SECURITY" in addition and "FORCE ROW LEVEL SECURITY" in addition
     assert "AS RESTRICTIVE FOR ALL TO PUBLIC" in addition
     assert "WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)" in addition
+
+
+@pytest.mark.asyncio
+async def test_find_get_returns_count_first_twenty_and_free_receipt(monkeypatch):
+    import command
+    actor = Actor(TENANT, "invented", False, frozenset({"base"}))
+    monkeypatch.setattr(command, "db", lambda: None)
+    app = FastAPI()
+    app.include_router(lists.build_router())
+    app.dependency_overrides[command.identity] = lambda: actor
+    async def find(self, tenant, filters):
+        assert tenant == TENANT and filters.state == "DC"
+        return [record() for _ in range(27)]
+    async def receipt(tenant, task):
+        assert tenant == TENANT and task == "base.find"
+        return str(uuid4())
+    monkeypatch.setattr(lists.Store, "find", find)
+    monkeypatch.setattr(lists, "receipt", receipt)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://fixture") as client:
+        response = await client.get("/v1/command/base/lists/find", params={"state": "DC", "tenant_id": str(OTHER)})
+        assert response.status_code == 200
+        result = response.json()
+        assert result["total"] == 27 and len(result["records"]) == 20
+        assert result["cost_usd"] == 0 and result["ledger_id"]
+        assert result["records"][0]["fields"]["email"]["source_url"] == URL
+        assert result["records"][0]["fields"]["email"]["checked_at"] == STAMP
+
+
+@pytest.mark.asyncio
+async def test_base_corridor_authority_requires_own_confirmed_card(monkeypatch):
+    import trigger_crm
+    from trigger_commands import CONFIRMED
+    base = Actor(TENANT, "invented", False, frozenset({"base"}))
+    async def authorized(actor):
+        return actor
+    monkeypatch.setattr(trigger_crm, "authorized_actor", authorized)
+    with pytest.raises(HTTPException):
+        await trigger_crm.authority(base)
+    token = CONFIRMED.set((TENANT, base.user_id, uuid4(), "base.list.to_crm", {}))
+    try:
+        assert await trigger_crm.authority(base) == base
+        with pytest.raises(HTTPException):
+            await trigger_crm.authority(Actor(OTHER, base.user_id, False, frozenset({"base"})))
+        with pytest.raises(HTTPException):
+            await trigger_crm.authority(Actor(TENANT, base.user_id, False, frozenset({"tiger"})))
+    finally:
+        CONFIRMED.reset(token)
