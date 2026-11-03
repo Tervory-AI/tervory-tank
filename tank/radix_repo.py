@@ -1,6 +1,4 @@
 """Client archive scans through Command confirmation and Radix's existing jobs."""
-from __future__ import annotations
-
 import base64
 from uuid import UUID
 
