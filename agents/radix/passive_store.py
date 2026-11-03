@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS agent_radix.passive_watches (
 );
 -- Follow personal_tokens: join an existing platform rollout, never start one.
 DO $$ BEGIN
- IF EXISTS (SELECT 1 FROM pg_class WHERE oid=to_regclass('tank.command_threads') AND relrowsecurity) THEN
+ IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
   ALTER TABLE agent_radix.passive_watches ENABLE ROW LEVEL SECURITY;
   ALTER TABLE agent_radix.passive_watches FORCE ROW LEVEL SECURITY;
   IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.passive_watches'::regclass AND polname='tenant_access') THEN
