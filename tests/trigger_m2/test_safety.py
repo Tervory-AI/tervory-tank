@@ -155,3 +155,49 @@ async def test_meta_transport_distinguishes_unsent_from_unknown_send(monkeypatch
 def test_malformed_graph_error_code_is_sanitised_failure(code):
     with pytest.raises(MetaFailure):
         Meta.result(httpx.Response(400, json={'error': {'code': code, 'message': 'placeholder error'}}))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('url', ['https://[', 'https://untrusted.invalid/placeholder', 'https://www.facebook.com/?access_token=placeholder-page-token'])
+async def test_bad_permalink_cannot_discard_known_published_id(monkeypatch, url):
+    import trigger_meta as module
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr(module, 'settings', lambda: {'client_secret': 'placeholder-app-secret'})
+    meta = Meta(None)
+    meta.bundle = AsyncMock(return_value=({}, {'page_token': 'placeholder-page-token'}))
+    meta.request = AsyncMock(side_effect=[{'id': PAGE+'_9001'}, {'permalink_url': url}])
+    result = await meta.publish(TENANT, PAGE, 'placeholder approved text', conn=None)
+    assert result == {'name': PAGE+'_9001', 'searchUrl': None}
+    assert meta.request.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_documented_boolean_revocation_response_is_accepted(monkeypatch):
+    import trigger_meta as module
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr(module, 'open_seal', lambda *unused: {'user_token': 'placeholder-user-token'})
+    meta = Meta(None)
+    meta.http = AsyncMock(return_value=httpx.Response(200, content=b'true'))
+    await meta.revoke(TENANT, uuid4(), 'placeholder-sealed')
+    meta.http.assert_awaited_once_with('DELETE', GRAPH+'me/permissions', headers={'Authorization': 'Bearer placeholder-user-token'})
+
+
+@pytest.mark.asyncio
+async def test_page_pagination_never_follows_provider_url_and_redacts_page_tokens(monkeypatch):
+    import trigger_meta as module
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr(module, 'settings', lambda: {'client_secret': 'placeholder-app-secret'})
+    meta = Meta(None)
+    meta.bundle = AsyncMock(return_value=({}, {'user_token': 'placeholder-user-token'}))
+    data = {'data': [{'id': PAGE, 'name': 'placeholder-page-token', 'access_token': 'placeholder-page-token', 'tasks': ['CREATE_CONTENT']}]}
+    meta._call = AsyncMock(return_value=data)
+    assert (await meta.pages(TENANT))[0]['name'] == ''
+    data['paging'] = {'next': 'https://untrusted.invalid/?access_token=placeholder-user-token', 'cursors': {'after': 'placeholder-after'}}
+    meta._call.reset_mock()
+    with pytest.raises(MetaFailure):
+        await meta.pages(TENANT)
+    assert meta._call.await_count == 2
+    assert all(call.args[2] == 'me/accounts' for call in meta._call.await_args_list)
