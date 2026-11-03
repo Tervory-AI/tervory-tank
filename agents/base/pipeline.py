@@ -439,10 +439,37 @@ async def enrich_one(
             "emails": val(profile, "emails", []),
             "people": val(profile, "people", []),
         }
+        # Preserve each contact's own observation. Raw licence phones are also
+        # checked, even when a site phone won the normal profile merge.
+        phone_inputs = []
+        observations = scr.get("_base_observations") or []
+        for number in list(val(profile, "phones", [])) + [val(profile, "phone")]:
+            if not number:
+                continue
+            page = next((page for page in observations if number in page.get("phones", [])), {})
+            source = profile.get("phone") if number == val(profile, "phone") else profile.get("phones")
+            phone_inputs.append({**(source or {}), "value": number,
+                                 **({"source": "site", "confidence": 80, "source_url": page.get("source_url"),
+                                     "checked_at": page.get("checked_at")} if page else {})})
+        for number in (raw_input.get("phone"), raw_input.get("voice_phone"), (engine_in or {}).get("phone")):
+            if number:
+                phone_inputs.append({"value": number, "source": "input", "confidence": 90,
+                                     "source_url": reference.get("source_url"), "checked_at": reference.get("checked_at")})
+        email_inputs = []
+        for email in val(profile, "emails", []):
+            page = next((page for page in observations if email.lower() in
+                         [str(item).lower() for item in page.get("emails", [])]), {})
+            email_inputs.append({**(profile.get("emails") or {}), "value": email,
+                                 "source_url": page.get("source_url"), "checked_at": page.get("checked_at")})
+        con_in.update(phones=phone_inputs, country=val(profile, "country") or raw_input.get("country")
+                      or (engine_in or {}).get("country") or "",
+                      primary_phone=val(profile, "phone", ""),
+                      primary_email=next(iter(val(profile, "emails", [])), ""), email_evidence=email_inputs)
         if terms["generic_locals"]:
             con_in["generic_words"] = terms["generic_locals"]
         con = await call("base.contacts", con_in)
         cost += cost_of(con)
+        merge(profile, con.get("fields") or {}, reliability, decisions)
         if con.get("confidence"):
             profile["contacts"] = {
                 "value": {
