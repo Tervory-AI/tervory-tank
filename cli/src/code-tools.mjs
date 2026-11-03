@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { lstat, realpath, open, readdir, readFile, writeFile, rename, unlink } from 'node:fs/promises';
+import { lstat, realpath, open, readdir, writeFile, rename, unlink } from 'node:fs/promises';
 import { resolve, relative, isAbsolute, sep, dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -30,7 +30,7 @@ export function secretPath(path) {
 
 // The process output is collected, not streamed: redaction must see complete lines
 // even when a secret arrives split across stdout/stderr chunks.
-export async function processOutput(command, args, { cwd, shell = false, timeoutMs = LIMITS.commandMs, signal } = {}) {
+export async function processOutput(command, args, { cwd, shell = false, timeoutMs = LIMITS.commandMs, signal, input } = {}) {
   return new Promise((resolveResult, reject) => {
     let child; let timer; let killed = false; let size = 0; let total = 0; const chunks = [];
     const stop = () => {
@@ -41,8 +41,9 @@ export async function processOutput(command, args, { cwd, shell = false, timeout
     try {
       child = spawn(command, args, { cwd, shell, detached: process.platform !== 'win32', windowsHide: true,
         env: { PATH: process.env.PATH, LANG: 'C.UTF-8', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' },
-        stdio: ['ignore', 'pipe', 'pipe'] });
+        stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
     } catch { return reject(refused()); }
+    if (input !== undefined) { child.stdin.on('error', () => {}); child.stdin.end(input); }
     const collect = chunk => { total += chunk.length; const keep = chunk.subarray(0, Math.max(0, LIMITS.outputBytes - size)); size += keep.length; chunks.push(keep); };
     child.stdout.on('data', collect); child.stderr.on('data', collect);
     child.on('error', () => { clearTimeout(timer); signal?.removeEventListener('abort', stop); reject(refused()); });
@@ -69,8 +70,8 @@ export class CodeFolder {
     return tool;
   }
   constructor(root) { this.root = root; }
-  async git(args) {
-    return processOutput('git', ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '--no-pager', ...args], { cwd: this.root });
+  async git(args, input) {
+    return processOutput('git', ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '--no-pager', ...args], { cwd: this.root, input });
   }
   async path(name, { missing = false } = {}) {
     if (typeof name !== 'string' || !name || name.includes('\0') || name.includes('\\')) throw refused();
@@ -92,17 +93,20 @@ export class CodeFolder {
     const result = await this.git(['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', '.']);
     if (result.code !== 0) throw refused();
     const names = result.output.split('\0'); names.pop();
+    const ignored = await this.git(['check-ignore', '--no-index', '-z', '--stdin'], names.join('\0') + '\0');
+    if (![0, 1].includes(ignored.code) || ignored.truncated) throw refused();
+    const excluded = new Set(ignored.output.split('\0'));
     const files = [];
     for (const name of names) {
       try {
         const path = await this.path(name);
-        if ((await lstat(path)).isFile() && (await this.git(['check-ignore', '--quiet', '--no-index', '--', name])).code === 1) files.push(name);
+        if (!excluded.has(name) && (await lstat(path)).isFile()) files.push(name);
       } catch { /* ignored, secret, symlink or vanished */ }
       if (files.length === LIMITS.files) break;
     }
     return { files, truncated: result.truncated || names.length > files.length && files.length === LIMITS.files };
   }
-  async read(name) {
+  async raw(name) {
     const path = await this.path(name, { missing: true });
     let handle;
     try {
@@ -117,12 +121,18 @@ export class CodeFolder {
       const raw = bytes.subarray(0, bytesRead); const text = new TextDecoder('utf-8', { fatal: true }).decode(raw);
       if (text.includes('\0')) throw refused();
       await this.path(name);
-      this.#reads.set(path, digest(raw));
-      return { exists: true, text: redactSecrets(text), size: bytesRead };
+      return { bytes: raw, text };
     } catch (error) {
-      if (error.code === 'ENOENT') { this.#reads.set(path, null); return { exists: false, text: '', size: 0 }; }
+      if (error.code === 'ENOENT') return null;
       throw refused();
     } finally { await handle?.close(); }
+  }
+  async read(name) {
+    const path = await this.path(name, { missing: true });
+    const value = await this.raw(name);
+    this.#reads.set(path, value === null ? null : digest(value.bytes));
+    return value === null ? { exists: false, text: '', size: 0 }
+      : { exists: true, text: redactSecrets(value.text), size: value.bytes.length };
   }
   async search(pattern, regex = false) {
     if (typeof pattern !== 'string' || pattern.length > 500 || !pattern) throw refused();
@@ -162,11 +172,10 @@ export class CodeFolder {
     const expected = this.#reads.get(path);
     const check = async () => {
       await this.path(name, { missing: true });
-      try {
-        const value = await readFile(path);
-        if (expected === null || digest(value) !== expected || value.length > LIMITS.fileBytes) throw refused();
-        const text = value.toString('utf8'); if (redactSecrets(text) !== text) throw refused(); return text;
-      } catch (error) { if (error.code === 'ENOENT' && expected === null) return ''; throw refused(); }
+      const value = await this.raw(name);
+      if (value === null && expected === null) return '';
+      if (value === null || expected === null || digest(value.bytes) !== expected || redactSecrets(value.text) !== value.text) throw refused();
+      return value.text;
     };
     const before = await check(); const after = applyDiff(before, patch, name, expected === null);
     if (Buffer.byteLength(after) > LIMITS.fileBytes || redactSecrets(after) !== after) throw refused();
