@@ -173,7 +173,7 @@ def build_router() -> APIRouter:
     from command import Actor, db, identity, require_tool
     from trigger_commands import confirmation
     from fastapi.responses import Response
-    router = APIRouter(prefix="/v1/base/lists", tags=["base"])
+    router = APIRouter(prefix="/v1/command/base/lists", tags=["base"])
 
     def store():
         return Store(db())
