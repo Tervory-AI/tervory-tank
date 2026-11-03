@@ -91,7 +91,7 @@ class Marketing:
             row = await self.post(tenant, args.post_id, conn=conn, lock=True)
             if existing:
                 return public(row)
-            if row['revision'] != args.expected_revision or row['state'] in {'published', 'cancelled'} or (row['delivery'] == 'inflight' and operation != 'post.cancel'):
+            if row['revision'] != args.expected_revision or row['state'] in {'published', 'cancelled'} or row['delivery'] == 'uncertain' or (row['delivery'] == 'inflight' and operation != 'post.cancel'):
                 raise HTTPException(409)
             state, target, generation = row['state'], row['location'], row['connection_generation']
             if operation == 'post.edit':
@@ -125,7 +125,7 @@ class Marketing:
             elif operation == 'post.cancel':
                 row = await conn.fetchrow("UPDATE tank.trigger_posts SET state='cancelled',delivery='done',retryable=false,retry_at=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING *", tenant, args.post_id)
             elif operation == 'post.retry':
-                if state != 'failed' or not row['retryable'] or row['delivery'] != 'pending' or row['approved_revision'] != row['revision']:
+                if state != 'failed' or row['delivery'] != 'pending' or row['approved_revision'] != row['revision']:
                     raise HTTPException(409)
                 row = await conn.fetchrow("UPDATE tank.trigger_posts SET state='scheduled',attempts=0,retry_at=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING *", tenant, args.post_id)
             else:
