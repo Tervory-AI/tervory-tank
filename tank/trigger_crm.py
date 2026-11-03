@@ -214,7 +214,7 @@ async def write(request: Request, actor: Annotated[Actor, Depends(identity)]):
             "ledger_id": str(await code_receipt(actor.tenant_id, "trigger.crm.write"))}
 
 
-async def confirmed_bot_lead(actor: Actor, draft_id: UUID, data: dict) -> dict:
+async def confirmed_bot_lead(actor: Actor, draft_id: UUID, data: dict, arguments: dict) -> dict:
     """Narrow bot create-only capability; generic CRM access stays founder-only."""
     from trigger_commands import confirmation
 
@@ -223,7 +223,11 @@ async def confirmed_bot_lead(actor: Actor, draft_id: UUID, data: dict) -> dict:
         if not (current.founder or current.tenant_admin):
             raise HTTPException(403, "This tool is not available to this user")
         require_tool(current, "trigger.bot.lead.confirm")
-        confirmation(current, "trigger.bot.lead.confirm", {"draft_id": str(draft_id)})
+        confirmation(current, "trigger.bot.lead.confirm", arguments)
+        import hashlib
+        expected = hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        if arguments.get("draft_id") != str(draft_id) or arguments.get("expected_digest") != expected:
+            raise HTTPException(409, "Confirmed action required")
         return current
 
     actor = await authorize(actor)
