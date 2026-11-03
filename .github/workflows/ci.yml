@@ -3,6 +3,10 @@ name: ci
 # Security runs on every PR, including docs-only changes. Build jobs still use ci_scope.py.
 on:
   pull_request:
+  # Merge queue (3 Nov, founder): the queue tests each group of PRs merged onto main
+  # before it lands, so branches no longer merge main to stay current.
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [main]
 
@@ -40,17 +44,17 @@ jobs:
       - name: Gitleaks — PR commits or main push
         if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
         env:
-          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: python3 .github/scripts/security_scan.py gitleaks --base "$SECURITY_BASE" --output "$RUNNER_TEMP/security-results"
       - name: Semgrep — new high findings
         if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
         env:
-          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: python3 .github/scripts/security_scan.py semgrep --base "$SECURITY_BASE" --output "$RUNNER_TEMP/security-results"
       - name: OSV-Scanner — new vulnerable versions
         if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
         env:
-          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          SECURITY_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: python3 .github/scripts/security_scan.py osv --base "$SECURITY_BASE" --output "$RUNNER_TEMP/security-results"
       - name: Save security results
         if: always()
@@ -78,8 +82,8 @@ jobs:
         id: scope
         env:
           EVENT_NAME: ${{ github.event_name }}
-          DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-          DIFF_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          DIFF_HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
         run: python3 .github/scripts/ci_scope.py
 
   # Picks where the real jobs run. It only runs when the founder has switched the
