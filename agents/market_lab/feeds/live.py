@@ -160,12 +160,16 @@ class PoliteClient:
                 _SEC_LAST = time.monotonic()
 
     def get(self, url: str, headers: dict[str, str] | None = None) -> bytes:
+        return self.request(url, headers=headers)
+
+    def request(self, url: str, *, headers: dict[str, str] | None = None, data: bytes | None = None) -> bytes:
+        """Use the same limits, pacing and access-boundary checks for read-only API queries."""
         self.ensure_open(url)
         host = urllib.parse.urlsplit(url).hostname or ""
         last: BaseException | None = None
         for attempt in range(self.retries):
             self._wait(host)
-            request = urllib.request.Request(url, headers=self._headers(headers))
+            request = urllib.request.Request(url, data=data, headers=self._headers(headers))
             try:
                 with self.opener(request, timeout=self.timeout) as response:
                     status = getattr(response, "status", 200) or 200

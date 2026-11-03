@@ -184,6 +184,27 @@ async def test_failed_check_returns_output_without_archive(builder, monkeypatch,
 
 
 @pytest.mark.asyncio
+async def test_failed_quality_check_saves_manifest_and_card_location(builder, monkeypatch, tmp_path):
+    scaffold = builder._scaffold()
+    check = {'name': 'links', 'ok': False, 'failures': [{'page': '/', 'url': '/missing', 'status': 404}],
+             'summary': '/: /missing answered 404'}
+    scaffold.run_checks = AsyncMock(return_value=([check], 'Failed checks: links'))
+    monkeypatch.setattr(builder, '_scaffold', lambda: scaffold)
+    p = payload()
+    p['copy'] = copy_for(builder, p['plan'])
+    async with client_for() as client:
+        result = await builder.execute(p, TENANT, http=client, data_root=tmp_path)
+    assert result['ok'] is False
+    assert result['results'] == [{'name': 'links', 'ok': False, 'summary': '/: /missing answered 404'}]
+    saved = list(tmp_path.rglob('*.json'))
+    assert len(saved) == 1
+    manifest = json.loads(saved[0].read_text())
+    assert manifest['ok'] is False and manifest['archive'] == ''
+    assert manifest['checks'] == [check] and manifest['results'] == result['results']
+    assert not list(tmp_path.rglob('*.tar.gz'))
+
+
+@pytest.mark.asyncio
 async def test_archive_contains_accepted_content(builder, monkeypatch, tmp_path):
     scaffold = builder._scaffold()
     scaffold.run_checks = AsyncMock(return_value=([{'name': 'test check double', 'ok': True}], ''))
