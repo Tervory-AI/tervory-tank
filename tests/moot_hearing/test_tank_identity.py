@@ -1,6 +1,8 @@
 import json
 import os
 from uuid import uuid4
+from unittest.mock import AsyncMock
+import tenant_regions
 
 import httpx
 import pytest
@@ -36,6 +38,8 @@ async def test_tank_derives_founder_and_discards_forged_capability(monkeypatch):
     monkeypatch.setenv("TANK_KEY_ZENAS", "room-disposable-test-key")
     monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "actual-founder")
     transport = HTTP(); monkeypatch.setattr(main, "_http", transport)
+    stored_home = AsyncMock(return_value="us-east")
+    monkeypatch.setattr(tenant_regions, "home", stored_home)
     headers = {"X-Tank-Key": "workspace-disposable-test-key", "X-Moot-Actor": "student",
         "X-Moot-Tenant": str(uuid4()), "X-Moot-Founder": "1"}
     await main.zenas_proxy("moot/hearings", request(headers))
@@ -48,6 +52,7 @@ async def test_tank_derives_founder_and_discards_forged_capability(monkeypatch):
         with pytest.raises(HTTPException) as caught:
             await main.zenas_proxy("moot/hearings", request({**headers, **mutation}))
         assert caught.value.status_code == 404
+    assert stored_home.await_count == 2  # Invalid attestation never reaches registry lookup.
     with pytest.raises(HTTPException) as caught:
         await main.zenas_proxy("moot/hearings", request(headers, home="za"))
     assert caught.value.status_code == 403

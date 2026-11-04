@@ -89,7 +89,12 @@ async def record(tank: Any, result: dict, by: str | None = None) -> dict:
     job = ACTIVE.get()
     if job is None:
         raise RuntimeError("Missing policy change")
-    gate = result["score"] >= result["threshold"] and result["eligible"]
+    # Approved legacy suites can predate new-approval case-count/refusal rules.
+    # A perfect run of every saved case is sufficient preflight evidence; this
+    # path never approves a package or changes the source-approval requirements.
+    legacy_preflight = bool(job.get("preflight_hash") and result["total"] > 0
+                            and result["passed"] == result["total"])
+    gate = result["score"] >= result["threshold"] and (result["eligible"] or legacy_preflight)
     eval_id = uuid.uuid4()
     validation = {
         "model": job["model"], "old_model": job["old_model"], "task_type": job["task_type"],

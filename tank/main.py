@@ -3813,26 +3813,6 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     foreign = home_region_refusal(_request_home(raw, request.query_params.get("home_region")), box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
-    tenant_values = [request.headers.get("x-tervory-tenant"), request.headers.get("x-moot-tenant"), request.query_params.get("tenant_id")]
-    try:
-        document = json.loads(raw) if raw else {}
-    except (ValueError, UnicodeError):
-        document = {}
-    if isinstance(document, dict):
-        tenant_values.append(document.get("tenant_id"))
-    tenant_ids = {str(value) for value in tenant_values if value}
-    if len(tenant_ids) > 1:
-        raise HTTPException(422, "A request must belong to one workspace")
-    if tenant_ids and path != "tenants":
-        try:
-            owner = uuid.UUID(next(iter(tenant_ids)))
-        except ValueError:
-            raise HTTPException(422, "A workspace is required") from None
-        await __import__("tenant_regions").local(__import__("sys").modules[__name__], owner,
-            _request_home(raw, request.query_params.get("home_region")))
-    target = zenas_upstream(path)
-    if _http is None:
-        raise HTTPException(status_code=503, detail="Zenas room is unreachable")
     headers: dict[str, str] = {}
     if path.startswith("regulations/"):
         headers["X-Tank-Key"] = os.environ.get("TANK_KEY_ZENAS", "")
@@ -3853,6 +3833,26 @@ async def zenas_proxy(path: str, request: Request) -> Response:
         founder = __import__("admin").founder_allowed(supplied_key, actor)
         headers.update({"X-Tank-Key": os.environ.get("TANK_KEY_ZENAS", ""),
             "X-Moot-Actor": actor, "X-Moot-Tenant": tenant, "X-Moot-Founder": "1" if founder else "0"})
+    tenant_values = [request.headers.get("x-tervory-tenant"), request.headers.get("x-moot-tenant"), request.query_params.get("tenant_id")]
+    try:
+        document = json.loads(raw) if raw else {}
+    except (ValueError, UnicodeError):
+        document = {}
+    if isinstance(document, dict):
+        tenant_values.append(document.get("tenant_id"))
+    tenant_ids = {str(value) for value in tenant_values if value}
+    if len(tenant_ids) > 1:
+        raise HTTPException(422, "A request must belong to one workspace")
+    if tenant_ids and path != "tenants":
+        try:
+            owner = uuid.UUID(next(iter(tenant_ids)))
+        except ValueError:
+            raise HTTPException(422, "A workspace is required") from None
+        await __import__("tenant_regions").local(__import__("sys").modules[__name__], owner,
+            _request_home(raw, request.query_params.get("home_region")))
+    target = zenas_upstream(path)
+    if _http is None:
+        raise HTTPException(status_code=503, detail="Zenas room is unreachable")
     content_type = request.headers.get("content-type")
     if content_type:
         headers["content-type"] = content_type

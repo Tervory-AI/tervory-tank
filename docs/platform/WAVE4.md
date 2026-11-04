@@ -108,3 +108,5 @@ Serial integration checks after these corrections: 76 passed in 30.72s; 155 pass
 Roster transitions carry a durable epoch: returning from roster B to a previously validated roster A reruns every approved skill. Proof reuse applies only within the same observed roster epoch.
 
 CLI sign-in listing/revocation keep the issuing Tank and its dedicated approval credential, allowing users to revoke old tokens in either region. New token creation and content requests still require recorded-home routing.
+
+CI follow-up: a perfect rerun of an already-approved legacy suite is valid preflight proof even when that saved suite predates new-approval eligibility rules. This never approves a version or relaxes source-review/approval gates. A short regression exercises the real legacy package suites without the 200-run fixture. Moot capability authentication precedes registry access. Chrome skips first-run setup, retains port=0/DevToolsActivePort, has a bounded 30-second startup budget and captures bounded startup stderr on failure; no launch retry is added.

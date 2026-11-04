@@ -345,9 +345,11 @@ async function main(): Promise<void> {
     return fixtureOrigin + path;
   }
   const profile = join(dir, "profile");
-  const startupDeadline = Date.now() + 15000;
+  const startupDeadline = Date.now() + 30000;
   const proc = spawn(executable, [
     "--headless=new",
+    "--no-first-run",
+    "--no-default-browser-check",
     "--disable-gpu",
     "--no-sandbox",
     "--disable-dev-shm-usage",
@@ -355,9 +357,13 @@ async function main(): Promise<void> {
     "--remote-debugging-port=0",
     `--user-data-dir=${profile}`,
     "about:blank",
-  ], { stdio: "ignore" });
+  ], { stdio: ["ignore", "ignore", "pipe"] });
+  let startupDiagnostics = "";
+  proc.stderr?.on("data", chunk => { startupDiagnostics = (startupDiagnostics + String(chunk)).slice(-4000); });
   try {
-    const port = await waitDebuggingPort(profile, proc, startupDeadline);
+    const port = await waitDebuggingPort(profile, proc, startupDeadline).catch(error => {
+      throw new Error(`${error.message}; executable=${executable}; stderr=${startupDiagnostics}`);
+    });
     await waitJson(`http://127.0.0.1:${port}/json/version`, proc, startupDeadline);
     const list = (await waitJson(`http://127.0.0.1:${port}/json/list`, proc, startupDeadline)) as { type: string; webSocketDebuggerUrl: string }[];
     const page = list.find((item) => item.type === "page");

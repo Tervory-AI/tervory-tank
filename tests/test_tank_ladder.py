@@ -290,3 +290,20 @@ async def test_cache_expiry_and_private_code_ownership_before_reuse(ladder):  # 
     with pytest.raises(HTTPException) as bad_task:
         await b.tank.run_route(request(b, b.tenants[1]), task_id=base_task)
     assert bad_task.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_approved_legacy_suites_have_preflight_proof_without_reapproval(ladder, monkeypatch):
+    from unittest.mock import AsyncMock
+    import roster_validation
+    import skala_revalidation
+    b = ladder
+    monkeypatch.setattr(b.tank, '_roster_models', AsyncMock(return_value=[{'model_name':'luna'}]))
+    proposal = b.tank.PolicyRow(task_type='base.normalize', model='skill:base.normalize@1.0.0', rung=3)
+    before = await roster_validation.prepare(b.tank, proposal.model_dump())
+    assert before['pending'] == 2
+    assert await skala_revalidation.drain(b.tank) == 2
+    after = await roster_validation.prepare(b.tank, proposal.model_dump())
+    assert after['pending'] == after['failed'] == 0
+    assert await b.pool.fetchval("SELECT count(*) FROM tank.skills WHERE state='approved' AND present") == 2
+    assert await b.pool.fetchval('SELECT count(*) FROM tank.skill_approvals') == 0
