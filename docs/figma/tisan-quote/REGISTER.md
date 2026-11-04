@@ -30,6 +30,8 @@ Required: Name, Email, Reply method, at least one item, Type, Description, Quant
 | empty | 375 | [514:6148](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-6148) | [empty-375.png](screenshots/empty-375.png) |
 | missing | 1440 | [514:18203](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-18203) | [missing-1440.png](screenshots/missing-1440.png) |
 | missing | 375 | [514:18361](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-18361) | [missing-375.png](screenshots/missing-375.png) |
+| invalid | 1440 | [514:18586](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-18586) | [invalid-1440.png](screenshots/invalid-1440.png) |
+| invalid | 375 | [514:18744](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-18744) | [invalid-375.png](screenshots/invalid-375.png) |
 
 ## Verification
 
