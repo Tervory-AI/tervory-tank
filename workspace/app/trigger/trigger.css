@@ -596,3 +596,35 @@ body:has(.trigger-console) main {
     font-size: 24px;
   }
 }
+
+.trigger-hamburger {
+  display: inline-block;
+  position: relative;
+  width: 20px;
+  height: 16px;
+  border-top: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+}
+.trigger-hamburger::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 5px;
+  height: 2px;
+  background: currentColor;
+}
+
+.trigger-subtable th:first-child {
+  width: 30%;
+}
+.trigger-subtable th:nth-child(2),
+.trigger-subtable th:nth-child(3) {
+  width: 20%;
+}
+.trigger-subtable th:nth-child(4) {
+  width: 18%;
+}
+.trigger-subtable th:last-child {
+  width: 12%;
+}
