@@ -37,6 +37,17 @@ class TankVendorLedger:
             raise ValueError("company trials require the platform tenant")
 
     async def reserve(self, event: dict[str, Any], max_credits: int) -> str:
+        from chassis.tank import paid_result
+        base = os.environ.get("TANK_URL", "http://tank:8000").rstrip("/")
+        key = os.environ.get("TANK_KEY", "")
+        response = await self.http.post(base+"/v1/paid-steps/authorize", headers={"X-Tank-Key":key},
+            json={"tenant_id":str(self.tenant_id),"call_id":event["call_id"],"run_id":str(self.run_id),
+                  "record_id":event["record_id"],"units":event["reserved_credits"],"request_hash":event["request_hash"]},
+            timeout=30, follow_redirects=False)
+        response.raise_for_status()
+        allowed = await paid_result(self.http, base, key, str(self.tenant_id), response.json())
+        if allowed.get("authorized") is not True or allowed.get("call_id") != event["call_id"]:
+            raise RuntimeError("Tank did not authorize this credit call")
         async with self.conn.transaction():
             await self.conn.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",

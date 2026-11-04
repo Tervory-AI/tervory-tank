@@ -15,6 +15,29 @@ _BACKGROUND_WAIT_S = 25 * 3600
 _FINISHED = {"completed", "failed", "uncertain"}
 
 
+async def paid_result(http, base: str, key: str, tenant: str, value: dict) -> dict:
+    """Poll an already-started Ask run; never repeat the operation's POST."""
+    if 'paid_run_id' not in value:
+        return value
+    identity = str(uuid.UUID(value['paid_run_id']))
+    if not _same_uuid(value.get('tenant_id'), tenant):
+        raise RuntimeError('Tank paid run returned a foreign tenant')
+    deadline = time.monotonic() + _wait_limit()
+    while time.monotonic() < deadline:
+        response = await http.get(base.rstrip('/')+'/v1/paid-runs/'+identity,
+            params={'tenant_id':str(tenant)}, headers={'X-Tank-Key':key}, timeout=30, follow_redirects=False)
+        response.raise_for_status()
+        row = response.json()
+        if row['status'] == 'completed':
+            if not 200 <= int(row.get('response_status') or 500) < 300 or not isinstance(row.get('result'), dict):
+                raise RuntimeError('Tank paid run did not complete successfully')
+            return row['result']
+        if row['status'] in {'interrupted','cancelled'}:
+            raise RuntimeError('Tank paid run was interrupted; it was not replayed')
+        await asyncio.sleep(1)
+    raise RuntimeError('Tank paid run is still waiting; stopped polling without replay')
+
+
 class TankClient:
     def __init__(self, base_url: str, api_key: str, agent: str, http: httpx.AsyncClient) -> None:
         self._base = base_url.rstrip("/")
@@ -123,7 +146,7 @@ class TankClient:
         data = response.json()
         if not isinstance(data, dict):
             raise RuntimeError("tank answer was not an object")
-        return data
+        return await paid_result(self._http, self._base, self._api_key, str(body['tenant_id']), data)
 
 
 def _queued(data: dict[str, Any]) -> bool:
