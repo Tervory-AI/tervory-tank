@@ -1517,3 +1517,15 @@ body:has(.zn) main {
     grid-template-columns: 1fr;
   }
 }
+
+/* Text Moot controls use the existing Zenas card/composer/shell tokens. */
+.zn-moot form,
+.zn-moot .zn-card label { display: flex; flex-direction: column; gap: 8px; }
+.zn-moot form { gap: 14px; margin: 12px 0; }
+.zn-moot input,
+.zn-moot textarea,
+.zn-moot select { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; font: inherit; }
+.zn-moot textarea { min-height: 84px; resize: vertical; }
+.zn-moot pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.zn-moot .zn-card { min-width: 0; overflow-wrap: anywhere; }
+.zn-moot button { margin: 6px 6px 6px 0; }

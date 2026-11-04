@@ -23,6 +23,17 @@ def tenant_scope(tenant_id: Any, *, administrative: bool = False):
         _tenant.reset(token)
 
 
+def _accepted(tenant: Any) -> Any:
+    """A tenant a caller sent that is not a UUID is their error (422), not a 500 from tenant_scope."""
+    if tenant is not None and tenant != "" and not isinstance(tenant, UUID):
+        try:
+            UUID(str(tenant))
+        except ValueError:
+            from fastapi import HTTPException
+            raise HTTPException(422, "A workspace is required.") from None
+    return tenant
+
+
 def administrative() -> bool:
     return _administrative.get()
 
@@ -92,6 +103,7 @@ def bind_tenant_endpoints(app):
                     if name == "actor" and hasattr(value, "tenant"):
                         tenant = value.tenant
                         break
+                tenant = _accepted(tenant)
                 admin = founder_only or bool(actor and getattr(actor, "founder", False))
                 with tenant_scope(tenant, administrative=admin):
                     response = await function(**kwargs)
@@ -123,7 +135,7 @@ def tenant_path(parameter: str):
         @wraps(function)
         async def scoped(*args, **kwargs):
             accepted = parameters.bind(*args, **kwargs).arguments[parameter]
-            tenant_id = getattr(accepted, "tenant_id", accepted)
+            tenant_id = _accepted(getattr(accepted, "tenant_id", accepted))
             with tenant_scope(tenant_id):
                 return await function(*args, **kwargs)
 

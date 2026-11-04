@@ -225,7 +225,7 @@ export function SearchView({ query, onQuery, hasCatalogue }: { query: string; on
           <input
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder="Search a brand, model or part, like Staccato"
+            placeholder="Search a brand, model or part"
             aria-label="Search a brand, model or part"
           />
           <button type="submit" className="primary">
@@ -353,7 +353,7 @@ export function SearchView({ query, onQuery, hasCatalogue }: { query: string; on
             <input
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder='Ask a follow-up, like "Which grips fit the Staccato P?"'
+              placeholder='Ask a follow-up'
               aria-label="Ask Rig"
               disabled={busy}
             />

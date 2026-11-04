@@ -1,13 +1,13 @@
-const { readFileSync } = require("node:fs");
+const { existsSync } = require("node:fs");
 const { join } = require("node:path");
+const { loadContent } = require("./content-check.cjs");
 
 function sitePaths() {
-  const text = readFileSync(join(__dirname, "..", "lib", "site.ts"), "utf8");
-  const hrefs = [...text.matchAll(/href:\s*"([^"]+)"/g)].map((match) => match[1]);
-  if (hrefs.length === 0) {
-    throw new Error("lib/site.ts has no pages");
+  const root = join(__dirname, "..");
+  const paths = (loadContent(root)?.pages || []).map((page) => page.path);
+  for (const name of ["contact", "privacy"]) {
+    if (existsSync(join(root, "app", name, "page.tsx"))) paths.push(`/${name}`);
   }
-  return hrefs;
+  return [...new Set(paths)];
 }
-
 module.exports = { sitePaths };

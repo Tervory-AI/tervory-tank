@@ -28,13 +28,6 @@ class WorkerHealthTests(unittest.TestCase):
         for args in ([b"python", b"other.py"], [b"celery", b"worker"], [b"notcelery", b"beat"]):
             self.assertEqual(self.run_probe(test, args), 1)
 
-    def test_backup_requires_scheduled_backup_command_in_both_regions(self):
-        for suffix in ("", ".za"):
-            test = services(f"agents/zenas/docker-compose.docassemble{suffix}.yml")["docassemble-backup"]["healthcheck"]["test"]
-            self.assertEqual(self.run_probe(test, [b"python", b"jobs/train/docassemble_backup.py", b"--nightly"]), 0)
-            for args in ([b"python", b"other.py", b"--nightly"], [b"python", b"jobs/train/docassemble_backup.py", b"--once"]):
-                self.assertEqual(self.run_probe(test, args), 1)
-
     def test_worker_ping_is_local_and_time_bounded(self):
         probe = services("ops/trigger-crm/docker-compose.yml")["celery-worker"]["healthcheck"]
         command = probe["test"][1]

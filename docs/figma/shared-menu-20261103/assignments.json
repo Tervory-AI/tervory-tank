@@ -1,0 +1,1178 @@
+[
+  {
+    "pageId": "93:2",
+    "menuId": "182:8871",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "94:172",
+    "frameName": "Leads / List / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "182:8951",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "94:417",
+    "frameName": "Leads / List / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "182:9039",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "94:741",
+    "frameName": "Leads / Detail / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "182:9119",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "94:1061",
+    "frameName": "Leads / Detail / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:8287",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "94:1811",
+    "frameName": "Clients / List / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:8367",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "94:1978",
+    "frameName": "Clients / List / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:8455",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "94:2263",
+    "frameName": "Clients / Detail / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:8535",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "94:2510",
+    "frameName": "Clients / Detail / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:8623",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:2074",
+    "frameName": "Contacts / List / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:8703",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:2245",
+    "frameName": "Contacts / List / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:8791",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:2543",
+    "frameName": "Contacts / Detail / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:8871",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:2800",
+    "frameName": "Contacts / Detail / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:8959",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:3343",
+    "frameName": "Opportunities / List / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:9039",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:3522",
+    "frameName": "Opportunities / List / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:9127",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:3846",
+    "frameName": "Opportunities / Detail / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:9207",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:4107",
+    "frameName": "Opportunities / Detail / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:9295",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:4662",
+    "frameName": "Cases / List / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:9375",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:4837",
+    "frameName": "Cases / List / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:9463",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:5148",
+    "frameName": "Cases / Detail / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:9543",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:5416",
+    "frameName": "Cases / Detail / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:9631",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:5994",
+    "frameName": "Tasks / List / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:9711",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:6165",
+    "frameName": "Tasks / List / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:9799",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:6463",
+    "frameName": "Tasks / Detail / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "183:9879",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:6671",
+    "frameName": "Tasks / Detail / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "184:7387",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:7053",
+    "frameName": "Invoices / List / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "184:7467",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:7276",
+    "frameName": "Invoices / List / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "184:7555",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:7743",
+    "frameName": "Invoices / Detail / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "184:7635",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:8098",
+    "frameName": "Invoices / Detail / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "184:7723",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:8979",
+    "frameName": "Quotes / List / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "184:7803",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:9218",
+    "frameName": "Quotes / List / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "184:7891",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:9737",
+    "frameName": "Quotes / Detail / Desktop / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "184:7971",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "97:10064",
+    "frameName": "Quotes / Detail / Desktop / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "192:21343",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "98:8589",
+    "frameName": "Leads / Confirm Delete / Desktop · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "192:21444",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "98:8621",
+    "frameName": "Clients / Confirm Delete / Desktop · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "192:21545",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "98:8653",
+    "frameName": "Contacts / Confirm Delete / Desktop · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "192:21646",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "98:8685",
+    "frameName": "Opportunities / Confirm Delete / Desktop · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "192:21747",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "98:8717",
+    "frameName": "Cases / Confirm Delete / Desktop · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "192:21848",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "98:8749",
+    "frameName": "Tasks / Confirm Delete / Desktop · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "192:21949",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "98:8781",
+    "frameName": "Invoices / Confirm Send / Desktop · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "192:22050",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "98:8819",
+    "frameName": "Invoices / Confirm Mark paid / Desktop · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "192:22151",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "98:8893",
+    "frameName": "Quotes / Confirm Delete / Desktop · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "192:22252",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "98:8925",
+    "frameName": "Quotes / Confirm Send / Desktop · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "192:22353",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "98:8963",
+    "frameName": "Quotes / Confirm Convert / Desktop · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "192:22454",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "98:9013",
+    "frameName": "Invoices / Confirm Record payment / Desktop · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "192:22555",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "98:9087",
+    "frameName": "Invoices / Confirm Delete payment / Desktop · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "192:22656",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "98:9131",
+    "frameName": "Invoices / Confirm Delete line item / Desktop · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "187:12961",
+    "mainId": "180:8467",
+    "product": "Trigger",
+    "frame": "98:9181",
+    "frameName": "Trigger / Mobile drawer / Zero · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "187:13042",
+    "mainId": "180:8467",
+    "product": "Trigger",
+    "frame": "98:9227",
+    "frameName": "Trigger / Mobile drawer / Filled · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:15308",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:15307",
+    "frameName": "Leads / Detail / Desktop / Zero / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:15590",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:15589",
+    "frameName": "Leads / Detail / Desktop / Zero / Scrolled fields 2 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:15872",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:15871",
+    "frameName": "Leads / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:16157",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:16156",
+    "frameName": "Leads / Detail / Desktop / Filled / Scrolled fields 2 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:18992",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:18991",
+    "frameName": "Clients / Detail / Desktop / Zero / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:19201",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:19200",
+    "frameName": "Clients / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:20184",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:20183",
+    "frameName": "Contacts / Detail / Desktop / Zero / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:20403",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:20402",
+    "frameName": "Contacts / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:21468",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:21467",
+    "frameName": "Opportunities / Detail / Desktop / Zero / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:21691",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:21690",
+    "frameName": "Opportunities / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:22784",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:22783",
+    "frameName": "Cases / Detail / Desktop / Zero / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:23014",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:23013",
+    "frameName": "Cases / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:24467",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:24466",
+    "frameName": "Tasks / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:24978",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:24977",
+    "frameName": "Invoices / Detail / Desktop / Zero / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:25349",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:25348",
+    "frameName": "Invoices / Detail / Desktop / Zero / Scrolled fields 2 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:25720",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:25719",
+    "frameName": "Invoices / Detail / Desktop / Zero / Scrolled fields 3 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:26091",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:26090",
+    "frameName": "Invoices / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:26471",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:26470",
+    "frameName": "Invoices / Detail / Desktop / Filled / Scrolled fields 2 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:26851",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:26850",
+    "frameName": "Invoices / Detail / Desktop / Filled / Scrolled fields 3 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:31564",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:31563",
+    "frameName": "Quotes / Detail / Desktop / Zero / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:31853",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:31852",
+    "frameName": "Quotes / Detail / Desktop / Zero / Scrolled fields 2 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:32142",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:32141",
+    "frameName": "Quotes / Detail / Desktop / Filled / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:32438",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:32437",
+    "frameName": "Quotes / Detail / Desktop / Filled / Scrolled fields 2 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:35404",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:35403",
+    "frameName": "Invoices / Confirm Mark paid / Desktop / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:35585",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:35584",
+    "frameName": "Invoices / Confirm Record payment / Desktop / Scrolled fields 1 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:35766",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:35765",
+    "frameName": "Invoices / Detail / Desktop / Zero / Scrolled to Items and Payments · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "93:2",
+    "menuId": "310:36137",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "310:36136",
+    "frameName": "Invoices / Detail / Desktop / Filled / Scrolled to Items and Payments · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:43393",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "231:11794",
+    "frameName": "CLI sign-ins and connected apps / Connected / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:43476",
+    "mainId": "180:8467",
+    "product": "Trigger",
+    "frame": "231:11832",
+    "frameName": "CLI sign-ins and connected apps / Connected / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:45832",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "231:11870",
+    "frameName": "Rig Plugins / MCP connections / Saved with a token / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:45919",
+    "mainId": "180:8467",
+    "product": "Rig",
+    "frame": "231:11900",
+    "frameName": "Rig Plugins / MCP connections / Saved with a token / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:46007",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "231:11930",
+    "frameName": "Rig Plugins / MCP connections / Needs sign-in / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:46094",
+    "mainId": "180:8467",
+    "product": "Rig",
+    "frame": "231:11958",
+    "frameName": "Rig Plugins / MCP connections / Needs sign-in / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:46183",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "231:11986",
+    "frameName": "Rig Plugins / MCP connections / Connected / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:46270",
+    "mainId": "180:8467",
+    "product": "Rig",
+    "frame": "231:12014",
+    "frameName": "Rig Plugins / MCP connections / Connected / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:46359",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "231:12042",
+    "frameName": "Rig Plugins / MCP connections / Sign-in failed / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:46447",
+    "mainId": "180:8467",
+    "product": "Rig",
+    "frame": "231:12070",
+    "frameName": "Rig Plugins / MCP connections / Sign-in failed / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:47228",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "231:12098",
+    "frameName": "Rig Plugins / MCP connections / Server not approved by Tervory / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:47318",
+    "mainId": "180:8467",
+    "product": "Rig",
+    "frame": "231:12124",
+    "frameName": "Rig Plugins / MCP connections / Server not approved by Tervory / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:47406",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "231:12150",
+    "frameName": "Rig Plugins / MCP connections / Expanded / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:47493",
+    "mainId": "180:8467",
+    "product": "Rig",
+    "frame": "231:12187",
+    "frameName": "Rig Plugins / MCP connections / Expanded / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:47581",
+    "mainId": "180:8387",
+    "product": "Tisan",
+    "frame": "231:12224",
+    "frameName": "Tisan Plugins / MCP connections / Saved with a token / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:47668",
+    "mainId": "180:8467",
+    "product": "Tisan",
+    "frame": "231:12254",
+    "frameName": "Tisan Plugins / MCP connections / Saved with a token / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:47756",
+    "mainId": "180:8387",
+    "product": "Tisan",
+    "frame": "231:12284",
+    "frameName": "Tisan Plugins / MCP connections / Needs sign-in / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:47843",
+    "mainId": "180:8467",
+    "product": "Tisan",
+    "frame": "231:12312",
+    "frameName": "Tisan Plugins / MCP connections / Needs sign-in / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:47931",
+    "mainId": "180:8387",
+    "product": "Tisan",
+    "frame": "231:12340",
+    "frameName": "Tisan Plugins / MCP connections / Connected / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:48018",
+    "mainId": "180:8467",
+    "product": "Tisan",
+    "frame": "231:12368",
+    "frameName": "Tisan Plugins / MCP connections / Connected / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:48107",
+    "mainId": "180:8387",
+    "product": "Tisan",
+    "frame": "231:12396",
+    "frameName": "Tisan Plugins / MCP connections / Sign-in failed / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:48195",
+    "mainId": "180:8467",
+    "product": "Tisan",
+    "frame": "231:12424",
+    "frameName": "Tisan Plugins / MCP connections / Sign-in failed / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:48286",
+    "mainId": "180:8387",
+    "product": "Tisan",
+    "frame": "231:12452",
+    "frameName": "Tisan Plugins / MCP connections / Server not approved by Tervory / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:48376",
+    "mainId": "180:8467",
+    "product": "Tisan",
+    "frame": "231:12478",
+    "frameName": "Tisan Plugins / MCP connections / Server not approved by Tervory / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:48464",
+    "mainId": "180:8387",
+    "product": "Tisan",
+    "frame": "231:12504",
+    "frameName": "Tisan Plugins / MCP connections / Expanded / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:48551",
+    "mainId": "180:8467",
+    "product": "Tisan",
+    "frame": "231:12541",
+    "frameName": "Tisan Plugins / MCP connections / Expanded / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:48656",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "231:12578",
+    "frameName": "Founder MCP servers / Servers / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:48743",
+    "mainId": "180:8467",
+    "product": "Trigger",
+    "frame": "231:12629",
+    "frameName": "Founder MCP servers / Servers / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:48828",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "231:12680",
+    "frameName": "Founder MCP servers / Add server / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:48912",
+    "mainId": "180:8467",
+    "product": "Trigger",
+    "frame": "231:12712",
+    "frameName": "Founder MCP servers / Add server / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:48997",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "231:12744",
+    "frameName": "Founder MCP servers / Remove server / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "465:49081",
+    "mainId": "180:8467",
+    "product": "Trigger",
+    "frame": "231:12774",
+    "frameName": "Founder MCP servers / Remove server / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:26071",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "468:26067",
+    "frameName": "Computers and connected apps / Revoke Computer / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:26177",
+    "mainId": "180:8467",
+    "product": "Trigger",
+    "frame": "468:26173",
+    "frameName": "Computers and connected apps / Revoke Computer / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:26211",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "468:26207",
+    "frameName": "Computers and connected apps / Revoke App / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:26317",
+    "mainId": "180:8467",
+    "product": "Trigger",
+    "frame": "468:26313",
+    "frameName": "Computers and connected apps / Revoke App / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:26351",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "468:26347",
+    "frameName": "Rig Plugins / Disconnect / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:26459",
+    "mainId": "180:8467",
+    "product": "Rig",
+    "frame": "468:26455",
+    "frameName": "Rig Plugins / Disconnect / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:26495",
+    "mainId": "180:8387",
+    "product": "Tisan",
+    "frame": "468:26491",
+    "frameName": "Tisan Plugins / Disconnect / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:26603",
+    "mainId": "180:8467",
+    "product": "Tisan",
+    "frame": "468:26599",
+    "frameName": "Tisan Plugins / Disconnect / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:27702",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "468:27698",
+    "frameName": "Rig Plugins / Add connection / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:27808",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "468:27804",
+    "frameName": "Rig Plugins / Empty / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:27923",
+    "mainId": "180:8467",
+    "product": "Rig",
+    "frame": "468:27919",
+    "frameName": "Rig Plugins / Add connection / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:27957",
+    "mainId": "180:8467",
+    "product": "Rig",
+    "frame": "468:27953",
+    "frameName": "Rig Plugins / Empty / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:28000",
+    "mainId": "180:8387",
+    "product": "Tisan",
+    "frame": "468:27996",
+    "frameName": "Tisan Plugins / Add connection / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:28106",
+    "mainId": "180:8387",
+    "product": "Tisan",
+    "frame": "468:28102",
+    "frameName": "Tisan Plugins / Empty / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:28221",
+    "mainId": "180:8467",
+    "product": "Tisan",
+    "frame": "468:28217",
+    "frameName": "Tisan Plugins / Add connection / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:28255",
+    "mainId": "180:8467",
+    "product": "Tisan",
+    "frame": "468:28251",
+    "frameName": "Tisan Plugins / Empty / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:30893",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "468:30889",
+    "frameName": "Founder MCP servers / Add server / Bad address / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:31000",
+    "mainId": "180:8467",
+    "product": "Trigger",
+    "frame": "468:30996",
+    "frameName": "Founder MCP servers / Add server / Bad address / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:31035",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "468:31031",
+    "frameName": "Founder MCP servers / Add server / Duplicate / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:31142",
+    "mainId": "180:8467",
+    "product": "Trigger",
+    "frame": "468:31138",
+    "frameName": "Founder MCP servers / Add server / Duplicate / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:31177",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "468:31173",
+    "frameName": "Founder MCP servers / Add server / Unreachable / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:31284",
+    "mainId": "180:8467",
+    "product": "Trigger",
+    "frame": "468:31280",
+    "frameName": "Founder MCP servers / Add server / Unreachable / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:31319",
+    "mainId": "180:8387",
+    "product": "Trigger",
+    "frame": "468:31315",
+    "frameName": "Computers and connected apps / Empty / Desktop / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "230:9",
+    "menuId": "468:31431",
+    "mainId": "180:8467",
+    "product": "Trigger",
+    "frame": "468:31427",
+    "frameName": "Computers and connected apps / Empty / Mobile / Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "256:9",
+    "menuId": "465:26693",
+    "mainId": "180:8387",
+    "product": "Tiger",
+    "frame": "256:10",
+    "frameName": "01 · Price position · 1440 · Approved 3 Nov · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "256:9",
+    "menuId": "465:26776",
+    "mainId": "180:8387",
+    "product": "Tiger",
+    "frame": "256:283",
+    "frameName": "02 · Matches to review · 1440 · Approved 3 Nov · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "256:9",
+    "menuId": "465:26859",
+    "mainId": "180:8387",
+    "product": "Tiger",
+    "frame": "256:471",
+    "frameName": "03 · Competitor sites · 1440 · Approved 3 Nov · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "256:9",
+    "menuId": "465:26942",
+    "mainId": "180:8387",
+    "product": "Tiger",
+    "frame": "267:19232",
+    "frameName": "02 · Matches to review · 1440 · Empty · Approved 3 Nov · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "256:9",
+    "menuId": "465:27025",
+    "mainId": "180:8387",
+    "product": "Tiger",
+    "frame": "267:19424",
+    "frameName": "03 · Competitor sites · 1440 · Empty · Approved 3 Nov · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "289:13919",
+    "menuId": "456:18492",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "291:8053",
+    "frameName": "A07-choose · Shop platform · not connected · 1440 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "289:13919",
+    "menuId": "456:18598",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "291:8097",
+    "frameName": "A07-shopify · Shopify · enter credentials · 1440 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "289:13919",
+    "menuId": "456:18691",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "291:8151",
+    "frameName": "A07-woo · WooCommerce · enter credentials · 1440 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "289:13919",
+    "menuId": "456:18784",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "291:8213",
+    "frameName": "A07-big · BigCommerce · enter credentials · 1440 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "289:13919",
+    "menuId": "456:18877",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "291:8267",
+    "frameName": "A07-testing · Shop platform · testing · 1440 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "289:13919",
+    "menuId": "456:18970",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "291:8309",
+    "frameName": "A07-connected · Shop platform · connected · 1440 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "289:13919",
+    "menuId": "456:19063",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "291:8357",
+    "frameName": "A07-failed · Shop platform · connection failed · 1440 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "289:13919",
+    "menuId": "456:19156",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "291:8405",
+    "frameName": "A08 · Orders · 1440 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "289:13919",
+    "menuId": "456:19249",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "291:8444",
+    "frameName": "A09 · Store delivery time · 1440 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "289:13919",
+    "menuId": "456:19342",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "321:6304",
+    "frameName": "A08-late · Order paid after window · 1440 · Changed after approval, awaiting founder"
+  },
+  {
+    "pageId": "289:13919",
+    "menuId": "456:19435",
+    "mainId": "180:8387",
+    "product": "Rig",
+    "frame": "321:6382",
+    "frameName": "A07-choose-open · Choose a platform · open · 1440 · Changed after approval, awaiting founder"
+  }
+]

@@ -48,7 +48,9 @@ def test_panel_stays_fixed_and_split_in_three():
     assert "Chats" in source
     assert "Settings" not in (PAGE / "view.tsx").read_text(encoding="utf-8")
     assert "Support" in source
-    assert 'href="/"' in source
+    assert 'href="https://app.tervory.com/">Dashboard</a>' in source
+    assert 'href="/chats"' in source
+    assert 'href="/"' not in (PAGE / "view.tsx").read_text(encoding="utf-8")
     assert "/brand/tervory-logo-reversed.png" in source
 
 

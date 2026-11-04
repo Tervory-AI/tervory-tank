@@ -5,24 +5,34 @@ const { sitePaths } = require("./scripts/site-paths.cjs");
 const categories = ["performance", "accessibility", "best-practices", "seo"];
 const assertions = {
   "categories:performance": ["error", { minScore: 0.9 }],
-  "categories:accessibility": ["error", { minScore: 0.9 }],
+  "categories:accessibility": ["error", { minScore: 0.95 }],
   "categories:best-practices": ["error", { minScore: 0.9 }],
   "categories:seo": ["error", { minScore: 0.9 }],
 };
 
-const origin = "http://127.0.0.1:3000";
+const origin = process.env.TISAN_CHECK_ORIGIN || "http://127.0.0.1:3000";
+const pages = process.env.TISAN_CHECK_PAGES
+  ? JSON.parse(process.env.TISAN_CHECK_PAGES)
+  : sitePaths();
 
 module.exports = {
   ci: {
     collect: {
-      url: sitePaths().map((path) => `${origin}${path}`),
-      startServerCommand: "npx next start -H 127.0.0.1 -p 3000",
+      url: pages.map((path) => `${origin}${path}`),
+      startServerCommand: process.env.TISAN_CHECK_ORIGIN
+        ? undefined
+        : "npx next start -H 127.0.0.1 -p 3000",
       startServerReadyPattern: "Ready",
       startServerReadyTimeout: 120000,
       numberOfRuns: 3,
-      chromePath: process.env.CHROME_PATH || chromium.executablePath(),
+      chromePath: chromium.executablePath(),
       settings: {
-        chromeFlags: "--no-sandbox --disable-dev-shm-usage --disable-gpu",
+        chromeFlags:
+          "--no-sandbox --disable-dev-shm-usage --disable-gpu --disable-background-networking" +
+          (process.env.TISAN_CHECK_PROXY
+            ? ` --proxy-server=${process.env.TISAN_CHECK_PROXY} --proxy-bypass-list=<-loopback> --host-resolver-rules="MAP * ~NOTFOUND, EXCLUDE 127.0.0.1"`
+            : ""),
+        formFactor: "mobile",
         onlyCategories: categories,
       },
     },

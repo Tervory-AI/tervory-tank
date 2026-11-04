@@ -22,7 +22,7 @@ async def main() -> None:
     try:
         ident = await conn.fetchval(
             """INSERT INTO agent_market_lab.jobs (tenant_id,kind,input,status,run_at)
-            VALUES ($1,'resolve',$2::jsonb,'queued',now()) RETURNING id""",
+            VALUES ($1,'resolve',$2::jsonb,'queued','epoch') RETURNING id""",
             UUID(RESOLVED),
             json.dumps({"engine": ENGINE}),
         )

@@ -201,6 +201,20 @@ def test_finding5_7_8_9_owner_email_from_receipts_not_request(tmp_path: Path, mo
         assert "/receipts/weekly/" + TENANT not in body.replace("/autumbra/receipts/weekly/", "")
 
 
+import pytest as _pytest
+from datetime import datetime as _dt, timezone as _tz
+
+
+@_pytest.fixture(autouse=True)
+def _fixed_report_week(monkeypatch):
+    """These receipts are dated 26 Oct 2026. Pin the report week to that week, so the
+    tests don't fail once the real clock moves on (they first failed on 2 Nov 2026)."""
+    import agents.ghost.owner_email_jobs as jobs
+    fixed = _dt(2026, 10, 30, 12, 0, tzinfo=_tz.utc)
+    real = jobs.week_bounds
+    monkeypatch.setattr(jobs, "week_bounds", lambda *, now=None: real(now=now or fixed))
+
+
 def test_finding8_weekly_covers_every_owner_from_receipts(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("AUTUMBRA_UNDO_TOKEN_SECRET", "test-undo-secret-fourth")
     store = Store(tmp_path / "g.sqlite3")

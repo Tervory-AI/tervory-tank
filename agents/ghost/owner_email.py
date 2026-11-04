@@ -108,13 +108,10 @@ def build_owner_update(
         stacks.append(name)
         linked_stacks.append(_link(name, str(item["advisory_url"])))
     if not stacks:
-        stack_list = "software"
         stack_list_linked = "software"
     elif len(stacks) == 1:
-        stack_list = stacks[0]
         stack_list_linked = linked_stacks[0]
     else:
-        stack_list = ", ".join(stacks[:-1]) + " and " + stacks[-1]
         stack_list_linked = ", ".join(linked_stacks[:-1]) + " and " + linked_stacks[-1]
 
     # Lead sentence always states what happened. Critical / fix-PR / campaign
@@ -184,19 +181,7 @@ def build_owner_update(
         return True
 
     mode = settings.fix_mode
-    if mode is ApplyMode.auto_when_checks_pass:
-        # Auto-fix paragraph only when a code fix was applied, with its PR link.
-        # An IP block is described as a block in the shield paragraph — never as a patch.
-        if _is_real_pr_url(pr_url) and undo_fix_url:
-            body_lines.append(
-                f"You chose to let us fix this kind of problem automatically, so we did. "
-                f"{stack_list} are now on patched versions and your site passed its own "
-                f"checks afterwards. Here is the report; you can send it to your IT manager, "
-                f"who can reverse our change with one click. "
-                f"{_link('Fix report', pr_url)} "
-                f"{_link('Undo', undo_fix_url)}"
-            )
-    elif mode is ApplyMode.approve_each:
+    if mode is ApplyMode.approve_each:
         # "we built the fix" only when a real fix PR exists with its link.
         if _is_real_pr_url(pr_url):
             body_lines.append(
@@ -305,11 +290,17 @@ def send_owner_update(
     *,
     to: str,
     transport: Any | None = None,
+    tenant_id: str = "",
+    message_key: str = "",
 ) -> dict[str, Any]:
     """Call the sender. Weekly/quiet-week paths use the same door."""
     if not to:
         raise ValueError("recipient must come from the client's settings")
-    sender = transport or DEFAULT_FIXTURE_TRANSPORT
+    if transport is None and tenant_id:
+        from .smtp_email import configured_transport
+        sender = configured_transport(tenant_id, message_key)
+    else:
+        sender = transport or DEFAULT_FIXTURE_TRANSPORT
     result = sender.send(to=to, subject=email["subject"], body=email["body"])
     return {
         "sent": bool(result.get("sent")),

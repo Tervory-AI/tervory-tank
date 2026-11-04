@@ -11,6 +11,7 @@ from selectolax.parser import HTMLParser
 
 observations: ContextVar[list[dict[str, Any]] | None] = ContextVar("base_field_observations", default=None)
 FIELDS = ("website", "phone", "email", "socials")
+SITE_SIGNAL_FIELDS = ("technologies", "sells_online", "site_newest_year")
 EMAIL = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
 PHONE = re.compile(r"(?:\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b")
 SOCIAL_NETWORKS = {
@@ -25,7 +26,8 @@ def social_network(url: str) -> str | None:
         host = (urlsplit(url).hostname or "").lower()
     except ValueError:
         return None
-    return next((name for name, hosts in SOCIAL_NETWORKS.items()
+    networks = {**SOCIAL_NETWORKS, "pinterest": ("pinterest.com",), "yelp": ("yelp.com",)}
+    return next((name for name, hosts in networks.items()
                  if any(host == domain or host.endswith("." + domain) for domain in hosts)), None)
 
 
@@ -163,7 +165,7 @@ def row_fields(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
             matches += observed_emails
         if matches and checks.get("email_domain_matches_site") is not False:
             add_values(result, "email", matches, url, checked)
-        matches = [link for link in wanted_links if public_url(link) in observed.get("links", [])]
+        matches = [link for link in wanted_links if social_profile(link) and public_url(link) in observed.get("links", [])]
         if same_site:
             matches += [link for link in observed.get("links", []) if social_profile(link)]
         if matches:
@@ -207,4 +209,48 @@ def row_fields(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
                                     else [item["value"] for item in ordered],
                                     match["source_url"], match["checked_at"]), "items": ordered,
                             "source_kind": winner.get("source_kind")}
+    # Add quality only for the exact contact and observation that survived the
+    # existing verification guards. Do not change existing evidence or order.
+    for name, collection, identity, keys in (
+        ("phone", "phone_quality", "phone", ("phone_e164", "phone_valid", "phone_line_type", "phone_region")),
+        ("email", "email_quality", "email", ("email_syntax_ok", "email_disposable")),
+    ):
+        if not result[name].get("verified"):
+            continue
+        quality = (profile.get(collection) or {}).get("value") or []
+        if not isinstance(quality, list):
+            continue
+        first = (result[name].get("items") or [result[name]])[0]
+        primary = first.get("value")
+        primary = primary[0] if isinstance(primary, list) and primary else primary
+        for candidate in quality:
+            observed = candidate.get(identity)
+            same = phone(observed) == phone(primary) if name == "phone" else str(observed).lower() == str(primary).lower()
+            if not same:
+                continue
+            evidence = candidate.get(keys[0]) or {}
+            if evidence.get("source_url") != first.get("source_url") or evidence.get("checked_at") != first.get("checked_at"):
+                continue
+            for key in keys:
+                item = candidate.get(key)
+                if (isinstance(item, dict) and item.get("source_url") == first.get("source_url")
+                        and item.get("checked_at") == first.get("checked_at")):
+                    result[key] = {**item, "verified": True, "reason": None, "contact_value": primary}
+            break
+    # Optional passive signals retain the observation date and exact source evidence.
+    # Keep the legacy field set unchanged until an approved signals pass has run.
+    if passes.get("2b_signals"):
+        for name in SITE_SIGNAL_FIELDS:
+            candidate = profile.get(name)
+            if not isinstance(candidate, dict):
+                continue
+            evidence = candidate.get("evidence") or []
+            source, checked = public_url(candidate.get("source_url")), candidate.get("checked_at")
+            valid = bool(source and checked and evidence and candidate.get("value") is not None
+                         and all(isinstance(item, dict) and public_url(item.get("source_url"))
+                                 and item.get("text") and item.get("checked_at") for item in evidence))
+            result[name] = {**field(candidate.get("value"), source, checked),
+                            "verified": valid, "reason": None if valid else field()["reason"],
+                            "confidence": candidate.get("confidence", 0), "source": candidate.get("source"),
+                            "evidence": evidence}
     return result

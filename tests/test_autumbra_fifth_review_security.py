@@ -242,11 +242,11 @@ def test_4_act_email_counts_from_week_receipts(tmp_path, monkeypatch):
     assert "2 threats found, 1 critical" in sent["subject"]
 
 
-def test_5_auto_fix_paragraph_only_with_real_pr():
+def test_5_auto_fix_paragraph_is_removed_even_with_real_pr():
     settings = ClientAutumbraSettings(
         tenant_id=TENANT_A,
         site_name="coolify.tervory.com",
-        fix_mode=ApplyMode.auto_when_checks_pass,
+        fix_mode=ApplyMode.approve_each,
         owner_email="o@example.test",
     )
     # IP block only — shield undo must NOT trigger "patched versions".
@@ -264,7 +264,7 @@ def test_5_auto_fix_paragraph_only_with_real_pr():
     assert "let us fix this kind of problem automatically" not in mail["body"]
     assert "blocked 1" in mail["body"] or "blocked" in mail["body"]
 
-    # Real code fix + PR → auto paragraph with PR link.
+    # A real code-fix PR still never produces an automatic-fix claim.
     mail2 = build_owner_update(
         settings=settings,
         site_name="coolify.tervory.com",
@@ -274,8 +274,9 @@ def test_5_auto_fix_paragraph_only_with_real_pr():
         pr_url="https://github.com/example/repo/pull/9",
         undo_fix_url="https://protect.tervory.com/autumbra/undo/r2?token=y",
     )
-    assert "let us fix this kind of problem automatically" in mail2["body"]
-    assert "patched versions" in mail2["body"]
+    assert "let us fix this kind of problem automatically" not in mail2["body"]
+    assert "approve fixes yourself" in mail2["body"]
+    assert "patched versions" not in mail2["body"]
     assert "https://github.com/example/repo/pull/9" in mail2["body"]
 
     # week_stats must not set undo_fix_url for an IP-block-only receipt.

@@ -44,7 +44,7 @@ async def ping(ctx: JobContext) -> dict:
 
 async def refresh(ctx: JobContext) -> dict:
     fixtures = ctx.input.get("fixtures") or os.environ.get("FEEDS_FIXTURES") or None
-    async with _ledger() as ledger:
+    async with _ledger(memory=ctx.memory) as ledger:
         lock = ctx.tenant_id + ":market-collect"
         await ledger.conn.execute("SELECT pg_advisory_lock(hashtextextended($1, 0))", lock)
         try:
@@ -65,12 +65,12 @@ async def refresh(ctx: JobContext) -> dict:
 
 async def feed_links(ctx: JobContext) -> dict:
     from core.feed_links import refresh_links
-    async with _ledger() as ledger:
+    async with _ledger(memory=ctx.memory) as ledger:
         return await refresh_links(ledger, ctx.tenant_id, case_plan()["engine"])
 
 
 async def opportunities(ctx: JobContext) -> dict:
-    async with _ledger() as ledger:
+    async with _ledger(memory=ctx.memory) as ledger:
         result = await perform_opportunities(
             tenant_id=ctx.tenant_id,
             engine=str(ctx.input.get("engine") or ""),
@@ -85,7 +85,7 @@ async def opportunities(ctx: JobContext) -> dict:
 
 
 async def resolve(ctx: JobContext) -> dict:
-    async with _ledger() as ledger:
+    async with _ledger(memory=ctx.memory) as ledger:
         from core.warning_http import refresh as refresh_warnings
         warning_result = await refresh_warnings(ledger, ctx.tenant_id, str(ctx.input.get("engine") or ""))
         return {**(await perform_resolve(tenant_id=ctx.tenant_id, ledger=ledger)), "warnings": warning_result}
@@ -102,21 +102,26 @@ async def research(ctx: JobContext) -> dict:
         if not question:
             return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
         if os.environ.get("DATABASE_URL"):
-            from core.documents import matched
-            async with _ledger() as ledger:
-                found = await matched(ledger, ctx.tenant_id, question)
-            if found:
-                found.sort(key=lambda item: (item[0], item[1]), reverse=True)
-                facts = [item[2] for item in found[:5]]
-                return {"answer": "\n".join(fact["text"] for fact in facts),
-                        "citations": [{"claim": fact["text"], "url": fact["href"], "source": fact["name"]} for fact in facts], "cost_usd": 0}
+            from core.evidence import answer as cited_answer
+            from uuid import uuid4
+            from datetime import datetime, timezone
+            async with _ledger(memory=ctx.memory) as ledger:
+                saved = await cited_answer(ledger, ctx.tenant_id, question, engine=case_plan()["engine"])
+                facts = saved.get("facts") or []
+                if facts:
+                    text = "\n".join(fact["text"] for fact in facts)
+                    citations = [{"claim": fact["text"], "url": fact["href"], "source": fact["name"]} for fact in facts]
+                    await ledger.save_report({"id": str(uuid4()), "tenant_id": ctx.tenant_id,
+                                              "made_at": datetime.now(timezone.utc), "question": question,
+                                              "answer": text, "citations": citations})
+                    return {"answer": text, "citations": citations, "cost_usd": 0}
         from core.research_adapter import research_web
 
         result = await research_web(ctx.tenant_id, question)
         if result is not None:
             return result
         return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
-    async with _ledger() as ledger:
+    async with _ledger(memory=ctx.memory) as ledger:
         answer = await perform_research(
             tenant_id=ctx.tenant_id,
             ledger=ledger,
@@ -128,13 +133,33 @@ async def research(ctx: JobContext) -> dict:
     return {"answer": answer["answer"], "citations": answer["citations"]}
 
 
+async def calibration(ctx: JobContext) -> dict:
+    """Data only; a Workspace view requires its own approved Figma frame."""
+    async with _ledger(memory=ctx.memory) as ledger:
+        return await ledger.calibration_for(ctx.tenant_id)
+
+
+async def intel(ctx: JobContext) -> dict:
+    if ctx.tenant_id != HEARTBEAT_TENANT:
+        raise ValueError("tenant_id is required")
+    from core.intel import refresh as refresh_intel
+    async with _ledger() as ledger:
+        return await refresh_intel(ledger)
+
+
+async def alerts(ctx: JobContext) -> dict:
+    from core.ml3 import deliver
+    async with _ledger(memory=ctx.memory) as ledger:
+        return await deliver(ctx.tenant_id, ledger=ledger)
+
+
 class _SafeMemory:
     def __init__(self, inner: object) -> None:
         self.inner = inner
 
-    async def remember(self, tenant_id: str, text: str, kind: str, source: str) -> dict:
+    async def remember(self, tenant_id: str, text: str, kind: str, source: str, **kwargs: object) -> dict:
         try:
-            saved = await self.inner.remember(tenant_id, text, kind, source)  # type: ignore[attr-defined]
+            saved = await self.inner.remember(tenant_id, text, kind, source, **kwargs)  # type: ignore[attr-defined]
         except Exception as exc:  # noqa: BLE001 — class name only, never the message
             log.warning("memory failed (%s)", type(exc).__name__)
             return {"seen": None}
@@ -142,7 +167,8 @@ class _SafeMemory:
 
 
 class _ledger:
-    def __init__(self) -> None:
+    def __init__(self, *, memory: object | None = None) -> None:
+        self.memory = memory
         self.conn = None
         self.ledger: PostgresLedger | None = None
 
@@ -154,6 +180,7 @@ class _ledger:
             raise RuntimeError("DATABASE_URL is not set")
         self.conn = await asyncpg.connect(url)
         self.ledger = PostgresLedger(self.conn)
+        self.ledger.memory = self.memory if self.memory is not None else getattr(app.state, "memory", None)
         await self.ledger.apply_schema()
         return self.ledger
 
@@ -179,6 +206,7 @@ def _schedules() -> list[dict]:
             "input": {"heartbeat": True},
         }
     ]
+    rows.append({"tenant_id": HEARTBEAT_TENANT, "cron": "15 6 * * *", "kind": "intel", "input": {}})
     rows.extend(case_schedules())
     return rows
 
@@ -192,9 +220,12 @@ app = create_app(
         "opportunities": opportunities,
         "resolve": resolve,
         "research": research,
+        "calibration": calibration,
+        "intel": intel,
+        "alerts": alerts,
     },
     schedules=_schedules(),
-    job_timeouts={"refresh": 86400, "feed_links": 7200},
+    job_timeouts={"refresh": 86400, "feed_links": 7200, "intel": 86400},
 )
 
 
@@ -333,3 +364,8 @@ app.include_router(document_router(key_ok=_room_key_ok, ledger_context=_ledger))
 from core.feed_links import build_router as feed_router
 
 app.include_router(feed_router(key_ok=_room_key_ok, ledger_context=_ledger, engine=case_plan()["engine"]))
+
+
+from core.ml3 import build_router as ml3_router
+
+app.include_router(ml3_router(key_ok=_room_key_ok, ledger_context=_ledger, engine=case_plan()["engine"]))

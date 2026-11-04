@@ -12,15 +12,11 @@ import re
 import time
 import unicodedata
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 from urllib.parse import urlparse
 
 from rigbox.catalogue import (
-    check_fit_refs,
-    families_from,
-    load_folder,
     map_google_merchant,
     map_shopify,
     map_woocommerce,
@@ -42,6 +38,7 @@ from rigbox.logic import options_for
 from rigbox.logic import product_detail
 from rigbox.logic import _limit
 from rigbox.logic import public_product
+from rigbox.shopper_attributes import shopper_attributes, shopper_rows
 from rigbox.logic import reprice
 from rigbox.logic import setups as build_setups
 from rigbox.rank import search as rank_room
@@ -53,6 +50,8 @@ from rigbox.recall import part_query
 from rigbox.recall import parts_of
 from rigbox.recall import signature
 from rigbox.recall import whole_hit
+from rigbox.locate import catalogue as supply_catalogue, locate as supply_locate, needs_supply
+from rigbox.locate import enabled as locate_enabled
 from rigbox.store import _fit_key
 from rigbox.quotes.limits import FailedKeyLimits, MemoryRateLimits, PgRateLimits
 
@@ -241,6 +240,9 @@ class Service:
         self.store = store
         self.models = models
         self.handoff = handoff or RecordingHandoff()
+        # Locate confirm reads offers live. The app wires the product checkers,
+        # tests inject doubles. None means confirm is not available.
+        self.locate_checker: Any | None = None
         self.limiter = RateLimiter(limit=rate_limit)
         self.failed_keys = FailedKeyLimits()
         pool = getattr(store, "pool", None)
@@ -311,11 +313,11 @@ class Service:
         text = (query or "").strip()
         shop = await self._shop(tenant_id)
         if shop.get("search"):
-            from rigbox.cn import shop_search
+            from rigbox.guided_search import shop_search
 
             cap = _limit(limit)
             version = await self._catalogue_version(tenant_id)
-            products = await self.store.products(tenant_id)
+            products = await self._shopper_products(tenant_id)
             fits = await self._approved_fits(tenant_id)
             body = shop_search(
                 {
@@ -356,7 +358,7 @@ class Service:
             body = await self._body_from_saved(tenant_id, whole, pieces, host, cap)
             if body is not None:
                 return body
-        products = await self.store.products(tenant_id)
+        products = await self._shopper_products(tenant_id)
         reusable = False
         for piece in pieces:
             if part_hit(known, host, piece, cap) is not None:
@@ -475,7 +477,7 @@ class Service:
         if not ids:
             return []
         by_id: dict[str, dict[str, Any]] = {}
-        for row in await self.store.products(tenant_id):
+        for row in await supply_catalogue(self.store, tenant_id):
             if row.get("active", True) is False:
                 continue
             public = public_product(row)
@@ -498,13 +500,14 @@ class Service:
             raise RigError("not_found", "No such product.", 404)
         shop = await self._shop(tenant_id)
         if shop.get("search"):
-            from rigbox.cn import present_detail
+            from rigbox.guided_search import present_detail
 
             return present_detail(
                 detail,
                 await self._active(tenant_id),
                 await self._approved_fits(tenant_id),
                 str(shop.get("centre_sku") or ""),
+                vocabulary=shop.get("vocabulary"),
             )
         return detail
 
@@ -518,9 +521,9 @@ class Service:
             raise RigError("not_found", "No such product.", 404)
         built = build_setups(bundle)
         if (await self._shop(tenant_id)).get("search"):
-            from rigbox.cn import enrich_setups
+            from rigbox.guided_search import enrich_setups
 
-            built = enrich_setups(built, bundle["products"], bundle["fits"])
+            built = enrich_setups(built, bundle["products"], bundle["fits"], vocabulary=(await self._shop(tenant_id)).get("vocabulary"))
         centre = _centre(bundle["products"], product_id)
         for setup in built["setups"]:
             setup["why"] = await self._compose_why(
@@ -553,9 +556,9 @@ class Service:
             raise RigError("not_found", "No such product.", 404)
         await self._annotate_graph(tenant_id, bundle, built)
         if (await self._shop(tenant_id)).get("search"):
-            from rigbox.cn import enrich_graph
+            from rigbox.guided_search import enrich_graph
 
-            built = enrich_graph(built, bundle["products"], bundle["fits"])
+            built = enrich_graph(built, bundle["products"], bundle["fits"], vocabulary=(await self._shop(tenant_id)).get("vocabulary"))
         await self.store.put_answer(tenant_id, "graph", product_id, version, built)
         return built
 
@@ -573,6 +576,8 @@ class Service:
         products = []
         for row in await self._active(tenant_id):
             item = public_product(row)
+            # The model and the grounded sentence only see shopper-safe facts.
+            item["attributes"] = shopper_attributes(item["attributes"])
             item["family"] = str(row.get("family") or "")
             products.append(item)
         fits = await self._approved_fits(tenant_id)
@@ -615,13 +620,14 @@ class Service:
             _restore_choices(priced, body["setup"])
             shop = await self._shop(tenant_id)
             if shop.get("search"):
-                from rigbox.cn import prepare_reservation
+                from rigbox.guided_search import prepare_reservation
 
                 problem = prepare_reservation(
                     priced,
                     products,
                     await self._approved_fits(tenant_id),
                     str(shop.get("centre_sku") or ""),
+                    vocabulary=shop.get("vocabulary"),
                 )
                 if problem:
                     raise RigError("invalid", problem, 422)
@@ -630,20 +636,78 @@ class Service:
             product = await self.product(tenant_id, str(body["product_id"]))
             shop = await self._shop(tenant_id)
             if shop.get("search"):
-                from rigbox.cn import prepare_reservation
+                from rigbox.guided_search import prepare_reservation
 
                 problem = prepare_reservation(
                     {"parts": [{"product": product, "choice": ""}]},
                     await self._active(tenant_id),
                     await self._approved_fits(tenant_id),
                     str(shop.get("centre_sku") or ""),
+                    vocabulary=shop.get("vocabulary"),
                 )
                 if problem:
                     raise RigError("invalid", problem, 422)
             payload = {"kind": "product", "product": product}
         else:
             raise RigError("invalid", "A setup or a product is required.", 422)
+        # A visitor request is metadata, never an invented price or invoice.
+        request = {key: body[key] for key in ("title", "request", "quantity") if body.get(key) is not None}
+        if request:
+            payload["request"] = request
+        wanted = ([part["product"]["id"] for part in payload["setup"]["parts"]]
+                  if payload["kind"] == "setup" else [payload["product"]["id"]])
+        private = []
+        # Optional per store: no supply lookup at all until the store opts in.
+        rows = await self.store.products(tenant_id) if await locate_enabled(self.store, tenant_id) else []
+        for row in rows:
+            if str(row["sku"]) in wanted and needs_supply(row):
+                result = await supply_locate(self.store, tenant_id, row)
+                private.append({"product_id": row["sku"], **result})
+        if private:
+            payload["locate"] = private
+        retailer = await self.store.retailer(tenant_id) or {}
+        own_delivery = retailer.get("delivery") or {}
+        catalogue_rows = {str(row["sku"]): row for row in await self.store.products(tenant_id)}
+        located = {str(line["product_id"]): line["public"] for line in private}
+        items = ([part["product"] for part in payload["setup"]["parts"]]
+                 if payload["kind"] == "setup" else [payload["product"]])
+        for item in items:
+            row = catalogue_rows.get(str(item["id"]), {})
+            if needs_supply(row):
+                offer = located.get(str(item["id"]), {})
+                item["delivery"] = {"ship_days": offer.get("ship_days"), "eta": offer.get("eta"),
+                                    "back_order": offer.get("status") != "available_to_order"}
+            else:
+                item["delivery"] = {"min_days": own_delivery.get("min_days"),
+                                    "max_days": own_delivery.get("max_days"), "back_order": False}
         return payload, contact
+
+    async def _locate_row(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        if not await locate_enabled(self.store, tenant_id):
+            raise RigError("locate_disabled", "This store does not offer ordering from other stores.", 403)
+        row = next((p for p in await self.store.products(tenant_id) if p["sku"] == product_id), None)
+        if row is None:
+            raise RigError("not_found", "No such product.", 404)
+        return row
+
+    async def locate(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        row = await self._locate_row(tenant_id, product_id)
+        return (await supply_locate(self.store, tenant_id, row))["public"]
+
+    async def locate_confirm(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        """Live re-check of the located offer, then a short-lived signed hold."""
+        from rigbox.locate_live import LocateRefused, confirm, hold_secret
+
+        row = await self._locate_row(tenant_id, product_id)
+        if not needs_supply(row):
+            raise RigError("invalid", "This product is available from the store.", 422)
+        if self.locate_checker is None:
+            raise RigError("unavailable", "Live stock checks are not available.", 503)
+        try:
+            secret = hold_secret()
+        except LocateRefused:
+            raise RigError("unavailable", "Live stock checks are not available.", 503) from None
+        return (await confirm(self.store, tenant_id, row, self.locate_checker, secret=secret))["public"]
 
     async def compare(self, tenant_id: str, product_ids: list[str]) -> dict[str, Any]:
         """Other sellers' prices for a selection the shopper already made.
@@ -724,7 +788,7 @@ class Service:
     async def suggested_fits(self, tenant_id: str) -> dict[str, Any]:
         names = {
             str(row.get("sku") or row.get("id") or ""): str(row.get("name") or "")
-            for row in await self.store.products(tenant_id)
+            for row in await supply_catalogue(self.store, tenant_id)
         }
         rows: list[dict[str, Any]] = []
         for row in await self.store.fits(tenant_id):
@@ -778,60 +842,6 @@ class Service:
                 await store.mark_watch_applied(tenant_id, sku, url, stamp)
             return changed
 
-    async def load_catalogues(self, root: Path) -> list[dict[str, Any]]:
-        if not root.is_dir():
-            return []
-        reports = []
-        for folder in sorted(path for path in root.iterdir() if path.is_dir() and not path.name.startswith(".") and path.name != "samples"):
-            reports.append(await self.load_folder(folder))
-        return reports
-
-    async def load_folder(self, folder: Path) -> dict[str, Any]:
-        loaded = load_folder(folder)
-        tenant = loaded["tenant_id"]
-        report: dict[str, Any] = {"slug": loaded["slug"], "tenant_id": tenant, "products": {}, "fits": {}}
-        if not tenant:
-            reason = loaded["publish_error"] or "no tenant"
-            report["products"] = {"added": 0, "updated": 0, "rejected": [{"row": 0, "reason": reason}]}
-            report["fits"] = {"added": 0, "updated": 0, "rejected": []}
-            return report
-        products = loaded["products"]
-        if products["rejected"]:
-            report["products"] = {"added": 0, "updated": 0, "rejected": products["rejected"]}
-        else:
-            added = updated = 0
-            for row in products["rows"]:
-                action = await self.store.upsert_product(tenant, row)
-                if action == "added":
-                    added += 1
-                elif action == "updated":
-                    updated += 1
-            report["products"] = {"added": added, "updated": updated, "rejected": []}
-            for family, members in families_from(await self.store.products(tenant)).items():
-                await self.store.set_family(tenant, family, members)
-            report["market"] = await self._import_market(tenant, loaded.get("market"))
-        if not loaded["publish_error"]:
-            await self._apply_publish(tenant, loaded["slug"], loaded["publish"], report)
-        fits = loaded["fits"]
-        if fits["rejected"]:
-            report["fits"] = {"added": 0, "updated": 0, "rejected": fits["rejected"]}
-            return report
-        known = {str(row["sku"]) for row in await self.store.products(tenant)}
-        family_names = set(families_from(await self.store.products(tenant)))
-        ref_errors = check_fit_refs(fits["rows"], known, family_names)
-        if ref_errors:
-            report["fits"] = {"added": 0, "updated": 0, "rejected": ref_errors}
-            return report
-        existing = {_fit_key(row) for row in await self.store.fits(tenant)}
-        added = updated = 0
-        for row in fits["rows"]:
-            if _fit_key(row) in existing:
-                updated += 1
-            else:
-                added += 1
-            await self.store.upsert_fit(tenant, row)
-        report["fits"] = {"added": added, "updated": updated, "rejected": []}
-        return report
 
     async def pull_feeds(self, tenant_id: str, fetch: Any) -> list[dict[str, Any]]:
         reports = []
@@ -873,8 +883,16 @@ class Service:
             "templates": await self.store.templates_for(tenant_id),
         }
 
+    async def _shopper_products(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Catalogue rows for shopper search, ranking and answers: attributes allowlisted.
+
+        rigbox.logic (mirrored into Skala) indexes every attribute it is given,
+        so private keys are removed here, before any search or setup sees a row.
+        """
+        return shopper_rows(await supply_catalogue(self.store, tenant_id))
+
     async def _active(self, tenant_id: str) -> list[dict[str, Any]]:
-        return [row for row in await self.store.products(tenant_id) if row.get("active", True)]
+        return [row for row in await self._shopper_products(tenant_id) if row.get("active", True)]
 
     async def _approved_fits(self, tenant_id: str) -> list[dict[str, Any]]:
         kept: list[dict[str, Any]] = []
@@ -886,7 +904,7 @@ class Service:
         return kept
 
     async def _catalogue_version(self, tenant_id: str) -> str:
-        products = [_version_product(row) for row in await self.store.products(tenant_id)]
+        products = [_version_product(row) for row in await supply_catalogue(self.store, tenant_id)]
         fits = [_version_fit(row) for row in await self._approved_fits(tenant_id)]
         fits.sort(key=lambda row: (row["part_sku"], row["fits_sku"], row["fits_family"]))
         payload = {
@@ -977,62 +995,7 @@ class Service:
                 lines = await self._fit_why(tenant_id, centre, pair[0], pair[1])
                 product["why"] = " · ".join(line for line in lines if line)
 
-    async def _apply_publish(self, tenant_id: str, slug: str, publish: dict[str, Any], report: dict[str, Any]) -> None:
-        keys = publish.get("keys") if isinstance(publish.get("keys"), list) else []
-        parsed: list[tuple[str, list[str]]] = []
-        rejected: list[dict[str, Any]] = []
-        for index, item in enumerate(keys, start=1):
-            if not isinstance(item, dict):
-                rejected.append({"row": index, "reason": "key must start with rk_pub_ and list origins"})
-                continue
-            raw = str(item.get("key") or "")
-            origins = item.get("origins")
-            if _KEY.fullmatch(raw) is None or not isinstance(origins, list) or not origins:
-                rejected.append({"row": index, "reason": "key must start with rk_pub_ and list origins"})
-                continue
-            parsed.append((raw, [str(origin) for origin in origins]))
-        if rejected:
-            report["keys_rejected"] = rejected
-        else:
-            for raw, origins in parsed:
-                await self.store.put_key(tenant_id, hash_key(raw), "publishable", origins)
-            report["keys"] = len(parsed)
-        email = publish.get("email")
-        webhook = publish.get("webhook")
-        await self.store.put_retailer(
-            tenant_id,
-            slug,
-            str(email) if email else None,
-            str(webhook) if webhook else None,
-            str(publish.get("name") or ""),
-        )
-        templates = publish.get("setup_templates")
-        if isinstance(templates, dict):
-            for category, roles in templates.items():
-                await self.store.set_template(tenant_id, str(category), roles)
-        feed = publish.get("feed")
-        if isinstance(feed, dict) and feed.get("url") and feed.get("format"):
-            await self.store.put_feed(
-                tenant_id,
-                str(feed["format"]),
-                str(feed["url"]),
-                str(feed.get("currency") or ""),
-            )
 
-    async def _import_market(self, tenant_id: str, market: dict[str, Any] | None) -> dict[str, Any]:
-        if market is None:
-            return {"rows": 0, "rejected": []}
-        if market.get("rejected"):
-            return {"rows": 0, "rejected": list(market["rejected"])}
-        known = {str(row.get("sku") or "") for row in await self.store.products(tenant_id)}
-        unknown = [row for row in market.get("rows") or [] if str(row.get("sku") or "") not in known]
-        if unknown:
-            return {
-                "rows": 0,
-                "rejected": [{"row": row.get("row") or 0, "reason": "sku is not in this catalogue"} for row in unknown],
-            }
-        await self.store.replace_market(tenant_id, list(market.get("rows") or []))
-        return {"rows": len(market.get("rows") or []), "rejected": []}
 
     async def _store_quote(self, tenant_id: str, payload: dict[str, Any], contact: dict[str, Any]) -> dict[str, Any]:
         quote_id = "req_" + uuid4().hex
@@ -1060,24 +1023,14 @@ class Service:
 
     async def _shop(self, tenant_id: str) -> dict[str, Any]:
         retailer = await self.store.retailer(tenant_id) or {}
-        publish = _publish_for_slug(str(retailer.get("slug") or ""))
-        shop = publish.get("shop")
-        return shop if isinstance(shop, dict) else {}
-
-
-def _publish_for_slug(slug: str) -> dict[str, Any]:
-    if not slug:
-        return {}
-    configured = os.environ.get("CATALOGUE_DIR") or ""
-    base = Path(configured) if configured else Path(__file__).resolve().parents[1] / "catalogues"
-    path = base / slug / "publish.json"
-    if not path.is_file():
-        return {}
-    try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return loaded if isinstance(loaded, dict) else {}
+        shop = retailer.get("shop")
+        if not isinstance(shop, dict):
+            return {}
+        if "vocabulary" in shop:
+            from rigbox.vocabulary import validate
+            checked = validate(shop["vocabulary"])
+            return {**shop, "vocabulary": checked} if checked else {key: value for key, value in shop.items() if key != "vocabulary"}
+        return shop
 
 
 def _market_average(rows: list[dict[str, Any]], currency: str) -> dict[str, Any] | None:
@@ -1163,6 +1116,7 @@ def _version_product(row: dict[str, Any]) -> dict[str, Any]:
         "image": str(row.get("image_url") or row.get("image") or ""),
         "active": bool(row.get("active", True)),
         "attributes": attributes,
+        "availability": row.get("availability"),
     }
 
 

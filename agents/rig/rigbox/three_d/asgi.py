@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Request
-from fastapi.staticfiles import StaticFiles
+from .static import ViewerFiles
 from pydantic import Field
 from app import app
 
@@ -98,4 +98,4 @@ async def page_config(request: Request):
 
 bundle = Path(__file__).with_name("widget")
 if bundle.is_dir():
-    app.mount("/3d", StaticFiles(directory=bundle, html=True), name="rig-three-d-test")
+    app.mount("/3d", ViewerFiles(directory=bundle, html=True), name="rig-three-d-test")

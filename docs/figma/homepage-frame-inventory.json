@@ -1,0 +1,620 @@
+{
+  "fileKey": "bOSFzo7qMhHjJ6T5brXG1Y",
+  "readAt": "2026-11-03",
+  "pages": [
+    {
+      "page": "Buttons — standard",
+      "pageId": "13:4",
+      "nodes": [
+        {
+          "id": "13:173",
+          "name": "Button",
+          "type": "COMPONENT_SET",
+          "width": 1632,
+          "height": 544,
+          "visible": true
+        },
+        {
+          "id": "14:2",
+          "name": "Column labels",
+          "type": "FRAME",
+          "width": 1600,
+          "height": 16,
+          "visible": true
+        },
+        {
+          "id": "14:19",
+          "name": "primary · sm",
+          "type": "TEXT",
+          "width": 72,
+          "height": 15,
+          "visible": true
+        },
+        {
+          "id": "14:20",
+          "name": "primary · md",
+          "type": "TEXT",
+          "width": 73,
+          "height": 15,
+          "visible": true
+        },
+        {
+          "id": "14:21",
+          "name": "secondary · sm",
+          "type": "TEXT",
+          "width": 89,
+          "height": 15,
+          "visible": true
+        },
+        {
+          "id": "14:22",
+          "name": "secondary · md",
+          "type": "TEXT",
+          "width": 90,
+          "height": 15,
+          "visible": true
+        },
+        {
+          "id": "14:23",
+          "name": "ghost · sm",
+          "type": "TEXT",
+          "width": 61,
+          "height": 15,
+          "visible": true
+        },
+        {
+          "id": "14:24",
+          "name": "ghost · md",
+          "type": "TEXT",
+          "width": 62,
+          "height": 15,
+          "visible": true
+        },
+        {
+          "id": "14:25",
+          "name": "danger · sm",
+          "type": "TEXT",
+          "width": 68,
+          "height": 15,
+          "visible": true
+        },
+        {
+          "id": "14:26",
+          "name": "danger · md",
+          "type": "TEXT",
+          "width": 69,
+          "height": 15,
+          "visible": true
+        },
+        {
+          "id": "14:27",
+          "name": "Buttons — standard · guide",
+          "type": "FRAME",
+          "width": 1664,
+          "height": 1029,
+          "visible": true
+        },
+        {
+          "id": "15:12",
+          "name": "Audit — current buttons in workspace/app",
+          "type": "FRAME",
+          "width": 1664,
+          "height": 1069,
+          "visible": true
+        },
+        {
+          "id": "119:916",
+          "name": "Form/Early access — desktop",
+          "type": "COMPONENT_SET",
+          "width": 1090,
+          "height": 139,
+          "visible": true
+        },
+        {
+          "id": "119:941",
+          "name": "Form/Early access — mobile",
+          "type": "COMPONENT_SET",
+          "width": 788,
+          "height": 191,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "page": "Sidebar — standard",
+      "pageId": "16:12",
+      "nodes": [
+        {
+          "id": "17:14",
+          "name": "Product logo",
+          "type": "COMPONENT_SET",
+          "width": 392,
+          "height": 84,
+          "visible": true
+        },
+        {
+          "id": "17:16",
+          "name": "Tervory mark · on navy",
+          "type": "FRAME",
+          "width": 200,
+          "height": 63,
+          "visible": true
+        },
+        {
+          "id": "17:30",
+          "name": "Sidebar / Tab",
+          "type": "COMPONENT_SET",
+          "width": 240,
+          "height": 168,
+          "visible": true
+        },
+        {
+          "id": "17:36",
+          "name": "Org switcher · on navy",
+          "type": "FRAME",
+          "width": 224,
+          "height": 72,
+          "visible": true
+        },
+        {
+          "id": "17:37",
+          "name": "Sidebar",
+          "type": "COMPONENT",
+          "width": 240,
+          "height": 1024,
+          "visible": true
+        },
+        {
+          "id": "18:29",
+          "name": "Sidebar — standard · guide",
+          "type": "FRAME",
+          "width": 1100,
+          "height": 1004,
+          "visible": true
+        },
+        {
+          "id": "18:57",
+          "name": "Applied · Base",
+          "type": "TEXT",
+          "width": 90,
+          "height": 16,
+          "visible": true
+        },
+        {
+          "id": "18:58",
+          "name": "Sidebar",
+          "type": "INSTANCE",
+          "width": 240,
+          "height": 1024,
+          "visible": true
+        },
+        {
+          "id": "18:103",
+          "name": "Applied · Tiger (same component, swapped)",
+          "type": "TEXT",
+          "width": 279,
+          "height": 16,
+          "visible": true
+        },
+        {
+          "id": "18:104",
+          "name": "Tiger · Overview — sidebar standard applied",
+          "type": "FRAME",
+          "width": 1200,
+          "height": 1024,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "page": "Campaign flow — generic (issue #437)",
+      "pageId": "0:1",
+      "nodes": [
+        {
+          "id": "19:230",
+          "name": "1 · Choose dataset (org switcher open)",
+          "type": "FRAME",
+          "width": 1440,
+          "height": 1024,
+          "visible": true
+        },
+        {
+          "id": "19:346",
+          "name": "2 · Split by — any column (ATF sample)",
+          "type": "FRAME",
+          "width": 1440,
+          "height": 1024,
+          "visible": true
+        },
+        {
+          "id": "20:123",
+          "name": "3 · Filters from columns + Start campaign (ATF sample)",
+          "type": "FRAME",
+          "width": 1440,
+          "height": 1032,
+          "visible": true
+        },
+        {
+          "id": "20:262",
+          "name": "4 · Same flow, non-geographic dataset (Product catalogue sample)",
+          "type": "FRAME",
+          "width": 1440,
+          "height": 1280,
+          "visible": true
+        },
+        {
+          "id": "20:418",
+          "name": "5 · Confirm (ATF sample)",
+          "type": "FRAME",
+          "width": 1440,
+          "height": 1024,
+          "visible": true
+        },
+        {
+          "id": "21:273",
+          "name": "6 · Running — progress per group (Product catalogue sample)",
+          "type": "FRAME",
+          "width": 1440,
+          "height": 1024,
+          "visible": true
+        },
+        {
+          "id": "21:383",
+          "name": "7 · Results (ATF sample — real DC run 919381d5)",
+          "type": "FRAME",
+          "width": 1440,
+          "height": 1024,
+          "visible": true
+        },
+        {
+          "id": "21:494",
+          "name": "8 · Error — inline and actionable",
+          "type": "FRAME",
+          "width": 1440,
+          "height": 1079,
+          "visible": true
+        },
+        {
+          "id": "21:620",
+          "name": "9 · Empty — no dataset yet",
+          "type": "FRAME",
+          "width": 1440,
+          "height": 1024,
+          "visible": true
+        },
+        {
+          "id": "21:703",
+          "name": "Notes · backend work needed for the generic split",
+          "type": "FRAME",
+          "width": 720,
+          "height": 477,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "page": "Homepage — v1",
+      "pageId": "44:12",
+      "nodes": [
+        {
+          "id": "44:13",
+          "name": "Brand/Tervory lockup — on light",
+          "type": "COMPONENT",
+          "width": 144,
+          "height": 29,
+          "visible": true
+        },
+        {
+          "id": "44:29",
+          "name": "Brand/Tervory lockup — on ink",
+          "type": "COMPONENT",
+          "width": 144,
+          "height": 29,
+          "visible": true
+        },
+        {
+          "id": "44:45",
+          "name": "Site/Nav — desktop",
+          "type": "COMPONENT",
+          "width": 1440,
+          "height": 72,
+          "visible": true
+        },
+        {
+          "id": "44:73",
+          "name": "Site/Nav — mobile",
+          "type": "COMPONENT",
+          "width": 390,
+          "height": 64,
+          "visible": true
+        },
+        {
+          "id": "44:92",
+          "name": "Site/Footer — desktop",
+          "type": "COMPONENT",
+          "width": 1440,
+          "height": 525,
+          "visible": true
+        },
+        {
+          "id": "44:141",
+          "name": "Site/Footer — mobile",
+          "type": "COMPONENT",
+          "width": 390,
+          "height": 705,
+          "visible": true
+        },
+        {
+          "id": "52:74",
+          "name": "Homepage — v2 desktop",
+          "type": "FRAME",
+          "width": 1440,
+          "height": 4299,
+          "visible": true
+        },
+        {
+          "id": "56:115",
+          "name": "Homepage — v3 desktop · title",
+          "type": "FRAME",
+          "width": 351,
+          "height": 25,
+          "visible": true
+        },
+        {
+          "id": "56:119",
+          "name": "Homepage — v3 desktop",
+          "type": "FRAME",
+          "width": 1440,
+          "height": 6677,
+          "visible": true
+        },
+        {
+          "id": "59:163",
+          "name": "Homepage — v4 desktop · title",
+          "type": "TEXT",
+          "width": 433,
+          "height": 24,
+          "visible": true
+        },
+        {
+          "id": "59:164",
+          "name": "Homepage — v6 desktop",
+          "type": "FRAME",
+          "width": 1440,
+          "height": 10807.7158203125,
+          "visible": true
+        },
+        {
+          "id": "63:196",
+          "name": "Homepage — v4 mobile · title",
+          "type": "TEXT",
+          "width": 230,
+          "height": 24,
+          "visible": true
+        },
+        {
+          "id": "63:197",
+          "name": "Homepage — v6 mobile",
+          "type": "FRAME",
+          "width": 390,
+          "height": 15041,
+          "visible": true
+        },
+        {
+          "id": "66:229",
+          "name": "Logos — product (vectorized, swap)",
+          "type": "FRAME",
+          "width": 560,
+          "height": 768,
+          "visible": true
+        },
+        {
+          "id": "77:2611",
+          "name": "Squad/Specialist — desktop",
+          "type": "COMPONENT_SET",
+          "width": 370,
+          "height": 1160,
+          "visible": true
+        },
+        {
+          "id": "77:3158",
+          "name": "Squad/Specialist — mobile",
+          "type": "COMPONENT_SET",
+          "width": 810,
+          "height": 744,
+          "visible": true
+        },
+        {
+          "id": "89:7477",
+          "name": "Tank/Router — desktop",
+          "type": "COMPONENT_SET",
+          "width": 6680,
+          "height": 3117.400146484375,
+          "visible": true
+        },
+        {
+          "id": "90:2783",
+          "name": "Tank/Router — mobile",
+          "type": "COMPONENT_SET",
+          "width": 2150,
+          "height": 5950,
+          "visible": true
+        },
+        {
+          "id": "111:12",
+          "name": "Tag/Status",
+          "type": "COMPONENT_SET",
+          "width": 375,
+          "height": 55,
+          "visible": true
+        },
+        {
+          "id": "114:3906",
+          "name": "Receipt/Example (desktop)",
+          "type": "COMPONENT_SET",
+          "width": 1680,
+          "height": 658,
+          "visible": true
+        },
+        {
+          "id": "114:3907",
+          "name": "Receipt/Example (mobile)",
+          "type": "COMPONENT_SET",
+          "width": 844,
+          "height": 962,
+          "visible": true
+        },
+        {
+          "id": "116:2381",
+          "name": "Rig/Showcase — mobile",
+          "type": "COMPONENT_SET",
+          "width": 3800,
+          "height": 4120,
+          "visible": true
+        },
+        {
+          "id": "117:3547",
+          "name": "Rig/Showcase — desktop",
+          "type": "COMPONENT_SET",
+          "width": 12200,
+          "height": 1720,
+          "visible": true
+        },
+        {
+          "id": "125:2430",
+          "name": "Rig v6/Optional switch",
+          "type": "COMPONENT_SET",
+          "width": 468,
+          "height": 152,
+          "visible": true
+        },
+        {
+          "id": "127:2613",
+          "name": "Rig v6/Demo — desktop",
+          "type": "COMPONENT_SET",
+          "width": 8712,
+          "height": 580,
+          "visible": true
+        },
+        {
+          "id": "127:2819",
+          "name": "Rig v6/Demo — mobile",
+          "type": "COMPONENT_SET",
+          "width": 3932,
+          "height": 660,
+          "visible": true
+        },
+        {
+          "id": "159:2284",
+          "name": "Switch/Optional v2",
+          "type": "COMPONENT_SET",
+          "width": 420,
+          "height": 108,
+          "visible": true
+        },
+        {
+          "id": "159:2357",
+          "name": "Toggle test",
+          "type": "FRAME",
+          "width": 480,
+          "height": 124,
+          "visible": true
+        },
+        {
+          "id": "163:2480",
+          "name": "Switch/Optional v3",
+          "type": "COMPONENT_SET",
+          "width": 420,
+          "height": 108,
+          "visible": true
+        },
+        {
+          "id": "181:3069",
+          "name": "EXP A/Rig demo clone",
+          "type": "COMPONENT_SET",
+          "width": 8712,
+          "height": 580,
+          "visible": true
+        },
+        {
+          "id": "181:3460",
+          "name": "EXP A — demo clone",
+          "type": "FRAME",
+          "width": 900,
+          "height": 580,
+          "visible": true
+        },
+        {
+          "id": "181:3500",
+          "name": "EXP B/Demo clone stripped to switch",
+          "type": "COMPONENT_SET",
+          "width": 968,
+          "height": 124,
+          "visible": true
+        },
+        {
+          "id": "181:3907",
+          "name": "EXP B — stripped clone",
+          "type": "FRAME",
+          "width": 480,
+          "height": 124,
+          "visible": true
+        },
+        {
+          "id": "181:3916",
+          "name": "Toggle Off",
+          "type": "FRAME",
+          "width": 480,
+          "height": 124,
+          "visible": true
+        },
+        {
+          "id": "181:3917",
+          "name": "Toggle On",
+          "type": "FRAME",
+          "width": 480,
+          "height": 124,
+          "visible": true
+        },
+        {
+          "id": "208:3347",
+          "name": "Tank/Five points (desktop)",
+          "type": "COMPONENT_SET",
+          "width": 6640,
+          "height": 1722,
+          "visible": true
+        },
+        {
+          "id": "208:4443",
+          "name": "Tank/Five points (mobile)",
+          "type": "COMPONENT_SET",
+          "width": 2110,
+          "height": 3330,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "page": "Rig — v1",
+      "pageId": "56:12",
+      "nodes": [
+        {
+          "id": "56:127",
+          "name": "Rig — desktop",
+          "type": "FRAME",
+          "width": 1440,
+          "height": 3005,
+          "visible": true
+        },
+        {
+          "id": "56:798",
+          "name": "Rig — mobile",
+          "type": "FRAME",
+          "width": 390,
+          "height": 4033,
+          "visible": true
+        }
+      ]
+    }
+  ]
+}

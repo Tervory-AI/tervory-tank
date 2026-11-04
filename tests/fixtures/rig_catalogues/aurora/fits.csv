@@ -1,0 +1,19 @@
+part_sku,fits_sku,fits_family,rule,note
+ARCHON-DOT-RMR,,ARCHON-TYPE-B,"{""optic_cut"":""RMR""}",Fits your RMR cut
+ARCHON-DOT-RMS,,ARCHON-TYPE-B,"{""optic_cut"":""RMS""}",Needs RMS cut
+ARCHON-DOT-ACRO,,ARCHON-TYPE-B,"{""optic_cut"":""ACRO P2/C2""}",Needs ACRO cut
+ARCHON-TRIGGER-PERF,,ARCHON-TYPE-B,,Made for Type B
+ARCHON-MAG-12,,ARCHON-TYPE-B,,Fits Type B
+ARCHON-MAG-15,,ARCHON-TYPE-B,,Fits Type B
+ARCHON-MAG-18,,ARCHON-TYPE-B,,Fits Type B
+ARCHON-RMR-SCREWS,,ARCHON-TYPE-B,"{""optic_cut"":""RMR""}",Fits the RMR cut
+ARCHON-TB-THREADED,,ARCHON-TYPE-B,,"1/2-28 threaded barrel, suppressor ready"
+ARCHON-TB-135,,ARCHON-TYPE-B,,13.5x1 LH barrel option
+ARCHON-MAG-12,,ARCHON-TYPE-A,,Ships with the Type A. https://archonfirearms.com/product/type-a/
+ARCHON-MAG-15,,ARCHON-TYPE-A,,Ships with the Type A. https://archonfirearms.com/product/type-a/
+ARCHON-MAG-18,,ARCHON-TYPE-A,,Ships with the Type A. https://archonfirearms.com/product/type-a/
+ARCHON-LIGHT,,ARCHON-TYPE-B,,1913 Picatinny. https://archonfirearms.com/
+ARCHON-LIGHT,,ARCHON-TYPE-A,,Picatinny rail. The Type B instructions apply in full to the Type A. https://archonfirearms.com/wp-content/uploads/2026/02/Manual_US_2026.pdf
+ARCHON-TB-THREADED,,ARCHON-TYPE-A,"{""fits"":false}",Type B barrel. The Type A ships with a 5 inch barrel. https://archonfirearms.com/product/type-a/
+ARCHON-TB-135,,ARCHON-TYPE-A,"{""fits"":false}",Type B barrel. The Type A ships with a 5 inch barrel. https://archonfirearms.com/product/type-a/
+ARCHON-HOLSTER-TB,,ARCHON-TYPE-A,"{""fits"":false}",The Type B holster is for the Type B.

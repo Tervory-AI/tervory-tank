@@ -12,6 +12,7 @@ import logging
 import os
 import re
 from datetime import datetime
+from functools import lru_cache
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
@@ -28,6 +29,63 @@ async def ensure_rig_tables(conn, schema: str) -> None:
         attempts integer NOT NULL DEFAULT 0, next_attempt_at timestamptz NOT NULL DEFAULT now(),
         PRIMARY KEY (tenant_id, sku))''')
     await conn.execute(f'CREATE INDEX IF NOT EXISTS rig_targets_url ON {schema}.rig_targets(tenant_id,url)')
+
+
+# Rig Locate confirm re-reads one watched page now. Same 45 second browser
+# budget as Tiger's renders (#458). Read only: no observation, alert or delivery.
+CHECK_NOW_BUDGET_S = 45
+
+
+async def check_now(store, tenant_id: str, url: str, render, extract, fetch_text, *,
+                    budget: float = CHECK_NOW_BUDGET_S, clock=None) -> dict:
+    """One live reading of a page Tiger already watches for this tenant.
+
+    Answers available / unavailable only from an explicit schema.org stock
+    state with a stated price (confirmed_value). Everything else is unknown.
+    """
+    from datetime import timezone
+    from urllib.parse import urlsplit
+
+    from watch import ROBOTS_TOKEN, robots_allows
+
+    now = (clock or (lambda: datetime.now(timezone.utc)))()
+    unknown = lambda reason: {"status": "unknown", "reason": reason, "url": url}  # noqa: E731
+    watch = await store.get_watch(tenant_id, url)
+    if watch is None or not watch.get("enabled"):
+        return unknown("not_watched")
+    parts = urlsplit(url)
+    try:
+        robots = await asyncio.wait_for(fetch_text(f"{parts.scheme}://{parts.netloc}/robots.txt"), 10)
+    except Exception:
+        return unknown("robots_unavailable")
+    if not robots_allows(robots or "", url, ROBOTS_TOKEN):
+        return unknown("robots")
+    try:
+        page = await asyncio.wait_for(render(url), budget)
+    except Exception:
+        return unknown("timeout")
+    if not isinstance(page, dict) or not page.get("ok") or page.get("challenge") or not page.get("html"):
+        return unknown("blocked" if isinstance(page, dict) and page.get("challenge") else "unreadable")
+    try:
+        extracted = await asyncio.wait_for(extract(page["html"], url), 15)
+    except Exception:
+        return unknown("unreadable")
+    items = [item for item in (extracted or {}).get("items") or [] if isinstance(item, dict)]
+    if len(items) != 1:
+        return unknown("unreadable" if not items else "ambiguous")
+    item = items[0]
+    value = confirmed_value({"method": item.get("method") or extracted.get("method"),
+                             "product_name": item.get("name"), "availability": item.get("availability"),
+                             "price": item.get("price"), "currency": item.get("currency")})
+    if value is None:
+        return unknown("unconfirmed")
+    result = {"status": "available" if value["active"] else "unavailable", "url": url,
+              "checked_at": now.isoformat(), "method": str(item.get("method") or extracted.get("method") or "")}
+    if value["active"]:
+        result.update(price=value["price"], currency=value["currency"])
+    if item.get("gtin"):
+        result["gtin"] = str(item["gtin"])
+    return result
 
 
 def confirmed_value(observation: dict) -> dict | None:
@@ -223,3 +281,315 @@ class RigWatches:
                     WHERE tenant_id=$1 AND sku=$2 AND pending=$3::jsonb''', UUID(tenant), row['sku'], json.dumps(payload), accepted)
             sent += int(accepted)
         return sent
+
+# Competitor discovery deliberately shares the room's existing fetch/render path.
+# Public host accounting is durable and shared across all workers and tenants.
+class DiscoveryStopped(Exception):
+    pass
+
+
+class DiscoveryGate:
+    def __init__(self, pool):
+        self.pool = pool
+
+    async def call(self, url, operation):
+        from urllib.parse import urlsplit
+        from datetime import timezone
+        from watch import check_url
+        safe = await asyncio.to_thread(check_url, url)
+        parsed = urlsplit(safe)
+        site = f'{parsed.scheme}://{parsed.netloc}'
+        checkout = self.pool.acquire(autocommit=True) if hasattr(self.pool, 'raw') else self.pool.acquire()
+        async with checkout as conn:
+            await conn.execute('SELECT pg_advisory_lock(hashtextextended($1,1))', site)
+            try:
+                async with conn.transaction():
+                    row = await conn.fetchrow('''INSERT INTO agent_tiger.discovery_limits(site) VALUES($1)
+                        ON CONFLICT(site) DO UPDATE SET
+                        requests=CASE WHEN discovery_limits.day<>(now() AT TIME ZONE 'UTC')::date THEN 0 ELSE discovery_limits.requests END,
+                        human_check=CASE WHEN discovery_limits.day<>(now() AT TIME ZONE 'UTC')::date THEN false ELSE discovery_limits.human_check END,
+                        day=(now() AT TIME ZONE 'UTC')::date RETURNING *''', site)
+                    if row['human_check']:
+                        raise DiscoveryStopped('human_check')
+                    if row['requests'] >= 500:
+                        raise DiscoveryStopped('page_limit')
+                    if row['last_at']:
+                        delay = 3 - (datetime.now(timezone.utc) - row['last_at']).total_seconds()
+                        if delay > 0:
+                            await asyncio.sleep(min(delay, 3))
+                    await conn.execute('UPDATE agent_tiger.discovery_limits SET requests=requests+1,last_at=clock_timestamp() WHERE site=$1', site)
+                # The reservation committed before transport: cancellation or a
+                # crashed worker cannot refund an already-started public request.
+                result = await operation()
+                if isinstance(result, dict) and (result.get('challenge') or result.get('status') in {401,403,429}):
+                    await conn.execute('UPDATE agent_tiger.discovery_limits SET human_check=true WHERE site=$1', site)
+                return result
+            finally:
+                await asyncio.shield(conn.execute('SELECT pg_advisory_unlock(hashtextextended($1,1))', site))
+
+    async def block(self, site):
+        async with self.pool.acquire() as conn:
+            await conn.execute('UPDATE agent_tiger.discovery_limits SET human_check=true WHERE site=$1', site)
+
+
+class DiscoveryLinks:
+    """Bounded links and GET search forms; never submit credentials or a POST."""
+    @staticmethod
+    def parse(html, base):
+        from html.parser import HTMLParser
+        from urllib.parse import urljoin
+        class Parser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.links, self.forms, self.form = [], [], None
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == 'a' and attrs.get('href') and len(self.links) < 1000:
+                    self.links.append(urljoin(base, attrs['href']))
+                if tag == 'form' and attrs.get('method', 'get').lower() == 'get':
+                    self.form = {'action': urljoin(base, attrs.get('action') or base), 'fields': {}, 'query': None}
+                if tag == 'input' and self.form is not None:
+                    name = attrs.get('name', '')
+                    if attrs.get('type') == 'search' or name in {'q','s','search','query','search_query'}:
+                        self.form['query'] = name
+                    elif attrs.get('type') == 'hidden' and name:
+                        self.form['fields'][name] = attrs.get('value', '')
+            def handle_endtag(self, tag):
+                if tag == 'form' and self.form is not None:
+                    if self.form['query']:
+                        self.forms.append(self.form)
+                    self.form = None
+        parser = Parser()
+        parser.feed(html[:600000])
+        return parser.links, parser.forms
+
+
+# Hints only decide whether to ask the existing browser human_check detector.
+# They never mark a host blocked by themselves.
+_DISCOVERY_CHALLENGE_HINT = re.compile(
+    r'captcha|turnstile|(?:verify|confirm|prove).{0,30}human|checking your browser|'
+    r'security check|cf-error-details|sorry.{0,20}blocked|your request.{0,20}blocked', re.I)
+
+
+def _discovery_robot_normalize(value):
+    def unescape(match):
+        char = chr(int(match[1], 16))
+        return char if char.isascii() and (char.isalnum() or char in '-._~') else match[0].upper()
+    return re.sub(r'%([0-9a-fA-F]{2})', unescape, value)
+
+
+@lru_cache(maxsize=64)
+def _discovery_robot_rules(body, token):
+    # Public policy only. Parsing/compilation happens once, rather than once
+    # for every loc in a large sitemap. A changed body is a different key.
+    from watch import _robot_groups, _rules_for
+    groups = _robot_groups(body)
+    rules = _rules_for(groups, token)
+    if rules is None:
+        rules = [rule for agents, group in groups if '*' in agents for rule in group]
+    compiled = []
+    for kind, rule in rules:
+        if not rule:
+            continue
+        rule = _discovery_robot_normalize(rule)
+        end = rule.endswith('$')
+        pattern = rule[:-1] if end else rule
+        regex = re.compile('^' + '.*'.join(re.escape(part) for part in pattern.split('*')) + ('$' if end else ''))
+        compiled.append((regex, len(pattern.replace('*', '').encode()), kind == 'allow'))
+    return tuple(compiled)
+
+
+def discovery_robots_allows(body, url, token='tervorytiger'):
+    """Discovery-only RFC 9309 path/query matching; ordinary watches unchanged."""
+    from urllib.parse import urlsplit
+    parsed = urlsplit(url)
+    target = _discovery_robot_normalize((parsed.path or '/') + ('?' + parsed.query if parsed.query else ''))
+    return max(((length, allow) for regex, length, allow in _discovery_robot_rules(body, token)
+                if regex.match(target)), default=(0, True))[1]
+
+
+def discovery_same(site, url):
+    """Syntactic filtering only. Transport validates public DNS at fetch time."""
+    from urllib.parse import urlsplit
+    try:
+        a, b = urlsplit(site), urlsplit(url)
+        return (b.scheme == 'https' and not b.username and not b.password
+                and (a.hostname.lower(), a.port or 443) == (b.hostname.lower(), b.port or 443)
+                and not b.path.lower().endswith('.pdf'))
+    except (ValueError, AttributeError):
+        return False
+
+
+def discovery_search_url(url):
+    from urllib.parse import urlsplit, parse_qsl
+    parsed = urlsplit(url)
+    return (parsed.path.rstrip('/').lower() == '/search'
+            or bool({'q', 's', 'search', 'query', 'search_query'} & {k for k, _ in parse_qsl(parsed.query)}))
+
+
+def discovery_sitemap(source, limit=10000):
+    from io import StringIO
+    from xml.etree import ElementTree
+    locations, kind, cut = [], '', False
+    try:
+        for event, element in ElementTree.iterparse(StringIO(source), events=('start', 'end')):
+            tag = element.tag.rsplit('}', 1)[-1]
+            if not kind:
+                kind = tag
+            if event == 'end':
+                if tag == 'loc' and element.text:
+                    locations.append(element.text.strip())
+                    if len(locations) >= limit:
+                        cut = True
+                        break
+                element.clear()
+    except ElementTree.ParseError:
+        cut = True
+    return kind, locations, cut
+
+
+class CatalogueDiscovery:
+    """One transport operation per durable slice; all traversal state is JSON."""
+    def __init__(self, fetch, render, gate, publish):
+        self.fetch, self.render, self.gate, self.publish = fetch, render, gate, publish
+
+    async def step(self, sites, products, cursor=None):
+        from urllib.parse import urljoin, urlencode, urlsplit, urlunsplit, parse_qsl
+        state = cursor or {'site_index': 0, 'sites': [], 'active': None}
+        if state['site_index'] >= len(sites):
+            return state, True
+        site = sites[state['site_index']]
+        if state['active'] is None:
+            state['active'] = {'robots': '', 'queue': [{'kind': 'robots', 'url': site + '/robots.txt'}],
+                               'visited': [], 'confirmed': [], 'forms': [], 'pages': 0, 'warnings': []}
+        active = state['active']
+        def allowed(url):
+            return (discovery_same(site, url)
+                    and all(discovery_robots_allows(active['robots'], url, token) for token in ('tervorytiger', 'tervory')))
+        def enqueue(kind, urls, **extra):
+            pending = [{'kind': kind, 'url': url, **extra} for url in dict.fromkeys(urls) if allowed(url)]
+            capacity = max(0, 10000 - len(active['queue']))
+            if len(pending) > capacity:
+                active['warnings'].append({'url': site, 'reason': 'candidate_limit'})
+            active['queue'][0:0] = pending[:capacity]
+        def finish(status):
+            state['sites'].append({'site': site, 'status': status, 'pages': active['pages'], 'warnings': active['warnings']})
+            state['site_index'] += 1
+            state['active'] = None
+        try:
+            # Skip bounded local work without occupying a worker for a request.
+            for _ in range(1000):
+                if not active['queue']:
+                    index = active.get('search_index', 0)
+                    if active.get('home_finished') and index < len(products):
+                        product = products[index]
+                        active['search_index'] = index + 1
+                        raw_gtin = product.get('gtin')
+                        gtin = re.sub(r'[\s-]', '', raw_gtin) if isinstance(raw_gtin, str) else ''
+                        if (product['sku'] in active['confirmed']
+                                or not re.fullmatch(r'[0-9]{8}|[0-9]{12,14}', gtin) or not gtin.strip('0')):
+                            continue
+                        # Same GS1 check digit as Tank's tiger_gtin identity rule.
+                        total = sum(int(c) * (3 if i % 2 == 0 else 1) for i, c in enumerate(reversed(gtin[:-1])))
+                        if (10 - total % 10) % 10 != int(gtin[-1]):
+                            continue
+                        searches = [site + '/search?' + urlencode({'q': gtin}), site + '/?' + urlencode({'s': gtin, 'post_type': 'product'})]
+                        for form in active['forms'][:20]:
+                            parsed = urlsplit(form['action'])
+                            fields = {**dict(parse_qsl(parsed.query)), **form['fields'], form['query']: gtin}
+                            searches.append(urlunsplit(parsed._replace(query=urlencode(fields), fragment='')))
+                        active['queue'].extend({'kind': 'search', 'url': target, 'sku': product['sku']} for target in dict.fromkeys(searches) if allowed(target))
+                        # Skip unusable/finished SKUs in this bounded local loop;
+                        # no job row or one-second wait is needed per empty SKU.
+                        continue
+                    finish('completed')
+                    return state, state['site_index'] >= len(sites)
+                action = active['queue'].pop(0)
+                kind, url = action['kind'], action['url']
+                if kind != 'robots' and not allowed(url):
+                    continue
+                if action.get('sku') in active['confirmed']:
+                    continue
+                key = kind + ':' + url
+                if key in active['visited']:
+                    continue
+                active['visited'].append(key)
+                break
+            else:
+                return state, False
+            if kind == 'publish':
+                matched = await self.publish(site, url, action['html'], False)
+                active['confirmed'] = list(set(active['confirmed']) | {m['sku'] for m in matched.get('matches', []) if m.get('state') == 'confirmed'})
+                return state, False
+            if kind == 'home':
+                active['home_finished'] = True
+            response = await self.gate.call(url, lambda: self.fetch(url) if kind in {'robots', 'map'} else self.render(url))
+            if response.get('challenge') or response.get('status') in {401, 403, 429}:
+                await self.gate.block(site)
+                await self.publish(site, url, '', True)
+                finish('human_check')
+                return state, state['site_index'] >= len(sites)
+            if kind == 'robots':
+                if response.get('status') not in {200, 404}:
+                    finish('unavailable')
+                    return state, state['site_index'] >= len(sites)
+                active['robots'] = response.get('text', '') if response.get('status') == 200 else ''
+                maps = [urljoin(site + '/', m[1]) for m in re.finditer(r'^\s*Sitemap:\s*(\S+)', active['robots'], re.I | re.M)]
+                enqueue('map', maps[:500] + [site + '/sitemap.xml'])
+                if _DISCOVERY_CHALLENGE_HINT.search(active['robots']):
+                    enqueue('probe', [url])
+                active['queue'].append({'kind': 'home', 'url': site + '/'})
+                return state, False
+            if kind == 'map':
+                source = response.get('text', '')
+                if response.get('status') != 200:
+                    active['warnings'].append({'url': url, 'reason': 'sitemap_unavailable'})
+                    return state, False
+                if (re.search(r'<(?:!doctype\s+html|html|form)\b', source, re.I) or _DISCOVERY_CHALLENGE_HINT.search(source)):
+                    if _DISCOVERY_CHALLENGE_HINT.search(source):
+                        enqueue('probe', [url])
+                    else:
+                        active['warnings'].append({'url': url, 'reason': 'sitemap_html'})
+                    return state, False
+                root, locations, cut = discovery_sitemap(source)
+                if cut or response.get('truncated'):
+                    active['warnings'].append({'url': url, 'reason': 'sitemap_cut'})
+                if root == 'sitemapindex':
+                    enqueue('map', [urljoin(url, loc) for loc in locations[:500]])
+                elif root == 'urlset':
+                    enqueue('product', [urljoin(url, loc) for loc in locations if not discovery_search_url(loc)])
+                return state, False
+            active['pages'] += 1
+            if response.get('reason') == 'redirect' or response.get('status') in {301, 302, 303, 307, 308}:
+                target = urljoin(url, response.get('location') or '')
+                if kind in {'search', 'product'} and target != url and not discovery_search_url(target):
+                    enqueue('product', [target], **({'sku': action['sku']} if action.get('sku') else {}))
+                return state, False
+            if not response.get('ok') or response.get('url', url).rstrip('/') != url.rstrip('/'):
+                return state, False
+            html = response.get('html', '')
+            if kind == 'product':
+                # Search and home responses never become identity evidence.
+                if not discovery_search_url(url):
+                    enqueue('publish', [url], html=html)
+            elif kind == 'home':
+                _, active['forms'] = DiscoveryLinks.parse(html, url)
+                active['forms'] = active['forms'][:20]
+                active['home_finished'] = True
+            elif kind == 'search':
+                links, _ = DiscoveryLinks.parse(html, url)
+                enqueue('product', [link for link in links if not discovery_search_url(link)], sku=action['sku'])
+        except DiscoveryStopped as exc:
+            finish(str(exc))
+        except (httpx.HTTPError, OSError, ValueError):
+            active['warnings'].append({'url': url, 'reason': 'transport_error'})
+            if kind == 'robots':
+                finish('unavailable')
+        return state, state['site_index'] >= len(sites)
+
+    async def run(self, sites, products):
+        # Offline traversal convenience; the production handler calls step once.
+        state, done = None, False
+        while not done:
+            state, done = await self.step(sites, products, state)
+        return {'sites': state['sites'], 'model_calls': 0}

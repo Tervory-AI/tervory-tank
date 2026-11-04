@@ -1,0 +1,319 @@
+"""Synthetic local OIDC provider, real JWT verification and disposable Tank DB."""
+import asyncio
+import base64
+import json
+import time
+from urllib.parse import parse_qs
+
+from cryptography.hazmat.primitives.asymmetric import rsa
+import httpx
+import jwt
+import pytest
+from starlette.requests import Request
+
+import identity_oidc as oidc
+import personal_tokens as pat
+from test_device_login import device as device_fixture
+from test_command import runtime as runtime_fixture, command_pool as command_pool_fixture, TENANT
+
+# Reuse the existing real-Postgres fixtures under their original pytest names.
+device = device_fixture
+runtime = runtime_fixture
+command_pool = command_pool_fixture
+
+CLIENT = '123@tervory'
+ORG = '10001'
+SUB = '20001'
+
+
+class Provider:
+    def __init__(self):
+        self.private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        self.kid = 'first-key'
+        self.keys = [self.jwk()]
+        self.calls = []
+        self.claims = {'iss': oidc.ISSUER, 'aud': CLIENT, 'sub': SUB, 'exp': int(time.time()) + 600,
+                       'iat': int(time.time()), oidc.ORG_CLAIM: ORG,
+                       oidc.ROLES_CLAIM: {'org_admin': {ORG: 'tervory'}}}
+
+    def jwk(self):
+        return {**jwt.algorithms.RSAAlgorithm.to_jwk(self.private.public_key(), as_dict=True),
+                'kid': self.kid, 'alg': 'RS256', 'use': 'sig'}
+
+    def token(self, **claims):
+        return jwt.encode({**self.claims, **claims}, self.private, algorithm='RS256', headers={'kid': self.kid})
+
+    def __call__(self, request):
+        assert request.url.host == 'auth-za.tervory.com'
+        self.calls.append((request.method, request.url.path))
+        if request.url.path == '/.well-known/openid-configuration':
+            return httpx.Response(200, json={'issuer': oidc.ISSUER, 'jwks_uri': oidc.ISSUER + '/keys',
+                'token_endpoint': oidc.ISSUER + '/oauth/v2/token',
+                'device_authorization_endpoint': oidc.ISSUER + '/oauth/v2/device_authorization'})
+        if request.url.path == '/keys':
+            return httpx.Response(200, json={'keys': self.keys})
+        form = parse_qs(request.content.decode())
+        assert request.method == 'POST' and form['client_id'] == [CLIENT]
+        if request.url.path == '/oauth/v2/device_authorization':
+            assert form['scope'] == [oidc.SCOPE]
+            return httpx.Response(200, json={'device_code': 'synthetic-provider-code', 'user_code': '1234-5678',
+                'verification_uri': oidc.ISSUER + '/ui/v2/login/device',
+                'verification_uri_complete': oidc.ISSUER + '/ui/v2/login/device?user_code=1234-5678',
+                'expires_in': 600, 'interval': 5})
+        assert request.url.path == '/oauth/v2/token'
+        assert form['device_code'] == ['synthetic-provider-code']
+        assert form['grant_type'] == ['urn:ietf:params:oauth:grant-type:device_code']
+        return httpx.Response(200, json={'id_token': self.token(), 'access_token': 'unused-synthetic-upstream-token'})
+
+
+@pytest.fixture
+def provider(monkeypatch):
+    provider = Provider()
+    oidc._cache.clear()
+    monkeypatch.setenv('IDENTITY_ISSUER', oidc.ISSUER)
+    monkeypatch.setenv('IDENTITY_CLIENT_ID', CLIENT)
+    monkeypatch.setenv('IDENTITY_ORG_TENANTS', json.dumps({ORG: str(TENANT)}))
+    monkeypatch.setattr(oidc, 'http_client', lambda: httpx.AsyncClient(transport=httpx.MockTransport(provider)))
+    yield provider
+    oidc._cache.clear()
+
+
+@pytest.mark.asyncio
+async def test_verified_claims_and_key_cache_rotation(provider):
+    assert (await oidc.verify(provider.token()))['sub'] == SUB
+    await oidc.verify(provider.token())
+    assert provider.calls.count(('GET', '/keys')) == 1
+    provider.kid = 'rotated-key'
+    provider.keys = [provider.jwk()]
+    with pytest.raises(oidc.IdentityError):
+        await oidc.verify(provider.token())
+    assert provider.calls.count(('GET', '/keys')) == 1
+    oidc._cache['keys_refresh_after'] = time.monotonic() - 1
+    await oidc.verify(provider.token())
+    assert provider.calls.count(('GET', '/keys')) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change', [{'aud': 'another-client'}, {'iss': 'https://other.example'}, {'exp': 1}, {'azp': 'other-client'}])
+async def test_token_checks_refuse_invalid_claims(provider, change):
+    with pytest.raises(oidc.IdentityError, match='token refused'):
+        await oidc.verify(provider.token(**change))
+
+
+@pytest.mark.asyncio
+async def test_bad_signature_and_unknown_kid_are_refused(provider):
+    other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    forged = jwt.encode(provider.claims, other, algorithm='RS256', headers={'kid': provider.kid})
+    with pytest.raises(oidc.IdentityError):
+        await oidc.verify(forged)
+    provider.kid = 'unknown'
+    with pytest.raises(oidc.IdentityError):
+        await oidc.verify(provider.token())
+
+
+def test_unmapped_organisation_and_metadata_do_not_grant_identity(provider, monkeypatch):
+    with pytest.raises(oidc.IdentityError):
+        oidc.principal({**provider.claims, oidc.ORG_CLAIM: '99999'})
+    claims = {**provider.claims, oidc.ROLES_CLAIM: {}, 'email': 'founder@tervory.com',
+              'name': 'founder', 'metadata': {'role': 'org_admin', 'founder': True},
+              'urn:zitadel:iam:user:metadata': {'founder': 'true'},
+              'urn:zitadel:iam:org:project:another-project:roles': {'org_admin': {ORG: 'tervory'}}}
+    tenant, user, admin = oidc.principal(claims)
+    assert tenant == TENANT and user == 'zitadel:' + SUB and admin is False
+    assert oidc.principal(provider.claims)[2] is True
+    assert oidc.principal({**provider.claims, oidc.ROLES_CLAIM: {'org_admin': {'99999': 'elsewhere'}}})[2] is False
+
+
+@pytest.mark.asyncio
+async def test_provider_endpoints_cannot_escape_fixed_origin(provider, monkeypatch):
+    for endpoint in ['https://evil.example/token', 'http://auth-za.tervory.com/token',
+                     'https://user@auth-za.tervory.com/token', 'https://auth-za.tervory.com:444/token']:
+        with pytest.raises(oidc.IdentityError):
+            oidc.endpoint(endpoint)
+
+
+@pytest.mark.asyncio
+async def test_issuer_unset_and_boston_keep_existing_device_flow(device, monkeypatch):
+    client, _, runtime = device
+    monkeypatch.delenv('IDENTITY_ISSUER', raising=False)
+    monkeypatch.setattr(oidc, 'http_client', lambda: pytest.fail('OIDC was called with issuer unset'))
+    result = await client.post('/v1/command/device/code', json={'device_name': 'synthetic', 'approval': 'zitadel'})
+    assert result.status_code == 200 and result.json()['device_code'].startswith('tvd1.us-east.')
+    monkeypatch.setenv('IDENTITY_ISSUER', oidc.ISSUER)
+    assert not oidc.configured()  # Even a misplaced setting cannot change Boston.
+
+
+@pytest.mark.asyncio
+async def test_za_oidc_issue_refresh_revoke_and_verified_roles(device, provider, monkeypatch):
+    client, pool, runtime = device
+    runtime.box_region = lambda: 'za'
+    result = await client.post('/v1/command/device/code', json={'device_name': 'synthetic', 'approval': 'zitadel'})
+    assert result.status_code == 200
+    start = result.json()
+    assert start['identity_provider'] == 'zitadel' and start['user_code'] == '1234-5678'
+    assert start['verification_uri'].startswith(oidc.ISSUER + '/')
+    wrapped = start['device_code']
+    assert base64.urlsafe_b64decode(wrapped[5:] + '=' * (-len(wrapped[5:]) % 4)) == b'synthetic-provider-code'
+    issued = await client.post('/v1/command/device/token', json={'device_code': wrapped})
+    assert issued.status_code == 200, issued.text
+    grant = issued.json()
+    assert grant['access_token'].startswith('tv1.za.') and grant['refresh_token'].startswith('tvr1.za.')
+    assert grant['expires_in'] == 3600 and grant['refresh_expires_in'] == 30 * 86400
+    assert (await client.post('/v1/command/device/token', json={'device_code': wrapped})).json()['error'] == 'invalid_grant'
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow('SELECT * FROM tank.personal_tokens')
+        assert row['user_id'] == 'zitadel:' + SUB and row['tenant_id'] == TENANT
+        assert row['identity_tenant_admin'] is True
+        devices = await conn.fetch('SELECT * FROM tank.device_authorizations')
+        stored = repr(dict(row)) + repr([dict(r) for r in devices])
+        for secret in [wrapped, 'synthetic-provider-code', grant['access_token'], grant['refresh_token']]:
+            assert secret not in stored
+    def request(token, **extra):
+        headers = {'authorization': 'Bearer ' + token, **extra}
+        return Request({'type': 'http', 'method': 'GET', 'path': '/v1/command/tools', 'query_string': b'',
+                        'headers': [(k.encode(), v.encode()) for k, v in headers.items()]})
+    actor = await pat.identity(request(grant['access_token'], **{'x-tervory-user': 'founder'}))
+    assert actor.user_id == 'zitadel:' + SUB and actor.tenant_admin and not actor.founder
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'zitadel:' + SUB)
+    assert (await pat.identity(request(grant['access_token']))).founder
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'somebody-else')
+    assert not (await pat.identity(request(grant['access_token']))).founder
+    rotated = await client.post('/v1/command/device/refresh', json={'refresh_token': grant['refresh_token']})
+    assert rotated.status_code == 200 and rotated.json()['access_token'] != grant['access_token']
+    assert (await client.post('/v1/command/device/refresh', json={'refresh_token': grant['refresh_token']})).json()['error'] == 'invalid_grant'
+    fresh = rotated.json()
+    assert (await client.post('/v1/command/device/revoke', json={'refresh_token': fresh['refresh_token']})).json()['revoked']
+    assert (await client.post('/v1/command/device/refresh', json={'refresh_token': fresh['refresh_token']})).json()['error'] == 'invalid_grant'
+    with pytest.raises(Exception):
+        await pat.identity(request(fresh['access_token']))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('selection', [{}, {'approval': 'workspace'}])
+async def test_boston_approval_key_still_works_while_zitadel_is_enabled(device, provider, monkeypatch, selection):
+    client, pool, runtime = device
+    runtime.box_region = lambda: 'za'
+    monkeypatch.setenv('TANK_DEVICE_APPROVAL_KEY', 'dummy-za-approval-key')
+    started = await client.post('/v1/command/device/code', json={'device_name': 'legacy-synthetic', **selection})
+    assert started.status_code == 200
+    data = started.json()
+    assert data['device_code'].startswith('tvd1.za.') and provider.calls == []
+    assert data['verification_uri'].startswith('https://workspace.fixture/cli/device')
+    headers = {'x-tank-key': 'dummy-za-approval-key', 'x-tervory-user': 'client', 'x-tervory-tenant': str(TENANT)}
+    approved = await client.post('/v1/command/device/approval/' + data['user_code'], json={'action': 'approve'}, headers=headers)
+    assert approved.status_code == 200
+    grant = await client.post('/v1/command/device/token', json={'device_code': data['device_code']})
+    assert grant.status_code == 200 and grant.json()['access_token'].startswith('tv1.za.')
+    next_code = await client.post('/v1/command/device/code', json={'device_name': 'identity-synthetic', 'approval': 'zitadel'})
+    assert next_code.json()['identity_provider'] == 'zitadel'
+
+
+@pytest.mark.asyncio
+async def test_signed_but_unmapped_org_mints_no_tank_credential(device, provider):
+    client, pool, runtime = device
+    runtime.box_region = lambda: 'za'
+    provider.claims[oidc.ORG_CLAIM] = '99999'
+    code = (await client.post('/v1/command/device/code', json={'device_name': 'synthetic', 'approval': 'zitadel'})).json()['device_code']
+    response = await client.post('/v1/command/device/token', json={'device_code': code})
+    assert response.status_code == 400 and response.json() == {'error': 'invalid_grant'}
+    async with pool.acquire() as conn:
+        assert await conn.fetchval('SELECT count(*) FROM tank.personal_tokens') == 0
+
+
+@pytest.mark.asyncio
+async def test_slow_provider_releases_pool_and_overlapping_polls_issue_once(device, provider, monkeypatch):
+    client, pool, runtime = device
+    runtime.box_region = lambda: 'za'
+    wrapped = (await client.post('/v1/command/device/code', json={
+        'device_name': 'concurrent-synthetic', 'approval': 'zitadel'})).json()['device_code']
+    entered = [asyncio.Event(), asyncio.Event()]
+    release_poll, release_verify = asyncio.Event(), asyncio.Event()
+    verifying = asyncio.Event()
+    calls = 0
+    original_verify = oidc.verify
+
+    async def slow_poll(code):
+        nonlocal calls
+        assert pool.get_idle_size() == pool.get_size()
+        slot = calls
+        calls += 1
+        entered[slot].set()
+        await release_poll.wait()
+        return {'id_token': provider.token()}
+
+    async def slow_verify(token):
+        assert pool.get_idle_size() == pool.get_size()
+        verifying.set()
+        await release_verify.wait()
+        return await original_verify(token)
+
+    monkeypatch.setattr(oidc, 'poll', slow_poll)
+    monkeypatch.setattr(oidc, 'verify', slow_verify)
+    async def request():
+        return await client.post('/v1/command/device/token', json={'device_code': wrapped})
+    first = asyncio.create_task(request())
+    second = None
+    try:
+        await asyncio.wait_for(entered[0].wait(), 2)
+        # Simulate the next allowed interval while the first provider call is stalled.
+        async with pool.acquire() as conn:
+            await conn.execute("UPDATE tank.device_authorizations SET last_polled_at=now()-interval '5 seconds'")
+        second = asyncio.create_task(request())
+        await asyncio.wait_for(entered[1].wait(), 2)
+        assert pool.get_idle_size() == pool.get_size()
+        async with pool.acquire(timeout=1) as conn:
+            assert await conn.fetchval('SELECT 1') == 1
+        release_poll.set()
+        await asyncio.wait_for(verifying.wait(), 2)
+        assert pool.get_idle_size() == pool.get_size()
+        release_verify.set()
+        responses = await asyncio.wait_for(asyncio.gather(first, second), 5)
+        assert sorted(r.status_code for r in responses) == [200, 400]
+        assert [r.json()['error'] for r in responses if r.status_code == 400] == ['invalid_grant']
+        async with pool.acquire() as conn:
+            assert await conn.fetchval('SELECT count(*) FROM tank.personal_tokens') == 1
+            assert await conn.fetchval("SELECT status FROM tank.device_authorizations") == 'consumed'
+    finally:
+        release_poll.set()
+        release_verify.set()
+        await asyncio.gather(*(t for t in [first, second] if t), return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_unknown_kid_refresh_is_bounded_and_does_not_lock_known_keys(provider, monkeypatch):
+    from types import SimpleNamespace
+    clock = [100.0]
+    monkeypatch.setattr(oidc, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    known = provider.token()
+    await oidc.verify(known)
+    for i in range(20):
+        provider.kid = f'unknown-{i}'
+        with pytest.raises(oidc.IdentityError):
+            await oidc.verify(provider.token())
+    assert provider.calls.count(('GET', '/keys')) == 1
+    clock[0] = 160.0
+    original_fetch = oidc.fetch
+    fetching, release = asyncio.Event(), asyncio.Event()
+    async def slow_fetch(method, url, **kwargs):
+        if url.endswith('/keys'):
+            assert not oidc._lock.locked()
+            fetching.set()
+            await release.wait()
+        return await original_fetch(method, url, **kwargs)
+    monkeypatch.setattr(oidc, 'fetch', slow_fetch)
+    async def unknown():
+        with pytest.raises(oidc.IdentityError):
+            await oidc.verify(provider.token())
+    pending = asyncio.create_task(unknown())
+    try:
+        await asyncio.wait_for(fetching.wait(), 2)
+        assert (await asyncio.wait_for(oidc.verify(known), 1))['sub'] == SUB
+        release.set()
+        await pending
+    finally:
+        release.set()
+        await asyncio.gather(pending, return_exceptions=True)
+    assert provider.calls.count(('GET', '/keys')) == 2
+    with pytest.raises(oidc.IdentityError):
+        await oidc.verify(provider.token())
+    assert provider.calls.count(('GET', '/keys')) == 2

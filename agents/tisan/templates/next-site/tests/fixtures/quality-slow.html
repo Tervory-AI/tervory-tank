@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="description" content="Isolated quality-check fixture" />
+    <title>Quality test fixture</title>
+  </head>
+  <body>
+    <main>
+      <h1>Quality test fixture</h1>
+      <script>
+        const deadline = Date.now() + 6000;
+        while (Date.now() < deadline) {}
+      </script>
+      <p>Slow fixture.</p>
+    </main>
+  </body>
+</html>

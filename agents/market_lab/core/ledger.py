@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 from core.batch_guard import Pool
+from core.predictions import metadata, calibration
 
 SCHEMA = "agent_market_lab"
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.sql"
@@ -32,6 +33,7 @@ class MemoryLedger:
         self.opportunities: list[dict[str, Any]] = []
         self.predictions: list[dict[str, Any]] = []
         self.reports: list[dict[str, Any]] = []
+        self.brief_deliveries: dict[tuple, dict] = {}
         self.refused: list[str] = []
         self.pool = Pool()
 
@@ -105,11 +107,40 @@ class MemoryLedger:
         self._require_tenant(row["tenant_id"])
         if any(item["id"] == row["id"] for item in self.predictions):
             raise RuntimeError("predictions are append-only")
-        self.predictions.append(dict(row))
+        self.predictions.append(metadata(row))
 
     def save_report(self, row: dict[str, Any]) -> None:
         self._require_tenant(row["tenant_id"])
         self.reports.append(dict(row))
+
+    def save_brief(self, report: dict, status: str, reason: str | None) -> None:
+        self.save_report(report)
+        for channel in ("email", "webhook"):
+            self.brief_deliveries.setdefault((str(report["tenant_id"]), str(report["id"]), channel),
+                                             {"channel": channel, "status": status, "reason": reason})
+
+    def briefs_for(self, tenant: str) -> list[dict]:
+        rows = []
+        for report in self.reports:
+            if str(report["tenant_id"]) != str(tenant):
+                continue
+            states = [dict(row) for key, row in self.brief_deliveries.items()
+                      if key[:2] == (str(tenant), str(report["id"]))]
+            if states:
+                rows.append({**report, "deliveries": states})
+        return sorted(rows, key=lambda row: (row["made_at"], str(row["id"])), reverse=True)[:12]
+
+    def pending_briefs(self, tenant: str, channel: str) -> list[dict]:
+        return [dict(report) for report in self.reports if str(report["tenant_id"]) == str(tenant)
+                and self.brief_deliveries.get((str(tenant), str(report["id"]), channel), {}).get("status") == "pending"][:3]
+
+    def update_brief(self, tenant: str, ident: str, channel: str, status: str,
+                     reason: str | None = None, *, expected: str = "sending") -> bool:
+        row = self.brief_deliveries.get((str(tenant), str(ident), channel))
+        if row is None or row["status"] != expected:
+            return False
+        row.update(status=status, reason=reason)
+        return True
 
     def series_for(self, tenant_id: str) -> list[dict[str, Any]]:
         self._require_tenant(tenant_id)
@@ -125,6 +156,9 @@ class MemoryLedger:
     def predictions_for(self, tenant_id: str) -> list[dict[str, Any]]:
         self._require_tenant(tenant_id)
         return [dict(item) for item in self.predictions if item["tenant_id"] == str(tenant_id)]
+
+    def calibration_for(self, tenant_id: str) -> dict:
+        return calibration(self.predictions_for(tenant_id), tenant_id)
 
     def _sync_points(self) -> None:
         self.points = [_plain_point(point) for point in self.pool.points]
@@ -447,13 +481,17 @@ class PostgresLedger:
         )
 
     async def save_prediction(self, row: dict[str, Any]) -> None:
+        row = metadata(row)
+        # Literal schema name: no string formatting in this statement (Semgrep raw-query rule).
         await self.conn.execute(
-            f"""
-            INSERT INTO {SCHEMA}.predictions (
+            """
+            INSERT INTO agent_market_lab.predictions (
                 id, tenant_id, made_at, statement, metric_series_id, comparator,
-                target, resolve_by, rationale, sources, outcome, resolved_at, score
+                target, resolve_by, rationale, sources, outcome, resolved_at, score,
+                horizon_seconds, confidence, realised_value, realised_date, kind, feed
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13,
+                $14, $15, $16, $17, $18, $19
             )
             """,
             uuid.UUID(str(row["id"])),
@@ -469,6 +507,12 @@ class PostgresLedger:
             row.get("outcome"),
             _timestamp(row.get("resolved_at")),
             row.get("score"),
+            row["horizon_seconds"],
+            row.get("confidence"),
+            row.get("realised_value"),
+            date.fromisoformat(str(row["realised_date"])[:10]) if row.get("realised_date") else None,
+            row.get("kind"),
+            row.get("feed"),
         )
 
     async def save_report(self, row: dict[str, Any]) -> None:
@@ -484,6 +528,47 @@ class PostgresLedger:
             row["answer"],
             json.dumps(row["citations"]),
         )
+
+    async def save_brief(self, report: dict, status: str, reason: str | None) -> None:
+        async with self.conn.transaction():
+            await self.save_report(report)
+            await self.conn.execute(
+                "INSERT INTO agent_market_lab.brief_deliveries(tenant_id,report_id,channel,status,reason) "
+                "SELECT tenant_id,id,c.channel,$3,$4 FROM agent_market_lab.reports "
+                "CROSS JOIN (VALUES ('email'),('webhook')) AS c(channel) "
+                "WHERE tenant_id=$1 AND id=$2 ON CONFLICT DO NOTHING",
+                uuid.UUID(str(report["tenant_id"])), uuid.UUID(str(report["id"])), status, reason)
+
+    async def briefs_for(self, tenant: str) -> list[dict]:
+        rows = await self.conn.fetch(
+            "SELECT r.*, (SELECT jsonb_agg(jsonb_build_object('channel',d.channel,'status',d.status,'reason',d.reason) ORDER BY d.channel) "
+            "FROM agent_market_lab.brief_deliveries d WHERE d.tenant_id=r.tenant_id AND d.report_id=r.id) AS deliveries "
+            "FROM agent_market_lab.reports r WHERE r.tenant_id=$1 "
+            "AND EXISTS (SELECT 1 FROM agent_market_lab.brief_deliveries d WHERE d.tenant_id=$1 AND d.report_id=r.id) "
+            "ORDER BY r.made_at DESC,r.id DESC LIMIT 12", uuid.UUID(str(tenant)))
+        result = []
+        for row in rows:
+            report = _record(row)
+            if isinstance(report["deliveries"], str):
+                report["deliveries"] = json.loads(report["deliveries"])
+            result.append(report)
+        return result
+
+    async def pending_briefs(self, tenant: str, channel: str) -> list[dict]:
+        rows = await self.conn.fetch(
+            "SELECT r.* FROM agent_market_lab.reports r JOIN agent_market_lab.brief_deliveries d "
+            "ON d.tenant_id=r.tenant_id AND d.report_id=r.id "
+            "WHERE d.tenant_id=$1 AND d.channel=$2 AND d.status='pending' "
+            "ORDER BY r.made_at,r.id LIMIT 3", uuid.UUID(str(tenant)), channel)
+        return [_record(row) for row in rows]
+
+    async def update_brief(self, tenant: str, ident: str, channel: str, status: str,
+                           reason: str | None = None, *, expected: str = "sending") -> bool:
+        changed = await self.conn.fetchval(
+            "UPDATE agent_market_lab.brief_deliveries SET status=$4,reason=$5,updated_at=now() "
+            "WHERE tenant_id=$1 AND report_id=$2 AND channel=$3 AND status=$6 RETURNING report_id",
+            uuid.UUID(str(tenant)), uuid.UUID(str(ident)), channel, status, reason, expected)
+        return changed is not None
 
     async def series_for(self, tenant_id: str) -> list[dict[str, Any]]:
         rows = await self.conn.fetch(
@@ -527,7 +612,8 @@ class PostgresLedger:
         rows = await self.conn.fetch(
             f"""
             SELECT id, tenant_id, made_at, statement, metric_series_id, comparator,
-                   target, resolve_by, rationale, sources, outcome, resolved_at, score
+                   target, resolve_by, rationale, sources, outcome, resolved_at, score,
+                   horizon_seconds, confidence, realised_value, realised_date, kind, feed
             FROM {SCHEMA}.predictions
             WHERE tenant_id = $1
             ORDER BY made_at, id
@@ -535,6 +621,10 @@ class PostgresLedger:
             uuid.UUID(str(tenant_id)),
         )
         return [_record(row) for row in rows]
+
+
+    async def calibration_for(self, tenant_id: str) -> dict:
+        return calibration(await self.predictions_for(tenant_id), tenant_id)
 
 
 def _plain_point(point: dict[str, Any]) -> dict[str, Any]:

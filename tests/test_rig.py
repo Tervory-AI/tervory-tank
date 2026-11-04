@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from rig_fixture_loader import load_catalogue
+
 import asyncio
 import importlib.util
 import json
@@ -24,14 +26,14 @@ from rigbox.service import RecordingHandoff, Service  # noqa: E402
 from rigbox.store import MemoryStore, PgStore, _SEARCH, schema_statements  # noqa: E402
 from rigbox.api import mount  # noqa: E402
 
-EXAMPLE = ROOT / "agents" / "rig" / "catalogues" / "example"
+EXAMPLE = ROOT / "tests" / "fixtures" / "rig_catalogues" / "example"
 TENANT = "11111111-1111-4111-8111-111111111111"
 OTHER = "22222222-2222-4222-8222-222222222222"
 KEY = "rk_pub_examplebrand"
 OTHER_KEY = "rk_pub_othertenant"
 ORIGIN = "https://rig.tervory.com"
 BANNED = re.compile(
-    r"\b(firearms?|ammunition|ammo|handguns?|rifles?|pistols?|shotguns?|holsters?|picatinny|staccato|calibres?|calibers?)\b",
+    r"\b(firearms?|ammunition|ammo|handguns?|rifles?|pistols?|shotguns?|holsters?|picatinny|lumaworks|calibres?|calibers?)\b",
     re.IGNORECASE,
 )
 
@@ -70,7 +72,7 @@ async def _loaded() -> tuple[Service, MemoryStore, RecordingHandoff, Models]:
     handoff = RecordingHandoff()
     models = Models()
     service = Service(store, models, handoff)
-    report = await service.load_folder(EXAMPLE)
+    report = await load_catalogue(service, EXAMPLE)
     assert report["products"] == {"added": 3, "updated": 0, "rejected": []}
     assert report["fits"]["rejected"] == []
     assert report["fits"]["added"] == 3
@@ -95,7 +97,7 @@ def _headers(key: str = KEY, origin: str | None = ORIGIN) -> dict[str, str]:
 @pytest.mark.asyncio
 async def test_import_search_setups_and_a_single_total() -> None:
     service, store, handoff, models = await _loaded()
-    again = await service.load_folder(EXAMPLE)
+    again = await load_catalogue(service, EXAMPLE)
     assert again["products"]["added"] == 0
     assert again["products"]["updated"] == 3
     found = await service.search(TENANT, "scope", 12)
@@ -293,7 +295,7 @@ async def test_a_key_cannot_see_another_tenant() -> None:
 async def test_rate_limit_and_bad_sheet_and_feeds_and_price_watch(tmp_path: Path) -> None:
     store = MemoryStore()
     service = Service(store, rate_limit=2)
-    await service.load_folder(EXAMPLE)
+    await load_catalogue(service, EXAMPLE)
     client = _client(service)
     assert client.get("/v1/rig/search", params={"q": "scope"}, headers=_headers()).status_code == 200
     assert client.get("/v1/rig/search", params={"q": "scope"}, headers=_headers()).status_code == 200
@@ -309,7 +311,7 @@ async def test_rate_limit_and_bad_sheet_and_feeds_and_price_watch(tmp_path: Path
         "BAD-1,,Bad Lamp,North,light,nope,USD,https://example.com/b.jpg,,,yes,\n",
         encoding="utf-8",
     )
-    rejected = await service.load_folder(folder)
+    rejected = await load_catalogue(service, folder)
     assert rejected["products"]["added"] == 0
     assert rejected["products"]["rejected"]
     assert await store.product_exists(rejected["tenant_id"], "OK-1") is False
@@ -465,8 +467,8 @@ def test_room_compose_policy_and_skills_match() -> None:
             assert "IF NOT EXISTS" in statement.upper()
     logic = (ROOT / "agents" / "rig" / "rigbox" / "logic.py").read_bytes()
     ground = (ROOT / "agents" / "rig" / "rigbox" / "ground.py").read_bytes()
-    assert logic == (ROOT / "tank" / "skills" / "rig.search" / "1.0.0" / "pure.py").read_bytes()
-    assert logic == (ROOT / "tank" / "skills" / "rig.setups" / "1.0.0" / "pure.py").read_bytes()
+    assert logic == (ROOT / "tank" / "skills" / "rig.search" / "1.1.0" / "pure.py").read_bytes()
+    assert logic == (ROOT / "tank" / "skills" / "rig.setups" / "1.1.0" / "pure.py").read_bytes()
     for name in ("rig.explain", "rig.ask", "rig.fit_suggest"):
         assert ground == (ROOT / "tank" / "skills" / name / "1.0.0" / "ground.py").read_bytes()
     hits: list[str] = []
@@ -519,7 +521,13 @@ class _SchemaConn:
         self.executed: list[str] = []
         self.lookups: list[str] = []
 
-    async def execute(self, statement: str) -> None:
+    def transaction(self) -> "_SchemaAcquire":
+        # apply_schema runs each statement in its own transaction.
+        return _SchemaAcquire(self)
+
+    async def execute(self, statement: str, *args: object) -> None:
+        if statement.startswith("SELECT set_config('lock_timeout'"):
+            return  # apply_schema's per-statement lock_timeout
         self.executed.append(statement)
         if self.error is not None:
             raise self.error

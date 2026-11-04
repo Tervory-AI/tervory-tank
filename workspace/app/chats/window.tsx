@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { SquadLinks, SQUAD_MEMBERS } from "../squad-links";
+import { RadixCard } from "./radix-card";
 import { clientLabel, visibleCard } from "./presentation";
-import { applyReceipt, canConfirm, dollars, readEvents, safeLink, upsert, type Attachment, type Card, type Message, type ModelOption, type Receipt, type Snapshot, type Step, type Thread } from "./contract";
+import { applyReceipt, canConfirm, dollars, readEvents, safeLink, upsert, type Attachment, type Card, type Event, type Message, type ModelOption, type Receipt, type Snapshot, type Step, type Thread } from "./contract";
 import doneDot from "./assets/done.svg";
 import attentionDot from "./assets/attention.svg";
 import plannedDot from "./assets/planned.svg";
@@ -29,6 +30,13 @@ function CostReceipt({ receipt, founder, threadId, messageId }: { receipt: Recei
   return <section className="cw-receipt" id={`cost-${messageId}`} aria-label="Answer cost"><div className="cw-receipt-desktop"><header><strong>Receipt{pending ? " · Cost pending" : ""}</strong><small>Each step links to its cost details</small></header>{rows}</div><details className="cw-receipt-mobile"><summary>Receipt{pending ? " · Cost pending" : ""} · {dollars(receipt.totals.cost_usd)} · would have cost {dollars(receipt.totals.baseline_cost_usd)} · saved {dollars(receipt.totals.saved_usd)}</summary>{rows}</details></section>;
 }
 
+/** Header totals belong to a selected chat; with none selected there is nothing to total. */
+export function ThreadTotals({ selected, snapshot }: { selected: string | null; snapshot: Snapshot | null }) {
+  if (!selected) return null;
+  const evidence = `/chats/evidence/${encodeURIComponent(selected)}`;
+  return <div className="cw-totals">{snapshot?.thread.receipt_status === "pending" && <span>Cost pending</span>}<a href={evidence}>Spent {dollars(snapshot?.thread.spent_usd)}</a><a className="cw-saving" href={evidence}>Saved {dollars(snapshot?.thread.saved_usd)}</a></div>;
+}
+
 export function CommandWindow({ initialThreads, models, founder, account, initialTools = [], initialError = "" }: { initialThreads: Thread[]; models: ModelOption[]; founder: boolean; account: string; initialTools?: string[]; initialError?: string }) {
   const [availableTools, setAvailableTools] = useState(initialTools);
   const [pendingAsk, setPendingAsk] = useState("");
@@ -51,6 +59,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
   const streamAbort = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
   const uncertainCards = useRef(new Set<string>());
+  const oneTimeResults = useRef(new Map<string, Card["results"]>());
   const active = useRef<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const workButton = useRef<HTMLButtonElement>(null);
@@ -83,11 +92,16 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
       if (generation.current !== version || active.current !== id) return;
       setAvailableTools(tools);
     }
+    // A one-time Confirm response stays in this mounted view only. Polling
+    // never retrieves it again, and switching chats discards the local value.
+    next.cards = next.cards.map(card => oneTimeResults.current.has(card.card_id)
+      ? { ...card, results: oneTimeResults.current.get(card.card_id) } : card);
     setSnapshot(next); setThreads(rows => upsert(rows, next.thread, "thread_id"));
   }
   async function choose(id: string) {
     if (sendingRef.current || cardBusy) return;
     setAttachments([]);
+    oneTimeResults.current.clear();
     const version = ++generation.current;
     active.current = id; setSelected(id); setSnapshot(null); setBusy(true); setError(""); setMenu(false); setRenaming(false);
     window.history.replaceState(null, "", `/chats?thread=${encodeURIComponent(id)}`);
@@ -155,6 +169,8 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     }
     try {
       const saved = await (await api(`cards/${encodeURIComponent(card.card_id)}`, { method: "POST", body: JSON.stringify({ action }) })).json() as Card;
+      if (saved.tool === "market_lab.alerts.webhook" && saved.status === "confirmed"
+        && saved.results?.some(row => row.label === "Response")) oneTimeResults.current.set(saved.card_id, saved.results);
       if (saved.card_id === card.card_id && saved.status && !["pending", "awaiting_confirmation"].includes(saved.status)) {
         rememberUncertain(card.card_id, false);
         setSnapshot(current => current && ({ ...current, cards: upsert(current.cards, saved, "card_id") }));
@@ -196,17 +212,17 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     // Invalidate any snapshot already in flight before the new stream starts.
     const version = ++generation.current;
     const controller = new AbortController(); streamAbort.current = controller;
-    const localId = `pending-${Date.now()}`; let completed = false; let lastSeq = -1;
+    const localId = `pending-${Date.now()}`; let completed = false; let lastSeq = snapshot.seq ?? -1; let rejected = false;
     setSnapshot(current => current && ({ ...current, messages: [...current.messages, { message_id: `${localId}-user`, role: "user", content: requestText, attachments: files }, { message_id: localId, role: "assistant", content: "" }] }));
     try {
       const response = await api(`threads/${id}/turn`, { method: "POST", body: JSON.stringify({ text: requestText, model: founder ? model : "auto", attachments: files }), signal: controller.signal });
       if (!response.body || !response.headers.get("content-type")?.includes("text/event-stream")) throw new Error("The live response is unavailable. Reopen this chat before sending again.");
       setText(""); setAttachments([]);
-      await readEvents(response.body, event => {
+      const receive = (event: Event) => {
         if (generation.current !== version) return;
         if (event.seq !== undefined) { if (event.seq <= lastSeq) return; lastSeq = event.seq; }
         const data = event.data;
-        if (event.type === "error") throw new Error(String(data.message));
+        if (event.type === "error") { rejected = true; throw new Error(String(data.message)); }
         if (event.type === "done") completed = true;
         setSnapshot(current => {
           if (!current) return current;
@@ -216,7 +232,14 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
           if (event.type === "token") return { ...current, messages: current.messages.map(message => message.message_id !== localId ? message : { ...message, content: (data.replace === true ? "" : message.content) + String(data.text ?? "") }) };
           return current;
         });
-      });
+      };
+      // A dropped GET/stream can be replayed; a turn POST must never be retried.
+      try { await readEvents(response.body, receive, controller.signal); }
+      catch (err) { if (rejected || controller.signal.aborted) throw err; }
+      if (!completed && !controller.signal.aborted) {
+        const replay = await api(`threads/${id}/events?after=${Math.max(0, lastSeq)}`, { signal: controller.signal });
+        if (replay.body && replay.headers.get("content-type")?.includes("text/event-stream")) await readEvents(replay.body, receive, controller.signal);
+      }
       if (!completed) throw new Error("The connection ended before the answer finished. Reopen this chat before sending again.");
       await load(id, version); await refreshThreads();
     } catch (err) {
@@ -235,6 +258,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
   const confirmation = cards.map(card => <section className="cw-confirm" key={card.card_id} data-status={card.status ?? "pending"}><strong className="cw-eyebrow">{cardLabels[card.status ?? "pending"] ?? "STATUS UNAVAILABLE"}</strong><p>{clean(card.summary)}</p>
     {!!card.targets?.length && <dl className="cw-card-details">{card.targets.map((target, index) => <div key={index}><dt>{target.label}</dt><dd>{safeLink(target.href) ? <a href={safeLink(target.href)} target="_blank" rel="noreferrer">{target.value}</a> : target.value}</dd></div>)}</dl>}
     {card.cost_estimate_usd !== undefined && <p className="cw-meta">Estimated {dollars(card.cost_estimate_usd)}</p>}
+    {card.radix && <RadixCard view={card.radix} status={card.status} disabled={sending || busy || !!cardBusy} onPrepare={message => { setText(message); document.getElementById("cw-message")?.focus(); }} />}
     {!!card.results?.length && <dl className="cw-card-details" aria-label="Action result">{card.results.map((result, index) => <div key={index}><dt>{result.label}</dt><dd>{safeLink(result.href) ? <a href={safeLink(result.href)} target="_blank" rel="noreferrer">{result.value}</a> : result.value}</dd></div>)}</dl>}
     {card.error && ["failed", "unknown"].includes(card.status ?? "") && <p className="cw-note">{clean(card.error)}</p>}
     {card.status === "unknown" && <p className="cw-note">Do not repeat this action until its outcome is checked. Retrying is disabled.</p>}
@@ -250,14 +274,14 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
       <div className="cw-brand"><img src="/brand/tervory-logo-reversed.png" alt="Tervory" /><button className="cw-mobile-only" ref={menuClose} onClick={closeMenu}>Close</button></div>
       <a className="cw-account" href="/onboarding">{account}</a>
       <a href="/access?section=checks">Needs a person</a>
-      <nav aria-label="Workspace"><a href={founder ? "/control" : "/"}>Dashboard</a><a href="/matters">Projects</a><a href="/chats" aria-current="page">Chats</a>{founder ? <SquadLinks active founder /> : SQUAD_MEMBERS.filter(member => !member.founderOnly && availableTools.some(tool => tool.startsWith(`${member.href.slice(1).replace(/-/g, "_")}.`))).map(member => <a key={member.href} href={member.href}>{member.label}</a>)}</nav>
+      <nav aria-label="Workspace"><a href={founder ? "https://app.tervory.com/control" : "https://app.tervory.com/"}>Dashboard</a><a href="/matters">Projects</a><a href="/chats" aria-current="page">Chats</a>{founder ? <SquadLinks active founder /> : SQUAD_MEMBERS.filter(member => !member.founderOnly && availableTools.some(tool => tool.startsWith(`${member.href.slice(1).replace(/-/g, "_")}.`))).map(member => <a key={member.href} href={member.href}>{member.label}</a>)}</nav>
       <p className="cw-eyebrow">CHATS</p><button className="cw-new" disabled={busy || sending || !!cardBusy} onClick={() => void newThread()}>+ New chat</button>
       <input type="search" aria-label="Search chats" placeholder="Search chats" value={query} onChange={event => setQuery(event.target.value)} />
       <div className="cw-threads">{threads.filter(thread => thread.title.toLowerCase().includes(query.toLowerCase())).map(thread => <button key={thread.thread_id} className={selected === thread.thread_id ? "selected" : ""} disabled={sending || busy || !!cardBusy} aria-current={selected === thread.thread_id ? "page" : undefined} onClick={() => void choose(thread.thread_id)}><span>{thread.title}</span><small>Spent {dollars(thread.spent_usd)} · saved {dollars(thread.saved_usd)}</small></button>)}{!threads.length && <p className="cw-note">Your saved chats will appear here.</p>}</div>
       <nav className="cw-bottom-nav">{founder && <a href="/ledger">Ledger</a>}<a href="/billing">Billing</a><a href="/data">Files</a><a href="/onboarding">Settings</a></nav>
     </aside>
     <main className="cw-chat" inert={menu || work ? true : undefined}>
-      <header className="cw-thread-header"><div><h1>{snapshot ? snapshot.thread.title : selected ? "Loading chat…" : "A new conversation"}</h1>{snapshot && <button className="cw-rename" disabled={sending || busy || !!cardBusy} onClick={() => { setTitle(snapshot.thread.title); setRenaming(true); }}>Rename</button>}</div><button className="cw-work-tab" ref={workButton} onClick={() => setWork(true)} aria-expanded={work}>Work {done}/{steps.length}</button><div className="cw-totals">{snapshot?.thread.receipt_status === "pending" && <span>Cost pending</span>}<a href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Spent {dollars(snapshot?.thread.spent_usd)}</a><a className="cw-saving" href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Saved {dollars(snapshot?.thread.saved_usd)}</a></div></header>
+      <header className="cw-thread-header"><div><h1>{snapshot ? snapshot.thread.title : selected ? "Loading chat…" : "A new conversation"}</h1>{snapshot && <button className="cw-rename" disabled={sending || busy || !!cardBusy} onClick={() => { setTitle(snapshot.thread.title); setRenaming(true); }}>Rename</button>}</div><button className="cw-work-tab" ref={workButton} onClick={() => setWork(true)} aria-expanded={work}>Work {done}/{steps.length}</button><ThreadTotals selected={selected} snapshot={snapshot} /></header>
       {renaming && <form className="cw-rename-form" onSubmit={rename}><label>Chat name<input autoFocus value={title} maxLength={160} required onChange={event => setTitle(event.target.value)} /></label><button disabled={busy}>Save</button><button type="button" onClick={() => setRenaming(false)}>Cancel</button></form>}
       {error && <div className="cw-error" role="alert">{error}<button disabled={sending || busy} onClick={() => { setError(""); void (selected ? load(selected) : refreshThreads()).catch(err => setError(problem(err))); }}>Reload</button></div>}
       <div className="cw-messages" aria-label="Conversation" aria-busy={sending || busy}>

@@ -87,7 +87,11 @@ async def rig(tmp_path):
     async def scan(tenant, target, artifact):
         assert (tenant, target, artifact) == (TENANT, TARGET, 'commit:' + NEW)
         return dict(gate)
-    service = Promotion(journal, coolify, check, scan)
+    async def repo(tenant, site, expected):
+        assert (tenant, site, expected) == (TENANT, 'site', NEW)
+        return {'ok': True, 'scan_id': str(uuid.uuid4()), 'critical': 0, 'scan_complete': True,
+                'tenant_id': tenant, 'archive_sha256': 'c' * 64}
+    service = Promotion(journal, coolify, check, scan, repo)
     yield fake, journal, service, live, gate
     await http.aclose()
 
@@ -123,9 +127,9 @@ async def test_exact_promotion_rollback_and_durable_audit(rig):
 @pytest.mark.parametrize('field,value', [('allowed', False), ('allowed', 'true'), ('status', 'pending'),
     ('status', 'error'), ('tenant_id', OTHER), ('target', 'https://other.example.org/'),
     ('artifact', 'commit:' + OLD), ('high', 1), ('high', False), ('critical', 1), ('scan_id', ''),
-    ('completed_at', ''), ('completed_at', None), ('completed_at', datetime.now(timezone.utc).replace(tzinfo=None).isoformat()),
-    ('completed_at', (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()),
-    ('completed_at', (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat())],
+    ('completed_at', ''), ('completed_at', None), ('completed_at', lambda: datetime.now(timezone.utc).replace(tzinfo=None).isoformat()),
+    ('completed_at', lambda: (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()),
+    ('completed_at', lambda: (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat())],
     # Fixed ids: timestamp values differ between pytest-xdist workers, so ids built
     # from them make each worker collect a different test list.
     ids=['allowed-false', 'allowed-string', 'status-pending', 'status-error', 'tenant-other',
@@ -134,7 +138,8 @@ async def test_exact_promotion_rollback_and_durable_audit(rig):
          'completed_at-future'])
 async def test_gate_fail_closed(rig, field, value):
     fake, _, service, _, gate = rig
-    gate[field] = value
+    # Timestamp boundaries are relative to execution, even after a slow collection/run.
+    gate[field] = value() if callable(value) else value
     assert (await promote(service))['result'] == 'refused'
     assert not fake.writes
 

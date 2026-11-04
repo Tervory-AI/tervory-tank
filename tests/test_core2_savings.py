@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
+import re
 import secrets
 import subprocess
 import uuid
@@ -18,6 +19,21 @@ from test_train1 import database as _database
 database = _database
 ROOT = Path(__file__).resolve().parents[1]
 END = datetime(2026, 10, 21, tzinfo=timezone.utc)
+UUID_TEXT = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', re.I)
+
+
+def amounts(text):
+    """Every number written in text, as a Decimal (777.00000000 reads as 777).
+
+    Ids are removed first. Founder exports list tenant and ledger UUIDs, and a random
+    UUID such as 1b2c3d4e-777a-... holds digit runs that a substring check like
+    '777' not in csv would mistake for another tenant's amount."""
+    return {Decimal(n) for n in re.findall(r'\d+(?:\.\d+)?', UUID_TEXT.sub(' ', text))}
+
+
+def test_amounts_ignore_digits_inside_ids():
+    assert amounts('1b2c3d4e-777a-4bcd-8777-123456789777') == set()
+    assert amounts('row,1B2C3D4E-777A-4BCD-8777-123456789777,777.00000000,0.5') == {Decimal('777'), Decimal('0.5')}
 
 
 async def seed(pool, tenant, *, count=1, day=None, model='cheap', cost='.1', baseline='.3',
@@ -178,10 +194,13 @@ async def test_exports_reconcile_and_keep_precise_decimals(database,monkeypatch)
     await prices(pool)
     a=uuid.uuid4()
     await seed(pool,a,count=101,cost='.000001',baseline='.00000325')
-    await seed(pool,uuid.uuid4(),cost='777',baseline='888')
+    foreign=uuid.uuid4()
+    await seed(pool,foreign,cost='777',baseline='888')
     await seed(pool,a,cost='2',baseline='1')
     csv=(await proof.savings_export('csv',END,a,1)).body.decode()
-    assert '0.00022725' in csv and '0.00000325' in csv and '777' not in csv
+    assert '0.00022725' in csv and '0.00000325' in csv
+    # The other tenant leaks neither its id nor its amounts; compared as numbers, not substrings.
+    assert str(foreign) not in csv and not {Decimal('777'),Decimal('888')} & amounts(csv)
     assert 'no billing data yet' in csv
     pdf=PdfReader(BytesIO((await proof.savings_export('pdf',END,a,1)).body))
     text=''.join(p.extract_text() for p in pdf.pages)
@@ -325,7 +344,7 @@ async def test_client_copy_exports_five_graphs_job_pages_and_no_founder_detail(d
             response=await client.get(url,params=params,headers=headers)
             assert response.status_code==(200 if tenant_arg==str(foreign) else 422)
             if response.status_code==200:
-                assert '777' in response.text and '0.00022725' not in response.text
+                assert Decimal('777') in amounts(response.text) and '0.00022725' not in response.text
     empty=(await proof.savings_client_copy('pdf',END,uuid.uuid4(),0)).body
     assert 'No comparable work yet' in ''.join(p.extract_text() for p in PdfReader(BytesIO(empty)).pages)
 

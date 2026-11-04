@@ -236,10 +236,11 @@ test("passing a web address on the command line is refused", () => {
   expect(outcome.text).toContain("Deploy refused");
 });
 
-test("the built starter pages pass when they are already on disk", () => {
+test("pending designs cannot bypass the saved-page privacy gate", () => {
   const files = gate.checkSavedPages(process.cwd());
   if (files.pages.length === 0) return;
-  expect(files.ok).toBe(true);
+  expect(files.ok).toBe(false);
+  expect(files.reason).toContain("privacy notice");
   expect(files.deployed).toBe(false);
   expect(files.pages.length).toBeGreaterThan(0);
 });

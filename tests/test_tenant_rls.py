@@ -196,6 +196,7 @@ async def test_every_actual_tenant_table(database):
             await database.owner.execute(f'ALTER TABLE {relation} DROP CONSTRAINT "{check["conname"]}"')
         columns = await database.owner.fetch("""SELECT column_name,udt_name FROM information_schema.columns
             WHERE table_schema=$1 AND table_name=$2 AND is_generated='NEVER'
+            AND identity_generation IS DISTINCT FROM 'ALWAYS'
             AND (is_nullable='NO' OR column_name='tenant_id') ORDER BY ordinal_position""", table["schema"], table["name"])
         names = ",".join('"' + c["column_name"] + '"' for c in columns)
         insert = f'INSERT INTO {relation} ({names}) VALUES ({",".join("$"+str(i+1) for i in range(len(columns)))})'

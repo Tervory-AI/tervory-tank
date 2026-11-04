@@ -14,7 +14,7 @@
 ## How it runs: all five lanes in parallel, now (founder, 22 Oct 11:13)
 > "Forget anything to do with my suppliers or API keys. Those come last. The infrastructure needs to be built and complete."
 
-**Phase 1 is the complete machine, running on stand-in data.** Every lane uses fixtures, sample feeds and stand-in 3D models. Real suppliers, supplier keys, and Custom Nation's Odoo login are plugged in **last**, as configuration only, with no new code. Every lane builds the adapter, the screen and the test now, and leaves the real credentials as a named, empty Coolify setting.
+**Phase 1 is the complete machine, running on stand-in data.** Every lane uses fixtures, sample feeds and stand-in 3D models. Real suppliers, supplier keys, and Custom Nation's store email are plugged in **last**, as configuration only, with no new code. Founder update, 3 Nov 15:23 PT: Trigger CRM replaces the retired ERP; Custom Nation stays quote → the store's own invoice → EFT. Every lane builds the adapter, the screen and the test now, and leaves the real credentials as a named, empty Coolify setting.
 
 **Rig is built neutral (founder, 22 Oct).** Rig is a product for any retailer. Build every lane industry-neutral, with neutral stand-in data and neutral stand-in 3D models; no retailer- or industry-specific content in code, fixtures or models. Custom Nation comes with its own skin, which already exists (`theme="custom-nation"` in `tervory-rig`), and its catalogue is loaded last, as data. Don't add to or change the existing `customnation` catalogue files.
 
@@ -24,7 +24,7 @@ The lanes run **in parallel**. To keep merges clean, each lane owns its own file
 |---|---|---|---|
 | **RIG-2** | Rig's own box: brain, sandbox, sealed browser, storage, memory | Codex | `agents/rig/` compose, Dockerfiles, `brain/`, `ops/seal-check.sh`, `tests/test_room_seal.py`, `tests/test_rig_box*.py` |
 | **RIG-3** | Feed machinery, price rules, fit approval, retailer admin, on sample feeds | Codex | `agents/rig/rigbox/` (feeds, pricing, fits), `tank/access.py` (Rig mapping only), `workspace/app/rig/admin/`, `tests/test_rig_feeds*.py` |
-| **RIG-4** | The widget complete to Figma 01–05, the quote handoff (Odoo adapter stubbed), bundle hosting, analytics | Codex | `Tervory-AI/tervory-rig`, plus `agents/rig/rigbox/quotes/` and `tests/test_rig_quotes*.py` |
+| **RIG-4** | The widget complete to Figma 01–05, the quote handoff (existing store email transport), bundle hosting, analytics | Codex | `Tervory-AI/tervory-rig`, plus `agents/rig/rigbox/quotes/` and `tests/test_rig_quotes*.py` |
 | **RIG-5a** | 3D frames 06–07 in Figma | Codex | Figma `uRpPy3Hns0WxWZYTPwZ2ni` only |
 | **RIG-5F** | The 3D forge: every 3D tool brought in, pinned and sealed, plus the GPU jobs | Codex | `agents/rig/forge/` (new service), `agents/rig/docker-compose.yml` (the forge service only), `ops/seal-check.sh` (forge entries), `tests/test_rig_forge*.py` |
 | **RIG-5** | The 3D engine: asset pipeline, mount points, `rig_3d` entitlement, viewer chunk, kiosk mode, on stand-in models | Codex | `agents/rig/rigbox/three_d/`, `tervory-rig/widget/src/three/`, `tests/test_rig_3d*.py` |
@@ -122,15 +122,14 @@ Clone the AGENT-1 shape that Base proved (`agents/base/`: brain, sandbox, browse
 1. **Build frames 01–05 exactly as in Figma** (`uRpPy3Hns0WxWZYTPwZ2ni`), including **05 · Explore**, the graph view, and the **Ask** box. Use the `custom-nation` theme. The `SAMPLE DATA` badge shows only when `sample` is true.
 2. **Quote handoff:**
    - every quote and "can't find it" link request is stored in Rig and sent to the retailer's flow, configured per tenant;
-   - for Custom Nation that flow is its client portal and an **Odoo quotation** (Figma notes);
-   - build the Odoo adapter behind the existing sender interface, with a stub in tests.
-   - Build the adapter against Odoo's documented API with a stub in tests. `RIG_ODOO_URL` and `RIG_ODOO_USER` stay empty in Coolify until they are plugged in last.
+   - for Custom Nation, email the quote to the store using the existing SMTP sender;
+   - the store issues its own invoice and receives EFT outside Rig. Trigger CRM replaces the retired ERP; no new quote delivery adapter is required.
 3. **Keys and origins:** a live publishable key for Custom Nation, limited to customnation.co.za and its test page.
 4. **Hosting the bundle:** the UMD bundle on a public, cache-busted path (an R2 public bucket or Rig's own domain), under 150 KB gzipped.
 5. **Analytics** (no tracking of people): counts of searches, setups opened, swaps, quotes, and searches with no result, per tenant.
 
 **Done when:**
-- The widget on a Custom Nation test page searches the real catalogue, builds setups, swaps a part and sends a test quote, which reaches Odoo as a draft quotation (in a test Odoo, or by founder sign-off).
+- The widget on a Custom Nation test page searches the real catalogue, builds setups, swaps a part and sends a test quote, which reaches the store's test email inbox through the existing quote delivery path.
 - Screenshots at 390px and 1440px.
 - **Custom Nation's live shopper data moves to the new ZA host (Hetzner) with the rest of ZA, last.** Until then the test page runs on Boston with stand-in data.
 
@@ -236,8 +235,19 @@ Nothing else in other lanes' files changes behaviour.
 - Kiosk mode runs at 1920×1080.
 - Build and test on stand-in models now: neutral stand-in models (a centre product and two parts that fit it), each with mount points.
 
+## Optional: cross-store fulfilment (Locate checkout)
+Optional, per store, **off by default** (`retailers.locate_enabled`). Custom Nation is the case study. When a store has not switched it on, `/v1/rig/locate`, `/locate/confirm` and `/locate/accept` refuse, and search and quotes do no supply lookup.
+1. **Locate:** out of stock here, verified stock at an approved other store (GTIN, brand+MPN or explicit SKU map), fresh within the source's maximum age.
+2. **Confirm:** re-reads the offer and re-checks live (approved-source stock API, or a Tiger one-shot check of a watched page within 45 s). Unknown or stale stock is never shown as available. Returns a short-lived, single-use, signed hold with the price.
+3. **Accept:** test-mode payment through a provider-agnostic interface (`RIG_LOCATE_PAYMENTS_MODE=test`, live keys refused, no concrete provider yet), then a Rig-owned sandbox order (`RIG_LOCATE_ORDER_MODE=sandbox`): one `agent_rig.locate_orders` row and one draft `agent_rig.supplier_purchase_orders` row per quote, in Rig's own Postgres. No external ERP. Order failure refunds the test payment.
+4. No shopper Accept UI yet. It needs an approved Figma frame first.
+
+Further Optional switches on top of Locate checkout, each per store and **off by default**:
+- **Blind ship** (`retailers.blind_ship`): the approved source ships straight to the shopper. Accept takes the shopper's delivery address, and the supplier PO carries it plus a neutral-packing-slip instruction when the source is flagged `neutral_slip_required`. Shoppers never see the source, its cost or the PO.
+
 ## Plugged in last (configuration only, no code)
 1. Custom Nation's real suppliers and their keys: RIG-3's feed connections take them.
-2. Custom Nation's Odoo URL and user: RIG-4's adapter takes them.
+2. Custom Nation's store email and the existing SMTP settings: RIG-4 emails the quote; the store handles its own invoice and EFT.
 3. The 3D add-on price.
 4. Going live on the new ZA host (Hetzner) for Custom Nation shopper data.
+5. Locate checkout: the payment provider (Paystack or Stripe, pending), and a live order mode. Both need the founder's OK.

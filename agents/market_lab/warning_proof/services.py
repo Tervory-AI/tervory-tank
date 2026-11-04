@@ -74,6 +74,9 @@ def services(*, log=None, api_port=None, seed_data=True):
                 str(ROOT / "tank"),
                 str(ROOT / "agents/market_lab"),
                 str(ROOT / "agents/_chassis"),
+                # Tiger's alert_email imports agents.rig.rigbox.reserve (#365); its image
+                # copies that file to /app/agents/rig/rigbox/, so the repo root plays /app.
+                str(ROOT),
             ]
         ),
         "TANK_API_KEY": secrets.token_hex(32),

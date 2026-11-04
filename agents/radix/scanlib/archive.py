@@ -128,7 +128,7 @@ def _unpack_zip(raw: bytes, dest: Path) -> None:
             handle.extract(item, dest)
 
 
-def _unpack_bundle(raw: bytes, dest: Path) -> Path:
+def _unpack_bundle(raw: bytes, dest: Path, commit: str | None = None) -> Path:
     bundle = dest / "source.bundle"
     bundle.write_bytes(raw)
     work = dest / "repo"
@@ -147,6 +147,10 @@ def _unpack_bundle(raw: bytes, dest: Path) -> Path:
         raise ValueError("git bundle could not be read") from exc
     if completed.returncode != 0:
         raise ValueError("git bundle could not be read")
+    if commit is not None:
+        actual=subprocess.run([git,'rev-parse','HEAD'],cwd=work,env=_git_env(),capture_output=True,text=True,timeout=10,check=True).stdout.strip()
+        if actual!=commit:
+            raise ValueError('bundle commit mismatch')
     git_dir = work / ".git"
     if git_dir.exists():
         shutil.rmtree(git_dir)
@@ -154,9 +158,11 @@ def _unpack_bundle(raw: bytes, dest: Path) -> Path:
     return work
 
 
-def unpack(raw: bytes, dest: Path) -> Path:
+def unpack(raw: bytes, dest: Path, *, commit: str | None = None) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     kind = _kind(raw)
+    if commit is not None and (kind!='bundle' or re.fullmatch(r'[0-9a-f]{40}',commit) is None):
+        raise ValueError('bundle commit required')
     if kind == "tar":
         _unpack_tar(raw, dest)
         return dest
@@ -164,5 +170,5 @@ def unpack(raw: bytes, dest: Path) -> Path:
         _unpack_zip(raw, dest)
         return dest
     if kind == "bundle":
-        return _unpack_bundle(raw, dest)
+        return _unpack_bundle(raw, dest, commit)
     raise ValueError("source is not a tar archive, zip archive, or git bundle")

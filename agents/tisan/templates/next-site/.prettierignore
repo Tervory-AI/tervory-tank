@@ -4,3 +4,6 @@ package-lock.json
 playwright-report
 test-results
 .lighthouseci
+
+# Shared contract is maintained across the three Tisan branches.
+sections/manifest.json

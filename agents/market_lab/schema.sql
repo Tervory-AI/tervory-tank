@@ -81,6 +81,15 @@ CREATE TABLE IF NOT EXISTS agent_market_lab.predictions (
     score             numeric
 );
 
+-- Gate 2 adds metadata without changing historical prediction rows.
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS horizon_seconds bigint;
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS confidence double precision
+    CHECK (confidence >= 0 AND confidence <= 1 AND confidence NOT IN ('NaN'::float8, 'Infinity'::float8, '-Infinity'::float8));
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS realised_value numeric;
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS realised_date date;
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS kind text;
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS feed text;
+
 CREATE INDEX IF NOT EXISTS predictions_tenant_idx
     ON agent_market_lab.predictions (tenant_id, resolve_by);
 
@@ -95,6 +104,19 @@ CREATE TABLE IF NOT EXISTS agent_market_lab.reports (
 
 CREATE INDEX IF NOT EXISTS reports_tenant_idx
     ON agent_market_lab.reports (tenant_id, made_at);
+
+-- ML6 report/channel claims remain in this room. Sending is never reclaimed.
+CREATE TABLE IF NOT EXISTS agent_market_lab.brief_deliveries (
+    tenant_id uuid NOT NULL,
+    report_id uuid NOT NULL REFERENCES agent_market_lab.reports(id),
+    channel text NOT NULL CHECK (channel IN ('email','webhook')),
+    status text NOT NULL CHECK (status IN ('pending','sending','sent','uncertain','suppressed','held')),
+    reason text,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, report_id, channel)
+);
+CREATE INDEX IF NOT EXISTS brief_deliveries_pending
+    ON agent_market_lab.brief_deliveries (tenant_id, channel, report_id) WHERE status='pending';
 
 -- Provenance on every stored point. A batch stays out of the pool until it passes.
 ALTER TABLE agent_market_lab.series ADD COLUMN IF NOT EXISTS region text NOT NULL DEFAULT '';

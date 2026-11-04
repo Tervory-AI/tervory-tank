@@ -1,0 +1,321 @@
+{
+  "checkedOn": "2026-11-03",
+  "pageId": "197:9",
+  "maxMasterCount": 42,
+  "optionalMasterCount": 9,
+  "visibleTextCount": 662,
+  "hiddenAltCount": 18,
+  "errors": [],
+  "masters": [
+    {
+      "id": "198:10",
+      "name": "Width=390, Length=max · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 376
+    },
+    {
+      "id": "198:12",
+      "name": "Width=768, Length=max · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 160
+    },
+    {
+      "id": "198:14",
+      "name": "Width=1440, Length=max · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 280
+    },
+    {
+      "id": "199:140",
+      "name": "Width=390, Length=max · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 1220
+    },
+    {
+      "id": "199:142",
+      "name": "Width=768, Length=max · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 596
+    },
+    {
+      "id": "199:144",
+      "name": "Width=1440, Length=max · UNUSED — desktop navigation is always expanded · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 428
+    },
+    {
+      "id": "199:590",
+      "name": "Width=390, Length=max · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 1260
+    },
+    {
+      "id": "199:592",
+      "name": "Width=768, Length=max · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 676
+    },
+    {
+      "id": "199:594",
+      "name": "Width=1440, Length=max · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 408
+    },
+    {
+      "id": "199:1004",
+      "name": "Width=390, Length=max · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 1436.5
+    },
+    {
+      "id": "199:1006",
+      "name": "Width=768, Length=max · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 1412
+    },
+    {
+      "id": "199:1008",
+      "name": "Width=1440, Length=max · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 1580
+    },
+    {
+      "id": "199:1211",
+      "name": "Width=390, Length=max · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 7276
+    },
+    {
+      "id": "199:1213",
+      "name": "Width=768, Length=max · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 3834
+    },
+    {
+      "id": "199:1215",
+      "name": "Width=1440, Length=max · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 2788
+    },
+    {
+      "id": "199:1700",
+      "name": "Width=390, Length=max · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 12188
+    },
+    {
+      "id": "199:1702",
+      "name": "Width=768, Length=max · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 6275
+    },
+    {
+      "id": "199:1704",
+      "name": "Width=1440, Length=max · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 4657.3330078125
+    },
+    {
+      "id": "199:3272",
+      "name": "Width=390, Length=max · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 1073.5999755859375
+    },
+    {
+      "id": "199:3274",
+      "name": "Width=768, Length=max · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 1052
+    },
+    {
+      "id": "199:3276",
+      "name": "Width=1440, Length=max · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 828
+    },
+    {
+      "id": "199:3425",
+      "name": "Width=390, Length=max · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 1073.5999755859375
+    },
+    {
+      "id": "199:3427",
+      "name": "Width=768, Length=max · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 1052
+    },
+    {
+      "id": "199:3429",
+      "name": "Width=1440, Length=max · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 828
+    },
+    {
+      "id": "200:2723",
+      "name": "Width=390, Length=max · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 5124
+    },
+    {
+      "id": "200:2725",
+      "name": "Width=768, Length=max · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 2758
+    },
+    {
+      "id": "200:2727",
+      "name": "Width=1440, Length=max · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 2320
+    },
+    {
+      "id": "200:3110",
+      "name": "Width=390, Length=max · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 7154
+    },
+    {
+      "id": "200:3112",
+      "name": "Width=768, Length=max · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 4398
+    },
+    {
+      "id": "200:3114",
+      "name": "Width=1440, Length=max · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 3936
+    },
+    {
+      "id": "200:3992",
+      "name": "Width=390, Length=max · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 19594
+    },
+    {
+      "id": "200:3994",
+      "name": "Width=768, Length=max · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 10958
+    },
+    {
+      "id": "200:3996",
+      "name": "Width=1440, Length=max · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 7696
+    },
+    {
+      "id": "201:4337",
+      "name": "Width=390, Length=max · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 572
+    },
+    {
+      "id": "201:4339",
+      "name": "Width=768, Length=max · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 606
+    },
+    {
+      "id": "201:4341",
+      "name": "Width=1440, Length=max · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 680
+    },
+    {
+      "id": "201:4454",
+      "name": "Width=390, Length=max · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 1234
+    },
+    {
+      "id": "201:4456",
+      "name": "Width=768, Length=max · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 1072
+    },
+    {
+      "id": "201:4458",
+      "name": "Width=1440, Length=max · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 1050
+    },
+    {
+      "id": "201:4697",
+      "name": "Width=390, Length=max · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 6180
+    },
+    {
+      "id": "201:4699",
+      "name": "Width=768, Length=max · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 3270
+    },
+    {
+      "id": "201:4701",
+      "name": "Width=1440, Length=max · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 1664
+    }
+  ],
+  "optional": [
+    {
+      "id": "276:5579",
+      "name": "Tisan sections / text-only hero / 390 · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 1148
+    },
+    {
+      "id": "276:5593",
+      "name": "Tisan sections / text-only hero / 768 · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 956
+    },
+    {
+      "id": "276:5607",
+      "name": "Tisan sections / text-only hero / 1440 · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 965
+    },
+    {
+      "id": "276:5621",
+      "name": "Tisan sections / header without logo / 390 · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 508
+    },
+    {
+      "id": "276:5657",
+      "name": "Tisan sections / header without logo / 768 · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 268
+    },
+    {
+      "id": "276:5693",
+      "name": "Tisan sections / header without logo / 1440 · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 148
+    },
+    {
+      "id": "276:5724",
+      "name": "Tisan sections / many links header / 390 · Changed after approval, awaiting founder",
+      "width": 390,
+      "height": 604
+    },
+    {
+      "id": "276:5760",
+      "name": "Tisan sections / many links header / 768 · Changed after approval, awaiting founder",
+      "width": 768,
+      "height": 364
+    },
+    {
+      "id": "276:5796",
+      "name": "Tisan sections / many links header / 1440 · Changed after approval, awaiting founder",
+      "width": 1440,
+      "height": 208
+    }
+  ],
+  "reviewBoardId": "276:5827",
+  "previousTypeAndItemAudit": "42 max masters, nine optional masters; heading sizes, Medium card titles, body 18, and new item counts all passed"
+}

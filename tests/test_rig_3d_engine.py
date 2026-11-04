@@ -27,7 +27,7 @@ from rigbox.three_d.api import mount  # noqa: E402
 from rigbox.three_d.contracts import Assembly, Job, Review, Report  # noqa: E402
 from rigbox.three_d.engine import check_artifact  # noqa: E402
 from rigbox.three_d.forge import BrainForge  # noqa: E402
-from rigbox.three_d.sample import TENANT, WITHOUT_3D, PUBLIC_KEY, PLAIN_KEY, seed  # noqa: E402
+from fixtures.rig_three_d.sample import TENANT, WITHOUT_3D, PUBLIC_KEY, PLAIN_KEY, seed  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -284,7 +284,7 @@ async def test_forge_relay_contract_and_failure_do_not_leak_upstream(rig):
     from rigbox.three_d.contracts import Anchor
     from rigbox.three_d.forge import wire_job
     request = job(cost_cap_usd=1, anchors={"reviewed": Anchor(position_mm=(0,0,0), quaternion=(0,0,0,1))})
-    fixture = (ROOT / "agents/rig/rigbox/three_d/fixtures/centre.glb").read_bytes()
+    fixture = (ROOT / "tests/fixtures/rig_three_d/models/centre.glb").read_bytes()
     calls = []
     class Files:
         async def stage(self, value):
@@ -350,7 +350,7 @@ def test_photos_only_rejects_cad_and_model_suffixes(suffix):
 
 
 def test_fixture_glbs_match_their_report_and_are_compressed():
-    root = ROOT / "agents/rig/rigbox/three_d/fixtures"
+    root = ROOT / "tests/fixtures/rig_three_d/models"
     for path in root.glob("*.glb"):
         data = path.read_bytes()
         report = Report(**json.loads(path.with_suffix(".json").read_text()), sha256=hashlib.sha256(data).hexdigest(),
@@ -393,7 +393,7 @@ async def test_unapproved_fit_cannot_gain_mounts_or_enter_assembly(rig):
 
 def test_glb_cannot_cause_external_fetch_even_with_a_matching_checksum():
     import struct
-    path = ROOT / "agents/rig/rigbox/three_d/fixtures/centre.glb"
+    path = ROOT / "tests/fixtures/rig_three_d/models/centre.glb"
     data = path.read_bytes(); length = struct.unpack_from("<I", data, 12)[0]
     doc = json.loads(data[20:20+length]); doc["images"] = [{"uri": "https://invalid.example/texture.png"}]
     encoded = json.dumps(doc).encode(); encoded += b" " * (-len(encoded) % 4)
@@ -469,3 +469,67 @@ async def test_quote_accepts_phone_only_and_rejects_missing_or_invalid_contacts(
     row = await pool.fetchrow('SELECT tenant_id, contact FROM agent_rig.quotes WHERE id=$1', response.json()['request_id'])
     assert row['tenant_id'] == TENANT
     assert json.loads(row['contact']) == {'name': 'Sample Shopper', 'phone': '+1 202 555 0100'}
+
+
+@pytest.mark.asyncio
+async def test_wave4_room_entitlement_grant_review_revoke_and_restore(rig, monkeypatch):
+    """Existing approval path works without Figma, billing or a GPU service."""
+    engine, pool, client, admin = rig
+    monkeypatch.delenv('RIG_FORGE_TRELLIS_ENABLED', raising=False)
+    room_key = secrets.token_urlsafe(32)
+    monkeypatch.setenv('TANK_KEY', room_key)
+    tenant = str(TENANT)
+    public = {'X-Rig-Key': PUBLIC_KEY}
+    internal = '/v1/rig/internal/3d/entitlement'
+    room = {'X-Tank-Key': room_key}
+    await engine.store.set_entitlement(TENANT, False, None, 'ZAR')
+    request = job()
+    submit = '/v1/rig/admin/3d/jobs'
+    assert (await client.post(submit, headers={'X-Rig-Key': admin}, json=request.model_dump(mode='json'))).status_code == 403
+    assert await engine.store.job(tenant, request.id) is None
+    body = {'tenant_id': tenant, 'enabled': True, 'currency': 'ZAR'}
+    assert (await client.post(internal, headers={'X-Tank-Key': 'wrong'}, json=body)).status_code == 401
+    assert (await client.post(internal, headers=room, json=body)).status_code == 200
+    capabilities = (await client.get('/v1/rig/3d/capabilities', headers=public)).json()
+    assert capabilities['rig_3d'] is True
+    assert capabilities['photo_sources'] == ['scan']
+    assert (await client.get('/v1/rig/3d/capabilities', headers={'X-Rig-Key': PLAIN_KEY})).json()['rig_3d'] is False
+    await approve_all(engine)  # Local stand-in, validated GLBs, all three review checks.
+    model = await engine.store.approved(TENANT, 'centre')
+    assert model['reviewed_by'] == 'test-reviewer' and model['approved_at']
+    assert model['review'] == {'scale': True, 'appearance': True, 'attachment_points': True}
+    assembly = '/v1/rig/3d/assembly'
+    built = (await client.post(assembly, headers=public, json={'product_id': 'centre'})).json()
+    assert built['available'] is True and built['models']
+    asset = f"/v1/rig/3d/assets/{model['id']}"
+    assert (await client.get(asset, headers=public)).status_code == 200
+    assert (await client.post(internal, headers=room, json={**body, 'enabled': False})).status_code == 200
+    assert (await client.get(asset, headers=public)).status_code == 403
+    assert (await client.post(assembly, headers=public, json={'product_id': 'centre'})).status_code == 403
+    assert (await client.post(internal, headers=room, json=body)).status_code == 200
+    restored = await engine.store.approved(TENANT, 'centre')
+    assert restored['id'] == model['id'] and restored['approved_at'] == model['approved_at']
+    assert (await client.get(asset, headers=public)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_kiosk_quote_requires_current_displayed_notice_and_records_receipt(rig):
+    engine, pool, client, _ = rig
+    await approve_all(engine)
+    await engine.catalogue.store.put_retailer(str(TENANT), 'fixture-store', None, None,
+        quote_notice={'text': 'Fixture privacy notice', 'url': 'https://example.test/privacy'})
+    headers = {'X-Rig-Key': PUBLIC_KEY}
+    configured = (await client.get('/v1/rig/privacy-notice', headers=headers)).json()['notice']
+    body = {'assembly': {'product_id': 'centre'}, 'name': 'Fixture Shopper', 'phone': '+12025550123'}
+    assert (await client.post('/v1/rig/3d/quote', headers=headers, json=body)).status_code == 409
+    assert await pool.fetchval('SELECT count(*) FROM agent_rig.quotes WHERE tenant_id=$1', TENANT) == 0
+    body['notice_version'] = configured['version']
+    response = await client.post('/v1/rig/3d/quote', headers=headers, json=body)
+    assert response.status_code == 200
+    payload = await pool.fetchval('SELECT payload FROM agent_rig.quotes WHERE id=$1', response.json()['request_id'])
+    saved = json.loads(payload) if isinstance(payload, str) else payload
+    assert saved['notice_receipt']['version'] == configured['version']
+    assert saved['notice_receipt']['submitted_at']
+    await engine.catalogue.store.put_retailer(str(TENANT), 'fixture-store', None, None,
+        quote_notice={'text': 'Changed fixture notice', 'url': 'https://example.test/privacy'})
+    assert (await client.post('/v1/rig/3d/quote', headers=headers, json=body)).status_code == 409

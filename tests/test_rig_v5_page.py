@@ -5,6 +5,8 @@ No database, no network. The mailer is a fake and SMTP is guarded.
 
 from __future__ import annotations
 
+from rig_fixture_loader import load_catalogue
+
 import csv
 import json
 import re
@@ -25,7 +27,7 @@ from rigbox.page_route import mount_page  # noqa: E402
 from rigbox.service import Service, WebhookHandoff  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
-ARCHON = ROOT / "agents" / "rig" / "catalogues" / "archon"
+ARCHON = ROOT / "tests" / "fixtures" / "rig_catalogues" / "aurora"
 V5 = ROOT / "agents" / "rig" / "rigbox" / "page" / "v5"
 TENANT = "44444444-4444-4444-8444-444444444444"
 ORIGIN = "https://rig.tervory.com"
@@ -45,7 +47,7 @@ def _client(mail: Mail | None = None) -> TestClient:
     import asyncio
 
     service = Service(MemoryStore(), handoff=WebhookHandoff(None, mail))
-    report = asyncio.run(service.load_folder(ARCHON))
+    report = asyncio.run(load_catalogue(service, ARCHON))
     assert report["products"]["added"] == 15
     assert report["market"] == {"rows": report["market"]["rows"], "rejected": []}
     app = FastAPI()
@@ -126,7 +128,7 @@ def test_v5_shopper_words() -> None:
     assert "Demo · keys off" not in text
     assert "live distributor keys are off" not in text
     assert "sample prices" not in text
-    assert "sample" in (V5 / "sample-suppliers.json").read_text(encoding="utf-8")
+    assert "sample" in (ROOT / "tests/fixtures/rig_sample_suppliers.json").read_text(encoding="utf-8")
     # No web images: every image the page loads is under /page/v5/media.
     for url in re.findall(r"(?:src=|url\()[\"']?([^\"')\s>]+)", text):
         if url.startswith(("data:", "${", "/page/v5/media/")) or url == "/page/v5/rig.js":
@@ -147,7 +149,7 @@ def test_v5_media_is_wrapped_owner_media() -> None:
 
 
 def test_sample_suppliers_match_the_catalogue() -> None:
-    offers = json.loads((V5 / "sample-suppliers.json").read_text(encoding="utf-8"))
+    offers = json.loads((ROOT / "tests/fixtures/rig_sample_suppliers.json").read_text(encoding="utf-8"))
     assert offers["sample"] is True
     rows = list(csv.DictReader((ARCHON / "products.csv").open(encoding="utf-8")))
     assert {row["sku"] for row in rows} == set(offers["offers"])

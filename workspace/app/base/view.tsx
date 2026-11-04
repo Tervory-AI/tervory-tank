@@ -11,17 +11,17 @@ import { BatchWorkflow } from "./batch-workflow";
 import { ContextComparison } from "./context-comparison";
 import { ReferenceWorkflow } from "./reference-workflow";
 
-export const WORKSPACE_HREF = "/";
+export const WORKSPACE_HREF = "https://app.tervory.com/";
 
 /** Standard panel items, the same on every squad page. Top: account name, then these. Bottom: settings and support. */
 export const STANDARD_TOP = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/projects", label: "Projects" },
+  { href: "https://app.tervory.com/", label: "Dashboard" },
+  { href: "/matters", label: "Projects" },
   { href: "/chats", label: "Chats" },
 ] as const;
 export const STANDARD_BOTTOM = [
   { href: "/settings", label: "Settings" },
-  { href: "/support", label: "Support" },
+  { href: "https://tervory.com", label: "Support" },
 ] as const;
 
 const SECTIONS = ["overview", "search", "ask", "batches", "skills"] as const;

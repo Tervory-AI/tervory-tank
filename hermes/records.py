@@ -80,6 +80,12 @@ class Records:
                 async with conn.transaction():
                     await conn.execute(schema_sql(agent))
                     s = self.schema(agent)
+                    definition = await conn.fetchval(
+                        "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid=to_regclass($1) AND conname=$2",
+                        s + ".memory_publish_log", "memory_publish_log_result_check")
+                    if definition and "'withdrawn'" not in definition:
+                        await conn.execute(_sql("ALTER TABLE {schema}.memory_publish_log DROP CONSTRAINT memory_publish_log_result_check", s))
+                        await conn.execute(_sql("ALTER TABLE {schema}.memory_publish_log ADD CONSTRAINT memory_publish_log_result_check CHECK (result IN ('disabled','missing','refused','published','already_published','withdrawn'))", s))
                     # Match the chassis provisioner's existing ownership rule.
                     # Commit DDL + ownership together so restricted agent startup
                     # can safely reapply its schema regardless of startup order.
@@ -113,16 +119,18 @@ class Records:
         kind: str = "fact",
         meta: dict | None = None,
         row_id: str | None = None,
+        index: bool = True,
     ) -> dict:
         s = self.schema(agent)
         tenant_id, identity = (
             uuid.UUID(tenant),
             uuid.UUID(row_id) if row_id else uuid.uuid4(),
         )
-        try:
-            await asyncio.to_thread(self.encoder.validate, claim)
-        except ValueError as exc:
-            raise ClaimTooLong(str(exc)) from None
+        if index:
+            try:
+                await asyncio.to_thread(self.encoder.validate, claim)
+            except ValueError as exc:
+                raise ClaimTooLong(str(exc)) from None
         async with self.pool.acquire() as conn, conn.transaction():
             await self.lock(conn, s, identity)
             row = await conn.fetchrow(
@@ -140,7 +148,7 @@ class Records:
                 confidence,
                 last_verified,
                 kind,
-                json.dumps(meta or {}),
+                json.dumps({**(meta or {}), **({"_index_enabled": False} if not index else {})}),
             )
             if row is None:
                 row = await conn.fetchrow(
@@ -157,9 +165,11 @@ class Records:
                     or json.loads(row["evidence"]) != evidence
                 ):
                     raise ValueError("Memory id conflicts with a different record")
-            await self.enqueue(conn, s, identity, tenant_id, self.model)
+            if index:
+                await self.enqueue(conn, s, identity, tenant_id, self.model)
         # The transaction has committed before any inference or vector call.
-        await self.process_one(agent, tenant_id, identity, self.model)
+        if index:
+            await self.process_one(agent, tenant_id, identity, self.model)
         saved = await self.get(agent, tenant, str(identity))
         if saved is None:
             raise ValueError("Memory was concurrently deleted")
@@ -169,7 +179,7 @@ class Records:
             "sources": saved["evidence"],
             "source": next(iter(saved["evidence"]), ""),
             "deduped": False,
-            "index_pending": saved["embed_model"] != self.model,
+            "index_pending": index and saved["embed_model"] != self.model,
         }
 
     async def enqueue(
@@ -213,7 +223,7 @@ class Records:
         return public_row(row) if row else None
 
     async def list(
-        self, agent: str, tenant: str, tier: str = "client", limit: int = 50
+        self, agent: str, tenant: str, tier: str = "client", limit: int = 50, offset: int = 0
     ) -> list[dict]:
         if tier not in ("client", "platform"):
             raise ValueError("Read-only reference corpus")
@@ -222,12 +232,12 @@ class Records:
             rows = await conn.fetch(
                 _sql(
                     """SELECT * FROM {schema}.memory_records
-                WHERE tenant_id=$1 AND tier=$2 ORDER BY created_at DESC,id LIMIT $3""",
+                WHERE tenant_id=$1 AND tier=$2 ORDER BY created_at DESC,id LIMIT $3 OFFSET $4""",
                     self.schema(agent),
                 ),
                 uuid.UUID(owner),
                 tier,
-                limit,
+                limit, offset,
             )
         return [public_row(row) for row in rows]
 

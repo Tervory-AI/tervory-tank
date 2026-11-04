@@ -1,0 +1,52 @@
+Trigger Wave 4 — offline verification, 3–4 November 2026
+
+Checkout: /workspace/codex-trigger-w4
+Branch: codex/trigger-w4
+Base: origin/main at 55b2e224
+Design source: origin/codex/crm-marketing-chat-design at 51f9a0b1117f448bfa5cc7056a5a4792e528b77b
+
+PASS CI lint (repeated before each push after the founder lint update):
+ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+All checks passed!
+
+PASS:
+node workspace/node_modules/typescript/bin/tsc --noEmit --incremental false --project workspace/tsconfig.json
+
+PASS:
+next build (Workspace, local placeholder Clerk settings, telemetry disabled)
+Optimized production bundle, type checks, page collection and dynamic route build complete.
+
+PASS (disposable local Postgres, --disable-socket --allow-unix-socket):
+pytest tests/trigger_bot_b1 tests/trigger_m1 tests/trigger_second_build/test_second.py tests/trigger_gate2 tests/trigger_first_build/test_trigger.py tests/trigger_w4 -q -rs
+290 passed, 1 skipped
+Skip: tests/trigger_first_build/test_trigger.py:337, requires isolated room and LanguageTool containers.
+
+PASS (disposable local Postgres, --disable-socket --allow-unix-socket):
+pytest tests/test_trigger_crm.py tests/test_trigger_crm_wsgi.py tests/test_trigger_w1.py tests/test_trigger_x_length.py tests/trigger_crm_acceptance_20261031 tests/test_founder_console.py tests/test_batch_guard.py tests/test_device_login.py tests/trigger_w4 -q
+221 passed, 1 skipped
+This run preceded the three last Wave 4 cases; the final focused suite includes them.
+
+PASS:
+pytest tests/trigger_w4 --disable-socket --allow-unix-socket -q
+14 passed
+
+PASS:
+COMMAND_TEST_TOOLS=<checkout>/workspace/node_modules node tests/trigger_w4/workspace.cjs
+Actual regional public transport, origin forwarding, no private key, no ZA fallback, operation allowlist, active-tenant server actions, canonical durable-card Confirm URL, and scoped public-font CORS configuration.
+
+PASS:
+TRIGGER_BROWSER_TOOLS=<scratch>/node_modules node tests/trigger_w4/browser.cjs
+Actual React CRM/Marketing/bot views at 1440 and 375, mobile menu, server-captured Confirm, pending send, repeatable source links, privacy gate and hand-over. Separate local origins exercise embed fetch/preflight and actual FontFace loading. No page overflow or browser runtime errors. Screenshots are offline placeholder fixtures only.
+Browser tools: esbuild 0.25.12, Playwright 1.56.1, existing /usr/bin/google-chrome. Formatting tool: Prettier 3.6.2. Scratch tools are not runtime dependencies.
+
+PASS:
+node --check workspace/public/trigger/widget.js
+git diff --check
+
+Corrections during verification:
+- Some existing DB fixtures discard query strings. Their initial Unix-socket URL lost its host and socket blocking correctly refused a fallback. Reran with the socket host encoded in the URI authority; all tests above passed.
+- Local feedparser/PyJWT test dependencies were missing. Restored repository-pinned feedparser 6.0.14, feedparser-sgmllib 2.1.0 and PyJWT[crypto] 2.15.1 in the disposable test environment; no requirements file changed.
+- CRM regression caught creator email metadata in a newly expanded nested projection. Restored its exclusion and reran the existing CRM tests.
+- Browser harness needed a module resolution directory, a unique test-module name, UTF-8 fixture HTML, proper cross-origin preflight handling and font loading before capture. Corrected the harness; the final real-view checks pass.
+
+No production database, source content, tenant data, provider call, model call, SMTP delivery, new key, live OAuth consent, PR operation or deployment was used. The owned disposable Postgres has no production connection and uses test-only durability settings. Existing startup guard and conditional RLS tests were included.

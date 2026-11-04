@@ -202,13 +202,21 @@ async def test_adapter_http_tenant_ownership_and_zero_receipt(monkeypatch):
     monkeypatch.setattr(trigger_routes, 'code_receipt', receipt)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://tank') as http:
         response = await http.post('/v1/trigger/check', json={'text': 'This are a test.'})
+        assert response.status_code == 409
+        room.assert_not_called()
+        from trigger_commands import CONFIRMED
+        token = CONFIRMED.set((TENANT, 'founder', uuid4(), 'trigger.check', {'text': 'This are a test.'}))
+        try:
+            response = await http.post('/v1/trigger/check', json={'text': 'This are a test.'})
+        finally:
+            CONFIRMED.reset(token)
         assert response.status_code == 200
         assert response.json()['cost_usd'] == response.json()['model_calls'] == 0
         assert room.call_args.args[1]['tenant_id'] == str(TENANT)
         assert receipt.call_args.args == (TENANT, 'trigger.check')
         for payload, status in [({'text': 'text', 'tenant_id': str(OTHER)}, 403),
                                 ({'text': 'text', 'url': 'https://example.com'}, 422),
-                                ({'text': 'x' * 20001}, 422)]:
+                                ({'text': 'x' * 32001}, 422)]:
             response = await http.post('/v1/trigger/check', json=payload)
             assert response.status_code == status
         actor = command.Actor(TENANT, 'client', False)
@@ -245,7 +253,7 @@ def test_sources_match_pins_and_internal_room_limits():
     assert server['entrypoint'][0] == 'java'  # No entrypoint downloading optional models.
     root = yaml.safe_load((ROOT / 'docker-compose.yml').read_text())
     corridor = [name for name, service in root['services'].items() if 'tervory-gw-trigger' in service.get('networks', [])]
-    assert set(corridor) == {'tank', 'postgres'}
+    assert set(corridor) == {'tank', 'postgres', 'hermes'}
     assert 'external' not in root['networks']['tervory-gw-trigger']
 
 
@@ -284,7 +292,7 @@ async def test_real_schema_reapplication_and_voice_isolation(monkeypatch):
         schema = (ROOT / 'tank/schema.sql').read_text()
         await pool.execute(schema)
         await pool.execute(schema)
-        rows = await pool.fetch("SELECT task_type,cache_scope,eval_threshold,min_shadow_samples FROM tank.policy WHERE task_type LIKE 'trigger.%'")
+        rows = await pool.fetch("SELECT task_type,cache_scope,eval_threshold,min_shadow_samples FROM tank.policy WHERE task_type IN ('trigger.write','trigger.check')")
         assert len(rows) == 2
         assert {r['task_type']: r['cache_scope'] for r in rows} == {'trigger.write': 'tenant', 'trigger.check': 'none'}
         assert all(float(r['eval_threshold']) == 0.99 and r['min_shadow_samples'] == 200 for r in rows)

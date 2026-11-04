@@ -200,6 +200,8 @@ async def test_the_call_site_passes_engine_lists_only_for_that_engine() -> None:
 
 
 CANDIDATES = {
+    ("base.contacts", "1.3.0"),
+    ("base.site_signals", "1.0.1"),
     ("base.find_site", "1.5.0"),
     ("base.find_site", "1.6.0"),
     ("base.find_site", "1.7.0"),
@@ -209,6 +211,11 @@ CANDIDATES = {
     ("base.find_site", "1.7.1"),
     ("base.contacts", "1.1.1"),
     ("ffl.profile", "1.1.1"),
+    # Base B1 (#585): unapproved until the founder approves them in /skala.
+    ("base.contacts", "1.2.0"),
+    ("base.verify", "1.2.0"),
+    # Base wave 4 (#647): phone checks, unapproved until the founder approves it in /skala.
+    ("base.contacts", "1.4.0"),
 }
 
 

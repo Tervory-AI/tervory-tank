@@ -93,6 +93,14 @@ def bind_tenant_endpoints(app):
                         tenant = value.tenant
                         break
                 admin = founder_only or bool(actor and getattr(actor, "founder", False))
+                if tenant is not None and tenant != "" and not isinstance(tenant, UUID):
+                    # A str tenant_id parameter is not validated by FastAPI; a malformed
+                    # one (?tenant_id=nope) must be the caller's error, not a 500 here.
+                    try:
+                        UUID(str(tenant))
+                    except ValueError:
+                        from fastapi import HTTPException
+                        raise HTTPException(422, "A workspace is required.") from None
                 with tenant_scope(tenant, administrative=admin):
                     response = await function(**kwargs)
                 # StreamingResponse runs after endpoint return; preserve its scope.

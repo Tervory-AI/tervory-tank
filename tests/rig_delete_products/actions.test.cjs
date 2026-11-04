@@ -16,7 +16,7 @@ async function main() {
   const calls=[];
   let session={userId:'owner',orgRole:'org:member'};
   const actor={tenantId:'active-tenant',userId:'owner'};
-  const tank=load('workspace/lib/tank.ts',{}, {fetch:async(url,options)=>{
+  const tank=load('workspace/lib/tank.ts',{'@/app/api/zenas/tank':load('workspace/app/api/zenas/tank.ts')}, {fetch:async(url,options)=>{
     calls.push({url,options});
     return {ok:true,json:async()=>url.endsWith('/delete-products')?{deleted:2}:{products:0,product_rows:[]}};
   }});

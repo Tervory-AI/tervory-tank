@@ -26,16 +26,22 @@ const mocks = {
     return Response.json({ ok: true });
   } },
 };
-const code = ts.transpileModule(fs.readFileSync('workspace/app/base/product/[...path]/route.ts', 'utf8'), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS },
-}).outputText;
-const loaded = { exports: {} };
-new Function('require', 'module', 'exports', code)((name) => {
-  assert.ok(Object.hasOwn(mocks, name), `Unexpected dependency ${name}`);
-  return mocks[name];
-}, loaded, loaded.exports);
+function load(file, dependencies) {
+  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  const loaded = { exports: {} };
+  new Function('require', 'module', 'exports', code)((name) => {
+    assert.ok(Object.hasOwn(dependencies, name), `Unexpected dependency ${name}`);
+    return dependencies[name];
+  }, loaded, loaded.exports);
+  return loaded.exports;
+}
+const hosts = load('workspace/lib/product-hosts.ts', {});
+mocks['@/lib/workspace-origin'] = load('workspace/lib/workspace-origin.ts', {'./product-hosts': hosts});
+const loaded = {exports: load('workspace/app/base/product/[...path]/route.ts', mocks)};
 const paths = ['reference/batches', 'uploads', 'comparison'];
-async function post(path, headers, requestUrl = 'https://0.0.0.0:3000/base/product/' + path) {
+async function post(path, headers, requestUrl = 'http://0.0.0.0:3000/base/product/' + path) {
   return loaded.exports.POST(new Request(requestUrl, {
     method: 'POST', headers,
     body: JSON.stringify({ tenant_id: 'forged-tenant', created_by: 'forged-user', states: ['DC'] }),

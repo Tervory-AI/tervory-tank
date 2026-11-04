@@ -1,0 +1,32 @@
+{
+  "branch": "codex/tisan-w4",
+  "regression": {
+    "passed": 553,
+    "skipped": 3,
+    "warnings": 247,
+    "seconds": 217.83,
+    "skip_reason": "existing explicit opt-in npm/build integrations"
+  },
+  "earlier_focused_integration": {
+    "passed": 122,
+    "seconds": 36.39
+  },
+  "promotion_rollback_and_tracking": {
+    "passed": 6,
+    "seconds": 1.18,
+    "transport": "real Coolify HTTP client against in-process fake API",
+    "production_mutation_requests": 4,
+    "automatic_promote_from_status": false
+  },
+  "runtime": {
+    "base_image": "codex-tisan-w3-j5:final",
+    "current_sources": "read-only mounts",
+    "network": "none",
+    "docker_socket": false,
+    "import_and_openapi": "passed",
+    "startup_or_live_database": false,
+    "new_image_deployed": false
+  },
+  "live_founder_chat_acceptance": "pending merge and deploy",
+  "quote_request_page": "frame owned by Figma thread; no page implemented"
+}

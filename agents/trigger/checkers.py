@@ -103,7 +103,7 @@ def local_checks(text: str, voice: Voice | None, excluded: frozenset[str] = froz
             "limitations": "Mechanical findings only; semantic accuracy, voice fit and rubric grades are not assessed."}
 
 
-async def check(text: str, voice: Voice | None, http: httpx.AsyncClient, *, tank=None, tenant_id=None) -> dict:
+async def _check_piece(text: str, voice: Voice | None, http: httpx.AsyncClient, *, tank=None, tenant_id=None, bounded=True) -> dict:
     import asyncio
     approved = {}
     if tank is not None:
@@ -147,12 +147,95 @@ async def check(text: str, voice: Voice | None, http: httpx.AsyncClient, *, tank
             result["complete"] = False
             result["checker_errors"] = ["LanguageTool is unavailable; its checks have not completed."]
     result["issue_count"] = len(result["issues"])
-    result["issues"] = result["issues"][:200]
+    result["issues"] = result["issues"][:200] if bounded else result["issues"]
     result["truncated"] = result["issue_count"] > len(result["issues"])
     result["style_source"] = "tenant" if voice else "house"
     result["voice_revision"] = voice.revision if voice else None
     result["stylebook"] = voice.stylebook if voice else None
     result["model_calls"] = 0
+    return result
+
+
+# Preserve the existing Command action envelope; each checker still sees <20k.
+DOCUMENT_LIMIT = 32000
+PIECE_LIMIT = 19999
+
+
+def pieces(text: str):
+    """Lossless source slices: headings, then paragraphs, then word boundaries."""
+    start = 0
+    while start < len(text):
+        end = min(start + PIECE_LIMIT, len(text))
+        if end < len(text):
+            window = text[start:end]
+            headings = [m.start() for m in re.finditer(r"(?m)^#{1,6}[ \t]+\S", window) if m.start()]
+            paragraphs = [m.end() for m in re.finditer(r"\n[ \t]*\n", window)]
+            boundaries = headings or paragraphs or [m.end() for m in re.finditer(r"\s+", window)]
+            if boundaries:
+                end = start + boundaries[-1]
+        yield start, text[start:end]
+        start = end
+
+
+def _whole_position(issue: dict, part: str, start: int, text: str) -> dict:
+    item = dict(issue)
+    if isinstance(item.get("offset"), int):
+        offset = item["offset"]
+        # Java LanguageTool reports UTF-16 positions; Python checkers use code points.
+        if item.get("source") == "languagetool":
+            raw = part.encode("utf-16-le")
+            local = len(raw[:offset * 2].decode("utf-16-le", errors="ignore"))
+            if isinstance(item.get("length"), int):
+                stop = len(raw[:(offset + item["length"]) * 2].decode("utf-16-le", errors="ignore"))
+                item["length"] = stop - local
+            offset = local
+        item["offset"] = start + offset
+    elif isinstance(item.get("line"), int):
+        rows = part.splitlines(keepends=True)
+        local = sum(len(row) for row in rows[:max(0, item["line"] - 1)])
+        local += max(0, (item.get("column") or 1) - 1)
+        item["offset"] = start + local
+    if isinstance(item.get("line"), int):
+        local_line = item["line"]
+        item["line"] += text.count("\n", 0, start)
+        if local_line == 1 and isinstance(item.get("column"), int):
+            item["column"] += start - (text.rfind("\n", 0, start) + 1)
+    return item
+
+
+async def check(text: str, voice: Voice | None, http: httpx.AsyncClient, *, tank=None, tenant_id=None) -> dict:
+    if not isinstance(text, str) or not 1 <= len(text) <= DOCUMENT_LIMIT:
+        raise ValueError("Text exceeds the checker limit")
+    if len(text) <= PIECE_LIMIT:
+        return await _check_piece(text, voice, http, tank=tank, tenant_id=tenant_id)
+    reports = []
+    findings = []
+    global_seen = set()
+    required = {f"Required term missing: {term}": term for term in voice.requiredTerms} if voice else {}
+    unclosed = len(re.findall(r"^\s*(`{3,}|~{3,})", text, re.MULTILINE)) % 2
+    for start, part in pieces(text):
+        report = await _check_piece(part, voice, http, tank=tank, tenant_id=tenant_id, bounded=False)
+        reports.append(report)
+        for issue in report["issues"]:
+            rule = issue.get("rule")
+            if rule == "required_term":
+                term = required.get(issue.get("message"))
+                if term and phrase_spans(text, term):
+                    continue
+            if rule == "F3" and not unclosed:
+                continue
+            if rule in {"required_term", "F3"}:
+                key = (issue.get("source"), rule, issue.get("message"))
+                if key in global_seen:
+                    continue
+                global_seen.add(key)
+            findings.append(_whole_position(issue, part, start, text))
+    result = dict(reports[0])
+    result.update(issues=findings[:200], issue_count=len(findings), truncated=len(findings) > 200,
+                  complete=all(r["complete"] for r in reports),
+                  checker_errors=list(dict.fromkeys(e for r in reports for e in r["checker_errors"])))
+    if any("skills" in r for r in reports):
+        result["skills"] = [skill for r in reports for skill in r.get("skills", [])]
     return result
 
 

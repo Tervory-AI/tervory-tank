@@ -1,8 +1,216 @@
+import { regionTank, type Region } from "@/app/api/zenas/tank";
+
 // The only way the Workspace talks to a model: through Tank.
 // Server-side only (uses TANK_API_KEY). Never import from a client component.
 
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
+
+// Bounded server-side fetches for the CLI corridors (review of #506, B1). Kept in this
+// import-free module because several test harnesses load lib/tank.ts on its own.
+//
+// Node 22 / undici 6.29.1: a fetch made with redirect:"error" whose body stalls after
+// the headers never aborts once a GC has run, whatever the signal. So these helpers:
+//  - use redirect:"manual" and refuse any 3xx / opaqueredirect (still no redirects), and
+//  - race the whole call, body read included, against a hard deadline that aborts the
+//    request and cancels the body when it fires, without relying on undici honouring it.
+// A signal is always set, which also keeps Next's render-time dedupe fetch (tee'd GET
+// bodies whose cancel() never settles) out of the way.
+
+export class DeadlineError extends Error { constructor() { super("deadline"); this.name = "DeadlineError"; } }
+export class RedirectError extends Error {
+  status: number;
+  constructor(status: number) { super(`redirect ${status}`); this.name = "RedirectError"; this.status = status; }
+}
+
+export const isRedirect = (response: Response) =>
+  response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400);
+
+/** fetch(url, init) then read(response), all within timeoutMs. init.signal still aborts early. */
+export async function boundedFetch<T>(url: URL | string, init: RequestInit, timeoutMs: number,
+                                      read: (response: Response) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const signal = init.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
+  let response: Response | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new DeadlineError());
+      controller.abort();
+      try { response?.body?.cancel().catch(() => undefined); } catch { /* locked by the reader */ }
+    }, timeoutMs);
+  });
+  const work = (async () => {
+    response = await fetch(url, { ...init, redirect: "manual", signal });
+    if (isRedirect(response)) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new RedirectError(response.status);
+    }
+    return read(response);
+  })();
+  work.catch(() => undefined);
+  try { return await Promise.race([work, deadline]); } finally { clearTimeout(timer); }
+}
+
+/**
+ * Pass an upstream body through, failing it if no bytes arrive for idleMs (Tank sends a
+ * heartbeat every 0.25 s while a turn runs), if it is not finished within totalMs (when
+ * given), or if the downstream cancels. Each read is raced against a timer, so a stalled
+ * upstream cannot pin the request forever even when undici ignores its abort signal.
+ * onStop is required: it must abort the upstream fetch (its AbortController), so a stop
+ * closes the connection to Tank instead of only cancelling the reader.
+ */
+export function boundedBody(body: ReadableStream<Uint8Array>, limits: { idleMs: number; totalMs?: number },
+                            onStop: () => void): ReadableStream<Uint8Array> {
+  const reader = body.getReader();
+  const end = limits.totalMs === undefined ? Infinity : Date.now() + limits.totalMs;
+  let stopped = false;
+  const stop = () => { if (stopped) return; stopped = true; onStop(); reader.cancel().catch(() => undefined); };
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const wait = Math.max(0, Math.min(limits.idleMs, end - Date.now()));
+        const item = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new DeadlineError()), wait); }),
+        ]);
+        if (item.done) controller.close(); else controller.enqueue(item.value);
+      } catch (error) {
+        stop(); controller.error(error);
+      } finally { clearTimeout(timer); }
+    },
+    cancel() { stop(); },
+  });
+}
+
+export const DEVICE_PROXY_TIMEOUT_MS = 10_000;
+export const PROXY_HEADERS_TIMEOUT_MS = 300_000;
+export const PROXY_IDLE_MS = 120_000;
+/** Total for a non-stream Tank answer body once its headers arrived (JSON, files up to 5 MB). */
+export const COMMAND_BODY_TIMEOUT_MS = 60_000;
+/**
+ * Bounds for commandRequest (the /chats loop). Headers: 300 s, because card confirmations
+ * answer only once the action ran. Event streams: 120 s idle (Tank heartbeats every
+ * 0.25 s). Other bodies: 60 s total. Exported as an object so tests can shorten them.
+ */
+export const COMMAND_LIMITS = { headersMs: PROXY_HEADERS_TIMEOUT_MS, idleMs: PROXY_IDLE_MS, bodyMs: COMMAND_BODY_TIMEOUT_MS };
+
+const DEVICE_ERRORS = new Set(["authorization_pending", "slow_down", "access_denied", "expired_token", "invalid_grant", "invalid_request"]);
+
+/**
+ * CLI device sign-in corridor (unauthenticated: create a code, poll, refresh,
+ * revoke). This Workspace fronts only its own us-east box; ZA CLIs call the ZA
+ * Tank directly. Approval is never reachable here: it needs a Clerk session.
+ */
+async function personalDeviceRequest(request: Request, path: string[], timeoutMs = DEVICE_PROXY_TIMEOUT_MS): Promise<Response> {
+  const headers = { "Cache-Control": "no-store" };
+  const refused = (status: number) => Response.json({}, { status, headers });
+  const host = (request.headers.get("host") ?? new URL(request.url).host).toLowerCase();
+  if (host !== "app.tervory.com") return refused(404);
+  const action = path.length === 2 ? path[1] : "";
+  if (request.method !== "POST" || !["code", "token", "refresh", "revoke"].includes(action)) return refused(404);
+  if (new URL(request.url).search) return refused(400);
+  if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return refused(415);
+  const text = await request.text().catch(() => null);
+  if (text === null) return refused(400);
+  if (text.length > 4096) return refused(413);
+  const forward: Record<string, string> = { "Content-Type": "application/json" };
+  if (action === "revoke") {
+    const bearer = /^Bearer (tv1\.us-east\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43})$/i.exec(request.headers.get("authorization") ?? "");
+    if (bearer) forward.Authorization = `Bearer ${bearer[1]}`;
+  }
+  try {
+    // Never select TANK_URL_ZA or a caller URL; this Workspace talks to its own box.
+    // Hard deadline over the whole call, body included (boundedFetch above).
+    const { response, payload } = await boundedFetch(new URL(`/v1/command/device/${action}`, TANK_URL), {
+      method: "POST", body: text, headers: forward, signal: request.signal, cache: "no-store",
+    }, timeoutMs, async response => {
+      const type = response.headers.get("content-type") ?? "";
+      const payload: unknown = type.startsWith("application/json") ? await response.json().catch(() => null)
+        : (await response.body?.cancel().catch(() => undefined), null);
+      return { response, payload };
+    });
+    if (response.ok && payload && typeof payload === "object") return Response.json(payload, { status: response.status, headers });
+    const error = payload && typeof payload === "object" ? (payload as { error?: unknown }).error : undefined;
+    if (typeof error === "string" && DEVICE_ERRORS.has(error)) {
+      return Response.json({ error }, { status: response.status === 429 ? 429 : 400, headers });
+    }
+    return refused(response.ok ? 502 : response.status);
+  } catch { return refused(502); }
+}
+
+/** CLI-only public corridor. No Clerk cookies or service-key identity assertions. */
+export async function personalCommandRequest(request: Request, path: string[],
+                                             limits: { headersMs: number; idleMs: number; deviceMs: number; bodyMs?: number } = { headersMs: PROXY_HEADERS_TIMEOUT_MS, idleMs: PROXY_IDLE_MS, deviceMs: DEVICE_PROXY_TIMEOUT_MS, bodyMs: COMMAND_BODY_TIMEOUT_MS }): Promise<Response> {
+  const headers = { "Cache-Control": "no-store" };
+  const refused = (status: number) => Response.json({}, { status, headers });
+  if (path[0] === "device") return personalDeviceRequest(request, path, limits.deviceMs);
+  const authorization = request.headers.get("authorization") ?? "";
+  const token = /^Bearer (tv1\.(us-east|za)\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43})$/i.exec(authorization);
+  if (!token) return refused(401);
+  const host = (request.headers.get("host") ?? new URL(request.url).host).toLowerCase();
+  const region = host === "app.tervory.com" ? "us-east" : host === "za.tervory.com" ? "za" : null;
+  if (!region || token[2] !== region) return refused(403);
+  const id = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+  const target = path.join("/");
+  const routes: Record<string, RegExp> = {
+    GET: new RegExp(`^(tools|threads|threads/${id}(/events)?|tasks/${id}/receipts)$`),
+    POST: new RegExp(`^(threads|threads/${id}/(turn|actions|code-turn)|cards/${id}|build)$`),
+    PATCH: new RegExp(`^threads/${id}$`),
+  };
+  if (path.some(segment => !/^[a-z0-9-]+$/.test(segment)) || !routes[request.method]?.test(target)) return refused(404);
+  const query = new URL(request.url).searchParams;
+  for (const key of query.keys()) if (key !== "after" || !target.endsWith("/events")) return refused(400);
+  const after = query.getAll("after");
+  if (after.length > 1 || (after.length && !/^\d{1,15}$/.test(after[0]))) return refused(400);
+  // Never select TANK_URL_ZA or a caller URL; this Workspace talks to its own box.
+  const url = new URL(`/v1/command/${target}`, TANK_URL);
+  if (after.length) url.searchParams.set("after", after[0]);
+  let body: Uint8Array | undefined;
+  if (request.method !== "GET") {
+    if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return refused(415);
+    const reader = request.body?.getReader();
+    if (reader) {
+      const chunks: Uint8Array[] = []; let size = 0;
+      try {
+        while (true) {
+          const item = await reader.read(); if (item.done) break;
+          size += item.value.byteLength;
+          if (size > 2_000_000) return refused(413);
+          chunks.push(item.value);
+        }
+      } catch { return refused(400); }
+      finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+      body = new Uint8Array(size); let offset = 0;
+      for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
+    }
+  }
+  // Aborted when the body is stopped (idle, total deadline, or the client went away), so
+  // the connection to Tank is closed, not just the reader cancelled.
+  const stop = new AbortController();
+  const signal = AbortSignal.any([request.signal, stop.signal]);
+  try {
+    // The deadline covers the headers (card confirmations answer only once the action ran);
+    // the body is then passed through with an idle bound so a stalled Tank cannot pin it.
+    const response = await boundedFetch(url, {
+      method: request.method, body: body as BodyInit | undefined, signal,
+      headers: { Authorization: `Bearer ${token[1]}`, "Content-Type": "application/json" },
+      cache: "no-store",
+    }, limits.headersMs, async response => response);
+    if (!response.ok) { stop.abort(); await response.body?.cancel().catch(() => undefined); return refused(response.status); }
+    const type = response.headers.get("content-type") ?? "";
+    if (!type.startsWith("application/json") && !type.startsWith("text/event-stream")) {
+      stop.abort(); await response.body?.cancel().catch(() => undefined); return refused(502);
+    }
+    // Event streams: idle bound (Tank heartbeats). JSON: idle bound and a total deadline.
+    const bodyLimits = type.startsWith("text/event-stream") ? { idleMs: limits.idleMs }
+      : { idleMs: limits.idleMs, totalMs: limits.bodyMs ?? COMMAND_BODY_TIMEOUT_MS };
+    return new Response(response.body && boundedBody(response.body, bodyLimits, () => stop.abort()), { status: response.status, headers: {
+      ...headers, "Content-Type": type, "X-Accel-Buffering": "no", "X-Content-Type-Options": "nosniff",
+    } });
+  } catch { stop.abort(); return refused(502); }
+}
 
 /** Founder memory inspection; identity comes from the server's goldIdentity check. */
 export function memoryRecord(identity: { tenantId: string; userId: string; role: string }, id: string): Promise<Response> {
@@ -29,7 +237,7 @@ export function rigPriceHistory(identity: { tenantId: string; userId: string }, 
 }
 
 /** API-only reports. Identity is supplied by Clerk on the server, never the browser. */
-export async function caseStudyRequest(identity: { tenantId: string; userId: string }, path = "", query = new URLSearchParams()): Promise<Response> {
+export async function caseStudyRequest(identity: { tenantId: string; userId: string }, path = "", query = new URLSearchParams(), signal?: AbortSignal): Promise<Response> {
   const allowed = ["", "ensure", "clients", "base", "tiger", "market_lab", "rig", "zenas", "trigger", "tisan", "radix", "autumbra"];
   if (!allowed.includes(path)) throw new Error("Unknown request.");
   const url = new URL(`/v1/case-studies${path ? `/${path}` : ""}`, TANK_URL);
@@ -38,14 +246,61 @@ export async function caseStudyRequest(identity: { tenantId: string; userId: str
     if (value !== null) url.searchParams.set(key, value);
   }
   return fetch(url, {
-    method: path === "ensure" ? "POST" : "GET", cache: "no-store", redirect: "error",
+    method: path === "ensure" ? "POST" : "GET", cache: "no-store",
+    // Observe ensure redirects as non-retryable HTTP failures; never follow them.
+    redirect: path === "ensure" ? "manual" : "error", signal,
     headers: { "X-Tank-Key": TANK_API_KEY, "X-Tervory-User": identity.userId, "X-Tervory-Tenant": identity.tenantId },
   });
 }
 
+// Optional bookkeeping, never an authorization or squad grant. Durable Clerk
+// identity + Tank grants/ledger are the retry source on later requests, including
+// after process restarts. This bounded per-process guard only limits load.
+const reportRegistrations = new Map<string, { failures: number; next: number; pending?: Promise<void> }>();
+
 export async function ensureCaseStudyReports(identity: { tenantId: string; userId: string }): Promise<void> {
-  const response = await caseStudyRequest(identity, "ensure");
-  if (!response.ok) throw new Error();
+  // Reject malformed runtime configuration before classifying fetch failures.
+  const endpoint = new URL("/v1/case-studies/ensure", TANK_URL);
+  if (!["http:", "https:"].includes(endpoint.protocol)) throw new Error("Invalid Tank protocol");
+  const key = JSON.stringify([identity.tenantId, identity.userId]);
+  const previous = reportRegistrations.get(key);
+  if (previous?.pending) return previous.pending;
+  if (previous && previous.next > Date.now()) return;
+  if (!previous && reportRegistrations.size >= 1000) {
+    for (const [oldKey, entry] of reportRegistrations) {
+      if (!entry.pending && entry.next <= Date.now()) reportRegistrations.delete(oldKey);
+    }
+    // Defer bookkeeping rather than evict in-flight requests or grow without bound.
+    if (reportRegistrations.size >= 1000) return;
+  }
+  const state = { failures: previous?.failures ?? 0, next: 0, pending: undefined as Promise<void> | undefined };
+  reportRegistrations.set(key, state);
+  state.pending = (async () => {
+    let status: number | undefined;
+    try {
+      const response = await caseStudyRequest(identity, "ensure", new URLSearchParams(), AbortSignal.timeout(1500));
+      status = response.status;
+      if (!response.ok) throw new Error(`Case-study registration rejected (${status})`);
+      if (state.failures) console.info("case_study_registration_recovered", { tenantId: identity.tenantId });
+      state.failures = 0;
+      state.next = Date.now() + 30_000;
+    } catch (error) {
+      // Never contain security, configuration, programming or contract failures.
+      const transport = error instanceof TypeError || (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name));
+      if (!(status === 408 || status === 429 || (status !== undefined && status >= 500) || (status === undefined && transport))) {
+        reportRegistrations.delete(key);
+        throw error;
+      }
+      state.failures += 1;
+      const retryMs = Math.min(60_000, 1000 * 2 ** Math.min(state.failures - 1, 6));
+      state.next = Date.now() + retryMs;
+      // Never log response bodies, credentials, user data or transport messages.
+      console.warn("case_study_registration_deferred", { tenantId: identity.tenantId, status: status ?? "transport", retryMs });
+    } finally {
+      state.pending = undefined;
+    }
+  })();
+  return state.pending;
 }
 
 /** Base product only. Identity and allowed operations are resolved server-side. */
@@ -138,8 +393,15 @@ function priceOrNull(value: unknown): number | null {
 }
 
 /** The roster LiteLLM serves, cheapest first, with USD per million tokens. No key and no missing-key flag. */
+/** The /chats loop reads the roster on every request, so it gets a hard deadline, body included. */
+export const ROSTER_TIMEOUT_MS = { value: 15_000 };
 export async function listRoster(): Promise<RosterModel[]> {
-  const rows = await tank<unknown>("/v1/models", { method: "GET" });
+  const rows = await boundedFetch(`${TANK_URL}/v1/models`, {
+    method: "GET", cache: "no-store", headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY },
+  }, ROSTER_TIMEOUT_MS.value, async res => {
+    if (!res.ok) { const text = await res.text(); throw new Error(`Tank /v1/models ${res.status}: ${text.slice(0, 300)}`); }
+    return (await res.json()) as unknown;
+  });
   if (!Array.isArray(rows)) return [];
   const models: RosterModel[] = [];
   for (const row of rows) {
@@ -864,6 +1126,7 @@ export type DashboardRead = {
   jobs_done: number;
   saved_usd: number | null;
   credits_left: number | null;
+  granted_squads?: string[];
   recent?: { id: string; title: string; status: string }[];
   skills?: { id: string; version: string; last_eval_score: number | null; eval_threshold: number }[];
   squad?: { agent: string; status: string; jobs: number }[];
@@ -952,7 +1215,7 @@ export class CommandRequestError extends Error {
   code: string;
   constructor(status: number, code: string, message: string) { super(message); this.status = status; this.code = code; }
 }
-export async function commandRequest(identity: { tenantId: string; userId: string; tenantAdmin?: boolean }, path: string, init: RequestInit = {}): Promise<Response> {
+export async function commandRequest(identity: { tenantId: string; userId: string; tenantAdmin?: boolean }, path: string, init: RequestInit = {}, options: { passThroughErrors?: boolean } = {}): Promise<Response> {
   if (!TANK_API_KEY) throw new Error("The conversation service is not configured.");
   const url = new URL(`/v1/command/${path}`, TANK_URL);
   url.searchParams.delete("tenant_id");
@@ -967,8 +1230,26 @@ export async function commandRequest(identity: { tenantId: string; userId: strin
   // Never turn a caller header into tool authority.
   headers.delete("x-tervory-squad");
   headers.set("x-tervory-role", identity.tenantAdmin === true ? "org:admin" : "");
-  const response = await fetch(url, { ...init, headers, cache: "no-store", redirect: "error" });
-  if (!response.ok) {
+  // Review of #506, B1: hard deadline on the headers (boundedFetch, redirect:"manual",
+  // 3xx refused) and a bound on the body that cancels it: idle for event streams, idle
+  // plus total for everything else, error bodies included. Works under undici 6's
+  // redirect:"error" + GC hang because every wait is raced against a timer.
+  const stop = new AbortController();
+  const signal = init.signal ? AbortSignal.any([init.signal, stop.signal]) : stop.signal;
+  let upstream: Response;
+  try {
+    upstream = await boundedFetch(url, { ...init, headers, cache: "no-store", signal }, COMMAND_LIMITS.headersMs, async answer => answer);
+  } catch (error) {
+    if (error instanceof DeadlineError) throw new CommandRequestError(504, "timeout", "The conversation service did not answer in time. Reload the chat before trying again.");
+    throw new CommandRequestError(502, "request_failed", "This request could not be completed. Reload the chat before trying again.");
+  }
+  const stream = upstream.ok && (upstream.headers.get("content-type") ?? "").includes("text/event-stream");
+  const limits = stream ? { idleMs: COMMAND_LIMITS.idleMs } : { idleMs: COMMAND_LIMITS.bodyMs, totalMs: COMMAND_LIMITS.bodyMs };
+  const empty = [204, 205, 304].includes(upstream.status);
+  if (empty) upstream.body?.cancel().catch(() => undefined);
+  const response = new Response(empty || !upstream.body ? null : boundedBody(upstream.body, limits, () => stop.abort()),
+    { status: upstream.status, statusText: upstream.statusText, headers: upstream.headers });
+  if (!response.ok && !options.passThroughErrors) {
     const detail = await response.json().then(body => body.detail).catch(() => undefined);
     if (response.status === 409 && detail === "Pinned models await a router capability; choose Auto") throw new CommandRequestError(409, "pin_pending", "Choosing a specific answer option is not supported yet. Choose Auto to continue.");
     if (response.status === 422 && detail === "Model is not on the roster") throw new CommandRequestError(422, "pin_unavailable", "That answer option is no longer available. Choose Auto to continue.");
@@ -1050,40 +1331,24 @@ export function moaAction(userId: string, action: "bench" | "promote", body: { t
   return tank(`/v1/moa/${action}`, { method: "POST", headers: { "x-tervory-admin": userId }, body: JSON.stringify(body) });
 }
 
-/** Public platform training matches, read from the active US Zenas room. */
-export function mootPublishedMatches(matchId?: string): Promise<{ matches: unknown[] }> {
-  const query = new URLSearchParams({ home_region: "us-east" });
+/** Published matches are read on demand from their owning region, never persisted here. */
+export async function mootPublishedMatches(matchId?: string, signal?: AbortSignal, region: Region = "us-east"): Promise<unknown> {
+  if (region !== "us-east" && region !== "za") return { matches: [] };
+  const query = new URLSearchParams({ home_region: region });
   if (matchId) query.set("match_id", matchId);
-  return tank(`/v1/zenas/moot/published?${query}`, { method: "GET" });
-}
-
-/** MOOT-1a: list fixture problems via Tank → Zenas room (server-side only). */
-export function mootFixtures(): Promise<{ fixtures: string[] }> {
-  return tank<{ fixtures: string[] }>("/v1/zenas/moot/fixtures", { method: "GET" });
-}
-
-/** MOOT-1a: counsel bundle for one side (bench notes must never appear). */
-export function mootCounselBundle(problemId: string, side: "appellant" | "respondent"): Promise<Record<string, unknown>> {
-  return tank<Record<string, unknown>>(`/v1/zenas/moot/problems/${encodeURIComponent(problemId)}/counsel/${side}`, {
-    method: "GET",
+  const timeout = AbortSignal.timeout(10000);
+  const init: RequestInit = {
+    method: "GET", signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  };
+  if (region === "us-east") return tank(`/v1/zenas/moot/published?${query}`, init);
+  const owner = regionTank("za");
+  if (!owner) return { matches: [] };
+  const response = await fetch(`${owner.url}/v1/zenas/moot/published?${query}`, {
+    ...init, cache: "no-store", redirect: "error",
+    headers: { "content-type": "application/json", "x-tank-key": owner.key },
   });
-}
-
-/** MOOT-1a: AI-against-AI fairness pair on a fixture problem. */
-export function mootAiAi(body: { problem_id: string; home_region: string; strictness?: string }): Promise<Record<string, unknown>> {
-  return tank<Record<string, unknown>>("/v1/zenas/moot/matches/ai-ai", { method: "POST", body: JSON.stringify(body) });
-}
-
-/** MOOT-1a: student modes on a fixture problem. */
-export function mootStudentMatch(body: {
-  problem_id: string;
-  home_region: string;
-  mode: "student_ai" | "student_student";
-  student_side: "appellant" | "respondent";
-  student_text: string;
-  strictness?: string;
-}): Promise<Record<string, unknown>> {
-  return tank<Record<string, unknown>>("/v1/zenas/moot/matches/student", { method: "POST", body: JSON.stringify(body) });
+  if (!response.ok) throw new Error("Published matches unavailable");
+  return response.json();
 }
 
 // Market Lab: the server derives tenantId from Clerk before calling this corridor.
@@ -1151,4 +1416,25 @@ export async function marketWarningRequest<T>(tenantId: string, operation: "list
   });
   if (!response.ok) throw new MarketLabRequestError(response.status);
   return await response.json() as T;
+}
+/** Founder CRM reads: fixed same-box Tank only; no CRM credential reaches Workspace callers. */
+export async function triggerCrmRead(
+  identity: { tenantId: string; userId: string }, path: readonly string[], query: URLSearchParams,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const { crmReadPath, crmReadQuery } = await import("./trigger-crm");
+  const target = crmReadPath(path);
+  const parameters = crmReadQuery(query, path.length === 2);
+  if (!target || !parameters) throw new Error("invalid_crm_request");
+  if (!TANK_API_KEY) throw new Error("crm_unavailable");
+  const url = new URL(`/v1/trigger/crm/${target}`, TANK_URL);
+  url.search = parameters.toString();
+  return fetch(url, {
+    method: "GET", cache: "no-store", redirect: "error", signal,
+    headers: {
+      "accept": "application/json", "x-tank-key": TANK_API_KEY,
+      "x-tervory-user": identity.userId, "x-tervory-admin": identity.userId,
+      "x-tervory-tenant": identity.tenantId,
+    },
+  });
 }

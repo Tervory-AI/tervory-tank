@@ -176,6 +176,14 @@ function sendResult(res, result, html) {
 const server = createServer(async (req, res) => {
   const url = new URL(req.url || "/", "http://127.0.0.1");
   try {
+    // Only the existing marketing alias is canonicalized. Use the real Host header,
+    // not forwarded input, and retain the original escaped path and query verbatim.
+    if (/^www\.tervory\.com\.?(?::\d+)?$/i.test(req.headers.host || "")) {
+      const target = (req.url || "/").startsWith("/") ? req.url || "/" : url.pathname + url.search;
+      res.writeHead(308, { location: "https://tervory.com" + target });
+      res.end();
+      return;
+    }
     if (url.pathname === "/api/release-notice") {
       if (req.method !== "POST") {
         sendResult(res, { status: 405, stored: false }, wantsHtml(req));
@@ -242,5 +250,5 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(port, "0.0.0.0", () => {
-  console.log(`site listening on ${port}`);
+  console.log(`site listening on ${server.address().port}`);
 });

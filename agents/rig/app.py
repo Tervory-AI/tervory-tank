@@ -122,6 +122,8 @@ app = create_app(
     ],
 )
 mount(app)
+from rigbox.cart_api import mount as mount_cart
+mount_cart(app)
 mount_quotes(app)
 mount_widget(app)
 
@@ -152,10 +154,12 @@ mount_page(app)
 
 @app.get("/gold/candidates")
 async def gold_candidates(
+    request: Request,
+    tenant_id: str | None = None,
     limit: int = Query(default=200, ge=1, le=200),
     x_tank_key: str = Header(default=""),
 ) -> list[dict[str, Any]]:
-    """Room key only. Catalogue compatibility lists, marked public."""
+    """Room key only. Private uploaded-product labels for an explicit tenant."""
     key = os.environ.get("TANK_KEY", "")
     # compare_digest on str rejects some headers with TypeError. Bytes compare
     # instead, so a bad or non-ASCII header is 401.
@@ -165,8 +169,14 @@ async def gold_candidates(
         matches = False
     if not matches:
         raise HTTPException(status_code=401, detail="room key required")
-    root = Path(os.environ.get("CATALOGUE_DIR", str(Path(__file__).resolve().parent / "catalogues")))
-    return _gold_candidates()(limit, region=os.environ.get("TANK_REGION", "us-east"), root=root)
+    if tenant_id is not None:
+        try:
+            tenant_id = str(uuid.UUID(tenant_id))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="The request is not valid.") from None
+    with tenant_scope(tenant_id):
+        return await _gold_candidates()(_rig_service(request).store, str(tenant_id) if tenant_id else None,
+                                        limit, region=os.environ.get("TANK_REGION", "us-east"))
 
 
 def _gold_candidates():
@@ -324,6 +334,22 @@ async def _room_read(request: Request, kind: str) -> JSONResponse:
         return _room_error(exc.status, exc.code, exc.message)
     if not isinstance(result, dict):
         return _room_error(502, "unavailable", "Rig did not answer.")
+    if request.query_params.get("source_record") == "1" and kind in {"search", "product"}:
+        # Bot citations use the exact stored URL/SKU and current facts, never a synthesized link.
+        records = await service.store.products(tenant_id)
+        indexed = {str(row.get("id") or row.get("sku")): row for row in records
+                   if str(row.get("tenant_id", tenant_id)) == tenant_id and row.get("active", True)
+                   and not (row.get("attributes") or {}).get("demo_item")}
+        def enrich(item):
+            row = indexed.get(str(item.get("id"))) if isinstance(item, dict) else None
+            if row is None:
+                return item
+            return {**item, "source_record": {k: str(row[k]) if k == "price" and row[k] is not None else row[k] for k in
+                    ("id", "sku", "url", "name", "brand", "price", "currency") if k in row}}
+        if kind == "search":
+            result = {**result, "results": [enrich(item) for item in result.get("results", [])]}
+        else:
+            result = enrich(result)
     return JSONResponse(_public_body(result))
 
 
@@ -370,25 +396,22 @@ async def _lifespan(app: FastAPI):
         retention_days()
         service = QuoteService(store, _TankModels(app.state.tank), RetailerHandoff(app.state.http),
                                PgQuotes(app.state.pool))
+        # Locate confirm re-reads offers live: approved-source API or Tiger
+        # check-now. Accept only hands the quote to the store.
+        from rigbox.locate_live import product_checkers
+
+        service.locate_checker = product_checkers(app.state.http)
         app.state.rig = service
-        configured = os.environ.get("CATALOGUE_DIR", "").strip()
-        root = Path(configured).resolve() if configured else None
-        fixtures = {Path(__file__).resolve().parent / "catalogues", Path("/app/catalogues")}
-        reports = await service.load_catalogues(root) if root and root not in fixtures else []
-        for report in reports:
-            log_line(AGENT, json.dumps(_public_report(report)), tenant_id=report.get("tenant_id") or None)
+        from rigbox.cart_runtime import install as install_cart
+        cart_worker = install_cart(service, app.state.http, app.state.tank)
+        with tenant_scope(None, administrative=True):
+            tenants = await store.tenant_ids()
         nightly = [
-            {
-                "tenant_id": report["tenant_id"],
-                "cron": "0 3 * * *",
-                "kind": "pull_feeds",
-                "input": {},
-            }
-            for report in reports
-            if report.get("tenant_id")
+            {"tenant_id": tenant, "cron": "0 3 * * *", "kind": "pull_feeds", "input": {}}
+            for tenant in tenants
         ]
         nightly.extend({"tenant_id": tenant, "cron": "*/5 * * * *", "kind": "retry_quotes", "input": {}}
-                       for tenant in await store.tenant_ids())
+                       for tenant in tenants)
         async with app.state.pool.acquire() as conn:
             await ensure_schedules(conn, schema_for(AGENT), nightly)
         from rigbox.price_events import consume_loop
@@ -399,6 +422,9 @@ async def _lifespan(app: FastAPI):
         finally:
             consumer.cancel()
             await asyncio.gather(consumer, return_exceptions=True)
+            if cart_worker is not None:
+                cart_worker.cancel()
+                await asyncio.gather(cart_worker, return_exceptions=True)
 
 
 app.router.lifespan_context = _lifespan
@@ -422,3 +448,30 @@ def _public_report(report: dict) -> dict:
         "keys": report.get("keys", 0),
         "keys_rejected": report.get("keys_rejected", []),
     }
+
+
+@app.post("/internal/trigger/bot-quote")
+async def trigger_bot_quote(request: Request):
+    """Tank's confirmed bot draft uses the existing quote engine unchanged."""
+    if not _room_key_ok(request):
+        return _room_error(401, "unauthorized", "room key required")
+    body, error = await _json_object(request)
+    if error is not None or body is None:
+        return error
+    tenant, error = _room_tenant(_query_tenants(request) + [str(body.get("tenant_id", ""))])
+    if error is not None:
+        return error
+    if body.get("home_region") != os.environ.get("TANK_REGION", "us-east"):
+        return _room_error(403, "region", "region mismatch")
+    try:
+        from rigbox.api import QuoteIn
+        from pydantic import ValidationError
+        data = QuoteIn.model_validate(body.get("data"))
+    except (ValidationError, ValueError, TypeError):
+        return _room_error(422, "invalid", "The request is not valid.")
+    activate_tenant(tenant)
+    try:
+        result = await _rig_service(request).quote(tenant, data.model_dump(exclude_none=True))
+        return JSONResponse(_public_body(result))
+    except RigError as exc:
+        return _room_error(exc.status, exc.code, exc.message)

@@ -135,7 +135,7 @@ pymdown-extensions==12.3
 pymupdf==2.0
 pymupdf4llm==2.0
 pymupdf_layout==2.0
-pypdf==6.21.3
+pypdf==6.21.4
 pypdfium2==5.14.0
 pyphen==0.18.1
 python-dateutil==2.9.0.post0

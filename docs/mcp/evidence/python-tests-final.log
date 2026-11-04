@@ -1,0 +1,86 @@
+........................................................................ [ 27%]
+........................................................................ [ 55%]
+........................................................................ [ 82%]
+.............................................                            [100%]
+=============================== warnings summary ===============================
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../../home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-mcp-server/tank/main.py:752: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /home/ammosync/.codex/tervory-integration-closure-evidence-20261101/venv-ci/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-mcp-server/tank/main.py:806: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-mcp-server/tank/agent_skills.py:531: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-mcp-server/tank/skala_intake.py:71: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-mcp-server/tank/skala_intake.py:77: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tests/test_command.py::test_shared_pin_keeps_policy_limits_and_records_actual_ledger
+  /workspace/codex-mcp-server/tank/skala_revalidation.py:192: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+261 passed, 14 warnings in 255.68s (0:04:15)

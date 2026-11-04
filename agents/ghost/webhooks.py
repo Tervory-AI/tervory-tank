@@ -167,8 +167,6 @@ def verify_mailbox(
         _drops["google"] = _drops["mailbox"]
 
 
-verify_cloudflare = verify_edge
-verify_google_workspace = verify_mailbox
 
 
 def accept_signed(
@@ -181,10 +179,10 @@ def accept_signed(
 ) -> dict[str, Any]:
     """Verify then return a tiny envelope. Body is not persisted by this helper."""
     key = str(provider or "").strip().lower()
-    if key in {"cloudflare", "edge", "host_firewall"}:
+    if key in {"edge", "host_firewall"}:
         verify_edge(body, signature=signature, timestamp=timestamp, nonce=nonce)
         named = "edge"
-    elif key in {"google", "google_workspace", "mailbox"}:
+    elif key == "mailbox":
         verify_mailbox(body, signature=signature, timestamp=timestamp, nonce=nonce)
         named = "mailbox"
     else:
@@ -198,3 +196,30 @@ def accept_signed(
         "stored": False,
         "note": "Verified at the Watch edge. Body stays in working memory only.",
     }
+
+
+async def accept_webhook(provider: str, body: bytes, *, headers, tank) -> dict[str, Any]:
+    """Provider URLs accept only provider authentication; HMAC is internal only."""
+    signature = headers.get('x-autumbra-signature')
+    if provider.strip().lower() in {'edge', 'mailbox', 'host_firewall'}:
+        envelope = accept_signed(provider, body, signature=signature,
+                                 timestamp=headers.get('x-autumbra-timestamp'),
+                                 nonce=headers.get('x-autumbra-nonce'))
+        return {**envelope, 'authenticated_by': 'hmac'}
+    from .native_webhooks import verify_cloudflare_notification, verify_google_push
+    key = provider.strip().lower()
+    bucket = 'edge' if key == 'cloudflare' else 'mailbox' if key in {'google', 'google_workspace'} else 'unknown'
+    try:
+        if key == 'cloudflare':
+            verify_cloudflare_notification(body, headers.get('cf-webhook-auth'))
+        elif key in {'google', 'google_workspace'}:
+            await verify_google_push(body, headers.get('authorization'), tank)
+        else:
+            raise WebhookRejected('unknown provider')
+    except WebhookRejected:
+        _drops[bucket] += 1
+        _drops['cloudflare'] = _drops['edge']
+        _drops['google'] = _drops['mailbox']
+        raise
+    return {'provider': bucket, 'requested_provider': key, 'bytes': len(body),
+            'accepted': True, 'stored': False, 'authenticated_by': 'native'}

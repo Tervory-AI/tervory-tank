@@ -24,7 +24,7 @@ function moduleFrom(relative, bindings) {
   vm.runInNewContext(compiled,{exports,require:name=>{assert(name in bindings);return bindings[name];},process:{env:{...config,TANK_URL:tankUrl}},fetch,URL,URLSearchParams,Headers,Response,Request,Uint8Array,TextDecoder,Set,Error,AbortSignal});
   return exports;
 }
-const tank = moduleFrom('workspace/lib/tank.ts',{});
+const tank = moduleFrom('workspace/lib/tank.ts',{'@/app/api/zenas/tank':moduleFrom('workspace/app/api/zenas/tank.ts',{})});
 const actions = moduleFrom('workspace/app/rig/admin/actions.ts',{
   '@clerk/nextjs/server':{auth:async()=>({userId:session.getStore()?.userId,orgRole:session.getStore()?'org:admin':null})},
   '@/lib/tenant':{activeTenant:async()=>session.getStore()},

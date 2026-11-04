@@ -123,14 +123,23 @@ jobs:
           report = Path(os.environ['LIVE_CHECK_OUTPUT']) / 'results.json'
           if not report.exists():
               raise SystemExit('Live checker produced no results; see failed step logs')
-          failed = [row for row in json.loads(report.read_text()) if not row['passed']]
-          if not failed:
-              print('All hosts passed; no failure issues needed')
-              raise SystemExit(0)
+          rows = json.loads(report.read_text())
+          failed = [row for row in rows if not row['passed']]
           github = GitHub(os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_TOKEN'])
           github.ensure_label()
           opened = github.open_incidents()
           run = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          # A host that passes again closes its own open issue (seven stayed open for days on 31 Oct).
+          for row in rows:
+              title = 'Live check failed: ' + row['host']
+              if row['passed'] and title in opened:
+                  number = int(opened[title]['number'])
+                  github.comment(number, f'Passed again at both widths. Closing. [Run]({run})')
+                  github.close(number)
+                  print('Closed ' + title)
+          if not failed:
+              print('All hosts passed; no failure issues needed')
+              raise SystemExit(0)
           artifact = os.environ['ARTIFACT_URL'] or run
           for row in failed:
               title = 'Live check failed: ' + row['host']

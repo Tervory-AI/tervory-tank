@@ -431,8 +431,13 @@ async def test_paused_ticks_do_not_create_runs_audits_or_reservations_and_resume
     pool,rt=database
     monkeypatch.setattr(controls,'db',lambda:pool)
     monkeypatch.setattr(bench,'runtime',lambda:rt)
-    async def forbidden(): raise AssertionError('A paused tick must not fetch the roster')
-    rt._roster_models=forbidden
+    fetched=[]
+    async def free_roster():
+        fetched.append(1)
+        return roster()
+    # Reading LiteLLM's price list is free: a paused box still keeps receipts priced.
+    rt._roster_models=free_roster
+    rt.LITELLM_MASTER_KEY='fixture-only'
     await pool.execute("INSERT INTO tank.controls(tenant_id,name,value,updated_by) VALUES($1,'paid_paused',true,'fixture')",PLATFORM_TENANT)
     for _ in range(3):
         status=await bench.tick()
@@ -440,6 +445,9 @@ async def test_paused_ticks_do_not_create_runs_audits_or_reservations_and_resume
         await bench.worker_status(None,status)
     for table in ('bench_runs','bench_calls','control_log'):
         assert await pool.fetchval('SELECT count(*) FROM tank.'+table)==0
+    assert len(fetched)==3
+    assert await pool.fetchval('SELECT count(*) FROM tank.proof_prices WHERE active')==2
+    assert await pool.fetchval('SELECT count(*) FROM tank.baseline_price_changes')==0
     assert await pool.fetchval("SELECT bench_status FROM tank.search_state WHERE task_type='@bench'")=='paused'
     await pool.execute("UPDATE tank.controls SET value=false WHERE tenant_id=$1 AND name='paid_paused'",PLATFORM_TENANT)
     # No secret is needed for this test: reaching validation proves unpause resumes work.
@@ -469,3 +477,35 @@ def test_csv_negative_numbers_remain_numeric_while_text_formulas_are_escaped():
 def test_tenant_name_resolution_uses_organisation_names():
     import subprocess
     subprocess.run(['node','tests/core1-tenant-names.cjs'],cwd=ROOT,check=True,capture_output=True,text=True)
+
+
+@pytest.mark.asyncio
+async def test_fresh_deploy_populates_proof_prices_idempotently_before_any_tick(database,monkeypatch):
+    """Root cause: prices were synced only inside a bench tick, never while paused,
+    and a LiteLLM still starting left the table empty for five minutes or more."""
+    pool,rt=database
+    monkeypatch.setattr(bench,'runtime',lambda:rt)
+    assert await pool.fetchval('SELECT count(*) FROM tank.proof_prices')==0
+    calls=[]
+    async def starting_then_ready():
+        calls.append(1)
+        if len(calls)==1:
+            raise httpx.ConnectError('LiteLLM still starting')
+        return roster()
+    rt._roster_models=starting_then_ready
+    rt.LITELLM_MASTER_KEY='fixture-only'
+    slept=[]
+    async def no_wait(delay): slept.append(delay)
+    monkeypatch.setattr(bench.asyncio,'sleep',no_wait)
+    assert await bench.initial_prices() is True
+    assert slept==[0,5] and len(calls)==2
+    rows=await pool.fetch('SELECT model,input_usd,output_usd,active FROM tank.proof_prices ORDER BY model')
+    assert [(r['model'],r['active']) for r in rows]==[('cheap',True),('expensive',True)]
+    before=await pool.fetch('SELECT model,updated_at FROM tank.proof_prices ORDER BY model')
+    # Re-running (restart, second replica, next tick) changes nothing.
+    assert await bench.refresh_prices()==2
+    assert await pool.fetch('SELECT model,updated_at FROM tank.proof_prices ORDER BY model')==before
+    assert await pool.fetchval('SELECT count(*) FROM tank.baseline_price_changes')==0
+    rt.LITELLM_MASTER_KEY=''
+    with pytest.raises(RuntimeError,match='not configured'):
+        await bench.refresh_prices()

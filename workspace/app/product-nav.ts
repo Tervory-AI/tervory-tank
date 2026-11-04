@@ -28,9 +28,9 @@ export const SQUAD_MEMBERS: readonly SquadMember[] = [
 export const SQUAD_LINKS: NavLink[] = SQUAD_MEMBERS.map(({ href, label }) => ({ href, label }));
 
 export const TOP_LINKS: readonly NavLink[] = [
-  { href: "/", label: "Dashboard" },
+  { href: "https://app.tervory.com/", label: "Dashboard" },
   { href: "/matters", label: "Projects" },
-  { href: "/", label: "Chats" },
+  { href: "/chats", label: "Chats" },
 ];
 
 export const REST_LINKS: readonly NavLink[] = [
@@ -40,6 +40,7 @@ export const REST_LINKS: readonly NavLink[] = [
   { href: "/data", label: "Data" },
   { href: "/prices", label: "Prices" },
   { href: "/onboarding", label: "Settings" },
+  { href: "/cli/sign-ins", label: "CLI sign-ins" },
   { href: "https://tervory.com", label: "Support" },
 ];
 
@@ -56,7 +57,7 @@ export const REVIEW_LINK: NavLink = { href: "/review", label: "Review" };
 
 /** Signed-in routes that share the workspace sidebar shell. */
 export const SHELL_ROUTES: readonly string[] = [
-  "/",
+  "/chats",
   "/matters",
   "/tasks",
   "/ledger",
@@ -75,6 +76,8 @@ export const SHELL_ROUTES: readonly string[] = [
 
 /** Clerk auth and Figma squad product roots that already render their own left panel. */
 const OWN_SHELL = [
+  "/", // Frame 12:2 client dashboard owns its five-item navigation.
+  "/trigger",
   "/sign-in",
   "/sign-up",
   "/autumbra",
@@ -90,7 +93,7 @@ const OWN_SHELL = [
 ] as const;
 
 /** Auth + Autumbra owner pages keep nested screens under the own-shell root (no workspace menu). */
-const OWN_SHELL_NESTED = new Set<string>(["/sign-in", "/sign-up", "/autumbra"]);
+const OWN_SHELL_NESTED = new Set<string>(["/trigger", "/sign-in", "/sign-up", "/autumbra"]);
 
 export function cleanPath(pathname: string): string {
   if (!pathname) return "/";

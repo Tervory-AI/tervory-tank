@@ -1,3 +1,5 @@
+export const metadata = { title: "Privacy" };
+
 export default function PrivacyPage() {
   return (
     <section>

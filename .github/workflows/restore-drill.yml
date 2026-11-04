@@ -1,0 +1,43 @@
+name: Offline encrypted restore drill
+on:
+  push:
+    branches: [codex/restore-drill]
+  pull_request:
+    paths:
+      - 'ops/restore_drill.py'
+      - 'tests/test_restore_drill.py'
+      - 'tests/tenant_rls/**'
+      - 'db/migrations/tenant_rls/**'
+      - 'jobs/train/r2_archive.py'
+      - '.github/workflows/restore-drill.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: restore-drill-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - name: Install existing local test tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y age
+          pip install pytest==9.1.1 pytest-asyncio==1.4.1 httpx==0.28.1
+          docker pull postgres:16.15
+          docker pull qdrant/qdrant:v1.20.0
+      - name: Encrypted roundtrip and restored-copy RLS in both regions
+        env:
+          RESTORE_DRILL_E2E: '1'
+        run: python -m pytest -q tests/test_restore_drill.py --junitxml=restore-drill.xml
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: offline-restore-drill
+          path: restore-drill.xml

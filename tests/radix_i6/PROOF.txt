@@ -1,0 +1,185 @@
+Radix I6 verification, branch codex/radix-w4
+Audit main: 55b2e224. No main merge/rebase.
+
+
+i6-regression.txt
+........................................................................ [ 45%]
+........................................................................ [ 91%]
+..............                                                           [100%]
+=============================== warnings summary ===============================
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/main.py:754: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_command_radix_repo.py: 105 warnings
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/main.py:814: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_command_radix_repo.py: 21 warnings
+  /workspace/codex-radix-w3/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+158 passed, 234 warnings in 56.25s
+
+i6-gate-final.txt
+........                                                                 [100%]
+=============================== warnings summary ===============================
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+../codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/test_radix_deploy_gate.py::test_verified_founder_bundle_flows_from_confirmed_repo_scan_to_app_gate
+  /workspace/codex-radix-w3/tank/main.py:754: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_radix_deploy_gate.py::test_verified_founder_bundle_flows_from_confirmed_repo_scan_to_app_gate
+tests/test_radix_deploy_gate.py::test_verified_founder_bundle_flows_from_confirmed_repo_scan_to_app_gate
+tests/test_radix_deploy_gate.py::test_verified_founder_bundle_flows_from_confirmed_repo_scan_to_app_gate
+tests/test_radix_deploy_gate.py::test_verified_founder_bundle_flows_from_confirmed_repo_scan_to_app_gate
+tests/test_radix_deploy_gate.py::test_verified_founder_bundle_flows_from_confirmed_repo_scan_to_app_gate
+  /workspace/codex-radix-r4-py312/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_radix_deploy_gate.py::test_verified_founder_bundle_flows_from_confirmed_repo_scan_to_app_gate
+  /workspace/codex-radix-w3/tank/main.py:814: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_radix_deploy_gate.py::test_verified_founder_bundle_flows_from_confirmed_repo_scan_to_app_gate
+  /workspace/codex-radix-w3/tank/agent_skills.py:531: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+tests/test_radix_deploy_gate.py::test_verified_founder_bundle_flows_from_confirmed_repo_scan_to_app_gate
+  /workspace/codex-radix-w3/tank/skala_intake.py:71: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_radix_deploy_gate.py::test_verified_founder_bundle_flows_from_confirmed_repo_scan_to_app_gate
+  /workspace/codex-radix-w3/tank/skala_intake.py:77: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_radix_deploy_gate.py::test_verified_founder_bundle_flows_from_confirmed_repo_scan_to_app_gate
+  /workspace/codex-radix-w3/tank/skala_revalidation.py:192: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 passed, 14 warnings in 14.39s
+
+Commands, each exited 0:
+TMPDIR=/workspace/codex-radix-w3/.test-data/tmp PYTHONPATH=agents/_chassis POOL_SCHEMA_DATABASE_URL=postgresql://placeholder@127.0.0.1:56483/postgres /workspace/codex-radix-r4-py312/bin/python -m pytest -q --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 tests/test_deploy_changed.py tests/test_command_radix_repo.py tests/test_command_radix_active.py tests/test_radix_deploy_gate.py tests/test_command_repo_tools.py tests/test_backup_deploy_persistence.py
+# Final focused source revision: same environment/options, tests/test_radix_deploy_gate.py only.
+ruff check changed Python files --select E9,F
+git diff --check
+
+Initial test-only corrections: one bundle test needed agents/radix on its import path; the first broad command named tests/test_command_repo.py, corrected to the real tests/test_command_repo_tools.py. No production bypass, test suppression or weakened assertion was added. The optional own-main scan is strictly a founder-uploaded bundle verified against fixed-repository main and its immutable HEAD; normal client archive scans cannot enter the gate.
+
+Captured warning lines have trailing whitespace normalized for the repository whitespace check.
+
+Secret scan: python -m pytest -q tests/test_secrets.py
+..                                                                       [100%]
+2 passed in 23.23s

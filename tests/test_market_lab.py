@@ -399,8 +399,9 @@ async def test_opportunities_recommend_and_rank_products() -> None:
     assert ledger.opportunities[0]["evidence"]["recommendation"] == "increase marketing"
     statements = [row["statement"] for row in ledger.predictions]
     assert any(text.startswith("thin / retail: response rate above 5%") for text in statements)
-    assert ledger.reports[0]["answer"].startswith("1. thin / retail / tisan")
-    assert remembered and remembered[0][2] == "report"
+    assert ledger.reports[0]["answer"] == ""  # Unsourced injected metrics cannot become a brief claim.
+    assert ledger.reports[0]["citations"] == []
+    assert remembered == []
     assert ledger.predictions_for(OTHER) == []
 
 

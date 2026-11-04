@@ -18,11 +18,12 @@ sys.path.insert(0, str(ROOT / "agents" / "rig"))
 sys.path.insert(0, str(ROOT / "agents" / "_chassis"))
 
 import skala  # noqa: E402
-from rigbox.catalogue import families_from, load_folder  # noqa: E402
+from rigbox.catalogue import families_from
+from rig_fixture_loader import load_folder  # noqa: E402
 from rigbox.logic import approved as room_approved  # noqa: E402
 
 PACKAGE = ROOT / "tank" / "skills" / "rig.fit_suggest" / "1.1.0"
-CATALOGUES = ROOT / "agents" / "rig" / "catalogues"
+CATALOGUES = ROOT / "tests" / "fixtures" / "rig_catalogues"
 
 
 def _load(path: Path, name: str):

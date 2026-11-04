@@ -48,7 +48,8 @@ async function main() {
   // Load the real helper: mocking rigAdminAction hid the missing mapping allow-list entry.
   // Only the HTTP boundary is replaced; real actions and route call the real tank.ts exports.
   const forwarded = [];
-  const tank = moduleFrom('workspace/lib/tank.ts', {}, { fetch: async (url, options) => {
+  const regionTransport = moduleFrom('workspace/app/api/zenas/tank.ts', {});
+  const tank = moduleFrom('workspace/lib/tank.ts', { '@/app/api/zenas/tank': regionTransport }, { fetch: async (url, options) => {
     forwarded.push({ url, options });
     return { ok: true, json: async () => url.endsWith('/mapping')
       ? { preview_id: 'server-preview', fields: ['code'], columns: { sku: 'code' }, required: ['sku'] }

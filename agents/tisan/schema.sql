@@ -1,3 +1,143 @@
+-- J4: submission is approval; contact name/email/phone/company/reply method,
+-- item type/description/quantity/notes/reference, and the immutable quote snapshot are kept.
+CREATE TABLE IF NOT EXISTS agent_tisan.quote_requests (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    contact jsonb NOT NULL CHECK (jsonb_typeof(contact) = 'object'),
+    items jsonb NOT NULL CHECK (jsonb_typeof(items) = 'array'),
+    state text NOT NULL CHECK (state IN ('draft','submitted','acknowledged','quoted','accepted','declined')),
+    mail_state text NOT NULL DEFAULT 'pending'
+        CHECK (mail_state IN ('pending','sending','sent','uncertain')),
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY (tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS quote_requests_tenant_created
+    ON agent_tisan.quote_requests (tenant_id,created_at DESC,id DESC);
+CREATE TABLE IF NOT EXISTS agent_tisan.quote_events (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    request_id uuid NOT NULL,
+    from_state text,
+    to_state text NOT NULL,
+    actor text NOT NULL CHECK (length(btrim(actor)) BETWEEN 1 AND 256),
+    happened_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    FOREIGN KEY (tenant_id,request_id) REFERENCES agent_tisan.quote_requests (tenant_id,id),
+    CHECK (from_state IS NOT NULL OR to_state='draft'),
+    CHECK ((from_state IS NULL AND to_state='draft') OR
+        (from_state='draft' AND to_state='submitted') OR
+        (from_state='submitted' AND to_state='acknowledged') OR
+        (from_state='acknowledged' AND to_state='quoted') OR
+        (from_state='quoted' AND to_state IN ('accepted','declined')))
+);
+CREATE INDEX IF NOT EXISTS quote_events_tenant_request
+    ON agent_tisan.quote_events (tenant_id,request_id,id);
+-- Nullable additions preserve legacy JSON and legacy quoted rows verbatim.
+ALTER TABLE agent_tisan.quote_requests
+    ADD COLUMN IF NOT EXISTS quote_amount numeric
+        CHECK (quote_amount > 0 AND quote_amount < 'Infinity'::numeric AND scale(quote_amount) <= 2),
+    ADD COLUMN IF NOT EXISTS quote_currency text CHECK (quote_currency ~ '^[A-Z]{3}$'),
+    ADD COLUMN IF NOT EXISTS valid_until timestamptz CHECK (isfinite(valid_until)),
+    ADD COLUMN IF NOT EXISTS quote_message text
+        CHECK (length(quote_message) BETWEEN 1 AND 2000 AND quote_message ~ '[^[:space:]]');
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+        WHERE conrelid='agent_tisan.quote_requests'::regclass AND conname='quote_amount_bounded') THEN
+        ALTER TABLE agent_tisan.quote_requests ADD CONSTRAINT quote_amount_bounded
+            CHECK (quote_amount < 1e16);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+        WHERE conrelid='agent_tisan.quote_requests'::regclass AND conname='quote_snapshot_complete') THEN
+        ALTER TABLE agent_tisan.quote_requests ADD CONSTRAINT quote_snapshot_complete CHECK (
+            (quote_amount IS NULL AND quote_currency IS NULL AND valid_until IS NULL AND quote_message IS NULL)
+            OR (quote_amount IS NOT NULL AND quote_currency IS NOT NULL AND valid_until IS NOT NULL AND quote_message IS NOT NULL));
+    END IF;
+END $$;
+
+-- A new snapshot is written only on acknowledged -> quoted. Later state/mail
+-- updates retain it, and legacy quoted records without a snapshot remain readable.
+DO $install$ BEGIN
+    IF to_regprocedure('agent_tisan.keep_quote_snapshot()') IS NULL THEN
+        EXECUTE $ddl$CREATE FUNCTION agent_tisan.keep_quote_snapshot() RETURNS trigger
+LANGUAGE plpgsql AS $body$ BEGIN
+    IF TG_OP='INSERT' THEN
+        IF NEW.quote_amount IS NOT NULL OR NEW.quote_currency IS NOT NULL
+            OR NEW.valid_until IS NOT NULL OR NEW.quote_message IS NOT NULL THEN
+            RAISE EXCEPTION 'invalid_transition' USING ERRCODE='23514';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF OLD.state IN ('accepted','declined') AND NEW.state IS DISTINCT FROM OLD.state THEN
+        RAISE EXCEPTION 'invalid_transition' USING ERRCODE='23514';
+    END IF;
+    IF ROW(NEW.quote_amount,NEW.quote_currency,NEW.valid_until,NEW.quote_message)
+        IS DISTINCT FROM ROW(OLD.quote_amount,OLD.quote_currency,OLD.valid_until,OLD.quote_message) THEN
+        IF OLD.state <> 'acknowledged' OR NEW.state <> 'quoted' OR OLD.quote_amount IS NOT NULL THEN
+            RAISE EXCEPTION 'invalid_transition' USING ERRCODE='23514';
+        END IF;
+    END IF;
+    IF OLD.state='acknowledged' AND NEW.state='quoted' THEN
+        IF NEW.quote_amount IS NULL OR NEW.quote_currency IS NULL OR NEW.valid_until IS NULL
+            OR NEW.quote_message IS NULL OR NEW.valid_until <= clock_timestamp() THEN
+            RAISE EXCEPTION 'invalid_transition' USING ERRCODE='23514';
+        END IF;
+    END IF;
+    RETURN NEW;
+END $body$;$ddl$;
+    END IF;
+END $install$;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger
+        WHERE tgrelid='agent_tisan.quote_requests'::regclass AND tgname='quote_snapshot_once') THEN
+        CREATE TRIGGER quote_snapshot_once BEFORE INSERT OR UPDATE ON agent_tisan.quote_requests
+            FOR EACH ROW EXECUTE FUNCTION agent_tisan.keep_quote_snapshot();
+    END IF;
+END $$;
+
+-- Follow the platform RLS rollout; never turn RLS on by itself (the pattern of
+-- tank.personal_tokens in tank/schema.sql). An unconditional ENABLE here made Tank's
+-- startup guard (tank/main.py _startup) refuse its owner login on 1 Nov 2026. Until
+-- the rollout reaches tank.command_threads, these tables stay without RLS, and
+-- isolation is the tenant_id filter on every quote query (agents/tisan/quotes.py).
+-- The ELSE branch also turns RLS back off where it was already applied.
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+               WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+        ALTER TABLE agent_tisan.quote_requests ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.quote_requests FORCE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.quote_events ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.quote_events FORCE ROW LEVEL SECURITY;
+    ELSE
+        ALTER TABLE agent_tisan.quote_requests NO FORCE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.quote_requests DISABLE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.quote_events NO FORCE ROW LEVEL SECURITY;
+        ALTER TABLE agent_tisan.quote_events DISABLE ROW LEVEL SECURITY;
+    END IF;
+END $$;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='agent_tisan'
+        AND tablename='quote_requests' AND policyname='quote_requests_tenant') THEN
+        CREATE POLICY quote_requests_tenant ON agent_tisan.quote_requests
+            USING (tenant_id = nullif(current_setting('app.tenant_id',true),'')::uuid)
+            WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id',true),'')::uuid);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='agent_tisan'
+        AND tablename='quote_events' AND policyname='quote_events_tenant') THEN
+        CREATE POLICY quote_events_tenant ON agent_tisan.quote_events
+            USING (tenant_id = nullif(current_setting('app.tenant_id',true),'')::uuid)
+            WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id',true),'')::uuid);
+    END IF;
+END $$;
+-- Schemas may be installed before room roles are provisioned. Reapplying after
+-- provisioning grants only the existing room role; policies remain enforced.
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agent_tisan') THEN
+        GRANT SELECT,INSERT,UPDATE ON agent_tisan.quote_requests TO agent_tisan;
+        GRANT SELECT,INSERT ON agent_tisan.quote_events TO agent_tisan;
+        GRANT USAGE,SELECT ON SEQUENCE agent_tisan.quote_events_id_seq TO agent_tisan;
+    END IF;
+END $$;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE TABLE IF NOT EXISTS agent_tisan.memory_records (
     id uuid PRIMARY KEY,

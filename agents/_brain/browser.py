@@ -116,6 +116,7 @@ AGE_BUTTON = re.compile(r"^(?:yes[,! ]*)?(?:i am|i'm|i confirm i am) (?:over |at
 
 
 class Page(BaseModel):
+    catalogue_match: bool = False
     url: str = Field(max_length=2048)
     screenshot: bool = False
     price_reader: bool = False
@@ -379,6 +380,8 @@ async def _visit(body, tenant, task, origin, run, directory):
     secure = access_configured()
     policy = await access_rpc(tenant, origin, "policy") if secure else {"state": "public"}
     private = policy["state"] != "public"
+    if body.catalogue_match and (private or urlsplit(body.url).path.lower().endswith(".pdf")):
+        return {"ok": False, "challenge": False, "reason": "unsupported", "html": ""}
     if private: storage = storage_for(tenant, origin, authenticated=True)
     social = any(host == name or host.endswith("." + name) for name in ("facebook.com", "instagram.com", "fb.com", "fb.me"))
     if social: storage.unlink(missing_ok=True)
@@ -392,7 +395,7 @@ async def _visit(body, tenant, task, origin, run, directory):
             queue = (await access_rpc(tenant, origin, "queue", reason=reason, task_id=task or None))["queue_id"]
         return {"ok": False, "challenge": True, "needs_person": "needs a person", "queue_id": queue,
                 "html": "", "login_status": "login failed"}
-    for handle, item in list(held.items()):
+    for handle, item in ([] if body.catalogue_match else list(held.items())):
         if item.tenant == tenant and item.site == origin:
             if not item.ready:
                 return {"ok": False, "challenge": True, "needs_person": "needs a person", "html": ""}
@@ -430,12 +433,39 @@ async def _visit(body, tenant, task, origin, run, directory):
             browser = await playwright.chromium.launch(headless=True, executable_path="/usr/bin/chromium",
                 proxy={"server": proxy},
                 args=["--disable-quic", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--proxy-bypass-list=<-loopback>"])
-            context = await browser.new_context(storage_state=str(storage) if storage.exists() else None,
+            context = await browser.new_context(storage_state=str(storage) if storage.exists() and not body.catalogue_match else None,
                 proxy={"server": proxy}, viewport={"width": 1280, "height": 900},
                 service_workers="block", accept_downloads=False, user_agent=USER_AGENT)
             denied: set[str] = set()
-            await require_allowed(context, body.url, min(body.max_ms, 10000), run)
+            if not body.catalogue_match:
+                await require_allowed(context, body.url, min(body.max_ms, 10000), run)
+            if body.catalogue_match:
+                # Page routing does not intercept redirect hops. This transport
+                # refuses them, leaving each destination to a new reservation.
+                response = await context.request.get(body.url, timeout=min(body.max_ms, 10000), max_redirects=0)
+                status = response.status
+                if status in {301, 302, 303, 307, 308}:
+                    return {"ok": False, "challenge": False, "reason": "redirect",
+                            "status": status, "location": response.headers.get("location"), "url": body.url}
+                source = (await response.body())[:600000].decode("utf-8", errors="replace")
+                challenge = human_check(source) or status in {401, 403, 429}
+                if challenge:
+                    stop_host(run, body.url)
+                # An isolated structured-data read starts no page scripts,
+                # subresources, forms or navigation.
+                return {"ok": status == 200 and not challenge, "challenge": challenge,
+                        "status": status, "url": body.url, "html": "" if challenge else source}
+            discovery_document_sent = False
             async def check(route):
+                nonlocal discovery_document_sent
+                # Discovery budgets one exact public GET. Do not let redirects,
+                # frames, scripts, forms or subresources escape that reservation.
+                if body.catalogue_match:
+                    if (discovery_document_sent or route.request.url != body.url
+                            or route.request.resource_type != "document" or route.request.method != "GET"):
+                        await route.abort()
+                        return
+                    discovery_document_sent = True
                 try:
                     public_url(route.request.url)
                     target = site_origin(route.request.url)
@@ -503,7 +533,7 @@ async def _visit(body, tenant, task, origin, run, directory):
                         html = await page.content()
                     clicked = False
                     if not challenge:
-                        clicked = await confirm_age(page, html)
+                        clicked = await confirm_age(page, html) if not body.catalogue_match else False
                         await page.evaluate("window.scrollBy(0, Math.min(document.body.scrollHeight, 900))")
                         await page.wait_for_timeout(body.settle_ms)
                         html = await page.content()
@@ -515,7 +545,7 @@ async def _visit(body, tenant, task, origin, run, directory):
                     queue = None
                     if challenge and secure and social:
                         queue = (await access_rpc(tenant, origin, "queue", reason="human_login", task_id=task or None))["queue_id"]
-                    if challenge and secure and not social:
+                    if challenge and secure and not social and not body.catalogue_match:
                         queue = await retain(tenant, origin, page, context, browser, manager, storage, body.url, task,
                                              "captcha" if human_check(html) else "human_login", navigation, slot)
                         retained = True
@@ -558,7 +588,7 @@ async def _visit(body, tenant, task, origin, run, directory):
                     # Expiry never waits to save cookies. Bind the existing
                     # storage destination only for a normally completed visit.
                     await cleanup_visit(context, browser, manager, storage,
-                        save=not cancelled and not social, bounded=body.request_timeout_ms is not None)
+                        save=not cancelled and not social and not body.catalogue_match, bounded=body.request_timeout_ms is not None)
             finally:
                 last_visit[site] = time.monotonic()
 
@@ -593,7 +623,7 @@ async def public_result(page, result, html, directory, task, *, price_reader: bo
 # Credentials never pass through /render, a model, the history file or a URL.
 def access_room():
     room = os.environ.get("ACCESS_ROOM", "base")
-    if room not in {"base", "tiger", "rig"}:
+    if room not in {"base", "tiger", "rig", "trigger", "tisan", "radix", "market_lab"}:
         raise HTTPException(503, "Browser room is not configured.")
     return room
 

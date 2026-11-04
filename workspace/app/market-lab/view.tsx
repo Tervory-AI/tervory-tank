@@ -46,7 +46,7 @@ const SECTIONS = [
 const TOP_LINKS = [
   { href: "/ledger", label: "Usage" },
   { href: "/tasks", label: "Tasks" },
-  { href: "/", label: "Chats" },
+  { href: "/chats", label: "Chats" },
 ] as const;
 
 const BOTTOM_LINKS = [

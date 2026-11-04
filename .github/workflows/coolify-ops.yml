@@ -7,6 +7,10 @@
 # - The Coolify token lives only in the repo secret COOLIFY_TOKEN and is never printed.
 # - COOLIFY_URL (repo variable, default https://coolify.tervory.com) must be https://, so the token never crosses the internet in clear text.
 # - env-refs only ever writes references of the form {{project.NAME}}, never a secret value.
+# - zenas-renormalise runs agents.zenas.pool.renormalise inside the deployed ZA Zenas room as a
+#   Coolify scheduled task on that app (same container as zenas-pool-nightly). Dry run unless
+#   apply=true. zenas-renormalise-report reads the last run. Both share the fixed concurrency group
+#   coolify-zenas-renormalise. See docs/ops/ZENAS-ZA-RENORMALISE.md.
 # - room-setup generates a room's secrets inside this job (masked, never printed, never seen by anyone)
 #   and writes them straight into Coolify on the main app and the room. Existing values are never replaced.
 name: coolify-ops
@@ -15,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       op:
-        description: "status | env-refs | create-room | deploy | room-setup | backup-scope | nightly-status"
+        description: "status | env-refs | create-room | deploy | room-setup | backup-scope | nightly-status | zenas-renormalise | zenas-renormalise-report"
         required: true
       app:
         description: "Application uuid (env-refs, deploy)"
@@ -29,6 +33,27 @@ on:
         description: "create-room / room-setup: agent folder name under agents/ (e.g. rig)"
         required: false
         default: ""
+      region:
+        description: "zenas-renormalise(-report): region (only za)"
+        required: false
+        default: ""
+      apply:
+        description: "zenas-renormalise: write new versions. Default false = dry run"
+        required: false
+        type: boolean
+        default: false
+      source:
+        description: "zenas-renormalise: comma-separated source ids (default: every PDF court source except special-tribunal, which waits for #502)"
+        required: false
+        default: ""
+      limit:
+        description: "zenas-renormalise: stop after this many rows"
+        required: false
+        default: ""
+      after:
+        description: "zenas-renormalise: resume after this document_id (last_document_id of a report)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -37,14 +62,17 @@ permissions:
 # group and queue behind it (and it behind them). Read-only and metadata ops get their own
 # group per run, so a status read never waits on a deploy.
 concurrency:
-  group: ${{ (inputs.op == 'deploy' || inputs.op == 'room-setup') && 'coolify-deploy' || format('coolify-ops-{0}', github.run_id) }}
+  # deploy/room-setup queue with deploy-on-merge; both renormalise ops share one fixed
+  # group so two never run side by side; every other op runs on its own.
+  group: ${{ (inputs.op == 'deploy' || inputs.op == 'room-setup') && 'coolify-deploy' || (inputs.op == 'zenas-renormalise' || inputs.op == 'zenas-renormalise-report') && 'coolify-zenas-renormalise' || format('coolify-ops-{0}', github.run_id) }}
   cancel-in-progress: false
   queue: max
 
 jobs:
   op:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 12: the renormalise run step stops itself at 9, leaving time for its restore step.
+    timeout-minutes: 12
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
@@ -52,6 +80,11 @@ jobs:
       APP: ${{ inputs.app }}
       NAMES: ${{ inputs.names }}
       ROOM: ${{ inputs.room }}
+      REGION: ${{ inputs.region }}
+      APPLY: ${{ inputs.apply }}
+      SOURCE: ${{ inputs.source }}
+      LIMIT: ${{ inputs.limit }}
+      AFTER: ${{ inputs.after }}
       PROJECT_UUID: dguxczrbmbqvezo3qib0twge
       ENVIRONMENT_NAME: production
     steps:
@@ -60,11 +93,16 @@ jobs:
         run: |
           case "$COOLIFY_URL" in https://*) ;; *) echo "::error::COOLIFY_URL must be an https:// address"; exit 1 ;; esac
           test -n "$COOLIFY_TOKEN" || { echo "::error::COOLIFY_TOKEN secret is missing"; exit 1; }
-          case "$OP" in status|env-refs|create-room|deploy|room-setup|backup-scope|nightly-status) ;; *) echo "::error::unknown op $OP"; exit 1 ;; esac
+          case "$OP" in status|env-refs|create-room|deploy|room-setup|backup-scope|nightly-status|zenas-renormalise|zenas-renormalise-report) ;; *) echo "::error::unknown op $OP"; exit 1 ;; esac
           for v in "$APP" "$ROOM"; do
             case "$v" in *[!A-Za-z0-9_-]*) echo "::error::bad id: $v"; exit 1 ;; esac
           done
           case "$NAMES" in *[!A-Z0-9_,]*) echo "::error::names must be UPPER_CASE, comma-separated"; exit 1 ;; esac
+          case "$OP" in zenas-renormalise|zenas-renormalise-report)
+            test -z "$APP$ROOM$NAMES" || { echo "::error::$OP uses only region, apply, source, limit, after"; exit 1; }
+            test "$REGION" = za || { echo "::error::$OP: region must be za"; exit 1; } ;;
+            *) test -z "$REGION$SOURCE$LIMIT$AFTER" && [ "$APPLY" != true ] || { echo "::error::region, apply, source, limit, after belong to zenas-renormalise only"; exit 1; } ;;
+          esac
           if [ "$OP" = backup-scope ]; then
             test -z "$APP$ROOM$NAMES" || { echo "::error::backup-scope uses only its fixed main app and two existing names"; exit 1; }
           fi
@@ -81,6 +119,27 @@ jobs:
         if: inputs.op == 'backup-scope'
         run: python3 .github/scripts/backup_runtime_scope.py --apply
 
+      - name: ZA re-normalise in the deployed room (dry run unless apply=true)
+        if: inputs.op == 'zenas-renormalise'
+        timeout-minutes: 9
+        # exec: the runner signals the step's entry process on a cancel (SIGINT, then
+        # SIGTERM), so python must be that process for its in-process restore to run.
+        run: exec python3 .github/scripts/zenas_renormalise_op.py run
+
+      # A cancel, a step timeout or a SIGKILL can stop the run step before its own
+      # restore. This fixed step (no workflow inputs) acts only when the run step left
+      # its $RUNNER_TEMP marker (it stored a command and did not restore it): it puts
+      # those flags back with --dry-run and keeps the queued mark. After a refusal or a
+      # failed Check inputs there is no marker, and it makes no Coolify call.
+      - name: Put the ZA re-normalise task back to a dry run after a stop
+        if: (cancelled() || failure()) && inputs.op == 'zenas-renormalise'
+        timeout-minutes: 2
+        run: exec python3 .github/scripts/zenas_renormalise_op.py restore
+
+      - name: Read the last ZA re-normalise run
+        if: inputs.op == 'zenas-renormalise-report'
+        run: exec python3 .github/scripts/zenas_renormalise_op.py report
+
       - name: Room setup (one op, nothing by hand)
         if: inputs.op == 'room-setup'
         run: python3 .github/scripts/room_setup.py
@@ -90,7 +149,7 @@ jobs:
         run: python3 .github/scripts/backup_runtime_scope.py
 
       - name: Run
-        if: inputs.op != 'room-setup' && inputs.op != 'backup-scope' && inputs.op != 'nightly-status'
+        if: inputs.op != 'room-setup' && inputs.op != 'backup-scope' && inputs.op != 'nightly-status' && inputs.op != 'zenas-renormalise' && inputs.op != 'zenas-renormalise-report'
         run: |
           api() {  # method path [json-body-file]
             if [ -n "${3:-}" ]; then

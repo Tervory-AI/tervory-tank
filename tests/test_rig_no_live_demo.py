@@ -1,5 +1,7 @@
 """The live page never chooses the saved catalogues; fixtures remain offline."""
 
+from rig_fixture_loader import load_catalogue
+
 from contextlib import asynccontextmanager
 import json
 from pathlib import Path
@@ -53,8 +55,8 @@ async def test_configured_page_requires_its_own_published_products(monkeypatch):
     root = ARCHON.parent
     publish = json.loads((root / "second/publish.json").read_text())
     service = Service(MemoryStore())
-    await service.load_folder(ARCHON)
-    await service.load_folder(root / "second")
+    await load_catalogue(service, ARCHON)
+    await load_catalogue(service, root / "second")
     monkeypatch.setenv("RIG_WIDGET_PUBLISHABLE_KEY", publish["keys"][0]["key"])
     app = FastAPI()
     app.state.rig = service
@@ -98,7 +100,7 @@ async def test_production_startup_never_imports_bundled_catalogues(
     store = SimpleNamespace(
         apply_schema=AsyncMock(), tenant_ids=AsyncMock(return_value=[])
     )
-    service = SimpleNamespace(load_catalogues=AsyncMock(return_value=[]))
+    service = SimpleNamespace(store=store, load_catalogues=AsyncMock(return_value=[]))
     application = FastAPI()
     application.state.pool = SimpleNamespace(acquire=context)
     application.state.http = None

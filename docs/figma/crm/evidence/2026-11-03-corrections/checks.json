@@ -1,0 +1,2572 @@
+{
+  "audit0": [
+    {
+      "counts": {
+        "frames": 56,
+        "fields": 520,
+        "navs": 29
+      },
+      "failures": {
+        "darkSurfaces": [],
+        "shortMenuItems": [],
+        "shortWidgetControls": [],
+        "badPrimary": [],
+        "badFieldPadding": [],
+        "wrongMenuSource": [],
+        "unboundWidgetFonts": [],
+        "unlinkedSourceChips": [],
+        "confirmOrder": []
+      },
+      "confirmations": [
+        {
+          "id": "149:21139",
+          "footer": {
+            "id": "149:21460",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "149:21481",
+          "footer": {
+            "id": "149:21802",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "149:21823",
+          "footer": {
+            "id": "149:22041",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "149:22062",
+          "footer": {
+            "id": "149:22280",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "149:22301",
+          "footer": {
+            "id": "149:22622",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "149:22643",
+          "footer": {
+            "id": "149:22964",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "149:22985",
+          "footer": {
+            "id": "149:23203",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "149:23224",
+          "footer": {
+            "id": "149:23442",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "149:23463",
+          "footer": {
+            "id": "149:23784",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "149:23802",
+          "footer": {
+            "id": "149:24123",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "149:24141",
+          "footer": {
+            "id": "149:24359",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "149:24377",
+          "footer": {
+            "id": "149:24595",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "149:24613",
+          "footer": {
+            "id": "149:24934",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "149:24946",
+          "footer": {
+            "id": "149:25267",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "149:25279",
+          "footer": {
+            "id": "149:25497",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "149:25509",
+          "footer": {
+            "id": "149:25727",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "270:3220",
+          "footer": {
+            "id": "270:3226",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "270:3369",
+          "footer": {
+            "id": "270:3375",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "270:3496",
+          "footer": {
+            "id": "270:3502",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "270:3519",
+          "footer": {
+            "id": "270:3525",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "audit1": [
+    {
+      "counts": {
+        "frames": 124,
+        "fields": 272,
+        "navs": 24
+      },
+      "failures": {
+        "darkSurfaces": [
+          {
+            "id": "I272:3967;60:10402",
+            "name": "Toggle track",
+            "w": 48,
+            "h": 32
+          },
+          {
+            "id": "I272:3999;60:10404",
+            "name": "Toggle track",
+            "w": 48,
+            "h": 32
+          },
+          {
+            "id": "I272:4009;60:10402",
+            "name": "Toggle track",
+            "w": 48,
+            "h": 32
+          },
+          {
+            "id": "I272:4019;60:10404",
+            "name": "Toggle track",
+            "w": 48,
+            "h": 32
+          }
+        ],
+        "shortMenuItems": [],
+        "shortWidgetControls": [],
+        "badPrimary": [],
+        "badFieldPadding": [],
+        "wrongMenuSource": [],
+        "unboundWidgetFonts": [],
+        "unlinkedSourceChips": [],
+        "confirmOrder": []
+      },
+      "confirmations": [
+        {
+          "id": "151:6994",
+          "footer": {
+            "id": "151:7315",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:7330",
+          "footer": {
+            "id": "151:7651",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:7666",
+          "footer": {
+            "id": "151:7884",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:7899",
+          "footer": {
+            "id": "151:8117",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:8132",
+          "footer": {
+            "id": "151:8453",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:8468",
+          "footer": {
+            "id": "151:8789",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:8804",
+          "footer": {
+            "id": "151:9022",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:9037",
+          "footer": {
+            "id": "151:9255",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:9270",
+          "footer": {
+            "id": "151:9591",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:9612",
+          "footer": {
+            "id": "151:9933",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:9954",
+          "footer": {
+            "id": "151:10172",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:10193",
+          "footer": {
+            "id": "151:10411",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:10432",
+          "footer": {
+            "id": "151:10753",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:10771",
+          "footer": {
+            "id": "151:11092",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:11110",
+          "footer": {
+            "id": "151:11328",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:11346",
+          "footer": {
+            "id": "151:11564",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:11582",
+          "footer": {
+            "id": "151:11903",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:11924",
+          "footer": {
+            "id": "151:12245",
+            "y": 820,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:12266",
+          "footer": {
+            "id": "151:12484",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        },
+        {
+          "id": "151:12505",
+          "footer": {
+            "id": "151:12723",
+            "y": 732,
+            "h": 80,
+            "order": [
+              "Cancel",
+              "Confirm"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "contrastAudit0": [
+    {
+      "stats": {
+        "fields": 484,
+        "buttons": 35
+      },
+      "bad": [],
+      "active": [
+        {
+          "frame": "149:2263",
+          "id": "I185:3973;180:8434",
+          "name": "Trigger area / channels",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:2696",
+          "id": "I185:4101;180:8434",
+          "name": "Trigger area / channels",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:3789",
+          "id": "I185:4215;180:8437",
+          "name": "Trigger area / calendar",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:4224",
+          "id": "I185:4295;180:8437",
+          "name": "Trigger area / calendar",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:5331",
+          "id": "I185:4383;180:8437",
+          "name": "Trigger area / calendar",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:5710",
+          "id": "I185:4463;180:8437",
+          "name": "Trigger area / calendar",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:6649",
+          "id": "I185:4551;180:8440",
+          "name": "Trigger area / composer",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:7134",
+          "id": "I185:4631;180:8440",
+          "name": "Trigger area / composer",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:8383",
+          "id": "I185:5512;180:8437",
+          "name": "Trigger area / calendar",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:8745",
+          "id": "I185:5632;180:8437",
+          "name": "Trigger area / calendar",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:9625",
+          "id": "I185:5740;465:25708",
+          "name": "Trigger area / google-posts",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:9975",
+          "id": "I185:5845;465:25708",
+          "name": "Trigger area / google-posts",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:10819",
+          "id": "I185:6082;180:8443",
+          "name": "Trigger area / google-reviews",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:11184",
+          "id": "I185:6182;180:8443",
+          "name": "Trigger area / google-reviews",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:21139",
+          "id": "I185:6290;180:8440",
+          "name": "Trigger area / composer",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:21481",
+          "id": "I185:6390;180:8440",
+          "name": "Trigger area / composer",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:22301",
+          "id": "I185:6610;180:8440",
+          "name": "Trigger area / composer",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:22643",
+          "id": "I185:6710;180:8440",
+          "name": "Trigger area / composer",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:23463",
+          "id": "I185:6818;180:8443",
+          "name": "Trigger area / google-reviews",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:23802",
+          "id": "I185:6918;180:8443",
+          "name": "Trigger area / google-reviews",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:24613",
+          "id": "I185:7082;180:8434",
+          "name": "Trigger area / channels",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:24946",
+          "id": "I185:7182;180:8434",
+          "name": "Trigger area / channels",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "150:4047",
+          "id": "I187:13123;180:8516",
+          "name": "Trigger area / channels",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "150:4061",
+          "id": "I187:13204;180:8516",
+          "name": "Trigger area / channels",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "270:3220",
+          "id": "I270:3221;180:8434",
+          "name": "Trigger area / channels",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "270:3369",
+          "id": "I270:3370;180:8434",
+          "name": "Trigger area / channels",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "270:3789",
+          "id": "I270:3790;180:8443",
+          "name": "Trigger area / google-reviews",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "270:3964",
+          "id": "I270:3965;180:8443",
+          "name": "Trigger area / google-reviews",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "271:3480",
+          "id": "I271:3481;180:8440",
+          "name": "Trigger area / composer",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "contrastAudit1": [
+    {
+      "stats": {
+        "fields": 284,
+        "buttons": 36
+      },
+      "bad": [],
+      "active": [
+        {
+          "frame": "149:13691",
+          "id": "I186:4478;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:14042",
+          "id": "I186:4644;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:14889",
+          "id": "I186:4772;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:15281",
+          "id": "I186:4872;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:16251",
+          "id": "I186:5092;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:16604",
+          "id": "I186:5192;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:17457",
+          "id": "I186:5300;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:17814",
+          "id": "I186:5400;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:18679",
+          "id": "I186:5620;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:19033",
+          "id": "I186:5720;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:19889",
+          "id": "I186:5828;180:8451",
+          "name": "Trigger area / bot-settings",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "149:20253",
+          "id": "I186:5928;180:8451",
+          "name": "Trigger area / bot-settings",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "151:6994",
+          "id": "I186:6148;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "151:7330",
+          "id": "I186:6248;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "151:8132",
+          "id": "I186:6356;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "151:8468",
+          "id": "I186:6456;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "151:9270",
+          "id": "I186:6676;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "151:9612",
+          "id": "I186:6776;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "151:10432",
+          "id": "I186:6884;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "151:10771",
+          "id": "I186:6984;180:8448",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "151:11582",
+          "id": "I186:7148;180:8451",
+          "name": "Trigger area / bot-settings",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "151:11924",
+          "id": "I186:7248;180:8451",
+          "name": "Trigger area / bot-settings",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "153:4367",
+          "id": "I187:13285;180:8530",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "frame": "153:4381",
+          "id": "I187:13366;180:8530",
+          "name": "Trigger area / inbox",
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0.95686274766922,
+                "g": 0.9647058844566345,
+                "b": 0.9843137264251709
+              },
+              "boundVariables": {
+                "color": {
+                  "type": "VARIABLE_ALIAS",
+                  "id": "VariableID:42:12"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "finalChatAudit": [
+    {
+      "widgetFonts": [
+        {
+          "id": "VariableID:465:44702",
+          "name": "client/type/family/heading",
+          "values": {
+            "152:0": "Literata"
+          }
+        },
+        {
+          "id": "VariableID:465:44703",
+          "name": "client/type/family/body",
+          "values": {
+            "152:0": "Atkinson Hyperlegible"
+          }
+        }
+      ],
+      "widgetLine": {
+        "152:0": {
+          "r": 0.47999998927116394,
+          "g": 0.47999998927116394,
+          "b": 0.5199999809265137,
+          "a": 1
+        }
+      },
+      "widgetControls": [
+        {
+          "id": "274:21359",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:21363",
+          "name": "Action / Start chat",
+          "w": 309,
+          "h": 44
+        },
+        {
+          "id": "274:21367",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:21371",
+          "name": "Action / Start chat",
+          "w": 309,
+          "h": 44
+        },
+        {
+          "id": "274:21375",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:21386",
+          "name": "Action / Send",
+          "w": 317,
+          "h": 44
+        },
+        {
+          "id": "274:21390",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:21401",
+          "name": "Action / Send",
+          "w": 317,
+          "h": 44
+        },
+        {
+          "id": "274:21405",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:21422",
+          "name": "Action / Talk to a person",
+          "w": 309,
+          "h": 44
+        },
+        {
+          "id": "274:21425",
+          "name": "Action / Leave details",
+          "w": 309,
+          "h": 44
+        },
+        {
+          "id": "274:21428",
+          "name": "Action / Request a quote",
+          "w": 309,
+          "h": 44
+        },
+        {
+          "id": "274:21434",
+          "name": "Action / Send",
+          "w": 317,
+          "h": 44
+        },
+        {
+          "id": "274:21438",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:21455",
+          "name": "Action / Talk to a person",
+          "w": 309,
+          "h": 44
+        },
+        {
+          "id": "274:21458",
+          "name": "Action / Leave details",
+          "w": 309,
+          "h": 44
+        },
+        {
+          "id": "274:21461",
+          "name": "Action / Request a quote",
+          "w": 309,
+          "h": 44
+        },
+        {
+          "id": "274:21467",
+          "name": "Action / Send",
+          "w": 317,
+          "h": 44
+        },
+        {
+          "id": "274:21747",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:21757",
+          "name": "Action / Send",
+          "w": 317,
+          "h": 44
+        },
+        {
+          "id": "274:21761",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:21771",
+          "name": "Action / Send",
+          "w": 317,
+          "h": 44
+        },
+        {
+          "id": "274:21775",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:21795",
+          "name": "Action / Send my details",
+          "w": 317,
+          "h": 44
+        },
+        {
+          "id": "274:21799",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:21819",
+          "name": "Action / Send my details",
+          "w": 317,
+          "h": 44
+        },
+        {
+          "id": "274:21823",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:21842",
+          "name": "Action / Send request",
+          "w": 317,
+          "h": 44
+        },
+        {
+          "id": "274:21846",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:21865",
+          "name": "Action / Send request",
+          "w": 317,
+          "h": 44
+        },
+        {
+          "id": "274:22214",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:22225",
+          "name": "Action / Send",
+          "w": 317,
+          "h": 44
+        },
+        {
+          "id": "274:22228",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:22239",
+          "name": "Action / Send",
+          "w": 317,
+          "h": 44
+        },
+        {
+          "id": "274:22242",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:22246",
+          "name": "Action / Talk to a person",
+          "w": 309,
+          "h": 44
+        },
+        {
+          "id": "274:22250",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:22254",
+          "name": "Action / Talk to a person",
+          "w": 309,
+          "h": 44
+        },
+        {
+          "id": "274:22258",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:22263",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:22268",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:22273",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:22278",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:22283",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:22288",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        },
+        {
+          "id": "274:22293",
+          "name": "Close / Top right",
+          "w": 44,
+          "h": 44
+        }
+      ],
+      "confirmLead": [
+        {
+          "id": "151:9270",
+          "fields": [
+            "First name",
+            "Last name",
+            "Email",
+            "Phone",
+            "Notes",
+            "Lead draft",
+            "Source conversation"
+          ]
+        },
+        {
+          "id": "151:9612",
+          "fields": [
+            "First name",
+            "Last name",
+            "Email",
+            "Phone",
+            "Notes",
+            "Lead draft",
+            "Source conversation"
+          ]
+        },
+        {
+          "id": "151:9954",
+          "fields": [
+            "First name",
+            "Last name",
+            "Email",
+            "Phone",
+            "Notes",
+            "Lead draft",
+            "Source conversation"
+          ]
+        },
+        {
+          "id": "151:10193",
+          "fields": [
+            "First name",
+            "Last name",
+            "Email",
+            "Phone",
+            "Notes",
+            "Lead draft",
+            "Source conversation"
+          ]
+        }
+      ],
+      "handover": [
+        {
+          "action": {
+            "type": "NODE",
+            "destinationId": "151:8468",
+            "navigation": "NAVIGATE",
+            "transition": null,
+            "resetVideoPosition": false,
+            "resetScrollPosition": true
+          },
+          "actions": [
+            {
+              "type": "NODE",
+              "destinationId": "151:8468",
+              "navigation": "NAVIGATE",
+              "transition": null,
+              "resetVideoPosition": false,
+              "resetScrollPosition": true
+            }
+          ],
+          "trigger": {
+            "type": "ON_CLICK"
+          }
+        }
+      ],
+      "widgetBranches": [
+        {
+          "action": {
+            "type": "CONDITIONAL",
+            "conditionalBlocks": [
+              {
+                "actions": [
+                  {
+                    "type": "NODE",
+                    "destinationId": "152:4284",
+                    "navigation": "NAVIGATE",
+                    "transition": null,
+                    "resetVideoPosition": false,
+                    "resetScrollPosition": true
+                  }
+                ],
+                "condition": {
+                  "value": {
+                    "expressionArguments": [
+                      {
+                        "value": {
+                          "type": "VARIABLE_ALIAS",
+                          "id": "VariableID:465:48635"
+                        },
+                        "type": "VARIABLE_ALIAS",
+                        "resolvedType": "BOOLEAN"
+                      },
+                      {
+                        "value": true,
+                        "type": "BOOLEAN",
+                        "resolvedType": "BOOLEAN"
+                      }
+                    ],
+                    "expressionFunction": "EQUALS"
+                  },
+                  "type": "EXPRESSION",
+                  "resolvedType": "BOOLEAN"
+                }
+              },
+              {
+                "actions": [
+                  {
+                    "type": "NODE",
+                    "destinationId": "274:24427",
+                    "navigation": "NAVIGATE",
+                    "transition": null,
+                    "resetVideoPosition": false,
+                    "resetScrollPosition": true
+                  }
+                ]
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "CONDITIONAL",
+              "conditionalBlocks": [
+                {
+                  "actions": [
+                    {
+                      "type": "NODE",
+                      "destinationId": "152:4284",
+                      "navigation": "NAVIGATE",
+                      "transition": null,
+                      "resetVideoPosition": false,
+                      "resetScrollPosition": true
+                    }
+                  ],
+                  "condition": {
+                    "value": {
+                      "expressionArguments": [
+                        {
+                          "value": {
+                            "type": "VARIABLE_ALIAS",
+                            "id": "VariableID:465:48635"
+                          },
+                          "type": "VARIABLE_ALIAS",
+                          "resolvedType": "BOOLEAN"
+                        },
+                        {
+                          "value": true,
+                          "type": "BOOLEAN",
+                          "resolvedType": "BOOLEAN"
+                        }
+                      ],
+                      "expressionFunction": "EQUALS"
+                    },
+                    "type": "EXPRESSION",
+                    "resolvedType": "BOOLEAN"
+                  }
+                },
+                {
+                  "actions": [
+                    {
+                      "type": "NODE",
+                      "destinationId": "274:24427",
+                      "navigation": "NAVIGATE",
+                      "transition": null,
+                      "resetVideoPosition": false,
+                      "resetScrollPosition": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "trigger": {
+            "type": "AFTER_TIMEOUT",
+            "timeout": 0.800000011920929
+          }
+        }
+      ],
+      "sourceChips": [
+        {
+          "id": "274:21449",
+          "reactions": [
+            {
+              "action": {
+                "type": "URL",
+                "url": "[Source link]",
+                "openInNewTab": true
+              },
+              "actions": [
+                {
+                  "type": "URL",
+                  "url": "[Source link]",
+                  "openInNewTab": true
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        },
+        {
+          "id": "274:21452",
+          "reactions": [
+            {
+              "action": {
+                "type": "URL",
+                "url": "[Source link]",
+                "openInNewTab": true
+              },
+              "actions": [
+                {
+                  "type": "URL",
+                  "url": "[Source link]",
+                  "openInNewTab": true
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        }
+      ],
+      "radius": 8,
+      "drawers": [
+        {
+          "id": "468:30687",
+          "main": "180:8467",
+          "active": [
+            "Trigger area / bot-settings"
+          ]
+        },
+        {
+          "id": "468:30777",
+          "main": "180:8467",
+          "active": [
+            "Trigger area / bot-settings"
+          ]
+        }
+      ]
+    }
+  ],
+  "finalMarketingAudit": [
+    {
+      "cards": [
+        {
+          "id": "270:3669",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "149:9366",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false,
+                "resetScrollPosition": true
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "149:9366",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false,
+                  "resetScrollPosition": true
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        },
+        {
+          "id": "270:3701",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "149:9366",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false,
+                "resetScrollPosition": true
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "149:9366",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false,
+                  "resetScrollPosition": true
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        }
+      ],
+      "drawers": [
+        {
+          "id": "150:4047",
+          "name": "Trigger / Mobile drawer / Zero \u00b7 Changed after approval, awaiting founder",
+          "active": [
+            "Trigger area / channels"
+          ]
+        },
+        {
+          "id": "150:4061",
+          "name": "Trigger / Mobile drawer / Filled \u00b7 Changed after approval, awaiting founder",
+          "active": [
+            "Trigger area / channels"
+          ]
+        },
+        {
+          "id": "468:28294",
+          "name": "Trigger / Mobile drawer / calendar / Zero \u00b7 Changed after approval, awaiting founder",
+          "active": [
+            "Trigger area / calendar"
+          ]
+        },
+        {
+          "id": "468:28384",
+          "name": "Trigger / Mobile drawer / calendar / Filled \u00b7 Changed after approval, awaiting founder",
+          "active": [
+            "Trigger area / calendar"
+          ]
+        },
+        {
+          "id": "468:28474",
+          "name": "Trigger / Mobile drawer / composer / Zero \u00b7 Changed after approval, awaiting founder",
+          "active": [
+            "Trigger area / composer"
+          ]
+        },
+        {
+          "id": "468:28564",
+          "name": "Trigger / Mobile drawer / composer / Filled \u00b7 Changed after approval, awaiting founder",
+          "active": [
+            "Trigger area / composer"
+          ]
+        },
+        {
+          "id": "468:28654",
+          "name": "Trigger / Mobile drawer / google-posts / Zero \u00b7 Changed after approval, awaiting founder",
+          "active": [
+            "Trigger area / google-posts"
+          ]
+        },
+        {
+          "id": "468:28744",
+          "name": "Trigger / Mobile drawer / google-posts / Filled \u00b7 Changed after approval, awaiting founder",
+          "active": [
+            "Trigger area / google-posts"
+          ]
+        },
+        {
+          "id": "468:28834",
+          "name": "Trigger / Mobile drawer / google-reviews / Zero \u00b7 Changed after approval, awaiting founder",
+          "active": [
+            "Trigger area / google-reviews"
+          ]
+        },
+        {
+          "id": "468:28924",
+          "name": "Trigger / Mobile drawer / google-reviews / Filled \u00b7 Changed after approval, awaiting founder",
+          "active": [
+            "Trigger area / google-reviews"
+          ]
+        }
+      ],
+      "radius": 8,
+      "retiredVisible": false,
+      "primary": [
+        {
+          "type": "SOLID",
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "NORMAL",
+          "color": {
+            "r": 0,
+            "g": 0.09399999678134918,
+            "b": 0.25099998712539673
+          },
+          "boundVariables": {
+            "color": {
+              "type": "VARIABLE_ALIAS",
+              "id": "VariableID:42:14"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "calculatedContrast": {
+    "crmBorderVsWhite": 3.322823713730639,
+    "crmBorderVsCanvas": 3.0731266649087288,
+    "widgetBorderVsPaper": 4.2225044640682805,
+    "primaryWhiteTextVsNavy": 17.431918573309176
+  },
+  "retiredMenuInstances": {
+    "266:3039": [],
+    "266:3125": []
+  },
+  "closedWidgetLauncher": {
+    "id": "152:3608",
+    "width": 92,
+    "height": 48
+  },
+  "darkSurfaceAuditNote": "Four dark Toggle track nodes in audit1 are On/Off controls; all sidebar/panel/band/theme backgrounds are light. Navy primary controls are intentional."
+}

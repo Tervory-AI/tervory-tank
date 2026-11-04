@@ -1,0 +1,532 @@
+{
+  "before": [
+    {
+      "id": "180:8387",
+      "hash": "e4b854e7",
+      "nodeCount": 63,
+      "headings": [
+        {
+          "id": "180:8394",
+          "text": "Trigger",
+          "refs": {}
+        }
+      ],
+      "items": [
+        {
+          "id": "180:8392",
+          "text": "Business"
+        },
+        {
+          "id": "180:8393",
+          "text": "⌄"
+        },
+        {
+          "id": "180:8397",
+          "text": "Writing"
+        },
+        {
+          "id": "I180:8398;43:410",
+          "text": "Write"
+        },
+        {
+          "id": "I180:8401;43:410",
+          "text": "Voice"
+        },
+        {
+          "id": "180:8405",
+          "text": "CRM"
+        },
+        {
+          "id": "I180:8406;43:410",
+          "text": "Leads"
+        },
+        {
+          "id": "I180:8409;43:410",
+          "text": "Clients"
+        },
+        {
+          "id": "I180:8412;43:410",
+          "text": "Contacts"
+        },
+        {
+          "id": "I180:8415;43:410",
+          "text": "Opportunities"
+        },
+        {
+          "id": "I180:8418;43:410",
+          "text": "Cases"
+        },
+        {
+          "id": "I180:8421;43:410",
+          "text": "Tasks"
+        },
+        {
+          "id": "180:8425",
+          "text": "Sales"
+        },
+        {
+          "id": "I180:8426;43:410",
+          "text": "Quotes"
+        },
+        {
+          "id": "I180:8429;43:410",
+          "text": "Invoices"
+        },
+        {
+          "id": "180:8433",
+          "text": "Marketing"
+        },
+        {
+          "id": "I180:8434;43:410",
+          "text": "Channels"
+        },
+        {
+          "id": "I180:8437;43:410",
+          "text": "Calendar"
+        },
+        {
+          "id": "I180:8440;43:410",
+          "text": "Composer"
+        },
+        {
+          "id": "I465:25708;43:410",
+          "text": "Google posts"
+        },
+        {
+          "id": "I180:8443;43:410",
+          "text": "Google reviews"
+        },
+        {
+          "id": "180:8447",
+          "text": "Chat bot"
+        },
+        {
+          "id": "I180:8448;43:410",
+          "text": "Inbox"
+        },
+        {
+          "id": "I180:8451;43:410",
+          "text": "Settings"
+        },
+        {
+          "id": "I180:8455;43:410",
+          "text": "All products"
+        },
+        {
+          "id": "I180:8458;43:410",
+          "text": "Receipts"
+        },
+        {
+          "id": "I180:8461;43:410",
+          "text": "Billing"
+        },
+        {
+          "id": "I180:8464;43:410",
+          "text": "Account settings"
+        }
+      ]
+    },
+    {
+      "id": "180:8467",
+      "hash": "a4908817",
+      "nodeCount": 64,
+      "headings": [
+        {
+          "id": "180:8476",
+          "text": "Trigger",
+          "refs": {}
+        }
+      ],
+      "items": [
+        {
+          "id": "180:8471",
+          "text": "×"
+        },
+        {
+          "id": "180:8474",
+          "text": "Business"
+        },
+        {
+          "id": "180:8475",
+          "text": "⌄"
+        },
+        {
+          "id": "180:8479",
+          "text": "Writing"
+        },
+        {
+          "id": "I180:8480;43:410",
+          "text": "Write"
+        },
+        {
+          "id": "I180:8483;43:410",
+          "text": "Voice"
+        },
+        {
+          "id": "180:8487",
+          "text": "CRM"
+        },
+        {
+          "id": "I180:8488;43:410",
+          "text": "Leads"
+        },
+        {
+          "id": "I180:8491;43:410",
+          "text": "Clients"
+        },
+        {
+          "id": "I180:8494;43:410",
+          "text": "Contacts"
+        },
+        {
+          "id": "I180:8497;43:410",
+          "text": "Opportunities"
+        },
+        {
+          "id": "I180:8500;43:410",
+          "text": "Cases"
+        },
+        {
+          "id": "I180:8503;43:410",
+          "text": "Tasks"
+        },
+        {
+          "id": "180:8507",
+          "text": "Sales"
+        },
+        {
+          "id": "I180:8508;43:410",
+          "text": "Quotes"
+        },
+        {
+          "id": "I180:8511;43:410",
+          "text": "Invoices"
+        },
+        {
+          "id": "180:8515",
+          "text": "Marketing"
+        },
+        {
+          "id": "I180:8516;43:410",
+          "text": "Channels"
+        },
+        {
+          "id": "I180:8519;43:410",
+          "text": "Calendar"
+        },
+        {
+          "id": "I180:8522;43:410",
+          "text": "Composer"
+        },
+        {
+          "id": "I465:25712;43:410",
+          "text": "Google posts"
+        },
+        {
+          "id": "I180:8525;43:410",
+          "text": "Google reviews"
+        },
+        {
+          "id": "180:8529",
+          "text": "Chat bot"
+        },
+        {
+          "id": "I180:8530;43:410",
+          "text": "Inbox"
+        },
+        {
+          "id": "I180:8533;43:410",
+          "text": "Settings"
+        },
+        {
+          "id": "I180:8537;43:410",
+          "text": "All products"
+        },
+        {
+          "id": "I180:8540;43:410",
+          "text": "Receipts"
+        },
+        {
+          "id": "I180:8543;43:410",
+          "text": "Billing"
+        },
+        {
+          "id": "I180:8546;43:410",
+          "text": "Account settings"
+        }
+      ]
+    }
+  ],
+  "after": {
+    "definition": {
+      "type": "TEXT",
+      "defaultValue": "Trigger"
+    },
+    "mobileValue": {
+      "type": "TEXT",
+      "value": "Rig"
+    },
+    "components": [
+      {
+        "id": "180:8387",
+        "hash": "e4b854e7",
+        "nodeCount": 63,
+        "headings": [
+          {
+            "id": "180:8394",
+            "text": "Trigger",
+            "refs": {
+              "characters": "Product heading#508:0"
+            }
+          }
+        ],
+        "items": [
+          {
+            "id": "180:8392",
+            "text": "Business"
+          },
+          {
+            "id": "180:8393",
+            "text": "⌄"
+          },
+          {
+            "id": "180:8397",
+            "text": "Writing"
+          },
+          {
+            "id": "I180:8398;43:410",
+            "text": "Write"
+          },
+          {
+            "id": "I180:8401;43:410",
+            "text": "Voice"
+          },
+          {
+            "id": "180:8405",
+            "text": "CRM"
+          },
+          {
+            "id": "I180:8406;43:410",
+            "text": "Leads"
+          },
+          {
+            "id": "I180:8409;43:410",
+            "text": "Clients"
+          },
+          {
+            "id": "I180:8412;43:410",
+            "text": "Contacts"
+          },
+          {
+            "id": "I180:8415;43:410",
+            "text": "Opportunities"
+          },
+          {
+            "id": "I180:8418;43:410",
+            "text": "Cases"
+          },
+          {
+            "id": "I180:8421;43:410",
+            "text": "Tasks"
+          },
+          {
+            "id": "180:8425",
+            "text": "Sales"
+          },
+          {
+            "id": "I180:8426;43:410",
+            "text": "Quotes"
+          },
+          {
+            "id": "I180:8429;43:410",
+            "text": "Invoices"
+          },
+          {
+            "id": "180:8433",
+            "text": "Marketing"
+          },
+          {
+            "id": "I180:8434;43:410",
+            "text": "Channels"
+          },
+          {
+            "id": "I180:8437;43:410",
+            "text": "Calendar"
+          },
+          {
+            "id": "I180:8440;43:410",
+            "text": "Composer"
+          },
+          {
+            "id": "I465:25708;43:410",
+            "text": "Google posts"
+          },
+          {
+            "id": "I180:8443;43:410",
+            "text": "Google reviews"
+          },
+          {
+            "id": "180:8447",
+            "text": "Chat bot"
+          },
+          {
+            "id": "I180:8448;43:410",
+            "text": "Inbox"
+          },
+          {
+            "id": "I180:8451;43:410",
+            "text": "Settings"
+          },
+          {
+            "id": "I180:8455;43:410",
+            "text": "All products"
+          },
+          {
+            "id": "I180:8458;43:410",
+            "text": "Receipts"
+          },
+          {
+            "id": "I180:8461;43:410",
+            "text": "Billing"
+          },
+          {
+            "id": "I180:8464;43:410",
+            "text": "Account settings"
+          }
+        ]
+      },
+      {
+        "id": "180:8467",
+        "hash": "a4908817",
+        "nodeCount": 64,
+        "headings": [
+          {
+            "id": "180:8476",
+            "text": "Trigger",
+            "refs": {
+              "characters": "Product heading#508:0"
+            }
+          }
+        ],
+        "items": [
+          {
+            "id": "180:8471",
+            "text": "×"
+          },
+          {
+            "id": "180:8474",
+            "text": "Business"
+          },
+          {
+            "id": "180:8475",
+            "text": "⌄"
+          },
+          {
+            "id": "180:8479",
+            "text": "Writing"
+          },
+          {
+            "id": "I180:8480;43:410",
+            "text": "Write"
+          },
+          {
+            "id": "I180:8483;43:410",
+            "text": "Voice"
+          },
+          {
+            "id": "180:8487",
+            "text": "CRM"
+          },
+          {
+            "id": "I180:8488;43:410",
+            "text": "Leads"
+          },
+          {
+            "id": "I180:8491;43:410",
+            "text": "Clients"
+          },
+          {
+            "id": "I180:8494;43:410",
+            "text": "Contacts"
+          },
+          {
+            "id": "I180:8497;43:410",
+            "text": "Opportunities"
+          },
+          {
+            "id": "I180:8500;43:410",
+            "text": "Cases"
+          },
+          {
+            "id": "I180:8503;43:410",
+            "text": "Tasks"
+          },
+          {
+            "id": "180:8507",
+            "text": "Sales"
+          },
+          {
+            "id": "I180:8508;43:410",
+            "text": "Quotes"
+          },
+          {
+            "id": "I180:8511;43:410",
+            "text": "Invoices"
+          },
+          {
+            "id": "180:8515",
+            "text": "Marketing"
+          },
+          {
+            "id": "I180:8516;43:410",
+            "text": "Channels"
+          },
+          {
+            "id": "I180:8519;43:410",
+            "text": "Calendar"
+          },
+          {
+            "id": "I180:8522;43:410",
+            "text": "Composer"
+          },
+          {
+            "id": "I465:25712;43:410",
+            "text": "Google posts"
+          },
+          {
+            "id": "I180:8525;43:410",
+            "text": "Google reviews"
+          },
+          {
+            "id": "180:8529",
+            "text": "Chat bot"
+          },
+          {
+            "id": "I180:8530;43:410",
+            "text": "Inbox"
+          },
+          {
+            "id": "I180:8533;43:410",
+            "text": "Settings"
+          },
+          {
+            "id": "I180:8537;43:410",
+            "text": "All products"
+          },
+          {
+            "id": "I180:8540;43:410",
+            "text": "Receipts"
+          },
+          {
+            "id": "I180:8543;43:410",
+            "text": "Billing"
+          },
+          {
+            "id": "I180:8546;43:410",
+            "text": "Account settings"
+          }
+        ]
+      }
+    ]
+  }
+}
