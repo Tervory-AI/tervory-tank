@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 import httpx
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from tenant_db import tenant_scope
 import vault
@@ -31,6 +31,13 @@ class Notification(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     body: str = Field(min_length=1, max_length=1000)
     link: str = Field(default="/chats", max_length=2048)
+
+    @model_validator(mode="after")
+    def payload_size(self):
+        payload = {"aps": {"alert": {"title": self.title, "body": self.body}, "sound": "default"}, "path": self.link}
+        if len(json.dumps(payload, ensure_ascii=False).encode()) > 3800:
+            raise ValueError("Notification text and link must fit in 3800 UTF-8 bytes")
+        return self
 
     @field_validator("link")
     @classmethod
