@@ -1,0 +1,1491 @@
+{
+  "fileKey": "ZnphBOJU6657tohGLD3IzS",
+  "pageId": "513:34988",
+  "status": "Proposed",
+  "provider": "Google Workspace",
+  "createdNodeIds": [
+    "514:727",
+    "514:728",
+    "514:729",
+    "514:730",
+    "514:731",
+    "I514:731;180:8388",
+    "I514:731;180:8389",
+    "I514:731;180:8390",
+    "I514:731;180:8391",
+    "I514:731;180:8392",
+    "I514:731;180:8393",
+    "I514:731;180:8394",
+    "I514:731;180:8395",
+    "I514:731;502:19155",
+    "I514:731;180:8396",
+    "I514:731;180:8397",
+    "I514:731;180:8398",
+    "I514:731;180:8398;43:410",
+    "I514:731;180:8401",
+    "I514:731;180:8401;43:410",
+    "I514:731;180:8404",
+    "I514:731;180:8405",
+    "I514:731;180:8406",
+    "I514:731;180:8406;43:410",
+    "I514:731;180:8409",
+    "I514:731;180:8409;43:410",
+    "I514:731;180:8412",
+    "I514:731;180:8412;43:410",
+    "I514:731;180:8415",
+    "I514:731;180:8415;43:410",
+    "I514:731;180:8418",
+    "I514:731;180:8418;43:410",
+    "I514:731;180:8421",
+    "I514:731;180:8421;43:410",
+    "I514:731;180:8424",
+    "I514:731;180:8425",
+    "I514:731;180:8426",
+    "I514:731;180:8426;43:410",
+    "I514:731;180:8429",
+    "I514:731;180:8429;43:410",
+    "I514:731;180:8432",
+    "I514:731;180:8433",
+    "I514:731;180:8434",
+    "I514:731;180:8434;43:410",
+    "I514:731;180:8437",
+    "I514:731;180:8437;43:410",
+    "I514:731;180:8440",
+    "I514:731;180:8440;43:410",
+    "I514:731;465:25708",
+    "I514:731;465:25708;43:410",
+    "I514:731;180:8443",
+    "I514:731;180:8443;43:410",
+    "I514:731;180:8446",
+    "I514:731;180:8447",
+    "I514:731;180:8448",
+    "I514:731;180:8448;43:410",
+    "I514:731;180:8451",
+    "I514:731;180:8451;43:410",
+    "I514:731;180:8454",
+    "I514:731;180:8455",
+    "I514:731;180:8455;43:410",
+    "I514:731;180:8458",
+    "I514:731;180:8458;43:410",
+    "I514:731;180:8461",
+    "I514:731;180:8461;43:410",
+    "I514:731;180:8464",
+    "I514:731;180:8464;43:410",
+    "514:732",
+    "514:871",
+    "514:872",
+    "514:873",
+    "514:874",
+    "514:883",
+    "514:884",
+    "514:885",
+    "514:886",
+    "514:887",
+    "514:888",
+    "514:889",
+    "514:890",
+    "I514:890;93:5",
+    "514:892",
+    "I514:892;93:5",
+    "514:894",
+    "514:895",
+    "514:896",
+    "514:897",
+    "514:898",
+    "I514:898;180:8468",
+    "I514:898;180:8469",
+    "I514:898;180:8470",
+    "I514:898;180:8471",
+    "I514:898;180:8473",
+    "I514:898;180:8474",
+    "I514:898;180:8475",
+    "514:899",
+    "514:1081",
+    "514:1082",
+    "514:1083",
+    "514:1084",
+    "514:1093",
+    "514:1094",
+    "514:1095",
+    "514:1096",
+    "514:1097",
+    "514:1098",
+    "514:1099",
+    "514:1100",
+    "I514:1100;93:5",
+    "514:1102",
+    "I514:1102;93:5",
+    "514:1104",
+    "514:1105",
+    "514:1106",
+    "514:1107",
+    "514:1108",
+    "I514:1108;180:8388",
+    "I514:1108;180:8389",
+    "I514:1108;180:8390",
+    "I514:1108;180:8391",
+    "I514:1108;180:8392",
+    "I514:1108;180:8393",
+    "I514:1108;180:8394",
+    "I514:1108;180:8395",
+    "I514:1108;502:19155",
+    "I514:1108;180:8396",
+    "I514:1108;180:8397",
+    "I514:1108;180:8398",
+    "I514:1108;180:8398;43:410",
+    "I514:1108;180:8401",
+    "I514:1108;180:8401;43:410",
+    "I514:1108;180:8404",
+    "I514:1108;180:8405",
+    "I514:1108;180:8406",
+    "I514:1108;180:8406;43:410",
+    "I514:1108;180:8409",
+    "I514:1108;180:8409;43:410",
+    "I514:1108;180:8412",
+    "I514:1108;180:8412;43:410",
+    "I514:1108;180:8415",
+    "I514:1108;180:8415;43:410",
+    "I514:1108;180:8418",
+    "I514:1108;180:8418;43:410",
+    "I514:1108;180:8421",
+    "I514:1108;180:8421;43:410",
+    "I514:1108;180:8424",
+    "I514:1108;180:8425",
+    "I514:1108;180:8426",
+    "I514:1108;180:8426;43:410",
+    "I514:1108;180:8429",
+    "I514:1108;180:8429;43:410",
+    "I514:1108;180:8432",
+    "I514:1108;180:8433",
+    "I514:1108;180:8434",
+    "I514:1108;180:8434;43:410",
+    "I514:1108;180:8437",
+    "I514:1108;180:8437;43:410",
+    "I514:1108;180:8440",
+    "I514:1108;180:8440;43:410",
+    "I514:1108;465:25708",
+    "I514:1108;465:25708;43:410",
+    "I514:1108;180:8443",
+    "I514:1108;180:8443;43:410",
+    "I514:1108;180:8446",
+    "I514:1108;180:8447",
+    "I514:1108;180:8448",
+    "I514:1108;180:8448;43:410",
+    "I514:1108;180:8451",
+    "I514:1108;180:8451;43:410",
+    "I514:1108;180:8454",
+    "I514:1108;180:8455",
+    "I514:1108;180:8455;43:410",
+    "I514:1108;180:8458",
+    "I514:1108;180:8458;43:410",
+    "I514:1108;180:8461",
+    "I514:1108;180:8461;43:410",
+    "I514:1108;180:8464",
+    "I514:1108;180:8464;43:410",
+    "514:1109",
+    "514:1227",
+    "514:1228",
+    "514:1229",
+    "514:1230",
+    "514:1239",
+    "514:1240",
+    "514:1241",
+    "514:1242",
+    "514:1243",
+    "I514:1243;93:5",
+    "514:1245",
+    "514:1246",
+    "514:1247",
+    "514:1248",
+    "514:1249",
+    "I514:1249;180:8468",
+    "I514:1249;180:8469",
+    "I514:1249;180:8470",
+    "I514:1249;180:8471",
+    "I514:1249;180:8473",
+    "I514:1249;180:8474",
+    "I514:1249;180:8475",
+    "514:1250",
+    "514:1369",
+    "514:1370",
+    "514:1371",
+    "514:1372",
+    "514:1381",
+    "514:1382",
+    "514:1383",
+    "514:1384",
+    "514:1385",
+    "I514:1385;93:5",
+    "514:1387",
+    "514:1388",
+    "514:1389",
+    "514:1390",
+    "514:1391",
+    "I514:1391;180:8388",
+    "I514:1391;180:8389",
+    "I514:1391;180:8390",
+    "I514:1391;180:8391",
+    "I514:1391;180:8392",
+    "I514:1391;180:8393",
+    "I514:1391;180:8394",
+    "I514:1391;180:8395",
+    "I514:1391;502:19155",
+    "I514:1391;180:8396",
+    "I514:1391;180:8397",
+    "I514:1391;180:8398",
+    "I514:1391;180:8398;43:410",
+    "I514:1391;180:8401",
+    "I514:1391;180:8401;43:410",
+    "I514:1391;180:8404",
+    "I514:1391;180:8405",
+    "I514:1391;180:8406",
+    "I514:1391;180:8406;43:410",
+    "I514:1391;180:8409",
+    "I514:1391;180:8409;43:410",
+    "I514:1391;180:8412",
+    "I514:1391;180:8412;43:410",
+    "I514:1391;180:8415",
+    "I514:1391;180:8415;43:410",
+    "I514:1391;180:8418",
+    "I514:1391;180:8418;43:410",
+    "I514:1391;180:8421",
+    "I514:1391;180:8421;43:410",
+    "I514:1391;180:8424",
+    "I514:1391;180:8425",
+    "I514:1391;180:8426",
+    "I514:1391;180:8426;43:410",
+    "I514:1391;180:8429",
+    "I514:1391;180:8429;43:410",
+    "I514:1391;180:8432",
+    "I514:1391;180:8433",
+    "I514:1391;180:8434",
+    "I514:1391;180:8434;43:410",
+    "I514:1391;180:8437",
+    "I514:1391;180:8437;43:410",
+    "I514:1391;180:8440",
+    "I514:1391;180:8440;43:410",
+    "I514:1391;465:25708",
+    "I514:1391;465:25708;43:410",
+    "I514:1391;180:8443",
+    "I514:1391;180:8443;43:410",
+    "I514:1391;180:8446",
+    "I514:1391;180:8447",
+    "I514:1391;180:8448",
+    "I514:1391;180:8448;43:410",
+    "I514:1391;180:8451",
+    "I514:1391;180:8451;43:410",
+    "I514:1391;180:8454",
+    "I514:1391;180:8455",
+    "I514:1391;180:8455;43:410",
+    "I514:1391;180:8458",
+    "I514:1391;180:8458;43:410",
+    "I514:1391;180:8461",
+    "I514:1391;180:8461;43:410",
+    "I514:1391;180:8464",
+    "I514:1391;180:8464;43:410",
+    "514:1392",
+    "514:1510",
+    "514:1511",
+    "514:1512",
+    "514:1513",
+    "514:1522",
+    "514:1523",
+    "514:1524",
+    "514:1525",
+    "514:1526",
+    "I514:1526;93:5",
+    "514:1528",
+    "514:1529",
+    "514:1530",
+    "514:1531",
+    "514:1532",
+    "I514:1532;180:8468",
+    "I514:1532;180:8469",
+    "I514:1532;180:8470",
+    "I514:1532;180:8471",
+    "I514:1532;180:8473",
+    "I514:1532;180:8474",
+    "I514:1532;180:8475",
+    "514:1533",
+    "514:1652",
+    "514:1653",
+    "514:1654",
+    "514:1655",
+    "514:1664",
+    "514:1665",
+    "514:1666",
+    "514:1667",
+    "514:1668",
+    "I514:1668;93:5",
+    "514:1670",
+    "514:1671",
+    "514:1672",
+    "514:1673",
+    "514:1674",
+    "I514:1674;180:8388",
+    "I514:1674;180:8389",
+    "I514:1674;180:8390",
+    "I514:1674;180:8391",
+    "I514:1674;180:8392",
+    "I514:1674;180:8393",
+    "I514:1674;180:8394",
+    "I514:1674;180:8395",
+    "I514:1674;502:19155",
+    "I514:1674;180:8396",
+    "I514:1674;180:8397",
+    "I514:1674;180:8398",
+    "I514:1674;180:8398;43:410",
+    "I514:1674;180:8401",
+    "I514:1674;180:8401;43:410",
+    "I514:1674;180:8404",
+    "I514:1674;180:8405",
+    "I514:1674;180:8406",
+    "I514:1674;180:8406;43:410",
+    "I514:1674;180:8409",
+    "I514:1674;180:8409;43:410",
+    "I514:1674;180:8412",
+    "I514:1674;180:8412;43:410",
+    "I514:1674;180:8415",
+    "I514:1674;180:8415;43:410",
+    "I514:1674;180:8418",
+    "I514:1674;180:8418;43:410",
+    "I514:1674;180:8421",
+    "I514:1674;180:8421;43:410",
+    "I514:1674;180:8424",
+    "I514:1674;180:8425",
+    "I514:1674;180:8426",
+    "I514:1674;180:8426;43:410",
+    "I514:1674;180:8429",
+    "I514:1674;180:8429;43:410",
+    "I514:1674;180:8432",
+    "I514:1674;180:8433",
+    "I514:1674;180:8434",
+    "I514:1674;180:8434;43:410",
+    "I514:1674;180:8437",
+    "I514:1674;180:8437;43:410",
+    "I514:1674;180:8440",
+    "I514:1674;180:8440;43:410",
+    "I514:1674;465:25708",
+    "I514:1674;465:25708;43:410",
+    "I514:1674;180:8443",
+    "I514:1674;180:8443;43:410",
+    "I514:1674;180:8446",
+    "I514:1674;180:8447",
+    "I514:1674;180:8448",
+    "I514:1674;180:8448;43:410",
+    "I514:1674;180:8451",
+    "I514:1674;180:8451;43:410",
+    "I514:1674;180:8454",
+    "I514:1674;180:8455",
+    "I514:1674;180:8455;43:410",
+    "I514:1674;180:8458",
+    "I514:1674;180:8458;43:410",
+    "I514:1674;180:8461",
+    "I514:1674;180:8461;43:410",
+    "I514:1674;180:8464",
+    "I514:1674;180:8464;43:410",
+    "514:1675",
+    "514:1793",
+    "514:1794",
+    "514:1795",
+    "514:1796",
+    "514:1805",
+    "514:1806",
+    "514:1807",
+    "514:1808",
+    "514:1809",
+    "I514:1809;93:5",
+    "514:1811",
+    "I514:1811;93:5",
+    "514:1813",
+    "514:1814",
+    "514:1815",
+    "514:1816",
+    "514:1817",
+    "I514:1817;180:8468",
+    "I514:1817;180:8469",
+    "I514:1817;180:8470",
+    "I514:1817;180:8471",
+    "I514:1817;180:8473",
+    "I514:1817;180:8474",
+    "I514:1817;180:8475",
+    "514:1818",
+    "514:1937",
+    "514:1938",
+    "514:1939",
+    "514:1940",
+    "514:1949",
+    "514:1950",
+    "514:1951",
+    "514:1952",
+    "514:1953",
+    "I514:1953;93:5",
+    "514:1955",
+    "I514:1955;93:5",
+    "514:1957",
+    "514:1958",
+    "514:1959",
+    "514:1960",
+    "514:1961",
+    "I514:1961;180:8388",
+    "I514:1961;180:8389",
+    "I514:1961;180:8390",
+    "I514:1961;180:8391",
+    "I514:1961;180:8392",
+    "I514:1961;180:8393",
+    "I514:1961;180:8394",
+    "I514:1961;180:8395",
+    "I514:1961;502:19155",
+    "I514:1961;180:8396",
+    "I514:1961;180:8397",
+    "I514:1961;180:8398",
+    "I514:1961;180:8398;43:410",
+    "I514:1961;180:8401",
+    "I514:1961;180:8401;43:410",
+    "I514:1961;180:8404",
+    "I514:1961;180:8405",
+    "I514:1961;180:8406",
+    "I514:1961;180:8406;43:410",
+    "I514:1961;180:8409",
+    "I514:1961;180:8409;43:410",
+    "I514:1961;180:8412",
+    "I514:1961;180:8412;43:410",
+    "I514:1961;180:8415",
+    "I514:1961;180:8415;43:410",
+    "I514:1961;180:8418",
+    "I514:1961;180:8418;43:410",
+    "I514:1961;180:8421",
+    "I514:1961;180:8421;43:410",
+    "I514:1961;180:8424",
+    "I514:1961;180:8425",
+    "I514:1961;180:8426",
+    "I514:1961;180:8426;43:410",
+    "I514:1961;180:8429",
+    "I514:1961;180:8429;43:410",
+    "I514:1961;180:8432",
+    "I514:1961;180:8433",
+    "I514:1961;180:8434",
+    "I514:1961;180:8434;43:410",
+    "I514:1961;180:8437",
+    "I514:1961;180:8437;43:410",
+    "I514:1961;180:8440",
+    "I514:1961;180:8440;43:410",
+    "I514:1961;465:25708",
+    "I514:1961;465:25708;43:410",
+    "I514:1961;180:8443",
+    "I514:1961;180:8443;43:410",
+    "I514:1961;180:8446",
+    "I514:1961;180:8447",
+    "I514:1961;180:8448",
+    "I514:1961;180:8448;43:410",
+    "I514:1961;180:8451",
+    "I514:1961;180:8451;43:410",
+    "I514:1961;180:8454",
+    "I514:1961;180:8455",
+    "I514:1961;180:8455;43:410",
+    "I514:1961;180:8458",
+    "I514:1961;180:8458;43:410",
+    "I514:1961;180:8461",
+    "I514:1961;180:8461;43:410",
+    "I514:1961;180:8464",
+    "I514:1961;180:8464;43:410",
+    "514:1962",
+    "514:2080",
+    "514:2081",
+    "514:2082",
+    "514:2083",
+    "514:2092",
+    "514:2093",
+    "514:2094",
+    "514:2095",
+    "514:2096",
+    "514:2097",
+    "514:2098",
+    "I514:2098;93:5",
+    "514:2100",
+    "514:2101",
+    "514:2102",
+    "514:2103",
+    "514:2104",
+    "I514:2104;180:8468",
+    "I514:2104;180:8469",
+    "I514:2104;180:8470",
+    "I514:2104;180:8471",
+    "I514:2104;180:8473",
+    "I514:2104;180:8474",
+    "I514:2104;180:8475",
+    "514:2105",
+    "514:2224",
+    "514:2225",
+    "514:2226",
+    "514:2227",
+    "514:2236",
+    "514:2237",
+    "514:2238",
+    "514:2239",
+    "514:2240",
+    "514:2241",
+    "514:2242",
+    "I514:2242;93:5",
+    "514:2244",
+    "514:2245",
+    "514:2246",
+    "514:2247",
+    "514:2248",
+    "I514:2248;180:8388",
+    "I514:2248;180:8389",
+    "I514:2248;180:8390",
+    "I514:2248;180:8391",
+    "I514:2248;180:8392",
+    "I514:2248;180:8393",
+    "I514:2248;180:8394",
+    "I514:2248;180:8395",
+    "I514:2248;502:19155",
+    "I514:2248;180:8396",
+    "I514:2248;180:8397",
+    "I514:2248;180:8398",
+    "I514:2248;180:8398;43:410",
+    "I514:2248;180:8401",
+    "I514:2248;180:8401;43:410",
+    "I514:2248;180:8404",
+    "I514:2248;180:8405",
+    "I514:2248;180:8406",
+    "I514:2248;180:8406;43:410",
+    "I514:2248;180:8409",
+    "I514:2248;180:8409;43:410",
+    "I514:2248;180:8412",
+    "I514:2248;180:8412;43:410",
+    "I514:2248;180:8415",
+    "I514:2248;180:8415;43:410",
+    "I514:2248;180:8418",
+    "I514:2248;180:8418;43:410",
+    "I514:2248;180:8421",
+    "I514:2248;180:8421;43:410",
+    "I514:2248;180:8424",
+    "I514:2248;180:8425",
+    "I514:2248;180:8426",
+    "I514:2248;180:8426;43:410",
+    "I514:2248;180:8429",
+    "I514:2248;180:8429;43:410",
+    "I514:2248;180:8432",
+    "I514:2248;180:8433",
+    "I514:2248;180:8434",
+    "I514:2248;180:8434;43:410",
+    "I514:2248;180:8437",
+    "I514:2248;180:8437;43:410",
+    "I514:2248;180:8440",
+    "I514:2248;180:8440;43:410",
+    "I514:2248;465:25708",
+    "I514:2248;465:25708;43:410",
+    "I514:2248;180:8443",
+    "I514:2248;180:8443;43:410",
+    "I514:2248;180:8446",
+    "I514:2248;180:8447",
+    "I514:2248;180:8448",
+    "I514:2248;180:8448;43:410",
+    "I514:2248;180:8451",
+    "I514:2248;180:8451;43:410",
+    "I514:2248;180:8454",
+    "I514:2248;180:8455",
+    "I514:2248;180:8455;43:410",
+    "I514:2248;180:8458",
+    "I514:2248;180:8458;43:410",
+    "I514:2248;180:8461",
+    "I514:2248;180:8461;43:410",
+    "I514:2248;180:8464",
+    "I514:2248;180:8464;43:410",
+    "514:2249",
+    "514:2367",
+    "514:2368",
+    "514:2369",
+    "514:2370",
+    "514:2379",
+    "514:2380",
+    "514:2381",
+    "514:2382",
+    "514:2383",
+    "I514:2383;93:5",
+    "514:2385",
+    "I514:2385;93:5",
+    "514:2387",
+    "514:2388",
+    "514:2389",
+    "514:2390",
+    "514:2391",
+    "I514:2391;180:8468",
+    "I514:2391;180:8469",
+    "I514:2391;180:8470",
+    "I514:2391;180:8471",
+    "I514:2391;180:8473",
+    "I514:2391;180:8474",
+    "I514:2391;180:8475",
+    "514:2392",
+    "514:2511",
+    "514:2512",
+    "514:2513",
+    "514:2514",
+    "514:2523",
+    "514:2524",
+    "514:2525",
+    "514:2526",
+    "514:2527",
+    "I514:2527;93:5",
+    "514:2529",
+    "I514:2529;93:5",
+    "514:2531",
+    "514:2532",
+    "514:2533",
+    "514:2534",
+    "514:2535",
+    "I514:2535;180:8388",
+    "I514:2535;180:8389",
+    "I514:2535;180:8390",
+    "I514:2535;180:8391",
+    "I514:2535;180:8392",
+    "I514:2535;180:8393",
+    "I514:2535;180:8394",
+    "I514:2535;180:8395",
+    "I514:2535;502:19155",
+    "I514:2535;180:8396",
+    "I514:2535;180:8397",
+    "I514:2535;180:8398",
+    "I514:2535;180:8398;43:410",
+    "I514:2535;180:8401",
+    "I514:2535;180:8401;43:410",
+    "I514:2535;180:8404",
+    "I514:2535;180:8405",
+    "I514:2535;180:8406",
+    "I514:2535;180:8406;43:410",
+    "I514:2535;180:8409",
+    "I514:2535;180:8409;43:410",
+    "I514:2535;180:8412",
+    "I514:2535;180:8412;43:410",
+    "I514:2535;180:8415",
+    "I514:2535;180:8415;43:410",
+    "I514:2535;180:8418",
+    "I514:2535;180:8418;43:410",
+    "I514:2535;180:8421",
+    "I514:2535;180:8421;43:410",
+    "I514:2535;180:8424",
+    "I514:2535;180:8425",
+    "I514:2535;180:8426",
+    "I514:2535;180:8426;43:410",
+    "I514:2535;180:8429",
+    "I514:2535;180:8429;43:410",
+    "I514:2535;180:8432",
+    "I514:2535;180:8433",
+    "I514:2535;180:8434",
+    "I514:2535;180:8434;43:410",
+    "I514:2535;180:8437",
+    "I514:2535;180:8437;43:410",
+    "I514:2535;180:8440",
+    "I514:2535;180:8440;43:410",
+    "I514:2535;465:25708",
+    "I514:2535;465:25708;43:410",
+    "I514:2535;180:8443",
+    "I514:2535;180:8443;43:410",
+    "I514:2535;180:8446",
+    "I514:2535;180:8447",
+    "I514:2535;180:8448",
+    "I514:2535;180:8448;43:410",
+    "I514:2535;180:8451",
+    "I514:2535;180:8451;43:410",
+    "I514:2535;180:8454",
+    "I514:2535;180:8455",
+    "I514:2535;180:8455;43:410",
+    "I514:2535;180:8458",
+    "I514:2535;180:8458;43:410",
+    "I514:2535;180:8461",
+    "I514:2535;180:8461;43:410",
+    "I514:2535;180:8464",
+    "I514:2535;180:8464;43:410",
+    "514:2536",
+    "514:2654",
+    "514:2655",
+    "514:2656",
+    "514:2657",
+    "514:2666",
+    "514:2667",
+    "514:2668",
+    "514:2669",
+    "514:2670",
+    "I514:2670;93:5",
+    "514:2672",
+    "514:2673",
+    "514:2674",
+    "514:2675",
+    "514:2676",
+    "I514:2676;180:8468",
+    "I514:2676;180:8469",
+    "I514:2676;180:8470",
+    "I514:2676;180:8471",
+    "I514:2676;180:8473",
+    "I514:2676;180:8474",
+    "I514:2676;180:8475",
+    "514:2677",
+    "514:2796",
+    "514:2797",
+    "514:2798",
+    "514:2799",
+    "514:2808",
+    "514:2809",
+    "514:2810",
+    "514:2811",
+    "514:2812",
+    "I514:2812;93:5"
+  ],
+  "frames": [
+    {
+      "id": "514:727",
+      "name": "Autumbra / Google Workspace / Connect / 1440 / Proposed",
+      "width": 1440,
+      "height": 900,
+      "texts": [
+        {
+          "id": "514:871",
+          "text": "Autumbra",
+          "name": "Proposed wording / Autumbra"
+        },
+        {
+          "id": "514:872",
+          "text": "Connections",
+          "name": "Proposed wording / Connections"
+        },
+        {
+          "id": "514:873",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "514:883",
+          "text": "Google Workspace",
+          "name": "Proposed wording / Google Workspace"
+        },
+        {
+          "id": "514:884",
+          "text": "Proposed wording",
+          "name": "Proposed wording / Proposed wording"
+        },
+        {
+          "id": "514:885",
+          "text": "Connect Google Workspace alerts",
+          "name": "Proposed wording / Connect Google Workspace alerts"
+        },
+        {
+          "id": "514:886",
+          "text": "Permissions before connecting",
+          "name": "Proposed wording / Permissions before connecting"
+        },
+        {
+          "id": "514:887",
+          "text": "Read Google Workspace security alerts.",
+          "name": "Proposed wording / Read Google Workspace security alerts."
+        },
+        {
+          "id": "514:888",
+          "text": "No email or file access.",
+          "name": "Proposed wording / No email or file access."
+        },
+        {
+          "id": "514:889",
+          "text": "Autumbra reads alerts as they arrive and discards them.",
+          "name": "Proposed wording / Autumbra reads alerts as they arrive and discards them."
+        },
+        {
+          "id": "I514:890;93:5",
+          "text": "Sign in with the provider",
+          "name": "label"
+        },
+        {
+          "id": "I514:892;93:5",
+          "text": "Cancel",
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "id": "514:894",
+      "name": "Autumbra / Google Workspace / Connect / 375 / Proposed",
+      "width": 375,
+      "height": 900,
+      "texts": [
+        {
+          "id": "514:1081",
+          "text": "Autumbra",
+          "name": "Proposed wording / Autumbra"
+        },
+        {
+          "id": "514:1082",
+          "text": "Connections",
+          "name": "Proposed wording / Connections"
+        },
+        {
+          "id": "514:1083",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "514:1093",
+          "text": "Google Workspace",
+          "name": "Proposed wording / Google Workspace"
+        },
+        {
+          "id": "514:1094",
+          "text": "Proposed wording",
+          "name": "Proposed wording / Proposed wording"
+        },
+        {
+          "id": "514:1095",
+          "text": "Connect Google Workspace alerts",
+          "name": "Proposed wording / Connect Google Workspace alerts"
+        },
+        {
+          "id": "514:1096",
+          "text": "Permissions before connecting",
+          "name": "Proposed wording / Permissions before connecting"
+        },
+        {
+          "id": "514:1097",
+          "text": "Read Google Workspace security alerts.",
+          "name": "Proposed wording / Read Google Workspace security alerts."
+        },
+        {
+          "id": "514:1098",
+          "text": "No email or file access.",
+          "name": "Proposed wording / No email or file access."
+        },
+        {
+          "id": "514:1099",
+          "text": "Autumbra reads alerts as they arrive and discards them.",
+          "name": "Proposed wording / Autumbra reads alerts as they arrive and discards them."
+        },
+        {
+          "id": "I514:1100;93:5",
+          "text": "Sign in with the provider",
+          "name": "label"
+        },
+        {
+          "id": "I514:1102;93:5",
+          "text": "Cancel",
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "id": "514:1104",
+      "name": "Autumbra / Google Workspace / Empty / 1440 / Proposed",
+      "width": 1440,
+      "height": 900,
+      "texts": [
+        {
+          "id": "514:1227",
+          "text": "Autumbra",
+          "name": "Proposed wording / Autumbra"
+        },
+        {
+          "id": "514:1228",
+          "text": "Connections",
+          "name": "Proposed wording / Connections"
+        },
+        {
+          "id": "514:1229",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "514:1239",
+          "text": "Google Workspace",
+          "name": "Proposed wording / Google Workspace"
+        },
+        {
+          "id": "514:1240",
+          "text": "Proposed wording",
+          "name": "Proposed wording / Proposed wording"
+        },
+        {
+          "id": "514:1241",
+          "text": "No connections yet.",
+          "name": "Proposed wording / No connections yet."
+        },
+        {
+          "id": "514:1242",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "I514:1243;93:5",
+          "text": "Add connection",
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "id": "514:1245",
+      "name": "Autumbra / Google Workspace / Empty / 375 / Proposed",
+      "width": 375,
+      "height": 900,
+      "texts": [
+        {
+          "id": "514:1369",
+          "text": "Autumbra",
+          "name": "Proposed wording / Autumbra"
+        },
+        {
+          "id": "514:1370",
+          "text": "Connections",
+          "name": "Proposed wording / Connections"
+        },
+        {
+          "id": "514:1371",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "514:1381",
+          "text": "Google Workspace",
+          "name": "Proposed wording / Google Workspace"
+        },
+        {
+          "id": "514:1382",
+          "text": "Proposed wording",
+          "name": "Proposed wording / Proposed wording"
+        },
+        {
+          "id": "514:1383",
+          "text": "No connections yet.",
+          "name": "Proposed wording / No connections yet."
+        },
+        {
+          "id": "514:1384",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "I514:1385;93:5",
+          "text": "Add connection",
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "id": "514:1387",
+      "name": "Autumbra / Google Workspace / Loading / 1440 / Proposed",
+      "width": 1440,
+      "height": 900,
+      "texts": [
+        {
+          "id": "514:1510",
+          "text": "Autumbra",
+          "name": "Proposed wording / Autumbra"
+        },
+        {
+          "id": "514:1511",
+          "text": "Connections",
+          "name": "Proposed wording / Connections"
+        },
+        {
+          "id": "514:1512",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "514:1522",
+          "text": "Google Workspace",
+          "name": "Proposed wording / Google Workspace"
+        },
+        {
+          "id": "514:1523",
+          "text": "Proposed wording",
+          "name": "Proposed wording / Proposed wording"
+        },
+        {
+          "id": "514:1524",
+          "text": "Connecting…",
+          "name": "Proposed wording / Connecting…"
+        },
+        {
+          "id": "514:1525",
+          "text": "Waiting for Google Workspace authorization.",
+          "name": "Proposed wording / Waiting for Google Workspace authorization."
+        },
+        {
+          "id": "I514:1526;93:5",
+          "text": "Cancel",
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "id": "514:1528",
+      "name": "Autumbra / Google Workspace / Loading / 375 / Proposed",
+      "width": 375,
+      "height": 900,
+      "texts": [
+        {
+          "id": "514:1652",
+          "text": "Autumbra",
+          "name": "Proposed wording / Autumbra"
+        },
+        {
+          "id": "514:1653",
+          "text": "Connections",
+          "name": "Proposed wording / Connections"
+        },
+        {
+          "id": "514:1654",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "514:1664",
+          "text": "Google Workspace",
+          "name": "Proposed wording / Google Workspace"
+        },
+        {
+          "id": "514:1665",
+          "text": "Proposed wording",
+          "name": "Proposed wording / Proposed wording"
+        },
+        {
+          "id": "514:1666",
+          "text": "Connecting…",
+          "name": "Proposed wording / Connecting…"
+        },
+        {
+          "id": "514:1667",
+          "text": "Waiting for Google Workspace authorization.",
+          "name": "Proposed wording / Waiting for Google Workspace authorization."
+        },
+        {
+          "id": "I514:1668;93:5",
+          "text": "Cancel",
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "id": "514:1670",
+      "name": "Autumbra / Google Workspace / Error / 1440 / Proposed",
+      "width": 1440,
+      "height": 900,
+      "texts": [
+        {
+          "id": "514:1793",
+          "text": "Autumbra",
+          "name": "Proposed wording / Autumbra"
+        },
+        {
+          "id": "514:1794",
+          "text": "Connections",
+          "name": "Proposed wording / Connections"
+        },
+        {
+          "id": "514:1795",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "514:1805",
+          "text": "Google Workspace",
+          "name": "Proposed wording / Google Workspace"
+        },
+        {
+          "id": "514:1806",
+          "text": "Proposed wording",
+          "name": "Proposed wording / Proposed wording"
+        },
+        {
+          "id": "514:1807",
+          "text": "Connection failed",
+          "name": "Proposed wording / Connection failed"
+        },
+        {
+          "id": "514:1808",
+          "text": "Google Workspace did not grant access to security alerts.",
+          "name": "Proposed wording / Google Workspace did not grant access to security alerts."
+        },
+        {
+          "id": "I514:1809;93:5",
+          "text": "Try again",
+          "name": "label"
+        },
+        {
+          "id": "I514:1811;93:5",
+          "text": "Cancel",
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "id": "514:1813",
+      "name": "Autumbra / Google Workspace / Error / 375 / Proposed",
+      "width": 375,
+      "height": 900,
+      "texts": [
+        {
+          "id": "514:1937",
+          "text": "Autumbra",
+          "name": "Proposed wording / Autumbra"
+        },
+        {
+          "id": "514:1938",
+          "text": "Connections",
+          "name": "Proposed wording / Connections"
+        },
+        {
+          "id": "514:1939",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "514:1949",
+          "text": "Google Workspace",
+          "name": "Proposed wording / Google Workspace"
+        },
+        {
+          "id": "514:1950",
+          "text": "Proposed wording",
+          "name": "Proposed wording / Proposed wording"
+        },
+        {
+          "id": "514:1951",
+          "text": "Connection failed",
+          "name": "Proposed wording / Connection failed"
+        },
+        {
+          "id": "514:1952",
+          "text": "Google Workspace did not grant access to security alerts.",
+          "name": "Proposed wording / Google Workspace did not grant access to security alerts."
+        },
+        {
+          "id": "I514:1953;93:5",
+          "text": "Try again",
+          "name": "label"
+        },
+        {
+          "id": "I514:1955;93:5",
+          "text": "Cancel",
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "id": "514:1957",
+      "name": "Autumbra / Google Workspace / Connected / 1440 / Proposed",
+      "width": 1440,
+      "height": 900,
+      "texts": [
+        {
+          "id": "514:2080",
+          "text": "Autumbra",
+          "name": "Proposed wording / Autumbra"
+        },
+        {
+          "id": "514:2081",
+          "text": "Connections",
+          "name": "Proposed wording / Connections"
+        },
+        {
+          "id": "514:2082",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "514:2092",
+          "text": "Google Workspace",
+          "name": "Proposed wording / Google Workspace"
+        },
+        {
+          "id": "514:2093",
+          "text": "Proposed wording",
+          "name": "Proposed wording / Proposed wording"
+        },
+        {
+          "id": "514:2094",
+          "text": "Connected",
+          "name": "Proposed wording / Connected"
+        },
+        {
+          "id": "514:2095",
+          "text": "[Organization]",
+          "name": "Proposed wording / [Organization]"
+        },
+        {
+          "id": "514:2096",
+          "text": "Google Workspace security alerts connected.",
+          "name": "Proposed wording / Google Workspace security alerts connected."
+        },
+        {
+          "id": "514:2097",
+          "text": "Permissions: read security alerts. No email or file access.",
+          "name": "Proposed wording / Permissions: read security alerts. No email or file access."
+        },
+        {
+          "id": "I514:2098;93:5",
+          "text": "Disconnect",
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "id": "514:2100",
+      "name": "Autumbra / Google Workspace / Connected / 375 / Proposed",
+      "width": 375,
+      "height": 900,
+      "texts": [
+        {
+          "id": "514:2224",
+          "text": "Autumbra",
+          "name": "Proposed wording / Autumbra"
+        },
+        {
+          "id": "514:2225",
+          "text": "Connections",
+          "name": "Proposed wording / Connections"
+        },
+        {
+          "id": "514:2226",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "514:2236",
+          "text": "Google Workspace",
+          "name": "Proposed wording / Google Workspace"
+        },
+        {
+          "id": "514:2237",
+          "text": "Proposed wording",
+          "name": "Proposed wording / Proposed wording"
+        },
+        {
+          "id": "514:2238",
+          "text": "Connected",
+          "name": "Proposed wording / Connected"
+        },
+        {
+          "id": "514:2239",
+          "text": "[Organization]",
+          "name": "Proposed wording / [Organization]"
+        },
+        {
+          "id": "514:2240",
+          "text": "Google Workspace security alerts connected.",
+          "name": "Proposed wording / Google Workspace security alerts connected."
+        },
+        {
+          "id": "514:2241",
+          "text": "Permissions: read security alerts. No email or file access.",
+          "name": "Proposed wording / Permissions: read security alerts. No email or file access."
+        },
+        {
+          "id": "I514:2242;93:5",
+          "text": "Disconnect",
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "id": "514:2244",
+      "name": "Autumbra / Google Workspace / Disconnect / 1440 / Proposed",
+      "width": 1440,
+      "height": 900,
+      "texts": [
+        {
+          "id": "514:2367",
+          "text": "Autumbra",
+          "name": "Proposed wording / Autumbra"
+        },
+        {
+          "id": "514:2368",
+          "text": "Connections",
+          "name": "Proposed wording / Connections"
+        },
+        {
+          "id": "514:2369",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "514:2379",
+          "text": "Google Workspace",
+          "name": "Proposed wording / Google Workspace"
+        },
+        {
+          "id": "514:2380",
+          "text": "Proposed wording",
+          "name": "Proposed wording / Proposed wording"
+        },
+        {
+          "id": "514:2381",
+          "text": "Disconnect Google Workspace?",
+          "name": "Proposed wording / Disconnect Google Workspace?"
+        },
+        {
+          "id": "514:2382",
+          "text": "Autumbra will stop receiving Google Workspace alerts through this connection.",
+          "name": "Proposed wording / Autumbra will stop receiving Google Workspace alerts through this connection."
+        },
+        {
+          "id": "I514:2383;93:5",
+          "text": "Disconnect",
+          "name": "label"
+        },
+        {
+          "id": "I514:2385;93:5",
+          "text": "Cancel",
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "id": "514:2387",
+      "name": "Autumbra / Google Workspace / Disconnect / 375 / Proposed",
+      "width": 375,
+      "height": 900,
+      "texts": [
+        {
+          "id": "514:2511",
+          "text": "Autumbra",
+          "name": "Proposed wording / Autumbra"
+        },
+        {
+          "id": "514:2512",
+          "text": "Connections",
+          "name": "Proposed wording / Connections"
+        },
+        {
+          "id": "514:2513",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "514:2523",
+          "text": "Google Workspace",
+          "name": "Proposed wording / Google Workspace"
+        },
+        {
+          "id": "514:2524",
+          "text": "Proposed wording",
+          "name": "Proposed wording / Proposed wording"
+        },
+        {
+          "id": "514:2525",
+          "text": "Disconnect Google Workspace?",
+          "name": "Proposed wording / Disconnect Google Workspace?"
+        },
+        {
+          "id": "514:2526",
+          "text": "Autumbra will stop receiving Google Workspace alerts through this connection.",
+          "name": "Proposed wording / Autumbra will stop receiving Google Workspace alerts through this connection."
+        },
+        {
+          "id": "I514:2527;93:5",
+          "text": "Disconnect",
+          "name": "label"
+        },
+        {
+          "id": "I514:2529;93:5",
+          "text": "Cancel",
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "id": "514:2531",
+      "name": "Autumbra / Google Workspace / Disconnected / 1440 / Proposed",
+      "width": 1440,
+      "height": 900,
+      "texts": [
+        {
+          "id": "514:2654",
+          "text": "Autumbra",
+          "name": "Proposed wording / Autumbra"
+        },
+        {
+          "id": "514:2655",
+          "text": "Connections",
+          "name": "Proposed wording / Connections"
+        },
+        {
+          "id": "514:2656",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "514:2666",
+          "text": "Google Workspace",
+          "name": "Proposed wording / Google Workspace"
+        },
+        {
+          "id": "514:2667",
+          "text": "Proposed wording",
+          "name": "Proposed wording / Proposed wording"
+        },
+        {
+          "id": "514:2668",
+          "text": "Disconnected",
+          "name": "Proposed wording / Disconnected"
+        },
+        {
+          "id": "514:2669",
+          "text": "Google Workspace alerts are disconnected.",
+          "name": "Proposed wording / Google Workspace alerts are disconnected."
+        },
+        {
+          "id": "I514:2670;93:5",
+          "text": "Add connection",
+          "name": "label"
+        }
+      ]
+    },
+    {
+      "id": "514:2672",
+      "name": "Autumbra / Google Workspace / Disconnected / 375 / Proposed",
+      "width": 375,
+      "height": 900,
+      "texts": [
+        {
+          "id": "514:2796",
+          "text": "Autumbra",
+          "name": "Proposed wording / Autumbra"
+        },
+        {
+          "id": "514:2797",
+          "text": "Connections",
+          "name": "Proposed wording / Connections"
+        },
+        {
+          "id": "514:2798",
+          "text": "Optional. You choose what to connect.",
+          "name": "Proposed wording / Optional. You choose what to connect."
+        },
+        {
+          "id": "514:2808",
+          "text": "Google Workspace",
+          "name": "Proposed wording / Google Workspace"
+        },
+        {
+          "id": "514:2809",
+          "text": "Proposed wording",
+          "name": "Proposed wording / Proposed wording"
+        },
+        {
+          "id": "514:2810",
+          "text": "Disconnected",
+          "name": "Proposed wording / Disconnected"
+        },
+        {
+          "id": "514:2811",
+          "text": "Google Workspace alerts are disconnected.",
+          "name": "Proposed wording / Google Workspace alerts are disconnected."
+        },
+        {
+          "id": "I514:2812;93:5",
+          "text": "Add connection",
+          "name": "label"
+        }
+      ]
+    }
+  ]
+}

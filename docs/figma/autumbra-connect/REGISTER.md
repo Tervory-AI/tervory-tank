@@ -35,4 +35,29 @@ Every content string and text-node ID is recorded in [cloudflare.json](cloudflar
 
 ## Validation and approval gaps
 
-Every screen has 1440/375 versions and empty, loading, error, connected, disconnect confirmation and disconnected states. Font/bounds checks passed for Cloudflare. Screenshot review corrected the primary action paint and input height. New vault/save/removal claims require implementation verification and founder wording approval; no credential or client session was used. Google Workspace frames follow in the next screen push.
+Every screen has 1440/375 versions and empty, loading, error, connected, disconnect confirmation and disconnected states. Font/bounds checks passed for Cloudflare. Screenshot review corrected the primary action paint and input height. New vault/save/removal claims require implementation verification and founder wording approval; no credential or client session was used. Google Workspace frames are listed below.
+
+## Google Workspace alerts
+
+All alert permission, data-discard and connection-state wording is **Proposed**. This is a proposed read-only alert connection, not mailbox or file access. The Google authorization mechanism and exact required scopes must be checked by its implementation owner before approval; these frames are not evidence that an integration exists. The data-discard intent comes from `docs/cursor/AUTUMBRA-GROK-BRIEF.md:23` and is not an implementation guarantee.
+
+| State | Width | Frame ID | Status | Screenshot |
+| --- | --- | --- | --- | --- |
+| Connect | 1440 | [514:727](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-727) | Proposed | [PNG](screenshots/google-workspace-connect-1440.png) |
+| Connect | 375 | [514:894](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-894) | Proposed | [PNG](screenshots/google-workspace-connect-375.png) |
+| Empty | 1440 | [514:1104](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-1104) | Proposed | [PNG](screenshots/google-workspace-empty-1440.png) |
+| Empty | 375 | [514:1245](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-1245) | Proposed | [PNG](screenshots/google-workspace-empty-375.png) |
+| Loading | 1440 | [514:1387](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-1387) | Proposed | [PNG](screenshots/google-workspace-loading-1440.png) |
+| Loading | 375 | [514:1528](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-1528) | Proposed | [PNG](screenshots/google-workspace-loading-375.png) |
+| Error | 1440 | [514:1670](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-1670) | Proposed | [PNG](screenshots/google-workspace-error-1440.png) |
+| Error | 375 | [514:1813](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-1813) | Proposed | [PNG](screenshots/google-workspace-error-375.png) |
+| Connected | 1440 | [514:1957](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-1957) | Proposed | [PNG](screenshots/google-workspace-connected-1440.png) |
+| Connected | 375 | [514:2100](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-2100) | Proposed | [PNG](screenshots/google-workspace-connected-375.png) |
+| Disconnect | 1440 | [514:2244](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-2244) | Proposed | [PNG](screenshots/google-workspace-disconnect-1440.png) |
+| Disconnect | 375 | [514:2387](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-2387) | Proposed | [PNG](screenshots/google-workspace-disconnect-375.png) |
+| Disconnected | 1440 | [514:2531](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-2531) | Proposed | [PNG](screenshots/google-workspace-disconnected-1440.png) |
+| Disconnected | 375 | [514:2672](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-2672) | Proposed | [PNG](screenshots/google-workspace-disconnected-375.png) |
+
+Full wording and affected node IDs: [google-workspace.json](google-workspace.json). New wording including “Connect Google Workspace alerts”, “Permissions before connecting”, “Read Google Workspace security alerts.”, “No email or file access.”, “Autumbra reads alerts as they arrive and discards them.”, all waiting/failure/disconnect sentences and “Disconnected” is **Proposed**. Existing action labels retain their MCP wording.
+
+All 28 frames passed Inter-family, content bounds and light-panel checks. [validation.json](validation.json) records descendant counts, node types and all image nodes. The only raster assets are the approved shared-menu logos; the UI is editable. All frame PNGs are checked in. No shared navigation component, runtime code or credential was changed.
