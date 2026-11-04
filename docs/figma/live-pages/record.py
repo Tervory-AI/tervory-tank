@@ -47,7 +47,7 @@ for frame in receipt["frames"]:
     width = frame["width"]
     browser = json.loads((HERE / "evidence" / f"{key}-{width}.json").read_text())
     assert (width, frame["height"]) == (browser["width"], browser["height"])
-    unknown = [t["text"] for t in frame["copy"] if normalized(t["text"]) not in source]
+    unknown = [t["text"] for t in frame["copy"] if normalized(t["text"]) not in source and not (t["text"] == "▸" and "<summary>" in (ROOT / ".tmp/live-pages" / f"{key}.html").read_text())]
     assert not unknown, unknown
     images = {}
     for kind in ("browser", "figma"):

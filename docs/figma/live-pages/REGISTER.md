@@ -39,6 +39,8 @@ Source baseline: `origin/main` `c94610bd0f9f35443f9d58deb45ec44b60ecb33d`. The r
 
 | Autumbra public | https://app.tervory.com/autumbra | 1440 | [649:10](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=649-10) | Proposed | [PNG](evidence/autumbra-figma-1440.png) | [PNG](evidence/autumbra-browser-1440.png) |
 | Autumbra public | https://app.tervory.com/autumbra | 375 | [649:22](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=649-22) | Proposed | [PNG](evidence/autumbra-figma-375.png) | [PNG](evidence/autumbra-browser-375.png) |
+| Stored Market Lab source | https://market-lab.tervory.com/market-lab/sources/[id] | 1440 | [657:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=657-9) | Proposed | [PNG](evidence/sources-figma-1440.png) | [PNG](evidence/sources-browser-1440.png) |
+| Stored Market Lab source | https://market-lab.tervory.com/market-lab/sources/[id] | 375 | [658:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=658-9) | Proposed | [PNG](evidence/sources-figma-375.png) | [PNG](evidence/sources-browser-375.png) |
 
 | Autumbra undo | https://app.tervory.com/autumbra/undo/[id] | 1440 | [666:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=666-9) | Proposed | [PNG](evidence/undo-figma-1440.png) | [PNG](evidence/undo-browser-1440.png) |
 | Autumbra undo | https://app.tervory.com/autumbra/undo/[id] | 375 | [666:17](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=666-17) | Proposed | [PNG](evidence/undo-figma-375.png) | [PNG](evidence/undo-browser-375.png) |
@@ -61,7 +63,7 @@ Both native Figma PNGs have the same dimensions as their browser references: 144
 | Matters | `/matters` | Drawn; Proposed, IDs above |
 | Chat cost details | `/chats/evidence/[thread]` and `/chats/evidence/[thread]/[row]` | Drawn; Proposed, IDs above |
 | Onboarding | `/onboarding` | Four built steps drawn; Proposed. Gap: external account-provider widget requires separate evidence |
-| Stored Market Lab sources | `/market-lab/sources/[id]` | Pending |
+| Stored Market Lab sources | `/market-lab/sources/[id]` | Drawn; Proposed, IDs above |
 | Moot public watch | `/moot` and `/moot/[match]` on zenas.tervory.com | Pending |
 | Autumbra public | `/autumbra` | Drawn; Proposed, IDs above |
 | Autumbra undo | `/autumbra/undo/[id]` | Drawn; Proposed, no credential used |
@@ -136,3 +138,8 @@ Undo: unchanged page and UndoButton, without a token. The button is disabled at 
 Weekly: unchanged page, with the authorization/data boundaries isolated to an allowed empty receipt result. This demonstrates existing empty-state copy, not a real owner session or a credential-bearing email link. [Every node and exact words](evidence/weekly-nodes.json), [dimensions, copy and PNG hashes](evidence/weekly-checks.json).
 
 Both routes have 1440 and 375 native editable frames. Existing production copy only; no app code, tokens, account data or live operations changed. As with Autumbra public, Cousine is the metrics-compatible Figma counterpart of the Linux browser’s Liberation Mono fallback. Phone native screenshots were compared with browser references, including the disabled-opacity repair. Root frame IDs remain after that repair.
+## Stored Market Lab source
+
+Unchanged stored-source route, StoredSourcePage, SourceDocumentView and CSS. An adapted three-observation subset and one notice use the existing Harbor proof fixture labels, units and values. These are offline sample values, not a client document; no service is called. Native disclosure triangle is a browser control glyph, not new wording.
+
+[Every frame/node ID and exact copy](evidence/sources-nodes.json); [dimension, source-copy and PNG hash checks](evidence/sources-checks.json). All page text comes from the production render; no new product wording. Both native Figma screenshots were compared with the browser reference.
