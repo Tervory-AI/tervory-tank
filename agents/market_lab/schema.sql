@@ -278,3 +278,18 @@ CREATE TABLE IF NOT EXISTS agent_market_lab.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
+
+-- H7: append-only observations of delivery state, never inferred past sends.
+CREATE TABLE IF NOT EXISTS agent_market_lab.brief_delivery_history (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    report_id uuid NOT NULL,
+    channel text NOT NULL,
+    status text NOT NULL,
+    reason text,
+    happened_at timestamptz NOT NULL DEFAULT now(),
+    FOREIGN KEY (tenant_id,report_id,channel)
+      REFERENCES agent_market_lab.brief_deliveries(tenant_id,report_id,channel)
+);
+CREATE INDEX IF NOT EXISTS brief_history_scope
+    ON agent_market_lab.brief_delivery_history(tenant_id,report_id,happened_at,id);

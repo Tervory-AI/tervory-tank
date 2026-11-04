@@ -1486,6 +1486,9 @@ class MarketLabReadArgs(Body):
     limit: int = Field(default=20, ge=1, le=100)
     page: int = Field(default=0, ge=0, le=10000)
 
+class MarketLabBriefArgs(MarketLabReadArgs):
+    report_id: uuid.UUID | None = None
+
 
 class MarketLabWebhookArgs(Body):
     url: str = Field(min_length=1, max_length=2000)
@@ -1580,7 +1583,7 @@ ADAPTERS = {
     "market_lab.feeds": Adapter("GET", "/v1/market-lab/reads/feeds", MarketLabReadArgs, "market_lab.feeds"),
     "market_lab.patterns": Adapter("GET", "/v1/market-lab/reads/patterns", MarketLabReadArgs, "market_lab.patterns"),
     "market_lab.gate": Adapter("GET", "/v1/market-lab/reads/gate", MarketLabReadArgs, "market_lab.gate"),
-    "market_lab.briefs": Adapter("GET", "/v1/market-lab/reads/briefs", MarketLabReadArgs, "market_lab.briefs"),
+    "market_lab.briefs": Adapter("GET", "/v1/market-lab/reads/briefs", MarketLabBriefArgs, "market_lab.briefs"),
     "market_lab.alerts.email": Adapter("POST", "/v1/market-lab/alerts/email", EmptyArgs, "market_lab.alerts.email"),
     "market_lab.alerts.webhook": Adapter("POST", "/v1/market-lab/alerts/webhook", MarketLabWebhookArgs, "market_lab.alerts.webhook"),
     "market_lab.alerts.off": Adapter("POST", "/v1/market-lab/alerts/off", EmptyArgs, "market_lab.alerts.off"),
