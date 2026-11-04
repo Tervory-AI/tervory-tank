@@ -35,4 +35,10 @@ Required: Name, Email, Reply method, at least one item, Type, Description, Quant
 
 ## Verification
 
-Exported and visually reviewed at native widths. Node audit checks Inter and horizontal text bounds; results are recorded per frame in nodes.json. No executable app code changed; build tests are not applicable. All frames await founder approval.
+Screenshots exported at native widths; ready desktop/mobile, empty mobile, missing mobile and invalid mobile were visually reviewed. Node audit checks Inter and horizontal text bounds; results are recorded per frame in nodes.json. No executable app code changed; build tests are not applicable. All frames await founder approval.
+
+## Blocked remaining states
+
+The Figma MCP returned its Full-seat Professional-plan call-limit error on the first loading-screen construction attempt. That call committed no frame. **Loading, submitted and error desktop/mobile frames are unfinished and have no IDs or screenshots.** No fabricated IDs or completion claim is recorded. Resume these six frames when Figma tool access is available. The existing source references for these states are sending 166:873 / 166:2869, submitted 166:934 / 166:2930, error 166:946 / 166:2942. These are source frames, not new deliverables.
+
+Pushed screen commits: ready d29002e1; empty fc789bac; missing 44328dde; invalid 070955cd. Full per-node inventory is in nodes.json, including locally detached choice controls. No pre-existing frame or master was changed.
