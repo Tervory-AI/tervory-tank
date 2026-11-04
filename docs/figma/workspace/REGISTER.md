@@ -4,11 +4,11 @@
 
 Branch: `codex/figma-workspace`, created from `origin/main` at `8857cd3e`. File: [Workspace proposals](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-3092).
 
-Scope: C4 results; C3 task board; C6 result feedback; founder paid-step settings. Every screen has desktop 1440×900 and mobile 375×900 default, empty, loading and error views. Long content scrolls vertically; screenshots show the initial viewport.
+Scope: C4 results; C3 task board; C6 result feedback; founder paid-step settings. Completed: Results and Task board, each with desktop 1440×900 and mobile 375×900 default, empty, loading and error views. Feedback and Paid steps settings have not been created. Long content scrolls vertically; screenshots show the initial viewport.
 
 ## Rules and reuse
 
-White CRM menu and surfaces, light canvas, navy primary actions, Inter throughout new instances, 8px corners, 8/16/24 spacing. Existing shared menu, mobile bar, CRM fields and action instances are preserved. No existing master or screen is edited. Proposed composite components reuse these instances and the existing colour/spacing/radius variables. Input border #848da3 has 3.32:1 contrast on white.
+White CRM menu and surfaces, light canvas, navy primary actions, Inter throughout new instances, 8px corners, 8/16/24 spacing. Existing shared menu, mobile bar, CRM fields and action instances are preserved. No pre-existing master or screen is edited; overrides affect new menu instances only. Proposed composite components reuse these instances and the existing colour/spacing/radius variables. Input border #848da3 has 3.32:1 contrast on white.
 
 Sources: `workspace/app/control/view.tsx` (seven Squad products), `workspace/app/market-lab/warnings.tsx` (Useful / Not useful), `workspace/app/skala/gold/view.tsx` (Wrong), `workspace/app/control/widgets.tsx` (Pause all paid work / Resume paid work), `workspace/lib/admin.ts` (dynamic ladder steps), existing Figma CRM/Marketing components and client dashboard. User-requested labels remain Proposed until founder review.
 
@@ -129,3 +129,18 @@ All created nodes, instance descendants and subsequently changed IDs are listed 
 ## Review limitations
 
 All frames remain Proposed. Prototype fixtures are review data. Founder-only settings need existing server-side founder authorization when implemented. Ask/Auto is a new founder-requested design proposal; it does not override today’s automatic runtime ladder. Each paid step returned by each task ladder gets its own control; the illustrated categories are not an asserted live provider inventory.
+
+## Incomplete work — Figma access limit
+
+Figma rejected the first Feedback creation call: “You’ve reached the Figma MCP tool call limit for your Full seat on the Professional plan.” No Feedback or Paid steps settings frames, IDs or screenshots were created. All 16 registered screen frames belong to Results and Task board only.
+
+Pending before this task is complete:
+
+- Create C6 Feedback desktop/mobile and empty/loading/error states; preserve the originating result’s identity and download URL. Add optional-note entry and a submission acknowledgement.
+- Create founder-only Paid steps settings with Ask/Auto on every configured paid ladder step, a global pause/resume state, and desktop/mobile empty/loading/error views. The three authoring-script categories are Proposed examples, not a verified paid-step inventory.
+- Connect Workspace tabs, result Open / Add a note, feedback selection, task Open and the mobile header to the shared drawer. The present visible controls are design proposals; only Download, loading-delay and Try again actions are authored. No selected feedback, persistence, filter behaviour or drawer navigation is claimed.
+- Inspect the remaining screenshots and verify all intended interactions after the allowance is restored. Save screenshots and IDs for every new frame, and push each completed screen group.
+
+[Authoring script](authoring/build-screen.js) preserves construction helpers, component IDs are in the [session ledger](evidence/session-ledger.json). Invoke with explicit `SCREEN` and `GROUP` constants only after checking existing frame names to prevent duplicates. Remaining proposed calls: `SCREEN='Feedback', GROUP=2`; `SCREEN='Paid steps', GROUP=3`. These scripts have not been executed or visually validated for the remaining screens. Before using them, replace the single Base feedback example with per-result context and implement the pending interactions above.
+
+Per-screen pushes: Results `f1e463c2`; Task board `0458cc63`. These commits contain Proposed design evidence only. The task remains incomplete due to the reported Figma limit.
