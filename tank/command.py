@@ -113,9 +113,10 @@ def allowed_tools(actor: Actor) -> list[str]:
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
     voice_tools = TENANT_ADMIN_TOOLS if actor.tenant_admin and not actor.founder else []
     client_tools = []  # Product tenant-admin declarations already include these tools.
+    plugin_tools = (["plugins.list"] + (["plugins.install", "plugins.remove"] if actor.tenant_admin else [])) if not actor.founder and (actor.squads & SQUADS or actor.tenant_admin) else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]
                    if tool not in ADMIN_ONLY_TOOLS or actor.tenant_admin or actor.founder]
-                  + founder_tools + voice_tools + client_tools + list(actor.mcp_tools))
+                  + founder_tools + voice_tools + client_tools + plugin_tools + list(actor.mcp_tools))
 
 
 def require_tool(actor: Actor, name: str) -> None:
@@ -1492,6 +1493,7 @@ class Adapter:
     skill: str | None = None
 
 
+from plugin_args import PluginArgs  # noqa: F401 -- backwards-compatible command export
 from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServerArgs  # noqa: F401 -- backwards-compatible command exports
 
 

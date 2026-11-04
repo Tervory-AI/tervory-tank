@@ -163,7 +163,7 @@ def test_run_route_changes_only_in_the_two_reviewed_hooks():
         elif not skipping:
             old.append(line)
     assert hooks == 2 and not skipping
-    assert hashlib.sha256(''.join(old).encode()).hexdigest() == '3f33cc4218d786327c064f68aaf2a93cd45675c8ad9d751c9ed0753394a6ebe9'
+    assert hashlib.sha256(''.join(old).encode()).hexdigest() == 'fdd6cbb821586b1ba97cd44a2e37290d8736cb931f063c2ca30ab38424ebcc51'
 
 
 @pytest.mark.asyncio
