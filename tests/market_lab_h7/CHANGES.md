@@ -6,7 +6,7 @@
 | agents/market_lab/core/ledger.py | 11 | Read one brief and atomically append actual delivery-state observations. |
 | agents/market_lab/core/ml3.py | 18 | Serve optional brief detail through existing room read. |
 | agents/market_lab/core/predictions.py | 108 | Measured cohort confidence, actual rate, hits and misses. |
-| agents/market_lab/schema.sql | 281 | Additive tenant/report/channel delivery-history table and index. |
+| agents/market_lab/schema.sql | 232 | Additive tenant/report/channel delivery-history table and index. |
 | docs/acceptance/market_lab.md | 71 | Add founder acceptance R44–R47 and pending frame slots. |
 | tank/command.py | 1489 | Optional UUID report_id on existing briefs tool. |
 | tank/market_lab_ml3.py | 32 | Existing authenticated $0 route and structured detail/curve projection. |

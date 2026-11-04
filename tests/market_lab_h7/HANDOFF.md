@@ -1,69 +1,66 @@
 # Market Lab H7
 
-The existing ML3 briefs read accepts an optional report_id; detail returns saved
+The existing ML3 briefs read accepts an optional report_id. Detail returns saved
 text, citations, original signal confidence, verified stored-passage links and
-recorded delivery history. Tenant checks apply to reports and document rows.
-Deleted/foreign/unavailable passages never get an Open source link. Delivery
-history starts with this deployment; historic sends are not reconstructed.
-Calibration adds measured cohort means/hits/misses while retaining kind, feed,
-frozen horizon and bins. No extra route, model call, paid service or setting.
+recorded delivery history. Reports, predictions and document rows are tenant
+scoped. Deleted/foreign/unavailable passages have no Open stored source link.
+History starts with this deployment; historic sends are not reconstructed.
+The additive history table precedes the generated memory-schema block so the
+canonical generated suffix stays intact. Claims and history writes are atomic.
+Calibration retains kind, feed, frozen horizon and bins and adds measured
+confidence, actual rate, hits and misses. Existing $0 code receipts are reused.
+No new Tank route, tool, model call, paid service or founder setting.
 
-Workspace routes: /market-lab/briefs/<report-id> and /market-lab/calibration.
-The supporting /market-lab/briefs list supplies real report IDs. Existing Tank
-read transport and Workspace tenant authentication are reused server-side.
+Workspace: /market-lab/briefs/<report-id> and /market-lab/calibration, with a
+supporting /market-lab/briefs list for real report IDs. Existing authenticated
+Tank reads and Workspace tenant identity are reused server-side. Pagination
+includes later cohorts; unknown metrics are em dashes and only returned bins
+are plotted. Frozen periods stay separate.
 
-Frames: wave-5 branch codex/figma-w5, file ZnphBOJU6657tohGLD3IzS;
-brief desktop 566:395 / mobile 566:2140; calibration desktop 567:941 /
-mobile 567:1726. These remain Proposed in the register, not newly approved.
-Native frame assets are in workspace/public/market-lab/h7. Charts plot returned
-bins only; periods remain separate and missing metrics are em dashes.
-Dedicated brief confidence/history sections have no frame slots and remain
-structured-read data pending those sections. No new visible labels invented.
+Frames: codex/figma-w5, file ZnphBOJU6657tohGLD3IzS; brief 566:395 / 566:2140;
+calibration 567:941 / 567:1726. These remain Proposed in the register. Native
+assets are in workspace/public/market-lab/h7. Dedicated brief confidence and
+history sections have no frame slots; both are ready in the structured read.
+No new visible section wording is invented.
 
-Acceptance R44–R47 extends the existing sheet to 47 rows. Offline SQL/ASGI
-fixtures test the real tenant reads and receipts. Node fixtures test server
-loaders and production view rendering. Browser fixtures use actual components
-at 1440/375 for ready/loading/empty/error, source navigation, cohort selection
-and mobile menu; only the fixture replaces Clerk's organization switcher.
-These are local fixture proofs, not founder/production/deployed acceptance.
+R44–R47 extend the acceptance sheet to 47 rows. Offline SQL/ASGI tests use real
+handlers and code receipts. Node tests use real loaders/views, including 101
+cohorts across pages. Browser fixtures use actual components at 1440/375 across
+16 page/state combinations, stored-source navigation, cohort switching and
+mobile menu/Escape focus. Only the fixture replaces Clerk's organization
+switcher. Four populated fixture screenshots and proof.json are retained;
+they are not a deployed founder-session claim. Axis labels are checked against
+their true positions and native data dots remain 8px.
 
-Validated: SQL/ASGI H7 tests 2 passed; Node loader/view test 1 passed;
-TypeScript noEmit passed; browser final axis-alignment run 1 passed (118.40s).
-Four populated screenshots and proof.json in evidence/ are local fixture
-captures. The browser covered all 16 page/state/width combinations; these four
-files are the retained populated views. Axis midpoint/end labels are asserted
-against their true grid positions, and empirical dots remain 8px native assets.
-Mandatory precheck and hosted CI validation remain in progress. Local Semgrep timed out; the explicitly
-permitted PRECHECK_SKIP_SEMGREP=1 is used for subsequent prechecks; CI must run
-Semgrep. No production setting, mail recipient or live data was changed.
-Deploy the Market Lab room, Tank and Workspace together for the additive
-history table and detail contract. Founder approval, real saved brief links,
-real outcomes and final CI confirmation remain required after deployment.
+Local results: direct SQL/ASGI 2 passed; loader/render wrapper 1 passed (4 Node
+cases); TypeScript noEmit and exact CI Ruff passed; direct browser 1 passed in
+118.40s. Later acceptance R44–R46 passed, while R47's isolated Next compiler
+failed to finish startup on the overloaded shared host. A bounded-worker retry
+failed at that same stage, before page assertions. Fixture-only cpus=1,
+RAYON_NUM_THREADS=1 and UV_THREADPOOL_SIZE=2 prevent excess compiler workers;
+no production setting or test deadline changed.
 
-## Shared-box validation blocker
+Hosted run 41890503967 on published 717da4f3 passed Workspace, command acceptance,
+lint, savings-page and nine Python shards. The sole Python failure was the
+history table following the generated schema suffix. That ordering is now
+corrected; its exact existing test passed (1 passed, 34.61s). Final CI for the
+correction remains required. That manual run audited the entire repository
+(base=null): 3 Gitleaks history findings, none in H7 commits; 207 Semgrep
+findings, none intersecting H7 additions; 203 OSV findings on unchanged
+manifests. No scanner policy, dependency pin or allowlist was changed. The
+normal PR comparison audit remains required when Claude opens the one PR.
 
-The mandatory precheck has not passed; no push or hosted CI run is claimed.
-Lint, Gitleaks and OSV pass. Semgrep timed out and is skipped only under the
-founder's explicit allowance. Broad runs were interrupted by SIGTERM (one
-reached 87% without an assertion failure); another stopped at the existing
-room_brains seal fixture's 30-second subprocess timeout. The same case failed
-alone. Host load readings were approximately 149–165. No test deadline or
-assertion was relaxed, and an unsuccessful fixture-startup experiment was
-reverted. A local runner-only hook stops default-stop pgserver instances in a
-finished function's own tmp_path after fixture teardown, avoiding retained
-H7 database processes. This changes neither source nor tests and never touches
-another checkout. Full precheck, per-gate pushes and final hosted CI remain
-outstanding until validation can complete.
+Semgrep is disabled locally under the founder's 4 Nov instruction, and no own
+scan/container remains. Precheck was run with PRECHECK_SKIP_SEMGREP=1. Its
+lint/Gitleaks/OSV stages pass; broad local attempts encountered SIGTERM, an
+unchanged 30-second seal-check fixture timeout and filesystem journal waits.
+A local runner hook stops default-stop pgserver instances only after each
+function's own fixture teardown; a local Docker wrapper applies this folder's
+container names, --rm and tervory.test=1 label. No other checkout was cleaned.
+The current broad local precheck must be reported separately from hosted CI;
+no all-green local acceptance or CI claim is made here.
 
-
-Final focused acceptance attempt: R44–R46 passed (3 passed); R47 failed before
-page assertions because the isolated Next fixture stayed at `Compiling /`
-through its existing startup deadline. A standalone retry with cpus=1,
-RAYON_NUM_THREADS=1 and UV_THREADPOOL_SIZE=2 failed at the same startup stage
-(403.20s). Those fixture-only resource limits are retained to avoid amplifying
-shared-host load; no production setting changed. The earlier direct browser
-run passed all page assertions (118.40s), and its screenshots are retained.
-This is not a claim that all 47 acceptance tests currently pass. Final exact
-CI lint and TypeScript noEmit, including pagination, passed. No deadline or
-assertion was relaxed. No push occurred because precheck has not passed; final
-hosted CI and deployed founder acceptance remain outstanding.
+Deploy Market Lab room, Tank and Workspace together. No live data, recipient,
+credential, approved skill version or runtime YAML was changed. Founder frame
+approval and post-deploy checks with actual saved briefs, citation passages
+and outcomes remain outstanding.

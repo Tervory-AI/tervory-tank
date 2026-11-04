@@ -31,8 +31,28 @@
     "error": "ops/seal-check.sh subprocess timed out after 30 seconds"
   },
   "semgrep": {
-    "skipped": true,
-    "reason": "local run timed out; founder explicitly permits skip; CI must run it"
+    "local": "disabled by founder; no own scan running",
+    "CI": "normal PR comparison still required"
   },
-  "pushed": false
+  "pushed": true,
+  "captured_at": "2026-11-04T19:01:42.799595+00:00",
+  "published_head_at_capture": "717da4f3aaa08ac6183ee70b1d9ed68b6c758bab",
+  "hosted_prior": {
+    "run": 41890503967,
+    "result": "failure",
+    "passed": [
+      "workspace",
+      "command-acceptance",
+      "lint",
+      "savings-page",
+      "nine Python shards"
+    ],
+    "python_failure": "test_all_agent_schema_files_use_one_generator",
+    "fix": "history table moved before generated memory suffix",
+    "exact_fix_test": "1 passed in 34.61s",
+    "security_comparison_base": null,
+    "gitleaks_h7_commit_findings": 0,
+    "semgrep_h7_added_line_findings": 0,
+    "osv_h7_changed_manifests": 0
+  }
 }
