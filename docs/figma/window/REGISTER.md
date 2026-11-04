@@ -26,6 +26,8 @@ Wording/behavior sources: [CLI code/undo and region contract](../../../cli/READM
 | W01-ZA-1280 · Sign in | 1280×800 | [548:254](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=548-254) | Proposed | [W01-ZA-1280.png](evidence/W01-ZA-1280.png) |
 | W02-1440 · Empty state | 1440×900 | [553:1326](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=553-1326) | Proposed | [W02-1440.png](evidence/W02-1440.png) |
 | W02-1280 · Empty state | 1280×800 | [553:1421](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=553-1421) | Proposed | [W02-1280.png](evidence/W02-1280.png) |
+| W03-1440 · Conversation / proposed edit | 1440×900 | [555:284](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=555-284) | Proposed | [W03-1440.png](evidence/W03-1440.png) |
+| W03-1280 · Conversation / proposed edit | 1280×800 | [555:390](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=555-390) | Proposed | [W03-1280.png](evidence/W03-1280.png) |
 
 ## Evidence and validation
 

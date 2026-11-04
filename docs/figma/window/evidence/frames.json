@@ -50,5 +50,21 @@
     "height": 800,
     "state": "Empty state",
     "status": "Proposed"
+  },
+  {
+    "key": "W03-1440",
+    "id": "555:284",
+    "width": 1440,
+    "height": 900,
+    "state": "Conversation / proposed edit",
+    "status": "Proposed"
+  },
+  {
+    "key": "W03-1280",
+    "id": "555:390",
+    "width": 1280,
+    "height": 800,
+    "state": "Conversation / proposed edit",
+    "status": "Proposed"
   }
 ]
