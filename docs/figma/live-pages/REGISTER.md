@@ -37,6 +37,9 @@ Source baseline: `origin/main` `c94610bd0f9f35443f9d58deb45ec44b60ecb33d`. The r
 | Onboarding · Run | https://app.tervory.com/onboarding | 1440 | [654:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=654-9) | Proposed | [PNG](evidence/onboarding-run-figma-1440.png) | [PNG](evidence/onboarding-run-browser-1440.png) |
 | Onboarding · Run | https://app.tervory.com/onboarding | 375 | [655:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=655-9) | Proposed | [PNG](evidence/onboarding-run-figma-375.png) | [PNG](evidence/onboarding-run-browser-375.png) |
 
+| Autumbra public | https://app.tervory.com/autumbra | 1440 | [649:10](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=649-10) | Proposed | [PNG](evidence/autumbra-figma-1440.png) | [PNG](evidence/autumbra-browser-1440.png) |
+| Autumbra public | https://app.tervory.com/autumbra | 375 | [649:22](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=649-22) | Proposed | [PNG](evidence/autumbra-figma-375.png) | [PNG](evidence/autumbra-browser-375.png) |
+
 ## Data
 
 Unchanged `workspace/app/data/page.tsx`, `data.css`, actual `Shell`, global CSS, local fonts and original brand images. Existing default sample CSV and the built empty-batch message are retained. No batch, upload, enrichment or export is run. Client role excludes founder tools. The account-provider widget is unavailable offline; no company/avatar UI is invented.
@@ -55,7 +58,7 @@ Both native Figma PNGs have the same dimensions as their browser references: 144
 | Onboarding | `/onboarding` | Four built steps drawn; Proposed. Gap: external account-provider widget requires separate evidence |
 | Stored Market Lab sources | `/market-lab/sources/[id]` | Pending |
 | Moot public watch | `/moot` and `/moot/[match]` on zenas.tervory.com | Pending |
-| Autumbra public | `/autumbra` | Pending |
+| Autumbra public | `/autumbra` | Drawn; Proposed, IDs above |
 | Autumbra undo | `/autumbra/undo/[id]` | Pending; never use a real credential-bearing link |
 | Autumbra weekly receipts | `/autumbra/receipts/weekly/[tenant]` | Pending; never use a real credential-bearing link |
 
@@ -108,3 +111,15 @@ Actual Wizard File step before selection, with the built CSV guidance, cost line
 Actual Wizard Run step. Local hook state supplies the existing Example batch label and a one-record pending progress fixture; no run is started and no batch service is called. Progress labels, pass summaries and Data link come from the production component.
 
 [Every frame/node ID and exact copy](evidence/onboarding-run-nodes.json); [dimension, source-copy and PNG hash checks](evidence/onboarding-run-checks.json). All page text comes from the production render; no new product wording. Both native Figma screenshots were compared with the browser reference.
+
+## Autumbra public
+
+Unchanged `workspace/app/autumbra/page.tsx` and `public.css`; source hashes and exact copy are in [checks](evidence/autumbra-checks.json). Both 1440 and 375 views reproduce the existing public page, including its current dark public panel and original logo; this is the as-built inventory described above, not a styling change or approval. No product wording or app code changed.
+
+These are native editable text, logo and card instances, not a complete-page image. Role surface main `649:9` is reused four times. [Creation IDs and layer inventory](evidence/autumbra-nodes.json); [final geometry/copy and mutation IDs](evidence/autumbra-final.json). The temporary layout-reference capture `643:2` was removed.
+
+The Linux reference browser resolves system-ui to Liberation Mono. Cousine is the metrics-compatible Figma substitute; the automatic importer’s SF Pro substitution was rejected because it changed wrapping. Both final native exports were compared to the browser references. Scrollbars were hidden through Chrome CDP before measuring, matching Chrome’s screenshot behavior and preventing a 15px measurement/capture reflow; no product CSS was changed.
+
+## Capture tooling
+
+The local Chrome-CDP capture helper is intentionally untracked and retained outside the repository under the tooling folder’s `.tmp`. The tracked `capture.cjs` was deleted to remove the insecure-request finding from PR #685. No Gitleaks or Semgrep exception, suppression or rule change was added.
