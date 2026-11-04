@@ -1,6 +1,6 @@
 # Workspace design register
 
-**Status: Proposed — no frame or new wording in this register is approved.**
+**Status: Approved 3 Nov 2026, 17:40 PT** (Claude, under the founder's 3 Nov 13:28 delegation to approve the basics): the 16 Results and Task board frames and their wording, at this commit. Feedback and Paid steps settings are not drawn yet and are not approved.
 
 Branch: `codex/figma-workspace`, created from `origin/main` at `8857cd3e`. File: [Workspace proposals](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-3092).
 
