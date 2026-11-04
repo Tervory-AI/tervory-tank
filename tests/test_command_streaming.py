@@ -78,6 +78,12 @@ class Gateway:
         return ("data: " + json.dumps(body) + "\n\n").encode()
 
     def request(self, request):
+        if request.method == "GET":
+            assert str(request.url) in {
+                "http://litellm.internal/model/info", "http://litellm.internal/router/settings",
+            }
+            data = {"data": []} if request.url.path == "/model/info" else {"current_values": {"fallbacks": []}}
+            return httpx.Response(200, json=data)
         assert str(request.url) == "http://litellm.internal/v1/chat/completions"
         assert request.method == "POST"
         body = json.loads(request.content)
@@ -122,6 +128,10 @@ async def streaming(monkeypatch, command_pool):
     transport = SimpleNamespace(AsyncClient=client, HTTPError=httpx.HTTPError, Response=httpx.Response)
     monkeypatch.setattr(command_stream, "httpx", transport)
     monkeypatch.setattr(tank, "httpx", transport)
+    # Routing metadata shares Tank's client; give it the same local gateway
+    # transport instead of inheriting a client closed by another app fixture.
+    gateway_http = client()
+    monkeypatch.setattr(tank, "_http", gateway_http)
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
     port = listener.getsockname()[1]
@@ -143,6 +153,7 @@ async def streaming(monkeypatch, command_pool):
         server.should_exit = True
         await asyncio.wait_for(serving, 5)
         listener.close()
+        await gateway_http.aclose()
 
 
 async def events(response):

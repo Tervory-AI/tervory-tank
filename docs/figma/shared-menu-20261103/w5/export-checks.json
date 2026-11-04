@@ -1,0 +1,96 @@
+{
+  "frames": [
+    {
+      "id": "539:19651",
+      "name": "rig-mobile-menu.png",
+      "width": 375,
+      "height": 900,
+      "nonInter": []
+    },
+    {
+      "id": "539:19715",
+      "name": "tisan-mobile-menu.png",
+      "width": 375,
+      "height": 900,
+      "nonInter": []
+    },
+    {
+      "id": "539:19773",
+      "name": "tiger-mobile-menu.png",
+      "width": 375,
+      "height": 900,
+      "nonInter": []
+    }
+  ],
+  "triggerSource": [
+    {
+      "id": "180:8387",
+      "labels": [
+        "Business",
+        "⌄",
+        "Trigger",
+        "Writing",
+        "Write",
+        "Voice",
+        "CRM",
+        "Leads",
+        "Clients",
+        "Contacts",
+        "Opportunities",
+        "Cases",
+        "Tasks",
+        "Sales",
+        "Quotes",
+        "Invoices",
+        "Marketing",
+        "Channels",
+        "Calendar",
+        "Composer",
+        "Google posts",
+        "Google reviews",
+        "Chat bot",
+        "Inbox",
+        "Settings",
+        "All products",
+        "Receipts",
+        "Billing",
+        "Account settings"
+      ]
+    },
+    {
+      "id": "180:8467",
+      "labels": [
+        "×",
+        "Business",
+        "⌄",
+        "Trigger",
+        "Writing",
+        "Write",
+        "Voice",
+        "CRM",
+        "Leads",
+        "Clients",
+        "Contacts",
+        "Opportunities",
+        "Cases",
+        "Tasks",
+        "Sales",
+        "Quotes",
+        "Invoices",
+        "Marketing",
+        "Channels",
+        "Calendar",
+        "Composer",
+        "Google posts",
+        "Google reviews",
+        "Chat bot",
+        "Inbox",
+        "Settings",
+        "All products",
+        "Receipts",
+        "Billing",
+        "Account settings"
+      ]
+    }
+  ]
+}

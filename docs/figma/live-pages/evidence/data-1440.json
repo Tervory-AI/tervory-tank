@@ -1,0 +1,47 @@
+{
+  "text": "Skip to content\nDashboard\nProjects\nChats\nSquad\nLedger\nBilling\nTasks\nData\nPrices\nSettings\nCLI sign-ins\nSupport\n(opens a new tab)\nData\n\nUpload a CSV (or paste one; header row first: name, address, city, state, zip, phone, website — any you have). Base runs all seven passes: clean, match, find the site, scrape it, extract facts, contacts, socials, business data, the industry module, then verification and a 0–100 score. Pick an engine to feed it that industry's own list — the FFL engine reads the ATF licensee export as-is (comma or tab delimited). Up to 100,000 rows per upload; with \"one batch per state\" the upload is split by state and the states run one after another, smallest first, so finished states are auditable while the big ones are still going. A restart resumes where it stopped.\n\nBatch name\nor paste below\nNo engine (generic records)\n one batch per state, smallest state first\nRun Base\nName\tCity\tWebsite\tEmails\tDecision maker\tSegment\tTier\tConf.\tStatus\nNo records in this batch yet.",
+  "title": "Data",
+  "width": 1440,
+  "height": 951,
+  "controls": [
+    {
+      "type": "file",
+      "rect": {
+        "x": 454,
+        "y": 405.03125,
+        "width": 391,
+        "height": 48,
+        "top": 405.03125,
+        "right": 845,
+        "bottom": 453.03125,
+        "left": 454
+      },
+      "font": "17px / 25.5px Inter, Inter, sans-serif",
+      "padding": "10px 12px",
+      "pseudoFont": "17px Arial",
+      "pseudoPadding": "1px 6px"
+    },
+    {
+      "type": "checkbox",
+      "rect": {
+        "x": 797.3125,
+        "y": 666.53125,
+        "width": 13,
+        "height": 44,
+        "top": 666.53125,
+        "right": 810.3125,
+        "bottom": 710.53125,
+        "left": 797.3125
+      },
+      "font": "13px / 19.5px Inter, Inter, sans-serif",
+      "padding": "0px",
+      "pseudoFont": "13px / 19.5px Inter, Inter, sans-serif",
+      "pseudoPadding": "0px"
+    }
+  ],
+  "fonts": [
+    "Inter, Inter, sans-serif",
+    "Jost, Jost, sans-serif",
+    "ui-monospace, monospace"
+  ]
+}
