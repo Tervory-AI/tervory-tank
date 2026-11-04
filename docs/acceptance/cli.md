@@ -30,8 +30,8 @@ model, provider, account, production SQL or founder computer is used offline.
   are not fixed. Compare live receipts byte-for-byte with that same thread's
   receipt in `/chats`, rather than expecting a fixture price or model answer.
 - US browser approval and its sign-ins page use the existing Clerk/Workspace
-  configuration. Founder-only checks require the existing `TERVORY_ADMIN_USER_IDS` founder identity (including its Zitadel subject for ZA). ZA requires #589's existing `IDENTITY_ISSUER`,
-  `IDENTITY_CLIENT_ID` and `IDENTITY_ORG_TENANTS` on the ZA Tank, plus its deployed
+  configuration. Founder-only checks require the existing `TERVORY_ADMIN_USER_IDS` founder identity (including its Zitadel subject for ZA). ZA requires #589's existing `TRIGGER_SIGNIN_ISSUER`,
+  `TRIGGER_SIGNIN_CLIENT_ID` and `TRIGGER_SIGNIN_ORG_TENANTS` on the ZA Tank, plus its deployed
   identity host/certificates. The register below omits those already shipped
   identity prerequisites: `none` in its column means **no additional setting from
   that register**, not that existing authentication/deployment can be absent.

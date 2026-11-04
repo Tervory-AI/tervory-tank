@@ -84,7 +84,7 @@ repository. Do not attach any service to the main ZA database network or volume.
 
 Use Coolify's existing HTTPS proxy, entrypoint `https`, certificate resolver
 `letsencrypt`, with a valid public certificate for `auth-za.tervory.com`. Put the
-existing proxy network's name in `COOLIFY_PROXY_NETWORK`; select the name from
+existing proxy network's name in `TRIGGER_SIGNIN_PROXY_NETWORK`; select the name from
 the ZA server's existing proxy configuration, not from another server. If this
 server uses different proxy entrypoint/resolver names, stop and record those
 names for a reviewed configuration change; do not silently change the labels.
@@ -105,15 +105,15 @@ Do not enable shell tracing or print environment files.
 
 | Setting name | Founder supplies |
 | --- | --- |
-| `ZITADEL_MASTERKEY` | Exactly **32 ASCII characters**. Keep securely and **never change it** after initialization. The database cannot be recovered without the original key. |
-| `LOGIN_SESSION_COOKIE_SECRET` | A strong cookie-signing value of at least 32 characters, shared by Login replicas. |
-| `POSTGRES_ADMIN_PASSWORD` | A new password for this resource's own Postgres administrator. |
-| `POSTGRES_ZITADEL_PASSWORD` | A separate password for its own `zitadel` database role. |
-| `IDENTITY_ADMIN_EMAIL` | The first founder administrator's real email; also used as the initial login name. |
-| `IDENTITY_ADMIN_TEMP_PASSWORD` | A temporary password meeting Zitadel's complexity policy. First sign-in requires changing it. |
-| `IDENTITY_BOOTSTRAP_KEY_EXPIRATION` | A future RFC3339 UTC expiry for the short-lived first-instance setup machine key; allow enough time to finish/retry setup. |
-| `LOGIN_CLIENT_PAT_EXPIRATION` | A future RFC3339 UTC expiry for the Login app's service credential. Record its renewal date. |
-| `COOLIFY_PROXY_NETWORK` | The existing ZA Coolify proxy network name from step 2. |
+| `TRIGGER_SIGNIN_MASTERKEY` | Exactly **32 ASCII characters**. Keep securely and **never change it** after initialization. The database cannot be recovered without the original key. |
+| `TRIGGER_SIGNIN_SESSION_COOKIE_SECRET` | A strong cookie-signing value of at least 32 characters, shared by Login replicas. |
+| `TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD` | A new password for this resource's own Postgres administrator. |
+| `TRIGGER_SIGNIN_DB_PASSWORD` | A separate password for its own `zitadel` database role. |
+| `TRIGGER_SIGNIN_ADMIN_EMAIL` | The first founder administrator's real email; also used as the initial login name. |
+| `TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD` | A temporary password meeting Zitadel's complexity policy. First sign-in requires changing it. |
+| `TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION` | A future RFC3339 UTC expiry for the short-lived first-instance setup machine key; allow enough time to finish/retry setup. |
+| `TRIGGER_SIGNIN_LOGIN_CLIENT_PAT_EXPIRATION` | A future RFC3339 UTC expiry for the Login app's service credential. Record its renewal date. |
+| `TRIGGER_SIGNIN_PROXY_NETWORK` | The existing ZA Coolify proxy network name from step 2. |
 | `R2_ACCOUNT_ID` | The existing regional storage account setting. |
 | `R2_ACCESS_KEY_ID_ZENAS`, `R2_SECRET_ACCESS_KEY_ZENAS` | The existing ZA backup storage credential pair, entered through the approved operator path. Never borrow Boston's pair. |
 | `R2_BUCKET_ZENAS_ZA` | The existing ZA Zenas backup bucket name. |
@@ -141,7 +141,7 @@ project belongs to the first Tervory organisation. Self-registration is off,
 passkeys/TOTP/security keys are allowed, and password/OTP lockout limits are on.
 
 `tervory-setup` prints **only the public client ID on successful stdout**. Save
-that public identifier for `IDENTITY_CLIENT_ID` below. Resource identifiers are
+that public identifier for `TRIGGER_SIGNIN_CLIENT_ID` below. Resource identifiers are
 also stored in `/bootstrap/tervory.json`; no credential is included in that file.
 A repeated setup run finds existing resources and makes no changes. A partial
 run resumes by searching the same resources. If an existing app differs, setup
@@ -199,9 +199,9 @@ In the existing **tervory-tank-za** resource, set:
 
 | Setting | Value to enter |
 | --- | --- |
-| `IDENTITY_ISSUER` | `https://auth-za.tervory.com`, exactly, without a trailing slash. |
-| `IDENTITY_CLIENT_ID` | The public client ID printed by `tervory-setup`. |
-| `IDENTITY_ORG_TENANTS` | A JSON object mapping each actual Zitadel organisation ID to its approved existing Tervory tenant UUID, in the form `{"<org id>":"<tenant UUID>"}`. |
+| `TRIGGER_SIGNIN_ISSUER` | `https://auth-za.tervory.com`, exactly, without a trailing slash. |
+| `TRIGGER_SIGNIN_CLIENT_ID` | The public client ID printed by `tervory-setup`. |
+| `TRIGGER_SIGNIN_ORG_TENANTS` | A JSON object mapping each actual Zitadel organisation ID to its approved existing Tervory tenant UUID, in the form `{"<org id>":"<tenant UUID>"}`. |
 
 The first-start Zitadel **Tervory** organisation must map to the **existing
 Tervory Workspace tenant UUID**, not the platform UUID, the Zitadel project/org
@@ -222,7 +222,7 @@ The live Tervory UUID is not verified in this offline PR and is not fabricated
 here. If the founder cannot positively select the existing Tervory organisation,
 or the authenticated read does not return its UUID, **stop at this step**:
 missing input is the verified existing Tervory tenant UUID. Do not populate
-`IDENTITY_ORG_TENANTS` or continue sign-in acceptance until that read succeeds.
+`TRIGGER_SIGNIN_ORG_TENANTS` or continue sign-in acceptance until that read succeeds.
 
 These settings reach ZA Tank only. Do not configure them in Boston. An empty
 issuer preserves the existing behavior. **Zitadel is opt-in even with the issuer
@@ -322,3 +322,25 @@ The database drill does not claim to restore those separate secret volumes.
 Acceptance remains pending until the founder completes the browser/CLI steps,
 revocation refusal and this real **ZA** restore drill. The synthetic offline
 round trip in the PR is preparation evidence, not a live deployment result.
+# Trigger sign-in: regional resource migration
+
+Use `ops/trigger-signin/docker-compose.yml` for both resources. Rename the existing
+ZA Coolify resource to **trigger-signin-za**, keeping it on its existing server.
+Create **trigger-signin-us** on the existing Boston server. Each resource has its
+own PostgreSQL, bootstrap and login-token volumes. The upstream image digests
+from #589 are unchanged; no upstream source is modified.
+
+| Resource | TRIGGER_SIGNIN_REGION | TRIGGER_SIGNIN_HOST | TRIGGER_SIGNIN_VOLUME_PREFIX |
+| --- | --- | --- | --- |
+| trigger-signin-za | za | auth-za.tervory.com | identity-za (retain existing data) |
+| trigger-signin-us | us-east | auth.tervory.com | trigger-signin-us |
+
+Set `TRIGGER_SIGNIN_ISSUER` to the HTTPS origin of the corresponding host. Keep
+the existing ZA origin-certificate and HTTP/2 prerequisites below; verify the
+same prerequisites for Boston. Never attach a Tank database or a volume from
+the other region. Renaming the Coolify resource must preserve the named volumes.
+Map each server's actual organisation IDs to the existing Tank tenant UUIDs with
+`TRIGGER_SIGNIN_ORG_TENANTS`, independently in each region. Bootstrap email is a
+contact/login setting only; tenant administrators require the Tervory project's
+`org_admin` grant for that mapped organisation. This commit prepares deployment;
+live Coolify settings, DNS, certificates and founder acceptance remain unverified.

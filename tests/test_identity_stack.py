@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-SETUP = runpy.run_path(str(ROOT / 'ops/identity/setup.py'))
+SETUP = runpy.run_path(str(ROOT / 'ops/trigger-signin/setup.py'))
 
 
 @pytest.mark.parametrize('omit_defaults', [False, True])
@@ -81,46 +81,46 @@ def test_setup_creates_project_app_roles_policies_once_and_verifies_owner(omit_d
 
 
 def test_stack_is_isolated_pinned_and_uses_only_existing_proxy():
-    text = (ROOT / 'ops/identity/docker-compose.yml').read_text()
+    text = (ROOT / 'ops/trigger-signin/docker-compose.yml').read_text()
     stack = yaml.safe_load(text)
     services = stack['services']
-    for name in ['zitadel-init', 'zitadel-setup', 'zitadel-api']:
+    for name in ['trigger-signin-init', 'trigger-signin-setup', 'trigger-signin-api']:
         assert re.fullmatch(r'ghcr.io/zitadel/zitadel:v4\.20\.0@sha256:[a-f0-9]{64}', services[name]['image'])
-    assert re.fullmatch(r'ghcr.io/zitadel/zitadel-login:v4\.20\.0@sha256:[a-f0-9]{64}', services['zitadel-login']['image'])
+    assert re.fullmatch(r'ghcr.io/zitadel/zitadel-login:v4\.20\.0@sha256:[a-f0-9]{64}', services['trigger-signin-login']['image'])
     assert re.fullmatch(r'postgres:16\.15@sha256:[a-f0-9]{64}', services['identity-postgres']['image'])
-    assert stack['volumes']['identity_database']['name'] == 'identity-za-postgres'
+    assert stack['volumes']['identity_database']['name'] == '${TRIGGER_SIGNIN_VOLUME_PREFIX:?preserve existing ZA volume prefix}-postgres'
     assert services['identity-postgres']['networks'] == ['database']
     assert stack['networks']['database']['internal'] is True
     assert not any('traefik' in service.get('image', '') for service in services.values())
-    assert services['zitadel-api']['labels']['traefik.http.services.identity-za-api.loadbalancer.server.scheme'] == 'h2c'
-    assert services['zitadel-init']['command'] == ['init']
-    assert services['zitadel-setup']['command'] == ['setup', '--masterkeyFromEnv']
-    assert services['zitadel-api']['command'] == ['start', '--masterkeyFromEnv']
-    assert services['zitadel-setup']['depends_on']['zitadel-init']['condition'] == 'service_completed_successfully'
-    env = services['zitadel-setup']['environment']
+    assert services['trigger-signin-api']['labels']['traefik.http.services.trigger-signin-api.loadbalancer.server.scheme'] == 'h2c'
+    assert services['trigger-signin-init']['command'] == ['init']
+    assert services['trigger-signin-setup']['command'] == ['setup', '--masterkeyFromEnv']
+    assert services['trigger-signin-api']['command'] == ['start', '--masterkeyFromEnv']
+    assert services['trigger-signin-setup']['depends_on']['trigger-signin-init']['condition'] == 'service_completed_successfully'
+    env = services['trigger-signin-setup']['environment']
     assert env['ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED'] == 'true'
     assert env['ZITADEL_DEFAULTINSTANCE_LOGINPOLICY_ALLOWREGISTER'] == 'false'
     assert env['ZITADEL_FIRSTINSTANCE_MACHINEKEYPATH'] == '/bootstrap/machine-key.json'
-    assert services['zitadel-login']['volumes'] == ['identity_login_token:/login:ro']
+    assert services['trigger-signin-login']['volumes'] == ['identity_login_token:/login:ro']
     assert 'identity_bootstrap:/bootstrap' in services['tervory-setup']['volumes']
     for service in services.values():
         assert 'ports' not in service
         assert not any('SMTP' in name for name in service.get('environment', {}))
     assert services['identity-backup']['depends_on'] == {'identity-postgres': {'condition': 'service_healthy'}}
-    assert 'IDENTITY_BOOTSTRAP_KEY_EXPIRATION' in services['tervory-setup']['environment']
+    assert 'TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION' in services['tervory-setup']['environment']
     # Existing main backup has no route to this separate private database.
     za = yaml.safe_load((ROOT / 'docker-compose.za.yml').read_text())
     assert za['services']['r2-backup-za']['networks'] == ['default']
     assert stack['networks']['database'].get('external', False) is False
     assert services['identity-backup']['build']['target'] == 'backup'
-    assert services['identity-backup']['environment']['TANK_REGION'] == 'za'
+    assert services['identity-backup']['environment']['TANK_REGION'] == '${TRIGGER_SIGNIN_REGION:?regional Tank region}'
     assert 'DATABASE_URL' not in services['identity-backup']['environment']
     za = yaml.safe_load((ROOT / 'docker-compose.za.yml').read_text())
-    assert za['services']['tank']['environment']['IDENTITY_ISSUER'] == '${IDENTITY_ISSUER:-}'
+    assert za['services']['tank']['environment']['TRIGGER_SIGNIN_ISSUER'] == '${TRIGGER_SIGNIN_ISSUER:-}'
 
 
 def test_expired_bootstrap_skips_only_successfully_completed_setup(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv('IDENTITY_BOOTSTRAP_KEY_EXPIRATION', '2000-01-01T00:00:00Z')
+    monkeypatch.setenv('TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION', '2000-01-01T00:00:00Z')
     def no_network(*args, **kwargs):
         pytest.fail('Expired completed bootstrap must not authenticate or call an API')
     monkeypatch.setattr(httpx, 'Client', no_network)
@@ -138,5 +138,14 @@ def test_expired_bootstrap_skips_only_successfully_completed_setup(tmp_path, mon
     marker.write_text(json.dumps({'client_id': result['client_id']}))
     with pytest.raises(SETUP['SetupError'], match='record refused'):
         SETUP['main'](tmp_path)
-    monkeypatch.setenv('IDENTITY_BOOTSTRAP_KEY_EXPIRATION', '2999-01-01T00:00:00Z')
+    monkeypatch.setenv('TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION', '2999-01-01T00:00:00Z')
     assert SETUP['completed_setup'](tmp_path) is None
+
+
+@pytest.mark.parametrize('host', ['auth.tervory.com', 'auth-za.tervory.com'])
+def test_setup_accepts_only_regional_signin_hosts(monkeypatch, host):
+    monkeypatch.setenv('TRIGGER_SIGNIN_ISSUER', 'https://' + host)
+    assert SETUP['issuer_settings']() == ('https://' + host, host)
+    monkeypatch.setenv('TRIGGER_SIGNIN_ISSUER', 'https://trigger.tervory.com')
+    with pytest.raises(SETUP['SetupError']):
+        SETUP['issuer_settings']()

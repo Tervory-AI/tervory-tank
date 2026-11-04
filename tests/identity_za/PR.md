@@ -28,12 +28,12 @@ lifetimes. The existing revoke ends both access and refresh.
 
 ## What changed, file and line
 
-- `ops/identity/docker-compose.yml:1`: separate identity-za resource, digest-pinned
+- `ops/trigger-signin/docker-compose.yml:1`: separate identity-za resource, digest-pinned
   API/Login/Postgres, split init/setup/start, own volumes, existing proxy h2c labels,
   default branding, forced first password change, signup off and backup worker.
-- `ops/identity/Dockerfile.setup:1`: digest-pinned configuration and existing
+- `ops/trigger-signin/Dockerfile.setup:1`: digest-pinned configuration and existing
   encrypted-backup source build targets. Zitadel source is never patched/copied.
-- `ops/identity/setup.py:37`: API-only idempotent project/app/role/policy setup;
+- `ops/trigger-signin/setup.py:37`: API-only idempotent project/app/role/policy setup;
   owner verification, preserved policy lifetimes, omitted protobuf defaults,
   explicit second factors/passkeys. Successful stdout is only the public client ID.
 - `tank/identity_oidc.py:29`: optional ZA-only configuration gate.
@@ -220,11 +220,11 @@ identity archives fail when required; identity cannot substitute for Qdrant.
 No live ZA/Boston archive or private restore identity was accessed.
 
 ```sh
-PYTHONPATH=.proof/python /tmp/base-reliability-venv/bin/python -m ruff check tank/identity_oidc.py tank/identity_device.py tank/device_login.py tank/personal_tokens.py ops/identity/setup.py ops/restore_drill.py jobs/train/backup.py tests/test_identity_za.py tests/test_identity_stack.py tests/test_identity_backup.py tests/test_restore_drill.py --select E9,F
-docker compose -f ops/identity/docker-compose.yml config --no-interpolate --quiet
+PYTHONPATH=.proof/python /tmp/base-reliability-venv/bin/python -m ruff check tank/identity_oidc.py tank/identity_device.py tank/device_login.py tank/personal_tokens.py ops/trigger-signin/setup.py ops/restore_drill.py jobs/train/backup.py tests/test_identity_za.py tests/test_identity_stack.py tests/test_identity_backup.py tests/test_restore_drill.py --select E9,F
+docker compose -f ops/trigger-signin/docker-compose.yml config --no-interpolate --quiet
 git diff --check
-docker build --target configure -f ops/identity/Dockerfile.setup -t tervory-identity-za-config:review .
-docker build --target backup -f ops/identity/Dockerfile.setup -t tervory-identity-za-backup:review .
+docker build --target configure -f ops/trigger-signin/Dockerfile.setup -t tervory-identity-za-config:review .
+docker build --target backup -f ops/trigger-signin/Dockerfile.setup -t tervory-identity-za-backup:review .
 ```
 
 All exit 0. Both custom targets built locally; no image was published. A full
@@ -588,9 +588,9 @@ codex/identity-za`. Founder still merges the PR.
    `cli/test/identity-za.test.mjs:28`, `:66`, `:85` test the opt-in request, old
    default/Workspace origin and rejected wrong-region/command/selection flags.
    `cli/README.md:24` and `cli/CHANGELOG.md:5` describe the actual selection.
-3. `ops/identity/docker-compose.yml:157` passes the expiry name to setup;
-   `ops/identity/docker-compose.yml:185` gates backups on healthy Postgres only.
-   `ops/identity/setup.py:108` checks the public completion record after expiry,
+3. `ops/trigger-signin/docker-compose.yml:157` passes the expiry name to setup;
+   `ops/trigger-signin/docker-compose.yml:185` gates backups on healthy Postgres only.
+   `ops/trigger-signin/setup.py:108` checks the public completion record after expiry,
    exits 0 with a clear stderr line and prints the saved public client ID without
    reading/signing the machine key or contacting the API. A partial/missing record
    fails. This trusts the previous completed setup, not a live drift audit.
@@ -770,8 +770,8 @@ Final TAP summary:
 ```
 
 ```sh
-PYTHONPATH=.proof/python /tmp/base-reliability-venv/bin/python -m ruff check --select E9,F tank/identity_device.py tank/identity_oidc.py tank/device_login.py ops/identity/setup.py tests/test_identity_za.py tests/test_identity_stack.py
-docker compose -f ops/identity/docker-compose.yml config --no-interpolate --quiet
+PYTHONPATH=.proof/python /tmp/base-reliability-venv/bin/python -m ruff check --select E9,F tank/identity_device.py tank/identity_oidc.py tank/device_login.py ops/trigger-signin/setup.py tests/test_identity_za.py tests/test_identity_stack.py
+docker compose -f ops/trigger-signin/docker-compose.yml config --no-interpolate --quiet
 git diff --check
 ```
 
@@ -794,9 +794,9 @@ mapping) are kept. No image pin or certificate-resolver label was changed.
 
 Changed file/line references:
 
-- `ops/identity/docker-compose.yml:21,33,34,35,36`: external domain and all Login URLs.
+- `ops/trigger-signin/docker-compose.yml:21,33,34,35,36`: external domain and all Login URLs.
   `:110,137,145`: all Traefik Host rules. `:127`: custom upstream Host header.
-- `ops/identity/setup.py:14,140`: fixed assertion audience/issuer and API Host header.
+- `ops/trigger-signin/setup.py:14,140`: fixed assertion audience/issuer and API Host header.
 - `tank/identity_oidc.py:15,46`: fixed issuer and same-origin endpoint guard.
 - `cli/src/client.mjs:117`: fixed verification origin for both URLs.
 - `cli/test/identity-za.test.mjs:7,8,15` and `tests/test_identity_za.py:47,129`:
@@ -822,8 +822,8 @@ docker run --rm -d --name tervory-identity-za-host-pg --label tervory.test=ident
 docker port tervory-identity-za-host-pg 5432
 TMPDIR=/workspace/codex-identity-za/.proof/tmp PYTHONPATH=.proof/python:tank POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:32801/postgres /tmp/base-reliability-venv/bin/python -m pytest tests/test_identity_za.py tests/test_identity_stack.py tests/test_identity_backup.py tests/test_device_login.py tests/test_personal_tokens.py tests/test_command.py --disable-socket --allow-hosts=127.0.0.1,localhost -q
 TMPDIR=/workspace/codex-identity-za/.proof/tmp npm_config_cache=/workspace/codex-identity-za/.proof/npm-cache npm test --prefix cli
-docker compose -f ops/identity/docker-compose.yml config --no-interpolate --quiet
-PYTHONPATH=.proof/python /tmp/base-reliability-venv/bin/python -m ruff check --select E9,F tank/identity_oidc.py ops/identity/setup.py tests/test_identity_za.py tests/test_identity_stack.py
+docker compose -f ops/trigger-signin/docker-compose.yml config --no-interpolate --quiet
+PYTHONPATH=.proof/python /tmp/base-reliability-venv/bin/python -m ruff check --select E9,F tank/identity_oidc.py ops/trigger-signin/setup.py tests/test_identity_za.py tests/test_identity_stack.py
 git grep -n -E 'auth[.]za[.]tervory[.]com' -- .
 git grep -n -E 'DNS[-]01|CF_DNS_API[_]TOKEN|dnschallenge' -- docs/ops/IDENTITY-ZA.md
 git diff --check

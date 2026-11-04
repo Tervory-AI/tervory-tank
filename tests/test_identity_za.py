@@ -70,9 +70,9 @@ class Provider:
 def provider(monkeypatch):
     provider = Provider()
     oidc._cache.clear()
-    monkeypatch.setenv('IDENTITY_ISSUER', oidc.ISSUER)
-    monkeypatch.setenv('IDENTITY_CLIENT_ID', CLIENT)
-    monkeypatch.setenv('IDENTITY_ORG_TENANTS', json.dumps({ORG: str(TENANT)}))
+    monkeypatch.setenv('TRIGGER_SIGNIN_ISSUER', oidc.ISSUER)
+    monkeypatch.setenv('TRIGGER_SIGNIN_CLIENT_ID', CLIENT)
+    monkeypatch.setenv('TRIGGER_SIGNIN_ORG_TENANTS', json.dumps({ORG: str(TENANT)}))
     monkeypatch.setattr(oidc, 'http_client', lambda: httpx.AsyncClient(transport=httpx.MockTransport(provider)))
     yield provider
     oidc._cache.clear()
@@ -135,11 +135,11 @@ async def test_provider_endpoints_cannot_escape_fixed_origin(provider, monkeypat
 @pytest.mark.asyncio
 async def test_issuer_unset_and_boston_keep_existing_device_flow(device, monkeypatch):
     client, _, runtime = device
-    monkeypatch.delenv('IDENTITY_ISSUER', raising=False)
+    monkeypatch.delenv('TRIGGER_SIGNIN_ISSUER', raising=False)
     monkeypatch.setattr(oidc, 'http_client', lambda: pytest.fail('OIDC was called with issuer unset'))
     result = await client.post('/v1/command/device/code', json={'device_name': 'synthetic', 'approval': 'zitadel'})
     assert result.status_code == 200 and result.json()['device_code'].startswith('tvd1.us-east.')
-    monkeypatch.setenv('IDENTITY_ISSUER', oidc.ISSUER)
+    monkeypatch.setenv('TRIGGER_SIGNIN_ISSUER', oidc.ISSUER)
     assert not oidc.configured()  # Even a misplaced setting cannot change Boston.
 
 

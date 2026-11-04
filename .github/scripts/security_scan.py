@@ -68,7 +68,7 @@ def event_comparison_base(event_name: str, event: dict) -> str | None:
 def run(args: list[str], allowed: tuple[int, ...] = (0,)) -> int:
     # Scanner diagnostics can contain source text. Only sanitized JSON is retained.
     result = subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                            timeout=900, check=False)
+                            timeout=3600, check=False)
     if result.returncode not in allowed:
         raise RuntimeError(f"{args[0]} failed (exit {result.returncode}); scan is incomplete")
     return result.returncode

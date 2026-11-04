@@ -28,12 +28,12 @@ class IdentityError(ValueError):
 
 def configured() -> bool:
     from main import box_region
-    return box_region() == 'za' and bool(os.environ.get('IDENTITY_ISSUER', '').strip())
+    return box_region() == 'za' and bool(os.environ.get('TRIGGER_SIGNIN_ISSUER', '').strip())
 
 
 def settings() -> tuple[str, str]:
-    issuer = os.environ.get('IDENTITY_ISSUER', '').strip()
-    client = os.environ.get('IDENTITY_CLIENT_ID', '').strip()
+    issuer = os.environ.get('TRIGGER_SIGNIN_ISSUER', '').strip()
+    client = os.environ.get('TRIGGER_SIGNIN_CLIENT_ID', '').strip()
     if issuer != ISSUER or not re.fullmatch(r'[A-Za-z0-9@._-]{1,200}', client):
         raise IdentityError('Identity configuration refused')
     return issuer, client
@@ -135,7 +135,7 @@ def principal(claims: dict) -> tuple[uuid.UUID, str, bool]:
             raise ValueError
         if not isinstance(org, str) or not re.fullmatch(r'[0-9]{1,30}', org):
             raise ValueError
-        bindings = json.loads(os.environ.get('IDENTITY_ORG_TENANTS', '{}'))
+        bindings = json.loads(os.environ.get('TRIGGER_SIGNIN_ORG_TENANTS', '{}'))
         if not isinstance(bindings, dict) or org not in bindings:
             raise ValueError
         tenant = uuid.UUID(bindings[org])

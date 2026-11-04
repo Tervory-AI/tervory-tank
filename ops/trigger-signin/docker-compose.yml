@@ -1,0 +1,203 @@
+# coolify: raw compose
+# Coolify resources: trigger-signin-za and trigger-signin-us on the existing boxes.
+# Base directory: ops/trigger-signin. Set the region, host and volume prefix per resource.
+# Separate database/bootstrap volumes; never attach the main ZA database.
+# Settings (founder enters values only in Coolify): TRIGGER_SIGNIN_MASTERKEY (immutable,
+# exactly 32 ASCII characters), TRIGGER_SIGNIN_SESSION_COOKIE_SECRET (>=32 characters),
+# TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD, TRIGGER_SIGNIN_DB_PASSWORD, TRIGGER_SIGNIN_ADMIN_EMAIL,
+# TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD, TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION,
+# TRIGGER_SIGNIN_LOGIN_CLIENT_PAT_EXPIRATION, TRIGGER_SIGNIN_PROXY_NETWORK (existing proxy network name).
+# No SMTP settings: founder configures SMTP in the Zitadel console.
+# Unmodified upstream v4.20.0, release 22 Oct 2026; API and Login index digests verified.
+x-database: &database
+  ZITADEL_DATABASE_POSTGRES_HOST: identity-postgres
+  ZITADEL_DATABASE_POSTGRES_PORT: "5432"
+  ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+  ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
+  ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${TRIGGER_SIGNIN_DB_PASSWORD:?founder sets TRIGGER_SIGNIN_DB_PASSWORD}
+  ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+x-runtime: &runtime
+  <<: *database
+  ZITADEL_MASTERKEY: ${TRIGGER_SIGNIN_MASTERKEY:?founder sets immutable 32-character TRIGGER_SIGNIN_MASTERKEY}
+  ZITADEL_EXTERNALDOMAIN: ${TRIGGER_SIGNIN_HOST:?founder sets regional auth host}
+  ZITADEL_EXTERNALPORT: "443"
+  ZITADEL_EXTERNALSECURE: "true"
+  ZITADEL_TLS_ENABLED: "false"
+  ZITADEL_LOGSTORE_ACCESS_STDOUT_ENABLED: "false"
+  ZITADEL_LOG_LEVEL: warn
+  ZITADEL_DEFAULTINSTANCE_LOGINPOLICY_ALLOWREGISTER: "false"
+  ZITADEL_DEFAULTINSTANCE_LOGINPOLICY_ALLOWEXTERNALIDP: "false"
+  ZITADEL_DEFAULTINSTANCE_LOGINPOLICY_PASSWORDLESSTYPE: "1"
+  ZITADEL_DEFAULTINSTANCE_LOCKOUTPOLICY_MAXPASSWORDATTEMPTS: "5"
+  ZITADEL_DEFAULTINSTANCE_LOCKOUTPOLICY_MAXOTPATTEMPTS: "5"
+  ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
+  ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: https://${TRIGGER_SIGNIN_HOST:?regional auth host}/ui/v2/login/
+  ZITADEL_OIDC_DEFAULTLOGINURLV2: https://${TRIGGER_SIGNIN_HOST:?regional auth host}/ui/v2/login/login?authRequest=
+  ZITADEL_OIDC_DEFAULTLOGOUTURLV2: https://${TRIGGER_SIGNIN_HOST:?regional auth host}/ui/v2/login/logout?post_logout_redirect=
+  ZITADEL_SAML_DEFAULTLOGINURLV2: https://${TRIGGER_SIGNIN_HOST:?regional auth host}/ui/v2/login/login?samlRequest=
+services:
+  identity-postgres:
+    image: postgres:16.15@sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD:?founder sets TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD}
+    volumes: [identity_database:/var/lib/postgresql/data]
+    networks: [database]
+    healthcheck:
+      test: [CMD, pg_isready, -U, postgres, -d, postgres]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  trigger-signin-init:
+    image: ghcr.io/zitadel/zitadel:v4.20.0@sha256:9ea0e9ecfdc43115da871242e40a0320f2ece864c7cd8b5d41a863a7f4902499
+    restart: "no"
+    command: [init]
+    environment:
+      <<: *database
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD:?founder sets TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+    networks: [database]
+    depends_on:
+      identity-postgres:
+        condition: service_healthy
+  trigger-signin-setup:
+    image: ghcr.io/zitadel/zitadel:v4.20.0@sha256:9ea0e9ecfdc43115da871242e40a0320f2ece864c7cd8b5d41a863a7f4902499
+    restart: "no"
+    user: "0"
+    command: [setup, --masterkeyFromEnv]
+    environment:
+      <<: *runtime
+      ZITADEL_FIRSTINSTANCE_ORG_NAME: Tervory
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: ${TRIGGER_SIGNIN_ADMIN_EMAIL:?founder sets TRIGGER_SIGNIN_ADMIN_EMAIL}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_ADDRESS: ${TRIGGER_SIGNIN_ADMIN_EMAIL:?founder sets TRIGGER_SIGNIN_ADMIN_EMAIL}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_VERIFIED: "true"
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD:?founder sets TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "true"
+      ZITADEL_FIRSTINSTANCE_MACHINEKEYPATH: /bootstrap/machine-key.json
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: tervory-bootstrap
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: Tervory bootstrap
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINEKEY_TYPE: "1"
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINEKEY_EXPIRATIONDATE: ${TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION:?founder sets bootstrap expiry}
+      ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /login/login-client.pat
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME: Instance Login Client
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE: ${TRIGGER_SIGNIN_LOGIN_CLIENT_PAT_EXPIRATION:?founder sets login client expiry}
+    volumes: [identity_bootstrap:/bootstrap, identity_login_token:/login]
+    networks: [database]
+    depends_on:
+      trigger-signin-init:
+        condition: service_completed_successfully
+  trigger-signin-api:
+    image: ghcr.io/zitadel/zitadel:v4.20.0@sha256:9ea0e9ecfdc43115da871242e40a0320f2ece864c7cd8b5d41a863a7f4902499
+    command: [start, --masterkeyFromEnv]
+    restart: unless-stopped
+    environment: *runtime
+    expose: ["8080"]
+    networks: [database, proxy]
+    depends_on:
+      trigger-signin-setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, /app/zitadel, ready]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${TRIGGER_SIGNIN_PROXY_NETWORK:?existing Coolify proxy network name}
+      traefik.http.routers.trigger-signin-api.rule: Host(`${TRIGGER_SIGNIN_HOST:?regional auth host}`)
+      traefik.http.routers.trigger-signin-api.entrypoints: https
+      traefik.http.routers.trigger-signin-api.tls: "true"
+      traefik.http.routers.trigger-signin-api.tls.certresolver: letsencrypt
+      traefik.http.routers.trigger-signin-api.priority: "100"
+      traefik.http.routers.trigger-signin-api.service: trigger-signin-api
+      traefik.http.services.trigger-signin-api.loadbalancer.server.port: "8080"
+      traefik.http.services.trigger-signin-api.loadbalancer.server.scheme: h2c
+  trigger-signin-login:
+    image: ghcr.io/zitadel/zitadel-login:v4.20.0@sha256:f1abfdf3c5d16eda03cad3b584226207ecc640ca5c679d7c45abbbce7d1d63f0
+    restart: unless-stopped
+    user: "0"
+    environment:
+      ZITADEL_API_URL: http://trigger-signin-api:8080
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /login/login-client.pat
+      ZITADEL_SESSION_COOKIE_SECRET: ${TRIGGER_SIGNIN_SESSION_COOKIE_SECRET:?founder sets TRIGGER_SIGNIN_SESSION_COOKIE_SECRET}
+      CUSTOM_REQUEST_HEADERS: Host:${TRIGGER_SIGNIN_HOST:?regional auth host},X-Forwarded-Proto:https
+    volumes: [identity_login_token:/login:ro]
+    expose: ["3000"]
+    networks: [database, proxy]
+    depends_on:
+      trigger-signin-api:
+        condition: service_healthy
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${TRIGGER_SIGNIN_PROXY_NETWORK:?existing Coolify proxy network name}
+      traefik.http.routers.trigger-signin-login.rule: Host(`${TRIGGER_SIGNIN_HOST:?regional auth host}`) && PathPrefix(`/ui/v2/login`)
+      traefik.http.routers.trigger-signin-login.entrypoints: https
+      traefik.http.routers.trigger-signin-login.tls: "true"
+      traefik.http.routers.trigger-signin-login.tls.certresolver: letsencrypt
+      traefik.http.routers.trigger-signin-login.priority: "200"
+      traefik.http.routers.trigger-signin-login.service: trigger-signin-login
+      traefik.http.services.trigger-signin-login.loadbalancer.server.port: "3000"
+      traefik.http.middlewares.trigger-signin-root.replacepath.path: /ui/v2/login/
+      traefik.http.routers.trigger-signin-root.rule: Host(`${TRIGGER_SIGNIN_HOST:?regional auth host}`) && Path(`/`)
+      traefik.http.routers.trigger-signin-root.entrypoints: https
+      traefik.http.routers.trigger-signin-root.tls: "true"
+      traefik.http.routers.trigger-signin-root.tls.certresolver: letsencrypt
+      traefik.http.routers.trigger-signin-root.priority: "300"
+      traefik.http.routers.trigger-signin-root.service: trigger-signin-login
+      traefik.http.routers.trigger-signin-root.middlewares: trigger-signin-root
+    healthcheck:
+      test: [CMD, node, /app/healthcheck.mjs, http://localhost:3000/ui/v2/login/healthy]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  tervory-setup:
+    environment:
+      TRIGGER_SIGNIN_ISSUER: https://${TRIGGER_SIGNIN_HOST:?regional auth host}
+      TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION: ${TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION:?founder sets bootstrap key expiry}
+    build:
+      context: ../..
+      dockerfile: ops/trigger-signin/Dockerfile.setup
+      target: configure
+    restart: "no"
+    volumes: [identity_bootstrap:/bootstrap]
+    networks: [database]
+    depends_on:
+      trigger-signin-api:
+        condition: service_healthy
+  identity-backup:
+    build:
+      context: ../..
+      dockerfile: ops/trigger-signin/Dockerfile.setup
+      target: backup
+    restart: unless-stopped
+    environment:
+      TANK_REGION: ${TRIGGER_SIGNIN_REGION:?regional Tank region}
+      TRIGGER_SIGNIN_DB_PASSWORD: ${TRIGGER_SIGNIN_DB_PASSWORD:?founder sets TRIGGER_SIGNIN_DB_PASSWORD}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:?existing ZA storage account}
+      R2_ACCESS_KEY_ID_ZENAS: ${R2_ACCESS_KEY_ID_ZENAS:?existing ZA Zenas storage credential name}
+      R2_SECRET_ACCESS_KEY_ZENAS: ${R2_SECRET_ACCESS_KEY_ZENAS:?existing ZA Zenas storage credential name}
+      R2_BUCKET_ZENAS_ZA: ${R2_BUCKET_ZENAS_ZA:-}
+      R2_BACKUP_RECIPIENT: ${R2_BACKUP_RECIPIENT:?existing public age recipient}
+    networks: [database, backup_outbound]
+    depends_on:
+      identity-postgres:
+        condition: service_healthy
+volumes:
+  identity_login_token:
+    name: ${TRIGGER_SIGNIN_VOLUME_PREFIX:?preserve existing ZA volume prefix}-login-token
+  identity_database:
+    name: ${TRIGGER_SIGNIN_VOLUME_PREFIX:?preserve existing ZA volume prefix}-postgres
+  identity_bootstrap:
+    name: ${TRIGGER_SIGNIN_VOLUME_PREFIX:?preserve existing ZA volume prefix}-bootstrap
+networks:
+  backup_outbound: {}
+  database:
+    internal: true
+  proxy:
+    external: true
+    name: ${TRIGGER_SIGNIN_PROXY_NETWORK:?existing Coolify proxy network name}

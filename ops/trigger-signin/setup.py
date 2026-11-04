@@ -11,7 +11,11 @@ import time
 import httpx
 import jwt
 
-ISSUER = 'https://auth-za.tervory.com'
+def issuer_settings():
+    issuer = os.environ['TRIGGER_SIGNIN_ISSUER']
+    if issuer not in {'https://auth.tervory.com', 'https://auth-za.tervory.com'}:
+        raise SetupError('Trigger sign-in issuer refused')
+    return issuer, issuer.removeprefix('https://')
 APP = {
     'name': 'Tervory CLI', 'redirectUris': ['http://127.0.0.1/callback'],
     'responseTypes': ['OIDC_RESPONSE_TYPE_CODE'],
@@ -106,7 +110,7 @@ class Configure:
 
 
 def completed_setup(bootstrap: Path) -> dict | None:
-    expiry = datetime.fromisoformat(os.environ['IDENTITY_BOOTSTRAP_KEY_EXPIRATION'].replace('Z', '+00:00'))
+    expiry = datetime.fromisoformat(os.environ['TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION'].replace('Z', '+00:00'))
     if expiry.tzinfo is None:
         raise SetupError('Bootstrap expiry must include timezone')
     if expiry > datetime.now(timezone.utc):
@@ -131,13 +135,14 @@ def main(bootstrap: Path = Path('/bootstrap')):
         print(completed['client_id'])
         return
     key_path = bootstrap / 'machine-key.json'
+    issuer, host = issuer_settings()
     key_path.chmod(0o600)
     key = json.loads(key_path.read_text())
     now = int(time.time())
-    assertion = jwt.encode({'iss': key['userId'], 'sub': key['userId'], 'aud': ISSUER,
+    assertion = jwt.encode({'iss': key['userId'], 'sub': key['userId'], 'aud': issuer,
                             'iat': now, 'exp': now + 60}, key['key'], algorithm='RS256',
                            headers={'kid': key['keyId']})
-    with httpx.Client(base_url='http://zitadel-api:8080', headers={'Host': 'auth-za.tervory.com'},
+    with httpx.Client(base_url='http://trigger-signin-api:8080', headers={'Host': host},
                       timeout=30, trust_env=False, follow_redirects=False) as client:
         response = client.post('/oauth/v2/token', data={
             'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer', 'assertion': assertion,
