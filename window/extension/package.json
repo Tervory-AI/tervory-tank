@@ -1,0 +1,11 @@
+{
+  "name": "tervory-panel", "publisher": "tervory", "displayName": "Tervory",
+  "version": "0.1.0", "private": true, "engines": {"vscode": "^1.100.0"},
+  "main": "./extension.cjs", "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "viewsContainers": {"auxiliarybar": [{"id": "tervory", "title": "Tervory", "icon": "media/icon.svg"}]},
+    "views": {"tervory": [{"id": "tervory.panel", "name": "Tervory", "type": "webview"}]},
+    "commands": [{"command": "tervory.focus", "title": "Tervory: Open panel"}, {"command": "tervory.signIn", "title": "Tervory: Sign in"}]
+  },
+  "scripts": {"test": "node --test test/*.test.mjs"}
+}

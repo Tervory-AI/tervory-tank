@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/microsoft/vscode.git",
+  "release": "1.145.0",
+  "commit": "a717861c07586a53d83b80d742cd3f59b20a6273",
+  "node": "24.22.1",
+  "license": "MIT",
+  "sha256": "f812a329ab1565ad2dc9c004fa3207e4210c4f232263dea0d114669e95049dcc"
+}
