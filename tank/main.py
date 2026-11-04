@@ -63,7 +63,7 @@ from command_stream import StreamFailure, TokenSink, completion as stream_comple
 import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 import batch_providers
 import prompt_cache
@@ -679,6 +679,7 @@ class Message(BaseModel):
 
 
 class RouteRequest(BaseModel):
+    deadline: AwareDatetime | None = None
     complex_request: bool = False
     interactive: bool = True
     tenant_id: uuid.UUID
@@ -1439,7 +1440,7 @@ async def run_route(
     await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
     price_info = await priority_queue.model_info(__import__("sys").modules[__name__], model) if priority == "offpeak" else None
     sent_at = priority_queue.now()
-    if _offpeak_dispatch and not priority_queue.window_open(price_info.get("offpeak"), sent_at):
+    if _offpeak_dispatch and not priority_queue.dispatch_ready(req, price_info, sent_at):
         raise priority_queue.WindowClosed()
     if _receipt_id is not None:
         async with pool().acquire() as conn:
