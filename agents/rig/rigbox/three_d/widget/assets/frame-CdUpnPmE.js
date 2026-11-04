@@ -13,7 +13,7 @@ function e(e,t=``){let n=document.createElement(e);return n.textContent=t,n}func
 .rig-3d button:disabled{color:#242722;background:#e8e4da;cursor:not-allowed;opacity:1}.rig-3d button:focus-visible,.rig-3d input:focus-visible,.rig-3d select:focus-visible,.rig-3d canvas:focus-visible{outline:3px solid #001840;outline-offset:3px}
 .rig-3d .quote-button{background:#001840;color:#fff;border:0}.rig-3d .quote-button:disabled{background:#e8e4da;color:#242722}
 .rig-3d-side{background:#fff;border-radius:8px;padding:24px;min-width:0}.rig-3d-summary,.rig-3d .contact,.rig-3d .contact form,.rig-3d .parts,.rig-3d .swaps{display:flex;flex-direction:column;gap:16px}
-.rig-3d-summary>strong{font-size:16px;font-weight:600}.rig-3d .fine,.rig-3d .contact-help{color:#686b60;font:14px/24px Inter,Arial,sans-serif}.rig-3d .status:empty{display:none}
+.rig-3d-summary>strong{font-size:16px;font-weight:600}.rig-3d .fine,.rig-3d .contact-help{color:#686b60;font:14px/24px Inter,Arial,sans-serif}.rig-3d .status{color:#242722;font:14px/24px Inter,Arial,sans-serif}.rig-3d .status:empty{display:none}
 .rig-3d .field{border:1px solid #8b919a;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:8px;height:88px;color:#3d4a66;font:14px/24px Inter,Arial,sans-serif}
 .rig-3d input{border:0;background:#fff;color:#001840;font:14px/24px Inter,Arial,sans-serif;width:100%;min-width:0;padding:0;min-height:24px}
 .rig-3d .swaps select{width:100%;min-height:48px;background:#fff;color:#001840;border:1px solid #8b919a;border-radius:8px;font:14px/24px Inter,Arial,sans-serif;padding:8px}

@@ -30,7 +30,11 @@ def compare(page, name, width):
     # fixture caption, or API product/part names and repriced total.
     regions = [(0, 0, width, 96 if width == 375 else 128),
                (16 if width == 375 else 48, 96 if width == 375 else 128, width - 16 if width == 375 else width - 48, 216 if width == 375 else 272)]
-    regions.append((16, 564, 359, 740) if width == 375 else (48, 628, 1008, 804))
+    if name.startswith('07'):
+        regions.append((16, 584, 359, 808) if width == 375 else (48, 648, 1008, 872))
+        regions.append((16, 832, 359, min(1392, reference.height)) if width == 375 else (1032, 272, 1392, 888))
+    else:
+        regions.append((16, 564, 359, 740) if width == 375 else (48, 628, 1008, 804))
     results = []
     for region in regions:
         diff = ImageChops.difference(actual.crop(region), reference.crop(region))
@@ -83,10 +87,128 @@ def main():
             assert not any('/3d/assets/viewer-' in url or '/v1/rig/3d/assets/' in url for url in requests)
             assert not errors, errors
             page.close()
+            page = browser.new_page(viewport={'width': width, 'height': 968 if width == 1440 else 1392}, reduced_motion='reduce')
+            page.route('**/*', lambda route: route.continue_() if urlsplit(route.request.url).hostname == '127.0.0.1' else route.abort())
+            page.clock.install()
+            enter(page, terminal=True)
+            page.get_by_role('button', name='Full screen', exact=True).click()
+            page.wait_for_function('document.fullscreenElement !== null')
+            page.evaluate('document.exitFullscreen()')
+            page.get_by_role('button', name='Request a quote', exact=True).click()
+            page.locator('input[name=name]').fill('')
+            page.wait_for_function('''() => {
+                const e = document.querySelector('tervory-rig').shadowRoot;
+                return !e.querySelector('.contact button[type=submit]').disabled;
+            }''')
+            assert page.locator('input[name=phone]').is_visible()
+            assert not page.locator('input[name=email]').is_visible()
+            report[f'07-phone-{width}'] = compare(page, '07-phone', width)
+            page.get_by_role('button', name='Email', exact=True).click()
+            assert page.locator('input[name=email]').is_visible()
+            assert not page.locator('input[name=phone]').is_visible()
+            report[f'07-email-{width}'] = compare(page, '07-email', width)
+            page.locator('input[name=name]').fill('Offline Fixture')
+            page.locator('input[name=email]').fill('fixture@example.test')
+            page.context.set_offline(True)
+            page.wait_for_function('''() => document.querySelector('tervory-rig').shadowRoot.querySelector('.contact button[type=submit]').disabled''')
+            page.context.set_offline(False)
+            page.wait_for_function('''() => !document.querySelector('tervory-rig').shadowRoot.querySelector('.contact button[type=submit]').disabled''')
+            page.route('**/v1/rig/3d/quote', lambda route: route.fulfill(status=503, json={'error': 'fixture unavailable'}))
+            page.get_by_role('button', name='Request a quote', exact=True).click()
+            page.get_by_text('The quote could not be confirmed. Reconnect and try again.', exact=True).wait_for()
+            report[f'07-error-quote-{width}'] = compare(page, '07-error-quote', width)
+            page.unroute('**/v1/rig/3d/quote')
+            page.route('**/v1/rig/3d/quote', lambda route: route.fulfill(json={'request_id': 'offline_fixture_receipt'}))
+            page.get_by_role('button', name='Request a quote', exact=True).click()
+            page.get_by_text('Your quote request was saved. Delivery to the retailer is pending.', exact=True).wait_for()
+            assert page.locator('input[name=name]').input_value() == ''
+            report[f'07-saved-{width}'] = compare(page, '07-saved', width)
+            page.get_by_role('button', name='Start again', exact=True).last.click()
+            page.locator('.rig-3d[data-state=ready]').wait_for()
+            assert page.locator('.contact').is_hidden()
+            page.get_by_role('button', name='Request a quote', exact=True).click()
+            assert page.locator('input[name=name]').input_value() == ''
+            assert page.locator('input[name=phone]').input_value() == ''
+            page.locator('input[name=name]').fill('Inactivity Fixture')
+            page.clock.fast_forward(60_100)
+            page.locator('.contact').wait_for(state='hidden')
+            assert page.locator('input[name=name]').input_value() == ''
+            assert page.locator('.rig-3d-body>h2').inner_text() == 'Touch the product to explore a setup.'
+            page.close()
+        for failure in ('entitlement', 'expired', 'integrity', 'foreign-url'):
+            page = browser.new_page()
+            requested = []
+            page.on('request', lambda request: requested.append(request.url))
+            page.route('**/*', lambda route: route.continue_() if urlsplit(route.request.url).hostname == '127.0.0.1' else route.abort())
+            if failure == 'entitlement':
+                page.route('**/v1/rig/3d/capabilities', lambda route: route.fulfill(json={'rig_3d': False}))
+            else:
+                def corrupt(route):
+                    response = route.fetch()
+                    data = response.json()
+                    if failure == 'expired':
+                        data['valid_until'] = 1
+                    elif failure == 'integrity':
+                        data['models'][0]['sha256'] = '0' * 64
+                    else:
+                        data['models'][0]['url'] = 'https://untrusted.test/model.glb'
+                    route.fulfill(json=data)
+                page.route('**/v1/rig/3d/assembly', corrupt)
+            page.goto(BASE + '/viewer-test')
+            page.get_by_placeholder('Search a make, model or part', exact=True).fill('Centre')
+            page.get_by_role('button', name='Complete my setup', exact=True).click()
+            if failure == 'entitlement':
+                assert page.get_by_role('button', name='Open 3D', exact=True).count() == 0
+                assert not any(url.startswith(BASE + '/3d/') or '/v1/rig/3d/assets/' in url for url in requested)
+            else:
+                page.get_by_role('button', name='Open 3D', exact=True).click()
+                page.locator('.rig-3d[data-state=' + ('photos' if failure == 'expired' else 'error') + ']').wait_for()
+                assert page.locator('.rig-3d').get_attribute('data-models') is None
+                assert not any('untrusted.test' in url for url in requested)
+                if failure == 'expired':
+                    assert not any('/3d/assets/viewer-' in url or '/v1/rig/3d/assets/' in url for url in requested)
+            page.close()
         browser.close()
     (OUT / 'comparison.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))
 
 
 if __name__ == '__main__':
-    main()
+    import os
+    import subprocess
+    import sys
+    import tempfile
+    import time
+    from urllib.request import urlopen
+
+    if '--serve' not in sys.argv:
+        main()
+    else:
+        database = os.environ.get('RIG_3D_TEST_DATABASE_URL', '')
+        if urlsplit(database).hostname not in {'127.0.0.1', 'localhost'}:
+            raise SystemExit('--serve requires an explicit disposable loopback database')
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join(str(ROOT / p) for p in ('agents/rig', 'agents/_chassis', 'tests')))
+        with tempfile.TemporaryFile(mode='w+') as log:
+            server = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'fixtures.rig_three_d.viewer:app',
+                '--host', '127.0.0.1', '--port', '8035', '--log-level', 'warning'], cwd=ROOT, env=env, stdout=log, stderr=log)
+            try:
+                for _ in range(300):
+                    if server.poll() is not None:
+                        log.seek(0)
+                        raise RuntimeError(log.read())
+                    try:
+                        with urlopen(BASE + '/health', timeout=1) as response:
+                            if response.status == 200:
+                                break
+                    except OSError:
+                        time.sleep(.1)
+                else:
+                    raise RuntimeError('The offline fixture server did not start')
+                main()
+            finally:
+                server.terminate()
+                try:
+                    server.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    server.kill()
+                    server.wait()

@@ -31,6 +31,174 @@
       "mean_channel_error_255": 0.891015625
     }
   ],
+  "07-phone-1440": [
+    {
+      "region": [
+        0,
+        0,
+        1440,
+        128
+      ],
+      "changed_pixel_fraction": 0.01042751736111111,
+      "mean_channel_error_255": 0.9196650752314816
+    },
+    {
+      "region": [
+        48,
+        128,
+        1392,
+        272
+      ],
+      "changed_pixel_fraction": 0.017361111111111112,
+      "mean_channel_error_255": 0.8737013613315696
+    },
+    {
+      "region": [
+        48,
+        648,
+        1008,
+        872
+      ],
+      "changed_pixel_fraction": 0.01505766369047619,
+      "mean_channel_error_255": 0.6888733878968254
+    },
+    {
+      "region": [
+        1032,
+        272,
+        1392,
+        888
+      ],
+      "changed_pixel_fraction": 0.03090277777777778,
+      "mean_channel_error_255": 3.043459896584897
+    }
+  ],
+  "07-email-1440": [
+    {
+      "region": [
+        0,
+        0,
+        1440,
+        128
+      ],
+      "changed_pixel_fraction": 0.01042751736111111,
+      "mean_channel_error_255": 0.9196650752314816
+    },
+    {
+      "region": [
+        48,
+        128,
+        1392,
+        272
+      ],
+      "changed_pixel_fraction": 0.017361111111111112,
+      "mean_channel_error_255": 0.8737013613315696
+    },
+    {
+      "region": [
+        48,
+        648,
+        1008,
+        872
+      ],
+      "changed_pixel_fraction": 0.01505766369047619,
+      "mean_channel_error_255": 0.6888733878968254
+    },
+    {
+      "region": [
+        1032,
+        272,
+        1392,
+        888
+      ],
+      "changed_pixel_fraction": 0.022091450216450217,
+      "mean_channel_error_255": 1.0800715488215489
+    }
+  ],
+  "07-error-quote-1440": [
+    {
+      "region": [
+        0,
+        0,
+        1440,
+        128
+      ],
+      "changed_pixel_fraction": 0.01042751736111111,
+      "mean_channel_error_255": 0.9196650752314816
+    },
+    {
+      "region": [
+        48,
+        128,
+        1392,
+        272
+      ],
+      "changed_pixel_fraction": 0.017361111111111112,
+      "mean_channel_error_255": 0.8737013613315696
+    },
+    {
+      "region": [
+        48,
+        648,
+        1008,
+        872
+      ],
+      "changed_pixel_fraction": 0.01505766369047619,
+      "mean_channel_error_255": 0.6888733878968254
+    },
+    {
+      "region": [
+        1032,
+        272,
+        1392,
+        888
+      ],
+      "changed_pixel_fraction": 0.03988997113997114,
+      "mean_channel_error_255": 2.3902026214526217
+    }
+  ],
+  "07-saved-1440": [
+    {
+      "region": [
+        0,
+        0,
+        1440,
+        128
+      ],
+      "changed_pixel_fraction": 0.01042751736111111,
+      "mean_channel_error_255": 0.9196650752314816
+    },
+    {
+      "region": [
+        48,
+        128,
+        1392,
+        272
+      ],
+      "changed_pixel_fraction": 0.017361111111111112,
+      "mean_channel_error_255": 0.8737013613315696
+    },
+    {
+      "region": [
+        48,
+        648,
+        1008,
+        872
+      ],
+      "changed_pixel_fraction": 0.01505766369047619,
+      "mean_channel_error_255": 0.6888733878968254
+    },
+    {
+      "region": [
+        1032,
+        272,
+        1392,
+        888
+      ],
+      "changed_pixel_fraction": 0.023669733044733045,
+      "mean_channel_error_255": 2.4634680134680136
+    }
+  ],
   "06-ready-375": [
     {
       "region": [
@@ -61,6 +229,174 @@
       ],
       "changed_pixel_fraction": 0.05984958918632388,
       "mean_channel_error_255": 3.4378423447301
+    }
+  ],
+  "07-phone-375": [
+    {
+      "region": [
+        0,
+        0,
+        375,
+        96
+      ],
+      "changed_pixel_fraction": 0.04097222222222222,
+      "mean_channel_error_255": 2.9582499999999996
+    },
+    {
+      "region": [
+        16,
+        96,
+        359,
+        216
+      ],
+      "changed_pixel_fraction": 0.0738581146744412,
+      "mean_channel_error_255": 3.855919987042436
+    },
+    {
+      "region": [
+        16,
+        584,
+        359,
+        808
+      ],
+      "changed_pixel_fraction": 0.053220012494793835,
+      "mean_channel_error_255": 2.9493657156740247
+    },
+    {
+      "region": [
+        16,
+        832,
+        359,
+        1392
+      ],
+      "changed_pixel_fraction": 0.035417534360683046,
+      "mean_channel_error_255": 3.5076218242399
+    }
+  ],
+  "07-email-375": [
+    {
+      "region": [
+        0,
+        0,
+        375,
+        96
+      ],
+      "changed_pixel_fraction": 0.04097222222222222,
+      "mean_channel_error_255": 2.9582499999999996
+    },
+    {
+      "region": [
+        16,
+        96,
+        359,
+        216
+      ],
+      "changed_pixel_fraction": 0.0738581146744412,
+      "mean_channel_error_255": 3.855919987042436
+    },
+    {
+      "region": [
+        16,
+        584,
+        359,
+        808
+      ],
+      "changed_pixel_fraction": 0.053220012494793835,
+      "mean_channel_error_255": 2.9493657156740247
+    },
+    {
+      "region": [
+        16,
+        832,
+        359,
+        1392
+      ],
+      "changed_pixel_fraction": 0.025380049979175343,
+      "mean_channel_error_255": 1.2483930306816606
+    }
+  ],
+  "07-error-quote-375": [
+    {
+      "region": [
+        0,
+        0,
+        375,
+        96
+      ],
+      "changed_pixel_fraction": 0.04097222222222222,
+      "mean_channel_error_255": 2.9582499999999996
+    },
+    {
+      "region": [
+        16,
+        96,
+        359,
+        216
+      ],
+      "changed_pixel_fraction": 0.0738581146744412,
+      "mean_channel_error_255": 3.855919987042436
+    },
+    {
+      "region": [
+        16,
+        584,
+        359,
+        808
+      ],
+      "changed_pixel_fraction": 0.053220012494793835,
+      "mean_channel_error_255": 2.9493657156740247
+    },
+    {
+      "region": [
+        16,
+        832,
+        359,
+        1392
+      ],
+      "changed_pixel_fraction": 0.04424198250728863,
+      "mean_channel_error_255": 2.6637078300708037
+    }
+  ],
+  "07-saved-375": [
+    {
+      "region": [
+        0,
+        0,
+        375,
+        96
+      ],
+      "changed_pixel_fraction": 0.04097222222222222,
+      "mean_channel_error_255": 2.9582499999999996
+    },
+    {
+      "region": [
+        16,
+        96,
+        359,
+        216
+      ],
+      "changed_pixel_fraction": 0.0738581146744412,
+      "mean_channel_error_255": 3.855919987042436
+    },
+    {
+      "region": [
+        16,
+        584,
+        359,
+        808
+      ],
+      "changed_pixel_fraction": 0.053220012494793835,
+      "mean_channel_error_255": 2.9493657156740247
+    },
+    {
+      "region": [
+        16,
+        832,
+        359,
+        1088
+      ],
+      "changed_pixel_fraction": 0.05915178571428571,
+      "mean_channel_error_255": 6.225089589407191
     }
   ]
 }
