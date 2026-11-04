@@ -171,12 +171,13 @@ jobs:
     # Full suite: about 14 minutes on the hosted 4-core runner (run 41229068797: 808 s of tests in
     # the main pass, 834 s for the whole suite, 15 min for the job); the per-test timeout is 5 minutes.
     # 3 Nov 2026: the main pass reached about 1065 s, so the job allows 36 minutes. The main pass
-    # is now split across three parallel shards (offline_suite.py, by collected test count).
+    # is now split across ten parallel shards (offline_suite.py, by collected test count); each
+    # isolated group runs on its own shard. 4 Nov 2026: six shards took about 11 minutes per queue entry.
     timeout-minutes: 36
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     services:
       postgres:
         image: postgres:16
@@ -319,7 +320,7 @@ jobs:
         env:
           PYTHONPATH: tank
           SUITE_SHARD: ${{ matrix.shard }}
-          SUITE_SHARDS: 3
+          SUITE_SHARDS: 10
           # One Postgres service. tests/conftest.py gives each xdist worker its own
           # database cloned by name from this one (pooltest_gw0, ...).
           POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pooltest
