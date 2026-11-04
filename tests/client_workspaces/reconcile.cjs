@@ -22,6 +22,7 @@ delete process.env.TERVORY_TENANT_ALIASES;
 
 // Fake Clerk: organizations in memory; the list query is a case-insensitive substring match.
 let orgs = [], clerkCalls = [], failCreate = new Set(), nextId = 1;
+let deniedOrgs = new Set(), lostResponse = false, grantLog = new Map();
 class ClerkAPIResponseError extends Error {}
 const clerk = {
   auth: async () => { throw new Error('no request in a server-start reconcile'); },
@@ -30,16 +31,19 @@ const clerk = {
     organizations: {
       getOrganizationList: async (params) => {
         clerkCalls.push(['list', params]);
-        const hits = orgs.filter(org => org.name.toLowerCase().includes((params.query ?? '').toLowerCase()));
+        const hits = orgs.filter(org => (org.name + ' ' + (org.slug ?? '')).toLowerCase().includes((params.query ?? '').toLowerCase()));
         return {data: hits.slice(params.offset ?? 0, (params.offset ?? 0) + (params.limit ?? 10)), totalCount: hits.length};
       },
       createOrganization: async (params) => {
         clerkCalls.push(['create', params]);
         if (failCreate.has(params.name)) throw new ClerkAPIResponseError('Bearer ' + SECRETS[1] + ' ' + SECRETS[3]);
-        const org = {id: 'org_placeholder' + nextId++, name: params.name};
+        if (orgs.some(org => org.slug === params.slug)) throw new ClerkAPIResponseError('duplicate slug');
+        const org = {id: 'org_placeholder' + nextId++, name: params.name, slug: params.slug};
         orgs.push(org);
+        if (lostResponse) { lostResponse = false; throw new Error('placeholder lost response'); }
         return org;
       },
+      getOrganizationMembershipList: async ({organizationId, userId}) => ({data: deniedOrgs.has(organizationId) ? [] : [{publicUserData: {userId: userId[0]}, role: 'org:admin'}]}),
       updateOrganization: async () => { throw new Error('never rename'); },
       deleteOrganization: async () => { throw new Error('never delete'); },
     },
@@ -66,6 +70,8 @@ global.fetch = async (url, init = {}) => {
     registered.add(tenant);
     return Response.json({tenant_id: tenant, products: [...(squads.get(tenant) ?? [])].sort()});
   }
+  if (url.pathname === '/v1/command/squads') return Response.json([...(squads.get(tenant) ?? [])].map(agent => ({agent, enabled: true})));
+  if (url.pathname === '/v1/command/squads/log') return Response.json(grantLog.get(tenant) ?? []);
   const squad = url.pathname.match(/^\/v1\/command\/squads\/([a-z_]+)$/);
   if (squad && init.method === 'PUT') {
     const {enabled} = JSON.parse(init.body);
@@ -90,6 +96,7 @@ function fresh() {
 function reset() {
   orgs = []; clerkCalls = []; failCreate = new Set(); nextId = 1;
   registered = new Set(); squads = new Map(); changes = []; tankCalls = []; logs.length = 0;
+  deniedOrgs = new Set(); lostResponse = false; grantLog = new Map();
 }
 const EXPECTED = {
   'Custom Nation': ['rig', 'tiger'], 'LOKD Security': ['radix'], AmmoSync: ['base', 'market_lab'], 'Shot Bonus': [], TNGO: [],
@@ -115,7 +122,7 @@ const FOUNDER = 'user_placeholder_founder';
   const tenant = require('../../workspace/lib/tenant.ts');
   await roster.reconcileClients();
   const created = clerkCalls.filter(call => call[0] === 'create').map(call => call[1]);
-  assert.deepEqual(created, Object.keys(EXPECTED).map(name => ({name, createdBy: FOUNDER})));
+  assert.deepEqual(created, Object.keys(EXPECTED).map(name => ({name, slug: `tervory-client-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, createdBy: FOUNDER})));
   for (const call of clerkCalls.filter(call => call[0] === 'list')) assert.ok(call[1].query, 'the list is always queried by name');
   const byName = Object.fromEntries(orgs.map(org => [org.name, org]));
   const tenants = Object.keys(EXPECTED).map(name => tenant.tenantIdFor(byName[name].id));
@@ -149,6 +156,69 @@ const FOUNDER = 'user_placeholder_founder';
   assert.equal(orgs.filter(org => org.name === 'AmmoSync').length, 1);
   assert.deepEqual([...squads.get(tenant.tenantIdFor('org_placeholder_existing'))].sort(), ['base', 'market_lab']);
 
+  // Independent server modules racing first start share only provider slug uniqueness.
+  reset();
+  const first = fresh(), second = fresh();
+  await Promise.all([first.reconcileClients(), second.reconcileClients()]);
+  assert.equal(orgs.length, 5);
+  assert.equal(new Set(orgs.map(org => org.slug)).size, 5);
+  assert.equal(changes.length, 5);
+
+  // Create succeeded but its response was lost: reuse, never create another org.
+  reset(); lostResponse = true;
+  await fresh().reconcileClients();
+  assert.equal(orgs.length, 5);
+  assert.equal(registered.size, 5);
+
+  // Ambiguous legacy names and another owner's exact name never receive grants.
+  reset();
+  orgs.push({id: 'org_placeholder_duplicate1', name: 'AmmoSync'}, {id: 'org_placeholder_duplicate2', name: 'AmmoSync'});
+  await fresh().reconcileClients();
+  assert.equal(registered.size, 4);
+  assert.equal(orgs.filter(org => org.name === 'AmmoSync').length, 2);
+  reset();
+  orgs.push({id: 'org_placeholder_foreign', name: 'AmmoSync'});
+  deniedOrgs.add('org_placeholder_foreign');
+  await fresh().reconcileClients();
+  assert.equal(registered.has(tenant.tenantIdFor('org_placeholder_foreign')), false);
+  assert.equal(squads.has(tenant.tenantIdFor('org_placeholder_foreign')), false);
+
+  // Existing grants, unrelated products, and a founder's revocation survive startup.
+  reset();
+  orgs.push({id: 'org_placeholder_existing', name: 'AmmoSync'});
+  const existingTenant = tenant.tenantIdFor('org_placeholder_existing');
+  squads.set(existingTenant, new Set(['base', 'zenas']));
+  grantLog.set(existingTenant, [{agent: 'market_lab', enabled: false}]);
+  await fresh().reconcileClients();
+  assert.deepEqual([...squads.get(existingTenant)].sort(), ['base', 'zenas']);
+  assert.equal(tankCalls.some(call => call.headers['x-tervory-tenant'] === existingTenant && call.method === 'PUT'), false);
+
+  // Truncated history cannot silently restore an older revoked entitlement.
+  reset();
+  orgs.push({id: 'org_placeholder_existing', name: 'AmmoSync'});
+  grantLog.set(existingTenant, Array.from({length: 20}, () => ({agent: 'zenas', enabled: true})));
+  await fresh().reconcileClients();
+  assert.equal(squads.has(existingTenant), false);
+
+  // Aliases must not collapse two clients into one tenant; neither receives writes.
+  reset();
+  orgs.push({id: 'org_placeholder_a', name: 'AmmoSync'}, {id: 'org_placeholder_b', name: 'Custom Nation'});
+  process.env.TERVORY_TENANT_ALIASES = 'org_placeholder_a=org_placeholder_b';
+  await fresh().reconcileClients();
+  assert.equal(registered.has(tenant.tenantIdFor('org_placeholder_b')), false);
+  assert.equal(registered.size, 3);
+  delete process.env.TERVORY_TENANT_ALIASES;
+
+  // Registration outage is isolated and never logged as a successful reconcile.
+  reset();
+  const savedFetch = global.fetch;
+  global.fetch = async (url, init) => new URL(url).pathname.endsWith('/ensure')
+    ? new Response('placeholder unavailable', {status: 503}) : savedFetch(url, init);
+  await fresh().reconcileClients();
+  global.fetch = savedFetch;
+  assert.equal(logs.filter(line => line[0] === 'client_reconciled').length, 0);
+  assert.equal(changes.length, 0);
+
   // Empty TERVORY_ADMIN_USER_IDS: nothing at all, one fixed line.
   for (const value of ['', ' , ']) {
     reset();
@@ -181,7 +251,7 @@ const FOUNDER = 'user_placeholder_founder';
   assert.deepEqual(orgs.map(org => org.name), ['Custom Nation', 'AmmoSync', 'Shot Bonus', 'TNGO']);
   assert.equal(registered.size, 4);
   assert.deepEqual(logs.filter(line => line[0] === 'client_reconcile_failed').map(line => line[1]),
-    [{client: 'LOKD Security', orgId: undefined, tenantId: undefined, error: 'ClerkAPIResponseError'}]);
+    [{client: 'LOKD Security', error: 'ClerkAPIResponseError'}]);
   failCreate.clear();
   roster = fresh();
   await roster.reconcileClients();
@@ -230,5 +300,5 @@ const FOUNDER = 'user_placeholder_founder';
   clerk.clerkClient = realList;
   delete process.env.NEXT_RUNTIME;
 
-  process.stdout.write('PASS: five organizations/tenants/products, idempotent second run, exact-name reuse, empty founder no-op, per-client failure isolation, no secret logged, no import-time run, background register().\n');
+  process.stdout.write('PASS: roster, concurrent starts, lost create response, exact-name pagination, ownership and ambiguity refusal, tenant alias refusal, preserved grants/revocations, truncated history refusal, registration failure isolation, no secrets, background startup.\n');
 })().catch(error => { process.stderr.write(String(error && error.stack || error) + '\n'); process.exitCode = 1; });
