@@ -54,11 +54,15 @@ async def test_video_produces_timestamps_and_store_cart_line(tmp_path, monkeypat
                 source_data = {'video_base64': base64.b64encode((FIXTURES / 'sample.mp4').read_bytes()).decode()}
             created = await api.post(prefix + '/admin/videos', headers=admin, json={
                 **source_data,
+                'rights_confirmed': True,
                 'references': {'stock': base64.b64encode((FIXTURES / 'cup.ppm').read_bytes()).decode()},
                 'transcript': [{'start': 0, 'end': 5, 'text': 'Red cup'}]})
             assert created.status_code == 200, created.text
             draft = created.json()
             assert draft['receipt']['model_calls'] == 0
+            assert draft['permission']['confirmed'] is True
+            denied = await api.post(prefix + '/admin/videos', headers=admin, json=source_data)
+            assert denied.status_code == 422
             assert [m['start'] for m in draft['moments']] == [0, 5]
             assert draft['moments'][0]['evidence']['transcript']
             assert draft['moments'][0]['evidence']['vision_score'] >= .96

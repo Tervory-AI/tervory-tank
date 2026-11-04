@@ -89,3 +89,14 @@ async def test_bad_media_does_not_leave_a_published_file(tmp_path):
     with pytest.raises(ValueError, match='media_decode'):
         await engine.ingest(TENANT, b'not video', [], {})
     assert not list(tmp_path.rglob('*.mp4'))
+
+
+@pytest.mark.asyncio
+async def test_webm_keeps_its_browser_media_type(tmp_path):
+    video = tmp_path / 'sample.webm'
+    await command('ffmpeg', '-v', 'error', '-i', str(ROOT / 'tests/fixtures/video_shop/sample.mp4'),
+                  '-c:v', 'libvpx-vp9', '-deadline', 'realtime', str(video))
+    engine = Engine(SimpleNamespace(store=MemoryStore()), Repository(tmp_path / 'data'))
+    result = await engine.ingest(TENANT, video.read_bytes(), [], {})
+    assert result['media_type'] == 'video/webm'
+    assert result['duration'] == 10

@@ -29,7 +29,7 @@ store HTTP is simulated; no live catalogue, order, payment or model call occurs.
 | Guarded links | HTTPS only, no credentials or custom ports, all DNS addresses public, pinned IP connection, no redirects, bounded download |
 | No model spend | Saved receipt has `route=code` and `model_calls=0` |
 
-Browser behavior at 390px and 1440px is covered by:
+Browser behavior at 375px and 1440px is covered by:
 
 ```sh
 node tests/video_shop_overlay.test.cjs
@@ -38,7 +38,7 @@ node tests/video_shop_overlay.test.cjs
 Requires an installed Playwright package and Chromium. `PLAYWRIGHT_MODULE` and
 `CHROMIUM_PATH` may select existing installations. The browser test mocks HTTP,
 plays the sample MP4, seeks into and out of the product moment, opens detail,
-adds once, checks product text is rendered safely, and destroys the embed.
+adds once, checks pause/list/jump and disabled store-cart behavior, checks product text is rendered safely, and destroys the embed.
 
 ## Runtime composition and limits
 
@@ -62,17 +62,28 @@ Tank's existing routing and preserve its receipts.
 
 Cart availability and checkout platforms follow Rig's existing store settings;
 the room does not enable cart mode for a live store. Media must be browser-playable
-MP4 for the embed. Unsupported codecs are rejected by FFmpeg or fail playback.
+MP4 or WebM for the embed. Unsupported codecs are rejected by FFmpeg or fail playback.
 Back up the SQLite review database and its tenant media directories together.
 Run one room replica per durable directory; scale processing via the existing
 job system before increasing concurrent ingest demand.
 
 ## Design and live acceptance
 
-`docs/figma/video-shop/REGISTER.md` was absent in the implementation checkout and
-on the fetched main branch. Overlay labels are replaceable through embed options;
-admin screens can consume the saved upload/review contracts as frames land.
-No unrelated Figma register or guessed product name was introduced.
+The Proposed register landed in the parallel `/workspace/codex-figma-video`
+checkout at design commit `be87b92e` on branch `codex/figma-window-agent` while
+this implementation was underway. The embed now uses its functional headings,
+View product, Add to cart, store-cart acknowledgement/error, Keep watching and
+payment wording. Product occurrences list every approved time range and jump to
+the first. Pausing preserves the active moment. Open store cart is disabled
+unless the host supplies an authorized HTTPS `storeCartUrl`; `checkout()` remains
+available for the host to use Rig's existing checkout integration.
+
+Upload/link processing now requires `rights_confirmed: true`; the permission
+confirmation and server timestamp are saved with the video. The backend rejects
+processing without it. Existing start/end/product/approved fields support the
+register's Keep match / Remove match / Save review flow. The room does not copy
+or modify the parallel design branch's files. The embed adapts the matched-player
+component, tokens and copy; the full 48 proposed screens remain design work.
 
 After review and deployment, the founder/Claude can use an approved store fixture
 and existing cart configuration to repeat upload → review → play → add → store

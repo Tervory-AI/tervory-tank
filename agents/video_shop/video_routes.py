@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -46,6 +47,8 @@ async def create(request: Request):
     await _admin(request)
     data = await body(request)
     try:
+        if data.get('rights_confirmed') is not True:
+            raise ValueError('permission_required')
         if bool(data.get('video_base64')) == bool(data.get('url')):
             raise ValueError('one_source')
         video = (await asyncio.to_thread(download, data['url']) if data.get('url')
@@ -55,7 +58,8 @@ async def create(request: Request):
         references = {sku: base64.b64decode(value, validate=True)
                       for sku, value in data.get('references', {}).items()}
         result = await asyncio.wait_for(
-            engine(request).ingest(_tenant(request), video, data.get('transcript', []), references), 120)
+            engine(request).ingest(_tenant(request), video, data.get('transcript', []), references,
+                                   permission={'confirmed': True, 'at': datetime.now(timezone.utc).isoformat()}), 120)
         return _ok(request, result)
     except (ValueError, KeyError, TypeError, IndexError, OSError, TimeoutError):
         raise HTTPException(422, 'invalid_media') from None
@@ -120,7 +124,7 @@ async def media(identifier: str, request: Request):
     headers.pop('content-length', None)
     headers.pop('content-type', None)
     headers.update({'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'})
-    return FileResponse(path, media_type='video/mp4', headers=headers)
+    return FileResponse(path, media_type=saved.get('media_type', 'video/mp4'), headers=headers)
 
 
 @router.get('/widget.js')
@@ -145,5 +149,5 @@ async def admin_media(identifier: str, request: Request):
     except KeyError:
         raise HTTPException(404, 'video') from None
     path = engine(request).repository.directory(_tenant(request)) / (saved['id'] + '.mp4')
-    return FileResponse(path, media_type='video/mp4',
+    return FileResponse(path, media_type=saved.get('media_type', 'video/mp4'),
                         headers={'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'})

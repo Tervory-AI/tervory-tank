@@ -94,7 +94,7 @@ class Engine:
         self.rig, self.repository = rig, repository
         self.lock = asyncio.Semaphore(1)
 
-    async def ingest(self, tenant, video: bytes, transcript: list, references: dict):
+    async def ingest(self, tenant, video: bytes, transcript: list, references: dict, *, permission=None):
         if not isinstance(transcript, list) or not isinstance(references, dict):
             raise ValueError('media_input')
         if not video or len(video) > MAX_BYTES or len(transcript) > 1000 or len(references) > 100:
@@ -112,7 +112,7 @@ class Engine:
             async with self.lock:
                 metadata = json.loads(await command(
                     'ffprobe', '-v', 'error', '-protocol_whitelist', 'file,pipe',
-                    '-format_whitelist', 'mov,matroska,webm,avi', '-show_entries', 'format=duration',
+                    '-format_whitelist', 'mov,matroska,webm,avi', '-show_entries', 'format=duration,format_name',
                     '-of', 'json', str(path)))
                 duration = float(metadata['format']['duration'])
                 if not (0 < duration <= 600):
@@ -187,7 +187,10 @@ class Engine:
                     for sku, proof in evidence.items():
                         moments.append({'start': start, 'end': end, 'product_id': sku,
                                         'evidence': proof, 'approved': False})
-                body = {'id': identifier, 'duration': duration, 'revision': 1, 'status': 'draft', 'moments': moments,
+                body = {'id': identifier, 'duration': duration,
+                        'media_type': 'video/webm' if 'webm' in metadata['format']['format_name'] else 'video/mp4',
+                        'revision': 1, 'status': 'draft', 'moments': moments,
+                        'permission': permission,
                         'receipt': {'route': 'code', 'model_calls': 0, 'media_sha256': hashlib.sha256(video).hexdigest(),
                                     'vision': 'ffmpeg-rgb-distance-v1', 'samples': len(samples),
                                     'reference_images': len(fingerprints), 'image_errors': image_errors,
