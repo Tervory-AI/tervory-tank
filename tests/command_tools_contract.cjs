@@ -46,14 +46,25 @@ def catalogue(module, names):
     for node in declarations:
         # Contract registries map literal tool names to Pydantic classes. Only
         # their real keys are catalogue data; their classes need no evaluation.
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict) and module != 'command':
+        if (isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict)
+                and module != 'command' and not module.startswith('command_tools/')):
             node.value = ast.Dict(keys=node.value.keys, values=[ast.Constant(None) for _ in node.value.keys])
         code = ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[]))
         exec(compile(code, module, 'exec'), values)
     return {name: values[name] for name in names}
 
-values = catalogue('command', {'TOOLS', 'FOUNDER_TOOLS'})
-print(json.dumps(sorted(set(values['FOUNDER_TOOLS'] + sum(values['TOOLS'].values(), [])))))
+if (folder / 'command_tools' / '__init__.py').is_file():
+    tree = ast.parse((folder / 'command_tools' / '__init__.py').read_text())
+    products = next(ast.literal_eval(node.value) for node in tree.body
+                    if isinstance(node, ast.Assign)
+                    and any(isinstance(t, ast.Name) and t.id == 'PRODUCTS' for t in node.targets))
+    declarations = [catalogue('command_tools/' + name, {'TOOLS', 'FOUNDER_TOOLS'})
+                    for name in products]
+else:
+    declarations = [catalogue('command', {'TOOLS', 'FOUNDER_TOOLS'})]
+registered = {tool for values in declarations
+              for tool in values['FOUNDER_TOOLS'] + sum(values['TOOLS'].values(), [])}
+print(json.dumps(sorted(registered)))
 `], {cwd: root, encoding: 'utf8'});
 process.env.TANK_API_KEY = 'offline-test-placeholder';
 process.env.TANK_URL = 'http://tank.invalid';

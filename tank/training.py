@@ -22,7 +22,7 @@ from typing import Any
 
 import httpx
 from storage import StorageError, archive_training_snapshot
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from gold import (PLATFORM_TENANT, Reviewer, add_candidate, encoded, input_hash,
@@ -125,16 +125,17 @@ async def save_pair(conn, *, tenant: uuid.UUID, agent: str, task: str, value: An
                     gold_id: uuid.UUID | None = None, holdout: bool = False,
                     client_matter: bool = False, public: bool = False,
                     region: str | None = None, batch_id: str | None = None,
-                    currency: str | None = None, unit: str | None = None) -> None:
+                    currency: str | None = None, unit: str | None = None,
+                    teacher_model: str | None = None) -> None:
     stored_region = region if region in ("us-east", "za") else runtime().box_region()
     await conn.execute(
         """INSERT INTO tank.training_pairs
-        (tenant_id,agent,task_type,region,input,output,approved_by,source,source_ref,gold_id,holdout,client_matter,public,batch_id,currency,unit)
-        VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+        (tenant_id,agent,task_type,region,input,output,approved_by,source,source_ref,gold_id,holdout,client_matter,public,batch_id,currency,unit,teacher_model)
+        VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
         ON CONFLICT (tenant_id,region,source,source_ref) DO NOTHING""",
         tenant, agent, task, stored_region, encoded(value), encoded(output),
         approved_by, source, ref, gold_id, holdout, client_matter, public,
-        batch_id or None, currency or None, unit or None,
+        batch_id or None, currency or None, unit or None, teacher_model,
     )
 
 
@@ -144,13 +145,23 @@ async def pair_from_gold(conn, row: dict[str, Any]) -> None:
     if not admits_training(row):
         return
     currency, unit = regional_labels(row)
+    teacher = None
+    if row.get("source") == "ledger":
+        try:
+            ledger_id = uuid.UUID(str(row.get("source_ref") or ""))
+        except (ValueError, TypeError, AttributeError):
+            pass
+        else:
+            teacher = await conn.fetchval(
+                "SELECT model FROM tank.ledger WHERE id=$1 AND tenant_id=$2 AND rung IN (1,2)",
+                ledger_id, row["tenant_id"])
     await save_pair(conn, tenant=row["tenant_id"], agent=row["agent"], task=row["skill_id"],
                     value=obj(row["input"]), output=obj(row["expected"]), approved_by=row["checked_by"],
                     source="gold", ref=str(row["id"]), gold_id=row["id"], holdout=row["holdout"],
                     client_matter=row["tenant_id"] != PLATFORM_TENANT,
                     public=row.get("public") is True and row["tenant_id"] == PLATFORM_TENANT,
                     region=row.get("region"), batch_id=row.get("batch_id"),
-                    currency=currency or None, unit=unit or None)
+                    currency=currency or None, unit=unit or None, teacher_model=teacher)
 
 
 async def collect_ledger(conn, tenant: uuid.UUID) -> None:
@@ -188,12 +199,13 @@ async def collect_ledger(conn, tenant: uuid.UUID) -> None:
         output = graduate.as_obj(row["content"]) or {"text": row["content"]}
         inserted = await conn.fetchval(
             """INSERT INTO tank.training_pairs(tenant_id,region,agent,task_type,input,output,
-               approved_by,source,source_ref,client_matter,public,active,polarity)
-            VALUES($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,false,$11,$12)
+               approved_by,source,source_ref,client_matter,public,active,polarity,teacher_model)
+            VALUES($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,false,$11,$12,$13)
             ON CONFLICT(tenant_id,region,source,source_ref) DO NOTHING RETURNING id""",
             tenant, region, row["agent"], row["task_type"], encoded(value), encoded(output),
             row["feedback_by"] or "client acceptance window", "client_rejected" if rejected else "client_accepted",
             str(row["id"]), row["agent"] == "zenas", not rejected, "negative" if rejected else "positive",
+            row["model"] if row.get("rung") in (1, 2) else None,
         )
         if rejected and inserted:
             # Copy the effective policy before changing it: A's rejection never
@@ -558,6 +570,37 @@ async def schedule_loop(operation: str) -> None:
 
 router = APIRouter(prefix="/v1/training", lifespan=lifespan)
 
+@router.get("/teachers")
+async def teachers(skill_id: str = Query(min_length=1, max_length=100,
+                                       pattern=r"^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$"),
+                   actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]:
+    """Founder-only tenant-local aggregates; pair content never leaves this query."""
+    if not actor.founder:
+        raise HTTPException(404, "not found")
+    from command_tools.skala import TeachersArgs
+    from trigger_routes import code_receipt
+    args = TeachersArgs(skill_id=skill_id)
+    async with runtime().pool().acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT s.version,s.task_type,p.teacher_model,count(p.id) AS count,max(p.created_at) AS newest_created_at
+            FROM tank.skills s
+            LEFT JOIN tank.agent_skill_submissions owner ON owner.skill_id=s.id AND owner.version=s.version
+            LEFT JOIN tank.training_pairs p
+              ON p.tenant_id=$2 AND p.region=$3 AND p.agent=s.agent
+              AND (p.task_type=s.task_type OR p.task_type=s.id)
+              AND p.active AND p.polarity='positive'
+            WHERE s.id=$1 AND (owner.skill_id IS NULL OR (owner.tenant_id=$2 AND owner.region=$3))
+            GROUP BY s.version,s.task_type,p.teacher_model
+            ORDER BY s.version,p.teacher_model NULLS FIRST""", args.skill_id, actor.tenant, runtime().box_region())
+        ledger_id = await code_receipt(actor.tenant, "skala.teachers", agent="tank", conn=conn)
+    return {"name": args.skill_id, "count": len(rows),
+            "items": [{"name": row["version"], "task_type": row["task_type"],
+                       **({"model": row["teacher_model"]} if row["teacher_model"] is not None else {}),
+                       "teacher_model": row["teacher_model"], "count": row["count"],
+                       "newest_created_at": row["newest_created_at"].isoformat() if row["newest_created_at"] else None}
+                      for row in rows], "ledger_id": str(ledger_id)}
+
+
 
 class CourtTextPair(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -675,9 +718,10 @@ async def training_receipt(
 @router.post("/zenas/court-text")
 async def save_court_text_pair(body: CourtTextPair, request: Request) -> dict[str, bool]:
     """Accept only code-split official court text from the regional Zenas room."""
-    from main import TANK_API_KEY
     supplied = request.headers.get("x-tank-key", "")
-    expected = TANK_API_KEY
+    # The scheduled splitter runs in the Zenas room, which never holds the
+    # Workspace key. Only that owning room may submit official court splits.
+    expected = os.environ.get("TANK_KEY_ZENAS", "").strip()
     if not supplied or not expected or not hmac.compare_digest(supplied, expected):
         raise HTTPException(401, "Room authentication required")
     if runtime().box_region() != "za" or body.source_id not in OFFICIAL_ZA_CASE_SOURCES:
@@ -688,21 +732,26 @@ async def save_court_text_pair(body: CourtTextPair, request: Request) -> dict[st
                                       or body.reason not in {"empty", "criminal", "headings", "order"}):
         raise HTTPException(422, "Invalid court text exclusion")
     ref = f"{body.source_id}:{body.version_id}"
-    async with runtime().pool().acquire() as conn:
-        async with conn.transaction():
-            if body.status == "split":
-                value, output = dict(body.input or {}), dict(body.output or {})
-                await save_pair(
-                    conn, tenant=PLATFORM_TENANT, agent="zenas", task="zenas.reasoning",
-                    value=value, output=output, approved_by="court decision", source="court_text",
-                    ref=ref, holdout=is_holdout(PLATFORM_TENANT, "zenas.reasoning", value),
-                    client_matter=False, public=True, region="za",
+    from tenant_db import tenant_scope
+
+    # Platform-owned public data still needs an explicit transaction-local RLS
+    # tenant. No body field can choose a client tenant or an admin connection.
+    with tenant_scope(PLATFORM_TENANT):
+        async with runtime().pool().acquire() as conn:
+            async with conn.transaction():
+                if body.status == "split":
+                    value, output = dict(body.input or {}), dict(body.output or {})
+                    await save_pair(
+                        conn, tenant=PLATFORM_TENANT, agent="zenas", task="zenas.reasoning",
+                        value=value, output=output, approved_by="court decision", source="court_text",
+                        ref=ref, holdout=is_holdout(PLATFORM_TENANT, "zenas.reasoning", value),
+                        client_matter=False, public=True, region="za",
+                    )
+                await conn.execute(
+                    """INSERT INTO tank.judgment_splits(region,source_id,document_id,version_id,status,reason)
+                    VALUES('za',$1,$2,$3,$4,$5) ON CONFLICT(region,version_id) DO NOTHING""",
+                    body.source_id, body.document_id, body.version_id, body.status, body.reason,
                 )
-            await conn.execute(
-                """INSERT INTO tank.judgment_splits(region,source_id,document_id,version_id,status,reason)
-                VALUES('za',$1,$2,$3,$4,$5) ON CONFLICT(region,version_id) DO NOTHING""",
-                body.source_id, body.document_id, body.version_id, body.status, body.reason,
-            )
     return {"ok": True}
 
 

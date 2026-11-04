@@ -1,0 +1,112 @@
+{
+  "pageId": "289:13919",
+  "checks": [
+    {
+      "id": "456:18492",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 900,
+      "expectedW": 240,
+      "expectedH": 900,
+      "nonInter": []
+    },
+    {
+      "id": "456:18598",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 900,
+      "expectedW": 240,
+      "expectedH": 900,
+      "nonInter": []
+    },
+    {
+      "id": "456:18691",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 920,
+      "expectedW": 240,
+      "expectedH": 920,
+      "nonInter": []
+    },
+    {
+      "id": "456:18784",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 900,
+      "expectedW": 240,
+      "expectedH": 900,
+      "nonInter": []
+    },
+    {
+      "id": "456:18877",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 900,
+      "expectedW": 240,
+      "expectedH": 900,
+      "nonInter": []
+    },
+    {
+      "id": "456:18970",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 900,
+      "expectedW": 240,
+      "expectedH": 900,
+      "nonInter": []
+    },
+    {
+      "id": "456:19063",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 900,
+      "expectedW": 240,
+      "expectedH": 900,
+      "nonInter": []
+    },
+    {
+      "id": "456:19156",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 1050,
+      "expectedW": 240,
+      "expectedH": 1050,
+      "nonInter": []
+    },
+    {
+      "id": "456:19249",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 900,
+      "expectedW": 240,
+      "expectedH": 900,
+      "nonInter": []
+    },
+    {
+      "id": "456:19342",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 906,
+      "expectedW": 240,
+      "expectedH": 906,
+      "nonInter": []
+    },
+    {
+      "id": "456:19435",
+      "mainId": "533:19231",
+      "w": 240,
+      "h": 900,
+      "expectedW": 240,
+      "expectedH": 900,
+      "nonInter": []
+    }
+  ],
+  "exports": [
+    {
+      "id": "291:8053",
+      "name": "rig-cart-menu.png",
+      "w": 1440,
+      "h": 900
+    }
+  ]
+}

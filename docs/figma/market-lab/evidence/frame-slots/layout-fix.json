@@ -1,0 +1,571 @@
+{
+  "mutatedNodeIds": [
+    "566:561",
+    "566:562",
+    "566:567",
+    "566:568",
+    "566:569",
+    "689:1597",
+    "566:574",
+    "566:575",
+    "566:583",
+    "566:591",
+    "689:1624",
+    "566:599",
+    "566:400",
+    "566:395",
+    "566:399",
+    "566:401",
+    "566:767",
+    "566:768",
+    "566:773",
+    "566:774",
+    "566:775",
+    "689:1639",
+    "566:780",
+    "566:781",
+    "566:789",
+    "689:1658",
+    "566:797",
+    "566:606",
+    "566:601",
+    "566:605",
+    "566:607",
+    "566:965",
+    "566:966",
+    "566:971",
+    "566:972",
+    "566:973",
+    "689:1666",
+    "566:978",
+    "566:979",
+    "566:987",
+    "566:995",
+    "689:1693",
+    "566:1003",
+    "566:804",
+    "566:799",
+    "566:803",
+    "566:805",
+    "566:2209",
+    "566:2210",
+    "566:2215",
+    "566:2216",
+    "566:2217",
+    "689:1708",
+    "566:2222",
+    "566:2223",
+    "566:2231",
+    "566:2239",
+    "689:1735",
+    "566:2247",
+    "566:2140",
+    "566:2144",
+    "566:2150",
+    "566:2318",
+    "566:2319",
+    "566:2324",
+    "566:2325",
+    "566:2326",
+    "689:1750",
+    "566:2331",
+    "566:2332",
+    "566:2340",
+    "689:1769",
+    "566:2348",
+    "566:2249",
+    "566:2253",
+    "566:2259",
+    "566:2419",
+    "566:2420",
+    "566:2425",
+    "566:2426",
+    "566:2427",
+    "689:1777",
+    "566:2432",
+    "566:2433",
+    "566:2441",
+    "566:2449",
+    "689:1804",
+    "566:2457",
+    "566:2350",
+    "566:2354",
+    "566:2360"
+  ],
+  "frames": [
+    {
+      "id": "566:395",
+      "width": 1440,
+      "height": 2963,
+      "bodyHeight": 2886,
+      "children": [
+        {
+          "id": "566:561",
+          "name": "Market Lab",
+          "y": 48,
+          "height": 45
+        },
+        {
+          "id": "566:562",
+          "name": "Screen navigation",
+          "y": 109,
+          "height": 48
+        },
+        {
+          "id": "566:567",
+          "name": "Brief detail",
+          "y": 173,
+          "height": 45
+        },
+        {
+          "id": "566:568",
+          "name": "Proposed · Saved-report placeholders; no live evidence",
+          "y": 234,
+          "height": 20
+        },
+        {
+          "id": "566:569",
+          "name": "Where is demand outrunning supply?",
+          "y": 270,
+          "height": 170
+        },
+        {
+          "id": "689:1597",
+          "name": "Confidence section · Proposed",
+          "y": 456,
+          "height": 922
+        },
+        {
+          "id": "566:574",
+          "name": "3 · Sources cited",
+          "y": 1394,
+          "height": 28
+        },
+        {
+          "id": "566:575",
+          "name": "Citation 1",
+          "y": 1438,
+          "height": 270
+        },
+        {
+          "id": "566:583",
+          "name": "Citation 2",
+          "y": 1724,
+          "height": 270
+        },
+        {
+          "id": "566:591",
+          "name": "Citation 3",
+          "y": 2010,
+          "height": 270
+        },
+        {
+          "id": "689:1624",
+          "name": "History section · Proposed",
+          "y": 2296,
+          "height": 478
+        },
+        {
+          "id": "566:599",
+          "name": "Action / Monthly briefs",
+          "y": 2790,
+          "height": 48
+        }
+      ],
+      "overlaps": []
+    },
+    {
+      "id": "566:601",
+      "width": 1440,
+      "height": 2127,
+      "bodyHeight": 2050,
+      "children": [
+        {
+          "id": "566:767",
+          "name": "Market Lab",
+          "y": 48,
+          "height": 45
+        },
+        {
+          "id": "566:768",
+          "name": "Screen navigation",
+          "y": 109,
+          "height": 48
+        },
+        {
+          "id": "566:773",
+          "name": "Brief detail",
+          "y": 173,
+          "height": 45
+        },
+        {
+          "id": "566:774",
+          "name": "Proposed · Saved-report placeholders; no live evidence",
+          "y": 234,
+          "height": 20
+        },
+        {
+          "id": "566:775",
+          "name": "Where is demand outrunning supply?",
+          "y": 270,
+          "height": 170
+        },
+        {
+          "id": "689:1639",
+          "name": "Confidence section · Proposed",
+          "y": 456,
+          "height": 636
+        },
+        {
+          "id": "566:780",
+          "name": "2 · Sources cited",
+          "y": 1108,
+          "height": 28
+        },
+        {
+          "id": "566:781",
+          "name": "Citation 1",
+          "y": 1152,
+          "height": 270
+        },
+        {
+          "id": "566:789",
+          "name": "Citation 2",
+          "y": 1438,
+          "height": 270
+        },
+        {
+          "id": "689:1658",
+          "name": "History section · Proposed",
+          "y": 1724,
+          "height": 214
+        },
+        {
+          "id": "566:797",
+          "name": "Action / Monthly briefs",
+          "y": 1954,
+          "height": 48
+        }
+      ],
+      "overlaps": []
+    },
+    {
+      "id": "566:799",
+      "width": 1440,
+      "height": 2963,
+      "bodyHeight": 2886,
+      "children": [
+        {
+          "id": "566:965",
+          "name": "Market Lab",
+          "y": 48,
+          "height": 45
+        },
+        {
+          "id": "566:966",
+          "name": "Screen navigation",
+          "y": 109,
+          "height": 48
+        },
+        {
+          "id": "566:971",
+          "name": "Brief detail",
+          "y": 173,
+          "height": 45
+        },
+        {
+          "id": "566:972",
+          "name": "Proposed · Saved-report placeholders; no live evidence",
+          "y": 234,
+          "height": 20
+        },
+        {
+          "id": "566:973",
+          "name": "Where is demand outrunning supply?",
+          "y": 270,
+          "height": 170
+        },
+        {
+          "id": "689:1666",
+          "name": "Confidence section · Proposed",
+          "y": 456,
+          "height": 922
+        },
+        {
+          "id": "566:978",
+          "name": "3 · Sources cited",
+          "y": 1394,
+          "height": 28
+        },
+        {
+          "id": "566:979",
+          "name": "Citation 1",
+          "y": 1438,
+          "height": 270
+        },
+        {
+          "id": "566:987",
+          "name": "Citation 2",
+          "y": 1724,
+          "height": 270
+        },
+        {
+          "id": "566:995",
+          "name": "Citation 3",
+          "y": 2010,
+          "height": 270
+        },
+        {
+          "id": "689:1693",
+          "name": "History section · Proposed",
+          "y": 2296,
+          "height": 478
+        },
+        {
+          "id": "566:1003",
+          "name": "Action / Monthly briefs",
+          "y": 2790,
+          "height": 48
+        }
+      ],
+      "overlaps": []
+    },
+    {
+      "id": "566:2140",
+      "width": 375,
+      "height": 3117,
+      "bodyHeight": 2976,
+      "children": [
+        {
+          "id": "566:2209",
+          "name": "Market Lab",
+          "y": 24,
+          "height": 40
+        },
+        {
+          "id": "566:2210",
+          "name": "Screen navigation",
+          "y": 80,
+          "height": 48
+        },
+        {
+          "id": "566:2215",
+          "name": "Brief detail",
+          "y": 144,
+          "height": 40
+        },
+        {
+          "id": "566:2216",
+          "name": "Proposed · Saved-report placeholders; no live evidence",
+          "y": 200,
+          "height": 20
+        },
+        {
+          "id": "566:2217",
+          "name": "Where is demand outrunning supply?",
+          "y": 236,
+          "height": 198
+        },
+        {
+          "id": "689:1708",
+          "name": "Confidence section · Proposed",
+          "y": 450,
+          "height": 962
+        },
+        {
+          "id": "566:2222",
+          "name": "3 · Sources cited",
+          "y": 1428,
+          "height": 28
+        },
+        {
+          "id": "566:2223",
+          "name": "Citation 1",
+          "y": 1472,
+          "height": 290
+        },
+        {
+          "id": "566:2231",
+          "name": "Citation 2",
+          "y": 1778,
+          "height": 290
+        },
+        {
+          "id": "566:2239",
+          "name": "Citation 3",
+          "y": 2084,
+          "height": 290
+        },
+        {
+          "id": "689:1735",
+          "name": "History section · Proposed",
+          "y": 2390,
+          "height": 498
+        },
+        {
+          "id": "566:2247",
+          "name": "Action / Monthly briefs",
+          "y": 2904,
+          "height": 48
+        }
+      ],
+      "overlaps": []
+    },
+    {
+      "id": "566:2249",
+      "width": 375,
+      "height": 2241,
+      "bodyHeight": 2100,
+      "children": [
+        {
+          "id": "566:2318",
+          "name": "Market Lab",
+          "y": 24,
+          "height": 40
+        },
+        {
+          "id": "566:2319",
+          "name": "Screen navigation",
+          "y": 80,
+          "height": 48
+        },
+        {
+          "id": "566:2324",
+          "name": "Brief detail",
+          "y": 144,
+          "height": 40
+        },
+        {
+          "id": "566:2325",
+          "name": "Proposed · Saved-report placeholders; no live evidence",
+          "y": 200,
+          "height": 20
+        },
+        {
+          "id": "566:2326",
+          "name": "Where is demand outrunning supply?",
+          "y": 236,
+          "height": 198
+        },
+        {
+          "id": "689:1750",
+          "name": "Confidence section · Proposed",
+          "y": 450,
+          "height": 656
+        },
+        {
+          "id": "566:2331",
+          "name": "2 · Sources cited",
+          "y": 1122,
+          "height": 28
+        },
+        {
+          "id": "566:2332",
+          "name": "Citation 1",
+          "y": 1166,
+          "height": 290
+        },
+        {
+          "id": "566:2340",
+          "name": "Citation 2",
+          "y": 1472,
+          "height": 290
+        },
+        {
+          "id": "689:1769",
+          "name": "History section · Proposed",
+          "y": 1778,
+          "height": 234
+        },
+        {
+          "id": "566:2348",
+          "name": "Action / Monthly briefs",
+          "y": 2028,
+          "height": 48
+        }
+      ],
+      "overlaps": []
+    },
+    {
+      "id": "566:2350",
+      "width": 375,
+      "height": 3097,
+      "bodyHeight": 2956,
+      "children": [
+        {
+          "id": "566:2419",
+          "name": "Market Lab",
+          "y": 24,
+          "height": 40
+        },
+        {
+          "id": "566:2420",
+          "name": "Screen navigation",
+          "y": 80,
+          "height": 48
+        },
+        {
+          "id": "566:2425",
+          "name": "Brief detail",
+          "y": 144,
+          "height": 40
+        },
+        {
+          "id": "566:2426",
+          "name": "Proposed · Saved-report placeholders; no live evidence",
+          "y": 200,
+          "height": 20
+        },
+        {
+          "id": "566:2427",
+          "name": "Where is demand outrunning supply?",
+          "y": 236,
+          "height": 198
+        },
+        {
+          "id": "689:1777",
+          "name": "Confidence section · Proposed",
+          "y": 450,
+          "height": 942
+        },
+        {
+          "id": "566:2432",
+          "name": "3 · Sources cited",
+          "y": 1408,
+          "height": 28
+        },
+        {
+          "id": "566:2433",
+          "name": "Citation 1",
+          "y": 1452,
+          "height": 290
+        },
+        {
+          "id": "566:2441",
+          "name": "Citation 2",
+          "y": 1758,
+          "height": 290
+        },
+        {
+          "id": "566:2449",
+          "name": "Citation 3",
+          "y": 2064,
+          "height": 290
+        },
+        {
+          "id": "689:1804",
+          "name": "History section · Proposed",
+          "y": 2370,
+          "height": 498
+        },
+        {
+          "id": "566:2457",
+          "name": "Action / Monthly briefs",
+          "y": 2884,
+          "height": 48
+        }
+      ],
+      "overlaps": []
+    }
+  ]
+}

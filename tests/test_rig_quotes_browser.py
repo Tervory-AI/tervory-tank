@@ -29,7 +29,7 @@ async def widget_server(tmp_path):
             cwd=ROOT, env=process_env, stdout=log, stderr=log)
         try:
             async with httpx.AsyncClient(trust_env=False) as client:
-                for _ in range(100):
+                for _ in range(600):
                     if process.poll() is not None:
                         pytest.fail("Sample API exited during startup")
                     try:

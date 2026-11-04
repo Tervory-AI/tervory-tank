@@ -11,7 +11,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID
 
-from chassis.storage import Storage, StorageError
+from chassis.storage import StorageError
+from rigbox.rooms import RoomStorage as Storage, require_owner
 import httpx
 
 
@@ -27,6 +28,7 @@ class PhotoInputError(StorageError):
 class ForgeFiles(Storage):
     """Stream validated photos to this job's private prefix using Rig's R2 pair."""
     def prefix(self, job):
+        require_owner(job.tenant_id)
         if self.region != "us-east":
             raise StorageError("This conversion is available on the US box only")
         return f"forge/{job.tenant_id}/{job.id}/"
