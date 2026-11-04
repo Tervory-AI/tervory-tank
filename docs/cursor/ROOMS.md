@@ -182,12 +182,10 @@ tmpfs workspaces, dropped capabilities and no volume or Tank key. Only brain and
 executor receive `SANDBOX_KEY_TIGER`; use the existing `coolify-ops` room-setup
 with that extra name, without exposing its value.
 
-**Capacity evidence pending as of 3 Nov 2026:** the founder reports that Boston
-memory was cleaned, but a dated `ops/box-memory.sh` output has not been supplied.
-Host total/used/available bytes, running-container usage and aggregate memory
-limits therefore remain unrecorded. Keep the profile disabled until the ops
-thread's measured numbers show room for the two additional limits. Do not treat
-the requested limits above as measurements or capacity approval.
+**Capacity update, 3 Nov 2026:** the dated Boston `ops/box-memory.sh` snapshot is
+recorded in the Zenas section below, with raw per-container usage and limits.
+Keep Tiger's profile disabled until the founder enables it. The snapshot and
+requested limits are not capacity approval.
 
 After an authorized normal deploy, run `bash ops/seal-check.sh` on Boston and
 require `agent-tiger ... sealed` with no Tiger brain/sandbox running. Recheck the
@@ -206,3 +204,54 @@ Tank is the only public service, at `za.tervory.com`. The corridor `tervory-gw-z
 On `/v1/route`, `/v1/tasks` and `/v1/skala/*/run`, a missing home is this server's `TANK_REGION`, so the live Workspace and agent rooms keep working. An empty, unknown, or other-region home is refused and nothing is stored. `/v1/zenas/*` does not fill a missing home in. The home on that request is a cross-check. The authoritative home is `agent_zenas.tenants.home_region`. The founder sets it once, to `za` or `us-east`, from `/admin/homes`, and that call goes through this proxy to `POST /tenants`. The column is not added here. In `za`, a prompt that still contains a personal identifier is refused for every provider that is not running in South Africa. No such model is active yet. `za-local` is a commented slot in `litellm/config.za.yaml`.
 
 The pool-loader service is not in this file. It is added on the ZA box only, and it uses this stack's database.
+
+## Zenas standby brain, both boxes (3 Nov 2026)
+
+`zenas-brain` and `zenas-sandbox` reuse the pinned Rig Hermes image, shared
+health-only standby and Base WASI sandbox. No task API or caller is added.
+Both services use the `brain` profile; `ZENAS_BRAIN_ENABLED` defaults to false.
+The brain has a 2 GiB / 1 CPU limit, the sandbox 512 MiB / 0.5 CPU: planned
+additional limits of 2.5 GiB and 1.5 CPU per box. Both roots are read-only;
+workspaces are tmpfs, capabilities dropped and privileges/PIDs bounded. Each
+brain has its own regional data volume; the sandbox has no persistent volume,
+Tank key, provider key or bucket. All service URLs resolve inside that box.
+The room's existing bucket and data remain regional.
+
+Tank enables only the owning Zenas room key. Requests require a matching local
+home region; ZA never forwards to Boston. Before model policy or gateway work,
+the existing approved `zenas.scope` rules run in code, including criminal
+refusal; ambiguous/out-of-scope prompts cannot fall back to a model here.
+Only the room's existing approved skills export; candidate submission remains
+Base-only. No model policy or provider is added.
+
+Boston measurement, **3 Nov 2026, 14:20 PST (22:20 UTC)**, run read-only with
+`ops/box-memory.sh` on `ammosync-us-boston`, before this task's test containers:
+
+| Measure | Bytes / count |
+| --- | ---: |
+| Total memory | 33,648,410,624 |
+| Used memory | 10,821,517,312 |
+| Available memory | 22,826,893,312 |
+| All container memory limits | 32,078,036,992 |
+| Running container memory limits | 32,078,036,992 |
+| Containers / running | 64 / 61 |
+| Containers with no memory limit | 29 |
+
+Per-running-container usage and limits are retained in
+[the raw Boston snapshot](../../tests/zenas_brain/evidence/boston-memory.txt).
+Available memory is a snapshot, not an allocation; the plan's limits are not
+measured usage and do not authorize enabling either brain.
+
+**ZA: pending, read after deploy with ops/box-memory.sh**. Planned additional
+limits remain 2.5 GiB / 1.5 CPU; no ZA SSH target or credentials are available to
+builders, and none are requested. Keep both disabled defaults until the founder
+turns the brain on. No larger box is requested.
+
+Both room files use Raw Compose. Existing room volume declarations and mounts
+remain unchanged from main on both boxes. The brain mounts only its own new
+`zenas_brain_data`; it never mounts room data. Any future room-data access must
+use the room's existing tools through Tank.
+After an authorized profile deployment, run `ops/seal-check.sh` on each host and
+require Zenas brain and sandbox sealed. The isolation checker takes three Zenas
+container names; Base/Tiger retain five. Hosted CI and both postdeploy host
+proofs remain separate from local offline verification.

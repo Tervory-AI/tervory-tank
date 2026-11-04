@@ -175,7 +175,7 @@ test('tervory update: latest, TERVORY_CLI_VERSION pin, and checksum refusal', { 
 });
 
 test('install.sh: deadlines on every download, wrapped in main, atomic swap', () => {
-  const script = readFileSync(join(CLI, 'install.sh'), 'utf8');
+  const script = readFileSync(join(CLI, 'install.sh'), 'utf8').replaceAll('\r\n', '\n');
   assert.match(script, /PROTO='=https'; LOOPBACK=0/);
   assert.match(script, /http:\/\/127\.0\.0\.1:\*\|http:\/\/127\.0\.0\.1\/\*\|http:\/\/localhost:\*\|http:\/\/localhost\/\*\) PROTO='=https,http'; LOOPBACK=1/);
   assert.match(script, /curl -fsSL --proto "\$PROTO" --proto-redir "\$PROTO" --connect-timeout 15 --max-time 300/);

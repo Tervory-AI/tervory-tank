@@ -27,7 +27,7 @@ The existing storage API on agent-rig uses only `R2_ACCESS_KEY_ID_RIG` and
 `R2_SECRET_ACCESS_KEY_RIG`, with `R2_ACCOUNT_ID` and the fixed `tervory-rig` bucket.
 Use its `datasets` category for catalogue snapshots and `uploads` for product
 images and later 3D files. Keys include region and tenant. Missing credentials
-fail visibly before a write. No new supplier, Odoo or model credentials are needed
+fail visibly before a write. No new supplier or model credentials are needed
 for the stand-in tests. Do not put live ZA shopper information on Boston.
 
 ## Before deployment

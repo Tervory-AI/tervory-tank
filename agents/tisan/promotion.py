@@ -180,8 +180,10 @@ class Coolify:
 
 class Promotion:
     def __init__(self, journal: Journal, coolify: Coolify, live_check: Callable[[str], Awaitable[dict]],
-                 radix_gate: Callable[[str, str, str], Awaitable[dict]]) -> None:
+                 radix_gate: Callable[[str, str, str], Awaitable[dict]],
+                 repo_gate: Callable[[str, str, str], Awaitable[dict]] | None = None) -> None:
         self.journal, self.coolify, self.live_check, self.radix_gate = journal, coolify, live_check, radix_gate
+        self.repo_gate = repo_gate
 
     async def run(self, tenant: str, site: str, operation: str, action: str, actor: str, expected: str) -> dict:
         tenant, operation = str(uuid.UUID(tenant)), str(uuid.UUID(operation))
@@ -214,6 +216,17 @@ class Promotion:
                     raise Refused('staging and production sources differ')
                 if config['url'] not in [origin(u.strip()) for u in (staging['fqdn'] or '').split(',') if u.strip()]:
                     raise Refused('staging origin differs from registered application')
+                if self.repo_gate is None:
+                    raise Refused('repo scan required')
+                details['repo_scan'] = await self.repo_gate(tenant, site, expected)
+                if (not isinstance(details['repo_scan'], dict) or details['repo_scan'].get('ok') is not True
+                        or details['repo_scan'].get('tenant_id') != tenant
+                        or details['repo_scan'].get('scan_complete') is not True
+                        or type(details['repo_scan'].get('critical')) is not int
+                        or details['repo_scan']['critical'] != 0
+                        or not re.fullmatch(r'[a-f0-9]{64}', details['repo_scan'].get('archive_sha256', ''))):
+                    raise Refused('repo scan did not pass')
+                uuid.UUID(details['repo_scan'].get('scan_id', ''))
                 details['staging_deployment'] = staging['deployment']
                 details['live_check'] = await self.live_check(config['url'])
                 if not isinstance(details['live_check'], dict) or details['live_check'].get('passed') is not True:

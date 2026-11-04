@@ -8,6 +8,7 @@ from tenant_db import tenant_scope
 
 import hashlib
 import hmac
+import importlib.util
 import json
 import math
 import logging
@@ -31,7 +32,7 @@ log = logging.getLogger("tank.agent_skills")
 ROOM = "base"
 # Rooms with a brain pilot. room_text() maps a request's room to one of these fixed
 # strings; SQL always receives the room and its task type as bound parameters.
-ROOMS = {"base": "base", "rig": "rig", "tiger": "tiger"}
+ROOMS = {"base": "base", "rig": "rig", "tiger": "tiger", "zenas": "zenas"}
 SUBMISSIONS = Path("/tmp/tervory-agent-skills")
 LEDGER_SQL = """
 INSERT INTO tank.ledger
@@ -61,12 +62,27 @@ def room_key(room: str, authorization: str = "", x_tank_key: str = "") -> None:
         raise HTTPException(401, "Owning room key required.")
 
 
-def local_region(tank: Any, home: str | None) -> str:
+def local_region(tank: Any, home: str | None, *, room: str = ROOM) -> str:
     box = tank.box_region()
+    if room == "zenas":
+        if box not in {"us-east", "za"} or home != box:
+            raise HTTPException(403)
+        return box
     # The Base pilot is US-only. Never forward a ZA tenant to Boston.
     if box != "us-east" or (home is not None and home != box):
         raise HTTPException(403, "Base's pilot stays in its home region.")
     return box
+
+
+@lru_cache(maxsize=16)
+def zenas_scope_rules(package_path: Path):
+    """Load the existing approved scope rules; never run its model fallback."""
+    spec = importlib.util.spec_from_file_location("brain_zenas_scope", package_path / "rules.py")
+    if spec is None or spec.loader is None:
+        raise HTTPException(503)
+    rules = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rules)
+    return rules
 
 
 class Chat(BaseModel):
@@ -160,6 +176,16 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
     room = room_text(room)
     task_type = f"agent.{room}.think"
     validate_chat(body)
+    if room == "zenas":
+        region = local_region(tank, region, room=room)
+        version = await tank._pick_version("zenas.scope", False)
+        package = tank.get_package("zenas.scope", version)
+        # Scan the whole supplied conversation, including tool results/arguments.
+        # This is the room's existing classifier, with no model scope fallback.
+        scope = zenas_scope_rules(package.path).classify(
+            json.dumps(body.model_dump(exclude_none=True), ensure_ascii=False), "za" if region == "za" else "us")
+        if scope.get("criminal") or not scope.get("in_scope"):
+            raise HTTPException(403, scope["reason"])
     await controls.refuse_paid(task=task_type, path="agent.chat")
     policy = await tank.load_policy(task_type, tenant)
     model = policy["model"]
@@ -535,7 +561,7 @@ def build_router(tank: Any) -> APIRouter:
     @router.get("/v1/agents/{room}/skills")
     async def approved(room: str, tenant_id: uuid.UUID, request: Request, home_region: str = "us-east"):
         room_key(room, request.headers.get("authorization", ""), request.headers.get("x-tank-key", ""))
-        return await export_skills(tank, tenant_id, local_region(tank, home_region), room=room)
+        return await export_skills(tank, tenant_id, local_region(tank, home_region, room=room), room=room)
 
     @router.post("/v1/agents/{room}/skills/candidates", status_code=201)
     async def candidate(room: str, body: Candidate, request: Request):
@@ -547,7 +573,7 @@ def build_router(tank: Any) -> APIRouter:
     @router.get("/v1/agents/{room}/receipts")
     async def receipts(room: str, tenant_id: uuid.UUID, task_id: uuid.UUID, request: Request):
         room_key(room, request.headers.get("authorization", ""), request.headers.get("x-tank-key", ""))
-        local_region(tank, request.headers.get("x-home-region"))
+        local_region(tank, request.headers.get("x-home-region"), room=room)
         async with tank.pool().acquire() as conn:
             rows = await conn.fetch(
                 "SELECT r.receipt FROM tank.agent_receipts r JOIN tank.ledger l ON l.id=r.ledger_id "
@@ -560,7 +586,7 @@ def build_router(tank: Any) -> APIRouter:
                    x_tenant_id: uuid.UUID = Header(), x_task_id: uuid.UUID | None = Header(default=None),
                    x_home_region: str | None = Header(default=None)):
         room_key(room, request.headers.get("authorization", ""), request.headers.get("x-tank-key", ""))
-        result = await complete(tank, body, x_tenant_id, x_task_id, local_region(tank, x_home_region), room=room)
+        result = await complete(tank, body, x_tenant_id, x_task_id, local_region(tank, x_home_region, room=room), room=room)
         if body.stream:
             return StreamingResponse(stream_completion(result), media_type="text/event-stream")
         return result

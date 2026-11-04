@@ -46,7 +46,12 @@ async def run(
                 await store.import_series(ledger, tenant, engine, item, clock)
                 active.add(item["source"] + ":" + item["ref"])
         series = await store.series(ledger, tenant, clock)
+        from core.event_signals import series as event_series
+        from feeds.keys import key_is_set
+        series.update(await event_series(ledger, tenant, plan, series, clock))
         for config in plan["pairs"]:
+            if config.get("key_name") and not key_is_set(config["key_name"]):
+                continue
             upstream = next(
                 (
                     s
@@ -192,7 +197,18 @@ async def run(
                 )
                 # Freeze only the completed, non-overlapping history available
                 # at issuance. Future outcomes never revise this confidence.
-                prediction.update(confidence=stats["hit_rate"], kind=config["id"], feed=config["source"])
+                from core.warning_bridge import call
+                try:
+                    reliability = await call("confidence", {"tenant_id": tenant, "hits": stats["hits"], "total": count})
+                except RuntimeError:
+                    # An optional calculation corridor must not prevent the
+                    # warning itself. Unavailable confidence stays unknown.
+                    reliability = None
+                prediction.update(confidence=reliability["confidence"] if reliability else None,
+                                  kind=config["id"], feed=config["source"])
+                if reliability:
+                    prediction["sources"].append({"confidence_method": "wilson_lower_95",
+                                                  "hits": stats["hits"], "total": count})
                 await ledger.save_prediction(prediction)
                 await ledger.conn.execute(
                     """INSERT INTO agent_market_lab.warnings
@@ -358,7 +374,8 @@ async def listing(ledger: PostgresLedger, tenant: str) -> dict:
                 "href": href,
             },
             {
-                "text": f"{data['upstream_name']} {direction} {change:.1f}% in {period}."
+                "text": current["point"]["event_title"] if data["config"].get("trigger") == "event"
+                else f"{data['upstream_name']} {direction} {change:.1f}% in {period}."
                 if change is not None
                 else f"{data['upstream_name']} changed in {period}.",
                 "href": source_link(str(row["document_id"]), "upstream"),

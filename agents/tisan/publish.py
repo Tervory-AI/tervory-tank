@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hmac
+import hashlib
 import json
 import os
 import tarfile
@@ -41,6 +42,11 @@ def stored_build(root: Path, tenant: str, slug: str, number: int) -> dict:
             or not manifest.get('checks') or any(c.get('ok') is not True for c in manifest['checks'])
             or manifest.get('detail')):
         raise ValueError('stored build did not pass')
+    try:
+        from agents.tisan import repo_scan
+    except ModuleNotFoundError:
+        import repo_scan
+    repo_scan.receipt(manifest, tenant, hashlib.sha256(archive_path.read_bytes()).hexdigest())
     with tarfile.open(archive_path, 'r:gz') as archive:
         for member in archive:
             path = PurePosixPath(member.name)

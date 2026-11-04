@@ -1,0 +1,26 @@
+Market Lab Wave 4 offline verification (2026-11-03)
+Source head: 0d6d97de3ea5c906cb86f9b9a141b9ff94986505
+TMPDIR=/workspace/codex-market-lab-w3/.tmp
+
+Item push heads:
+1 b8266759689cf20855847922698292b036d7e0e9 — 39 passed
+2 e0aff15b9f840bc40e18072810185cbbabf0e194 — 39 passed, 3 skipped
+3 7d2445e30ca3e7acc41b965d6ef1f183e5ee2950 — 46 passed
+4 0d6d97de3ea5c906cb86f9b9a141b9ff94986505 — 30 passed
+
+Full command:
+TMPDIR=/workspace/codex-market-lab-w3/.tmp PYTHONPATH=tank .venv/bin/python -m pytest -q tests/test_market_lab*.py tests/test_feeds*.py tests/market_lab_feeds tests/market_lab_keyless_feeds tests/market_lab_gpt_researcher tests/test_autumbra_market_lab_intel.py tests/test_access1_feeds.py tests/test_tiger_alert_email.py tests/test_base_source_reliability.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --timeout=120
+Result: 352 passed, 12 skipped, 3 warnings in 149.76s (0:02:29).
+Warnings: existing Pydantic field-shadow warnings for ScaffoldPage.copy,
+TisanBuildArgs.copy and TriggerWriteArgs.register.
+Optional integrations remain skipped; no skipped case is claimed as run.
+
+Ruff E9/F on Wave 4 changed Python files: passed.
+git diff --check ef8a05b0: passed.
+No outside sockets, real SMTP recipient, production SQL or model call.
+Real temporary PostgreSQL, local SMTP and ASGI webhook fixtures only.
+Initial item-1 fixture had no admitted pooled points; corrected fixture to
+release its disposable held observations. No production data-guard bypass.
+
+CI source run: https://github.com/Tervory-AI/tervory-tank/actions/runs/41739548736
+CI final status and founder acceptance remain recorded in PR #640.

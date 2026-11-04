@@ -216,17 +216,19 @@ def test_ping_schedules_are_the_template_heartbeat() -> None:
         # RX1 adds scan on Radix. TS1 adds scaffold on Tisan. TS2 adds figma.
         # Each room keeps ping, and neither assertion may strip the other room's job.
         if folder == "radix":
-            assert handlers == {"ping", "scan"}
+            # R4 adds watch_tick for scheduled watch re-checks.
+            assert handlers == {"ping", "scan", "watch_tick"}
         else:
-            # Tisan builder (#571) adds build, with the same 10-minute allowance.
-            assert handlers == {"ping", "scaffold", "figma", "build"}
-            # Founder, 14 Oct 2026: a site build is allowed 10 minutes.
-            assert module.app.state.job_timeouts == {"scaffold": 600, "build": 600}
-        assert module.app.state.schedules == [
-            {
-                "tenant_id": "00000000-0000-0000-0000-000000000001",
-                "cron": "*/5 * * * *",
-                "kind": "ping",
-                "input": {"heartbeat": True},
-            }
-        ]
+            # Wave 4 adds the orchestration job; existing heartbeat and handlers remain.
+            assert handlers == {"ping", "scaffold", "figma", "build", "pipeline"}
+            # The R5 scan and staging poll are bounded inside the pipeline allowance.
+            assert module.app.state.job_timeouts == {"scaffold": 1200, "build": 1200, "pipeline": 2400}
+        heartbeat = {
+            "tenant_id": "00000000-0000-0000-0000-000000000001",
+            "cron": "*/5 * * * *",
+            "kind": "ping",
+            "input": {"heartbeat": True},
+        }
+        # R4: Radix also ticks its due watches every minute.
+        tick = {"tenant_id": heartbeat["tenant_id"], "cron": "* * * * *", "kind": "watch_tick", "input": {}}
+        assert module.app.state.schedules == ([tick, heartbeat] if folder == "radix" else [heartbeat])
