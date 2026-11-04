@@ -11,14 +11,21 @@ export default async function Page({
 }) {
   const { segments: parts = ["crm", "leads"] } = await params;
   const [area, section, id] = parts;
-  if (parts.length > 3 || (id && !/^[a-f0-9-]{36}$/.test(id))) notFound();
-  if (area === "crm" && section in CRM) {
+  if (
+    parts.length > 3 ||
+    (id &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+        id,
+      ))
+  )
+    notFound();
+  if (area === "crm" && Object.hasOwn(CRM, section)) {
     const resource = section as Resource;
     return (
       <CRMView
         resource={resource}
         detail={!!id}
-        data={await readTrigger(`crm/${resource}${id ? `/${id}` : ""}`)}
+        data={await readTrigger("crm", resource, id)}
       />
     );
   }
@@ -34,9 +41,7 @@ export default async function Page({
         area={area}
         section={section}
         id={id}
-        data={await readTrigger(
-          `${area}/${section}${id ? `?record_id=${id}` : ""}`,
-        )}
+        data={await readTrigger(area, section, id)}
       />
     );
   notFound();
