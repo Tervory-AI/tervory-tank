@@ -35,6 +35,14 @@ No Code Connect files were found. Local source instances and variables take prec
 | T07-375 · Watch card controls · On | 375×1678 | [629:510](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=629-510) | Proposed | [PNG](evidence/T07-375.png) |
 | T08-1440 · Watch card controls · Off | 1440×1610 | [629:650](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=629-650) | Proposed | [PNG](evidence/T08-1440.png) |
 | T08-375 · Watch card controls · Off | 375×1728 | [629:868](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=629-868) | Proposed | [PNG](evidence/T08-375.png) |
+| T09-1440 · Alerts · All five kinds | 1440×1700 | [642:443](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=642-443) | Proposed | [PNG](evidence/T09-1440.png) |
+| T09-375 · Alerts · All five kinds | 375×1936 | [642:662](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=642-662) | Proposed | [PNG](evidence/T09-375.png) |
+| T10-1440 · Alerts · Empty | 1440×1189 | [645:496](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=645-496) | Proposed | [PNG](evidence/T10-1440.png) |
+| T10-375 · Alerts · Empty | 375×900 | [645:676](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=645-676) | Proposed | [PNG](evidence/T10-375.png) |
+| T11-1440 · Alerts · Loading | 1440×1189 | [645:782](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=645-782) | Proposed | [PNG](evidence/T11-1440.png) |
+| T11-375 · Alerts · Loading | 375×900 | [645:962](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=645-962) | Proposed | [PNG](evidence/T11-375.png) |
+| T12-1440 · Alerts · Error | 1440×1189 | [645:1068](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=645-1068) | Proposed | [PNG](evidence/T12-1440.png) |
+| T12-375 · Alerts · Error | 375×900 | [645:1250](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=645-1250) | Proposed | [PNG](evidence/T12-375.png) |
 
 ## Validation and copy
 
