@@ -37,6 +37,9 @@ async def test_decorative_overflow_preserves_viewport(real_chromium, tmp_path, w
     await page.clock.pause_at('2024-01-02T00:00:00Z')
     await page.goto('http://rig.test/', wait_until='networkidle')
     await page.evaluate('document.fonts.ready')
+    # Disable motion for the entire observation, including style changes between
+    # captures. Per-screenshot fast-forward alone can fire/restore transitions.
+    await page.add_style_tag(content='*,*::before,*::after { animation:none!important; transition:none!important; caret-color:transparent!important; }')
     await page.evaluate('''view => {
       document.body.dataset.view = view;
       document.querySelector('#landing').hidden = view !== 'landing';

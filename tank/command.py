@@ -761,6 +761,7 @@ async def propose_build(body: Build, actor: Actor = Depends(identity)) -> dict:
 
 @router.post("/cards/{card_id}")
 async def card_action(card_id: uuid.UUID, body: CardAction, actor: Actor = Depends(identity)) -> dict:
+    __import__('paid_steps').current().card_tenant = actor.tenant_id
     async with db().acquire() as conn:
         thread_id = await conn.fetchval(
             "SELECT thread_id FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND state->'cards' ? $3",
@@ -777,14 +778,15 @@ async def card_action(card_id: uuid.UUID, body: CardAction, actor: Actor = Depen
         raise HTTPException(404, "Card not found")
     if cancellation is not None:
         await __import__("paid_steps").decide(cancellation, actor.user_id, approve=False)
+    source = db()
+    parked = await __import__('paid_steps').card_waiting(card_id, actor.tenant_id,
+        source=getattr(source, 'admin_pool', None) or source)
     action = None
     reconcile = False
     async with editing(thread_id, actor) as (conn, row, state):
         card = state["cards"][str(card_id)]
         # Recover a crashed process without replaying an uncertain side effect.
         if card["status"] == "executing":
-            parked = await conn.fetchval("""SELECT EXISTS(SELECT 1 FROM tank.paid_runs
-                WHERE tenant_id=$1 AND source_card_id=$2 AND status='waiting' AND tank.paid_worker_alive(server_id))""", actor.tenant_id, card_id)
             if parked:
                 return public_card(card)
             started = datetime.fromisoformat(card["started_at"])

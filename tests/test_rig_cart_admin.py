@@ -1,5 +1,9 @@
 """Signed-in cart admin boundary and sealed credentials, entirely offline."""
 import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'agents/rig'))
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock
 from uuid import UUID

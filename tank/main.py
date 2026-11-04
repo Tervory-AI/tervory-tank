@@ -3069,7 +3069,7 @@ async def _process_batch(conn: Any, batch: Any) -> None:
 
 async def process_batches_once() -> None:
     import paid_steps
-    await paid_steps.heartbeat()
+    await paid_steps.heartbeat(__import__('sys').modules[__name__])
     async with admin_pool().acquire() as conn:
         rows = await conn.fetch("SELECT id,tenant_id FROM tank.batches WHERE region=$1 AND status IN ('queued','submitting','submitted','retrying') ORDER BY created_at LIMIT 20", box_region())
     for row in rows:

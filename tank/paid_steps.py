@@ -63,6 +63,7 @@ class Run:
     saved: bool = False
     task_id: uuid.UUID | None = None
     card_id: uuid.UUID | None = None
+    card_tenant: uuid.UUID | None = None
     deadline: datetime | None = None
     on_pause: Any = None
     on_resume: Any = None
@@ -202,9 +203,9 @@ async def authorize(step_id: str, payload: Any, *, tenant: uuid.UUID | None = No
     expires = min(datetime.now(UTC) + WAIT_LIMIT, run.deadline) if run.deadline else datetime.now(UTC) + WAIT_LIMIT
     with tenant_scope(owner):
         async with runtime().pool().acquire() as conn, conn.transaction():
-            await conn.execute('''INSERT INTO tank.paid_runs(tenant_id,id,region,server_id,caller,source_card_id,status)
-                VALUES($1,$2,$3,$4,$5,$6,'waiting') ON CONFLICT(tenant_id,id) DO UPDATE SET status='waiting' ''',
-                owner, run.id, runtime().box_region(), SERVER, run.caller, run.card_id)
+            await conn.execute('''INSERT INTO tank.paid_runs(tenant_id,id,region,server_id,caller,source_card_id,source_tenant_id,status)
+                VALUES($1,$2,$3,$4,$5,$6,$7,'waiting') ON CONFLICT(tenant_id,id) DO UPDATE SET status='waiting' ''',
+                owner, run.id, runtime().box_region(), SERVER, run.caller, run.card_id, run.card_tenant)
             await conn.execute('''INSERT INTO tank.paid_step_approvals
                 (tenant_id,id,run_id,step_id,request_hash,task_type,expires_at)
                 VALUES($1,$2,$3,$4,$5,$6,$7)''', owner, approval, run.id, step_id, digest(payload), task[:120], expires)
@@ -356,6 +357,17 @@ async def decide(approval_id: uuid.UUID, by: str, *, approve=True):
     return {'approval_id':str(approval_id), 'status':'approved' if approve else 'cancelled'}
 
 
+async def card_waiting(card_id, tenant, *, source=None):
+    # Called only after ownership of this exact source card was checked and the
+    # source checkout released. Global skill evals can own a platform paid run
+    # while their founder's source card belongs to a workspace tenant.
+    with tenant_scope(None, administrative=True):
+        async with (source or runtime().admin_pool()).acquire() as conn:
+            return await conn.fetchval('''SELECT EXISTS(SELECT 1 FROM tank.paid_runs
+                WHERE source_tenant_id=$1 AND source_card_id=$2 AND region=$3
+                AND status IN ('waiting','running') AND tank.paid_worker_alive(server_id))''', tenant, card_id, runtime().box_region())
+
+
 @asynccontextmanager
 async def execution_timeout(seconds: float):
     """Budget active execution time; an Ask wait does not consume this budget."""
@@ -481,10 +493,11 @@ class PaidRunMiddleware:
                 if path.startswith('/v1/command/cards/'):
                     import command
                     card_id = path.rsplit('/',1)[-1]
-                    with tenant_scope(run.tenant):
+                    owner = run.card_tenant or run.tenant
+                    with tenant_scope(owner):
                         async with runtime().pool().acquire() as conn:
                             row = await conn.fetchrow('''SELECT state FROM tank.command_threads WHERE tenant_id=$1
-                                AND state->'cards' ? $2 LIMIT 1''', run.tenant, card_id)
+                                AND state->'cards' ? $2 LIMIT 1''', owner, card_id)
                     if row:
                         card = json.loads(row['state'])['cards'][card_id]
                         body = {**command.public_card(card), 'paid_run':body}

@@ -102,6 +102,7 @@ def corridor(monkeypatch):
         box_region=lambda: "us-east", model_call_refusal=Mock(return_value=None),
         graduate=SimpleNamespace(router_cannot_serve=lambda model: False),
         LITELLM_URL="http://placeholder-gateway", LITELLM_MASTER_KEY="placeholder-gateway-key")
+    monkeypatch.setattr(__import__('paid_steps'), 'runtime', lambda: tank)
     app = FastAPI()
     app.include_router(agent_skills.build_router(tank))
     original = httpx.AsyncClient

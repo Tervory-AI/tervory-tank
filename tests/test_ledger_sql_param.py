@@ -37,6 +37,8 @@ class Pool:
         yield
 
     async def fetchval(self, sql, *args):
+        if 'paid_step_settings' in sql:
+            return 'auto'  # Explicit fixture authorization; SQL binding is under test.
         if "tank.standard_model_for" in sql:
             return "baseline"
         return False
@@ -67,6 +69,7 @@ def setup(monkeypatch):
     tank = SimpleNamespace(pool=lambda: pool, load_policy=policy, _roster_models=roster, box_region=lambda: "us-east",
                            model_call_refusal=lambda *a, **kw: None, graduate=SimpleNamespace(router_cannot_serve=lambda m: False),
                            LITELLM_URL="http://gateway.invalid", LITELLM_MASTER_KEY=uuid.uuid4().hex)
+    monkeypatch.setattr(__import__('paid_steps'), 'runtime', lambda: tank)
     original = httpx.AsyncClient
 
     def gateway(request):

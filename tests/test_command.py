@@ -1164,7 +1164,8 @@ async def test_shared_override_disables_fallback_and_shadow_without_mutating_pol
     import asyncio
     await asyncio.gather(*list(tank._background))
     shadow.assert_awaited_once()
-    assert 'disable_fallbacks' not in calls[-1]
+    # Ask/Auto authorizes each model step, so even Auto has no hidden fallback/retry.
+    assert calls[-1]['disable_fallbacks'] is True and calls[-1]['num_retries'] == 0
 
 
 @pytest.mark.asyncio

@@ -99,6 +99,7 @@ async def real_tank(monkeypatch):
         async with tank.app.router.lifespan_context(tank.app):
             async with tank.pool().acquire() as conn:
                 await __import__('tenant_fixture').onboard(conn, *tenants)
+                await __import__('paid_fixture').auto(conn, 'flash-lite')
                 for tenant in tenants:
                     await conn.execute("""INSERT INTO tank.policy(tenant_id,task_type,model,shadow_rate,system_prompt)
                         VALUES($1,'routellm.proof','sol',1,'Answer the question.')""", tenant)

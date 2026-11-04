@@ -3029,6 +3029,9 @@ CREATE TABLE IF NOT EXISTS tank.paid_step_approvals (
     PRIMARY KEY(tenant_id,id), FOREIGN KEY(tenant_id,run_id) REFERENCES tank.paid_runs(tenant_id,id)
 );
 CREATE INDEX IF NOT EXISTS paid_step_approvals_waiting ON tank.paid_step_approvals(status,created_at);
+ALTER TABLE tank.paid_runs ADD COLUMN IF NOT EXISTS source_tenant_id uuid;
+CREATE INDEX IF NOT EXISTS paid_runs_source_card ON tank.paid_runs(source_tenant_id,source_card_id)
+    WHERE source_card_id IS NOT NULL;
 DO $$ DECLARE name text; BEGIN
  IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
   FOREACH name IN ARRAY ARRAY['paid_step_settings','paid_step_log','paid_step_workers','paid_runs','paid_step_approvals'] LOOP
@@ -3048,7 +3051,7 @@ END $$;
 
 CREATE OR REPLACE FUNCTION tank.paid_worker_alive(worker uuid) RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,tank
-SET app.tenant_id='00000000-0000-0000-0000-000000000001' AS $$
+SET row_security=off AS $$
  SELECT EXISTS(SELECT 1 FROM tank.paid_step_workers WHERE tenant_id='00000000-0000-0000-0000-000000000001'::uuid
                AND id=worker AND heartbeat>now()-interval '90 seconds')
 $$;

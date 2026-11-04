@@ -387,3 +387,48 @@ async def test_waiting_sibling_does_not_remove_active_timeout(boundary, monkeypa
     finally:
         work.cancel()
         await asyncio.gather(work, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_workspace_card_can_wait_on_platform_owned_eval(boundary, monkeypatch):  # noqa: F811
+    import command
+    b = boundary
+    monkeypatch.setattr(paid, 'POLL_SECONDS', .01)
+    await paid.heartbeat()
+    actor = command.Actor(b.tenants[0], 'founder-fixture', True)
+    headers = {'X-Tervory-User':actor.user_id,'X-Tervory-Tenant':str(actor.tenant_id)}
+    thread = (await b.client.post('/v1/command/threads',headers=headers,json={})).json()['thread_id']
+    async with command.editing(uuid.UUID(thread),actor) as (conn,row,state):
+        card = await command.propose_action(conn,row,state,command.PlannedAction(tool='skala.evals',
+            arguments={'skill_id':'base.public','version':'1.0.0'}),actor)
+        identity = card['card_id']
+    calls = []
+    async def execute(action, actor):
+        await paid.authorize(paid.model_step('luna'), {'input':'global eval'}, tenant=paid.PLATFORM_TENANT)
+        calls.append(True)
+        return 200, {'evaluated':True}
+    monkeypatch.setattr(command, 'dispatch_action', execute)
+    response = await b.client.post('/v1/command/cards/'+identity,headers=headers,json={'action':'confirm'})
+    assert response.status_code == 202 and response.json()['card_id'] == identity, response.text
+    assert response.json()['paid_run']['tenant_id'] == str(paid.PLATFORM_TENANT)
+    try:
+        approval = await waiting(b)
+        assert await paid.card_waiting(uuid.UUID(identity), actor.tenant_id)
+        assert not await paid.card_waiting(uuid.UUID(identity), b.tenants[1])
+        # Polling the executing card cannot dispatch it again or mark it stale.
+        second = await b.client.post('/v1/command/cards/'+identity,headers=headers,json={'action':'confirm'})
+        assert second.status_code == 200 and second.json()['status'] == 'executing'
+        await paid.decide(approval['id'], actor.user_id)
+        async with asyncio.timeout(3):
+            while True:
+                saved = (await b.client.get('/v1/command/threads/'+thread,headers=headers)).json()
+                found = next(c for c in saved['cards'] if c['card_id'] == identity)
+                if found['status'] == 'confirmed':
+                    break
+                await asyncio.sleep(.01)
+        assert calls == [True] and found['result'] == {'evaluated':True}
+    finally:
+        for task in list(paid.LIVE):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*list(paid.LIVE), return_exceptions=True)

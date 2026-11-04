@@ -307,6 +307,7 @@ async def test_batch_completion_records_enqueue_time_shadow_once(semantic, monke
     async with b.pool.acquire() as conn:
         await conn.execute("""UPDATE tank.policy SET model='batch-fixture',batch_eligible=true,
             max_cost_usd=1 WHERE tenant_id=$1""", b.tenants[0])
+        await __import__('paid_fixture').auto(conn, 'batch-fixture')
     async def roster():
         return [{'model_name': 'batch-fixture', 'litellm_params': {'model': 'openai/' + NATIVE['openai']},
                  'model_info': {'input_cost_per_token': .000002, 'output_cost_per_token': .00001}}]
