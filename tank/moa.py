@@ -171,7 +171,7 @@ class FanState(TypedDict):
 async def run_seat(seat: Seat, messages: list[dict], policy: Policy, call: Call,
                    breaker: CircuitBreaker, scope: tuple) -> Result:
     from langgraph.graph import END, START, StateGraph
-    from langgraph.types import RetryPolicy, TimeoutPolicy
+    from langgraph.types import RetryPolicy
 
     key = (*scope, seat.name, seat.model)
     result = Result(seat.name, seat.model, 'FAILED', critical=seat.critical)
@@ -200,12 +200,12 @@ async def run_seat(seat: Seat, messages: list[dict], policy: Policy, call: Call,
     graph.add_node('call', attempt,
                    retry_policy=RetryPolicy(max_attempts=policy.max_attempts, initial_interval=.2,
                                             max_interval=2, jitter=True, retry_on=retryable),
-                   timeout=TimeoutPolicy(run_timeout=seat.timeout_s))
+                   )
     graph.add_edge(START, 'call')
     graph.add_edge('call', END)
     try:
         # Retries share the seat's hard wall-clock budget; they cannot multiply it.
-        async with asyncio.timeout(seat.timeout_s):
+        async with __import__("paid_steps").execution_timeout(seat.timeout_s):
             state = await graph.compile().ainvoke({})
         result.answer, result.status = state['answer'], 'COMPLETE'
     except Exception as error:

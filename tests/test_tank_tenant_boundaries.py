@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest_asyncio.fixture
-async def boundary(monkeypatch, tmp_path):
+async def boundary(monkeypatch, tmp_path, request):
     url = os.environ.get("POOL_SCHEMA_DATABASE_URL")
     if not url:
         pytest.skip("Set POOL_SCHEMA_DATABASE_URL to isolated test Postgres")
@@ -48,6 +48,8 @@ async def boundary(monkeypatch, tmp_path):
         monkeypatch.setattr(skala, "run_skill", run)
         async with pool.acquire() as conn:
             await conn.execute((ROOT / "tank/schema.sql").read_text())
+            if request.node.get_closest_marker("paid_step_controls") is None:
+                await __import__("paid_fixture").auto(conn)
             for tenant in tenants:
                 await conn.execute("INSERT INTO tank.tenants(tenant_id,home_region,onboarded_by) VALUES($1,'us-east','founder-fixture')", tenant)
             for i, tenant in enumerate(tenants):

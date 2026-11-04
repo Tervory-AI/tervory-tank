@@ -70,7 +70,7 @@ import prompt_cache
 import priority_queue
 import graduate
 import semantic_cache
-from tenant_db import TenantContextMiddleware, TenantPool, tenant_path, tenant_scope, administrative, bind_tenant_endpoints
+from tenant_db import TenantContextMiddleware, TenantPool, tenant_path, administrative, bind_tenant_endpoints
 import routellm_shadow
 import skala
 import skill_costs
@@ -643,6 +643,8 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
     batch_route = path == "/v1/route/batch" or (request.method == "GET" and path.startswith("/v1/route/batch/"))
     # Its own queued background calls only; route_job checks the caller.
     job_route = request.method == "GET" and path.startswith("/v1/route/jobs/") and path.count("/") == 4
+    job_route = job_route or (matched == "base" and request.method == "POST" and path == "/v1/paid-steps/authorize")
+    job_route = job_route or (request.method == "GET" and re.fullmatch(r"/v1/paid-runs/[0-9a-f-]{36}", path) is not None)
     event_route = request.method == "POST" and path in {"/v1/events/publish", "/v1/events/receive", "/v1/events/settle"}
     if path not in {"/health", "/v1/route"} and not batch_route and not job_route and not skill_run and not vendor_write and not ghost_route and not event_route:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
@@ -1242,6 +1244,8 @@ async def run_route(
         # Empty, unknown, or the other region's text is not written.
         raise HTTPException(status_code=403, detail=foreign)
     await __import__("tenant_regions").local(__import__("sys").modules[__name__], req.tenant_id, req.home_region)
+    paid_run = __import__("paid_steps").current()
+    paid_run.task_id, paid_run.deadline = task_id, req.deadline_at
     client_text = "\n".join(m.content for m in req.messages)
     pool_read = await zenas_pool_prompt(
         client_text, caller=caller, task_type=req.task_type, skill=req.skill
@@ -1268,6 +1272,7 @@ async def run_route(
         if model_override not in {row["name"] for row in await list_models()}:
             raise HTTPException(status_code=422, detail="Model is not on the roster")
     policy = await load_policy(req.task_type.partition("#moa.")[0], req.tenant_id)
+    policy_revision = policy.get("updated_at")
     if _paid_policy is not None:
         policy = _paid_policy
     if model_override is not None:
@@ -1354,7 +1359,7 @@ async def run_route(
         reason = code_problem or "no_code_skill"
         if graduate.is_skill(model) and code_problem is None:
             try:
-                async with asyncio.timeout(30):
+                async with __import__("paid_steps").execution_timeout(30):
                     content, _cost = await _run_code_candidate(req, model, messages)
                 reason = graduate.code_failure(json.loads(content), float(policy.get("confidence_floor", 0.8)))
             except HTTPException as exc:
@@ -1407,7 +1412,18 @@ async def run_route(
             raise HTTPException(409, "Task cost cap prevents another call")
         generation = {**generation, "disable_fallbacks": True}
     await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
+    await __import__("paid_steps").authorize(__import__("paid_steps").model_step(model, int(policy["rung"])),
+        {"model":model,"messages":messages,"max_tokens":max_tokens,"generation":generation}, tenant=req.tenant_id, task=req.task_type)
+    # A permission for this exact step cannot authorize a hidden gateway retry/fallback.
+    generation = {**generation, "disable_fallbacks":True, "num_retries":0}
     price_info = await priority_queue.model_info(__import__("sys").modules[__name__], model) if priority == "offpeak" else None
+    if paid_run.saved:
+        await __import__("tenant_regions").local(__import__("sys").modules[__name__], req.tenant_id, req.home_region)
+        await _check_route_task(req, task_id)
+        latest = await load_policy(req.task_type.partition("#moa.")[0], req.tenant_id)
+        if policy_revision is not None and latest.get("updated_at") != policy_revision:
+            raise HTTPException(409, "Policy changed while waiting for paid-step approval")
+    await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route.dispatch")
     sent_at = priority_queue.now()
     if req.deadline_at is not None and sent_at >= req.deadline_at:
         raise HTTPException(408, "Work deadline exceeded before dispatch")
@@ -1544,14 +1560,14 @@ async def run_route(
     # Graduation: shadow the candidate on a share of calls; it never affects this answer.
     # An identifier prompt is not copied to a second provider or into the transcript.
     if priority != "urgent" and cost_status == "set" and not holds_identifier and policy.get("candidate_model") and float(policy.get("shadow_rate") or 0) > random.random():
-        t = asyncio.create_task(_shadow(req, policy, messages, max_tokens, ledger_id, content, cost_usd))
+        t = asyncio.create_task(_shadow(req, policy, messages, max_tokens, ledger_id, content, cost_usd), context=__import__("paid_steps").detached_context())
         _background.add(t)
         t.add_done_callback(_background.discard)
 
     if priority != "urgent" and cost_status == "set" and not holds_identifier and model_override is None and routellm_shadow.configuration(policy):
         t = asyncio.create_task(routellm_shadow.observe(
             __import__("sys").modules[__name__], req, policy, messages, max_tokens,
-            ledger_id, content, cost_usd, answered, "x-litellm-response-cost" in r.headers))
+            ledger_id, content, cost_usd, answered, "x-litellm-response-cost" in r.headers), context=__import__("paid_steps").detached_context())
         _background.add(t)
         t.add_done_callback(_background.discard)
 
@@ -1592,12 +1608,14 @@ async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int, *, r
         raise ValueError("HTML is not model input; supply extracted text")
     _screen_mask(messages)
     await __import__("controls").refuse_paid(path="_llm")
+    await __import__("paid_steps").authorize(__import__("paid_steps").model_step(model),
+        {"model":model,"messages":messages,"max_tokens":max_tokens}, task=__import__("controls")._task.get() or "internal.model")
     async with httpx.AsyncClient(timeout=120) as client:
         r = await client.post(
             f"{LITELLM_URL}/v1/chat/completions",
             headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
             json={"model": model, "messages": messages, "max_tokens": max_tokens,
-                  **({"disable_fallbacks": True} if receipt is not None else {})},
+                  "disable_fallbacks":True, "num_retries":0},
         )
     if r.status_code != 200:
         raise RuntimeError(f"{model}: {r.status_code} {r.text[:200]}")
@@ -2654,6 +2672,7 @@ async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     if foreign:
         raise HTTPException(403, foreign)
     await __import__("tenant_regions").local(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
+    __import__("paid_steps").current().caller = caller
     if "#moa." in body.task_type:
         raise HTTPException(403, "Submit the original task; MoA seats are internal")
     row = await load_policy(body.task_type, body.tenant_id)
@@ -2739,6 +2758,10 @@ def _call_upper(messages: list[dict[str, str]], max_tokens: int, prices: dict[st
 
 async def _batch_gateway(method: str, path: str, *, model: str | None = None, **kwargs) -> httpx.Response:
     await __import__("controls").refuse_paid(path="route/batch")
+    if method.upper() == "POST" and path.rstrip("/").endswith("batches"):
+        if not model:
+            raise HTTPException(409, "Batch submission needs an explicit paid model step")
+        await __import__("paid_steps").authorize(__import__("paid_steps").model_step(model), kwargs, task="route.batch")
     async with httpx.AsyncClient(timeout=60) as client:
         headers = {"Authorization": f"Bearer {LITELLM_MASTER_KEY}"}
         if path.startswith("/anthropic/"):
@@ -2983,6 +3006,9 @@ async def _process_batch(conn: Any, batch: Any) -> None:
                 await conn.execute("""UPDATE tank.batch_items SET status='failed',error='deadline_exceeded'
                     WHERE batch_id=$1 AND tenant_id=$2 AND item_id=$3""", batch["id"], batch["tenant_id"], item["item_id"])
                 continue
+            if req.deadline_at is not None:
+                run = __import__("paid_steps").current()
+                run.deadline = min(run.deadline, req.deadline_at) if run.deadline else req.deadline_at
             current = await load_policy(req.task_type, req.tenant_id)
             if str(current["updated_at"]) != str(snapshot["routing"]["updated_at"]):
                 raise ValueError("policy_changed")
@@ -3040,30 +3066,47 @@ async def _process_batch(conn: Any, batch: Any) -> None:
 
 
 async def process_batches_once() -> None:
+    import paid_steps
+    await paid_steps.heartbeat()
     async with admin_pool().acquire() as conn:
         rows = await conn.fetch("SELECT id,tenant_id FROM tank.batches WHERE region=$1 AND status IN ('queued','submitting','submitted','retrying') ORDER BY created_at LIMIT 20", box_region())
-        for row in rows:
-            lock = int.from_bytes(row["id"].bytes[:8], "big", signed=True)
-            if not await conn.fetchval("SELECT pg_try_advisory_lock($1)", lock):
+    for row in rows:
+        queries = paid_steps.Queries(pool(), row['tenant_id'])
+        async with queries.transaction():
+            batch = await queries.fetchrow("""SELECT * FROM tank.batches WHERE id=$1 AND tenant_id=$2
+                AND (paid_worker_id IS NULL OR NOT tank.paid_worker_alive(paid_worker_id))
+                FOR UPDATE SKIP LOCKED""", row['id'], row['tenant_id'])
+            if batch is None or batch['status'] not in {'queued','submitting','submitted','retrying'}:
                 continue
+            await queries.execute('UPDATE tank.batches SET paid_worker_id=$3 WHERE id=$1 AND tenant_id=$2',
+                                  batch['id'], batch['tenant_id'], paid_steps.SERVER)
+        run = paid_steps.Run(tenant=batch['tenant_id'], caller=batch['caller'])
+        async def work(batch=batch, queries=queries, run=run):
+            run.task = asyncio.current_task()
+            paid_steps.RUNS[run.task] = run
+            token = paid_steps.CURRENT.set(run)
             try:
-                batch = await conn.fetchrow("SELECT * FROM tank.batches WHERE id=$1 AND tenant_id=$2", row["id"], row["tenant_id"])
-                if batch["status"] not in {"queued", "submitting", "submitted", "retrying"}:
-                    continue
-                with tenant_scope(batch["tenant_id"]):
-                    if _admin_pool is None:
-                        # Before opt-in RLS, retain the existing single-pool path.
-                        # Startup refuses this configuration when RLS is active.
-                        await _process_batch(conn, batch)
-                    else:
-                        async with pool().acquire(autocommit=True) as tenant_conn:
-                            await _process_batch(tenant_conn, batch)
-            except (httpx.HTTPError, ValueError, KeyError):
-                # Poll failures are retriable; submission ambiguity is surfaced
-                # on the next pass, with no second provider submission.
-                await conn.execute("UPDATE tank.batches SET error='Provider operation interrupted; retrying status check' WHERE id=$1 AND tenant_id=$2", row["id"], row["tenant_id"])
+                await _process_batch(queries, batch)
+                await paid_steps.finish_run(run, 200)
+            except (httpx.HTTPError, ValueError, KeyError, HTTPException):
+                # Submission ambiguity never repeats a paid call. Status polling
+                # retains its existing recovery behavior on the next pass.
+                await queries.execute("UPDATE tank.batches SET error='Provider operation interrupted; inspect before dispatch' WHERE id=$1 AND tenant_id=$2", batch['id'], batch['tenant_id'])
+                await paid_steps.finish_run(run)
             finally:
-                await conn.execute("SELECT pg_advisory_unlock($1)", lock)
+                await queries.execute('UPDATE tank.batches SET paid_worker_id=NULL WHERE id=$1 AND tenant_id=$2 AND paid_worker_id=$3',
+                                      batch['id'], batch['tenant_id'], paid_steps.SERVER)
+                paid_steps.RUNS.pop(run.task, None)
+                paid_steps.CURRENT.reset(token)
+        operation = paid_steps.track(asyncio.create_task(work()))
+        parked = asyncio.create_task(run.paused.wait())
+        try:
+            await asyncio.wait({operation, parked}, return_when=asyncio.FIRST_COMPLETED)
+            if operation.done():
+                await operation
+        finally:
+            parked.cancel()
+            await asyncio.gather(parked, return_exceptions=True)
 
 
 async def _batch_loop() -> None:
@@ -3527,6 +3570,7 @@ async def _run_one_skill(
     caller: str | None,
 ) -> dict[str, Any]:
     await __import__("tenant_regions").local(__import__("sys").modules[__name__], body.tenant_id, body.home_region)
+    __import__("paid_steps").current().caller = caller
     __import__("skala_intake").guard_preview(skill_id, caller, body.preview)
     version = body.version or await _pick_version(skill_id, body.preview)
     pkg = get_package(skill_id, version)
@@ -3597,7 +3641,7 @@ async def base_context_trial() -> Response:
             BASE_AGENT_URL.rstrip("/") + "/context-dev/trial",
             json={"tenant_id": str(PLATFORM_TENANT)},
             headers={"X-Tank-Key": key},
-            timeout=3600, follow_redirects=False,
+            timeout=25 * 3600, follow_redirects=False,
         )
     except httpx.HTTPError:
         raise HTTPException(status_code=503, detail="Trial interrupted; refresh results before trying again") from None
@@ -4830,6 +4874,8 @@ __import__("task_board").install(app, __import__("sys").modules[__name__])
 __import__("tenant_regions").install(app, __import__("sys").modules[__name__])
 
 __import__("morning_report").install(app, __import__("sys").modules[__name__])
+
+__import__("paid_steps").install(app, __import__("sys").modules[__name__])
 
 # Bind only accepted endpoint arguments after existing authentication dependencies.
 bind_tenant_endpoints(app)

@@ -81,6 +81,13 @@ async def paid_host_hook(request: httpx.Request) -> None:
     host = request.url.host.lower()
     if host in vendor_meter.PAID_HOSTS:
         await refuse_paid(path=f"HTTP host:{host}", task=_task.get() or "base.find_site (HTTP client has no run ID)")
+        run = vendor_meter.current.get()
+        if run is None:
+            raise HTTPException(503, "Paid tool receipt context is unavailable.")
+        from paid_steps import authorize
+        step_id = "vendor.brave" if host == "api.search.brave.com" else "vendor.google_places"
+        await authorize(step_id, {"method":request.method,"url":str(request.url),"body":request.content.hex()},
+                        tenant=run.tenant, task=run.skill)
         await vendor_meter.request_hook(request)
 
 

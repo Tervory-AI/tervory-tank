@@ -30,6 +30,7 @@ def _no_skill_temp_sweep(monkeypatch):
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "paid_step_controls: exercise the real Ask-default payment boundary")
     # pytest-asyncio warns, and will later error, when this is unset. There is no
     # project config file in this lane, so set the ini cache before the plugin reads it.
     if not config.getini("asyncio_default_fixture_loop_scope"):

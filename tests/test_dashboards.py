@@ -44,6 +44,8 @@ class Conn:
         self.reads.append((sql, args))
         if 'home_region FROM tank.tenants' in sql:
             return 'us-east'
+        if 'paid_step_settings' in sql:
+            return 'auto'  # Explicitly authorized synthetic provider fixture.
         if 'tank.controls' in sql:
             return self.value
         return 4
@@ -68,6 +70,7 @@ class Conn:
 def conn(monkeypatch):
     value = Conn()
     monkeypatch.setattr(controls, 'db', lambda: value)
+    monkeypatch.setattr(main, 'pool', lambda: value)
     monkeypatch.setattr(dashboards, 'db', lambda: value)
     return value
 

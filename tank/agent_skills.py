@@ -208,6 +208,11 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
     tokens_in = tokens_out = 0
     answered = model
     data: dict[str, Any] = {}
+    import paid_steps
+    paid_steps.current().caller = room
+    await paid_steps.authorize(paid_steps.model_step(model, int(policy.get('rung',1))), payload, tenant=tenant, task=task_type)
+    payload.update(disable_fallbacks=True, num_retries=0)
+    started = time.perf_counter()
     try:
         async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(
@@ -560,9 +565,51 @@ def build_router(tank: Any) -> APIRouter:
                    x_tenant_id: uuid.UUID = Header(), x_task_id: uuid.UUID | None = Header(default=None),
                    x_home_region: str | None = Header(default=None)):
         room_key(room, request.headers.get("authorization", ""), request.headers.get("x-tank-key", ""))
-        result = await complete(tank, body, x_tenant_id, x_task_id, local_region(tank, x_home_region), room=room)
-        if body.stream:
-            return StreamingResponse(stream_completion(result), media_type="text/event-stream")
-        return result
+        # Preserve the OpenAI protocol while Ask waits. SSE comments (or JSON
+        # whitespace) keep a read timeout from consuming a human decision wait.
+        # Validation/refusals before an Ask retain their ordinary HTTP status.
+        import asyncio
+        import paid_steps
+        region = local_region(tank, x_home_region)
+        run = paid_steps.Run(tenant=x_tenant_id, caller=room)
+        async def work():
+            run.task = asyncio.current_task()
+            paid_steps.RUNS[run.task] = run
+            token = paid_steps.CURRENT.set(run)
+            try:
+                value = await complete(tank, body, x_tenant_id, x_task_id, region, room=room)
+                await paid_steps.finish_run(run, 200, json.dumps(value).encode())
+                return value
+            except BaseException:
+                await paid_steps.finish_run(run)
+                raise
+            finally:
+                paid_steps.CURRENT.reset(token)
+        task = asyncio.create_task(work())
+        wait = asyncio.create_task(run.paused.wait())
+        try:
+            await asyncio.wait({task, wait}, return_when=asyncio.FIRST_COMPLETED)
+            if task.done():
+                value = await task
+                return StreamingResponse(stream_completion(value), media_type="text/event-stream") if body.stream else value
+        finally:
+            wait.cancel()
+            await asyncio.gather(wait, return_exceptions=True)
+        async def response():
+            try:
+                while not task.done():
+                    yield ": waiting for founder approval\n\n" if body.stream else "\n"
+                    await asyncio.wait({task}, timeout=10)
+                value = await task
+                if body.stream:
+                    for chunk in stream_completion(value):
+                        yield chunk
+                else:
+                    yield json.dumps(value)
+            finally:
+                if not task.done():
+                    task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+        return StreamingResponse(response(), media_type="text/event-stream" if body.stream else "application/json")
 
     return router

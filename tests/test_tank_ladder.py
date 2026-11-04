@@ -58,6 +58,8 @@ async def policy(b, tenant, **values):
         await conn.execute("""INSERT INTO tank.policy SELECT (jsonb_populate_record(NULL::tank.policy,
             to_jsonb(p)||$2::jsonb||jsonb_build_object('tenant_id',$1::uuid))).*
             FROM tank.policy p WHERE task_type='base.normalize' AND tenant_id IS NULL""", tenant, json.dumps(values))
+        if values.get("model"):
+            await __import__("paid_fixture").auto(conn, values["model"])
 
 
 @pytest.mark.asyncio

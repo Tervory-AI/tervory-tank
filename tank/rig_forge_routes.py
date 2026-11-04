@@ -102,6 +102,14 @@ def build_router(tank) -> APIRouter:
         auth(body, request)
         await controls.refuse_paid(task="rig.forge.gpu", path="rig.forge.claim")
         async with tank.pool().acquire() as conn:
+            reserved = await get_job(conn, body)
+        if reserved["state"] != "reserved":
+            raise HTTPException(409, "No unclaimed GPU reservation")
+        import paid_steps
+        paid_steps.current().caller = "rig"
+        await paid_steps.authorize("hf.jobs."+reserved["method"],
+            {"job_id":str(body.job_id),"request":reserved["request"]}, tenant=body.tenant_id, task="rig.forge.gpu")
+        async with tank.pool().acquire() as conn:
             async with conn.transaction():
                 row = await get_job(conn, body)
                 if row["state"] != "reserved":

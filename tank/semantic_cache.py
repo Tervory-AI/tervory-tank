@@ -228,7 +228,7 @@ def schedule(rt: Any, req: Any, policy: dict, identity: tuple, messages: list[di
              probe: Probe | None, ledger_id: uuid.UUID, content: str, cost: float) -> None:
     if probe is None or str(policy.get("model") or "").strip().lower().startswith("build-"):
         return
-    task = asyncio.create_task(finish(rt, req, policy, identity, messages, probe, ledger_id, content, cost))
+    task = asyncio.create_task(finish(rt, req, policy, identity, messages, probe, ledger_id, content, cost), context=__import__("paid_steps").detached_context())
     rt._background.add(task)
     task.add_done_callback(rt._background.discard)
 
@@ -303,6 +303,6 @@ def schedule_batch(rt: Any, req: Any, snapshot: dict, ledger_id: uuid.UUID, cont
         except Exception as exc:
             log.warning("Semantic batch evidence unavailable (%s)", type(exc).__name__)
 
-    task = asyncio.create_task(complete())
+    task = asyncio.create_task(complete(), context=__import__("paid_steps").detached_context())
     rt._background.add(task)
     task.add_done_callback(rt._background.discard)

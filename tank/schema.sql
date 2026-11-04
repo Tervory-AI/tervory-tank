@@ -2996,6 +2996,66 @@ CREATE UNIQUE INDEX IF NOT EXISTS skill_revalidation_proof_once ON tank.skill_re
 -- Every observed roster transition requires fresh proof, including a return to an old roster.
 ALTER TABLE tank.roster_checks ADD COLUMN IF NOT EXISTS epoch uuid NOT NULL DEFAULT gen_random_uuid();
 
+-- Founder decision 27 Oct: each paid step defaults to Ask. Global pause remains separate.
+CREATE TABLE IF NOT EXISTS tank.paid_step_settings (
+    tenant_id uuid NOT NULL CHECK(tenant_id='00000000-0000-0000-0000-000000000001'::uuid),
+    step_id text NOT NULL CHECK(length(step_id) BETWEEN 1 AND 200),
+    mode text NOT NULL DEFAULT 'ask' CHECK(mode IN ('ask','auto')),
+    updated_by text NOT NULL, updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,step_id)
+);
+CREATE TABLE IF NOT EXISTS tank.paid_step_log (
+    tenant_id uuid NOT NULL, id bigserial, step_id text NOT NULL,
+    old_mode text NOT NULL, new_mode text NOT NULL, by_user text NOT NULL,
+    at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS tank.paid_step_workers (
+    tenant_id uuid NOT NULL, id uuid NOT NULL, heartbeat timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS tank.paid_runs (
+    tenant_id uuid NOT NULL, id uuid NOT NULL, region text NOT NULL, server_id uuid NOT NULL,
+    caller text, source_card_id uuid, status text NOT NULL CHECK(status IN ('waiting','running','completed','interrupted','cancelled')),
+    response_status integer, response_body bytea, response_headers jsonb,
+    created_at timestamptz NOT NULL DEFAULT now(), finished_at timestamptz,
+    PRIMARY KEY(tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS tank.paid_step_approvals (
+    tenant_id uuid NOT NULL, id uuid NOT NULL, run_id uuid NOT NULL, step_id text NOT NULL,
+    request_hash text NOT NULL, task_type text NOT NULL,
+    status text NOT NULL DEFAULT 'waiting' CHECK(status IN ('waiting','approved','claimed','cancelled','interrupted')),
+    created_at timestamptz NOT NULL DEFAULT now(), expires_at timestamptz NOT NULL,
+    decided_by text, decided_at timestamptz, claimed_at timestamptz,
+    PRIMARY KEY(tenant_id,id), FOREIGN KEY(tenant_id,run_id) REFERENCES tank.paid_runs(tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS paid_step_approvals_waiting ON tank.paid_step_approvals(status,created_at);
+DO $$ DECLARE name text; BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  FOREACH name IN ARRAY ARRAY['paid_step_settings','paid_step_log','paid_step_workers','paid_runs','paid_step_approvals'] LOOP
+   EXECUTE format('ALTER TABLE tank.%I ENABLE ROW LEVEL SECURITY',name);
+   EXECUTE format('ALTER TABLE tank.%I FORCE ROW LEVEL SECURITY',name);
+   IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid=format('tank.%I',name)::regclass AND polname='tenant_boundary') THEN
+    EXECUTE format($policy$CREATE POLICY tenant_boundary ON tank.%I AS RESTRICTIVE FOR ALL TO PUBLIC
+      USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+      WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)$policy$,name);
+    EXECUTE format($policy$CREATE POLICY tenant_access ON tank.%I FOR ALL TO PUBLIC
+      USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+      WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)$policy$,name);
+   END IF;
+  END LOOP;
+ END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION tank.paid_worker_alive(worker uuid) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,tank
+SET app.tenant_id='00000000-0000-0000-0000-000000000001' AS $$
+ SELECT EXISTS(SELECT 1 FROM tank.paid_step_workers WHERE tenant_id='00000000-0000-0000-0000-000000000001'::uuid
+               AND id=worker AND heartbeat>now()-interval '90 seconds')
+$$;
+ALTER TABLE tank.offpeak_jobs ADD COLUMN IF NOT EXISTS paid_worker_id uuid;
+ALTER TABLE tank.skill_revalidations ADD COLUMN IF NOT EXISTS paid_worker_id uuid;
+ALTER TABLE tank.batches ADD COLUMN IF NOT EXISTS paid_worker_id uuid;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (

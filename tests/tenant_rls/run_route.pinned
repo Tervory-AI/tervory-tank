@@ -22,6 +22,8 @@ async def run_route(
         # Empty, unknown, or the other region's text is not written.
         raise HTTPException(status_code=403, detail=foreign)
     await __import__("tenant_regions").local(__import__("sys").modules[__name__], req.tenant_id, req.home_region)
+    paid_run = __import__("paid_steps").current()
+    paid_run.task_id, paid_run.deadline = task_id, req.deadline_at
     client_text = "\n".join(m.content for m in req.messages)
     pool_read = await zenas_pool_prompt(
         client_text, caller=caller, task_type=req.task_type, skill=req.skill
@@ -48,6 +50,7 @@ async def run_route(
         if model_override not in {row["name"] for row in await list_models()}:
             raise HTTPException(status_code=422, detail="Model is not on the roster")
     policy = await load_policy(req.task_type.partition("#moa.")[0], req.tenant_id)
+    policy_revision = policy.get("updated_at")
     if _paid_policy is not None:
         policy = _paid_policy
     if model_override is not None:
@@ -134,7 +137,7 @@ async def run_route(
         reason = code_problem or "no_code_skill"
         if graduate.is_skill(model) and code_problem is None:
             try:
-                async with asyncio.timeout(30):
+                async with __import__("paid_steps").execution_timeout(30):
                     content, _cost = await _run_code_candidate(req, model, messages)
                 reason = graduate.code_failure(json.loads(content), float(policy.get("confidence_floor", 0.8)))
             except HTTPException as exc:
@@ -187,7 +190,18 @@ async def run_route(
             raise HTTPException(409, "Task cost cap prevents another call")
         generation = {**generation, "disable_fallbacks": True}
     await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
+    await __import__("paid_steps").authorize(__import__("paid_steps").model_step(model, int(policy["rung"])),
+        {"model":model,"messages":messages,"max_tokens":max_tokens,"generation":generation}, tenant=req.tenant_id, task=req.task_type)
+    # A permission for this exact step cannot authorize a hidden gateway retry/fallback.
+    generation = {**generation, "disable_fallbacks":True, "num_retries":0}
     price_info = await priority_queue.model_info(__import__("sys").modules[__name__], model) if priority == "offpeak" else None
+    if paid_run.saved:
+        await __import__("tenant_regions").local(__import__("sys").modules[__name__], req.tenant_id, req.home_region)
+        await _check_route_task(req, task_id)
+        latest = await load_policy(req.task_type.partition("#moa.")[0], req.tenant_id)
+        if policy_revision is not None and latest.get("updated_at") != policy_revision:
+            raise HTTPException(409, "Policy changed while waiting for paid-step approval")
+    await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route.dispatch")
     sent_at = priority_queue.now()
     if req.deadline_at is not None and sent_at >= req.deadline_at:
         raise HTTPException(408, "Work deadline exceeded before dispatch")
@@ -324,14 +338,14 @@ async def run_route(
     # Graduation: shadow the candidate on a share of calls; it never affects this answer.
     # An identifier prompt is not copied to a second provider or into the transcript.
     if priority != "urgent" and cost_status == "set" and not holds_identifier and policy.get("candidate_model") and float(policy.get("shadow_rate") or 0) > random.random():
-        t = asyncio.create_task(_shadow(req, policy, messages, max_tokens, ledger_id, content, cost_usd))
+        t = asyncio.create_task(_shadow(req, policy, messages, max_tokens, ledger_id, content, cost_usd), context=__import__("paid_steps").detached_context())
         _background.add(t)
         t.add_done_callback(_background.discard)
 
     if priority != "urgent" and cost_status == "set" and not holds_identifier and model_override is None and routellm_shadow.configuration(policy):
         t = asyncio.create_task(routellm_shadow.observe(
             __import__("sys").modules[__name__], req, policy, messages, max_tokens,
-            ledger_id, content, cost_usd, answered, "x-litellm-response-cost" in r.headers))
+            ledger_id, content, cost_usd, answered, "x-litellm-response-cost" in r.headers), context=__import__("paid_steps").detached_context())
         _background.add(t)
         t.add_done_callback(_background.discard)
 

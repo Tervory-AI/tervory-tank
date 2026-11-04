@@ -117,6 +117,10 @@ async def test_schema_and_durable_trial(monkeypatch, upgrade):
         async def transport(request):
             if request.url.host == "tank.test":
                 body = json.loads(request.content)
+                if request.url.path == "/v1/paid-steps/authorize":
+                    # Explicit Auto fixture; exercise the real authenticated credit gate.
+                    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=tank.app), base_url='http://fixture') as api:
+                        return await api.post(request.url.path, json=body, headers={'X-Tank-Key':'base-placeholder'})
                 if unavailable:
                     return httpx.Response(503)
                 assert request.url.path == "/v1/base-product/context-dev"
@@ -135,6 +139,7 @@ async def test_schema_and_durable_trial(monkeypatch, upgrade):
 
         tank_pool = await asyncpg.create_pool(url, database=database, min_size=1, max_size=2)
         monkeypatch.setattr(tank, "pool", lambda: tank_pool)
+        await __import__('paid_fixture').auto(tank_pool)
         selected = [{"record_id": str(record), "domain": "stripe.com"} for record in ids]
         async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
             try:
@@ -206,7 +211,7 @@ async def test_schema_and_durable_trial(monkeypatch, upgrade):
                 )
                 async with base_pool.acquire() as base:
                     await TankVendorLedger(base, http, tenant_id=str(tenant), run_id=str(other_run)).reserve(
-                        {"call_id": str(uuid.uuid4()), "record_id": str(ids[2]), "reserved_credits": 10}, 20,
+                        {"call_id": str(uuid.uuid4()), "record_id": str(ids[2]), "reserved_credits": 10, "request_hash":"0"*64}, 20,
                     )
                 await flush_pending(base_pool, http)
                 recovered = await run_trial(base_pool, http, str(tenant), str(other_run), selected[2:3])

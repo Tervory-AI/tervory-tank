@@ -183,6 +183,8 @@ async def call_model(model: str, messages: list[dict], max_tokens: int) -> dict:
     rt = runtime()
     if str(model or "").strip().lower().startswith("build-"):
         raise ValueError("This model is for Tervory's own build and test work only.")
+    import paid_steps
+    await paid_steps.authorize(paid_steps.model_step(model), {'messages':messages,'max_tokens':max_tokens}, tenant=PLATFORM_TENANT, task='bench')
     async with httpx.AsyncClient(timeout=120) as client:
         response = await client.post(f'{rt.LITELLM_URL}/v1/chat/completions',
             headers={'Authorization': f'Bearer {rt.LITELLM_MASTER_KEY}'},
@@ -321,7 +323,8 @@ async def tick() -> str | None:
                                 hashlib.sha256(encoded(cases).encode()).hexdigest(), len(cases))
                             results.append({'model': entry['model_name'], 'status': 'failed'})
                     for model in sorted(book, key=lambda m: (m != policy['model'], book[m]['input']+book[m]['output'], m)):
-                        result = await bench_model(conn, policy, model, cases, book, region, cap, comparison)
+                        async with __import__('paid_steps').run_scope(tenant=PLATFORM_TENANT):
+                            result = await bench_model(conn, policy, model, cases, book, region, cap, comparison)
                         results.append(result)
                         if result['status'] in ('capped', 'paused'):
                             break

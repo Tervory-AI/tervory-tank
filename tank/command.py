@@ -54,6 +54,7 @@ FOUNDER_TOOLS = ["base.audit.start", "base.audit.csv", "base.audit.review", "tri
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
 FOUNDER_TOOLS += TISAN_CLIENT_TOOLS
+FOUNDER_TOOLS += ["platform.paid_steps", "platform.paid_step.set", "platform.paid_step.approve"]
 TOOLS["plugins"] = ["plugins.list", "plugins.install", "plugins.remove"]
 
 
@@ -399,6 +400,8 @@ async def create_thread(body: NewThread, actor: Actor = Depends(identity)) -> di
 
 @router.get("/threads")
 async def list_threads(q: str = Query(default="", max_length=200), actor: Actor = Depends(identity)) -> list[dict]:
+    if current_actor(actor).founder:
+        await __import__("paid_steps").sync_inbox(actor)
     async with db().acquire() as conn:
         rows = await conn.fetch(
             "SELECT * FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 "
@@ -506,6 +509,9 @@ async def events(thread_id: uuid.UUID, after: int = Query(default=0, ge=0), acto
 async def route_turn(actor: Actor, messages: list[dict], model: str | None = None,
                      *, task_id: uuid.UUID | None = None, on_token: TokenSink | None = None,
                      priority: str | None = None) -> Any:
+    planned = await __import__("paid_steps").code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     from market_lab_ml3 import code_plan as market_lab_code_plan
     planned = await market_lab_code_plan(actor, messages, task_id)
     if planned is not None:
@@ -557,7 +563,12 @@ async def auto_price_snapshot(conn: Any, tenant_id: uuid.UUID) -> dict:
             "priced_at": row["updated_at"].isoformat() if row and row["updated_at"] else None}
 
 
-async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages: list[dict], model: str | None = None,
+async def finish_turn(thread_id, actor, turn_id, messages, model=None, **kwargs):
+    async with __import__("paid_steps").command_run(thread_id, actor, turn_id):
+        await _finish_turn(thread_id, actor, turn_id, messages, model=model, **kwargs)
+
+
+async def _finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages: list[dict], model: str | None = None,
                       *, priority: str | None = None, answer=None, deferred_error=None) -> None:
     preview = AnswerText()
 
@@ -566,7 +577,7 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
         if text:
             async with db().acquire() as conn, conn.transaction():
                 row = await owned(conn, thread_id, actor, lock=True)
-                if unpack(row["state"])["active_turn"] != turn_id:
+                if unpack(row["state"])["active_turn"] != turn_id and not __import__("paid_steps").current().saved:
                     raise asyncio.CancelledError()
                 # Provisional events only: no saved assistant message or receipt yet.
                 # Do not rewrite the full conversation for every model delta.
@@ -576,7 +587,7 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
         if deferred_error is not None:
             raise deferred_error
         if answer is None:
-            async with asyncio.timeout(150):
+            async with __import__("paid_steps").execution_timeout(150):
                 answer = await route_turn(actor, messages, model=model, task_id=uuid.UUID(turn_id), on_token=on_token,
                                           **({"priority": priority} if priority is not None else {}))
         from priority_queue import QueuedResponse
@@ -731,7 +742,8 @@ async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity
         finally:
             # Foreground disconnects close the SDK stream. An explicitly deferred
             # turn must finish saving its queue/thread link even if the browser closes.
-            if not finished and not task.done() and body.priority != "offpeak":
+            waiting = __import__("paid_steps").RUNS.get(task)
+            if not finished and not task.done() and body.priority != "offpeak" and not (waiting and waiting.waiting):
                 task.cancel()
 
     return StreamingResponse(stream_turn(), media_type="text/event-stream",
@@ -754,14 +766,27 @@ async def card_action(card_id: uuid.UUID, body: CardAction, actor: Actor = Depen
             "SELECT thread_id FROM tank.command_threads WHERE tenant_id=$1 AND user_id=$2 AND state->'cards' ? $3",
             actor.tenant_id, actor.user_id, str(card_id),
         )
+        cancellation = None
+        if thread_id is not None and body.action == "cancel":
+            saved = await owned(conn, thread_id, actor)
+            candidate = unpack(saved["state"])["cards"][str(card_id)]
+            if candidate.get("tool") == "platform.paid_step.approve" and candidate.get("status") == "pending":
+                require_founder(current_actor(actor))
+                cancellation = uuid.UUID(candidate["arguments"]["approval_id"])
     if thread_id is None:
         raise HTTPException(404, "Card not found")
+    if cancellation is not None:
+        await __import__("paid_steps").decide(cancellation, actor.user_id, approve=False)
     action = None
     reconcile = False
     async with editing(thread_id, actor) as (conn, row, state):
         card = state["cards"][str(card_id)]
         # Recover a crashed process without replaying an uncertain side effect.
         if card["status"] == "executing":
+            parked = await conn.fetchval("""SELECT EXISTS(SELECT 1 FROM tank.paid_runs
+                WHERE tenant_id=$1 AND source_card_id=$2 AND status='waiting' AND tank.paid_worker_alive(server_id))""", actor.tenant_id, card_id)
+            if parked:
+                return public_card(card)
             started = datetime.fromisoformat(card["started_at"])
             if (datetime.now(timezone.utc) - started).total_seconds() > action_timeout(card.get("tool")) + 30:
                 card.update(status="unknown", retry_safe=False, error="The action outcome is unknown. Do not repeat it until checked.")
@@ -1397,6 +1422,9 @@ ADAPTERS = {
     "zenas.watch.disable": Adapter("POST", "/v1/zenas/regulations/watches/{watch_id}", ZenasWatchIdArgs, "zenas.watch.disable"),
     "zenas.review": Adapter("POST", "/v1/zenas/contract-reviews", ReviewArgs, "Review a contract", True, "paid_run"),
     "skala.list": Adapter("GET", "/v1/skala", EmptyArgs, "List skills"),
+    "platform.paid_steps": Adapter("GET", "/v1/controls/paid-steps", EmptyArgs, "Show paid-step Ask/Auto settings"),
+    "platform.paid_step.set": Adapter("PUT", "/v1/controls/paid-steps", __import__("paid_steps").Setting, "Change one paid-step setting"),
+    "platform.paid_step.approve": Adapter("POST", "/v1/controls/paid-steps/approve", __import__("paid_steps").ApprovalArgs, "Approve this paid step once"),
     "skala.evals": Adapter("POST", "/v1/skala/{skill_id}/{version}/evals", SkillVersionArgs, "Run skill evaluations", True, "paid_run"),
     "skala.approve": Adapter("POST", "/v1/skala/{skill_id}/{version}/approve", SkillVersionArgs, "Approve a skill version", False, "approve_skill"),
     "skala.retire": Adapter("POST", "/v1/skala/{skill_id}/{version}/retire", SkillVersionArgs, "Retire a skill version", False, "retire"),
@@ -1559,6 +1587,8 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
     args = dict(action.arguments)
     path = adapter.path
     scope = {"tenant_id": str(actor.tenant_id)}
+    if action.tool.startswith("platform.paid"):
+        return adapter.method, path, {}, args if adapter.method in {"POST", "PUT"} else None
     if action.tool.startswith("radix.repo."):
         return adapter.method, path, args if adapter.method == "GET" else {}, args if adapter.method == "POST" else None
     if action.tool == "radix.passive.scan":
@@ -1802,7 +1832,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
         # Recheck immediately before dispatch; a queued card is not authority.
         require_tool(current_actor(actor), action.tool)
         attempted = True
-        async with asyncio.timeout(action_timeout(action.tool)):
+        async with __import__("paid_steps").execution_timeout(action_timeout(action.tool)):
             if action.tool.startswith("plugins."):
                 from plugins import dispatch
                 status, result = await dispatch(action, actor, thread_id, card_id)

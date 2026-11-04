@@ -253,6 +253,10 @@ def register(app: Any, runtime: dict[str, Any]) -> None:
                    "fallbacks": [], "disable_fallbacks": True}
         if policy.get("system_prompt"):
             payload["instructions"] = policy["system_prompt"]
+        import paid_steps
+        for step in ('vendor.perplexity.search_web','vendor.perplexity.fetch_url',paid_steps.model_step(model)):
+            await paid_steps.authorize(step, payload, tenant=req.tenant_id, task=TASK)
+        payload['num_retries'] = 0
         started = time.perf_counter()
         data: dict[str, Any] = {}
         costs = None

@@ -35,7 +35,9 @@ async def database(monkeypatch):
         await conn.execute((ROOT / "tank/schema.sql").read_text())
         from savings_defaults import initialize
         await initialize(conn)
+        await __import__("paid_fixture").auto(conn)
     rt = SimpleNamespace(pool=lambda: pool, box_region=lambda: "us-east", _packages={})
+    monkeypatch.setattr(__import__("paid_steps"), "runtime", lambda: rt)
     monkeypatch.setattr(gold, "runtime", lambda: rt)
     monkeypatch.setattr(training, "runtime", lambda: rt)
     try:

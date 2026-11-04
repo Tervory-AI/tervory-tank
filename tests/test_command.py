@@ -176,6 +176,7 @@ async def command_pool():
         async with pool.acquire() as conn:
             await conn.execute(schema)
             await conn.execute(schema)  # Empty database and idempotent reapplication.
+            await __import__("paid_fixture").auto(conn, "placeholder-pin", "placeholder-model")
             # Match Tank startup; this fixture mounts only the command router.
             from savings_defaults import initialize
             await initialize(conn)
@@ -193,6 +194,7 @@ async def command_pool():
 
 @pytest_asyncio.fixture
 async def api(runtime, monkeypatch, command_pool):
+    runtime.pool = runtime.admin_pool = lambda: command_pool
     monkeypatch.setattr(command, 'db', lambda: command_pool)
     app = FastAPI()
     app.include_router(command.router)

@@ -255,8 +255,7 @@ async def _process(tank, conn, job):
 
 
 async def process_once(tank, *, job_id=None, tenant_id=None):
-    async with worker_lock():
-        await _process_once(tank, job_id=job_id, tenant_id=tenant_id)
+    await _process_once(tank, job_id=job_id, tenant_id=tenant_id)
 
 
 @asynccontextmanager
@@ -272,34 +271,57 @@ async def owner_connection(tank, discovery, tenant):
 
 
 async def _process_once(tank, *, job_id=None, tenant_id=None):
+    import paid_steps
+    await paid_steps.heartbeat(tank)
     async with getattr(tank, "admin_pool", tank.pool)().acquire() as conn:
-        # Platform worker discovers work across tenants, then every operation is
-        # scoped by that row's tenant and box, as in the existing batch worker.
         rows = await conn.fetch("""SELECT id,tenant_id FROM tank.offpeak_jobs WHERE region=$1
             AND ($2::uuid IS NULL OR id=$2) AND ($3::uuid IS NULL OR tenant_id=$3)
             AND status IN ('queued','dispatching','batch') ORDER BY checked_at NULLS FIRST,created_at LIMIT 100""",
             tank.box_region(), job_id, tenant_id)
-        for row in rows:
-            # Separate advisory namespace from provider batches (which share id).
-            lock = int.from_bytes(uuid.uuid5(row['id'], 'offpeak').bytes[:8], 'big', signed=True)
-            if not await conn.fetchval('SELECT pg_try_advisory_lock($1)', lock):
+    for row in rows:
+        queries = paid_steps.Queries(tank.pool(), row['tenant_id'])
+        async with queries.transaction():
+            job = await queries.fetchrow("""SELECT * FROM tank.offpeak_jobs j WHERE id=$1 AND tenant_id=$2
+                AND (paid_worker_id IS NULL OR NOT tank.paid_worker_alive(paid_worker_id))
+                FOR UPDATE SKIP LOCKED""", row['id'], row['tenant_id'])
+            if job is None or job['status'] not in {'queued','dispatching','batch'}:
                 continue
+            await queries.execute('UPDATE tank.offpeak_jobs SET checked_at=now(),paid_worker_id=$3 WHERE id=$1 AND tenant_id=$2',
+                                  row['id'], row['tenant_id'], paid_steps.SERVER)
+        run = paid_steps.Run(tenant=row['tenant_id'], caller=job['caller'], task_id=job['task_id'], deadline=job['deadline_at'])
+        async def work(job=job, queries=queries, run=run):
+            run.task = asyncio.current_task()
+            paid_steps.RUNS[run.task] = run
+            token = paid_steps.CURRENT.set(run)
             try:
-                async with owner_connection(tank, conn, row['tenant_id']) as owned:
-                    job = await owned.fetchrow('SELECT * FROM tank.offpeak_jobs WHERE id=$1 AND tenant_id=$2', row['id'], row['tenant_id'])
-                    if job['status'] in {'queued', 'dispatching', 'batch'}:
-                        await owned.execute('UPDATE tank.offpeak_jobs SET checked_at=now() WHERE id=$1 AND tenant_id=$2', row['id'], row['tenant_id'])
-                        await _process(tank, owned, job)
+                await _process(tank, queries, job)
+                await paid_steps.finish_run(run, 200)
             except HTTPException as exc:
                 if exc.status_code < 500:
-                    async with owner_connection(tank, conn, row['tenant_id']) as owned:
-                        await _finish(tank, owned, row, error='route_refused')
+                    await _finish(tank, queries, job, error='route_refused')
                 else:
-                    tank.log.warning('Offpeak maintenance will retry status')
+                    tank.log.warning('Offpeak dispatch held before completion')
             except Exception:
-                tank.log.warning('Offpeak maintenance will retry status')
+                tank.log.warning('Offpeak dispatch outcome requires reconciliation')
             finally:
-                await conn.execute('SELECT pg_advisory_unlock($1)', lock)
+                await queries.execute('UPDATE tank.offpeak_jobs SET paid_worker_id=NULL WHERE id=$1 AND tenant_id=$2 AND paid_worker_id=$3',
+                                      job['id'], job['tenant_id'], paid_steps.SERVER)
+                paid_steps.CURRENT.reset(token)
+                paid_steps.RUNS.pop(run.task, None)
+        async def paused(_approval, _step, job=job, queries=queries):
+            await queries.execute("UPDATE tank.offpeak_jobs SET status='queued',sent_at=NULL WHERE id=$1 AND tenant_id=$2", job['id'], job['tenant_id'])
+        async def resumed(job=job, queries=queries):
+            await queries.execute("UPDATE tank.offpeak_jobs SET status='dispatching',sent_at=now() WHERE id=$1 AND tenant_id=$2", job['id'], job['tenant_id'])
+        run.on_pause, run.on_resume = paused, resumed
+        task = paid_steps.track(asyncio.create_task(work()))
+        parked = asyncio.create_task(run.paused.wait())
+        try:
+            await asyncio.wait({task, parked}, return_when=asyncio.FIRST_COMPLETED)
+            if task.done():
+                await task
+        finally:
+            parked.cancel()
+            await asyncio.gather(parked, return_exceptions=True)
 
 
 async def notify_commands(tank):

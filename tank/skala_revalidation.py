@@ -156,48 +156,39 @@ def failed_result(tank: Any, job: dict) -> dict:
 
 
 async def drain(tank: Any, limit: int = 20) -> int:
-    """One same-box worker; completing an eval and its job is one transaction."""
+    """Durable job claims; never retain a connection while a paid eval awaits approval."""
+    import paid_steps
+    await paid_steps.heartbeat(tank)
     count = 0
-    async with tank.pool().acquire() as lock:
-        if not await lock.fetchval("SELECT pg_try_advisory_lock($1)", WORKER_LOCK):
-            return 0
-        try:
-            for _ in range(limit):
-                row = await lock.fetchrow(
-                    """SELECT * FROM tank.skill_revalidations WHERE tenant_id=$1 AND completed_at IS NULL AND source_job_id IS NULL
-                    AND (preflight_hash IS NULL OR NOT EXISTS(SELECT 1 FROM tank.roster_heads WHERE tenant_id=$1 AND unavailable))
-                    ORDER BY queued_at,id LIMIT 1""",
-                    PLATFORM_TENANT)
-                if row is None:
-                    break
-                job = dict(row)
-                token = ACTIVE.set(job)
-                try:
-                    if job.get("preflight_hash"):
-                        if job.get("started_at") is not None:
-                            # An interrupted eval may already have charged. Hold
-                            # its proof rather than buying the same cases again.
-                            await record(tank, failed_result(tank, job))
-                            count += 1
-                            continue
-                        claimed = await lock.fetchval("""UPDATE tank.skill_revalidations SET started_at=clock_timestamp()
-                            WHERE id=$1 AND tenant_id=$2 AND started_at IS NULL AND completed_at IS NULL RETURNING id""",
-                            job["id"], PLATFORM_TENANT)
-                        if claimed is None:
-                            continue
-                    pkg = tank.get_package(job["skill_id"], job["version"])
-                    if pkg.task_type is not None and pkg.task_type != job["task_type"]:
-                        raise ValueError("Package task type changed")
-                    # The exact handler used by /v1/skala/{id}/{version}/evals.
-                    await tank.run_skill_evals(pkg.id, pkg.version)
-                except Exception:
-                    log.warning("Skala model revalidation unavailable for %s@%s", job["skill_id"], job["version"])
+    for _ in range(limit):
+        async with tank.pool().acquire() as conn, conn.transaction():
+            row = await conn.fetchrow("""SELECT * FROM tank.skill_revalidations WHERE tenant_id=$1
+                AND completed_at IS NULL AND source_job_id IS NULL
+                AND (paid_worker_id IS NULL OR NOT tank.paid_worker_alive(paid_worker_id))
+                AND (preflight_hash IS NULL OR NOT EXISTS(SELECT 1 FROM tank.roster_heads WHERE tenant_id=$1 AND unavailable))
+                ORDER BY queued_at,id FOR UPDATE SKIP LOCKED LIMIT 1""", PLATFORM_TENANT)
+            if row is None:
+                break
+            job = dict(row)
+            await conn.execute("""UPDATE tank.skill_revalidations SET paid_worker_id=$3,started_at=coalesce(started_at,clock_timestamp())
+                WHERE id=$1 AND tenant_id=$2""", job['id'], PLATFORM_TENANT, paid_steps.SERVER)
+        async with paid_steps.run_scope():
+            token = ACTIVE.set(job)
+            try:
+                if job.get('started_at') is not None:
+                    # A lost worker may already have charged; its cases are never replayed.
                     await record(tank, failed_result(tank, job))
-                finally:
-                    ACTIVE.reset(token)
-                count += 1
-        finally:
-            await lock.execute("SELECT pg_advisory_unlock($1)", WORKER_LOCK)
+                else:
+                    pkg = tank.get_package(job['skill_id'], job['version'])
+                    if pkg.task_type is not None and pkg.task_type != job['task_type']:
+                        raise ValueError('Package task type changed')
+                    await tank.run_skill_evals(pkg.id, pkg.version)
+            except Exception:
+                log.warning('Skala model revalidation unavailable for %s@%s', job['skill_id'], job['version'])
+                await record(tank, failed_result(tank, job))
+            finally:
+                ACTIVE.reset(token)
+        count += 1
     return count
 
 
