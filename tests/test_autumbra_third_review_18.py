@@ -324,6 +324,7 @@ def test_11_webhook_action_and_replay(tmp_path: Path, monkeypatch):
             "/ghost/autumbra/webhooks/edge",
             content=body,
             headers={
+                "X-Tank-Key": KEY,
                 "X-Autumbra-Signature": sig,
                 "X-Autumbra-Timestamp": ts,
                 "X-Autumbra-Nonce": nonce,
@@ -335,6 +336,7 @@ def test_11_webhook_action_and_replay(tmp_path: Path, monkeypatch):
             "/ghost/autumbra/webhooks/edge",
             content=body,
             headers={
+                "X-Tank-Key": KEY,
                 "X-Autumbra-Signature": sig,
                 "X-Autumbra-Timestamp": ts,
                 "X-Autumbra-Nonce": nonce,

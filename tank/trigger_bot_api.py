@@ -203,7 +203,8 @@ async def execute(operation, args, actor, operation_id):
             count(*) FILTER(WHERE outcome='handed_over') AS handovers,
             count(*) FILTER(WHERE feedback='bad') AS bad_answers
             FROM tank.trigger_bot_messages WHERE tenant_id=$1 GROUP BY 1 ORDER BY 1 DESC LIMIT 52''', tenant)
-        return {'weeks': [dict(row) for row in rows]}
+        from trigger_whatsapp import reply_count
+        return {'weeks': [dict(row) for row in rows], 'count': await reply_count(pool, tenant)}
     if operation.endswith('.confirm'):
         return await confirm_draft(bot, actor, operation, args, operation_id)
     raise HTTPException(404)
@@ -331,3 +332,8 @@ async def public_message(request: Request):
     # No model name, raw retrieval text, peer address or internal draft data.
     result = {k: v for k, v in result.items() if k in {'state', 'answer', 'sources', 'message_id', 'conversation_id', 'visitor_id'}}
     return JSONResponse(result, headers={'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'Cache-Control': 'no-store'})
+
+
+# Public Meta corridor authenticates raw webhook signatures, independently of embed keys.
+from trigger_whatsapp import router as whatsapp_router
+router.include_router(whatsapp_router)

@@ -32,6 +32,7 @@ class Mount(Strict):
 
 
 class Quote(Strict):
+    notice_version: str | None = Field(default=None, min_length=64, max_length=64)
     assembly: Assembly
     name: str = Field(min_length=1, max_length=160)
     email: str = Field(default="", max_length=254)
@@ -89,10 +90,18 @@ async def quote(request: Request, body: Quote):
     # queued or cached on a shared kiosk, and no receipt means no success UI.
     value = engine(request)
     built = await value.assembly(_tenant(request), body.assembly)
+    if not built["available"]:
+        raise RigError("unavailable", "The quote could not be confirmed. Reconnect and try again.", 409)
+    from rigbox.quotes.notice import notice, receipt
+    retailer = await value.catalogue.store.retailer(_tenant(request)) or {}
+    shown = receipt(notice(retailer.get("quote_notice")), body.notice_version)
+    payload = {"kind": "setup", "setup": built["setup"]}
+    if shown:
+        payload["notice_receipt"] = shown
     # assembly() already rebuilds current approved fits and prices. Reuse the
     # existing durable quote/handoff interface, which also accepts phone contacts.
     contact = {key: value for key, value in {"name": body.name, "email": body.email, "phone": body.phone}.items() if value}
-    ack = await value.catalogue._store_quote(_tenant(request), {"kind": "setup", "setup": built["setup"]}, contact)
+    ack = await value.catalogue._store_quote(_tenant(request), payload, contact)
     return _ok(request, ack)
 
 

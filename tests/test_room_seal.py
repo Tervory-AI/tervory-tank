@@ -103,7 +103,7 @@ def test_sealed_rooms_are_marked_raw_compose(room: str) -> None:
     ("tiger", {"tiger-browser", "tiger-sandbox"}),
     ("rig", {"rig-sandbox", "rig-browser", "rig-forge"}),
     # Radix is sealed on the live host today; this keeps it so.
-    ("radix", {"agent-radix"}),
+    ("radix", {"agent-radix", "radix-brain", "radix-sandbox", "radix-browser", "radix-browser-gateway"}),
 ])
 def test_normal_mode_would_put_sealed_services_on_coolifys_network(room: str, sealed: set[str]) -> None:
     text = (ROOT / "agents" / room / "docker-compose.yml").read_text(encoding="utf-8")
@@ -155,6 +155,13 @@ def test_raw_compose_files_need_nothing_from_coolify(path: Path) -> None:
         for key, value in (service.get("environment") or {}).items():
             assert isinstance(value, (str, int, float)), f"{name}.{key} must be explicit"
     for key, spec in (compose.get("volumes") or {}).items():
+        snapshot = ROOT / "tests/room_brains/snapshots" / (path.parent.name + ".json")
+        if snapshot.is_file():
+            original = json.loads(snapshot.read_text())["volumes"]
+            prior = yaml.safe_load("volumes:\n" + original).get("volumes") if original else {}
+            if key in prior:
+                assert spec == prior[key], f"volume {key} must stay unchanged from main"
+                continue
         if path.parent.name == "zenas":
             # Existing Zenas room volumes must retain main's declarations.
             # Its new brain volume still requires its own explicit name below.

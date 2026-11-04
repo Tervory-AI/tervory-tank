@@ -32,7 +32,7 @@ log = logging.getLogger("tank.agent_skills")
 ROOM = "base"
 # Rooms with a brain pilot. room_text() maps a request's room to one of these fixed
 # strings; SQL always receives the room and its task type as bound parameters.
-ROOMS = {"base": "base", "rig": "rig", "tiger": "tiger", "zenas": "zenas"}
+ROOMS = {"base": "base", "rig": "rig", "tiger": "tiger", "zenas": "zenas", "ghost": "ghost", "trigger": "trigger", "tisan": "tisan", "radix": "radix", "market_lab": "market_lab"}
 SUBMISSIONS = Path("/tmp/tervory-agent-skills")
 LEDGER_SQL = """
 INSERT INTO tank.ledger

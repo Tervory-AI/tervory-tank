@@ -84,6 +84,7 @@ class CloudflareEdgeControl(FixtureEdgeControl):
             follow_redirects=False, trust_env=False,
             headers={"Authorization": "Bearer " + token} if token else {},
         )
+        self.measurements: list[dict] = []
         self._health_probe = health_probe
         self._fresh_health_probe = fresh_health_probe
 
@@ -98,8 +99,11 @@ class CloudflareEdgeControl(FixtureEdgeControl):
 
     def _request(self, method: str, path: str, *, body=None, missing_ok=False):
         # Paths are constructed locally from validated hex identifiers only.
+        started = time.perf_counter()
+        status = None
         try:
             response = self._client.request(method, path, json=body)
+            status = response.status_code
             if missing_ok and response.status_code == 404:
                 return None
             if not response.is_success:
@@ -111,6 +115,11 @@ class CloudflareEdgeControl(FixtureEdgeControl):
             return data["result"]
         except (httpx.HTTPError, ValueError, KeyError, TypeError):
             raise CloudflareEdgeError("Cloudflare request failed.") from None
+        finally:
+            # Timing and status only; never token, body, rule expression or URL query.
+            self.measurements.append({"method": method, "status": status,
+                                      "seconds": time.perf_counter() - started})
+            del self.measurements[:-64]
 
     def _zone_plan(self, kind: str) -> tuple[str, str | None]:
         zones = self._request("GET", "zones?name=" + self._zone(self.site))

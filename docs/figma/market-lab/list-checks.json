@@ -1,0 +1,134 @@
+[
+  {
+    "id": "514:5141",
+    "name": "H7 \u00b7 Monthly briefs \u00b7 Filled \u00b7 1440 \u00b7 Proposed",
+    "w": 1440,
+    "h": 1037,
+    "overflow": [
+      {
+        "id": "I514:5146;180:8388",
+        "name": "Trigger identity",
+        "parent": "514:5146",
+        "parentName": "Shared menu \u00b7 Market Lab",
+        "type": "FRAME"
+      },
+      {
+        "id": "I514:5146;180:8395",
+        "name": "Trigger areas / Vertical scroll",
+        "parent": "514:5146",
+        "parentName": "Shared menu \u00b7 Market Lab",
+        "type": "FRAME"
+      }
+    ],
+    "nonInter": [],
+    "dark": []
+  },
+  {
+    "id": "514:5414",
+    "name": "H7 \u00b7 Monthly briefs \u00b7 Filled \u00b7 375 \u00b7 Proposed",
+    "w": 375,
+    "h": 1336,
+    "overflow": [],
+    "nonInter": [],
+    "dark": []
+  },
+  {
+    "id": "514:5483",
+    "name": "H7 \u00b7 Monthly briefs \u00b7 Empty \u00b7 1440 \u00b7 Proposed",
+    "w": 1440,
+    "h": 1037,
+    "overflow": [
+      {
+        "id": "I514:5488;180:8388",
+        "name": "Trigger identity",
+        "parent": "514:5488",
+        "parentName": "Shared menu \u00b7 Market Lab",
+        "type": "FRAME"
+      },
+      {
+        "id": "I514:5488;180:8395",
+        "name": "Trigger areas / Vertical scroll",
+        "parent": "514:5488",
+        "parentName": "Shared menu \u00b7 Market Lab",
+        "type": "FRAME"
+      }
+    ],
+    "nonInter": [],
+    "dark": []
+  },
+  {
+    "id": "514:5603",
+    "name": "H7 \u00b7 Monthly briefs \u00b7 Empty \u00b7 375 \u00b7 Proposed",
+    "w": 375,
+    "h": 781,
+    "overflow": [],
+    "nonInter": [],
+    "dark": []
+  },
+  {
+    "id": "514:5623",
+    "name": "H7 \u00b7 Monthly briefs \u00b7 Loading \u00b7 1440 \u00b7 Proposed",
+    "w": 1440,
+    "h": 1037,
+    "overflow": [
+      {
+        "id": "I514:5628;180:8388",
+        "name": "Trigger identity",
+        "parent": "514:5628",
+        "parentName": "Shared menu \u00b7 Market Lab",
+        "type": "FRAME"
+      },
+      {
+        "id": "I514:5628;180:8395",
+        "name": "Trigger areas / Vertical scroll",
+        "parent": "514:5628",
+        "parentName": "Shared menu \u00b7 Market Lab",
+        "type": "FRAME"
+      }
+    ],
+    "nonInter": [],
+    "dark": []
+  },
+  {
+    "id": "514:5746",
+    "name": "H7 \u00b7 Monthly briefs \u00b7 Loading \u00b7 375 \u00b7 Proposed",
+    "w": 375,
+    "h": 781,
+    "overflow": [],
+    "nonInter": [],
+    "dark": []
+  },
+  {
+    "id": "514:5769",
+    "name": "H7 \u00b7 Monthly briefs \u00b7 Error \u00b7 1440 \u00b7 Proposed",
+    "w": 1440,
+    "h": 1037,
+    "overflow": [
+      {
+        "id": "I514:5774;180:8388",
+        "name": "Trigger identity",
+        "parent": "514:5774",
+        "parentName": "Shared menu \u00b7 Market Lab",
+        "type": "FRAME"
+      },
+      {
+        "id": "I514:5774;180:8395",
+        "name": "Trigger areas / Vertical scroll",
+        "parent": "514:5774",
+        "parentName": "Shared menu \u00b7 Market Lab",
+        "type": "FRAME"
+      }
+    ],
+    "nonInter": [],
+    "dark": []
+  },
+  {
+    "id": "514:5891",
+    "name": "H7 \u00b7 Monthly briefs \u00b7 Error \u00b7 375 \u00b7 Proposed",
+    "w": 375,
+    "h": 781,
+    "overflow": [],
+    "nonInter": [],
+    "dark": []
+  }
+]

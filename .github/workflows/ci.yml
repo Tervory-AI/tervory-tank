@@ -8,16 +8,18 @@ on:
   # before it lands, so branches no longer merge main to stay current.
   merge_group:
     types: [checks_requested]
-  push:
-    branches: [main]
+  # No push trigger on main (3 Nov, founder): the merge queue (merge method MERGE) already
+  # ran this whole workflow on the exact commit that lands, so a run on the push was a
+  # pure repeat. workflow_dispatch (above) still runs everything on main by hand:
+  # ci_scope.py gets no DIFF_BASE for a dispatch and selects the full suite.
 
 permissions:
   contents: read
 
 # Cancel superseded runs (CI-2). A newer push to the same pull request cancels the
-# older run. Runs on main are never cancelled: each main run gets its own group
-# (run_id), so it never waits behind or gets replaced by another main run. Since
-# 27 Oct the deploy no longer waits for them (deploy-on-merge runs on the push). (With a shared group, GitHub cancels a *pending*
+# older run. Merge-queue and manual runs are never cancelled: each gets its own group
+# (run_id), so it never waits behind or gets replaced by another run. Since
+# 27 Oct the deploy no longer waits for CI (deploy-on-merge runs on the push). (With a shared group, GitHub cancels a *pending*
 # run when a newer one queues, even with cancel-in-progress false.)
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -65,6 +67,23 @@ jobs:
           path: ${{ runner.temp }}/security-results/*.json
           if-no-files-found: warn
           retention-days: 14
+
+  lint:
+    # Founder, 3 Nov: the full suite runs once, in the merge queue (the exact commit that lands).
+    # A pull request gets the fast checks only: this lint, security and the changes scope.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12.14"
+      - name: Lint
+        run: |
+          python -m pip install --disable-pip-version-check "ruff==0.17.2"
+          ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
 
   changes:
     runs-on: ubuntu-latest
@@ -146,7 +165,7 @@ jobs:
   tank:
     needs: [changes, runner]
     # Run even when "pick runner" was skipped; then the runner falls back to ubuntu-latest.
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.run == 'true' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.run == 'true' }}
     # Self-hosted only when "pick runner" chose it and the change is not from a fork.
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
     # Full suite: about 14 minutes on the hosted 4-core runner (run 41229068797: 808 s of tests in
@@ -239,6 +258,33 @@ jobs:
       - name: Install workspace packages for offline billing and Node tests
         working-directory: workspace
         run: npm ci --no-audit --no-fund
+      - name: Prepare CLI acceptance fixtures
+        run: |
+          npm ci --prefix cli --ignore-scripts --no-audit --no-fund
+          # Setup may fetch pinned dependencies; the acceptance tests themselves stay offline.
+          node --input-type=module - <<'JS'
+          import { PLATFORMS } from './cli/scripts/build-release.mjs';
+          import { readFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const lock = JSON.parse(readFileSync('cli/package-lock.json'));
+          for (const platform of Object.keys(PLATFORMS)) {
+            const name = '@napi-rs/keyring-' + platform;
+            const version = lock.packages['node_modules/' + name].version;
+            execFileSync('npm', ['cache', 'add', name + '@' + version], { stdio: 'inherit' });
+          }
+          JS
+          if ! command -v bwrap >/dev/null; then
+            if [ "$RUNNER_ENVIRONMENT" != github-hosted ]; then
+              echo "Self-hosted CLI acceptance needs preinstalled Bubblewrap."
+              exit 1
+            fi
+            sudo apt-get update
+            sudo apt-get install -y bubblewrap
+          fi
+          # Kernel changes are restricted to disposable hosted runners.
+          if [ "$RUNNER_ENVIRONMENT" = github-hosted ] && test -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: Lint
         # F401 in base.socials/1.0.0/run.py is a pre-existing unused import.
         # This lane cannot edit an approved skill in place.
@@ -299,7 +345,7 @@ jobs:
 
   workspace:
     needs: [changes, runner]
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
@@ -353,7 +399,7 @@ jobs:
   # Any skipped or missing test fails the job, so it never passes silently.
   command-acceptance:
     needs: [changes]
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     services:
@@ -425,7 +471,7 @@ jobs:
     needs: [changes]
     # Only when the savings pages (or what they render) change. Founder, 27 Oct: no
     # check runs on a pull request it cannot affect.
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.savings == 'true' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.savings == 'true' }}
     # Chromium system dependencies need sudo; keep this job on GitHub hosted runners.
     runs-on: ubuntu-latest
     # 8 minutes timed out twice on 22 Oct and cancelled CI on main. Usually ~1 minute.
@@ -483,7 +529,7 @@ jobs:
   # when any failed or was cancelled.
   ci-ok:
     if: always()
-    needs: [security, changes, tank, workspace, command-acceptance, savings-page]
+    needs: [security, lint, changes, tank, workspace, command-acceptance, savings-page]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
