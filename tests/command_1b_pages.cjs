@@ -18,7 +18,8 @@ Module._load=function(name,parent,isMain){
  if(name==='@/lib/tank')return {
   commandRequest:async()=>Response.json([]),commandTools:async()=>{if(toolsFail)throw Error('unavailable');return tools},
   listRoster:async()=>{rosterReads++;return [{name:'fixture-model',inputPerM:.1,outputPerM:.4}]},
-  readClientDashboard:async()=>({jobs_done:4,recent:[]}),createTask:async()=>{tasks++},
+  readClientDashboard:async()=>({jobs_done:4,recent:[],granted_squads:[]}),
+  readClientSavings:async()=>({month:{saved:"12.50"}}),createTask:async()=>{tasks++},
  };
  return original.call(this,name,parent,isMain);
 };

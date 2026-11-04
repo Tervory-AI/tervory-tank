@@ -19,7 +19,7 @@
 
 /* The approved content fills the area provided by the existing shared shell. */
 .app-shell:has(.dash-client-root)>.shell-main>main{max-width:none;width:100%;margin:0;padding:0}
-.dash-client-root .dash-good .savings-number{color:#1e7a46}
+.dash-client-root .dash-good .savings-number{color:#1e7a46;text-decoration:none}
 .dash-client-root .dash-label{line-height:normal}
 .dash-client-root .dash-value{margin:6px 0 0!important}
 .dash-client-root .dash-ask{margin:0}
@@ -27,3 +27,22 @@
 .dash-client-root .dash-client-columns h2{margin:0}
 .dash-client-root .dash-row{width:100%}
 .dash-client-root .dash-member .dash-note{line-height:normal}
+
+/* Frame 12:2 owns its five-item navigation; other Workspace menus stay intact. */
+main:has(.dash-client-root){max-width:none;margin:0;padding:0;width:100%}
+.dash-client-root .dash-sidebar{width:220px;padding:22px 16px;display:flex;flex-direction:column;gap:6px;align-self:stretch}
+.dash-client-root .dash-logo{padding-bottom:18px}
+.dash-client-root .dash-sidebar img{display:block;width:180px;height:33px;object-fit:contain;margin:0}
+.dash-client-root .dash-nav{display:flex;flex-direction:column;gap:6px;width:100%}
+.dash-client-root .dash-nav a{font-size:15px;font-weight:500;line-height:normal;padding:10px 12px}
+.dash-client-root .dash-button{padding:8px 14px;border-radius:10px}
+.dash-client-root .dash-button.primary{border:0}
+.dash-client-root .dash-status img{width:10px;height:10px;flex:none}
+/* Keep the existing client-safe savings drilldown behind its existing link.
+ * Its expanded report has no frame in this dashboard export. */
+.dash-savings-report{display:none}
+.dash-savings-report:target{display:block}
+@media(max-width:650px){
+  .dash-client-root .dash-sidebar{width:100%;display:block;padding:16px}
+  .dash-client-root .dash-nav{flex-direction:row;flex-wrap:wrap}
+}
