@@ -261,7 +261,7 @@ jobs:
       - name: Prepare pinned Tiger acceptance browser dependencies
         working-directory: tests/acceptance/tiger-browser
         run: |
-          npm ci --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
           npx --no-install playwright install chromium
       - name: Prepare CLI acceptance fixtures
         run: |

@@ -86,3 +86,11 @@ Base: `d5d3ea2eeb08c9b7a9061274504f0acf53bab2a6`. Step 1 pushed at `2e64a1fa94b4
 | `workspace/public/tiger/neutral-dot.svg` | 1 |
 | `workspace/public/tiger/search.svg` | 1 |
 | `workspace/public/tiger/warning-dot.svg` | 1 |
+
+## PR #690 CI follow-up
+
+- `.github/workflows/ci.yml:264`: disable lifecycle scripts for the pinned Tiger browser install.
+- `tests/tiger_position/browser.cjs:59`: use deterministic Chromium text rendering; keep the 5% pixel limit.
+- `tests/tiger_position/frames/README.md:34`: document the rendering setup.
+- `tests/tiger_position/evidence/browser.txt:1`, `visual-results.json:1` and the ten `screenshots/*.png` artifacts above: refresh the passing ten-frame evidence.
+- `tests/tiger_sheet/PR.md:5` and `tests/tiger_sheet/evidence/verification.json:59`: record the CI failures, focused validation and unchanged security policy.

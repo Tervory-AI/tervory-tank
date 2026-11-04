@@ -30,3 +30,7 @@ and 186 × 34 mobile. Search (16 × 16), warning dot (6 × 6), neutral hollow do
 `workspace/public/tiger/`. They are checked for load success and effective geometry.
 No flattened design image is an implementation asset; no temporary Figma URL is
 used at runtime.
+
+The screenshot browser disables platform font hinting and LCD text rendering,
+and uses the sRGB color profile. This keeps bundled-font comparisons stable
+across Linux fontconfig defaults. The 5% pixel limit and exports are unchanged.

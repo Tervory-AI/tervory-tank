@@ -56,7 +56,11 @@ async function main() {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+  // Figma exports are compared across Linux fontconfig defaults. Disable system
+  // hinting/LCD rendering so the same bundled fonts produce stable pixels.
+  const browser = await chromium.launch({ headless: true, args: [
+    '--no-sandbox', '--font-render-hinting=none', '--disable-lcd-text', '--force-color-profile=srgb',
+  ] });
   const frames = [
     ['256-10','position',1440,false], ['256-170','position',375,false],
     ['256-283','matches',1440,false], ['256-406','matches',375,false],

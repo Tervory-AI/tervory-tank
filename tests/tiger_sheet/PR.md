@@ -2,6 +2,15 @@
 
 ## Product fixes first
 
+PR #690 CI follow-up: the screenshot browser now disables system font hinting/LCD
+text rendering and uses sRGB. CI's Linux font defaults reproduced the mobile
+pixel failures; all ten frames now pass at a maximum 3.51% difference with the
+same 5% limit and unchanged approved exports. The browser dependency install now
+uses `npm ci --ignore-scripts`; an offline clean install still runs esbuild.
+Only the two affected screenshot cases were rerun locally (2 passed, 51
+deselected), alongside the install-pin gate. No broad local rerun or policy
+exception was added for this follow-up.
+
 The integrated view now uses the existing transparent Tervory logo, preserving
 main's app branding rule and the approved dimensions. The older TG2 branch used
 the document-only white-background asset; CI's branding regression caught it.
@@ -70,7 +79,8 @@ observation back through `tiger.read`. No price response is stubbed.
 The backend regression passed 313 tests; the existing Tiger Node suite plus
 position tests passed 29. Typecheck and production build passed. Branding/Tiger
 page tests passed 10 after the transparent-logo correction. All ten fresh
-screenshots pass approved text, geometry, interaction and pixel checks. Pinned
+screenshots pass approved text, geometry, interaction and pixel checks; the CI
+follow-up above records the final deterministic browser rendering settings. Pinned
 browser-package lock validation also passed. Machine-readable evidence is in
 `tests/tiger_sheet/evidence/verification.json`; screenshots are under
 `tests/tiger_position/evidence/screenshots/`.

@@ -30,9 +30,14 @@
   },
   "visual": {
     "frames": 10,
-    "max_changed_pixel_percent": 4.9914,
+    "max_changed_pixel_percent": 3.5101,
     "geometry_and_copy": "passed",
-    "asset": "existing transparent tervory-logo.png"
+    "asset": "existing transparent tervory-logo.png",
+    "rendering": [
+      "--font-render-hinting=none",
+      "--disable-lcd-text",
+      "--force-color-profile=srgb"
+    ]
   },
   "local_prechecks": {
     "ruff": "passed",
@@ -50,5 +55,19 @@
     "tank_shards_failed": 1,
     "failure": "test_brand_logo.py white-background logo; corrected in this branch",
     "security": "whole audit findings; workflow_dispatch deliberately has no comparison base; not a green PR gate"
+  },
+  "ci_followup_690": {
+    "failed_head": "3335d600fa97dba27a6387eb899fa19e7b85828a",
+    "full_run": "https://github.com/Tervory-AI/tervory-tank/actions/runs/41863874079",
+    "failures_fixed": [
+      "platform font hinting changed mobile screenshot pixels",
+      "Tiger npm ci must use --ignore-scripts"
+    ],
+    "focused_command": "python3 -m pytest -q -p no:cacheprovider tests/acceptance/test_tiger.py -k 'tg31 or tg32' --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost",
+    "focused_passed": 2,
+    "focused_deselected": 51,
+    "broad_local_rerun": false,
+    "clean_offline_npm_ignore_scripts_and_esbuild": "passed",
+    "threshold_or_export_change": false
   }
 }
