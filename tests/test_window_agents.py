@@ -162,3 +162,28 @@ async def test_durable_queue_tenant_and_user_isolation_cancel_and_recovery(agent
         rows = (await client.get('/v1/window-agents/jobs')).json()
         assert {r['status'] for r in rows} == {'cancelled', 'failed'}
         assert token not in str(rows) and job['lease'] not in str(rows)
+
+
+@pytest.mark.asyncio
+async def test_rls_policies_install_idempotently_and_hide_other_tenants(agent_db):
+    from window_agents import SCHEMA
+    owner, stranger = uuid.uuid4(), uuid.uuid4()
+    role = 'window_agent_' + uuid.uuid4().hex
+    async with agent_db.acquire() as conn:
+        await conn.execute('ALTER TABLE tank.command_threads ENABLE ROW LEVEL SECURITY')
+        await conn.execute(SCHEMA)
+        await conn.execute(SCHEMA)
+        await conn.execute('INSERT INTO tank.window_agent_credentials VALUES($1,$2,$3,$4)', owner, 'alice', 'github', 'sealed')
+        await conn.execute(f'CREATE ROLE "{role}" NOLOGIN NOSUPERUSER NOBYPASSRLS')
+        try:
+            await conn.execute(f'GRANT USAGE ON SCHEMA tank TO "{role}"')
+            await conn.execute(f'GRANT SELECT ON tank.window_agent_credentials TO "{role}"')
+            async with conn.transaction():
+                await conn.execute(f'SET LOCAL ROLE "{role}"')
+                await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(stranger))
+                assert await conn.fetchval('SELECT count(*) FROM tank.window_agent_credentials') == 0
+                await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(owner))
+                assert await conn.fetchval('SELECT count(*) FROM tank.window_agent_credentials') == 1
+        finally:
+            await conn.execute(f'DROP OWNED BY "{role}"')
+            await conn.execute(f'DROP ROLE "{role}"')

@@ -32,6 +32,20 @@ CREATE TABLE IF NOT EXISTS tank.window_agent_jobs (
 CREATE TABLE IF NOT EXISTS tank.window_agent_dispatch (
  tenant_id uuid NOT NULL, job_id uuid NOT NULL, owner_tenant uuid NOT NULL,
  created_at timestamptz NOT NULL DEFAULT now(), claimed boolean NOT NULL DEFAULT false, PRIMARY KEY(tenant_id,job_id));
+DO $$ DECLARE tab text; BEGIN
+ IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
+  FOREACH tab IN ARRAY ARRAY['window_agent_credentials','window_agent_jobs','window_agent_dispatch'] LOOP
+   EXECUTE format('ALTER TABLE tank.%I ENABLE ROW LEVEL SECURITY',tab);
+   EXECUTE format('ALTER TABLE tank.%I FORCE ROW LEVEL SECURITY',tab);
+   IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid=('tank.'||tab)::regclass AND polname='tenant_access') THEN
+    EXECUTE format($policy$CREATE POLICY tenant_access ON tank.%I FOR ALL TO PUBLIC USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid) WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)$policy$,tab);
+   END IF;
+   IF NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid=('tank.'||tab)::regclass AND polname='tenant_boundary') THEN
+    EXECUTE format($policy$CREATE POLICY tenant_boundary ON tank.%I AS RESTRICTIVE FOR ALL TO PUBLIC USING(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid) WITH CHECK(tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)$policy$,tab);
+   END IF;
+  END LOOP;
+ END IF;
+END $$;
 """
 router = APIRouter(prefix='/v1/window-agents', tags=['window agents'])
 
@@ -127,7 +141,9 @@ async def enqueue(body: Start, actor):
                                thread_id, actor.tenant_id, actor.user_id, body.repo, json.dumps(state))
             await conn.execute('INSERT INTO tank.window_agent_jobs(tenant_id,user_id,job_id,thread_id,repo,credential_name,prompt) VALUES($1,$2,$3,$4,$5,$6,$7)',
                                actor.tenant_id, actor.user_id, body.request_id, thread_id, body.repo, body.credential_name, body.prompt)
+            await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(PLATFORM))
             await conn.execute('INSERT INTO tank.window_agent_dispatch(tenant_id,job_id,owner_tenant) VALUES($1,$2,$3)', PLATFORM, body.request_id, actor.tenant_id)
+            await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(actor.tenant_id))
     return {'job_id': str(body.request_id)}
 
 
