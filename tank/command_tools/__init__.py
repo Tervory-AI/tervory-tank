@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 PRODUCTS = ('trigger', 'base', 'tiger', 'market_lab', 'rig', 'tisan', 'radix', 'zenas', 'mcp', 'skala', 'worker', 'plugins', 'training')
 FOUNDER_ORDER = (('worker', 2), ('base', 6), ('skala', 6), ('tisan', 1), ('worker', 4), ('training', 3), ('mcp', 3), ('radix', 3), ('tisan', 4))
-ADAPTER_ORDER = (('worker', 2), ('training', 3), ('tisan', 4), ('base', 6), ('plugins', 3), ('mcp', 3), ('trigger', 13), ('worker', 3), ('base', 2), ('tiger', 4), ('base', 8), ('tiger', 7), ('market_lab', 11), ('tiger', 1), ('market_lab', 1), ('rig', 3), ('tisan', 1), ('radix', 7), ('tisan', 1), ('radix', 3), ('zenas', 10), ('skala', 6), ('trigger', 33))
+ADAPTER_ORDER = (('worker', 2), ('training', 3), ('tisan', 4), ('base', 6), ('plugins', 3), ('mcp', 3), ('trigger', 13), ('worker', 3), ('base', 2), ('tiger', 4), ('base', 8), ('tiger', 7), ('market_lab', 11), ('tiger', 1), ('market_lab', 1), ('rig', 3), ('tisan', 1), ('radix', 13), ('tisan', 1), ('radix', 3), ('zenas', 10), ('skala', 6), ('trigger', 33))
 
 def product_modules(products=PRODUCTS):
     return [import_module("command_tools." + name) if isinstance(name, str) else name for name in products]
@@ -33,7 +33,7 @@ def build_founder_tools(products=PRODUCTS):
 
 
 def build_set(name, products=PRODUCTS):
-    return frozenset(tool for module in product_modules(products) for tool in getattr(module, name))
+    return frozenset(tool for module in product_modules(products) for tool in getattr(module, name, ()))
 
 
 def build_admin_tools(products=PRODUCTS):
