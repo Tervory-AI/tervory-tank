@@ -79,6 +79,22 @@ if (sitemap.includes("internal") || sitemap.includes("sign-up") || sitemap.inclu
   throw new Error("Sitemap lists a page that is not the homepage");
 }
 if (!sitemap.includes("https://tervory.com/")) throw new Error("Sitemap is missing the homepage");
+if (!/<loc>https:\/\/tervory\.com\/rig<\/loc>/.test(sitemap)) throw new Error("Sitemap is missing the approved Rig page");
+// Visible text only: remove script elements repeatedly until none are left.
+let rig = readFileSync("out/rig.html", "utf8");
+for (let previous = ""; previous !== rig; ) {
+  previous = rig;
+  rig = rig.replace(/<script\b[\s\S]*?<\/script\s*>/gi, "");
+}
+for (const line of ["One item out of stock.", "Rig keeps the sale.", "Seven steps from a missing item to a saved sale.", "Built for the moment a sale would be lost.", "RCT-EXAMPLE"]) {
+  if (!rig.includes(line)) throw new Error(`Rig page is missing approved copy: ${line}`);
+}
+if (rig.includes("figma.com/api/mcp/asset")) throw new Error("Temporary Figma URL in Rig page");
+for (const match of rig.matchAll(/<img[^>]+src="([^"]+)"/g)) {
+  for (const prefix of ["public", "out"]) {
+    if (!match[1].startsWith("/home/") || !existsSync(`${prefix}${match[1]}`) || !readFileSync(`${prefix}${match[1]}`).length) throw new Error(`Missing Rig asset: ${match[1]}`);
+  }
+}
 
 const hidden = [
   "out/internal/ammosync.html",
