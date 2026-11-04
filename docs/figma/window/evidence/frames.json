@@ -34,5 +34,21 @@
     "state": "Sign in",
     "region": "ZA",
     "status": "Proposed"
+  },
+  {
+    "key": "W02-1440",
+    "id": "553:1326",
+    "width": 1440,
+    "height": 900,
+    "state": "Empty state",
+    "status": "Proposed"
+  },
+  {
+    "key": "W02-1280",
+    "id": "553:1421",
+    "width": 1280,
+    "height": 800,
+    "state": "Empty state",
+    "status": "Proposed"
   }
 ]

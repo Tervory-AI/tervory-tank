@@ -28,6 +28,20 @@
       "width": 1280,
       "height": 800,
       "sha256": "b569e51274575cb4e75ae9db7c0de1dda11b6decccf4b0082bf37eab231a34ba"
+    },
+    {
+      "frame": "553:1326",
+      "file": "evidence/W02-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "98b8381340af34d58eb6967cecfab026bceec7dec04c7a8460cc5d8be218d91b"
+    },
+    {
+      "frame": "553:1421",
+      "file": "evidence/W02-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "93b30d540ee171cddc187258d3e94855c94a4d5f6c3d0766d47248011dc76977"
     }
   ]
 }
