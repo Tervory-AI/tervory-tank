@@ -29,7 +29,7 @@ vm.runInNewContext(compiled,{exports:moduleObject.exports,module:moduleObject,re
   const mod={exports:{}};let request;
   const regionTransport={exports:{}};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync('workspace/app/api/zenas/tank.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:regionTransport.exports,process:{env:{}},URL,URLSearchParams});
-  vm.runInNewContext(compiled,{exports:mod.exports,module:mod,process:{env:{}},URLSearchParams,fetch:async(url,init)=>{request={url,init};return {ok:true,json:async()=>({})};},require(name){if(name==='@/app/api/zenas/tank')return regionTransport.exports;throw Error(name);}});
+  vm.runInNewContext(compiled,{exports:mod.exports,module:mod,process:{env:{}},URLSearchParams,fetch:async(url,init)=>{request={url,init};return {ok:true,json:async()=>({})};},require(name){if(name==='@/lib/trigger-signin-fetch')return {signinFetch:async(url,init)=>{request={url,init};return {ok:true,json:async()=>({})};}};if(name==='@/app/api/zenas/tank')return regionTransport.exports;throw Error(name);}});
   await mod.exports.readClientSavings('session-tenant','/rows',{tenant_id:'victim',population:'costs',page:'2',end:'cutoff'});
   const url=new URL(request.url);assert.equal(url.pathname,'/v1/client-savings/rows');
   assert.deepEqual([...url.searchParams.entries()],[['end','cutoff'],['page','2'],['tenant_id','session-tenant']]);
@@ -57,6 +57,7 @@ vm.runInNewContext(compiled,{exports:moduleObject.exports,module:moduleObject,re
   const server={exports:{}};let url;
   vm.runInNewContext(ts.transpileModule(fs.readFileSync('workspace/app/tank/proof/server.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{
     exports:server.exports,module:server,URLSearchParams,process:{env:{}},fetch:async(value)=>{url=new URL(value);return {ok:true};},require(name){
+      if(name==='@/lib/trigger-signin-fetch')return {signinFetch:async(value)=>{url=new URL(value);return {ok:true};}};
       if(name.endsWith('/access'))return {goldIdentity:async()=>({role:'founder',userId:'founder'})};return {};
     }
   });

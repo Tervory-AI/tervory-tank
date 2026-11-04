@@ -39,6 +39,18 @@ async def boundary(monkeypatch, tmp_path):
         monkeypatch.setattr(tank, "_http", object())
         monkeypatch.setattr(tank, "_agent_keys_synced", True)
         tenants = (uuid.uuid4(), uuid.uuid4())
+        # The founder proves identity with a signed Trigger sign-in token, not a bare header.
+        import identity_oidc as oidc
+        from trigger_signin_fakes import CLIENT, ORG, SUB, Provider, install_registry
+        provider = Provider("us-east")
+        install_registry(monkeypatch, [provider], {ORG: str(tenants[0])})
+        set_founders(monkeypatch, SUB)
+        monkeypatch.setenv("TRIGGER_SIGNIN_ISSUER", provider.issuer)
+        monkeypatch.setenv("TRIGGER_SIGNIN_CLIENT_ID", CLIENT)
+        monkeypatch.setenv("TRIGGER_SIGNIN_WORKSPACE_CLIENT_ID", CLIENT)
+        monkeypatch.setattr(oidc, "http_client", lambda: httpx.AsyncClient(transport=httpx.MockTransport(provider)))
+        oidc._cache.clear()
+        founder = {"X-Tervory-Admin": SUB, "X-Trigger-Signin-Token": provider.token()}
         packages = {}
         calls = []
 
@@ -66,7 +78,7 @@ async def boundary(monkeypatch, tmp_path):
             await conn.execute("INSERT INTO tank.skills(id,version,agent,task_type,state) VALUES('base.public','1.0.0','base','fixture.boundary','approved')")
         monkeypatch.setattr(tank, "_packages", packages)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=tank.app), base_url="http://tank", headers={"X-Tank-Key": key}) as client:
-            yield SimpleNamespace(tank=tank, pool=pool, client=client, tenants=tenants, calls=calls, key=key)
+            yield SimpleNamespace(tank=tank, pool=pool, client=client, tenants=tenants, calls=calls, key=key, founder=founder)
     finally:
         if pool:
             await pool.close()
@@ -82,9 +94,11 @@ async def test_evals_summary_requires_tenant_and_founder_for_totals(boundary):
         assert result.status_code == 200
         assert result.json() == [{"task_type": "fixture.boundary", "cases": i + 1, "accepted": 0, "rejected": 0, "manual": i + 1}]
     assert (await b.client.get("/v1/evals/summary")).status_code == 422
-    for headers in ({}, {"X-Tervory-Admin": "ordinary-user"}, {"X-Tervory-Role": "founder"}):
-        assert (await b.client.get("/v1/evals/summary", params={"all_tenants": True}, headers=headers)).status_code == 404
-    result = await b.client.get("/v1/evals/summary", params={"all_tenants": True}, headers={"X-Tervory-Admin": "founder-fixture"})
+    assert (await b.client.get("/v1/evals/summary", params={"all_tenants": True})).status_code == 404
+    # A bare identity header without a signed Trigger sign-in token is refused before any data is read.
+    for headers in ({"X-Tervory-Admin": "ordinary-user"}, {"X-Tervory-Role": "founder"}):
+        assert (await b.client.get("/v1/evals/summary", params={"all_tenants": True}, headers=headers)).status_code == 401
+    result = await b.client.get("/v1/evals/summary", params={"all_tenants": True}, headers=b.founder)
     assert result.status_code == 200 and result.json()[0]["cases"] == 3
 
 
@@ -96,9 +110,10 @@ async def test_skala_private_packages_are_owned_and_founder_gated(boundary):
         assert result.status_code == 200
         assert {r["id"] for r in result.json()} == {"base.public", f"base.private{i}"}
     assert {r["id"] for r in (await b.client.get("/v1/skala")).json()} == {"base.public"}
-    for headers in ({}, {"X-Tervory-Admin": "ordinary-user"}, {"X-Tervory-Role": "founder"}):
-        assert (await b.client.get("/v1/skala", params={"all_tenants": True}, headers=headers)).status_code == 404
-    result = await b.client.get("/v1/skala", params={"all_tenants": True}, headers={"X-Tervory-Admin": "founder-fixture"})
+    assert (await b.client.get("/v1/skala", params={"all_tenants": True})).status_code == 404
+    for headers in ({"X-Tervory-Admin": "ordinary-user"}, {"X-Tervory-Role": "founder"}):
+        assert (await b.client.get("/v1/skala", params={"all_tenants": True}, headers=headers)).status_code == 401
+    result = await b.client.get("/v1/skala", params={"all_tenants": True}, headers=b.founder)
     assert {r["id"] for r in result.json()} == {"base.public", "base.private0", "base.private1"}
 
 
