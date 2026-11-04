@@ -140,7 +140,7 @@ class WindowJobs:
             await self.call(path + '/finish', {**lease, **result})
         except (OSError, RuntimeError, ValueError, httpx.HTTPError):
             try:
-                await self.call(path + '/finish', {**lease, 'status': 'failed'})
+                await self.call(path + '/finish', {**lease, 'status': 'failed', 'pr_number': job['pull_number']})
             except (httpx.HTTPError, asyncio.CancelledError):
                 pass
             raise

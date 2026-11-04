@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import uuid
 from pathlib import Path
@@ -28,7 +29,7 @@ def git(*argv, cwd=None):
     return subprocess.check_output(['git', *argv], cwd=cwd, stderr=subprocess.DEVNULL, text=True).strip()
 
 
-async def acceptance(root):
+async def acceptance(root, check_command=False):
     seed, remote, checkout = root / 'seed', root / 'remote.git', root / 'repo'
     seed.mkdir()
     git('init', '-b', 'develop', cwd=seed)
@@ -56,7 +57,7 @@ async def acceptance(root):
             assert body['head'] == branch and body['base'] == 'develop' and body['draft'] is True
             git('--git-dir', str(remote), 'rev-parse', 'refs/heads/' + branch)
             created = True
-            return httpx.Response(201, json={'number': 8, 'html_url': 'https://github.com/alice/project/pull/8'})
+            return httpx.Response(201, json={'number': 8, 'draft': True, 'html_url': 'https://github.com/alice/project/pull/8'})
         sha = git('--git-dir', str(remote), 'rev-parse', 'refs/heads/' + branch)
         if path.endswith('/pulls/8'):
             assert created
@@ -80,7 +81,7 @@ async def acceptance(root):
             assert argv[-2] == 'https://github.com/alice/project.git'
             return original(['git', 'clone', '--depth', '1', '--branch', 'develop', remote.as_uri(), str(checkout)], root)
         if argv[0] == 'node':
-            result = subprocess.check_output(['node', str(SOURCE / 'workers/window_agent/test/fake-loop.mjs'), str(checkout)], text=True, timeout=60)
+            result = subprocess.check_output(['node', str(SOURCE / 'workers/window_agent/test/fake-loop.mjs'), str(checkout), *(['--check-command'] if check_command else [])], text=True, timeout=60)
             task_receipts.extend(json.loads(result)['receipts'])
             return ''
         return original(argv, cwd or checkout, **kwargs)
@@ -106,13 +107,13 @@ async def acceptance(root):
     assert published and review_receipts and result['status'] == 'done'
     return {'status': 'passed', 'sequence': ['task', 'branch', 'PR', 'review'],
             'branch': branch, 'pr_url': outcome.pr_url, 'task_receipts': len(task_receipts),
-            'review_receipts': len(review_receipts), 'github_operations': len(calls)}
+            'review_receipts': len(review_receipts), 'github_operations': len(calls), 'command_sandbox': check_command}
 
 
 def main():
     directory = os.environ.get('TMPDIR')
     with tempfile.TemporaryDirectory(prefix='window-agents-e2e-', dir=directory) as temporary:
-        print(json.dumps(asyncio.run(acceptance(Path(temporary))), sort_keys=True))
+        print(json.dumps(asyncio.run(acceptance(Path(temporary), check_command='--check-command' in sys.argv)), sort_keys=True))
 
 
 if __name__ == '__main__':

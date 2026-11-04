@@ -64,7 +64,7 @@ async def test_own_repository_default_branch_and_draft_never_merge():
             return httpx.Response(200, json={'default_branch': 'develop', 'permissions': {'push': True}})
         data = json.loads(request.content)
         assert data['base'] == 'develop' and data['draft'] is True
-        return httpx.Response(201, json={'number': 8, 'html_url': 'https://github.com/alice/project/pull/8'})
+        return httpx.Response(201, json={'number': 8, 'draft': True, 'html_url': 'https://github.com/alice/project/pull/8'})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(fake)) as client:
         github = UserGitHub('alice/project', client)
@@ -199,7 +199,7 @@ async def test_container_runner_cancellation_stops_child(tmp_path):
     import sys
     from workers.window_agent.runtime import ContainerRunner
     pidfile = tmp_path / 'pid'
-    code = 'import os,sys,time; open(sys.argv[1],"w").write(str(os.getpid())); time.sleep(60)'
+    code = 'import os,sys,time; from pathlib import Path; p=Path(sys.argv[1]); ready=p.with_suffix(".ready"); ready.write_text(str(os.getpid())); ready.replace(p); time.sleep(60)'
     stop = 'import os,sys,signal; os.kill(int(open(sys.argv[1]).read()),signal.SIGTERM)'
     runner = ContainerRunner()
     running = asyncio.create_task(runner([sys.executable, '-c', code, str(pidfile)], timeout_s=90,
@@ -220,3 +220,143 @@ async def test_container_runner_cancellation_stops_child(tmp_path):
         if not running.done():
             running.cancel()
             await asyncio.gather(running, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_receipts_are_existing_command_receipts_and_private_to_the_job_owner(agent_db):
+    import json
+    import command
+    import window_agents as agents
+    from fastapi import FastAPI
+    actor = [command.Actor(uuid.uuid4(), 'alice', False)]
+    owner = actor[0]
+    application = FastAPI()
+    application.include_router(agents.router)
+    application.dependency_overrides[agents.actor_identity] = lambda: actor[0]
+    job_id = uuid.uuid4()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application), base_url='http://test') as client:
+        await client.put('/v1/window-agents/vault/github', json={'name': 'github', 'value': 'github_pat_' + 'test' * 8})
+        await client.post('/v1/window-agents/jobs', json={'repo': 'alice/project', 'credential_name': 'github', 'prompt': 'fix', 'request_id': str(job_id)})
+        receipt_path = f'/v1/window-agents/jobs/{job_id}/receipt'
+        assert (await client.get(receipt_path)).json()['status'] == 'pending'
+        async with agent_db.acquire() as conn:
+            thread_id = await conn.fetchval('SELECT thread_id FROM tank.window_agent_jobs WHERE tenant_id=$1 AND job_id=$2', owner.tenant_id, job_id)
+            stored = {'ledger_id': str(uuid.uuid4()), 'step_id': str(uuid.uuid4()), 'cost_usd': .01,
+                      'baseline_cost_usd': .03, 'saved_usd': .02, 'tokens_in': 10, 'tokens_out': 20, 'model': 'private-roster-name'}
+            state = {'receipts': [stored], 'steps': {}, 'cards': {}, 'active_turn': None}
+            await conn.execute('UPDATE tank.command_threads SET state=$3::jsonb WHERE tenant_id=$1 AND thread_id=$2', owner.tenant_id, thread_id, json.dumps(state))
+        result = await client.get(receipt_path)
+        assert result.headers['cache-control'] == 'private, no-store'
+        receipt = result.json()
+        assert receipt['rows'][0]['ledger_id'] == stored['ledger_id']
+        assert receipt['totals']['cost_usd'] == .01
+        assert 'model' not in receipt['rows'][0]
+        actor[0] = command.Actor(owner.tenant_id, 'bob', True)
+        assert (await client.get(receipt_path)).status_code == 404
+        actor[0] = command.Actor(uuid.uuid4(), 'alice', True)
+        assert (await client.get(receipt_path)).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_old_running_jobs_remain_visible_beside_recent_finished_jobs(agent_db):
+    import command
+    import window_agents as agents
+    from fastapi import FastAPI
+    actor = command.Actor(uuid.uuid4(), 'alice', False)
+    application = FastAPI()
+    application.include_router(agents.router)
+    application.dependency_overrides[agents.actor_identity] = lambda: actor
+    running = uuid.uuid4()
+    async with agent_db.acquire() as conn:
+        await conn.execute("INSERT INTO tank.window_agent_jobs(tenant_id,user_id,job_id,thread_id,repo,credential_name,prompt,status,created_at) VALUES($1,$2,$3,$4,'alice/project','github','fix','running',now()-interval '30 days')", actor.tenant_id, actor.user_id, running, uuid.uuid4())
+        await conn.executemany("INSERT INTO tank.window_agent_jobs(tenant_id,user_id,job_id,thread_id,repo,credential_name,prompt,status) VALUES($1,$2,$3,$4,'alice/project','github','fix','done')", [(actor.tenant_id, actor.user_id, uuid.uuid4(), uuid.uuid4()) for _ in range(105)])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application), base_url='http://test') as client:
+        rows = (await client.get('/v1/window-agents/jobs')).json()
+    assert str(running) in {row['job_id'] for row in rows}
+    assert len([row for row in rows if row['status'] == 'done']) == 100
+
+
+@pytest.mark.asyncio
+async def test_worker_health_includes_window_jobs_without_founder_github_app(tmp_path, monkeypatch):
+    import asyncio
+    import json
+    from types import SimpleNamespace
+    import workers.service as service
+    import workers.window_agent.service as window_service
+    ready = asyncio.Event()
+    baseline = asyncio.all_tasks()
+    handlers = list(service.log.handlers)
+
+    class Server:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): return None
+        async def serve_forever(self):
+            ready.set()
+            await asyncio.Event().wait()
+
+    class Writer:
+        def write(self, data): self.data = data
+        async def drain(self): return None
+        def close(self): return None
+
+    listener = AsyncMock(return_value=Server())
+    monkeypatch.setattr(service.asyncio, 'start_server', listener)
+    control = AsyncMock()
+    control.paused.return_value = True
+    monkeypatch.setattr(service, 'TankControl', lambda *args: control)
+
+    async def waiting(): await asyncio.Event().wait()
+    window = SimpleNamespace(busy=False, serve=waiting)
+    monkeypatch.setattr(window_service, 'WindowJobs', lambda *args, **kwargs: window)
+    serving = asyncio.create_task(service.serve(Settings(code_dir=str(tmp_path / 'app'))))
+    try:
+        await asyncio.wait_for(ready.wait(), 5)
+        async def health():
+            reader, writer = asyncio.StreamReader(), Writer()
+            reader.feed_data(b'GET /health HTTP/1.1\r\nHost: localhost\r\n\r\n')
+            await listener.call_args.args[0](reader, writer)
+            return json.loads(writer.data.split(b'\r\n\r\n', 1)[1])
+        assert (await health())['busy'] is False
+        window.busy = True
+        assert (await health())['busy'] is True
+        window.busy = False
+        assert (await health())['busy'] is False
+    finally:
+        tasks = (asyncio.all_tasks() - baseline) | {serving}
+        for task in tasks: task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        for handler in service.log.handlers[:]:
+            if handler not in handlers: service.log.removeHandler(handler)
+
+
+@pytest.mark.asyncio
+async def test_feature_migrations_grant_only_the_existing_application_role(agent_db):
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import window_agents as agents
+    from tenant_db import administrative
+    role = 'window_app_' + uuid.uuid4().hex
+
+    class TenantPool:
+        @asynccontextmanager
+        async def acquire(self):
+            async with agent_db.acquire() as conn:
+                async with conn.transaction():
+                    await conn.execute(f'SET LOCAL ROLE "{role}"')
+                    yield conn
+
+    tenant = TenantPool()
+    tank = SimpleNamespace(pool=lambda: agent_db if administrative() else tenant)
+    async with agent_db.acquire() as conn:
+        await conn.execute(f'CREATE ROLE "{role}" NOLOGIN NOSUPERUSER NOBYPASSRLS')
+        await conn.execute(f'GRANT USAGE ON SCHEMA tank TO "{role}"')
+    try:
+        await agents.migrate(tank, agents.SCHEMA, ['window_agent_jobs', 'window_agent_dispatch'])
+        async with agent_db.acquire() as conn:
+            assert await conn.fetchval("SELECT has_table_privilege($1,'tank.window_agent_jobs','INSERT')", role)
+            assert await conn.fetchval("SELECT has_table_privilege($1,'tank.window_agent_dispatch','SELECT')", role)
+            assert not await conn.fetchval("SELECT has_table_privilege($1,'tank.command_threads','INSERT')", role)
+    finally:
+        async with agent_db.acquire() as conn:
+            await conn.execute(f'DROP OWNED BY "{role}"')
+            await conn.execute(f'DROP ROLE "{role}"')

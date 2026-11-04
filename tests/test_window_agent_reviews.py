@@ -38,7 +38,11 @@ async def test_review_publishes_only_valid_comments_on_the_reviewed_head(changed
     async with httpx.AsyncClient(transport=httpx.MockTransport(github_api)) as client:
         args = ({'job_id': str(uuid.uuid4()), 'pull_number': 7}, UserGitHub('alice/project', client),
                 'github_pat_' + 'test' * 8, turn, heartbeat)
-        if changed_head or bad_line or not receipt:
+        if changed_head:
+            outcome = await review(*args)
+            assert outcome['status'] == 'superseded'
+            assert all(r.method != 'POST' for r in requests)
+        elif bad_line or not receipt:
             with pytest.raises(GitHubError):
                 await review(*args)
             assert all(r.method != 'POST' for r in requests)
@@ -143,3 +147,31 @@ async def test_review_worker_uses_no_container_and_reports_result(monkeypatch):
     fake.assert_awaited_once()
     worker.runner.assert_not_called()
     assert calls[-1].endswith('/finish')
+
+
+@pytest.mark.asyncio
+async def test_merge_word_in_repository_is_allowed_but_merge_and_traversal_routes_are_not():
+    calls = []
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(200, json={'default_branch': 'main', 'permissions': {'push': True}})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        github = UserGitHub('alice/merge-helper', client)
+        token = 'github_pat_' + 'test' * 8
+        assert await github.default_branch(token) == 'main'
+        for path in ['/pulls/1/merge', '/merges', '/merge-upstream', '/../../bob/private', '/%2e%2e/other']:
+            with pytest.raises(GitHubError):
+                await github._send('PUT', 'https://api.github.com/repos/alice/merge-helper' + path, token)
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_queued_webhook_review_for_an_old_head_costs_nothing():
+    github = UserGitHub('alice/project', None)
+    github.pull = AsyncMock(return_value={'state': 'open', 'head': {'sha': 'b' * 40},
+        'base': {'repo': {'full_name': 'alice/project'}}, 'changed_files': 1})
+    turn = AsyncMock()
+    result = await review({'job_id': str(uuid.uuid4()), 'pull_number': 8, 'target_sha': 'a' * 40},
+                          github, 'unused', turn, AsyncMock())
+    assert result == {'status': 'superseded', 'pr_number': 8, 'sha': None}
+    turn.assert_not_called()

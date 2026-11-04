@@ -65,6 +65,8 @@ async def review(job, github, token, turn, heartbeat):
     if (pull.get('state') != 'open' or not re.fullmatch(r'[0-9a-f]{40}', sha)
             or pull.get('base', {}).get('repo', {}).get('full_name', '').casefold() != github.repo.casefold()):
         raise GitHubError('Pull request does not belong to this repository or is closed')
+    if job.get('target_sha') and job['target_sha'] != sha:
+        return {'status': 'superseded', 'pr_number': number, 'sha': None}
     files = []
     for page in range(1, 4):
         batch = await github._send('GET', f'{API}/repos/{github.repo}/pulls/{number}/files?per_page=100&page={page}', token)
@@ -87,7 +89,7 @@ async def review(job, github, token, turn, heartbeat):
     # Never publish findings against a newer revision than the one reviewed.
     current = await github.pull(token, number)
     if current.get('head', {}).get('sha') != sha or current.get('state') != 'open':
-        raise GitHubError('Pull request changed during review; start a new review')
+        return {'status': 'superseded', 'pr_number': number, 'sha': sha}
     await heartbeat()  # Re-check cancellation immediately before the GitHub mutation.
     marker = f"<!-- tervory-review:{job['job_id']}:{sha} -->"
     posted = await github._send('POST', f'{API}/repos/{github.repo}/pulls/{number}/reviews', token, {

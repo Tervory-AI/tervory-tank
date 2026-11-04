@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import unquote, urlsplit
 
 from workers.github_api import API, GitHub, GitHubError
 from workers.github_app import assert_push_branch
@@ -9,8 +10,14 @@ from workers.github_app import assert_push_branch
 
 class UserGitHub(GitHub):
     async def _send(self, method, url, token, body=None):
-        prefix = f'{API}/repos/{self.repo}'
-        if not (url == prefix or url.startswith(prefix + '/')) or '/merge' in url:
+        parsed = urlsplit(url)
+        path = unquote(parsed.path)
+        prefix = f'/repos/{self.repo}'
+        if (parsed.scheme != 'https' or parsed.netloc != 'api.github.com' or parsed.fragment
+                or not (path == prefix or path.startswith(prefix + '/'))
+                or any(part in {'.', '..'} for part in path.split('/'))):
+            raise GitHubError('GitHub operation refused')
+        if any(part in {'merge', 'merges', 'merge-upstream'} for part in path[len(prefix):].split('/')):
             raise GitHubError('GitHub operation refused')
         if not re.fullmatch(r'(?:github_pat_|gh[pous]_)[A-Za-z0-9_]+', token):
             raise GitHubError('Named GitHub credential refused')
@@ -33,7 +40,10 @@ class UserGitHub(GitHub):
 
     async def draft(self, token, branch, base, title):
         assert_push_branch(branch)
-        return await self._send('POST', f'{API}/repos/{self.repo}/pulls', token, {
+        created = await self._send('POST', f'{API}/repos/{self.repo}/pulls', token, {
             'head': branch, 'base': base, 'title': title[:200], 'draft': True,
             'body': 'Background task completed. See the Tervory receipt for model usage. Review before merging.',
         })
+        if not isinstance(created, dict) or created.get('draft') is not True:
+            raise GitHubError('GitHub did not acknowledge a draft pull request')
+        return created

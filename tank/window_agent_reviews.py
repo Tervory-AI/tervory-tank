@@ -15,13 +15,14 @@ from pydantic import Field, field_validator
 
 import command
 import window_agents as agents
-from tenant_db import activate_tenant, tenant_scope
+from tenant_db import activate_tenant
 from vault import open_seal, seal
 
 router = APIRouter(prefix='/v1/window-agents')
 SCHEMA = """
 ALTER TABLE tank.window_agent_jobs ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'task';
 ALTER TABLE tank.window_agent_jobs ADD COLUMN IF NOT EXISTS pull_number integer;
+ALTER TABLE tank.window_agent_jobs ADD COLUMN IF NOT EXISTS target_sha text;
 CREATE TABLE IF NOT EXISTS tank.window_agent_webhooks(
  tenant_id uuid NOT NULL, user_id text NOT NULL, hook_id uuid NOT NULL, repo text NOT NULL,
  credential_name text NOT NULL, enabled boolean NOT NULL DEFAULT false,
@@ -153,7 +154,7 @@ async def receive_hook(tenant_id: uuid.UUID, hook_id: uuid.UUID, request: Reques
                             prompt=f'Review pull request #{number} at {sha}', request_id=request_id)
     except (ValueError, TypeError, KeyError, AttributeError):
         raise HTTPException(422, 'Webhook payload refused.') from None
-    return await agents.enqueue(task, actor, kind='review', pull_number=number)
+    return await agents.enqueue(task, actor, kind='review', pull_number=number, target_sha=sha)
 
 
 def install(app, tank):
@@ -163,8 +164,6 @@ def install(app, tank):
     @asynccontextmanager
     async def lifespan(application):
         async with previous(application):
-            with tenant_scope(agents.PLATFORM, administrative=True):
-                async with tank.pool().acquire() as conn:
-                    await conn.execute(SCHEMA)
+            await agents.migrate(tank, SCHEMA, ['window_agent_webhooks'])
             yield
     app.router.lifespan_context = lifespan

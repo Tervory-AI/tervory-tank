@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS tank.window_agent_jobs (
 CREATE TABLE IF NOT EXISTS tank.window_agent_dispatch (
  tenant_id uuid NOT NULL, job_id uuid NOT NULL, owner_tenant uuid NOT NULL,
  created_at timestamptz NOT NULL DEFAULT now(), claimed boolean NOT NULL DEFAULT false, PRIMARY KEY(tenant_id,job_id));
+CREATE INDEX IF NOT EXISTS window_agent_jobs_owner_created ON tank.window_agent_jobs(tenant_id,user_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS window_agent_dispatch_pending ON tank.window_agent_dispatch(tenant_id,claimed,created_at);
 DO $$ DECLARE tab text; BEGIN
  IF EXISTS(SELECT 1 FROM pg_class WHERE oid='tank.command_threads'::regclass AND relrowsecurity) THEN
   FOREACH tab IN ARRAY ARRAY['window_agent_jobs','window_agent_dispatch'] LOOP
@@ -88,7 +90,7 @@ class Lease(command.Body):
 
 
 class Finish(Lease):
-    status: Literal['done', 'failed']
+    status: Literal['done', 'failed', 'superseded']
     pr_number: int | None = Field(default=None, gt=0)
     sha: str | None = Field(default=None, pattern=r'^[a-f0-9]{40}$')
 
@@ -124,7 +126,7 @@ async def names(actor: command.Actor = Depends(actor_identity)):
     return [r['name'] for r in rows]
 
 
-async def enqueue(body: Start, actor, *, kind='task', pull_number=None):
+async def enqueue(body: Start, actor, *, kind='task', pull_number=None, target_sha=None):
     async with command.db().acquire() as conn:
         async with conn.transaction():
             # Serialise duplicate requests before creating their receipt thread.
@@ -133,7 +135,7 @@ async def enqueue(body: Start, actor, *, kind='task', pull_number=None):
             if previous:
                 if previous['user_id'] != actor.user_id:
                     raise HTTPException(404, 'Job not found.')
-                if (previous['repo'], previous['credential_name'], previous['prompt'], previous['kind'], previous['pull_number']) != (body.repo, body.credential_name, body.prompt, kind, pull_number):
+                if (previous['repo'], previous['credential_name'], previous['prompt'], previous['kind'], previous['pull_number'], previous['target_sha']) != (body.repo, body.credential_name, body.prompt, kind, pull_number, target_sha):
                     raise HTTPException(409, 'Request already used for another task.')
                 return {'job_id': str(body.request_id)}
             await credential(conn, actor, body.credential_name)
@@ -141,8 +143,8 @@ async def enqueue(body: Start, actor, *, kind='task', pull_number=None):
             state = {'messages': [], 'steps': {}, 'cards': {}, 'receipts': [], 'active_turn': None}
             await conn.execute('INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,title,state) VALUES($1,$2,$3,$4,$5::jsonb)',
                                thread_id, actor.tenant_id, actor.user_id, body.repo, json.dumps(state))
-            await conn.execute('INSERT INTO tank.window_agent_jobs(tenant_id,user_id,job_id,thread_id,repo,credential_name,prompt,kind,pull_number) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-                               actor.tenant_id, actor.user_id, body.request_id, thread_id, body.repo, body.credential_name, body.prompt, kind, pull_number)
+            await conn.execute('INSERT INTO tank.window_agent_jobs(tenant_id,user_id,job_id,thread_id,repo,credential_name,prompt,kind,pull_number,target_sha) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+                               actor.tenant_id, actor.user_id, body.request_id, thread_id, body.repo, body.credential_name, body.prompt, kind, pull_number, target_sha)
             await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(PLATFORM))
             await conn.execute('INSERT INTO tank.window_agent_dispatch(tenant_id,job_id,owner_tenant) VALUES($1,$2,$3)', PLATFORM, body.request_id, actor.tenant_id)
             await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(actor.tenant_id))
@@ -168,8 +170,32 @@ async def cancel(job_id: uuid.UUID, actor: command.Actor = Depends(actor_identit
 @router.get('/jobs')
 async def jobs(actor: command.Actor = Depends(actor_identity)):
     async with command.db().acquire() as conn:
-        rows = await conn.fetch('SELECT job_id,thread_id,repo,status,result,created_at,kind,pull_number FROM tank.window_agent_jobs WHERE tenant_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 100', actor.tenant_id, actor.user_id)
+        await conn.execute("UPDATE tank.window_agent_jobs SET status='failed' WHERE tenant_id=$1 AND user_id=$2 AND status='running' AND heartbeat < now() - interval '2 minutes'", actor.tenant_id, actor.user_id)
+        rows = await conn.fetch("""WITH ranked AS (
+            SELECT job_id,thread_id,repo,status,result,created_at,kind,pull_number,
+            row_number() OVER(PARTITION BY status IN ('queued','running')
+              ORDER BY CASE WHEN status='running' THEN 0 ELSE 1 END,created_at DESC,job_id) AS position
+            FROM tank.window_agent_jobs WHERE tenant_id=$1 AND user_id=$2)
+            SELECT job_id,thread_id,repo,status,result,created_at,kind,pull_number FROM ranked
+            WHERE position<=100 OR status='running'
+            ORDER BY CASE WHEN status IN ('queued','running') THEN 0 ELSE 1 END,created_at DESC,job_id""", actor.tenant_id, actor.user_id)
     return [{**dict(row), 'result': command.unpack(row['result'])} for row in rows]
+
+
+@router.get('/jobs/{job_id}/receipt')
+async def receipt(job_id: uuid.UUID, actor: command.Actor = Depends(actor_identity)):
+    from fastapi.responses import JSONResponse
+    async with command.db().acquire() as conn:
+        job = await conn.fetchrow('SELECT thread_id,status FROM tank.window_agent_jobs WHERE tenant_id=$1 AND user_id=$2 AND job_id=$3', actor.tenant_id, actor.user_id, job_id)
+        if job is None:
+            raise HTTPException(404, 'Job not found.')
+        thread = await command.owned(conn, job['thread_id'], actor)
+    state = command.unpack(thread['state'])
+    rows = [command.public_receipt(row, actor.founder) for row in state['receipts']]
+    totals = command.thread_totals(state)
+    status = 'pending' if (state.get('active_turn') or totals['cost_usd'] is None or (not rows and job['status'] in {'queued', 'running'})) else 'recorded'
+    return JSONResponse({'thread_id': str(job['thread_id']), 'rows': rows, 'totals': totals, 'status': status},
+                        headers={'Cache-Control': 'private, no-store'})
 
 
 async def leased(conn, tenant_id, job_id, lease):
@@ -192,9 +218,12 @@ async def next_job(body: Next):
         async with command.db().acquire() as conn:
             async with conn.transaction():
                 # Interrupted jobs are failed, never replayed after an uncertain charge/push.
-                abandoned = await conn.fetch('SELECT owner_tenant,job_id FROM tank.window_agent_dispatch WHERE tenant_id=$1 AND claimed=true', PLATFORM)
+                abandoned = await conn.fetch('SELECT owner_tenant,job_id FROM tank.window_agent_dispatch WHERE tenant_id=$1 AND claimed=true ORDER BY created_at LIMIT 1000', PLATFORM)
                 for pending in abandoned:
                     await conn.execute("UPDATE tank.window_agent_jobs SET status='failed' WHERE tenant_id=$1 AND job_id=$2 AND status='running' AND heartbeat < now() - interval '2 minutes'", pending['owner_tenant'], pending['job_id'])
+                    status = await conn.fetchval('SELECT status FROM tank.window_agent_jobs WHERE tenant_id=$1 AND job_id=$2', pending['owner_tenant'], pending['job_id'])
+                    if status not in {'queued', 'running'}:
+                        await conn.execute('DELETE FROM tank.window_agent_dispatch WHERE tenant_id=$1 AND job_id=$2', PLATFORM, pending['job_id'])
                 dispatch = await conn.fetchrow("SELECT d.* FROM tank.window_agent_dispatch d WHERE d.tenant_id=$1 AND d.claimed=false AND EXISTS(SELECT 1 FROM tank.window_agent_jobs j WHERE j.tenant_id=d.owner_tenant AND j.job_id=d.job_id AND ($2::text IS NULL OR j.kind=$2)) ORDER BY d.created_at LIMIT 1 FOR UPDATE OF d SKIP LOCKED", PLATFORM, body.kind)
                 if body.peek:
                     return {'available': dispatch is not None}
@@ -206,7 +235,7 @@ async def next_job(body: Next):
                 row = await conn.fetchrow("UPDATE tank.window_agent_jobs SET status='running',lease_hash=$3,heartbeat=now() WHERE tenant_id=$1 AND job_id=$2 AND status='queued' RETURNING *", tenant_id, job_id, hashlib.sha256(lease.encode()).hexdigest())
                 if row is None:
                     return None
-                return {**{k: str(row[k]) for k in ('tenant_id', 'job_id', 'thread_id')}, 'repo': row['repo'], 'prompt': row['prompt'], 'lease': lease, 'kind': row['kind'], 'pull_number': row['pull_number']}
+                return {**{k: str(row[k]) for k in ('tenant_id', 'job_id', 'thread_id')}, 'repo': row['repo'], 'prompt': row['prompt'], 'lease': lease, 'kind': row['kind'], 'pull_number': row['pull_number'], 'target_sha': row['target_sha']}
 
 
 @router.post('/worker/{tenant_id}/{job_id}/heartbeat', dependencies=[Depends(command.worker)])
@@ -257,6 +286,24 @@ async def finish(tenant_id: uuid.UUID, job_id: uuid.UUID, body: Finish):
     return {'status': body.status}
 
 
+
+async def migrate(tank, sql, tables):
+    # Existing deployments use separate tenant and BYPASSRLS migration pools.
+    with tenant_scope(PLATFORM):
+        async with tank.pool().acquire() as conn:
+            role = await conn.fetchval('SELECT current_user')
+    if not isinstance(role, str) or not role:
+        raise RuntimeError('Tenant database role is unavailable')
+    if any(not re.fullmatch(r'window_agent_[a-z_]+', table) for table in tables):
+        raise RuntimeError('Feature table name was refused')
+    template = 'GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE ' + ','.join('tank.' + table for table in tables) + ' TO %I'
+    with tenant_scope(PLATFORM, administrative=True):
+        async with tank.pool().acquire() as conn:
+            await conn.execute(sql)
+            # PostgreSQL quotes the database-owned role identifier, not Python.
+            statement = await conn.fetchval('SELECT format($1::text,$2::text)', template, role)
+            await conn.execute(statement)
+
 def install(app, tank):
     app.include_router(router)
     previous = app.router.lifespan_context
@@ -264,9 +311,7 @@ def install(app, tank):
     @asynccontextmanager
     async def lifespan(application):
         async with previous(application):
-            with tenant_scope(PLATFORM, administrative=True):
-                async with tank.pool().acquire() as conn:
-                    await conn.execute(SCHEMA)
+            await migrate(tank, SCHEMA, ['window_agent_jobs', 'window_agent_dispatch'])
             yield
     app.router.lifespan_context = lifespan
     __import__('window_agent_reviews').install(app, tank)
