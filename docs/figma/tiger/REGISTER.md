@@ -25,6 +25,8 @@ No Code Connect files were found. Local source instances and variables take prec
 | T02-375 · Read failure | 375×935 | [622:499](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=622-499) | Proposed | [PNG](evidence/T02-375.png) |
 | T03-1440 · Decision failure | 1440×1189 | [622:594](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=622-594) | Proposed | [PNG](evidence/T03-1440.png) |
 | T03-375 · Decision failure | 375×1251 | [622:764](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=622-764) | Proposed | [PNG](evidence/T03-375.png) |
+| T04-1440 · Unavailable site-check details | 1440×1189 | [627:158](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=627-158) | Proposed | [PNG](evidence/T04-1440.png) |
+| T04-375 · Unavailable site-check details | 375×1195 | [627:317](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=627-317) | Proposed | [PNG](evidence/T04-375.png) |
 
 ## Validation and copy
 
