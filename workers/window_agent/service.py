@@ -12,7 +12,7 @@ import httpx
 
 from workers.podman_run import build_argv, choose_runtime, container_name, kill_argv, task_argv, task_tank_url
 from workers.secrets_io import _write
-from workers.service import split, tank_hosts
+from workers.service import split, tank_hosts, update_pending
 from workers.window_agent.runtime import ContainerRunner
 from workers.tank_status import tank_key
 from workers.task_run import parse_result
@@ -42,14 +42,19 @@ def argv_for(settings, name, runtime, directory, job):
 
 
 class WindowJobs:
-    def __init__(self, settings, control, client, runner=None):
+    def __init__(self, settings, control, client, runner=None, legacy=None):
         self.settings, self.control, self.client = settings, control, client
         self.runner = runner or ContainerRunner()
         self.built = False
+        self.busy = False
+        self.legacy = legacy or (lambda: None)
+        self.guard = asyncio.Lock()
 
-    async def call(self, path, body=None):
+    async def call(self, path, body=None, *, timeout=30):
+        if not tank_key():
+            raise RuntimeError('Worker corridor is not configured')
         response = await self.client.post(self.settings.tank_url.rstrip('/') + '/v1/window-agents/' + path,
-                                          json=body or {}, headers={'x-tank-key': tank_key()}, timeout=30)
+                                          json=body or {}, headers={'x-tank-key': tank_key()}, timeout=timeout)
         if response.status_code == 409:
             raise asyncio.CancelledError()
         response.raise_for_status()
@@ -112,20 +117,77 @@ class WindowJobs:
             finally:
                 shutil.rmtree(directory, ignore_errors=True)
 
+    async def run_review(self, job):
+        from workers.window_agent.github import UserGitHub
+        from workers.window_agent.review import review
+        path = f"worker/{job['tenant_id']}/{job['job_id']}"
+        lease = {'lease': job['lease']}
+        pending = None
+        try:
+            token = (await self.call(path + '/credential', lease))['value']
+
+            async def turn(body):
+                return await self.call(path + '/code-turn', {**lease, 'turn': body}, timeout=180)
+
+            async def heartbeat():
+                await self.call(path + '/heartbeat', lease)
+
+            pending = asyncio.create_task(review(job, UserGitHub(job['repo'], self.client), token, turn, heartbeat))
+            while not pending.done():
+                await heartbeat()
+                await asyncio.wait({pending}, timeout=2)
+            result = await pending
+            await self.call(path + '/finish', {**lease, **result})
+        except (OSError, RuntimeError, ValueError, httpx.HTTPError):
+            try:
+                await self.call(path + '/finish', {**lease, 'status': 'failed'})
+            except (httpx.HTTPError, asyncio.CancelledError):
+                pass
+            raise
+        finally:
+            if pending and not pending.done():
+                pending.cancel()
+                await asyncio.gather(pending, return_exceptions=True)
+
+    async def poll_legacy(self, service, token):
+        # A shared claim lock prevents issue workers and window jobs racing for
+        # the same server slot. Existing running workers finish without changes.
+        async with self.guard:
+            if not self.busy:
+                await service.poll_once(token)
+
     async def serve(self):
         while True:
             try:
-                if not await self.control.paused():
-                    # Build before claiming so a failed build never strands a job.
-                    await self.prepare()
-                    job = await self.call('worker/next')
-                    if job:
+                if not await self.control.paused() and not update_pending(self.settings):
+                    job = None
+                    needs_image = False
+                    async with self.guard:
+                        legacy = self.legacy()
+                        if not update_pending(self.settings) and not (legacy and legacy.busy):
+                            job = await self.call('worker/next', {'kind': 'review'})
+                            if not job:
+                                queued = await self.call('worker/next', {'kind': 'task', 'peek': True})
+                                needs_image = queued['available'] is True
+                            self.busy = bool(job or needs_image)
+                    if self.busy:
                         try:
-                            await self.run(job)
-                        except asyncio.CancelledError:
-                            # Job cancellation is distinct from service shutdown.
-                            if asyncio.current_task().cancelling():
-                                raise
+                            if needs_image:
+                                await self.prepare()
+                                if update_pending(self.settings) or await self.control.paused():
+                                    continue
+                                job = await self.call('worker/next', {'kind': 'task'})
+                            if job:
+                                try:
+                                    if job['kind'] == 'review':
+                                        await self.run_review(job)
+                                    else:
+                                        await self.run(job)
+                                except asyncio.CancelledError:
+                                    if asyncio.current_task().cancelling():
+                                        raise
+                        finally:
+                            self.busy = False
                 await asyncio.sleep(5)
             except (OSError, RuntimeError, ValueError, httpx.HTTPError):
                 log.warning('Window job poll stopped; no task was replayed')

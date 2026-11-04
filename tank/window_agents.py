@@ -124,7 +124,7 @@ async def names(actor: command.Actor = Depends(actor_identity)):
     return [r['name'] for r in rows]
 
 
-async def enqueue(body: Start, actor):
+async def enqueue(body: Start, actor, *, kind='task', pull_number=None):
     async with command.db().acquire() as conn:
         async with conn.transaction():
             # Serialise duplicate requests before creating their receipt thread.
@@ -133,7 +133,7 @@ async def enqueue(body: Start, actor):
             if previous:
                 if previous['user_id'] != actor.user_id:
                     raise HTTPException(404, 'Job not found.')
-                if (previous['repo'], previous['credential_name'], previous['prompt']) != (body.repo, body.credential_name, body.prompt):
+                if (previous['repo'], previous['credential_name'], previous['prompt'], previous['kind'], previous['pull_number']) != (body.repo, body.credential_name, body.prompt, kind, pull_number):
                     raise HTTPException(409, 'Request already used for another task.')
                 return {'job_id': str(body.request_id)}
             await credential(conn, actor, body.credential_name)
@@ -141,8 +141,8 @@ async def enqueue(body: Start, actor):
             state = {'messages': [], 'steps': {}, 'cards': {}, 'receipts': [], 'active_turn': None}
             await conn.execute('INSERT INTO tank.command_threads(thread_id,tenant_id,user_id,title,state) VALUES($1,$2,$3,$4,$5::jsonb)',
                                thread_id, actor.tenant_id, actor.user_id, body.repo, json.dumps(state))
-            await conn.execute('INSERT INTO tank.window_agent_jobs(tenant_id,user_id,job_id,thread_id,repo,credential_name,prompt) VALUES($1,$2,$3,$4,$5,$6,$7)',
-                               actor.tenant_id, actor.user_id, body.request_id, thread_id, body.repo, body.credential_name, body.prompt)
+            await conn.execute('INSERT INTO tank.window_agent_jobs(tenant_id,user_id,job_id,thread_id,repo,credential_name,prompt,kind,pull_number) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+                               actor.tenant_id, actor.user_id, body.request_id, thread_id, body.repo, body.credential_name, body.prompt, kind, pull_number)
             await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(PLATFORM))
             await conn.execute('INSERT INTO tank.window_agent_dispatch(tenant_id,job_id,owner_tenant) VALUES($1,$2,$3)', PLATFORM, body.request_id, actor.tenant_id)
             await conn.execute("SELECT set_config('app.tenant_id',$1,true)", str(actor.tenant_id))
@@ -168,7 +168,7 @@ async def cancel(job_id: uuid.UUID, actor: command.Actor = Depends(actor_identit
 @router.get('/jobs')
 async def jobs(actor: command.Actor = Depends(actor_identity)):
     async with command.db().acquire() as conn:
-        rows = await conn.fetch('SELECT job_id,thread_id,repo,status,result,created_at FROM tank.window_agent_jobs WHERE tenant_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 100', actor.tenant_id, actor.user_id)
+        rows = await conn.fetch('SELECT job_id,thread_id,repo,status,result,created_at,kind,pull_number FROM tank.window_agent_jobs WHERE tenant_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 100', actor.tenant_id, actor.user_id)
     return [{**dict(row), 'result': command.unpack(row['result'])} for row in rows]
 
 
@@ -181,8 +181,13 @@ async def leased(conn, tenant_id, job_id, lease):
     return dict(row)
 
 
+class Next(command.Body):
+    kind: Literal['task', 'review'] | None = None
+    peek: bool = False
+
+
 @router.post('/worker/next', dependencies=[Depends(command.worker)])
-async def next_job():
+async def next_job(body: Next):
     with tenant_scope(PLATFORM, administrative=True):
         async with command.db().acquire() as conn:
             async with conn.transaction():
@@ -190,7 +195,9 @@ async def next_job():
                 abandoned = await conn.fetch('SELECT owner_tenant,job_id FROM tank.window_agent_dispatch WHERE tenant_id=$1 AND claimed=true', PLATFORM)
                 for pending in abandoned:
                     await conn.execute("UPDATE tank.window_agent_jobs SET status='failed' WHERE tenant_id=$1 AND job_id=$2 AND status='running' AND heartbeat < now() - interval '2 minutes'", pending['owner_tenant'], pending['job_id'])
-                dispatch = await conn.fetchrow('SELECT * FROM tank.window_agent_dispatch WHERE tenant_id=$1 AND claimed=false ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED', PLATFORM)
+                dispatch = await conn.fetchrow("SELECT d.* FROM tank.window_agent_dispatch d WHERE d.tenant_id=$1 AND d.claimed=false AND EXISTS(SELECT 1 FROM tank.window_agent_jobs j WHERE j.tenant_id=d.owner_tenant AND j.job_id=d.job_id AND ($2::text IS NULL OR j.kind=$2)) ORDER BY d.created_at LIMIT 1 FOR UPDATE OF d SKIP LOCKED", PLATFORM, body.kind)
+                if body.peek:
+                    return {'available': dispatch is not None}
                 if not dispatch:
                     return None
                 tenant_id, job_id = dispatch['owner_tenant'], dispatch['job_id']
@@ -199,7 +206,7 @@ async def next_job():
                 row = await conn.fetchrow("UPDATE tank.window_agent_jobs SET status='running',lease_hash=$3,heartbeat=now() WHERE tenant_id=$1 AND job_id=$2 AND status='queued' RETURNING *", tenant_id, job_id, hashlib.sha256(lease.encode()).hexdigest())
                 if row is None:
                     return None
-                return {**{k: str(row[k]) for k in ('tenant_id', 'job_id', 'thread_id')}, 'repo': row['repo'], 'prompt': row['prompt'], 'lease': lease}
+                return {**{k: str(row[k]) for k in ('tenant_id', 'job_id', 'thread_id')}, 'repo': row['repo'], 'prompt': row['prompt'], 'lease': lease, 'kind': row['kind'], 'pull_number': row['pull_number']}
 
 
 @router.post('/worker/{tenant_id}/{job_id}/heartbeat', dependencies=[Depends(command.worker)])
@@ -235,7 +242,7 @@ async def code_turn(tenant_id: uuid.UUID, job_id: uuid.UUID, body: Turn):
     actor = await command.authorized_actor(command.Actor(tenant_id, row['user_id'], False))
     plan = await command.code_turn(row['thread_id'], body.turn, actor)
     # Background permission covers repository edits only. Never execute product cards.
-    if plan.get('cards'):
+    if plan.get('cards') or (row['kind'] == 'review' and plan.get('requests')):
         raise HTTPException(422, 'Background agents only edit the repository.')
     return plan
 
@@ -262,3 +269,4 @@ def install(app, tank):
                     await conn.execute(SCHEMA)
             yield
     app.router.lifespan_context = lifespan
+    __import__('window_agent_reviews').install(app, tank)

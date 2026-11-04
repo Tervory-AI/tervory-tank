@@ -55,3 +55,14 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 2. Chat bot: the privacy notice and how long conversations are kept (decision 35; 12 months suggested).
 
 Nothing else needs you before testing. Any name a later PR adds is added to this file, not sent separately.
+
+## WINDOW-AGENTS (user settings; no new Coolify variables)
+
+`credential_name` selects a GitHub token saved by the user in their own existing
+Tank vault. `repo` selects their GitHub repository. `enabled` is the user's
+per-repository PR review webhook opt-in. The window gives them the callback URL
+and a generated webhook secret for GitHub's webhook form; the secret stays sealed
+in their vault. The founder never collects users' GitHub tokens in chat.
+
+The worker continues to use the existing Tank worker key, pause, region, resource
+limits and code directory. There is no new model provider or paid route setting.

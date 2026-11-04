@@ -88,6 +88,7 @@ async def agent_db(monkeypatch):
     from urllib.parse import urlsplit, urlunsplit
     import command
     from window_agents import SCHEMA
+    from window_agent_reviews import SCHEMA as REVIEW_SCHEMA
 
     url = os.environ.get('POOL_SCHEMA_DATABASE_URL')
     if not url:
@@ -103,6 +104,7 @@ async def agent_db(monkeypatch):
             await conn.execute("CREATE TABLE tank.vault_items(tenant_id uuid,vault text,kind text,name text,metadata jsonb,sealed text, PRIMARY KEY(tenant_id,vault,kind,name))")
             await conn.execute(SCHEMA)
             await conn.execute(SCHEMA)  # Every Tank restart is safe.
+            await conn.execute(REVIEW_SCHEMA)
         monkeypatch.setattr(command, 'db', lambda: pool)
         monkeypatch.setenv('TANK_VAULT_KEY', base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())
         yield pool
