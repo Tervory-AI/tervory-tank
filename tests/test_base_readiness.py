@@ -115,7 +115,8 @@ async def test_dc_campaign_through_confirmed_cards_collection_audit_and_download
             assert records_json.json()['total'] == population
             for record in records_json.json()['rows']:
                 found = verified_contacts(record['fields']['socials'])
-                assert any('pinterest.com' in item['value'] for item in found)
+                from urllib.parse import urlparse
+                assert any((urlparse(item['value']).hostname or '').removeprefix('www.') == 'pinterest.com' for item in found)
                 assert all(item['source_url'] and item['checked_at'] for item in found)
             args = {'campaign_id': str(campaign)}
             show = await client.get('/v1/command/base/campaigns/show', params=args)
