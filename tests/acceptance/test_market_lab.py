@@ -392,3 +392,26 @@ def install_vault(database, monkeypatch):
     database.app.include_router(vault_routes.build_router(runtime))
     return {'x-tank-key': runtime.TANK_API_KEY, 'x-tervory-user': 'placeholder-admin',
             'x-tervory-squad': 'market_lab', 'x-tervory-tenant': str(ml3.OWNER)}
+
+
+@pytest.mark.asyncio
+async def test_R44(database, monkeypatch):
+    import test_market_lab_h7 as h7
+    await h7.test_detail_uses_existing_tenant_read_and_opens_exact_saved_passage(database, monkeypatch)
+
+
+@pytest.mark.asyncio
+async def test_R45(database, monkeypatch):
+    import test_market_lab_h7 as h7
+    await h7.test_calibration_groups_and_curve_share_measured_code_data(database, monkeypatch)
+
+
+def test_R46():
+    import test_market_lab_h7_pages as h7_pages
+    h7_pages.test_h7_views_and_tenant_loaders_offline()
+
+
+@pytest.mark.asyncio
+async def test_R47(real_chromium, tmp_path):
+    import test_market_lab_h7_browser as h7_browser
+    await h7_browser.test_both_pages_states_menu_and_cohort_selection(real_chromium, tmp_path)

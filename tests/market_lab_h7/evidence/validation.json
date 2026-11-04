@@ -1,0 +1,38 @@
+{
+  "scope": "local offline fixtures; no hosted CI or deployed acceptance claim",
+  "acceptance_rows": 47,
+  "h7_sql_asgi": {
+    "passed": 2
+  },
+  "loader_and_render": {
+    "passed": 1,
+    "node_cases": 4
+  },
+  "typescript_no_emit": "passed",
+  "exact_ci_lint": "All checks passed!",
+  "browser_prior": {
+    "passed": 1,
+    "seconds": 118.4,
+    "widths": [
+      1440,
+      375
+    ],
+    "states_per_page": 4
+  },
+  "acceptance_latest": {
+    "passed": 3,
+    "failed": 1,
+    "failed_row": "R47",
+    "failure_stage": "Next fixture compiling before browser assertions"
+  },
+  "precheck": {
+    "passed": false,
+    "blocking_test": "tests/room_brains/test_rooms.py::test_seal_exact_networks_and_partial_optional_group[none-radix-browser-gateway]",
+    "error": "ops/seal-check.sh subprocess timed out after 30 seconds"
+  },
+  "semgrep": {
+    "skipped": true,
+    "reason": "local run timed out; founder explicitly permits skip; CI must run it"
+  },
+  "pushed": false
+}

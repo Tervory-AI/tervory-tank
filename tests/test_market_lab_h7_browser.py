@@ -27,7 +27,7 @@ def wrapper(folder):
     # Only the isolated visual fixture replaces Clerk's shared switcher. The
     # production page retains the existing authenticated Workspace component.
     write('fixture-clerk.tsx', 'export function OrganizationSwitcher(){return <button aria-label="Business">⌄</button>}')
-    write('next.config.mjs', 'export default {experimental:{externalDir:true},devIndicators:false,webpack(config){config.resolve.alias={...config.resolve.alias,"@clerk/nextjs$":' +
+    write('next.config.mjs', 'export default {experimental:{externalDir:true,cpus:1},devIndicators:false,webpack(config){config.resolve.alias={...config.resolve.alias,"@clerk/nextjs$":' +
           json.dumps(str(folder / 'fixture-clerk.tsx')) + '};return config;}};')
     write('app/layout.tsx', f'''import {{inter}} from {json.dumps(str(WORKSPACE / 'app/fonts'))};
 import {json.dumps(str(WORKSPACE / 'app/market-lab/h7.css'))};
@@ -68,7 +68,8 @@ async def test_both_pages_states_menu_and_cohort_selection(real_chromium, tmp_pa
     with (tmp_path / 'next.log').open('w') as log:
         process = subprocess.Popen(['node', str(WORKSPACE / 'node_modules/next/dist/bin/next'),
             'dev', '--hostname', '127.0.0.1', '--port', str(port)], cwd=folder,
-            env={**os.environ, 'NEXT_TELEMETRY_DISABLED': '1'}, stdout=log, stderr=log,
+            env={**os.environ, 'NEXT_TELEMETRY_DISABLED': '1',
+                 'RAYON_NUM_THREADS': '1', 'UV_THREADPOOL_SIZE': '2'}, stdout=log, stderr=log,
             start_new_session=True)
         try:
             async with httpx.AsyncClient(trust_env=False) as client:

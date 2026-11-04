@@ -68,9 +68,13 @@ browser clicks, a real founder email or production publisher availability.
 | R42 | /chats: market_lab.briefs | Run opportunities when there is no source-backed claim; read briefs. | Empty brief held with reason no_cited_claims; unsupported product recommendation text omitted; nothing is sent. | none |
 | R43 | https://app.tervory.com/market-lab | Set the registered EIA and Census keys; click Refresh feeds; open their stored source cards. | Only a successful read counts as On. Offline fixture EIA value 3.86 and Census revision value 110; exactly 2 On feeds, each with rows and its document. Live values must match the opened source. | EIA_API_KEY, CENSUS_API_KEY |
 
+| R44 | https://app.tervory.com/market-lab/briefs/<report-id>; /chats: market_lab.briefs {"report_id":"<report-id>"} | Use your saved report id. Open detail; click Open stored source. | Saved title, text, delivery status and citations; exact stored passage opens. Removed sources cannot open; foreign report 404. Structured read includes confidence (fixture 0.75) and recorded pending → sending → sent history. | none |
+| R45 | https://app.tervory.com/market-lab/calibration | Select signal kind and period. | Resolved originals only; fixture confidence 45.0%, actual 50.0%, samples 2. Separate 7-day and 30-day cohorts; curve uses returned bins. Live values follow saved outcomes. | none |
+| R46 | Both H7 URLs above | Open while loading, without data, and with a failed read; retry. | Loading…; No brief selected. / No resolved predictions yet.; Brief detail could not be loaded. / Calibration could not be loaded.; Try again. Unknown metrics —, no invented zero or private error. | none |
+| R47 | Both H7 URLs above, 1440px and 375px | Open a source; return; change cohort; open mobile Menu and press Escape. | Stored passage opens; curve follows selected cohort (fixture confidence 75% → 25%). No horizontal overflow; Menu closes and focus returns. | none |
+
 Deferred features: USPTO ML7 stays parked even though USPTO_API_KEY is in the
-register. H3 classifier waits for 90 days of outcomes. The Workspace calibration
-chart needs its approved Figma frame; R21 tests its shipped structured $0 read.
+register. H3 classifier waits for 90 days of outcomes. H7 implements the proposed wave-5 frames; founder approval and deployed acceptance remain pending. R21 tests the structured $0 read.
 No acceptance claim is made for those unshipped views/features.
 
 Offline command (no outside network; local PostgreSQL/SMTP/ASGI fixtures only):
@@ -100,3 +104,5 @@ missing collector arguments, and the fixture's normalized EIA decimal spelling
 
 The settings register was read, without merging, from commit `272454b69c74982b8f0c8439f1a760d267a073a3`.
 No deployment, real founder delivery or live UI acceptance is claimed here.
+
+H7 adds R44–R47 (47 rows total). Earlier results predate H7. H7 needs no new setting. Dedicated brief confidence/history sections await frame slots; the structured read returns both. Browser evidence uses local fixtures, not a deployed founder session.
