@@ -1,0 +1,1124 @@
+{
+  "status": "Proposed",
+  "fileUrl": "https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS",
+  "frames": [
+    {
+      "id": "566:395",
+      "name": "Brief detail / Report 1 / 1440 · Proposed",
+      "width": 1440,
+      "height": 2963,
+      "bodyHeight": 2886,
+      "descendantCount": 149,
+      "types": {
+        "FRAME": 21,
+        "TEXT": 90,
+        "INSTANCE": 37,
+        "RECTANGLE": 1
+      },
+      "fonts": [
+        "Inter"
+      ],
+      "images": [
+        {
+          "id": "I566:400;180:8390",
+          "name": "Asset · tervory-logo-on-white.png · approved source",
+          "type": "RECTANGLE",
+          "width": 208,
+          "height": 38
+        }
+      ],
+      "instances": [
+        {
+          "id": "689:1600",
+          "mainId": "689:1585",
+          "name": "Signal 1 · original confidence"
+        },
+        {
+          "id": "689:1608",
+          "mainId": "689:1585",
+          "name": "Signal 2 · original confidence"
+        },
+        {
+          "id": "689:1616",
+          "mainId": "689:1585",
+          "name": "Signal 3 · original confidence"
+        },
+        {
+          "id": "689:1627",
+          "mainId": "689:1593",
+          "name": "Saved report event · made_at"
+        },
+        {
+          "id": "689:1631",
+          "mainId": "689:1593",
+          "name": "Email · recorded history placeholder"
+        },
+        {
+          "id": "689:1635",
+          "mainId": "689:1593",
+          "name": "Webhook · recorded history placeholder"
+        }
+      ],
+      "variables": [
+        "VariableID:42:13",
+        "VariableID:42:14",
+        "VariableID:42:15",
+        "VariableID:42:19",
+        "VariableID:42:23",
+        "VariableID:42:22",
+        "VariableID:42:12",
+        "VariableID:42:31",
+        "VariableID:42:44",
+        "VariableID:42:38",
+        "VariableID:42:49",
+        "VariableID:42:24",
+        "VariableID:42:36",
+        "VariableID:42:51",
+        "VariableID:465:26692"
+      ],
+      "actions": [
+        {
+          "id": "566:563",
+          "name": "Action / Monthly briefs",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "514:5141",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "514:5141",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        },
+        {
+          "id": "566:565",
+          "name": "Action / Calibration",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "567:941",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "567:941",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        },
+        {
+          "id": "566:581",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:589",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:597",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:599",
+          "name": "Action / Monthly briefs",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "514:5141",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "514:5141",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        }
+      ],
+      "newContentOverflow": [],
+      "bodyOverlaps": [],
+      "backAction": "Action / Monthly briefs",
+      "sectionBounds": [
+        {
+          "id": "689:1597",
+          "name": "Confidence section · Proposed",
+          "x": 64,
+          "y": 456,
+          "width": 1072,
+          "height": 922
+        },
+        {
+          "id": "689:1624",
+          "name": "History section · Proposed",
+          "x": 64,
+          "y": 2296,
+          "width": 1072,
+          "height": 478
+        }
+      ]
+    },
+    {
+      "id": "566:601",
+      "name": "Brief detail / Report 2 / 1440 · Proposed",
+      "width": 1440,
+      "height": 2127,
+      "bodyHeight": 2050,
+      "descendantCount": 126,
+      "types": {
+        "FRAME": 20,
+        "TEXT": 73,
+        "INSTANCE": 32,
+        "RECTANGLE": 1
+      },
+      "fonts": [
+        "Inter"
+      ],
+      "images": [
+        {
+          "id": "I566:606;180:8390",
+          "name": "Asset · tervory-logo-on-white.png · approved source",
+          "type": "RECTANGLE",
+          "width": 208,
+          "height": 38
+        }
+      ],
+      "instances": [
+        {
+          "id": "689:1642",
+          "mainId": "689:1585",
+          "name": "Signal 1 · original confidence"
+        },
+        {
+          "id": "689:1650",
+          "mainId": "689:1585",
+          "name": "Signal 2 · original confidence"
+        },
+        {
+          "id": "689:1661",
+          "mainId": "689:1593",
+          "name": "Saved report event · made_at"
+        }
+      ],
+      "variables": [
+        "VariableID:42:13",
+        "VariableID:42:14",
+        "VariableID:42:15",
+        "VariableID:42:19",
+        "VariableID:42:23",
+        "VariableID:42:22",
+        "VariableID:42:12",
+        "VariableID:42:31",
+        "VariableID:42:44",
+        "VariableID:42:38",
+        "VariableID:42:49",
+        "VariableID:42:24",
+        "VariableID:42:36",
+        "VariableID:42:51",
+        "VariableID:465:26692"
+      ],
+      "actions": [
+        {
+          "id": "566:769",
+          "name": "Action / Monthly briefs",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "514:5141",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "514:5141",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        },
+        {
+          "id": "566:771",
+          "name": "Action / Calibration",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "567:941",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "567:941",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        },
+        {
+          "id": "566:787",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:795",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:797",
+          "name": "Action / Monthly briefs",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "514:5141",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "514:5141",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        }
+      ],
+      "newContentOverflow": [],
+      "bodyOverlaps": [],
+      "backAction": "Action / Monthly briefs",
+      "sectionBounds": [
+        {
+          "id": "689:1639",
+          "name": "Confidence section · Proposed",
+          "x": 64,
+          "y": 456,
+          "width": 1072,
+          "height": 636
+        },
+        {
+          "id": "689:1658",
+          "name": "History section · Proposed",
+          "x": 64,
+          "y": 1724,
+          "width": 1072,
+          "height": 214
+        }
+      ]
+    },
+    {
+      "id": "566:799",
+      "name": "Brief detail / Report 3 / 1440 · Proposed",
+      "width": 1440,
+      "height": 2963,
+      "bodyHeight": 2886,
+      "descendantCount": 149,
+      "types": {
+        "FRAME": 21,
+        "TEXT": 90,
+        "INSTANCE": 37,
+        "RECTANGLE": 1
+      },
+      "fonts": [
+        "Inter"
+      ],
+      "images": [
+        {
+          "id": "I566:804;180:8390",
+          "name": "Asset · tervory-logo-on-white.png · approved source",
+          "type": "RECTANGLE",
+          "width": 208,
+          "height": 38
+        }
+      ],
+      "instances": [
+        {
+          "id": "689:1669",
+          "mainId": "689:1585",
+          "name": "Signal 1 · original confidence"
+        },
+        {
+          "id": "689:1677",
+          "mainId": "689:1585",
+          "name": "Signal 2 · original confidence"
+        },
+        {
+          "id": "689:1685",
+          "mainId": "689:1585",
+          "name": "Signal 3 · original confidence"
+        },
+        {
+          "id": "689:1696",
+          "mainId": "689:1593",
+          "name": "Saved report event · made_at"
+        },
+        {
+          "id": "689:1700",
+          "mainId": "689:1593",
+          "name": "Email · recorded history placeholder"
+        },
+        {
+          "id": "689:1704",
+          "mainId": "689:1593",
+          "name": "Webhook · recorded history placeholder"
+        }
+      ],
+      "variables": [
+        "VariableID:42:13",
+        "VariableID:42:14",
+        "VariableID:42:15",
+        "VariableID:42:19",
+        "VariableID:42:23",
+        "VariableID:42:22",
+        "VariableID:42:12",
+        "VariableID:42:31",
+        "VariableID:42:44",
+        "VariableID:42:38",
+        "VariableID:42:49",
+        "VariableID:42:24",
+        "VariableID:42:36",
+        "VariableID:42:51",
+        "VariableID:465:26692"
+      ],
+      "actions": [
+        {
+          "id": "566:967",
+          "name": "Action / Monthly briefs",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "514:5141",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "514:5141",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        },
+        {
+          "id": "566:969",
+          "name": "Action / Calibration",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "567:941",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "567:941",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        },
+        {
+          "id": "566:985",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:993",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:1001",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:1003",
+          "name": "Action / Monthly briefs",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "514:5141",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "514:5141",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        }
+      ],
+      "newContentOverflow": [],
+      "bodyOverlaps": [],
+      "backAction": "Action / Monthly briefs",
+      "sectionBounds": [
+        {
+          "id": "689:1666",
+          "name": "Confidence section · Proposed",
+          "x": 64,
+          "y": 456,
+          "width": 1072,
+          "height": 922
+        },
+        {
+          "id": "689:1693",
+          "name": "History section · Proposed",
+          "x": 64,
+          "y": 2296,
+          "width": 1072,
+          "height": 478
+        }
+      ]
+    },
+    {
+      "id": "566:2140",
+      "name": "Brief detail / Report 1 / 375 · Proposed",
+      "width": 375,
+      "height": 3117,
+      "bodyHeight": 2976,
+      "descendantCount": 91,
+      "types": {
+        "FRAME": 13,
+        "TEXT": 62,
+        "RECTANGLE": 1,
+        "INSTANCE": 15
+      },
+      "fonts": [
+        "Inter"
+      ],
+      "images": [
+        {
+          "id": "566:2147",
+          "name": "Logo · tervory-logo-reversed.png · 180 wide",
+          "type": "RECTANGLE",
+          "width": 186,
+          "height": 34
+        }
+      ],
+      "instances": [
+        {
+          "id": "689:1711",
+          "mainId": "689:1585",
+          "name": "Signal 1 · original confidence"
+        },
+        {
+          "id": "689:1719",
+          "mainId": "689:1585",
+          "name": "Signal 2 · original confidence"
+        },
+        {
+          "id": "689:1727",
+          "mainId": "689:1585",
+          "name": "Signal 3 · original confidence"
+        },
+        {
+          "id": "689:1738",
+          "mainId": "689:1593",
+          "name": "Saved report event · made_at"
+        },
+        {
+          "id": "689:1742",
+          "mainId": "689:1593",
+          "name": "Email · recorded history placeholder"
+        },
+        {
+          "id": "689:1746",
+          "mainId": "689:1593",
+          "name": "Webhook · recorded history placeholder"
+        }
+      ],
+      "variables": [
+        "VariableID:42:13",
+        "VariableID:42:14",
+        "VariableID:42:15",
+        "VariableID:42:22",
+        "VariableID:42:23",
+        "VariableID:42:31",
+        "VariableID:42:44",
+        "VariableID:42:19",
+        "VariableID:42:49",
+        "VariableID:42:24",
+        "VariableID:42:36",
+        "VariableID:42:51",
+        "VariableID:465:26692"
+      ],
+      "actions": [
+        {
+          "id": "566:2211",
+          "name": "Action / Monthly briefs",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "514:5414",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "514:5414",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        },
+        {
+          "id": "566:2213",
+          "name": "Action / Calibration",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "567:1726",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "567:1726",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        },
+        {
+          "id": "566:2229",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:2237",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:2245",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:2247",
+          "name": "Action / Monthly briefs",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "514:5414",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "514:5414",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        }
+      ],
+      "newContentOverflow": [],
+      "bodyOverlaps": [],
+      "backAction": "Action / Monthly briefs",
+      "sectionBounds": [
+        {
+          "id": "689:1708",
+          "name": "Confidence section · Proposed",
+          "x": 24,
+          "y": 450,
+          "width": 327,
+          "height": 962
+        },
+        {
+          "id": "689:1735",
+          "name": "History section · Proposed",
+          "x": 24,
+          "y": 2390,
+          "width": 327,
+          "height": 498
+        }
+      ]
+    },
+    {
+      "id": "566:2249",
+      "name": "Brief detail / Report 2 / 375 · Proposed",
+      "width": 375,
+      "height": 2241,
+      "bodyHeight": 2100,
+      "descendantCount": 68,
+      "types": {
+        "FRAME": 12,
+        "TEXT": 45,
+        "RECTANGLE": 1,
+        "INSTANCE": 10
+      },
+      "fonts": [
+        "Inter"
+      ],
+      "images": [
+        {
+          "id": "566:2256",
+          "name": "Logo · tervory-logo-reversed.png · 180 wide",
+          "type": "RECTANGLE",
+          "width": 186,
+          "height": 34
+        }
+      ],
+      "instances": [
+        {
+          "id": "689:1753",
+          "mainId": "689:1585",
+          "name": "Signal 1 · original confidence"
+        },
+        {
+          "id": "689:1761",
+          "mainId": "689:1585",
+          "name": "Signal 2 · original confidence"
+        },
+        {
+          "id": "689:1772",
+          "mainId": "689:1593",
+          "name": "Saved report event · made_at"
+        }
+      ],
+      "variables": [
+        "VariableID:42:13",
+        "VariableID:42:14",
+        "VariableID:42:15",
+        "VariableID:42:22",
+        "VariableID:42:23",
+        "VariableID:42:31",
+        "VariableID:42:44",
+        "VariableID:42:19",
+        "VariableID:42:49",
+        "VariableID:42:24",
+        "VariableID:42:36",
+        "VariableID:42:51",
+        "VariableID:465:26692"
+      ],
+      "actions": [
+        {
+          "id": "566:2320",
+          "name": "Action / Monthly briefs",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "514:5414",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "514:5414",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        },
+        {
+          "id": "566:2322",
+          "name": "Action / Calibration",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "567:1726",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "567:1726",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        },
+        {
+          "id": "566:2338",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:2346",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:2348",
+          "name": "Action / Monthly briefs",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "514:5414",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "514:5414",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        }
+      ],
+      "newContentOverflow": [],
+      "bodyOverlaps": [],
+      "backAction": "Action / Monthly briefs",
+      "sectionBounds": [
+        {
+          "id": "689:1750",
+          "name": "Confidence section · Proposed",
+          "x": 24,
+          "y": 450,
+          "width": 327,
+          "height": 656
+        },
+        {
+          "id": "689:1769",
+          "name": "History section · Proposed",
+          "x": 24,
+          "y": 1778,
+          "width": 327,
+          "height": 234
+        }
+      ]
+    },
+    {
+      "id": "566:2350",
+      "name": "Brief detail / Report 3 / 375 · Proposed",
+      "width": 375,
+      "height": 3097,
+      "bodyHeight": 2956,
+      "descendantCount": 91,
+      "types": {
+        "FRAME": 13,
+        "TEXT": 62,
+        "RECTANGLE": 1,
+        "INSTANCE": 15
+      },
+      "fonts": [
+        "Inter"
+      ],
+      "images": [
+        {
+          "id": "566:2357",
+          "name": "Logo · tervory-logo-reversed.png · 180 wide",
+          "type": "RECTANGLE",
+          "width": 186,
+          "height": 34
+        }
+      ],
+      "instances": [
+        {
+          "id": "689:1780",
+          "mainId": "689:1585",
+          "name": "Signal 1 · original confidence"
+        },
+        {
+          "id": "689:1788",
+          "mainId": "689:1585",
+          "name": "Signal 2 · original confidence"
+        },
+        {
+          "id": "689:1796",
+          "mainId": "689:1585",
+          "name": "Signal 3 · original confidence"
+        },
+        {
+          "id": "689:1807",
+          "mainId": "689:1593",
+          "name": "Saved report event · made_at"
+        },
+        {
+          "id": "689:1811",
+          "mainId": "689:1593",
+          "name": "Email · recorded history placeholder"
+        },
+        {
+          "id": "689:1815",
+          "mainId": "689:1593",
+          "name": "Webhook · recorded history placeholder"
+        }
+      ],
+      "variables": [
+        "VariableID:42:13",
+        "VariableID:42:14",
+        "VariableID:42:15",
+        "VariableID:42:22",
+        "VariableID:42:23",
+        "VariableID:42:31",
+        "VariableID:42:44",
+        "VariableID:42:19",
+        "VariableID:42:49",
+        "VariableID:42:24",
+        "VariableID:42:36",
+        "VariableID:42:51",
+        "VariableID:465:26692"
+      ],
+      "actions": [
+        {
+          "id": "566:2421",
+          "name": "Action / Monthly briefs",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "514:5414",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "514:5414",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        },
+        {
+          "id": "566:2423",
+          "name": "Action / Calibration",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "567:1726",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "567:1726",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        },
+        {
+          "id": "566:2439",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:2447",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:2455",
+          "name": "Action / Open stored source",
+          "reactions": []
+        },
+        {
+          "id": "566:2457",
+          "name": "Action / Monthly briefs",
+          "reactions": [
+            {
+              "action": {
+                "type": "NODE",
+                "destinationId": "514:5414",
+                "navigation": "NAVIGATE",
+                "transition": null,
+                "resetVideoPosition": false
+              },
+              "actions": [
+                {
+                  "type": "NODE",
+                  "destinationId": "514:5414",
+                  "navigation": "NAVIGATE",
+                  "transition": null,
+                  "resetVideoPosition": false
+                }
+              ],
+              "trigger": {
+                "type": "ON_CLICK"
+              }
+            }
+          ]
+        }
+      ],
+      "newContentOverflow": [],
+      "bodyOverlaps": [],
+      "backAction": "Action / Monthly briefs",
+      "sectionBounds": [
+        {
+          "id": "689:1777",
+          "name": "Confidence section · Proposed",
+          "x": 24,
+          "y": 450,
+          "width": 327,
+          "height": 942
+        },
+        {
+          "id": "689:1804",
+          "name": "History section · Proposed",
+          "x": 24,
+          "y": 2370,
+          "width": 327,
+          "height": 498
+        }
+      ]
+    }
+  ]
+}

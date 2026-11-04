@@ -3099,6 +3099,37 @@ END $$;
 ALTER TABLE tank.trigger_bot_config ADD COLUMN IF NOT EXISTS settings jsonb NOT NULL DEFAULT '{}';
 ALTER TABLE tank.trigger_bot_messages ADD COLUMN IF NOT EXISTS person text;
 
+-- BEGIN trigger (new blocks for trigger go here)
+-- END trigger
+-- BEGIN base (new blocks for base go here)
+-- END base
+-- BEGIN tiger (new blocks for tiger go here)
+-- END tiger
+-- BEGIN market_lab (new blocks for market_lab go here)
+-- END market_lab
+-- BEGIN rig (new blocks for rig go here)
+-- Rig store-room lifecycle registry. No store catalogue or contact data here.
+CREATE TABLE IF NOT EXISTS tank.rig_rooms (
+    tenant_id uuid PRIMARY KEY,
+    coolify_uuid text,
+    state text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+-- END rig
+-- BEGIN tisan (new blocks for tisan go here)
+-- END tisan
+-- BEGIN radix (new blocks for radix go here)
+-- END radix
+-- BEGIN zenas (new blocks for zenas go here)
+-- END zenas
+-- BEGIN mcp (new blocks for mcp go here)
+-- END mcp
+-- BEGIN skala (new blocks for skala go here)
+-- END skala
+-- BEGIN worker (new blocks for worker go here)
+-- END worker
+-- BEGIN platform (new blocks for platform go here)
+ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS teacher_model text;
 -- Paid ladder steps: tenant preferences default to Ask, independent of master stop.
 CREATE TABLE IF NOT EXISTS tank.paid_steps (
     step_id text PRIMARY KEY,
@@ -3185,6 +3216,7 @@ ALTER TABLE tank.paid_step_approvals ADD COLUMN IF NOT EXISTS delivery_thread_id
 ALTER TABLE tank.paid_steps ADD COLUMN IF NOT EXISTS task_type text;
 ALTER TABLE tank.paid_steps ADD COLUMN IF NOT EXISTS model text;
 -- END PAID LADDER STEPS
+-- END platform
 
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;

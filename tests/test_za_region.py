@@ -484,6 +484,7 @@ async def test_a_request_with_no_home_is_accepted_on_us_east(monkeypatch: pytest
     monkeypatch.setenv("TANK_REGION", "us-east")
     monkeypatch.setattr(main, "pool", lambda: _Pool())
     monkeypatch.setattr(main, "_redis", None)
+    monkeypatch.setattr(main, "_http", object())
     monkeypatch.setattr(main.httpx, "AsyncClient", _Gateway)
     seen: dict[str, str | None] = {}
 
@@ -693,6 +694,7 @@ async def test_only_the_zenas_key_and_a_real_pool_row_skip_the_identifier_rule(
     gate = _SeenGateway()
     monkeypatch.setattr(main, "pool", lambda: court)
     monkeypatch.setattr(main, "_redis", None)
+    monkeypatch.setattr(main, "_http", gate)
     monkeypatch.setattr(main.httpx, "AsyncClient", lambda *_a, **_k: gate)
     client = (
         "Please advise our client. The identity number "

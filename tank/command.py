@@ -24,10 +24,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model, field_validator, model_validator
 
 import command_repo
-from trigger_bot_contract import TOOLS as BOT_TOOLS
-from base_lists import FindArgs, SaveArgs, ListArgs, SendArgs
-from tisan_requests import TOOLS as TISAN_CLIENT_TOOLS, RequestIdArgs as TisanRequestIdArgs, FeedbackArgs as TisanFeedbackArgs
-from base_audit_commands import StartArgs as AuditStartArgs, CsvArgs as AuditCsvArgs, ReviewArgs as AuditReviewArgs
+from trigger_bot_contract import TOOLS as BOT_TOOLS  # noqa: F401 -- backwards-compatible command exports
+from base_lists import FindArgs, SaveArgs, ListArgs, SendArgs  # noqa: F401 -- backwards-compatible command exports
+from tisan_requests import TOOLS as TISAN_CLIENT_TOOLS, RequestIdArgs as TisanRequestIdArgs, FeedbackArgs as TisanFeedbackArgs  # noqa: F401 -- backwards-compatible command exports
+from base_audit_commands import StartArgs as AuditStartArgs, CsvArgs as AuditCsvArgs, ReviewArgs as AuditReviewArgs  # noqa: F401 -- backwards-compatible command exports
 from tenant_db import tenant_path
 from command_stream import AnswerText, TokenSink
 
@@ -37,29 +37,18 @@ _background: set[asyncio.Task] = set()
 SQUADS = frozenset({"base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"})
 from trigger_marketing_contract import TOOLS as MARKETING_TOOLS
 
-TOOLS = {
-    "trigger": ["trigger.revise", "trigger.voice.learn", "trigger.write.batch", "trigger.scorecard", "trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
-    "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.products", "base.compare.apollo", "base.list.to_crm"],
-    "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.position", "tiger.alerts", "tiger.watches", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk"],
-    "market_lab": ["market_lab.research", "market_lab.warnings", "market_lab.predictions", "market_lab.calibration", "market_lab.calibration.curve", "market_lab.feeds", "market_lab.patterns", "market_lab.gate", "market_lab.briefs", "market_lab.alerts.email", "market_lab.alerts.webhook", "market_lab.alerts.off"],
-    "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment"],
-    "tisan": ["tisan.scaffold"],
-    "radix": ["radix.infra.scan", "radix.active.consent", "radix.active.consent.withdraw", "radix.report", "radix.deploy.override", "radix.active.scan", "radix.scan", "radix.repo.scan", "radix.repo.findings", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"],
-    "zenas": ["zenas.ask", "zenas.matters", "zenas.draft", "zenas.review", "zenas.playbook.add", "zenas.playbooks", "zenas.watch.add", "zenas.watch.list", "zenas.watch.enable", "zenas.watch.disable"],
-}
-TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
-TOOLS["trigger"] += ["trigger.crm.list", "trigger.crm.get", "trigger.crm.write"]
+from command_tools import build_tools, build_founder_tools, build_set, build_admin_tools, build_adapters
 
-FOUNDER_TOOLS = ["tank.policy", "tank.policy.fallbacks", "base.campaign.start", "base.campaign.show", "base.campaign.csv", "base.audit.start", "base.audit.csv", "base.audit.review", "skala.list", "skala.evals", "skala.approve", "skala.retire",
-                 "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
-                 "training.status",
-                 "training.run", "training.receipt",
-                 "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
-                 "radix.domain.prove", "radix.passive.scan", "radix.findings"]
-FOUNDER_TOOLS += TISAN_CLIENT_TOOLS
-FOUNDER_TOOLS += ["autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy",
-                  "autumbra.fixes", "autumbra.fix.approve", "autumbra.blocks", "autumbra.blocks.share"]
-TOOLS["plugins"] = ["plugins.list", "plugins.install", "plugins.remove"]
+TOOLS = build_tools()
+TENANT_ADMIN_TOOLS = build_admin_tools()
+ADMIN_ONLY_TOOLS = build_set("ADMIN_ONLY_TOOLS")
+FOUNDER_ONLY_TOOLS = build_set("FOUNDER_ONLY_TOOLS")
+# REQUEST_BODY_TOOLS alone includes tisan.preview; CONFIRMED alone includes
+# rig.quote.confirm_payment, tiger.match* and radix.repo.scan.
+REQUEST_BODY_TOOLS = build_set("REQUEST_BODY_TOOLS")
+CONFIRMED = build_set("CONFIRMED")
+
+FOUNDER_TOOLS = build_founder_tools()
 
 
 def db() -> Any:
@@ -123,14 +112,14 @@ def allowed_tools(actor: Actor) -> list[str]:
     squads = TOOLS.keys() if actor.founder else actor.squads & SQUADS
     founder_tools = [name for name in FOUNDER_TOOLS
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
-    voice_tools = TOOLS["trigger"] + ["rig.quote.confirm_payment"] if actor.tenant_admin and not actor.founder else []
-    client_tools = TISAN_CLIENT_TOOLS if actor.tenant_admin and not actor.founder else []
+    voice_tools = TENANT_ADMIN_TOOLS if actor.tenant_admin and not actor.founder else []
+    client_tools = []  # Product tenant-admin declarations already include these tools.
     if actor.tenant_admin or actor.founder:
         client_tools = [*client_tools, "paid_steps.approve"]
     plugin_tools = (["plugins.list"] + (["plugins.install", "plugins.remove"] if actor.tenant_admin else [])) if not actor.founder and (actor.squads & SQUADS or actor.tenant_admin) else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]
-                   if (tool != "radix.deploy.override" or actor.founder) and (tool not in {"radix.infra.scan", "radix.active.scan", "radix.active.consent", "radix.active.consent.withdraw"} or actor.founder or actor.tenant_admin) and ((tool != "rig.quote.confirm_payment" and not tool.startswith("market_lab.alerts."))
-                   or actor.tenant_admin or actor.founder)]
+                   if (tool not in FOUNDER_ONLY_TOOLS or actor.founder)
+                   and (tool not in ADMIN_ONLY_TOOLS or actor.tenant_admin or actor.founder)]
                   + founder_tools + voice_tools + client_tools + plugin_tools + list(actor.mcp_tools))
 
 
@@ -510,6 +499,10 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
     if planned is not None:
         return planned
     planned = await policy_code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
+    from command_tools import plan_products
+    planned = await plan_products(actor, messages, task_id)
     if planned is not None:
         return planned
     from tisan_requests import code_plan as tisan_code_plan
@@ -1518,137 +1511,15 @@ class Adapter:
     skill: str | None = None
 
 
-TOOLS["trigger"] += ["trigger.bot." + name for name in BOT_TOOLS]
-from plugin_args import PluginArgs
-from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServerArgs
+from plugin_args import PluginArgs  # noqa: F401 -- backwards-compatible command export
+from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServerArgs  # noqa: F401 -- backwards-compatible command exports
 
 
-ADAPTERS = {
-    "tank.policy": Adapter("GET", "/v1/command/tank/policy", PolicyArgs, "tank.policy"),
-    "tank.policy.fallbacks": Adapter("POST", "/v1/command/tank/policy/fallbacks", PolicyFallbackArgs, "tank.policy.fallbacks"),
-    "autumbra.blocks": Adapter("GET", "/v1/ghost/autumbra/blocks", BlockTenantArgs, "autumbra.blocks"),
-    "autumbra.blocks.share": Adapter("POST", "/v1/ghost/autumbra/blocks/share", BlockShareArgs, "autumbra.blocks.share"),
-    "autumbra.fixes": Adapter("GET", "/v1/ghost/autumbra/fixes", EmptyArgs, "autumbra.fixes"),
-    "autumbra.fix.approve": Adapter("POST", "/v1/ghost/autumbra/fix/approve", FixMatchArgs, "autumbra.fix.approve"),
-    "autumbra.enforce.list": Adapter("GET", "/v1/ghost/autumbra/enforce/list", EmptyArgs, "autumbra.enforce.list"),
-    "autumbra.enforce.create": Adapter("POST", "/v1/ghost/autumbra/enforce/create", EnforceTenantArgs, "autumbra.enforce.create"),
-    "autumbra.enforce.destroy": Adapter("POST", "/v1/ghost/autumbra/enforce/destroy", EnforceTenantArgs, "autumbra.enforce.destroy"),
-    "training.status": Adapter("GET", "/v1/training/status", EmptyArgs, "training.status"),
-    "training.run": Adapter("POST", "/v1/training/run", TrainingRunArgs, "Start Zenas training", True, "paid_run"),
-    "training.receipt": Adapter("POST", "/v1/training/receipt", TrainingReceiptArgs, "Record training receipt"),
-    "tisan.request": Adapter("POST", "/v1/command/tisan/request", TisanRequestArgs, "tisan.request"),
-    "tisan.preview": Adapter("GET", "/v1/command/tisan/preview", TisanRequestIdArgs, "tisan.preview"),
-    "tisan.feedback": Adapter("POST", "/v1/command/tisan/feedback", TisanFeedbackArgs, "tisan.feedback"),
-    "tisan.handover": Adapter("POST", "/v1/command/tisan/handover", TisanRequestIdArgs, "tisan.handover"),
-    "base.campaign.start": Adapter("POST", "/v1/command/base/campaigns/start", __import__("base_campaign_commands").StartArgs, "base.campaign.start", True, "paid_run"),
-    "base.campaign.show": Adapter("GET", "/v1/command/base/campaigns/show", __import__("base_campaign_commands").CampaignArgs, "base.campaign.show"),
-    "base.campaign.csv": Adapter("GET", "/v1/command/base/campaigns/export", __import__("base_campaign_commands").CampaignArgs, "base.campaign.csv"),
-    "base.audit.start": Adapter("POST", "/v1/command/base/audits/start", AuditStartArgs, "base.audit.start"),
-    "base.audit.csv": Adapter("GET", "/v1/command/base/audits/export", AuditCsvArgs, "base.audit.csv"),
-    "base.audit.review": Adapter("POST", "/v1/command/base/audits/review", AuditReviewArgs, "base.audit.review"),
-    "plugins.list": Adapter("GET", "/v1/command/plugins/list", EmptyArgs, "plugins.list"),
-    "plugins.install": Adapter("POST", "/v1/command/plugins/install", PluginArgs, "plugins.install"),
-    "plugins.remove": Adapter("POST", "/v1/command/plugins/remove", PluginArgs, "plugins.remove"),
-    "mcp.servers.list": Adapter("GET", "/v1/command/mcp/servers/list", EmptyArgs, "mcp.servers.list"),
-    "mcp.servers.approve": Adapter("POST", "/v1/command/mcp/servers/approve", MCPApproveArgs, "mcp.servers.approve"),
-    "mcp.servers.remove": Adapter("POST", "/v1/command/mcp/servers/remove", MCPServerArgs, "mcp.servers.remove"),
-    "trigger.crm.list": Adapter("GET", "/v1/trigger/crm/{resource}", TriggerCRMListArgs, "trigger.crm.list"),
-    "trigger.crm.get": Adapter("GET", "/v1/trigger/crm/{resource}/{record_id}", TriggerCRMGetArgs, "trigger.crm.get"),
-    "trigger.crm.write": Adapter("POST", "/v1/trigger/crm/write", TriggerCRMWriteArgs, "trigger.crm.write"),
-    "trigger.voice.show": Adapter("POST", "/v1/trigger/voice.show", TriggerVoiceShowArgs, "trigger.voice.show"),
-    "trigger.voice.set": Adapter("POST", "/v1/trigger/voice.set", TriggerVoiceSetArgs, "trigger.voice.set"),
-    "trigger.voice.rollback": Adapter("POST", "/v1/trigger/voice.rollback", TriggerVoiceRollbackArgs, "trigger.voice.rollback"),
-    "trigger.feedback": Adapter("POST", "/v1/trigger/feedback", TriggerFeedbackArgs, "trigger.feedback"),
-    "trigger.revise": Adapter("POST", "/v1/trigger/revise", TriggerReviseArgs, "trigger.revise", True, "paid_run"),
-    "trigger.voice.learn": Adapter("POST", "/v1/trigger/voice.learn", TriggerVoiceLearnArgs, "trigger.voice.learn"),
-    "trigger.write.batch": Adapter("POST", "/v1/trigger/write.batch", TriggerBatchArgs, "trigger.write.batch", True, "paid_run"),
-    "trigger.scorecard": Adapter("GET", "/v1/trigger/scorecard", TriggerScorecardArgs, "trigger.scorecard"),
-    "trigger.write": Adapter("POST", "/v1/trigger/write", TriggerWriteArgs, "trigger.write", True, "paid_run"),
-    "trigger.check": Adapter("POST", "/v1/trigger/check", TriggerCheckArgs, "trigger.check"),
-    "repo.prs": Adapter("GET", "/v1/command/repo/prs", RepoPRsArgs, "open PRs on Tervory-AI/tervory-tank"),
-    "repo.pr": Adapter("GET", "/v1/command/repo/pr", RepoPRArgs, "one PR's changed files and check results"),
-    "repo.file": Adapter("GET", "/v1/command/repo/file", RepoFileArgs, "read one file from main"),
-    "base.batch": Adapter("POST", "/v1/base/run", BaseBatchArgs, "Start a Base batch", True, "paid_run"),
-    "base.search": Adapter("GET", "/v1/base/records", BaseSearchArgs, "Read Base records"),
-    "tiger.match": Adapter("POST", "/v1/access/tiger/match", EmptyArgs, "tiger.match"),
-    "tiger.match.confirm": Adapter("POST", "/v1/access/tiger/match/confirm", TigerMatchArgs, "tiger.match.confirm"),
-    "tiger.match.reject": Adapter("POST", "/v1/access/tiger/match/reject", TigerMatchArgs, "tiger.match.reject"),
-    "tiger.position": Adapter("GET", "/v1/access/tiger/position", EmptyArgs, "tiger.position"),
-    "base.find": Adapter("GET", "/v1/command/base/lists/find", FindArgs, "base.find"),
-    "base.list.save": Adapter("POST", "/v1/command/base/lists/save", SaveArgs, "base.list.save"),
-    "base.lists": Adapter("GET", "/v1/command/base/lists", Body, "base.lists"),
-    "base.list.show": Adapter("GET", "/v1/command/base/lists/show", ListArgs, "base.list.show"),
-    "base.list.export": Adapter("GET", "/v1/command/base/lists/export", ListArgs, "base.list.export"),
-    "base.compare.apollo": Adapter("GET", "/v1/command/base/compare/apollo", __import__("base_compare").ApolloArgs, "base.compare.apollo"),
-    "base.list.products": Adapter("GET", "/v1/command/base/lists/products", ListArgs, "base.list.products"),
-    "base.list.to_crm": Adapter("POST", "/v1/command/base/lists/to-crm", SendArgs, "base.list.to_crm"),
-    "tiger.watch": Adapter("POST", "/v1/tiger/watchlist", WatchArgs, "Start a price watch", True, "paid_run"),
-    "tiger.read": Adapter("GET", "/v1/tiger/observations", UrlArgs, "Read price observations"),
-    "tiger.watches": Adapter("GET", "/v1/command/tiger/watches", EmptyArgs, "tiger.watches"),
-    "tiger.watch.pause": Adapter("POST", "/v1/command/tiger/watches/pause", UrlArgs, "tiger.watch.pause"),
-    "tiger.watch.resume": Adapter("POST", "/v1/command/tiger/watches/resume", UrlArgs, "tiger.watch.resume"),
-    "tiger.watch.remove": Adapter("POST", "/v1/command/tiger/watches/remove", UrlArgs, "tiger.watch.remove"),
-    "tiger.watch.bulk": Adapter("POST", "/v1/command/tiger/watches/bulk", __import__("tiger_watch_commands").BulkArgs, "tiger.watch.bulk", True, "paid_run"),
-    "market_lab.warnings": Adapter("GET", "/v1/market-lab/reads/warnings", MarketLabReadArgs, "market_lab.warnings"),
-    "market_lab.predictions": Adapter("GET", "/v1/market-lab/reads/predictions", MarketLabReadArgs, "market_lab.predictions"),
-    "market_lab.calibration": Adapter("GET", "/v1/market-lab/reads/calibration", MarketLabReadArgs, "market_lab.calibration"),
-    "market_lab.calibration.curve": Adapter("GET", "/v1/market-lab/reads/calibration.curve", MarketLabReadArgs, "market_lab.calibration.curve"),
-    "market_lab.feeds": Adapter("GET", "/v1/market-lab/reads/feeds", MarketLabReadArgs, "market_lab.feeds"),
-    "market_lab.patterns": Adapter("GET", "/v1/market-lab/reads/patterns", MarketLabReadArgs, "market_lab.patterns"),
-    "market_lab.gate": Adapter("GET", "/v1/market-lab/reads/gate", MarketLabReadArgs, "market_lab.gate"),
-    "market_lab.briefs": Adapter("GET", "/v1/market-lab/reads/briefs", MarketLabReadArgs, "market_lab.briefs"),
-    "market_lab.alerts.email": Adapter("POST", "/v1/market-lab/alerts/email", EmptyArgs, "market_lab.alerts.email"),
-    "market_lab.alerts.webhook": Adapter("POST", "/v1/market-lab/alerts/webhook", MarketLabWebhookArgs, "market_lab.alerts.webhook"),
-    "market_lab.alerts.off": Adapter("POST", "/v1/market-lab/alerts/off", EmptyArgs, "market_lab.alerts.off"),
-    "tiger.alerts": Adapter("GET", "/v1/command/tiger/alerts", __import__("tiger_alerts").AlertsArgs, "tiger.alerts"),
-    "market_lab.research": Adapter("POST", "/v1/research", QuestionArgs, "Research a market question", True, "paid_run"),
-    "rig.search": Adapter("GET", "/v1/rig/search", QueryArgs, "Search the product catalogue"),
-    "rig.ask": Adapter("POST", "/v1/rig/ask", RigAskArgs, "Ask about a product", True, "paid_run"),
-    "rig.quote.confirm_payment": Adapter("POST", "/v1/access/rig/admin/confirm-store-payment", RigConfirmPaymentArgs, "rig.quote.confirm_payment"),
-    "tisan.scaffold": Adapter("POST", "/v1/skala/tisan.scaffold/run", ScaffoldArgs, "Create a site scaffold", False, "other", "tisan.scaffold"),
-    "radix.report": Adapter("GET", "/v1/command/radix/reports", RadixFindingsArgs, "radix.findings"),
-    "radix.deploy.override": Adapter("POST", "/v1/command/radix/deploy/override", RadixDeployOverrideArgs, "radix.changes"),
-    "radix.active.consent": Adapter("POST", "/v1/radix/passive/consent", RadixConsentArgs, "radix.watch"),
-    "radix.active.consent.withdraw": Adapter("POST", "/v1/radix/passive/consent-withdraw", RadixDomainArgs, "radix.unwatch"),
-    "radix.infra.scan": Adapter("POST", "/v1/radix/passive/infra", RadixActiveArgs, "radix.passive.scan"),
-    "radix.active.scan": Adapter("POST", "/v1/radix/passive/active", RadixActiveArgs, "radix.passive.scan"),
-    "radix.watch": Adapter("POST", "/v1/radix/passive/watch", RadixWatchArgs, "radix.watch"),
-    "radix.unwatch": Adapter("POST", "/v1/radix/passive/unwatch", RadixDomainArgs, "radix.unwatch"),
-    "radix.watches": Adapter("GET", "/v1/radix/passive/watches", EmptyArgs, "radix.watches"),
-    "radix.changes": Adapter("GET", "/v1/radix/passive/changes", RadixDomainArgs, "radix.changes"),
-    "radix.domain.prove": Adapter("POST", "/v1/radix/passive/domains", RadixDomainArgs, "radix.domain.prove"),
-    "radix.passive.scan": Adapter("POST", "/v1/radix/passive/scans", RadixPassiveArgs, "radix.passive.scan"),
-    "radix.findings": Adapter("GET", "/v1/radix/passive/scans/{scan_id}/findings", RadixFindingsArgs, "radix.findings"),
-    "tisan.build": Adapter("POST", "/v1/skala/tisan.build/run", TisanBuildArgs, "tisan.build", False, "other", "tisan.build"),
-    "radix.repo.scan": Adapter("POST", "/v1/command/radix/repo/scan", RadixRepoArgs, "radix.repo.scan"),
-    "radix.repo.findings": Adapter("GET", "/v1/command/radix/repo/findings", RadixFindingsArgs, "radix.repo.findings"),
-    "radix.scan": Adapter("POST", "/v1/skala/scan.static/run", ScanArgs, "Scan supplied source text", False, "other", "scan.static"),
-    "zenas.ask": Adapter("POST", "/v1/zenas/answers", ZenasAskArgs, "Ask a civil law question", True, "paid_run"),
-    "zenas.matters": Adapter("POST", "/v1/zenas/matters", MatterArgs, "Create a matter"),
-    "zenas.draft": Adapter("POST", "/v1/zenas/drafts", ZenasDraftArgs, "Draft a document", True, "paid_run"),
-    "zenas.playbook.add": Adapter("POST", "/v1/zenas/playbooks", ZenasPlaybookAddArgs, "Add a review guide"),
-    "zenas.playbooks": Adapter("GET", "/v1/zenas/playbooks", EmptyArgs, "List review guides"),
-    "zenas.watch.add": Adapter("POST", "/v1/zenas/regulations/watches", ZenasWatchAddArgs, "zenas.watch.add"),
-    "zenas.watch.list": Adapter("GET", "/v1/zenas/regulations/watches", EmptyArgs, "zenas.watch.list"),
-    "zenas.watch.enable": Adapter("POST", "/v1/zenas/regulations/watches/{watch_id}", ZenasWatchIdArgs, "zenas.watch.enable"),
-    "zenas.watch.disable": Adapter("POST", "/v1/zenas/regulations/watches/{watch_id}", ZenasWatchIdArgs, "zenas.watch.disable"),
-    "zenas.review": Adapter("POST", "/v1/zenas/contract-reviews", ReviewArgs, "Review a contract", True, "paid_run"),
-    "skala.list": Adapter("GET", "/v1/skala", EmptyArgs, "List skills"),
-    "skala.evals": Adapter("POST", "/v1/skala/{skill_id}/{version}/evals", SkillVersionArgs, "Run skill evaluations", True, "paid_run"),
-    "skala.approve": Adapter("POST", "/v1/skala/{skill_id}/{version}/approve", SkillVersionArgs, "Approve a skill version", False, "approve_skill"),
-    "skala.retire": Adapter("POST", "/v1/skala/{skill_id}/{version}/retire", SkillVersionArgs, "Retire a skill version", False, "retire"),
-    "ledger.receipts": Adapter("GET", "/v1/proof", ProofArgs, "Read ledger receipts"),
-    "ledger.savings": Adapter("GET", "/v1/proof", SavingsArgs, "Read recorded costs and savings"),
-}
-
-ADAPTERS.update({"trigger.bot." + name: Adapter("POST", "/v1/trigger/bot/" + name, schema, "trigger.bot." + name)
-                 for name, schema in BOT_TOOLS.items()})
+from command_tools.trigger import MARKETING_PAID_TOOLS as MARKETING_PAID_TOOLS
+ADAPTERS = build_adapters(globals())
 
 
-MARKETING_PAID_TOOLS = frozenset({'post.create', 'gbp.reply.draft'})
-ADAPTERS.update({"trigger." + name: Adapter("POST", "/v1/trigger/marketing/" + name, schema, "trigger." + name,
-                                          name in MARKETING_PAID_TOOLS, 'paid_run' if name in MARKETING_PAID_TOOLS else 'other')
-                 for name, schema in MARKETING_TOOLS.items()})
+
 
 
 class PlannedAction(Body):
@@ -1894,9 +1765,11 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, {}, args
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
+    if action.tool in {"rig.store.onboard", "rig.rooms.list", "rig.store.destroy"}:
+        return adapter.method, path, {}, {}
     if action.tool == "rig.quote.confirm_payment":
         return adapter.method, path, {}, {"data": args}
-    if action.tool in {"base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", "autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy", "autumbra.fixes", "autumbra.fix.approve", "autumbra.blocks", "autumbra.blocks.share", *TISAN_CLIENT_TOOLS}:
+    if action.tool in REQUEST_BODY_TOOLS:
         if adapter.method == 'GET':
             return adapter.method, path, args, None
         return adapter.method, path, {}, args  # Actor headers supply identity, never body fields.
@@ -2134,7 +2007,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 from market_lab_ml3 import confirmed
                 status, result = 200, await confirmed(action, actor, thread_id, card_id)
                 once = result.pop("_once", None)
-            elif (action.tool.startswith("trigger.") and action.tool not in {"trigger.crm.list", "trigger.crm.get"}) or action.tool in {"zenas.draft", "zenas.playbook.add", "training.run", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan", "autumbra.blocks.share", "autumbra.enforce.create", "autumbra.enforce.destroy", "autumbra.fix.approve", "radix.active.consent", "radix.active.consent.withdraw", "radix.active.scan", "radix.deploy.override", "radix.infra.scan"}:
+            elif (action.tool.startswith("trigger.") and action.tool not in {"trigger.crm.list", "trigger.crm.get"}) or action.tool in CONFIRMED:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
@@ -2321,11 +2194,11 @@ async def autumbra_enforce_code_plan(actor: Actor, messages: list[dict], task_id
     from trigger_routes import code_receipt
     last = messages[-1] if messages else {}
     text = last.get("content", "").strip()
-    if last.get("role") != "user" or not text.startswith("autumbra."):
+    if last.get("role") != "user" or not text.startswith(("autumbra.", "rig.")):
         return None
     parts = text.split()
     tool = parts[0]
-    fields = {"autumbra.enforce.list": None, "autumbra.enforce.create": "tenant_id",
+    fields = {"rig.store.onboard": None, "rig.rooms.list": None, "rig.store.destroy": None, "autumbra.enforce.list": None, "autumbra.enforce.create": "tenant_id",
               "autumbra.enforce.destroy": "tenant_id", "autumbra.fixes": None,
               "autumbra.fix.approve": "match_id", "autumbra.blocks": "tenant_id",
               "autumbra.blocks.share": "record_ids"}
@@ -2342,7 +2215,7 @@ async def autumbra_enforce_code_plan(actor: Actor, messages: list[dict], task_id
             raise HTTPException(422, "Use: autumbra.enforce.create|destroy <tenant-uuid>")
         arguments = {} if fields[tool] is None else {fields[tool]: parts[1]}
     action = validate_action(PlannedAction(tool=tool, arguments=arguments), actor)
-    ledger = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent="ghost")
+    ledger = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent="rig" if tool.startswith("rig.") else "ghost")
     return SimpleNamespace(content=dump({"text": tool, "actions": [action.model_dump(mode="json")]}), ledger_id=ledger)
 
 

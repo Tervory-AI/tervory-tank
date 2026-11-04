@@ -1,0 +1,28 @@
+{
+  "text": "Skip to content\nMenu\n1. Organization\n2. Industry\n3. File\n4. Run\nYour run has started\n\nEach step updates on its own. You can open your records while this is still going.\n\n1 records · 0 enriched · 1 still going\n\nClean names and addresses\nWaiting\nMatch records you already have\nWaiting\nFind each website\nWaiting\nRead the website\nWaiting\nPick out what the business does\nWaiting\nFind contacts\nWaiting\nCheck social pages\nWaiting\nEstimate the size of the business\nWaiting\nApply the industry profile\nWaiting\nCheck each record and score it\nWaiting\nSee your records",
+  "title": "Autumbra",
+  "width": 375,
+  "height": 1100,
+  "geometry": [
+    {
+      "tag": "DIV",
+      "text": "See your records",
+      "rect": {
+        "x": 28,
+        "y": 850.890625,
+        "width": 319,
+        "height": 41.5,
+        "top": 850.890625,
+        "right": 347,
+        "bottom": 892.390625,
+        "left": 28
+      }
+    }
+  ],
+  "controls": [],
+  "fonts": [
+    "Inter, Inter, sans-serif",
+    "Jost, Jost, sans-serif",
+    "\"JetBrains Mono\", \"JetBrains Mono\", ui-monospace, monospace"
+  ]
+}

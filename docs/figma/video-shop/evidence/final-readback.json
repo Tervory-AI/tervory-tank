@@ -1,0 +1,2187 @@
+{
+  "pageId": "579:4959",
+  "frames": [
+    {
+      "id": "581:9",
+      "name": "Player / Before / 1440 · Proposed",
+      "screen": "Player",
+      "state": "Before",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:16",
+        "products": "581:18",
+        "playback": "581:25"
+      },
+      "screenshot": "player-before-1440.png"
+    },
+    {
+      "id": "581:30",
+      "name": "Player / Moment / 1440 · Proposed",
+      "screen": "Player",
+      "state": "Moment",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:37",
+        "products": "581:39",
+        "open": "581:46",
+        "playback": "581:50"
+      },
+      "screenshot": "player-moment-1440.png"
+    },
+    {
+      "id": "581:55",
+      "name": "Player / After / 1440 · Proposed",
+      "screen": "Player",
+      "state": "After",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:62",
+        "products": "581:64",
+        "playback": "581:71"
+      },
+      "screenshot": "player-after-1440.png"
+    },
+    {
+      "id": "581:76",
+      "name": "Player / Paused / 1440 · Proposed",
+      "screen": "Player",
+      "state": "Paused",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:83",
+        "products": "581:85",
+        "open": "581:92",
+        "playback": "581:96"
+      },
+      "screenshot": "player-paused-1440.png"
+    },
+    {
+      "id": "581:101",
+      "name": "Player / Before / 375 · Proposed",
+      "screen": "Player",
+      "state": "Before",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:108",
+        "products": "581:110",
+        "playback": "581:117"
+      },
+      "screenshot": "player-before-375.png"
+    },
+    {
+      "id": "581:122",
+      "name": "Player / Moment / 375 · Proposed",
+      "screen": "Player",
+      "state": "Moment",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:129",
+        "products": "581:131",
+        "open": "581:138",
+        "playback": "581:142"
+      },
+      "screenshot": "player-moment-375.png"
+    },
+    {
+      "id": "581:147",
+      "name": "Player / After / 375 · Proposed",
+      "screen": "Player",
+      "state": "After",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:154",
+        "products": "581:156",
+        "playback": "581:163"
+      },
+      "screenshot": "player-after-375.png"
+    },
+    {
+      "id": "581:168",
+      "name": "Player / Paused / 375 · Proposed",
+      "screen": "Player",
+      "state": "Paused",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:175",
+        "products": "581:177",
+        "open": "581:184",
+        "playback": "581:188"
+      },
+      "screenshot": "player-paused-375.png"
+    },
+    {
+      "id": "581:289",
+      "name": "Player / Empty / 1440 · Proposed",
+      "screen": "Player",
+      "state": "Empty",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:296",
+        "products": "581:298"
+      },
+      "screenshot": "player-empty-1440.png"
+    },
+    {
+      "id": "581:303",
+      "name": "Player / Loading / 1440 · Proposed",
+      "screen": "Player",
+      "state": "Loading",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:310",
+        "products": "581:312"
+      },
+      "screenshot": "player-loading-1440.png"
+    },
+    {
+      "id": "581:320",
+      "name": "Player / Error / 1440 · Proposed",
+      "screen": "Player",
+      "state": "Error",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:327",
+        "products": "581:329",
+        "retry": "581:333"
+      },
+      "screenshot": "player-error-1440.png"
+    },
+    {
+      "id": "581:336",
+      "name": "Player / Empty / 375 · Proposed",
+      "screen": "Player",
+      "state": "Empty",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:343",
+        "products": "581:345"
+      },
+      "screenshot": "player-empty-375.png"
+    },
+    {
+      "id": "581:350",
+      "name": "Player / Loading / 375 · Proposed",
+      "screen": "Player",
+      "state": "Loading",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:357",
+        "products": "581:359"
+      },
+      "screenshot": "player-loading-375.png"
+    },
+    {
+      "id": "581:367",
+      "name": "Player / Error / 375 · Proposed",
+      "screen": "Player",
+      "state": "Error",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:374",
+        "products": "581:376",
+        "retry": "581:380"
+      },
+      "screenshot": "player-error-375.png"
+    },
+    {
+      "id": "581:383",
+      "name": "Products / Default / 1440 · Proposed",
+      "screen": "Products",
+      "state": "Default",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:390",
+        "products": "581:392",
+        "open": "581:402",
+        "jump": "581:404"
+      },
+      "screenshot": "products-default-1440.png"
+    },
+    {
+      "id": "581:407",
+      "name": "Products / Empty / 1440 · Proposed",
+      "screen": "Products",
+      "state": "Empty",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:414",
+        "products": "581:416"
+      },
+      "screenshot": "products-empty-1440.png"
+    },
+    {
+      "id": "581:421",
+      "name": "Products / Loading / 1440 · Proposed",
+      "screen": "Products",
+      "state": "Loading",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:428",
+        "products": "581:430"
+      },
+      "screenshot": "products-loading-1440.png"
+    },
+    {
+      "id": "581:438",
+      "name": "Products / Error / 1440 · Proposed",
+      "screen": "Products",
+      "state": "Error",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:445",
+        "products": "581:447",
+        "retry": "581:451"
+      },
+      "screenshot": "products-error-1440.png"
+    },
+    {
+      "id": "581:454",
+      "name": "Products / Default / 375 · Proposed",
+      "screen": "Products",
+      "state": "Default",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:461",
+        "products": "581:463",
+        "open": "581:473",
+        "jump": "581:475"
+      },
+      "screenshot": "products-default-375.png"
+    },
+    {
+      "id": "581:478",
+      "name": "Products / Empty / 375 · Proposed",
+      "screen": "Products",
+      "state": "Empty",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:485",
+        "products": "581:487"
+      },
+      "screenshot": "products-empty-375.png"
+    },
+    {
+      "id": "581:492",
+      "name": "Products / Loading / 375 · Proposed",
+      "screen": "Products",
+      "state": "Loading",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:499",
+        "products": "581:501"
+      },
+      "screenshot": "products-loading-375.png"
+    },
+    {
+      "id": "581:509",
+      "name": "Products / Error / 375 · Proposed",
+      "screen": "Products",
+      "state": "Error",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:516",
+        "products": "581:518",
+        "retry": "581:522"
+      },
+      "screenshot": "products-error-375.png"
+    },
+    {
+      "id": "581:525",
+      "name": "Product detail / Default / 1440 · Proposed",
+      "screen": "Product detail",
+      "state": "Default",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:532",
+        "products": "581:534",
+        "add": "581:544"
+      },
+      "screenshot": "product-detail-default-1440.png"
+    },
+    {
+      "id": "581:547",
+      "name": "Product detail / Added / 1440 · Proposed",
+      "screen": "Product detail",
+      "state": "Added",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:554",
+        "products": "581:556",
+        "keep": "581:567",
+        "cart": "581:569"
+      },
+      "screenshot": "product-detail-added-1440.png"
+    },
+    {
+      "id": "581:572",
+      "name": "Product detail / Cart error / 1440 · Proposed",
+      "screen": "Product detail",
+      "state": "Cart error",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:579",
+        "products": "581:581",
+        "retry": "581:592"
+      },
+      "screenshot": "product-detail-cart-error-1440.png"
+    },
+    {
+      "id": "581:595",
+      "name": "Product detail / Empty / 1440 · Proposed",
+      "screen": "Product detail",
+      "state": "Empty",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:602",
+        "products": "581:604"
+      },
+      "screenshot": "product-detail-empty-1440.png"
+    },
+    {
+      "id": "581:609",
+      "name": "Product detail / Loading / 1440 · Proposed",
+      "screen": "Product detail",
+      "state": "Loading",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:616",
+        "products": "581:618"
+      },
+      "screenshot": "product-detail-loading-1440.png"
+    },
+    {
+      "id": "581:626",
+      "name": "Product detail / Error / 1440 · Proposed",
+      "screen": "Product detail",
+      "state": "Error",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:633",
+        "products": "581:635",
+        "retry": "581:639"
+      },
+      "screenshot": "product-detail-error-1440.png"
+    },
+    {
+      "id": "581:642",
+      "name": "Product detail / Default / 375 · Proposed",
+      "screen": "Product detail",
+      "state": "Default",
+      "width": 375,
+      "height": 870,
+      "mobile": true,
+      "actions": {
+        "watch": "581:649",
+        "products": "581:651",
+        "add": "581:661"
+      },
+      "screenshot": "product-detail-default-375.png"
+    },
+    {
+      "id": "581:664",
+      "name": "Product detail / Added / 375 · Proposed",
+      "screen": "Product detail",
+      "state": "Added",
+      "width": 375,
+      "height": 870,
+      "mobile": true,
+      "actions": {
+        "watch": "581:671",
+        "products": "581:673",
+        "keep": "581:684",
+        "cart": "581:686"
+      },
+      "screenshot": "product-detail-added-375.png"
+    },
+    {
+      "id": "581:689",
+      "name": "Product detail / Cart error / 375 · Proposed",
+      "screen": "Product detail",
+      "state": "Cart error",
+      "width": 375,
+      "height": 870,
+      "mobile": true,
+      "actions": {
+        "watch": "581:696",
+        "products": "581:698",
+        "retry": "581:709"
+      },
+      "screenshot": "product-detail-cart-error-375.png"
+    },
+    {
+      "id": "581:712",
+      "name": "Product detail / Empty / 375 · Proposed",
+      "screen": "Product detail",
+      "state": "Empty",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:719",
+        "products": "581:721"
+      },
+      "screenshot": "product-detail-empty-375.png"
+    },
+    {
+      "id": "581:726",
+      "name": "Product detail / Loading / 375 · Proposed",
+      "screen": "Product detail",
+      "state": "Loading",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:733",
+        "products": "581:735"
+      },
+      "screenshot": "product-detail-loading-375.png"
+    },
+    {
+      "id": "581:743",
+      "name": "Product detail / Error / 375 · Proposed",
+      "screen": "Product detail",
+      "state": "Error",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:750",
+        "products": "581:752",
+        "retry": "581:756"
+      },
+      "screenshot": "product-detail-error-375.png"
+    },
+    {
+      "id": "581:759",
+      "name": "Setup / Default / 1440 · Proposed",
+      "screen": "Setup",
+      "state": "Default",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:766",
+        "products": "581:768",
+        "upload": "581:776",
+        "confirm": "581:780",
+        "process": "581:782"
+      },
+      "screenshot": "setup-default-1440.png"
+    },
+    {
+      "id": "581:786",
+      "name": "Setup / Permission / 1440 · Proposed",
+      "screen": "Setup",
+      "state": "Permission",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:793",
+        "products": "581:795",
+        "upload": "581:803",
+        "confirm": "581:807",
+        "process": "581:809"
+      },
+      "screenshot": "setup-permission-1440.png"
+    },
+    {
+      "id": "581:812",
+      "name": "Setup / Processing / 1440 · Proposed",
+      "screen": "Setup",
+      "state": "Processing",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:819",
+        "products": "581:821",
+        "review": "581:828"
+      },
+      "screenshot": "setup-processing-1440.png"
+    },
+    {
+      "id": "581:831",
+      "name": "Setup / Review / 1440 · Proposed",
+      "screen": "Setup",
+      "state": "Review",
+      "width": 1440,
+      "height": 1547,
+      "mobile": false,
+      "actions": {
+        "watch": "581:838",
+        "products": "581:840",
+        "save": "581:875"
+      },
+      "screenshot": "setup-review-1440.png"
+    },
+    {
+      "id": "581:877",
+      "name": "Setup / Empty / 1440 · Proposed",
+      "screen": "Setup",
+      "state": "Empty",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:884",
+        "products": "581:886",
+        "upload": "581:890"
+      },
+      "screenshot": "setup-empty-1440.png"
+    },
+    {
+      "id": "581:893",
+      "name": "Setup / Loading / 1440 · Proposed",
+      "screen": "Setup",
+      "state": "Loading",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:900",
+        "products": "581:902"
+      },
+      "screenshot": "setup-loading-1440.png"
+    },
+    {
+      "id": "581:910",
+      "name": "Setup / Error / 1440 · Proposed",
+      "screen": "Setup",
+      "state": "Error",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:917",
+        "products": "581:919",
+        "retry": "581:923"
+      },
+      "screenshot": "setup-error-1440.png"
+    },
+    {
+      "id": "581:926",
+      "name": "Setup / Default / 375 · Proposed",
+      "screen": "Setup",
+      "state": "Default",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:933",
+        "products": "581:935",
+        "upload": "581:943",
+        "confirm": "581:947",
+        "process": "581:949"
+      },
+      "screenshot": "setup-default-375.png"
+    },
+    {
+      "id": "581:953",
+      "name": "Setup / Permission / 375 · Proposed",
+      "screen": "Setup",
+      "state": "Permission",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:960",
+        "products": "581:962",
+        "upload": "581:970",
+        "confirm": "581:974",
+        "process": "581:976"
+      },
+      "screenshot": "setup-permission-375.png"
+    },
+    {
+      "id": "581:979",
+      "name": "Setup / Processing / 375 · Proposed",
+      "screen": "Setup",
+      "state": "Processing",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:986",
+        "products": "581:988",
+        "review": "581:995"
+      },
+      "screenshot": "setup-processing-375.png"
+    },
+    {
+      "id": "581:998",
+      "name": "Setup / Review / 375 · Proposed",
+      "screen": "Setup",
+      "state": "Review",
+      "width": 375,
+      "height": 1566,
+      "mobile": true,
+      "actions": {
+        "watch": "581:1005",
+        "products": "581:1007",
+        "save": "581:1042"
+      },
+      "screenshot": "setup-review-375.png"
+    },
+    {
+      "id": "581:1044",
+      "name": "Setup / Empty / 375 · Proposed",
+      "screen": "Setup",
+      "state": "Empty",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:1051",
+        "products": "581:1053",
+        "upload": "581:1057"
+      },
+      "screenshot": "setup-empty-375.png"
+    },
+    {
+      "id": "581:1060",
+      "name": "Setup / Loading / 375 · Proposed",
+      "screen": "Setup",
+      "state": "Loading",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:1067",
+        "products": "581:1069"
+      },
+      "screenshot": "setup-loading-375.png"
+    },
+    {
+      "id": "581:1077",
+      "name": "Setup / Error / 375 · Proposed",
+      "screen": "Setup",
+      "state": "Error",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:1084",
+        "products": "581:1086",
+        "retry": "581:1090"
+      },
+      "screenshot": "setup-error-375.png"
+    }
+  ],
+  "checks": [
+    {
+      "id": "581:9",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 7,
+        "TEXT": 9,
+        "INSTANCE": 3,
+        "RECTANGLE": 1
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:16",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:18",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:25",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:30",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 11,
+        "INSTANCE": 4,
+        "RECTANGLE": 1
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:37",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:39",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:46",
+          "main": "266:3032"
+        },
+        {
+          "id": "581:50",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:55",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 7,
+        "TEXT": 9,
+        "INSTANCE": 3,
+        "RECTANGLE": 1
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:62",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:64",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:71",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:76",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 11,
+        "INSTANCE": 4,
+        "RECTANGLE": 1
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:83",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:85",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:92",
+          "main": "266:3032"
+        },
+        {
+          "id": "581:96",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:101",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 7,
+        "TEXT": 9,
+        "INSTANCE": 3,
+        "RECTANGLE": 1
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:108",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:110",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:117",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:122",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 11,
+        "INSTANCE": 4,
+        "RECTANGLE": 1
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:129",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:131",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:138",
+          "main": "266:3032"
+        },
+        {
+          "id": "581:142",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:147",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 7,
+        "TEXT": 9,
+        "INSTANCE": 3,
+        "RECTANGLE": 1
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:154",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:156",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:163",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:168",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 11,
+        "INSTANCE": 4,
+        "RECTANGLE": 1
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:175",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:177",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:184",
+          "main": "266:3032"
+        },
+        {
+          "id": "581:188",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:289",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:296",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:298",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:303",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:310",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:312",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:320",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 7,
+        "INSTANCE": 3
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:327",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:329",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:333",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:336",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:343",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:345",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:350",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:357",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:359",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:367",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 7,
+        "INSTANCE": 3
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:374",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:376",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:380",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:383",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 13,
+        "INSTANCE": 5
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:390",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:392",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:396",
+          "main": "289:13957"
+        },
+        {
+          "id": "581:402",
+          "main": "266:3032"
+        },
+        {
+          "id": "581:404",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:407",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:414",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:416",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:421",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:428",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:430",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:438",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 7,
+        "INSTANCE": 3
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:445",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:447",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:451",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:454",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 13,
+        "INSTANCE": 5
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:461",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:463",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:467",
+          "main": "289:13957"
+        },
+        {
+          "id": "581:473",
+          "main": "266:3032"
+        },
+        {
+          "id": "581:475",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:478",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:485",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:487",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:492",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:499",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:501",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:509",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 7,
+        "INSTANCE": 3
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:516",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:518",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:522",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:525",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 12,
+        "INSTANCE": 4
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:532",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:534",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:537",
+          "main": "289:13957"
+        },
+        {
+          "id": "581:544",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:547",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 14,
+        "INSTANCE": 5
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:554",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:556",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:559",
+          "main": "289:13957"
+        },
+        {
+          "id": "581:567",
+          "main": "266:3032"
+        },
+        {
+          "id": "581:569",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:572",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 13,
+        "INSTANCE": 4
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:579",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:581",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:584",
+          "main": "289:13957"
+        },
+        {
+          "id": "581:592",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:595",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:602",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:604",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:609",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:616",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:618",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:626",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 7,
+        "INSTANCE": 3
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:633",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:635",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:639",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:642",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 12,
+        "INSTANCE": 4
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:649",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:651",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:654",
+          "main": "289:13957"
+        },
+        {
+          "id": "581:661",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:664",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 14,
+        "INSTANCE": 5
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:671",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:673",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:676",
+          "main": "289:13957"
+        },
+        {
+          "id": "581:684",
+          "main": "266:3032"
+        },
+        {
+          "id": "581:686",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:689",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 13,
+        "INSTANCE": 4
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:696",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:698",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:701",
+          "main": "289:13957"
+        },
+        {
+          "id": "581:709",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:712",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:719",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:721",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:726",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:733",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:735",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:743",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 7,
+        "INSTANCE": 3
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:750",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:752",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:756",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:759",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 15,
+        "INSTANCE": 6
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:766",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:768",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:773",
+          "main": "93:6"
+        },
+        {
+          "id": "581:776",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:780",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:782",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:786",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 14,
+        "INSTANCE": 6
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:793",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:795",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:800",
+          "main": "93:6"
+        },
+        {
+          "id": "581:803",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:807",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:809",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:812",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 6,
+        "TEXT": 9,
+        "INSTANCE": 3
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:819",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:821",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:828",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:831",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 27,
+        "INSTANCE": 13
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:838",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:840",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:847",
+          "main": "93:6"
+        },
+        {
+          "id": "581:850",
+          "main": "93:6"
+        },
+        {
+          "id": "581:853",
+          "main": "93:6"
+        },
+        {
+          "id": "581:856",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:858",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:862",
+          "main": "93:6"
+        },
+        {
+          "id": "581:865",
+          "main": "93:6"
+        },
+        {
+          "id": "581:868",
+          "main": "93:6"
+        },
+        {
+          "id": "581:871",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:873",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:875",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:877",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 7,
+        "INSTANCE": 3
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:884",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:886",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:890",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:893",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:900",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:902",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:910",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 7,
+        "INSTANCE": 3
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:917",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:919",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:923",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:926",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 15,
+        "INSTANCE": 6
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:933",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:935",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:940",
+          "main": "93:6"
+        },
+        {
+          "id": "581:943",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:947",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:949",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:953",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 14,
+        "INSTANCE": 6
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:960",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:962",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:967",
+          "main": "93:6"
+        },
+        {
+          "id": "581:970",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:974",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:976",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:979",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 6,
+        "TEXT": 9,
+        "INSTANCE": 3
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:986",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:988",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:995",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:998",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 27,
+        "INSTANCE": 13
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:1005",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:1007",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:1014",
+          "main": "93:6"
+        },
+        {
+          "id": "581:1017",
+          "main": "93:6"
+        },
+        {
+          "id": "581:1020",
+          "main": "93:6"
+        },
+        {
+          "id": "581:1023",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:1025",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:1029",
+          "main": "93:6"
+        },
+        {
+          "id": "581:1032",
+          "main": "93:6"
+        },
+        {
+          "id": "581:1035",
+          "main": "93:6"
+        },
+        {
+          "id": "581:1038",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:1040",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:1042",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:1044",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 7,
+        "INSTANCE": 3
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:1051",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:1053",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:1057",
+          "main": "266:3032"
+        }
+      ]
+    },
+    {
+      "id": "581:1060",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:1067",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:1069",
+          "main": "266:3034"
+        }
+      ]
+    },
+    {
+      "id": "581:1077",
+      "nonInter": [],
+      "textOverflow": [],
+      "darkSurfaces": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 7,
+        "INSTANCE": 3
+      },
+      "imageNodes": [],
+      "instances": [
+        {
+          "id": "581:1084",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:1086",
+          "main": "266:3034"
+        },
+        {
+          "id": "581:1090",
+          "main": "266:3032"
+        }
+      ]
+    }
+  ],
+  "copy": [
+    "Proposed",
+    "Illustrative video, product and timing · Figma only",
+    "Watch video",
+    "Products in this video",
+    "[Video preview]",
+    "[Video title]",
+    "00:08 / 01:00",
+    "Pause",
+    "COMPACT TRIPOD",
+    "View product",
+    "00:12 / 01:00",
+    "00:19 / 01:00",
+    "Play",
+    "No video yet.",
+    "Loading…",
+    "The video could not be loaded.",
+    "Try again",
+    "CT-01",
+    "$120.00",
+    "Delivery: 2–3 business days",
+    "Appears at 00:12–00:18 and 00:42–00:48",
+    "Watch at 00:12",
+    "No products in this video yet.",
+    "The products could not be loaded.",
+    "Product details",
+    "Quantity: 1",
+    "Payment is handled by the store.",
+    "Add to cart",
+    "Added to your store’s cart.",
+    "Keep watching",
+    "Open store cart",
+    "The store’s cart could not be updated.",
+    "This product is unavailable.",
+    "The product could not be loaded.",
+    "Video setup",
+    "Add a video",
+    "Upload a video or paste its link.",
+    "Video link",
+    "https://",
+    "Upload a video",
+    "MP4 or WebM · Up to 10 minutes",
+    "I own this video or have permission to use it.",
+    "Confirm permission",
+    "Process video",
+    "Confirm permission before processing.",
+    "Permission confirmed",
+    "Processing video…",
+    "Finding products and their times.",
+    "Review products",
+    "Only reviewed matches appear in the player.",
+    "COMPACT TRIPOD · CT-01",
+    "Start time",
+    "00:12",
+    "End time",
+    "00:18",
+    "Product",
+    "Keep match",
+    "Remove match",
+    "00:42",
+    "00:48",
+    "Save review",
+    "No videos yet.",
+    "The video could not be processed."
+  ],
+  "status": "Proposed"
+}

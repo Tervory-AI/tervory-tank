@@ -1,0 +1,935 @@
+{
+  "changed": [
+    {
+      "id": "581:18",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:37",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:39",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:46",
+      "to": "581:525",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:50",
+      "to": "581:76",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:62",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:64",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:83",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:85",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:92",
+      "to": "581:525",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:96",
+      "to": "581:30",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:296",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:298",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:310",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:312",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:327",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:329",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:333",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:390",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:402",
+      "to": "581:525",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:404",
+      "to": "581:30",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:414",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:416",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:428",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:430",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:445",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:447",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:451",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:532",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:534",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:544",
+      "to": "581:547",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:554",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:556",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:567",
+      "to": "581:76",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:579",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:581",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:592",
+      "to": "581:525",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:602",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:604",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:616",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:618",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:633",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:635",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:639",
+      "to": "581:525",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:766",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:768",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:780",
+      "to": "581:786",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:793",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:795",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:807",
+      "to": "581:759",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:809",
+      "to": "581:812",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:819",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:821",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:838",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:840",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:875",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:884",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:886",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:900",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:902",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:917",
+      "to": "581:9",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:919",
+      "to": "581:383",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:923",
+      "to": "581:759",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:9",
+      "to": "581:30",
+      "trigger": {
+        "type": "AFTER_TIMEOUT",
+        "timeout": 4
+      }
+    },
+    {
+      "id": "581:30",
+      "to": "581:55",
+      "trigger": {
+        "type": "AFTER_TIMEOUT",
+        "timeout": 7
+      }
+    },
+    {
+      "id": "581:812",
+      "to": "581:831",
+      "trigger": {
+        "type": "AFTER_TIMEOUT",
+        "timeout": 2
+      }
+    },
+    {
+      "id": "581:110",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:129",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:131",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:138",
+      "to": "581:642",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:142",
+      "to": "581:168",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:154",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:156",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:175",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:177",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:184",
+      "to": "581:642",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:188",
+      "to": "581:122",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:343",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:345",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:357",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:359",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:374",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:376",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:380",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:461",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:473",
+      "to": "581:642",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:475",
+      "to": "581:122",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:485",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:487",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:499",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:501",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:516",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:518",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:522",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:649",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:651",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:661",
+      "to": "581:664",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:671",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:673",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:684",
+      "to": "581:168",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:696",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:698",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:709",
+      "to": "581:642",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:719",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:721",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:733",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:735",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:750",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:752",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:756",
+      "to": "581:642",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:933",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:935",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:947",
+      "to": "581:953",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:960",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:962",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:974",
+      "to": "581:926",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:976",
+      "to": "581:979",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:986",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:988",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:1005",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:1007",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:1042",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:1051",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:1053",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:1067",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:1069",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:1084",
+      "to": "581:101",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:1086",
+      "to": "581:454",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:1090",
+      "to": "581:926",
+      "trigger": {
+        "type": "ON_CLICK"
+      }
+    },
+    {
+      "id": "581:101",
+      "to": "581:122",
+      "trigger": {
+        "type": "AFTER_TIMEOUT",
+        "timeout": 4
+      }
+    },
+    {
+      "id": "581:122",
+      "to": "581:147",
+      "trigger": {
+        "type": "AFTER_TIMEOUT",
+        "timeout": 7
+      }
+    },
+    {
+      "id": "581:979",
+      "to": "581:998",
+      "trigger": {
+        "type": "AFTER_TIMEOUT",
+        "timeout": 2
+      }
+    }
+  ],
+  "notice": "Figma-only timing example; no real video, upload, cart mutation or payment"
+}
