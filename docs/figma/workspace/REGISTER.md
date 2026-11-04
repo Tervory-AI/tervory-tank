@@ -30,6 +30,14 @@ The register records authored prototype actions; it does not claim browser gestu
 | Results / Mobile / Empty · Proposed | Proposed | [514:3983](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-3983) | [results-mobile-empty.png](evidence/results-mobile-empty.png) |
 | Results / Mobile / Loading · Proposed | Proposed | [514:4001](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-4001) | [results-mobile-loading.png](evidence/results-mobile-loading.png) |
 | Results / Mobile / Error · Proposed | Proposed | [514:4021](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-4021) | [results-mobile-error.png](evidence/results-mobile-error.png) |
+| Tasks / Desktop / Default · Proposed | Proposed | [514:17565](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-17565) | [tasks-desktop-default.png](evidence/tasks-desktop-default.png) |
+| Tasks / Desktop / Empty · Proposed | Proposed | [514:17723](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-17723) | [tasks-desktop-empty.png](evidence/tasks-desktop-empty.png) |
+| Tasks / Desktop / Loading · Proposed | Proposed | [514:17842](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-17842) | [tasks-desktop-loading.png](evidence/tasks-desktop-loading.png) |
+| Tasks / Desktop / Error · Proposed | Proposed | [514:17963](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-17963) | [tasks-desktop-error.png](evidence/tasks-desktop-error.png) |
+| Tasks / Mobile / Default · Proposed | Proposed | [514:18084](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-18084) | [tasks-mobile-default.png](evidence/tasks-mobile-default.png) |
+| Tasks / Mobile / Empty · Proposed | Proposed | [514:18141](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-18141) | [tasks-mobile-empty.png](evidence/tasks-mobile-empty.png) |
+| Tasks / Mobile / Loading · Proposed | Proposed | [514:18159](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-18159) | [tasks-mobile-loading.png](evidence/tasks-mobile-loading.png) |
+| Tasks / Mobile / Error · Proposed | Proposed | [514:18179](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-18179) | [tasks-mobile-error.png](evidence/tasks-mobile-error.png) |
 
 ## Wording inventory
 
@@ -41,6 +49,7 @@ Every visible string is listed below. **Proposed** is the conservative approval 
 | Add a note | Proposed |
 | All files | Proposed |
 | All products | Proposed |
+| Base | Proposed |
 | Base · Table | Proposed |
 | Billing | Proposed |
 | Business | Proposed |
@@ -57,6 +66,7 @@ Every visible string is listed below. **Proposed** is the conservative approval 
 | Delivered | Proposed |
 | Documents, tables, alerts and files | Proposed |
 | Download | Proposed |
+| Failed | Proposed |
 | Feedback | Proposed |
 | Google posts | Proposed |
 | Google reviews | Proposed |
@@ -65,6 +75,7 @@ Every visible string is listed below. **Proposed** is the conservative approval 
 | Leads | Proposed |
 | Lease review | Proposed |
 | Loading… | Proposed |
+| Market Lab | Proposed |
 | Market Lab · Document | Proposed |
 | Market research | Proposed |
 | Marketing | Proposed |
@@ -73,21 +84,29 @@ Every visible string is listed below. **Proposed** is the conservative approval 
 | Open | Proposed |
 | Opportunities | Proposed |
 | Proposed | Proposed |
+| Queued | Proposed |
+| Queued · Running · Delivered · Unverified · Failed | Proposed |
 | Quote draft | Proposed |
 | Quotes | Proposed |
 | Radix · Document | Proposed |
 | Receipts | Proposed |
 | Report | Proposed |
 | Results | Proposed |
+| Rig | Proposed |
 | Rig · File | Proposed |
+| Running | Proposed |
 | Sales | Proposed |
 | Settings | Proposed |
 | Something went wrong | Proposed |
+| Task board | Proposed |
 | Tasks | Proposed |
+| Tiger | Proposed |
 | Tiger · Alert | Proposed |
+| Tisan | Proposed |
 | Tisan · File | Proposed |
 | Trigger · Table | Proposed |
 | Try again | Proposed |
+| Unverified | Proposed |
 | Useful | Proposed |
 | Voice | Proposed |
 | Workspace | Proposed |
@@ -105,6 +124,7 @@ All created nodes, instance descendants and subsequently changed IDs are listed 
 | Screen | Full node and prototype-action ledger |
 |---|---|
 | Results | [IDs and actions](evidence/results.json) (761 IDs) |
+| Tasks | [IDs and actions](evidence/tasks.json) (533 IDs) |
 
 ## Review limitations
 
