@@ -1246,6 +1246,8 @@ async def run_route(
     await __import__("tenant_regions").local(__import__("sys").modules[__name__], req.tenant_id, req.home_region)
     paid_run = __import__("paid_steps").current()
     paid_run.task_id, paid_run.deadline = task_id, req.deadline_at
+    if caller is not None:
+        paid_run.caller = caller
     client_text = "\n".join(m.content for m in req.messages)
     pool_read = await zenas_pool_prompt(
         client_text, caller=caller, task_type=req.task_type, skill=req.skill

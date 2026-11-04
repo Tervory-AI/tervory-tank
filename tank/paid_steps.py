@@ -542,8 +542,10 @@ async def command_run(thread_id, actor, turn_id):
             if state['active_turn'] == turn_id:
                 state['active_turn'] = None
             if command.current_actor(actor).founder:
-                await command.propose_action(conn, row, state, command.PlannedAction(
+                card = await command.propose_action(conn, row, state, command.PlannedAction(
                     tool='platform.paid_step.approve',arguments={'approval_id':str(approval)}), actor)
+                card['summary'] = 'Ask: '+step_id+' · run '+str(run.id)
+                await command.event(conn, row, 'card', command.public_card(card))
     async def resumed():
         async with command.editing(thread_id, actor) as (conn, row, state):
             await conn.execute("UPDATE tank.tasks SET status='running' WHERE tenant_id=$1 AND id=$2 AND status='queued'", actor.tenant_id, uuid.UUID(turn_id))

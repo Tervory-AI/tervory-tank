@@ -52,6 +52,9 @@ def stack(monkeypatch):
         yield conn
 
     conn.transaction = acquire
+    async def scalar(sql, *args):
+        return 'auto' if 'paid_step_settings' in sql else False
+    conn.fetchval.side_effect = scalar
     monkeypatch.setattr(tank, "pool", lambda: SimpleNamespace(acquire=acquire))
     monkeypatch.setattr(tank, "load_policy", AsyncMock(return_value=policy))
     monkeypatch.setattr(tank, "_redis", None)

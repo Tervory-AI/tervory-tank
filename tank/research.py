@@ -152,6 +152,7 @@ def register(app: Any, runtime: dict[str, Any]) -> None:
         candidates = (runtime["TANK_API_KEY"], os.environ.get("TANK_KEY_MARKET_LAB", ""))
         if x_tank_key and any(key.strip() and hmac.compare_digest(x_tank_key.encode(), key.encode())
                               for key in candidates):
+            __import__('paid_steps').current().caller = None if x_tank_key == candidates[0] else 'market_lab'
             return
         raise HTTPException(status_code=401, detail="missing or invalid research key")
 
