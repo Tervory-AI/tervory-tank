@@ -59,3 +59,30 @@ File/line inventory for gate 1:
 - `tests/test_ledger_sql_param.py:21,55,87,126`: every enabled room and hostile input.
 - `tests/test_room_seal.py:157`: exact historical-volume exception, per main snapshot.
 - `tests/room_brains/evidence/*`: dated memory, runtime, original and corrected tests.
+
+## Gate 2 — Radix
+
+Radix gets independent optional brain, sandbox, browser and gateway using the same
+builds and hardening. `RADIX_BRAIN_ENABLED` defaults false. Existing data volume
+`agent_radix_data`, including its external live name, is byte-for-byte unchanged.
+No existing egress policy or attachment is widened: the browser remains subject
+to Radix's internal corridor boundary. No model caller is added. The Tank key,
+executor key, two new data volumes and private networks are Radix's own.
+
+The isolation checker recognizes Radix's existing proxy-link attachment and its
+existing passive-egress neighbour; its optional tools keep exact isolated networks.
+Tests now reject the Base key on the newly enabled Radix route with 401, and still
+reject hostile Radix input before SQL. Enforce remains outside the room map.
+
+Files: `agents/radix/docker-compose.yml:35,129,184,216,252` (flag and four optional
+services), `agents/_brain/standby.py:12`, `agents/_brain/browser.py:627`,
+`agents/base/check_brain_isolation.py:46`, `tank/agent_skills.py:35`,
+`ops/seal-check.sh` (Radix corridor/attachments/group), `.env.example` (two names),
+`docs/cursor/ROOMS.md:259`, `tests/room_brains/rooms.json:1` and
+`snapshots/radix.json:1`, `tests/room_brains/test_rooms.py:188` (external internal
+corridors recognized from the same seal metadata), `tests/test_ledger_sql_param.py:21`
+and `tests/test_agent1_brain_route.py:96` (new owning-key boundary).
+
+Radix validation: 33 focused cases and 85 shared brain/isolation/SQL cases passed.
+The final fixture uses the actual internal flag for external corridors; no network
+policy was changed to satisfy it. Exact CI lint and the staged secret scan pass.

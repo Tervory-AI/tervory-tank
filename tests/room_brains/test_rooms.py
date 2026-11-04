@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from tiger_brain.test_tg3 import TENANT, corridor as corridor, load, topology
-from test_room_seal import FIXTURES, leaks, run_seal_check
+from test_room_seal import FIXTURES, leaks, network_flags, run_seal_check
 
 ROOT = Path(__file__).resolve().parents[2]
 ROOMS = json.loads((Path(__file__).parent / 'rooms.json').read_text())
@@ -189,13 +189,14 @@ def placement(room):
     data = json.loads((FIXTURES / 'sealed.json').read_text())
     stem, project = room.replace('_', '-'), 'placeholder-' + room
     config = compose(room)
+    flags = network_flags((ROOT / 'agents' / room / 'docker-compose.yml').read_text())
     # Retain historical required rooms and override this room's placement only.
     for name, spec in config['services'].items():
         if not spec.get('profiles'):
             continue
         declared = [config['networks'][net].get('name', project + '_' + net) for net in spec['networks']]
         for net, actual in zip(spec['networks'], declared):
-            data['networks'][actual] = config['networks'][net].get('internal', False)
+            data['networks'][actual] = flags[net]
         data['containers'][name] = {'uuid': project, 'resource': 'agent-' + stem, 'project': project, 'service': name, 'name': 'placeholder-' + name, 'networks': declared}
     if room in {'market_lab', 'trigger'}:
         for name, spec in config['services'].items():
@@ -204,7 +205,7 @@ def placement(room):
             nets = []
             for net in spec['networks']:
                 actual = config['networks'][net].get('name', project + '_' + net)
-                data['networks'][actual] = config['networks'][net].get('internal', False)
+                data['networks'][actual] = flags[net]
                 nets.append(actual)
             data['containers'][name] = {'uuid': project, 'resource': 'agent-' + stem, 'project': project, 'service': name, 'name': 'placeholder-' + name, 'networks': nets}
     else:

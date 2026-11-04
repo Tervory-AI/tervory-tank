@@ -269,6 +269,7 @@ boundary; no ZA deployment or forwarding is introduced.
 | Room | Flag (default false) | New optional limits |
 | --- | --- | --- |
 | Market Lab | `MARKET_LAB_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
+| Radix | `RADIX_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
 
 All added services carry profile `brain`. A normal Compose deployment starts
 none of them. The flag is reserved for a future caller: enabling a profile or
@@ -279,7 +280,9 @@ only its new browser volume, and sandboxes/gateways have no persistent volume.
 Private sandbox and browser networks are per project, internal and disjoint.
 Brain/gateway corridor attachments are the owning room's existing Tank corridor,
 as in Tiger; no other room's corridor or keys are supplied. Public browsing uses
-the existing checked proxy. Vault/login access is not provisioned for new rooms.
+the existing checked proxy. Vault/login access is not provisioned for new rooms. Radix retains its existing
+internal corridor and restricted egress; this gate grants no broader browser
+network route.
 
 Boston snapshot: **3 Nov 2026 16:35 PST (4 Nov 00:35 UTC)**, read-only
 `ops/box-memory.sh`, before this task's test containers:
