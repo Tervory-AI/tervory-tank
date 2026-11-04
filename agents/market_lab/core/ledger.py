@@ -33,6 +33,7 @@ class MemoryLedger:
         self.opportunities: list[dict[str, Any]] = []
         self.predictions: list[dict[str, Any]] = []
         self.reports: list[dict[str, Any]] = []
+        self.brief_deliveries: dict[tuple, dict] = {}
         self.refused: list[str] = []
         self.pool = Pool()
 
@@ -111,6 +112,35 @@ class MemoryLedger:
     def save_report(self, row: dict[str, Any]) -> None:
         self._require_tenant(row["tenant_id"])
         self.reports.append(dict(row))
+
+    def save_brief(self, report: dict, status: str, reason: str | None) -> None:
+        self.save_report(report)
+        for channel in ("email", "webhook"):
+            self.brief_deliveries.setdefault((str(report["tenant_id"]), str(report["id"]), channel),
+                                             {"channel": channel, "status": status, "reason": reason})
+
+    def briefs_for(self, tenant: str) -> list[dict]:
+        rows = []
+        for report in self.reports:
+            if str(report["tenant_id"]) != str(tenant):
+                continue
+            states = [dict(row) for key, row in self.brief_deliveries.items()
+                      if key[:2] == (str(tenant), str(report["id"]))]
+            if states:
+                rows.append({**report, "deliveries": states})
+        return sorted(rows, key=lambda row: (row["made_at"], str(row["id"])), reverse=True)[:12]
+
+    def pending_briefs(self, tenant: str, channel: str) -> list[dict]:
+        return [dict(report) for report in self.reports if str(report["tenant_id"]) == str(tenant)
+                and self.brief_deliveries.get((str(tenant), str(report["id"]), channel), {}).get("status") == "pending"][:3]
+
+    def update_brief(self, tenant: str, ident: str, channel: str, status: str,
+                     reason: str | None = None, *, expected: str = "sending") -> bool:
+        row = self.brief_deliveries.get((str(tenant), str(ident), channel))
+        if row is None or row["status"] != expected:
+            return False
+        row.update(status=status, reason=reason)
+        return True
 
     def series_for(self, tenant_id: str) -> list[dict[str, Any]]:
         self._require_tenant(tenant_id)
@@ -498,6 +528,47 @@ class PostgresLedger:
             row["answer"],
             json.dumps(row["citations"]),
         )
+
+    async def save_brief(self, report: dict, status: str, reason: str | None) -> None:
+        async with self.conn.transaction():
+            await self.save_report(report)
+            await self.conn.execute(
+                "INSERT INTO agent_market_lab.brief_deliveries(tenant_id,report_id,channel,status,reason) "
+                "SELECT tenant_id,id,c.channel,$3,$4 FROM agent_market_lab.reports "
+                "CROSS JOIN (VALUES ('email'),('webhook')) AS c(channel) "
+                "WHERE tenant_id=$1 AND id=$2 ON CONFLICT DO NOTHING",
+                uuid.UUID(str(report["tenant_id"])), uuid.UUID(str(report["id"])), status, reason)
+
+    async def briefs_for(self, tenant: str) -> list[dict]:
+        rows = await self.conn.fetch(
+            "SELECT r.*, (SELECT jsonb_agg(jsonb_build_object('channel',d.channel,'status',d.status,'reason',d.reason) ORDER BY d.channel) "
+            "FROM agent_market_lab.brief_deliveries d WHERE d.tenant_id=r.tenant_id AND d.report_id=r.id) AS deliveries "
+            "FROM agent_market_lab.reports r WHERE r.tenant_id=$1 "
+            "AND EXISTS (SELECT 1 FROM agent_market_lab.brief_deliveries d WHERE d.tenant_id=$1 AND d.report_id=r.id) "
+            "ORDER BY r.made_at DESC,r.id DESC LIMIT 12", uuid.UUID(str(tenant)))
+        result = []
+        for row in rows:
+            report = _record(row)
+            if isinstance(report["deliveries"], str):
+                report["deliveries"] = json.loads(report["deliveries"])
+            result.append(report)
+        return result
+
+    async def pending_briefs(self, tenant: str, channel: str) -> list[dict]:
+        rows = await self.conn.fetch(
+            "SELECT r.* FROM agent_market_lab.reports r JOIN agent_market_lab.brief_deliveries d "
+            "ON d.tenant_id=r.tenant_id AND d.report_id=r.id "
+            "WHERE d.tenant_id=$1 AND d.channel=$2 AND d.status='pending' "
+            "ORDER BY r.made_at,r.id LIMIT 3", uuid.UUID(str(tenant)), channel)
+        return [_record(row) for row in rows]
+
+    async def update_brief(self, tenant: str, ident: str, channel: str, status: str,
+                           reason: str | None = None, *, expected: str = "sending") -> bool:
+        changed = await self.conn.fetchval(
+            "UPDATE agent_market_lab.brief_deliveries SET status=$4,reason=$5,updated_at=now() "
+            "WHERE tenant_id=$1 AND report_id=$2 AND channel=$3 AND status=$6 RETURNING report_id",
+            uuid.UUID(str(tenant)), uuid.UUID(str(ident)), channel, status, reason, expected)
+        return changed is not None
 
     async def series_for(self, tenant_id: str) -> list[dict[str, Any]]:
         rows = await self.conn.fetch(

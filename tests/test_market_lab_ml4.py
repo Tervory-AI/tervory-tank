@@ -47,6 +47,7 @@ def no_gateway(monkeypatch):
 def test_extracted_plans_are_byte_identical_before_the_explicit_additions():
     assert hashlib.sha256(json.dumps(plan()).encode()).hexdigest() == '836d44f801904dcb2c0f5b82031cbf246fc2713b03c2b2fa3cb928705ba35285'
     original = warning_plan()
+    original.pop("event_signals", None)  # Wave 4 adds event rules after the frozen ML4 extraction.
     original['pairs'] = original['pairs'][:2]
     original['signals'] = original['signals'][:6]
     assert hashlib.sha256(json.dumps(original).encode()).hexdigest() == '4ec26b246b29e5cd47ffaab92fc727d7a8896b9f56cb97673fa8c1183a562ded'
@@ -75,7 +76,7 @@ def test_duplicate_json_fields_refused(tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('config', warning_plan()['pairs'][2:], ids=lambda row: row['id'])
+@pytest.mark.parametrize('config', [row for row in warning_plan()['pairs'][2:] if not row.get('key_name')], ids=lambda row: row['id'])
 async def test_each_new_pair_uses_keyless_real_format_fixture_series_and_source_document(config):
     spec = next(row for row in sources('ffl') if row.id == config['source'])
     assert key_name_for(spec) == ''
@@ -290,7 +291,7 @@ async def test_warning_run_remembers_changed_summaries_only_and_retries_same_rec
     for state in states.values(): del state['summary']['pattern_pending']
     ledger.memory = memory
     await run()
-    pairs = len(warning_plan()['pairs'])
+    pairs = sum(not row.get('key_name') for row in warning_plan()['pairs'])
     assert len(states) == pairs * 2
     assert len(writes) == len(rows) == pairs < 50
     original_ids = set(rows)
