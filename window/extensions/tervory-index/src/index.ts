@@ -1,6 +1,7 @@
 import { create, insertMultiple, removeMultiple, search, save, load } from '@orama/orama';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { chunks, type Chunk, type Span } from './chunks';
 import { sources } from './files';
@@ -63,7 +64,15 @@ export class ProjectIndex {
     const temp = path.join(this.storage,`index.${randomUUID()}.next`);
     try {
       await fs.writeFile(temp,JSON.stringify({version:cacheVersion,root:this.root,files:[...this.files],db:save(this.db)}),{mode:0o600});
-      await fs.rename(temp,path.join(this.storage,'index.json'));
+      // Windows can briefly deny replacement while another window publishes its cache.
+      for(let attempt=0;;attempt++) {
+        try {await fs.rename(temp,path.join(this.storage,'index.json'));break;}
+        catch(error) {
+          const code=(error as NodeJS.ErrnoException).code;
+          if(process.platform!=='win32' || !['EPERM','EACCES','EBUSY'].includes(code??'') || attempt>=6) throw error;
+          await delay(20*2**attempt);
+        }
+      }
     } finally {await fs.rm(temp,{force:true});}
   }
   async search(query:string, mode:'meaning'|'exact'='meaning',limit=10):Promise<Hit[]> {

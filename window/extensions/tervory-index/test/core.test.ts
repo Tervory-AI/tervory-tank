@@ -87,7 +87,7 @@ test('two windows can persist the same project without temporary-file collisions
   await fs.writeFile(path.join(root,'code.ts'),'export const shared = 1;');
   const first=new ProjectIndex(root,store,embedder),second=new ProjectIndex(root,store,embedder);
   try {
-    await Promise.all([first.refresh(),second.refresh()]);
+    for(let iteration=0;iteration<20;iteration++) await Promise.all([first.refresh(),second.refresh()]);
     const restored=new ProjectIndex(root,store,embedder);await restored.restore();
     assert.equal((await restored.search('shared','exact'))[0].path,'code.ts');await restored.dispose();
   } finally {await first.dispose();await second.dispose();await fs.rm(base,{recursive:true,force:true});}
