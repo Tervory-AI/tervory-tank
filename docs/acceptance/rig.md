@@ -1,6 +1,6 @@
 # Rig founder acceptance sheet
 
-Baseline: `origin/main` at `475597ed`. The founder page URLs also require PR #653 and the register's shared-host domain cutover before testing. Use disposable acceptance tenants, synthetic
+The host split from merged PR #653 is included. Apply the register's shared-host domain cutover before founder browser testing. Use disposable acceptance tenants, synthetic
 contact details and test stores only. Each row has exactly one executable test
 named `test_RIG_NN` in `tests/acceptance/test_rig.py`; the final column identifies
 the production browser/handler contract that test executes. An acknowledgement
@@ -8,11 +8,9 @@ is transport acceptance/storage, not proof that the store has invoiced anyone.
 
 ## Settings and fixture preparation
 
-The settings names are from [FOUNDER-SETTINGS](https://github.com/Tervory-AI/tervory-tank/blob/272454b69c74982b8f0c8439f1a760d267a073a3/docs/ops/FOUNDER-SETTINGS.md), read
-from `origin/claude/founder-settings` (PR #657) while its merge is pending.
+The setting names are from [FOUNDER-SETTINGS](../ops/FOUNDER-SETTINGS.md), including the room settings added by this change.
 `none` means no **additional** entry from that register. It does not mean an
-unauthenticated store or an unconfigured production deployment. Rig adds no
-setting in this acceptance PR. Keep `HF_JOBS_TOKEN` and `HF_JOBS_NAMESPACE` off;
+unauthenticated store or an unconfigured production deployment. Rig room setting names and their service boundaries are listed in the register. Keep `HF_JOBS_TOKEN` and `HF_JOBS_NAMESPACE` off;
 no paid model, supplier, GPU, store or SMTP service is contacted by the proofs.
 
 The following are test profiles, not values to apply to a real store. Create or
@@ -55,6 +53,7 @@ production database. Synthetic supplier names stay private throughout.
 - **3D:** `tests/fixtures/rig_three_d/sample.py`, local measured stand-in GLBs,
   approved fits and `rig_3d` only on its test tenant. No conversion/GPU runs.
   Admin/backend proof does not approve frames 06–07 or expose a shopper button.
+- **Rooms:** two disposable stores A/B; the Core sample plus ROOM-A only / ROOM-B only (SKU ROOM-A / ROOM-B, USD 10), each in its own database. Use separate public/admin keys and the US fake-platform profile. The proof uses real Command turn/Confirm HTTP handlers, signed lifecycle HTTP against fake Coolify, actual PostgreSQL, cart/quote handlers and the real bucket signer against a fake bucket. It does not contact real stores or deploy applications.
 - **Plugins:** a separate fixture tenant and vault. The off-state row needs no
   activation. Enabled-vault rows require an existing authorized test-vault grant;
   they do not imply that the production Rig vault is enabled.
@@ -166,19 +165,23 @@ payment, DNS/TLS cutover or external-service readiness.
 | RIG-78 | https://rig.tervory.com/rig/admin | Feed: import the five catalogue samples; set EU rule freight 2/duty 5/margin 0, then DE freight 4/duty 0/margin 0, then supplier freight 3/duty 0/margin 0; change the default rule. | EU-STAND reprices ZAR 357 → 380 → 360 and stays 360 after the default changes; selling-price STORE-DESK stays 799.95. | none | test_rig_feeds_catalogues.test_regional_and_supplier_overrides_and_selling_price_survive_repricing |
 | RIG-79 | https://rig.tervory.com/v1/rig/search | Second-store profile: search lamps, shades, parts, shade to go with the lamp, then 2 pack lamps. | Focus SECOND-LAMP-01; shade/parts IDs SECOND-SHADE-01; message We list lamps separately.; no first-store vocabulary is pasted. | none | test_rig_l1.test_second_store_owns_categories_parts_and_sentences_without_fallback |
 | RIG-80 | https://rig.tervory.com/widget/test | US: leave a second tenant in default quote mode; attempt cart add there; on the cart tenant send a signed paid callback whose read-back total is 1.00 instead of the saved total. | Default quote tenant returns cart_disabled; changed paid total raises order_mismatch; no supplier placement. | RIG_WIDGET_PUBLISHABLE_KEY | test_rig_cart.test_quote_default_tenant_isolation_and_total_verification |
+| RIG-81 | https://rig.tervory.com/ | Sign in; open /?q=part and /admin?cart=orders. | Workspace rewrites to /rig?q=part and /rig/admin?cart=orders; signed-out visitors return to the same Rig URL. | none | test_rig_product_host.test_workspace_middleware_preserves_rig_authentication_and_query_strings |
+| RIG-82 | https://rig.tervory.com/widget/test | Load an existing issued embed and replay its API, asset and signed callback URLs through the shared host. | Every issued widget/store URL reaches agent-rig unchanged; root and admin reach Workspace. | none | test_rig_product_host.test_real_traefik_keeps_embed_store_urls_and_sends_app_paths_to_workspace |
+| RIG-83 | https://app.tervory.com/chats | In disposable store A enter rig.store.onboard; review and confirm its card twice. Switch to store B and repeat; enter rig.rooms.list and confirm. | Two distinct Coolify applications on the configured server; created, cost_usd 0; repeated Confirm creates no duplicate. Store B lists only its own room. Creation stays undeployed until its named settings are filled. | RIG_COOLIFY_URL, RIG_COOLIFY_TOKEN, RIG_COOLIFY_PROJECT_UUID, RIG_COOLIFY_SERVER_UUID, RIG_COOLIFY_ENVIRONMENT, RIG_COOLIFY_GITHUB_APP_UUID, RIG_LIFECYCLE_KEY, RIG_ROOM_DB_PASSWORD | test_rig_rooms_acceptance.test_chats_two_store_rooms_keep_search_cart_quote_and_destroy_isolated |
+| RIG-84 | https://rig.tervory.com/v1/rig/rooms/{tenant_id}/v1/rig/search | Rooms profile: search ROOM-A with A’s key. Try that key on B. Add ROOM-A quantity 1 to A; view B using the same cart session. Quote ROOM-A in A; request its delivery status with B’s admin key. | A returns ROOM-A only; foreign key 401; B cart lines is []; A quote delivery 200 and B delivery 404; no B platform call or quote. | RIG_WIDGET_PUBLISHABLE_KEY | test_rig_rooms_acceptance.test_chats_two_store_rooms_keep_search_cart_quote_and_destroy_isolated |
+| RIG-85 | https://app.tervory.com/chats | Rooms profile: in A enter rig.store.destroy and confirm. Search A and B through their room API paths; inspect A’s private bucket manifest and its retained Coolify volumes. | A returns 503; B returns 200 with ROOM-B only. A’s database/data volumes and hashed bucket backup parts remain. Bucket failure prevents application deletion. | RIG_LIFECYCLE_KEY, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID_RIG, R2_SECRET_ACCESS_KEY_RIG | test_rig_rooms_acceptance.test_chats_two_store_rooms_keep_search_cart_quote_and_destroy_isolated |
+| RIG-86 | https://app.tervory.com/chats | As ordinary member try rig.store.onboard. As a Rig administrator inspect/replay the tool validation with tenant_id naming B instead of using the current store. | Member cannot use the tool (403); extra tenant argument is rejected (422). No cross-store operation or paid adapter is available. | none | test_rig_rooms_acceptance.test_room_commands_require_admin_and_never_accept_foreign_tenant |
+| RIG-87 | https://github.com/Tervory-AI/tervory-tank/blob/main/docs/ops/RIG-STORE-ROOMS.md#measure-rooms-locally | On the disposable Coolify test host run python3 tests/load/rig_rooms_load.py --rooms 2 --duration 60s after building the local image. Open its measurement.json. | rooms 2; two per_room entries; finite search_p95_ms and quote_p95_ms; sampled memory in bytes; failed_checks 0, http_failure_rate 0, capacity_claim null. All fixture containers are removed. | none | test_rig_rooms_acceptance.test_load_harness_records_p95_and_memory_and_cleans_only_its_fixtures |
+| RIG-88 | https://rig.tervory.com/v1/rig/rooms/{tenant_id}/v1/rig/commerce/webhooks/{tenant_id} | Rooms protocol fixture: replay the signed WooCommerce body unchanged through A’s room prefix; try an internal/retailer path and a nested room path through that prefix. | Valid callback accepted true; body, signature and Origin are preserved; spoofed forwarding address is replaced by the resolved peer. Both forbidden paths return 404. | none | test_rig_rooms_acceptance.test_room_gateway_preserves_signed_callback_bytes_and_refuses_control_paths |
 
-**Row count: 80.** No row is conditionally skipped by the acceptance harness.
+**Row count: 88.** No row is conditionally skipped by the acceptance harness.
 The real database and browser prerequisites must be present for its complete run.
 
-## Deployment gate outside this baseline
+## Deployment preparation
 
-The shared-host split is PR #653 (`codex/rig-w5`, `165f11ef`), not yet merged
-into this baseline. After it merges and the founder applies section C.1 of
-FOUNDER-SETTINGS, `https://rig.tervory.com/` must open Workspace `/rig` and
-`/admin` must reach `/rig/admin`, while existing issued embeds keep their paths.
-Its real Traefik and middleware proof is `tests/test_rig_product_host.py` on that
-PR. This sheet does not count an unmerged feature as passed on main. The existing
-API/widget rows above remain applicable before and after that host cutover.
+Attach rig.tervory.com to the Workspace application as well as agent-rig, following
+FOUNDER-SETTINGS section C.1 and PRODUCT-HOSTS. Rows RIG-81–82 prove the merged
+middleware and real Traefik split offline, including issued embed URLs.
 Frames 06–07 are still pending; GPU flags remain off. Odoo is retired. Custom
 Nation stays quote → the store's own invoice → EFT. US stores go to their store
 checkout. Rig never takes payment, holds a card or refunds.
@@ -189,16 +192,21 @@ Use the repository test runtime, Chromium and an explicitly disposable Postgres
 16 through `RIG_TEST_DATABASE_URL` (the existing test-only variable). Then:
 
 ```sh
-python -m pytest -q tests/acceptance/test_rig.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+RIG_TRAEFIK_TEST_BINARY=/absolute/path/to/traefik python -m pytest -q tests/acceptance/test_rig.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
 ```
 
 The tests use the same fixture implementations cited above; no live credentials
 are needed. Every row runs independently. A parity assertion in every case
-refuses a sheet whose row IDs differ from the executable registry. Validation: **80 passed, zero skipped, zero failures**, in 132.95 seconds,
-using Chromium, disposable Postgres 16 and socket blocking. Combined collection
-with the existing Rig tests: **876 tests**, no module/fixture conflicts. The
-first 69-row pass and subsequent 77-row pass also passed; the final complete
-80-row run is the acceptance result. Corrections were confined to the sheet/test
-harness (fixture registration, a parameter-name collision and exact UI wording);
-no production behavior changed. CI's exact Ruff command passed with
-**All checks passed!**. The temporary database container was removed afterwards.
+refuses a sheet whose row IDs differ from the executable registry. The original
+80-row baseline passed with disposable Postgres and Chromium. Gate 1 adds two
+merged-host proofs: both passed, including the real local Traefik proxy.
+Full current results are recorded with the gate validation, rather than implying
+that an earlier baseline run validates new rows.
+
+Room proof boundaries: the Coolify API and bucket are fixture HTTP transports;
+store databases, Command turn/Confirm state, room routing, carts and quote delivery
+are real handlers. The load row executes the shipped k6 scenarios with fixture
+HTTP and measured-duration inputs, then the actual harness/report path with a
+recording Docker transport. Those fixture numbers are not host measurements.
+Use the local-container harness on the founder’s test host to measure capacity;
+60–80 clients per KVM 8 remains an estimate, not a tested result.

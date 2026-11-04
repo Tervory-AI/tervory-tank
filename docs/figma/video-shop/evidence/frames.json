@@ -1,0 +1,772 @@
+[
+  {
+    "id": "581:9",
+    "name": "Player / Before / 1440 \u00b7 Proposed",
+    "screen": "Player",
+    "state": "Before",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:16",
+      "products": "581:18",
+      "playback": "581:25"
+    },
+    "screenshot": "player-before-1440.png",
+    "sha256": "4f7a6da68ddce1a64972b2294d68f5be2c7a213721d375287873f9dcd0fc75da"
+  },
+  {
+    "id": "581:30",
+    "name": "Player / Moment / 1440 \u00b7 Proposed",
+    "screen": "Player",
+    "state": "Moment",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:37",
+      "products": "581:39",
+      "open": "581:46",
+      "playback": "581:50"
+    },
+    "screenshot": "player-moment-1440.png",
+    "sha256": "eaf848fb13db828aa6f2930d3d5873a459a564b5ed3746fc89022cc9948f199f"
+  },
+  {
+    "id": "581:55",
+    "name": "Player / After / 1440 \u00b7 Proposed",
+    "screen": "Player",
+    "state": "After",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:62",
+      "products": "581:64",
+      "playback": "581:71"
+    },
+    "screenshot": "player-after-1440.png",
+    "sha256": "7cec8313044b0914056d43ebf641cba789e00422c9b5ed42c65c41e356852506"
+  },
+  {
+    "id": "581:76",
+    "name": "Player / Paused / 1440 \u00b7 Proposed",
+    "screen": "Player",
+    "state": "Paused",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:83",
+      "products": "581:85",
+      "open": "581:92",
+      "playback": "581:96"
+    },
+    "screenshot": "player-paused-1440.png",
+    "sha256": "2a2619b7231a39e744802db937f60986a91a7b093cae939cc7fae2c5550867dc"
+  },
+  {
+    "id": "581:101",
+    "name": "Player / Before / 375 \u00b7 Proposed",
+    "screen": "Player",
+    "state": "Before",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:108",
+      "products": "581:110",
+      "playback": "581:117"
+    },
+    "screenshot": "player-before-375.png",
+    "sha256": "9c55f86b27c727a55728db2ea101f0dcd3b0ebf90b9a8760e07bbbd62e648e22"
+  },
+  {
+    "id": "581:122",
+    "name": "Player / Moment / 375 \u00b7 Proposed",
+    "screen": "Player",
+    "state": "Moment",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:129",
+      "products": "581:131",
+      "open": "581:138",
+      "playback": "581:142"
+    },
+    "screenshot": "player-moment-375.png",
+    "sha256": "8da72757c1ce8d9af220447a7da447943049a2d0cbd461a4dd227c2e0aa45240"
+  },
+  {
+    "id": "581:147",
+    "name": "Player / After / 375 \u00b7 Proposed",
+    "screen": "Player",
+    "state": "After",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:154",
+      "products": "581:156",
+      "playback": "581:163"
+    },
+    "screenshot": "player-after-375.png",
+    "sha256": "b0b40c8b8e99039556f5bd909e6adb1cb1c5934c1d6177a9574eb096340e9726"
+  },
+  {
+    "id": "581:168",
+    "name": "Player / Paused / 375 \u00b7 Proposed",
+    "screen": "Player",
+    "state": "Paused",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:175",
+      "products": "581:177",
+      "open": "581:184",
+      "playback": "581:188"
+    },
+    "screenshot": "player-paused-375.png",
+    "sha256": "a7d644a7ee09717eae9ca5223fbd3b4b74e2568ff71fb868a370f5f3d6872a7f"
+  },
+  {
+    "id": "581:289",
+    "name": "Player / Empty / 1440 \u00b7 Proposed",
+    "screen": "Player",
+    "state": "Empty",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:296",
+      "products": "581:298"
+    },
+    "screenshot": "player-empty-1440.png",
+    "sha256": "5fcf8d04a8327b7f9c264f9b176576cbeb415470de3de080a0b930aa1ab34a12"
+  },
+  {
+    "id": "581:303",
+    "name": "Player / Loading / 1440 \u00b7 Proposed",
+    "screen": "Player",
+    "state": "Loading",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:310",
+      "products": "581:312"
+    },
+    "screenshot": "player-loading-1440.png",
+    "sha256": "a9a852ba1cf8c757dd3b3eb9ebe8b2306258a78dbe8a40aa4e72a0542fff85b1"
+  },
+  {
+    "id": "581:320",
+    "name": "Player / Error / 1440 \u00b7 Proposed",
+    "screen": "Player",
+    "state": "Error",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:327",
+      "products": "581:329",
+      "retry": "581:333"
+    },
+    "screenshot": "player-error-1440.png",
+    "sha256": "c12a866621d976b1cafbebab6daf0a587a8c7a56c8b52f764dfd399f223e56c8"
+  },
+  {
+    "id": "581:336",
+    "name": "Player / Empty / 375 \u00b7 Proposed",
+    "screen": "Player",
+    "state": "Empty",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:343",
+      "products": "581:345"
+    },
+    "screenshot": "player-empty-375.png",
+    "sha256": "2ccfe72a629ba2044fefe2bcfa64e5ff9cc73849a1f1aac527db879fe6312563"
+  },
+  {
+    "id": "581:350",
+    "name": "Player / Loading / 375 \u00b7 Proposed",
+    "screen": "Player",
+    "state": "Loading",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:357",
+      "products": "581:359"
+    },
+    "screenshot": "player-loading-375.png",
+    "sha256": "3dab5ff6d48b7868ddeb6da869f48a873c15cd01062505d75c89b08b2a64b744"
+  },
+  {
+    "id": "581:367",
+    "name": "Player / Error / 375 \u00b7 Proposed",
+    "screen": "Player",
+    "state": "Error",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:374",
+      "products": "581:376",
+      "retry": "581:380"
+    },
+    "screenshot": "player-error-375.png",
+    "sha256": "d115822964dde93b9962808bad297c34698d511d6fee87be483307b71855a103"
+  },
+  {
+    "id": "581:383",
+    "name": "Products / Default / 1440 \u00b7 Proposed",
+    "screen": "Products",
+    "state": "Default",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:390",
+      "products": "581:392",
+      "open": "581:402",
+      "jump": "581:404"
+    },
+    "screenshot": "products-default-1440.png",
+    "sha256": "705d3848deabc1a893de84265164c7fd731d5b641d17e21988a95379b816dbcb"
+  },
+  {
+    "id": "581:407",
+    "name": "Products / Empty / 1440 \u00b7 Proposed",
+    "screen": "Products",
+    "state": "Empty",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:414",
+      "products": "581:416"
+    },
+    "screenshot": "products-empty-1440.png",
+    "sha256": "03a23db522fc2d0ab2e5704c8323867cac71a8314014cf0f957bcaeef7df8609"
+  },
+  {
+    "id": "581:421",
+    "name": "Products / Loading / 1440 \u00b7 Proposed",
+    "screen": "Products",
+    "state": "Loading",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:428",
+      "products": "581:430"
+    },
+    "screenshot": "products-loading-1440.png",
+    "sha256": "c56cfd4b2d5c224b4b2586499b44b063a038bc420c40e66cedb7e623bee67c82"
+  },
+  {
+    "id": "581:438",
+    "name": "Products / Error / 1440 \u00b7 Proposed",
+    "screen": "Products",
+    "state": "Error",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:445",
+      "products": "581:447",
+      "retry": "581:451"
+    },
+    "screenshot": "products-error-1440.png",
+    "sha256": "c3f5b85caea21b3a97363d8bf40256a58286c78657346aba051788e2d2671437"
+  },
+  {
+    "id": "581:454",
+    "name": "Products / Default / 375 \u00b7 Proposed",
+    "screen": "Products",
+    "state": "Default",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:461",
+      "products": "581:463",
+      "open": "581:473",
+      "jump": "581:475"
+    },
+    "screenshot": "products-default-375.png",
+    "sha256": "4ac091df4f64c7dd8d12588ae01b68c5540acfcc5c306620e7abb5850ca58adc"
+  },
+  {
+    "id": "581:478",
+    "name": "Products / Empty / 375 \u00b7 Proposed",
+    "screen": "Products",
+    "state": "Empty",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:485",
+      "products": "581:487"
+    },
+    "screenshot": "products-empty-375.png",
+    "sha256": "dc0a7947e341b33cc130ebca2766b9ddde88373e30151a89a46d4f1f513386b5"
+  },
+  {
+    "id": "581:492",
+    "name": "Products / Loading / 375 \u00b7 Proposed",
+    "screen": "Products",
+    "state": "Loading",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:499",
+      "products": "581:501"
+    },
+    "screenshot": "products-loading-375.png",
+    "sha256": "c6f31392d6ac5b16463ca90f7a21c7aac46fcba0d57e14c8edf8ed7091badcbc"
+  },
+  {
+    "id": "581:509",
+    "name": "Products / Error / 375 \u00b7 Proposed",
+    "screen": "Products",
+    "state": "Error",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:516",
+      "products": "581:518",
+      "retry": "581:522"
+    },
+    "screenshot": "products-error-375.png",
+    "sha256": "c7f3bd945479de3bdfc466a1178d5944fab33b73032bdc4e801ac12539780050"
+  },
+  {
+    "id": "581:525",
+    "name": "Product detail / Default / 1440 \u00b7 Proposed",
+    "screen": "Product detail",
+    "state": "Default",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:532",
+      "products": "581:534",
+      "add": "581:544"
+    },
+    "screenshot": "product-detail-default-1440.png",
+    "sha256": "b9cb8b2cfdd669b947ac494fb988e98f6280dd8c0fa92afcc3d08413ac6ff786"
+  },
+  {
+    "id": "581:547",
+    "name": "Product detail / Added / 1440 \u00b7 Proposed",
+    "screen": "Product detail",
+    "state": "Added",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:554",
+      "products": "581:556",
+      "keep": "581:567",
+      "cart": "581:569"
+    },
+    "screenshot": "product-detail-added-1440.png",
+    "sha256": "39d16c10d0f140e08749c7eea7aa772d40d4005eeaf399c466d20eaa2e361335"
+  },
+  {
+    "id": "581:572",
+    "name": "Product detail / Cart error / 1440 \u00b7 Proposed",
+    "screen": "Product detail",
+    "state": "Cart error",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:579",
+      "products": "581:581",
+      "retry": "581:592"
+    },
+    "screenshot": "product-detail-cart-error-1440.png",
+    "sha256": "8777c96be2ba2197427a9dc84394b18aae96da698f50a838432b942a2d2bf65b"
+  },
+  {
+    "id": "581:595",
+    "name": "Product detail / Empty / 1440 \u00b7 Proposed",
+    "screen": "Product detail",
+    "state": "Empty",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:602",
+      "products": "581:604"
+    },
+    "screenshot": "product-detail-empty-1440.png",
+    "sha256": "25f115ab3d2b467d6ab33c5a22e9a7bf46b428dd4724c2c757fc9b36bbc57f03"
+  },
+  {
+    "id": "581:609",
+    "name": "Product detail / Loading / 1440 \u00b7 Proposed",
+    "screen": "Product detail",
+    "state": "Loading",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:616",
+      "products": "581:618"
+    },
+    "screenshot": "product-detail-loading-1440.png",
+    "sha256": "19b31ac0f108c743f1f0c0c35ee9608fece7ea1e13a1fd03563afbcf2503aabd"
+  },
+  {
+    "id": "581:626",
+    "name": "Product detail / Error / 1440 \u00b7 Proposed",
+    "screen": "Product detail",
+    "state": "Error",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:633",
+      "products": "581:635",
+      "retry": "581:639"
+    },
+    "screenshot": "product-detail-error-1440.png",
+    "sha256": "65252b80f16b9d2e129cc563e375edf0b3fb787b9c5ea1839739cd585f1c4e81"
+  },
+  {
+    "id": "581:642",
+    "name": "Product detail / Default / 375 \u00b7 Proposed",
+    "screen": "Product detail",
+    "state": "Default",
+    "width": 375,
+    "height": 870,
+    "mobile": true,
+    "actions": {
+      "watch": "581:649",
+      "products": "581:651",
+      "add": "581:661"
+    },
+    "screenshot": "product-detail-default-375.png",
+    "sha256": "e9607f74472386f9051c3e4a05b4791e6f8aa80cedcd6b22a075e3a84d04eb04"
+  },
+  {
+    "id": "581:664",
+    "name": "Product detail / Added / 375 \u00b7 Proposed",
+    "screen": "Product detail",
+    "state": "Added",
+    "width": 375,
+    "height": 870,
+    "mobile": true,
+    "actions": {
+      "watch": "581:671",
+      "products": "581:673",
+      "keep": "581:684",
+      "cart": "581:686"
+    },
+    "screenshot": "product-detail-added-375.png",
+    "sha256": "799ff77fe7a54e81a9b5a8d71d79e3916617b063f2bfe0de2551289adfa42dd2"
+  },
+  {
+    "id": "581:689",
+    "name": "Product detail / Cart error / 375 \u00b7 Proposed",
+    "screen": "Product detail",
+    "state": "Cart error",
+    "width": 375,
+    "height": 870,
+    "mobile": true,
+    "actions": {
+      "watch": "581:696",
+      "products": "581:698",
+      "retry": "581:709"
+    },
+    "screenshot": "product-detail-cart-error-375.png",
+    "sha256": "cded7fc864660d3d222cf1396e8aa039c593557df5ea9819005828956b14e85a"
+  },
+  {
+    "id": "581:712",
+    "name": "Product detail / Empty / 375 \u00b7 Proposed",
+    "screen": "Product detail",
+    "state": "Empty",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:719",
+      "products": "581:721"
+    },
+    "screenshot": "product-detail-empty-375.png",
+    "sha256": "0111d707f043a4e05c9c9c9c0b457b3655b50e1581e92745448bb6bb1e750fc3"
+  },
+  {
+    "id": "581:726",
+    "name": "Product detail / Loading / 375 \u00b7 Proposed",
+    "screen": "Product detail",
+    "state": "Loading",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:733",
+      "products": "581:735"
+    },
+    "screenshot": "product-detail-loading-375.png",
+    "sha256": "2cc3ba7018b7d8dcb7feffdf3418bcb21f12a42610f6fcf4670427129ede1281"
+  },
+  {
+    "id": "581:743",
+    "name": "Product detail / Error / 375 \u00b7 Proposed",
+    "screen": "Product detail",
+    "state": "Error",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:750",
+      "products": "581:752",
+      "retry": "581:756"
+    },
+    "screenshot": "product-detail-error-375.png",
+    "sha256": "d329e4f32cf80e8cc5a6ae10abc64b3b37f07f46d38a564639dd72f79d4ed901"
+  },
+  {
+    "id": "581:759",
+    "name": "Setup / Default / 1440 \u00b7 Proposed",
+    "screen": "Setup",
+    "state": "Default",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:766",
+      "products": "581:768",
+      "upload": "581:776",
+      "confirm": "581:780",
+      "process": "581:782"
+    },
+    "screenshot": "setup-default-1440.png",
+    "sha256": "46eb2de48407451a464a821eae3bb7395450faf266263c83353e053018b2acde"
+  },
+  {
+    "id": "581:786",
+    "name": "Setup / Permission / 1440 \u00b7 Proposed",
+    "screen": "Setup",
+    "state": "Permission",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:793",
+      "products": "581:795",
+      "upload": "581:803",
+      "confirm": "581:807",
+      "process": "581:809"
+    },
+    "screenshot": "setup-permission-1440.png",
+    "sha256": "ef433e0fb81fa6554621f2d819daf112cfdc897766f3e4d51add756040b752ea"
+  },
+  {
+    "id": "581:812",
+    "name": "Setup / Processing / 1440 \u00b7 Proposed",
+    "screen": "Setup",
+    "state": "Processing",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:819",
+      "products": "581:821",
+      "review": "581:828"
+    },
+    "screenshot": "setup-processing-1440.png",
+    "sha256": "4460e09f645aabfb74b11a1fcbec3d6fb03137e2895fd5b56fbb6b81b3d7e97b"
+  },
+  {
+    "id": "581:831",
+    "name": "Setup / Review / 1440 \u00b7 Proposed",
+    "screen": "Setup",
+    "state": "Review",
+    "width": 1440,
+    "height": 1547,
+    "mobile": false,
+    "actions": {
+      "watch": "581:838",
+      "products": "581:840",
+      "save": "581:875"
+    },
+    "screenshot": "setup-review-1440.png",
+    "sha256": "4284b6109aef37038198384f2814ee86e2ea5d08d3356f3c32ed929d9e63acc9"
+  },
+  {
+    "id": "581:877",
+    "name": "Setup / Empty / 1440 \u00b7 Proposed",
+    "screen": "Setup",
+    "state": "Empty",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:884",
+      "products": "581:886",
+      "upload": "581:890"
+    },
+    "screenshot": "setup-empty-1440.png",
+    "sha256": "c4adab97285f29940ddf1c8ac0900625469277a78f1ff9b37c5f64b6adcf3b4f"
+  },
+  {
+    "id": "581:893",
+    "name": "Setup / Loading / 1440 \u00b7 Proposed",
+    "screen": "Setup",
+    "state": "Loading",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:900",
+      "products": "581:902"
+    },
+    "screenshot": "setup-loading-1440.png",
+    "sha256": "9c5102ac6b6342afa9ad3f78af43a521b72779ba2d57f89bb5cbefde71f4017a"
+  },
+  {
+    "id": "581:910",
+    "name": "Setup / Error / 1440 \u00b7 Proposed",
+    "screen": "Setup",
+    "state": "Error",
+    "width": 1440,
+    "height": 990,
+    "mobile": false,
+    "actions": {
+      "watch": "581:917",
+      "products": "581:919",
+      "retry": "581:923"
+    },
+    "screenshot": "setup-error-1440.png",
+    "sha256": "3ca394fecb628039ae5ca933658ded881ef7143e91beec23c42230d6ea3a4c31"
+  },
+  {
+    "id": "581:926",
+    "name": "Setup / Default / 375 \u00b7 Proposed",
+    "screen": "Setup",
+    "state": "Default",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:933",
+      "products": "581:935",
+      "upload": "581:943",
+      "confirm": "581:947",
+      "process": "581:949"
+    },
+    "screenshot": "setup-default-375.png",
+    "sha256": "72047f544ba03e89749745ff7026e629381cf8c5602814ae9944dfbbe36ef618"
+  },
+  {
+    "id": "581:953",
+    "name": "Setup / Permission / 375 \u00b7 Proposed",
+    "screen": "Setup",
+    "state": "Permission",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:960",
+      "products": "581:962",
+      "upload": "581:970",
+      "confirm": "581:974",
+      "process": "581:976"
+    },
+    "screenshot": "setup-permission-375.png",
+    "sha256": "d8b23c88a7a34e7bdef9d7be2080bbdd9e7fc324a8ea469686e84bbec0407152"
+  },
+  {
+    "id": "581:979",
+    "name": "Setup / Processing / 375 \u00b7 Proposed",
+    "screen": "Setup",
+    "state": "Processing",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:986",
+      "products": "581:988",
+      "review": "581:995"
+    },
+    "screenshot": "setup-processing-375.png",
+    "sha256": "c84c17d0d26174d4e2e78ea2864256626261dde6b0fa45dcc7e3c87ee5ac0ce0"
+  },
+  {
+    "id": "581:998",
+    "name": "Setup / Review / 375 \u00b7 Proposed",
+    "screen": "Setup",
+    "state": "Review",
+    "width": 375,
+    "height": 1566,
+    "mobile": true,
+    "actions": {
+      "watch": "581:1005",
+      "products": "581:1007",
+      "save": "581:1042"
+    },
+    "screenshot": "setup-review-375.png",
+    "sha256": "15cedf102af7fd0c76ec038541bbe08ebee84fb7a0e49ebff3de38a123111f78"
+  },
+  {
+    "id": "581:1044",
+    "name": "Setup / Empty / 375 \u00b7 Proposed",
+    "screen": "Setup",
+    "state": "Empty",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:1051",
+      "products": "581:1053",
+      "upload": "581:1057"
+    },
+    "screenshot": "setup-empty-375.png",
+    "sha256": "25d3560b90c6aace13e01bf32461d8b5c11708e70fd3ed57234baf0829556d95"
+  },
+  {
+    "id": "581:1060",
+    "name": "Setup / Loading / 375 \u00b7 Proposed",
+    "screen": "Setup",
+    "state": "Loading",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:1067",
+      "products": "581:1069"
+    },
+    "screenshot": "setup-loading-375.png",
+    "sha256": "abc83e769d5ea31f1acacf93345c92a82c17e026e216f8328a595ddc4067daaf"
+  },
+  {
+    "id": "581:1077",
+    "name": "Setup / Error / 375 \u00b7 Proposed",
+    "screen": "Setup",
+    "state": "Error",
+    "width": 375,
+    "height": 890,
+    "mobile": true,
+    "actions": {
+      "watch": "581:1084",
+      "products": "581:1086",
+      "retry": "581:1090"
+    },
+    "screenshot": "setup-error-375.png",
+    "sha256": "875052c1943c12dcfb9b696706c1cea4e647c5088d6f0e49ab3c1a550feebd10"
+  }
+]

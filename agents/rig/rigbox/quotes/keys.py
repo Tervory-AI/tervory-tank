@@ -31,8 +31,10 @@ def embed_snippet(key: str, *, theme: str = "neutral") -> str:
 
     if theme not in ("neutral", "custom-nation"):
         raise ValueError()
+    from rigbox.rooms import api_base
+    base = api_base()
     bundle = manifest()
     return (f'<script src="https://rig.tervory.com/widget/assets/{html.escape(bundle["file"], quote=True)}" '
             f'integrity="{html.escape(bundle["integrity"], quote=True)}" crossorigin="anonymous" defer></script>\n'
-            f'<tervory-rig api-base="https://rig.tervory.com" rig-key="{html.escape(key, quote=True)}" '
+            f'<tervory-rig api-base="{base}" rig-key="{html.escape(key, quote=True)}" '
             f'theme="{theme}"></tervory-rig>')

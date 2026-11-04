@@ -1,0 +1,201 @@
+{
+  "frames": [
+    {
+      "id": "581:454",
+      "name": "Products / Default / 375 · Proposed",
+      "screen": "Products",
+      "state": "Default",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:461",
+        "products": "581:463",
+        "open": "581:473",
+        "jump": "581:475"
+      },
+      "screenshot": "products-default-375.png"
+    },
+    {
+      "id": "581:478",
+      "name": "Products / Empty / 375 · Proposed",
+      "screen": "Products",
+      "state": "Empty",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:485",
+        "products": "581:487"
+      },
+      "screenshot": "products-empty-375.png"
+    },
+    {
+      "id": "581:492",
+      "name": "Products / Loading / 375 · Proposed",
+      "screen": "Products",
+      "state": "Loading",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:499",
+        "products": "581:501"
+      },
+      "screenshot": "products-loading-375.png"
+    },
+    {
+      "id": "581:509",
+      "name": "Products / Error / 375 · Proposed",
+      "screen": "Products",
+      "state": "Error",
+      "width": 375,
+      "height": 890,
+      "mobile": true,
+      "actions": {
+        "watch": "581:516",
+        "products": "581:518",
+        "retry": "581:522"
+      },
+      "screenshot": "products-error-375.png"
+    }
+  ],
+  "checks": [
+    {
+      "id": "581:454",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 13,
+        "INSTANCE": 5
+      },
+      "images": []
+    },
+    {
+      "id": "581:478",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "images": []
+    },
+    {
+      "id": "581:492",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "images": []
+    },
+    {
+      "id": "581:509",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 7,
+        "INSTANCE": 3
+      },
+      "images": []
+    }
+  ],
+  "createdNodeIds": [
+    "581:454",
+    "581:455",
+    "581:456",
+    "581:457",
+    "581:458",
+    "581:459",
+    "581:460",
+    "581:461",
+    "I581:461;266:3035",
+    "581:463",
+    "I581:463;266:3035",
+    "581:465",
+    "581:466",
+    "581:467",
+    "I581:467;289:13958",
+    "I581:467;289:13959",
+    "I581:467;289:13960",
+    "I581:467;289:13961",
+    "581:472",
+    "581:473",
+    "I581:473;266:3033",
+    "581:475",
+    "I581:475;266:3035",
+    "581:477",
+    "581:478",
+    "581:479",
+    "581:480",
+    "581:481",
+    "581:482",
+    "581:483",
+    "581:484",
+    "581:485",
+    "I581:485;266:3035",
+    "581:487",
+    "I581:487;266:3035",
+    "581:489",
+    "581:490",
+    "581:491",
+    "581:492",
+    "581:493",
+    "581:494",
+    "581:495",
+    "581:496",
+    "581:497",
+    "581:498",
+    "581:499",
+    "I581:499;266:3035",
+    "581:501",
+    "I581:501;266:3035",
+    "581:503",
+    "581:504",
+    "581:505",
+    "581:506",
+    "581:507",
+    "581:508",
+    "581:509",
+    "581:510",
+    "581:511",
+    "581:512",
+    "581:513",
+    "581:514",
+    "581:515",
+    "581:516",
+    "I581:516;266:3035",
+    "581:518",
+    "I581:518;266:3035",
+    "581:520",
+    "581:521",
+    "581:522",
+    "I581:522;266:3033",
+    "581:524"
+  ],
+  "status": "Proposed",
+  "copy": [
+    "Proposed",
+    "Illustrative video, product and timing · Figma only",
+    "Products in this video",
+    "Watch video",
+    "[Video title]",
+    "COMPACT TRIPOD",
+    "CT-01",
+    "$120.00",
+    "Delivery: 2–3 business days",
+    "Appears at 00:12–00:18 and 00:42–00:48",
+    "View product",
+    "Watch at 00:12",
+    "No products in this video yet.",
+    "Loading…",
+    "The products could not be loaded.",
+    "Try again"
+  ]
+}

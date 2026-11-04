@@ -308,6 +308,8 @@ jobs:
               await conn.close()
           asyncio.run(main())
           PY
+      - name: Install pinned Rig host-split test proxy
+        run: bash .github/scripts/install-rig-traefik.sh
       - name: Full offline test suite
         # The whole suite gates every PR again (it was cut to 3 files on 27 Oct, #351,
         # because it took 10-15 minutes serially and had not passed for three days).

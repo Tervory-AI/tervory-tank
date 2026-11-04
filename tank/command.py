@@ -1749,6 +1749,8 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, {}, args
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
+    if action.tool in {"rig.store.onboard", "rig.rooms.list", "rig.store.destroy"}:
+        return adapter.method, path, {}, {}
     if action.tool == "rig.quote.confirm_payment":
         return adapter.method, path, {}, {"data": args}
     if action.tool in REQUEST_BODY_TOOLS:
@@ -2167,11 +2169,11 @@ async def autumbra_enforce_code_plan(actor: Actor, messages: list[dict], task_id
     from trigger_routes import code_receipt
     last = messages[-1] if messages else {}
     text = last.get("content", "").strip()
-    if last.get("role") != "user" or not text.startswith("autumbra."):
+    if last.get("role") != "user" or not text.startswith(("autumbra.", "rig.")):
         return None
     parts = text.split()
     tool = parts[0]
-    fields = {"autumbra.enforce.list": None, "autumbra.enforce.create": "tenant_id",
+    fields = {"rig.store.onboard": None, "rig.rooms.list": None, "rig.store.destroy": None, "autumbra.enforce.list": None, "autumbra.enforce.create": "tenant_id",
               "autumbra.enforce.destroy": "tenant_id", "autumbra.fixes": None,
               "autumbra.fix.approve": "match_id", "autumbra.blocks": "tenant_id",
               "autumbra.blocks.share": "record_ids"}
@@ -2188,7 +2190,7 @@ async def autumbra_enforce_code_plan(actor: Actor, messages: list[dict], task_id
             raise HTTPException(422, "Use: autumbra.enforce.create|destroy <tenant-uuid>")
         arguments = {} if fields[tool] is None else {fields[tool]: parts[1]}
     action = validate_action(PlannedAction(tool=tool, arguments=arguments), actor)
-    ledger = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent="ghost")
+    ledger = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent="rig" if tool.startswith("rig.") else "ghost")
     return SimpleNamespace(content=dump({"text": tool, "actions": [action.model_dump(mode="json")]}), ledger_id=ledger)
 
 

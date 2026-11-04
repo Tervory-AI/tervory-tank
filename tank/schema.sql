@@ -3108,6 +3108,13 @@ ALTER TABLE tank.trigger_bot_messages ADD COLUMN IF NOT EXISTS person text;
 -- BEGIN market_lab (new blocks for market_lab go here)
 -- END market_lab
 -- BEGIN rig (new blocks for rig go here)
+-- Rig store-room lifecycle registry. No store catalogue or contact data here.
+CREATE TABLE IF NOT EXISTS tank.rig_rooms (
+    tenant_id uuid PRIMARY KEY,
+    coolify_uuid text,
+    state text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
 -- END rig
 -- BEGIN tisan (new blocks for tisan go here)
 -- END tisan

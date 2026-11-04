@@ -1,5 +1,7 @@
 # Market Lab briefs and calibration — H7
 
+**Latest brief-detail addition:** [Confidence and history frame slots](#confidence-and-history-frame-slots--proposed-4-nov-2026) are **Proposed**, added 4 Nov 2026 at both widths. Current slot links and screenshots are registered below; Wave 5 images remain historical evidence.
+
 **Approved 3 Nov 2026, 17:45 PT** (Claude, under the founder's 3 Nov 13:28 delegation): the eight Monthly briefs frames and their wording, at this commit. The illustrative values in the frames (titles, dates, counts) are Figma-only and never reach a live page. Brief detail and Calibration are not drawn yet and are not approved.
 
 **Wave 5 status: new detail/calibration frames remain Proposed.** The eight Monthly briefs approvals above are preserved. Branch `codex/figma-market-lab` was created from `origin/main` at `8857cd3e`. Existing Figma pages, shared mains and production code were not modified. All new work is isolated on [11 · Market Lab · H7 · Proposed](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=513-37050), page ID `513:37050`.
@@ -164,3 +166,87 @@ Calibration keeps `(kind, feed, frozen horizon)` groups separate. The desktop ta
 | Calibration / Empty · Proposed | 375×900 | [567:1846](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=567-1846) | [PNG](evidence/w5/calibration-empty-375.png) |
 | Calibration / Loading · Proposed | 375×900 | [567:1925](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=567-1925) | [PNG](evidence/w5/calibration-loading-375.png) |
 | Calibration / Error · Proposed | 375×900 | [567:2007](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=567-2007) | [PNG](evidence/w5/calibration-error-375.png) |
+
+## Confidence and history frame slots — Proposed, 4 Nov 2026
+
+Added on `codex/figma-market-lab-slots`, based on `origin/main` at `31683f28`. The six existing populated brief-detail frames are extended in place in [the Market Lab Figma file](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=513-37050). Their frame IDs, original wording, saved-report/citation content, delivery summaries and prototype destinations are retained. The new sections and their copy are **Proposed**; the existing review bars remain visible. This entry does not change the recorded approval status of earlier work.
+
+The section order is saved report → Confidence → Sources cited → History → Monthly briefs. Desktop remains 1440 wide with 1072-wide content cards; mobile remains 375 wide with 327-wide cards. The frames grow vertically. Empty/loading/error, Monthly briefs and Calibration frames are unchanged.
+
+The field contract is [PR #701](https://github.com/Tervory-AI/tervory-tank/pull/701), branch `codex/market-lab-h7`, inspected at `1e6ef3af8334aef18ed1a7245ba1ac724a590ff5`: [CHANGES.md](https://github.com/Tervory-AI/tervory-tank/blob/1e6ef3af8334aef18ed1a7245ba1ac724a590ff5/tests/market_lab_h7/CHANGES.md), [brief detail assembly](https://github.com/Tervory-AI/tervory-tank/blob/1e6ef3af8334aef18ed1a7245ba1ac724a590ff5/agents/market_lab/core/brief_detail.py), and [Workspace types/formatters](https://github.com/Tervory-AI/tervory-tank/blob/1e6ef3af8334aef18ed1a7245ba1ac724a590ff5/workspace/app/market-lab/h7-model.ts). H7 exposes these structured fields but does not yet render the dedicated confidence/history sections. This design task adds the missing Figma slots only.
+
+| Frame / status | Final size | Confidence slot | History slot | Screenshot |
+| --- | --- | --- | --- | --- |
+| [Report 1 · 1440 · Proposed](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=566-395) | 1440 × 2963 | [689:1597](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=689-1597) | [689:1624](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=689-1624) | [PNG](evidence/frame-slots/brief-detail-report-1-1440.png) |
+| [Report 2 · 1440 · Proposed](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=566-601) | 1440 × 2127 | [689:1639](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=689-1639) | [689:1658](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=689-1658) | [PNG](evidence/frame-slots/brief-detail-report-2-1440.png) |
+| [Report 3 · 1440 · Proposed](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=566-799) | 1440 × 2963 | [689:1666](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=689-1666) | [689:1693](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=689-1693) | [PNG](evidence/frame-slots/brief-detail-report-3-1440.png) |
+| [Report 1 · 375 · Proposed](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=566-2140) | 375 × 3117 | [689:1708](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=689-1708) | [689:1735](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=689-1735) | [PNG](evidence/frame-slots/brief-detail-report-1-375.png) |
+| [Report 2 · 375 · Proposed](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=566-2249) | 375 × 2241 | [689:1750](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=689-1750) | [689:1769](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=689-1769) | [PNG](evidence/frame-slots/brief-detail-report-2-375.png) |
+| [Report 3 · 375 · Proposed](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=566-2350) | 375 × 3097 | [689:1777](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=689-1777) | [689:1804](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=689-1804) | [PNG](evidence/frame-slots/brief-detail-report-3-375.png) |
+
+### Existing data bindings
+
+| Slot | H7 field | Presentation / missing-data rule |
+| --- | --- | --- |
+| Signal heading / claim | `signals[]` index and `signals[].claim` | Repeat one card per returned signal; keep the corresponding claim. The index is presentation only. |
+| Confidence | `signals[].confidence` | Use H7 `percent`: finite values in [0, 1] become one-decimal percentages. Null, unavailable or invalid values stay `—`; never substitute zero or a cohort average. |
+| Warning pair / feed | `signals[].kind`, `signals[].feed` | Keep the original signal's pair/feed; missing values are `—`. Bracketed text in Figma marks field slots, not a live warning pair. |
+| Frozen horizon | `signals[].horizon_seconds` | Use H7 `period` for a present horizon: whole days or seconds. A missing horizon stays `—`; do not infer it from the report date. |
+| Prediction | `signals[].prediction_id` | Show the original reference when present; missing references are `—`. |
+| Open stored source | `signals[].stored_href` | Link only to the verified returned stored-passage path. Every new Figma action is disabled with no destination because its source is a placeholder. Never derive a passage link from the public source URL. |
+| Saved report | Report event in `history[]`, `happened_at` from `made_at` | The returned report event has no delivery channel/status. It must not imply a send. Preserve the event timestamp; the design reuses each existing illustrative report date. |
+| Delivery event heading | `history[].channel`, `history[].status` | Repeat for **every** recorded event, including multiple events for one channel, in returned chronological order. Email and Webhook remain separate. Apply H7's delivery labels; retain other returned states such as `sending`. |
+| Event date/time | `history[].happened_at` | Render the recorded timestamp with date, time and timezone so same-day transitions remain distinguishable. Missing time is `—`; no invented timestamp. |
+| Event reason | `history[].reason` | Show the actual reason when present; omit the row when absent. Held/suppressed reasons must not become success messages. |
+| No recorded delivery events. | No delivery entries in `history[]` | Preserve the saved-report event. Do not reconstruct earlier sends from current `deliveries[]` statuses. |
+
+Report 1 shows one **illustrative** 75.0% / 30-day signal, using values already covered in H7 fixtures, plus unknown signals. Reports 2 and 3 show unknown confidence/horizon/reference values. Report 2 demonstrates a saved report with no recorded delivery events even though the original delivery summary has current states. Reports 1 and 3 show Email/Webhook event **placeholders**, not fabricated delivery receipts. The illustrative sample is not a claim that those values occurred together in a saved production report. All dates, claims, pairs and event details remain Figma-only.
+
+### Style and editable assets
+
+Existing Inter 20/28 semibold and 14/20 regular text, 16px spacing, white card surfaces, navy text, input-border strokes, 8px corners and 48px outline actions are reused. Surface/text/border/spacing/radius/stroke properties use the file's existing variables. No Code Connect files or matching subscribed-library Market Lab view were found, so the new cards use the existing frame styling and linked stored-source action.
+
+- [Signal confidence component](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=689-1585): text properties for signal, claim, metrics, pair/feed and prediction; 16 instances across the six frames.
+- [Recorded history event component](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=689-1593): event/time/reason text properties and optional reason visibility; 14 instances across the six frames.
+
+Both new local mains are on the same Proposed page to the right of existing frames. Existing shared mains are unchanged. New sections contain editable text and component instances. The only raster layers in the complete frames are the inherited logo assets.
+
+### Copy inventory — Proposed
+
+Every string below is Proposed for these sections, including reused product terms and illustrative data. Bracketed values are design-only field placeholders.
+
+| Exact visible string | Status |
+| --- | --- |
+| Confidence | Proposed |
+| Original signal confidence. Unknown values stay —. | Proposed |
+| Signal 1 | Proposed |
+| [Claim 1] | Proposed |
+| Confidence: 75.0% · Frozen horizon: 30 days | Proposed |
+| Warning pair / feed: [Warning pair] / [Feed] | Proposed |
+| Prediction: [Saved prediction reference] | Proposed |
+| Open stored source | Proposed |
+| Signal 2 | Proposed |
+| [Claim 2] | Proposed |
+| Confidence: — · Frozen horizon: — | Proposed |
+| Prediction: — | Proposed |
+| Signal 3 | Proposed |
+| [Claim 3] | Proposed |
+| History | Proposed |
+| Only recorded events are shown. Earlier sends are not reconstructed. | Proposed |
+| Saved report | Proposed |
+| Date: 1 Nov 2026 | Proposed |
+| Email · [Recorded status] | Proposed |
+| Date: [Recorded date and time] | Proposed |
+| Reason: [Recorded reason, when present] | Proposed |
+| Webhook · [Recorded status] | Proposed |
+| Date: 1 Oct 2026 | Proposed |
+| No recorded delivery events. | Proposed |
+| Date: 1 Sep 2026 | Proposed |
+
+### Verification and evidence
+
+All six final full-frame PNGs were visually checked after correcting the persisted positions of existing citations and the back action. The final views have no overlapping body rows or overflowing new content. Inter is asserted on every text layer. All original nodes and text were retained, and the 18 existing brief-detail navigation destinations match the Wave 5 prototype register. The sidebar height extends with the desktop content; inherited shared-menu geometry is otherwise unchanged.
+
+Evidence: [construction and retained-content checks](evidence/frame-slots/build.json), [layout correction](evidence/frame-slots/layout-fix.json), [persisted final read-back](evidence/frame-slots/final-readback.json), and [PNG dimensions, SHA-256 and local checks](evidence/frame-slots/verification.json). The [construction script](authoring/frame-slots.js) and [layout-persistence correction](authoring/frame-slots-layout-fix.js) record the two authoring steps; the final read-back and screenshots are authoritative.
+
+Checks cover six expected 1440/375 frames; 12 section slots; 30 new card instances; all original text and frame IDs; native editable layers; existing navigation destinations; PNG dimensions/hashes; JSON validity; JavaScript syntax; Markdown evidence links; and `git diff --check`. No application tests or deployment were needed: changed repository files are confined to `docs/figma/market-lab/`. Implementation and approval of the Proposed additions remain subsequent work.
