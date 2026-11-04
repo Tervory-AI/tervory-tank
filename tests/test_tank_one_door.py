@@ -186,6 +186,7 @@ def scan(root: Path) -> list[Finding]:
 # Canonical AST/token fingerprints and occurrence counts, never a whole-file waiver.
 # A changed or additional call in an audited file needs a fresh review.
 EXCEPTIONS: dict[tuple[str, str, str], tuple[int, str]] = {
+    ('tests/test_paid_steps.py', 'model/paid endpoint', '73e132bd91c9775c'): (1, 'Offline inbound ASGI room-completion proof; completion is stubbed and waits at the real paid-step gate.'),
     ('tests/test_base_database.py', 'model/paid endpoint', '78462f840ad17f59'): (2, 'Offline httpx.Request/Response values passed directly to Tank receipt hooks; no request is sent to Brave.'),
     ('tests/test_base_vendor_meter.py', 'model/paid endpoint', '78462f840ad17f59'): (3, 'Offline vendor-meter tests use MockTransport or call hooks directly; no provider traffic.'),
     ('tests/test_base_vendor_meter.py', 'model/paid endpoint', '47bc5ec6af477dfc'): (1, 'Offline blocked-site test with MockTransport proves Brave cannot be called after a site block.'),
