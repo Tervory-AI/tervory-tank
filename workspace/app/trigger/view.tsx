@@ -20,7 +20,9 @@ const object = (input: unknown): Data =>
 export function safeLink(input: unknown): string | undefined {
   try {
     const u = new URL(String(input));
-    return u.protocol === "https:" || u.protocol === "http:"
+    return (u.protocol === "https:" || u.protocol === "http:") &&
+      !u.username &&
+      !u.password
       ? u.href
       : undefined;
   } catch {
@@ -153,7 +155,14 @@ export default function ConsoleView({
       {error && <p role="alert">{error}</p>}
       {result && (
         <div className="trigger-section">
-          <p>{value(result.error ?? result.status)}</p>
+          <p>
+            {value(
+              result.error ??
+                object(result.result).platform_error ??
+                object(result.result).state ??
+                result.status,
+            )}
+          </p>
           {safeLink(object(result.result).platform_url) && (
             <a
               href={safeLink(object(result.result).platform_url)}
@@ -171,11 +180,11 @@ export default function ConsoleView({
               {value(receipt.ledger_id ?? receipt.id)}
             </Link>
           ))}
-          {!!result.ledger_id && (
+          {!!(result.ledger_id ?? object(result.result).ledger_id) && (
             <Link
-              href={`/ledger?entry=${encodeURIComponent(String(result.ledger_id))}`}
+              href={`/ledger?entry=${encodeURIComponent(String(result.ledger_id ?? object(result.result).ledger_id))}`}
             >
-              {value(result.ledger_id)}
+              {value(result.ledger_id ?? object(result.result).ledger_id)}
             </Link>
           )}
         </div>
@@ -467,7 +476,10 @@ function Posts({
         <Fields
           entries={[
             ["Channel", CHANNELS[post.channel as keyof typeof CHANNELS]],
-            ["Status", post.state],
+            [
+              "Status",
+              [post.state, post.platform_error].filter(Boolean).join("\n"),
+            ],
             ["Text", post.text],
             ["Media", null],
             [
@@ -489,6 +501,13 @@ function Posts({
           >
             {value(post.platform_url)}
           </a>
+        )}
+        {!!post.ledger_id && (
+          <Link
+            href={`/ledger?entry=${encodeURIComponent(String(post.ledger_id))}`}
+          >
+            {value(post.ledger_id)}
+          </Link>
         )}
         <div className="trigger-actions">
           <Link href={`/trigger/marketing/composer/${id}`}>Composer</Link>
