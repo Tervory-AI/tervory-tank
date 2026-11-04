@@ -449,6 +449,7 @@ async def test_schema_applies_twice_and_preserves_policy(harness):
         # model/vendor split and rollback if a later fee insert fails.
         pool = await asyncpg.create_pool(database_url, min_size=1, max_size=1)
         harness.runtime["pool"] = lambda: pool
+        await __import__('paid_fixture').auto(pool, 'research-low')
         response = await call(harness)
         assert response.status_code == 200
         ids = [uuid.UUID(value) for value in response.json()["receipt"]["ledger_ids"].values()]
