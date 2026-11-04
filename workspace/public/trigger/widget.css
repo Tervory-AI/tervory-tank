@@ -1,13 +1,3 @@
-@font-face {
-  font-family: Atkinson Hyperlegible;
-  src: url("./AtkinsonHyperlegible-Regular.ttf") format("truetype");
-  font-display: swap;
-}
-@font-face {
-  font-family: Literata;
-  src: url("./Literata.ttf") format("truetype");
-  font-display: swap;
-}
 :host {
   --client-accent: #001840;
   --client-ink: #1a1a1a;
@@ -18,7 +8,7 @@
   bottom: 16px;
   z-index: 2147483000;
   font:
-    14px/20px "Atkinson Hyperlegible",
+    14px/20px "TriggerWidgetAtkinson",
     sans-serif;
   color: var(--client-ink);
   color-scheme: light;
@@ -38,7 +28,7 @@ h3 {
 h2,
 h3 {
   font:
-    400 18px/26px Literata,
+    400 18px/26px "TriggerWidgetLiterata",
     serif;
 }
 button,
@@ -67,9 +57,12 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 .launcher {
-  min-width: 100px;
-  background: var(--client-accent);
-  color: var(--client-paper);
+  width: 92px;
+  min-width: 92px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--client-paper);
+  color: var(--client-ink);
 }
 .panel {
   width: 343px;
@@ -131,7 +124,7 @@ header button {
   gap: 8px;
   width: 100%;
 }
-.sources a {
+.sources .source {
   color: var(--client-ink);
   border: 1px solid var(--client-line);
   border-radius: 12px;
