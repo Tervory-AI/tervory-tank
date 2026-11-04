@@ -37,3 +37,13 @@ HIBP remains conditional on free domain search and founder configuration. No pai
 ## Founder sheet and settings
 
 The sheet has 58 founder checks, each naming its exact offline case, address, action, expected result and existing setting names. Adds TANK_GITHUB_READ_TOKEN (Tank's existing fixed-repository reader), RADIX_DEPLOY_TENANT_ID (GitHub repository variable) and the existing GitHub TANK_API_KEY secret to FOUNDER-SETTINGS. No values or new credentials. D1 currently requests the consent wording rather than supplying it: that approved copy remains an explicitly missing founder frame, never fixture consent. HIBP is conditional on free domain search and is not enabled here.
+
+## Offline validation and delivery
+
+- 58 executable founder cases plus exact ordered row/name parity; 62 tests passed when run with the three selected Rig runtime checks. The final missing/changed-TXT, client proof and parity refinements passed separately (3 passed).
+- Actual Command confirmation, tenant/user checks, receipts, private ASGI room/report downloads, local Postgres persistence, actual Redis retry/dead-letter; fake external HTTP/pages/scanners. Each acceptance case owns its database, including under xdist. Test Redis containers have --rm, tervory.test=1 and the checkout-name prefix.
+- Standalone CI security policy suite: 64 unittest cases passed with the pinned Gitleaks binary. No Gitleaks/Semgrep allowlist, suppression or rule exception was added.
+- The wider 35-file audit reached 347 passing cases and 437 passing subtests; a Tiger-history subprocess exceeded its startup window on the saturated local host. A measured Tank import took 151 seconds. This is recorded as an environment failure, not reported as a green full-suite run.
+- scripts/precheck.sh invoked before each push. Lint and branch-commit Gitleaks passed. Earlier OSV checks passed. Full pinned-image Semgrep remained pending locally under host overload; local runner concurrency/wait budget was adjusted without changing repository/CI scripts, rules, targets or failure policy. Hosted CI must finish before merge.
+
+Deployment impact: the application source fix follows existing deploy routing for agent-radix and its configured regional copies. No Compose, environment or regional runtime configuration is changed. No live target scan, deployment, client consent or founder acceptance is claimed. Claude opens the PR.
