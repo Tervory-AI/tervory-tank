@@ -4,7 +4,7 @@ Trigger drafts copy, articles and documents through Tank, then checks the output
 
 ## Operations handoff
 
-Grok creates the Coolify resource **agent-trigger**, using `agents/trigger/docker-compose.yml` in Raw Compose mode. The main stack creates `tervory-gw-trigger`; only Tank and Postgres join it. The room joins that corridor and a separate internal checker network. LanguageTool joins only the checker network and exposes no public port. Deploy the main stack/agent role provisioning before the room. No deployment was performed by this build.
+Grok creates the Coolify resource **agent-trigger**, using `agents/trigger/docker-compose.yml` in Raw Compose mode. The main stack creates `tervory-gw-trigger`; Tank, Postgres and Hermes join it. The room joins that corridor and a separate internal checker network. LanguageTool joins only the checker network and exposes no public port. Deploy the main stack/agent role provisioning before the room. No deployment was performed by this build.
 
 Settings by name only: `AGENT_DB_PASSWORD_TRIGGER`, `TANK_KEY_TRIGGER`, `POSTGRES_DB`, `TANK_REGION`. The shared role provisioner creates the `agent_trigger` role/schema. The room applies its idempotent table schema on startup. The key is passed as `TANK_KEY` inside this room; no provider keys are present. Health endpoints: room `/health`, checker `/v2/languages`. Both are internal.
 

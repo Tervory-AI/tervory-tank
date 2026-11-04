@@ -112,3 +112,35 @@ Base route regressions are recorded alongside exact lint and staged secret scans
 
 Tisan related result: 97 cases passed, including unchanged Figma proxy restrictions
 and real loopback HTTPS response tests.
+
+## Gate 4 — Trigger
+
+Trigger gets its own optional brain, WASI sandbox, browser and gateway. All use
+profile `brain`; `TRIGGER_BRAIN_ENABLED` defaults false. Existing LanguageTool
+configuration, checker network and bind mount remain unchanged. The brain receives
+only Trigger's room/executor keys and its own new data volume; the browser has a
+separate new volume and no Tank key. No model caller is added.
+
+Hermes previously had no Trigger corridor or key. Its existing service now joins
+only the Trigger corridor and accepts `TANK_KEY_TRIGGER`, through the existing
+per-room authentication and memory scope. The main-stack configuration therefore
+redeploys along with Trigger. No main-stack volume or other service attachment is
+changed. The isolated checker still joins only `checkers`.
+
+Files: `agents/trigger/docker-compose.yml:13,54,109,141,177`,
+`agents/trigger/README.md:7`, `docker-compose.yml:88,103`,
+`agents/_brain/standby.py:12`, `agents/_brain/browser.py:627`,
+`agents/base/check_brain_isolation.py:46`, `tank/agent_skills.py:35`,
+`ops/seal-check.sh:58,219,254,342`, `.env.example:567`,
+`docs/cursor/ROOMS.md:259`, `tests/room_brains/rooms.json:1`,
+`snapshots/trigger.json:1`, `test_rooms.py:66` (Hermes corridor/key),
+`tests/test_ledger_sql_param.py:21`, `tests/test_hermes_memory.py:429` and
+`tests/trigger_first_build/test_trigger.py:256` (permitted memory neighbour).
+
+Focused profile, volume, seal, accounting and isolation cases pass; related Trigger,
+Hermes and SQL guard results are recorded in evidence. Existing optional integration
+requirements are stated with their skips rather than claimed as executed.
+
+Trigger validation: 33 focused and 87 related cases passed. Two existing optional
+integration tests require isolated Postgres / a running LanguageTool pair and are
+not claimed as run. The staged secret scan passed.

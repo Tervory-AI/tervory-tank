@@ -57,6 +57,9 @@ def test_off_by_default_hardened_and_no_shared_data(room):
     assert brain['environment']['TANK_KEY'] == '${TANK_KEY_' + upper + ':-}'
     assert brain['environment']['TANK_URL'] == 'http://tank:8000'
     assert brain['environment']['HERMES_URL'] == 'http://hermes:8000'
+    hub = yaml.safe_load((ROOT / 'docker-compose.yml').read_text())['services']['hermes']
+    assert 'tervory-gw-' + room in hub['networks']
+    assert hub['environment']['TANK_KEY_' + upper] == '${TANK_KEY_' + upper + ':-}'
     if room == 'ghost':
         assert brain['environment']['GHOST_BROWSER_URL'] == 'http://ghost-browser:8000'
     else:

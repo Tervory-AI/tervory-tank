@@ -9,7 +9,7 @@ import os
 from fastapi import FastAPI
 
 ROOM = os.environ.get("BRAIN_ROOM", "tiger")
-if ROOM not in {"tiger", "zenas", "tisan", "radix", "market_lab"}:
+if ROOM not in {"tiger", "zenas", "trigger", "tisan", "radix", "market_lab"}:
     raise ValueError("Unsupported standby room")
 
 app = FastAPI()

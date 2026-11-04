@@ -271,6 +271,7 @@ boundary; no ZA deployment or forwarding is introduced.
 | Market Lab | `MARKET_LAB_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
 | Radix | `RADIX_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
 | Tisan | `TISAN_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
+| Trigger | `TRIGGER_BRAIN_ENABLED` | brain 2 GiB / 1 CPU; sandbox 512 MiB / 0.5 CPU; browser 2 GiB / 0.5 CPU; gateway 128 MiB / 0.25 CPU |
 
 All added services carry profile `brain`. A normal Compose deployment starts
 none of them. The flag is reserved for a future caller: enabling a profile or
@@ -306,6 +307,7 @@ Tank changes also redeploy the main stack and its configured ZA counterpart.
 Raw Compose Deployment must be enabled in Coolify for the files carrying its
 marker. Preserve the existing Compose project identity when switching modes so
 unchanged room volumes retain their current identity. No volume migration or
-replacement is part of this work. After deployment, run `ops/seal-check.sh` and,
+replacement is part of this work. Hermes also receives Trigger's owning key and
+joins only its existing corridor, so its optional memory URL is reachable. After deployment, run `ops/seal-check.sh` and,
 if the optional profile is authorized, the isolation checker with the room's
 container names. Offline fixtures do not replace that host check.
