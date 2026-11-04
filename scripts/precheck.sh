@@ -50,7 +50,8 @@ python3 .github/scripts/security_scan.py gitleaks --base "$base" --output "$out"
 
 if [ "${PRECHECK_SKIP_SEMGREP:-}" != 1 ]; then
   step "semgrep on changed files (as CI)"
-  python3 .github/scripts/security_scan.py semgrep --base "$base" --output "$out" || failed+=(semgrep)
+  # A contended local host can starve a complete scan; CI keeps its 900s default.
+  python3 .github/scripts/security_scan.py semgrep --base "$base" --output "$out" --tool-timeout 3600 || failed+=(semgrep)
 fi
 
 step "osv dependency check (as CI)"
