@@ -42,7 +42,7 @@ async def test_mobile_sessions_shares_and_notify_with_forced_tenant_rls(monkeypa
                 statement = re.search(r"CREATE TABLE IF NOT EXISTS tank\." + table + r" \(.*?\n\);", schema, re.S)
                 assert statement
                 await owner.execute(statement.group())
-            migration = schema[schema.index("CREATE TABLE IF NOT EXISTS tank.mobile_codes"):]
+            migration = schema.split("-- BEGIN mobile\n", 1)[1].split("-- END mobile", 1)[0]
             await owner.execute(migration)
             await owner.execute(migration)
             grant_schema = await owner.fetchval("SELECT format('GRANT USAGE ON SCHEMA tank TO %I', $1::text)", role)
