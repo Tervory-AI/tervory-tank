@@ -301,13 +301,22 @@ async def migrate(tank, sql, tables):
         raise RuntimeError('Tenant database role is unavailable')
     if any(not re.fullmatch(r'window_agent_[a-z_]+', table) for table in tables):
         raise RuntimeError('Feature table name was refused')
-    template = 'GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE ' + ','.join('tank.' + table for table in tables) + ' TO %I'
+    grants = {
+        'window_agent_jobs': """DO $$ BEGIN EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE tank.window_agent_jobs TO %I', current_setting('window_agents.tenant_role')); END $$""",
+        'window_agent_dispatch': """DO $$ BEGIN EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE tank.window_agent_dispatch TO %I', current_setting('window_agents.tenant_role')); END $$""",
+        'window_agent_webhooks': """DO $$ BEGIN EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE tank.window_agent_webhooks TO %I', current_setting('window_agents.tenant_role')); END $$""",
+        'window_agent_deliveries': """DO $$ BEGIN EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE tank.window_agent_deliveries TO %I', current_setting('window_agents.tenant_role')); END $$""",
+    }
+    if any(table not in grants for table in tables):
+        raise RuntimeError('Feature table name was refused')
     with tenant_scope(PLATFORM, administrative=True):
         async with tank.pool().acquire() as conn:
-            await conn.execute(sql)
-            # PostgreSQL quotes the database-owned role identifier, not Python.
-            statement = await conn.fetchval('SELECT format($1::text,$2::text)', template, role)
-            await conn.execute(statement)
+            async with conn.transaction():
+                await conn.execute(sql)
+                await conn.execute("SELECT set_config('window_agents.tenant_role', $1, true)", role)
+                # Fixed table grants; PostgreSQL quotes the database-owned role.
+                for table in tables:
+                    await conn.execute(grants[table])
 
 def install(app, tank):
     app.include_router(router)

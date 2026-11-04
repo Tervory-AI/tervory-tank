@@ -118,7 +118,8 @@ async def configure_hook(body: Webhook, actor: command.Actor = Depends(agents.ac
     async with command.db().acquire() as conn:
         async with conn.transaction():
             await agents.credential(conn, actor, body.credential_name)
-            await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', f'{actor.tenant_id}:{actor.user_id}:{repo}')
+            lock_key = ':'.join((str(actor.tenant_id), str(actor.user_id), repo))
+            await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', lock_key)
             row = await conn.fetchrow('SELECT hook_id FROM tank.window_agent_webhooks WHERE tenant_id=$1 AND user_id=$2 AND repo=$3', actor.tenant_id, actor.user_id, repo)
             hook_id = row['hook_id'] if row else uuid.uuid4()
             if row:

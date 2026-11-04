@@ -1,5 +1,6 @@
-# Reuse the existing worker computer, tools and non-root account.
-FROM tervory-worker-task:1
+# The poller overrides scratch with the immutable ID of the worker image it just built.
+# No external image is pulled here; reuse workers/task/Dockerfile and its tools.
+FROM scratch
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap && rm -rf /var/lib/apt/lists/*
 COPY cli /opt/tervory/cli

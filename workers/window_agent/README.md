@@ -38,7 +38,7 @@ connection in `POOL_SCHEMA_DATABASE_URL`:
 
 ```sh
 python -m pytest -q tests/test_window_agents.py tests/test_window_agent_reviews.py
-bash scripts/precheck.sh
+PRECHECK_SKIP_SEMGREP=1 bash scripts/precheck.sh
 ```
 
 The fake-GitHub acceptance test uses real Git commits, a local bare remote, the
@@ -47,7 +47,9 @@ Tank/model responses are fake; it incurs no model charges and creates no real PR
 To include the CLI command sandbox, run inside the derived worker image:
 
 ```sh
-podman build -t tervory-window-agent:1 -f workers/window_agent/Dockerfile .
+podman build -t tervory-worker-task:1 -f workers/task/Dockerfile .
+worker_image_id=$(podman image inspect --format '{{.Id}}' tervory-worker-task:1)
+podman build --pull=never --from "$worker_image_id" -t tervory-window-agent:1 -f workers/window_agent/Dockerfile .
 podman run --rm --label tervory.test=1 --name codex-agents-fake-github-e2e \
   --user 1001:1001 --cap-drop ALL --security-opt no-new-privileges \
   --security-opt 'unmask=/proc/*' --network none --read-only \

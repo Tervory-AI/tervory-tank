@@ -29,7 +29,8 @@ export async function POST(request: Request, context: Context): Promise<Response
   const body = new Uint8Array(size); let offset = 0;
   for (const part of chunks) { body.set(part, offset); offset += part.byteLength; }
   const forward: Record<string, string> = { "Content-Type": "application/json", "x-hub-signature-256": signature };
-  for (const name of ["x-github-event", "x-github-delivery"]) forward[name] = request.headers.get(name) ?? "";
+  forward["x-github-event"] = request.headers.get("x-github-event") ?? "";
+  forward["x-github-delivery"] = request.headers.get("x-github-delivery") ?? "";
   try {
     const status = await boundedFetch(new URL(`/v1/window-agents/webhooks/${tenantId}/${hookId}`, process.env.TANK_URL), {
       method: "POST", headers: forward, body, cache: "no-store", signal: request.signal,

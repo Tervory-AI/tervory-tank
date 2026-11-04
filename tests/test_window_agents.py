@@ -370,3 +370,24 @@ def test_real_workspace_public_proxy_and_signed_webhook_transport():
                             cwd=root, env={**os.environ, 'COMMAND_TEST_TOOLS': str(root / 'cli/node_modules')},
                             capture_output=True, text=True, timeout=120, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('image_id', ['sha256:' + 'a' * 64, 'mutable:latest'])
+async def test_window_image_uses_only_the_just_built_immutable_worker_base(image_id):
+    from workers.window_agent.service import WindowJobs
+    runner = AsyncMock(side_effect=[(0, '', ''), (0, image_id + '\n', ''), (0, '', '')])
+    jobs = WindowJobs(Settings(tank_url='http://127.0.0.1:8000'), None, None, runner=runner)
+    if image_id == 'mutable:latest':
+        with pytest.raises(RuntimeError, match='identity was refused'):
+            await jobs.prepare()
+        assert runner.await_count == 2
+        assert not jobs.built
+    else:
+        await jobs.prepare()
+        build = runner.await_args_list[2].args[0]
+        assert build[build.index('--from') + 1] == image_id
+        assert '--pull=never' in build
+        assert jobs.built
+        await jobs.prepare()
+        assert runner.await_count == 3

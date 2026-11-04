@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import shutil
 from dataclasses import replace
 from pathlib import Path
@@ -63,11 +64,20 @@ class WindowJobs:
     async def prepare(self):
         if self.built:
             return
-        for argv in (build_argv(self.settings.code_dir), ['podman', 'build', '-t', IMAGE, '-f',
-                     str(Path(self.settings.code_dir) / 'workers/window_agent/Dockerfile'), self.settings.code_dir]):
-            code, _, _ = split(await self.runner(argv, timeout_s=3600))
-            if code:
-                raise RuntimeError('Window task image did not build')
+        code, _, _ = split(await self.runner(build_argv(self.settings.code_dir), timeout_s=3600))
+        if code:
+            raise RuntimeError('Worker task image did not build')
+        code, image_id, _ = split(await self.runner(
+            ['podman', 'image', 'inspect', '--format', '{{.Id}}', 'tervory-worker-task:1'], timeout_s=30))
+        image_id = image_id.strip()
+        if code or not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id):
+            raise RuntimeError('Worker task image identity was refused')
+        argv = ['podman', 'build', '--pull=never', '--from', image_id, '-t', IMAGE,
+                '-f', str(Path(self.settings.code_dir) / 'workers/window_agent/Dockerfile'),
+                self.settings.code_dir]
+        code, _, _ = split(await self.runner(argv, timeout_s=3600))
+        if code:
+            raise RuntimeError('Window task image did not build')
         self.built = True
 
     async def run(self, job):
