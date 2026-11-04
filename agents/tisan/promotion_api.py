@@ -94,8 +94,15 @@ def mount(app, core):
                     raise core.Refused('Radix gate is unavailable')
                 return response.json()
             try:
+                try:
+                    from agents.tisan import repo_scan
+                except ModuleNotFoundError:
+                    import repo_scan
+                async def repo_gate(tenant, site, expected):
+                    return await repo_scan.promotion_gate(journal(), Path(os.environ.get('DATA_DIR', '/data')),
+                                                         http, tenant, site, expected)
                 service = core.Promotion(journal(), core.Coolify(http,
-                    os.environ.get('TISAN_COOLIFY_URL', ''), os.environ.get('TISAN_COOLIFY_TOKEN', '')), live_check, gate)
+                    os.environ.get('TISAN_COOLIFY_URL', ''), os.environ.get('TISAN_COOLIFY_TOKEN', '')), live_check, gate, repo_gate)
                 if action == 'status':
                     return await service.status(str(body.tenant_id), body.site, str(body.operation_id))
                 return await service.run(str(body.tenant_id), body.site, str(body.operation_id), action, actor, body.commit)

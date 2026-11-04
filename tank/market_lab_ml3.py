@@ -17,12 +17,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from tenant_db import tenant_path
 
 PLATFORM = "00000000-0000-0000-0000-000000000001"
-READS = {"warnings", "predictions", "calibration", "feeds"}
+READS = {"warnings", "predictions", "calibration", "feeds", "patterns", "gate", "briefs", "calibration.curve"}
 
 
 def obj(raw):
@@ -45,6 +45,28 @@ def link(value: str) -> str:
 
 
 def records(operation: str, data: dict) -> list[dict]:
+    if operation == "calibration.curve":
+        # The binned data is available to callers; its dedicated Workspace view
+        # waits for Figma rather than creating labels or a new chart here.
+        return [{"name": " / ".join(str(row[k]) for k in ("kind", "feed", "horizon_seconds")),
+                 "count": row["count"], "bins": row["bins"], "brier_score": row["brier_score"],
+                 "kind": row["kind"], "feed": row["feed"], "horizon_seconds": row["horizon_seconds"]}
+                for row in data.get("curves", [])]
+    if operation == "briefs":
+        return [{"name": row["question"], "summary": row["answer"],
+                 "status": " / ".join(d["channel"] + ":" + d["status"] for d in row["deliveries"]),
+                 "deliveries": row["deliveries"], "report_id": row["id"], "citations": row["citations"]}
+                for row in data.get("briefs", [])]
+    if operation == "patterns":
+        return [{"name": row["claim"]["pair_id"], "status": row["tier"],
+                 "count": row["claim"]["episodes"], "total": row["claim"]["hits"],
+                 "claim": row["claim"]}
+                for key in ("patterns", "published") for row in data.get(key, [])]
+    if operation == "gate":
+        return [{"name": " / ".join(str(row[key]) for key in ("kind", "feed", "horizon_seconds")),
+                 "status": "open" if row["open"] else "closed", "summary": row.get("opens_at"),
+                 "count": row["resolved_count"]}
+                for row in data.get("cohorts", [])]
     if operation == "warnings":
         rows = []
         for warning in data.get("warnings", []):
@@ -180,10 +202,23 @@ def signature(raw: bytes, value: str) -> str:
     return "sha256=" + hmac.new(value.encode(), raw, hashlib.sha256).hexdigest()
 
 
-async def webhooks(tenant: UUID) -> dict:
-    from main import pool
+async def send_webhook(tenant: UUID, settings: dict, payload: dict, ident: UUID) -> str:
+    """Shared ML3 signer/transport for warning and saved-report deliveries."""
     from access import public_stream
     from vault import open_seal
+    try:
+        value = open_seal(settings["webhook_sealed"], f"market_lab:webhook:v1:{tenant}")["value"]
+        raw = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
+        async with public_stream(settings["webhook_url"], method="POST", content=raw,
+                                 headers={"Content-Type": "application/json", "X-Market-Lab-Signature": signature(raw, value),
+                                          "Idempotency-Key": str(ident)}) as response:
+            return "sent" if 200 <= response.status_code < 300 else "uncertain"
+    except Exception:
+        return "uncertain"  # No URL, payload, signature or decrypted value in logs.
+
+
+async def webhooks(tenant: UUID) -> dict:
+    from main import pool
     async with pool().acquire() as conn:
         ids = await conn.fetch("SELECT warning_id FROM tank.market_lab_deliveries WHERE tenant_id=$1 AND channel='webhook' AND status='pending' ORDER BY created_at,warning_id LIMIT 3", tenant)
     sent = 0
@@ -191,28 +226,36 @@ async def webhooks(tenant: UUID) -> dict:
         claimed = await claim(tenant, ident["warning_id"], "webhook")
         if claimed is None:
             continue
-        state = "uncertain"
-        try:
-            settings = claimed["settings"]
-            value = open_seal(settings["webhook_sealed"], f"market_lab:webhook:v1:{tenant}")["value"]
-            raw = json.dumps({"tenant_id": str(tenant), "warning_id": str(ident["warning_id"]), **claimed["letter"]}, separators=(",", ":"), ensure_ascii=False).encode()
-            async with public_stream(settings["webhook_url"], method="POST", content=raw,
-                                     headers={"Content-Type": "application/json", "X-Market-Lab-Signature": signature(raw, value),
-                                              "Idempotency-Key": str(ident["warning_id"])}) as response:
-                if 200 <= response.status_code < 300:
-                    state = "sent"
-                    sent += 1
-        except Exception:
-            pass  # No URL, raw payload, signature or decrypted value in logs.
+        state = await send_webhook(tenant, claimed["settings"],
+                                   {"tenant_id": str(tenant), "warning_id": str(ident["warning_id"]), **claimed["letter"]},
+                                   ident["warning_id"])
+        sent += state == "sent"
         async with pool().acquire() as conn:
             await conn.execute("UPDATE tank.market_lab_deliveries SET status=$3,updated_at=now() WHERE tenant_id=$1 AND warning_id=$2 AND channel='webhook' AND status='sending'", tenant, ident["warning_id"], state)
     return {"sent": sent}
+
+
+class ConfidenceBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: UUID
+    hits: int = Field(ge=0, strict=True)
+    total: int = Field(ge=0, strict=True)
+
+    @model_validator(mode="after")
+    def valid_counts(self):
+        if self.hits > self.total:
+            raise ValueError("The action arguments are invalid")
+        return self
 
 
 class MailBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tenant_id: UUID
     warning_id: UUID | None = None
+    report_id: UUID | None = None
+    title: str | None = None
+    text: str | None = None
+    citations: list[dict] | None = None
     status: Literal["pending", "sent", "uncertain", "suppressed"] | None = None
 
 
@@ -244,10 +287,32 @@ def build_router(tank):
         if not command.key_matches(x_tank_key, os.environ.get("TANK_KEY_MARKET_LAB", "")):
             raise HTTPException(401, "Room key required")
 
+    @router.post("/v1/market-lab/internal/confidence", dependencies=[Depends(room_only)])
+    @tenant_path("body")
+    async def confidence(body: ConfidenceBody):
+        from base_reliability import wilson_lower
+        return {"confidence": wilson_lower(body.hits, body.total), "hits": body.hits, "total": body.total}
+
     @router.post("/v1/market-lab/internal/alerts/{operation}", dependencies=[Depends(room_only)])
     @tenant_path("body")
     async def alerts(operation: str, body: MailBody):
         from main import pool
+        if operation in {"settings", "brief-webhook"}:
+            async with pool().acquire() as conn:
+                settings = await conn.fetchrow("SELECT * FROM tank.market_lab_alerts WHERE tenant_id=$1", body.tenant_id)
+            if operation == "settings":
+                return {"email": bool(settings and settings["email_enabled"]),
+                        "webhook": bool(settings and settings["webhook_url"]),
+                        "email_since": settings["email_since"] if settings else None,
+                        "webhook_since": settings["webhook_since"] if settings else None}
+            if body.report_id is None or body.title is None or body.text is None or body.citations is None:
+                raise HTTPException(422, "The action arguments are invalid")
+            if not settings or not settings["webhook_url"]:
+                return {"status": "suppressed"}
+            state = await send_webhook(body.tenant_id, dict(settings),
+                                       {"report_id": str(body.report_id), "title": body.title,
+                                        "text": body.text, "citations": body.citations}, body.report_id)
+            return {"status": state}
         if operation in {"pending", "webhooks"}:
             await prime(body.tenant_id)
         if operation == "pending":

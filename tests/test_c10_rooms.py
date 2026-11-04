@@ -74,11 +74,24 @@ def test_agent_compose_is_one_corridor_with_a_limit_and_a_healthcheck(
     folder: str, service: str, corridor: str, role: str, key: str
 ) -> None:
     box = yaml.safe_load((ROOT / "agents" / folder / "docker-compose.yml").read_text(encoding="utf-8"))
-    assert list(box["networks"]) == ["gw"]
+    assert list(box["networks"]) == ["gw", "figma_internal", "egress"]
+    assert box["networks"]["figma_internal"] == {"internal": True}
+    assert box["networks"]["egress"] == {}
+    assert set(box["services"]) == {"agent-tisan", "figma-egress-proxy"}
+    proxy = box["services"]["figma-egress-proxy"]
+    assert proxy["networks"] == {"figma_internal": {"interface_name": "radix-link"}, "egress": {}}
+    assert proxy["build"] == {"context": "..", "dockerfile": "radix/Dockerfile"}
+    assert proxy["environment"] == {"PYTHONDONTWRITEBYTECODE": "1"}
+    assert proxy["read_only"] is True and proxy["cap_drop"] == ["ALL"]
+    assert proxy["security_opt"] == ["no-new-privileges:true"]
+    assert proxy["mem_limit"] == "128m" and proxy["cpus"] == 0.25
+    assert "allowed = 'api.figma.com'" in proxy["command"][-1]
+    assert "allow_storage=False, require_sni=True" in proxy["command"][-1]
+    assert "max_response_bytes=5_000_000" in proxy["command"][-1]
     assert box["networks"]["gw"]["external"] is True
     assert box["networks"]["gw"]["name"] == corridor
     spec = box["services"][service]
-    assert spec["networks"] == ["gw"]
+    assert spec["networks"] == ["gw", "figma_internal"]
     # Founder, 14 Oct 2026: Tisan's room is 1g so a site build can finish. Radix stays 256m.
     assert spec["mem_limit"] == ("1g" if folder == "tisan" else "256m")
     assert spec["cpus"] in (0.25, "0.25")
@@ -203,17 +216,19 @@ def test_ping_schedules_are_the_template_heartbeat() -> None:
         # RX1 adds scan on Radix. TS1 adds scaffold on Tisan. TS2 adds figma.
         # Each room keeps ping, and neither assertion may strip the other room's job.
         if folder == "radix":
-            assert handlers == {"ping", "scan"}
+            # R4 adds watch_tick for scheduled watch re-checks.
+            assert handlers == {"ping", "scan", "watch_tick"}
         else:
-            # Tisan builder (#571) adds build, with the same 10-minute allowance.
-            assert handlers == {"ping", "scaffold", "figma", "build"}
-            # Founder, 14 Oct 2026: a site build is allowed 10 minutes.
-            assert module.app.state.job_timeouts == {"scaffold": 600, "build": 600}
-        assert module.app.state.schedules == [
-            {
-                "tenant_id": "00000000-0000-0000-0000-000000000001",
-                "cron": "*/5 * * * *",
-                "kind": "ping",
-                "input": {"heartbeat": True},
-            }
-        ]
+            # Wave 4 adds the orchestration job; existing heartbeat and handlers remain.
+            assert handlers == {"ping", "scaffold", "figma", "build", "pipeline"}
+            # The R5 scan and staging poll are bounded inside the pipeline allowance.
+            assert module.app.state.job_timeouts == {"scaffold": 1200, "build": 1200, "pipeline": 2400}
+        heartbeat = {
+            "tenant_id": "00000000-0000-0000-0000-000000000001",
+            "cron": "*/5 * * * *",
+            "kind": "ping",
+            "input": {"heartbeat": True},
+        }
+        # R4: Radix also ticks its due watches every minute.
+        tick = {"tenant_id": heartbeat["tenant_id"], "cron": "* * * * *", "kind": "watch_tick", "input": {}}
+        assert module.app.state.schedules == ([tick, heartbeat] if folder == "radix" else [heartbeat])

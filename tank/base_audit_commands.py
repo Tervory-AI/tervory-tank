@@ -1,4 +1,6 @@
 """Founder-only Command adapters over the existing saved Base audit store."""
+import csv
+import io
 import json
 from typing import Annotated
 from uuid import UUID
@@ -27,6 +29,37 @@ class ReviewArgs(CsvArgs):
     attachment_id: UUID
     field_verdicts: dict[str, dict[str, str]] | None = None
 
+
+
+def field_checks_csv(text):
+    """Optional explicit field verdicts in the founder's uploaded review CSV."""
+    reader = csv.DictReader(io.StringIO(text.lstrip("\ufeff")), strict=True)
+    columns = reader.fieldnames or []
+    checks = {name + "_verdict": name for name in ("website", "phone", "email", "socials")}
+    added = set(columns).intersection(checks)
+    if not added:
+        return text, None
+    if len(columns) != len(set(columns)) or "record_id" not in columns:
+        raise HTTPException(422, "Invalid field verdict CSV")
+    original = [name for name in columns if name not in added]
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=original)
+    writer.writeheader()
+    verdicts = {}
+    for row in reader:
+        if None in row or any(value is None for value in row.values()):
+            raise HTTPException(422, "Invalid field verdict CSV")
+        supplied = {}
+        for column in added:
+            value = row.pop(column).strip()
+            if value:
+                if value not in {"correct", "wrong", "unsure"}:
+                    raise HTTPException(422, "Invalid field verdict CSV")
+                supplied[checks[column]] = value
+        if supplied:
+            verdicts[row["record_id"]] = supplied
+        writer.writerow(row)
+    return output.getvalue(), verdicts
 
 def build_router() -> APIRouter:
     from command import Actor, db, identity, require_tool
@@ -87,7 +120,14 @@ def build_router() -> APIRouter:
             text = bytes(row["content"]).decode("utf-8-sig")
         except UnicodeDecodeError:
             raise HTTPException(422, "The action arguments are invalid") from None
-        saved = await store().review(actor.tenant_id, args.campaign_id, args.audit_id, text, actor.user_id, args.field_verdicts)
+        try:
+            text, imported = field_checks_csv(text)
+        except csv.Error:
+            raise HTTPException(422, "Invalid field verdict CSV") from None
+        if imported is not None and args.field_verdicts is not None and imported != args.field_verdicts:
+            raise HTTPException(422, "Conflicting field verdicts")
+        saved = await store().review(actor.tenant_id, args.campaign_id, args.audit_id, text, actor.user_id,
+                                     imported if imported is not None else args.field_verdicts)
         return await result(actor, "base.audit.review", {"audit_id": str(args.audit_id), "measurement": saved["measurement"]})
 
     return router

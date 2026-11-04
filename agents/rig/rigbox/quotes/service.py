@@ -45,7 +45,7 @@ class QuoteService(Service):
     def __init__(self, store: Any, models: Any, handoff: Any, quotes: Any) -> None:
         super().__init__(store, models, handoff)
         self.quote_store = quotes
-        # Locate orders and supplier POs live in Rig's own database (no Odoo).
+        # Locate orders and supplier POs live in Rig's own database.
         from rigbox.fulfilment import RigOrders
         self.fulfilment: Any = RigOrders(store)
 
@@ -289,7 +289,7 @@ class QuoteService(Service):
         attempt = quote.pop("_attempt")
         error = None
         try:
-            # Shorter than the five-minute claim lease, including multi-line Odoo orders.
+            # Shorter than the five-minute delivery claim lease.
             async with asyncio.timeout(60):
                 retailer = await self.store.retailer(tenant) or {}
                 await self.handoff.send(tenant_id=tenant, email=retailer.get("email"),

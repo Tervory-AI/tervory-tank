@@ -1,0 +1,133 @@
+{
+  "instances": 147,
+  "visibleHeadingCorrections": 18,
+  "changes": [
+    {
+      "id": "I465:45832;180:8394",
+      "menu": "465:45832",
+      "frame": "231:11870",
+      "before": "Trigger",
+      "after": "Rig"
+    },
+    {
+      "id": "I465:46007;180:8394",
+      "menu": "465:46007",
+      "frame": "231:11930",
+      "before": "Trigger",
+      "after": "Rig"
+    },
+    {
+      "id": "I465:46183;180:8394",
+      "menu": "465:46183",
+      "frame": "231:11986",
+      "before": "Trigger",
+      "after": "Rig"
+    },
+    {
+      "id": "I465:46359;180:8394",
+      "menu": "465:46359",
+      "frame": "231:12042",
+      "before": "Trigger",
+      "after": "Rig"
+    },
+    {
+      "id": "I465:47228;180:8394",
+      "menu": "465:47228",
+      "frame": "231:12098",
+      "before": "Trigger",
+      "after": "Rig"
+    },
+    {
+      "id": "I465:47406;180:8394",
+      "menu": "465:47406",
+      "frame": "231:12150",
+      "before": "Trigger",
+      "after": "Rig"
+    },
+    {
+      "id": "I465:47581;180:8394",
+      "menu": "465:47581",
+      "frame": "231:12224",
+      "before": "Trigger",
+      "after": "Tisan"
+    },
+    {
+      "id": "I465:47756;180:8394",
+      "menu": "465:47756",
+      "frame": "231:12284",
+      "before": "Trigger",
+      "after": "Tisan"
+    },
+    {
+      "id": "I465:47931;180:8394",
+      "menu": "465:47931",
+      "frame": "231:12340",
+      "before": "Trigger",
+      "after": "Tisan"
+    },
+    {
+      "id": "I465:48107;180:8394",
+      "menu": "465:48107",
+      "frame": "231:12396",
+      "before": "Trigger",
+      "after": "Tisan"
+    },
+    {
+      "id": "I465:48286;180:8394",
+      "menu": "465:48286",
+      "frame": "231:12452",
+      "before": "Trigger",
+      "after": "Tisan"
+    },
+    {
+      "id": "I465:48464;180:8394",
+      "menu": "465:48464",
+      "frame": "231:12504",
+      "before": "Trigger",
+      "after": "Tisan"
+    },
+    {
+      "id": "I468:26351;180:8394",
+      "menu": "468:26351",
+      "frame": "468:26347",
+      "before": "Trigger",
+      "after": "Rig"
+    },
+    {
+      "id": "I468:26495;180:8394",
+      "menu": "468:26495",
+      "frame": "468:26491",
+      "before": "Trigger",
+      "after": "Tisan"
+    },
+    {
+      "id": "I468:27702;180:8394",
+      "menu": "468:27702",
+      "frame": "468:27698",
+      "before": "Trigger",
+      "after": "Rig"
+    },
+    {
+      "id": "I468:27808;180:8394",
+      "menu": "468:27808",
+      "frame": "468:27804",
+      "before": "Trigger",
+      "after": "Rig"
+    },
+    {
+      "id": "I468:28000;180:8394",
+      "menu": "468:28000",
+      "frame": "468:27996",
+      "before": "Trigger",
+      "after": "Tisan"
+    },
+    {
+      "id": "I468:28106;180:8394",
+      "menu": "468:28106",
+      "frame": "468:28102",
+      "before": "Trigger",
+      "after": "Tisan"
+    }
+  ],
+  "issues": []
+}

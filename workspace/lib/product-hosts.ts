@@ -5,7 +5,8 @@
  * Founder console remains at /admin/autumbra.
  * zenas.tervory.com is the Zenas product host — Moot watch at /moot, full
  * Zenas panel at /zenas. Squad product hosts land on their workspace paths.
- * Separate Coolify services (rig, mcp, site, coolify) are not rewritten here.
+ * Rig shares its host: Traefik keeps widget/store paths on agent-rig; the
+ * remaining paths reach Workspace. Separate mcp, site and coolify do not rewrite.
  */
 
 export type ProductHost = {
@@ -28,6 +29,7 @@ export const WORKSPACE_PRODUCT_HOSTS: readonly ProductHost[] = [
   { host: "tiger.tervory.com", rootPath: "/tiger", product: "Tiger" },
   { host: "market-lab.tervory.com", rootPath: "/market-lab", product: "Market Lab" },
   { host: "tisan.tervory.com", rootPath: "/tisan", product: "Tisan" },
+  { host: "rig.tervory.com", rootPath: "/rig", product: "Rig" },
   { host: "radix.tervory.com", rootPath: "/radix", product: "Radix" },
   { host: "skala.tervory.com", rootPath: "/skala", product: "Skala", founderOnly: true },
   { host: "tank.tervory.com", rootPath: "/tank", product: "Tank", founderOnly: true },
@@ -57,6 +59,7 @@ export function productHostFor(hostHeader: string | null | undefined): ProductHo
 /**
  * Path rewrite for a product host.
  * - `/` (and empty) → that product's rootPath
+ * - Rig /admin and /admin/* → /rig/admin and /rig/admin/*
  * - already on rootPath or under it → no rewrite
  * - public Clerk / health / webhook paths → no rewrite
  * - everything else on that host stays as-is (deep links work)
@@ -76,6 +79,11 @@ export function productHostRewritePath(
     path.startsWith("/_next")
   ) {
     return null;
+  }
+  // Rig's former room /admin becomes the authenticated Workspace administrator
+  // page. Already-prefixed /rig/* links keep their path, as on other hosts.
+  if (product.product === "Rig" && (path === "/admin" || path.startsWith("/admin/"))) {
+    return `/rig${path}`;
   }
   if (path === "/" || path === "") return product.rootPath;
   return null;

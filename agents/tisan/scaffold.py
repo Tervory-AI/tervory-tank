@@ -33,7 +33,7 @@ _CORE_COLOURS = ("ink", "paper", "accent", "line")
 _CORE_FONTS = ("heading", "body")
 _STANDARD_PAGES = ("home", "about", "contact", "privacy")
 _IGNORED_PAGES = {"404", "not-found"}
-_SKIP_DIRS = {"node_modules", ".next", "playwright-report", "test-results", ".lighthouseci", "out", ".quality-checks.json"}
+_SKIP_DIRS = {"node_modules", ".next", "playwright-report", "test-results", ".lighthouseci", "out", ".quality-checks.json", ".k6-check.json"}
 _LABELS = {"home": "Home", "about": "About", "contact": "Contact", "privacy": "Privacy"}
 _CHECKS = (
     ("npm ci", 240),
@@ -295,6 +295,7 @@ def write_project(brief: dict[str, Any], dest: Path) -> None:
             "tsconfig.tsbuildinfo",
             "quality-secrets.fixture",
             ".quality-checks.json",
+            ".k6-check.json",
         ),
     )
     (dest / "lib" / "site.ts").write_text(render_site(brief), encoding="utf-8")
@@ -455,7 +456,7 @@ def _short(text: str) -> str:
 def _quality_results(checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Use the existing card's result rows; never introduce a page or UI label."""
     return [{"name": c["name"], "ok": c["ok"], "summary": c.get("summary", "")}
-            for c in checks if c["name"] in {"accessibility", "lighthouse", "links", "secrets"}]
+            for c in checks if c["name"] in {"accessibility", "lighthouse", "links", "secrets", "k6", "radix.repo"}]
 
 
 async def _secret_check(project: Path, tenant_id: str | None, tank: Any = None) -> dict[str, Any]:
@@ -508,19 +509,21 @@ async def _secret_check(project: Path, tenant_id: str | None, tank: Any = None) 
 
 
 async def _quality_checks(project: Path, env: dict[str, str], tenant_id: str | None, tank: Any) -> list[dict[str, Any]]:
+    # Finish the Tank scan before the browser runner reaches its final k6 stage.
+    secrets = await _secret_check(project, tenant_id, tank)
     report_file = project / ".quality-checks.json"
     report_file.unlink(missing_ok=True)
     code, _ = await _run(["node", "scripts/quality-check.cjs"], project, env, 360)
     try:
         reports = json.loads(report_file.read_text(encoding="utf-8"))
-        if (not isinstance(reports, list) or [c.get("name") for c in reports] != ["accessibility", "lighthouse", "links"]
+        if (not isinstance(reports, list) or [c.get("name") for c in reports] != ["accessibility", "lighthouse", "links", "k6"]
                 or any(type(c.get("ok")) is not bool for c in reports)):
             raise ValueError
         if code not in (0, 1) or (code == 1 and all(c["ok"] for c in reports)):
             raise ValueError
     except (OSError, ValueError, TypeError, AttributeError):
         reports = [{"name": name, "ok": False, "summary": "local browser checks unavailable"}
-                   for name in ("accessibility", "lighthouse", "links")]
+                   for name in ("accessibility", "lighthouse", "links", "k6")]
     finally:
         report_file.unlink(missing_ok=True)
     for check in reports:
@@ -533,7 +536,7 @@ async def _quality_checks(project: Path, env: dict[str, str], tenant_id: str | N
         elif check["name"] == "links" and "summary" not in check:
             check["summary"] = "; ".join(f'{v["page"]}: {v["url"]} answered {v["status"]}'
                                           for v in check.get("failures", [])) or f'{len(check.get("checked", []))} local links/assets answered 200; external links were not fetched'
-    reports.append(await _secret_check(project, tenant_id, tank))
+    reports.insert(3, secrets)
     return reports
 
 

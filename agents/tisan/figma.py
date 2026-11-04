@@ -4,20 +4,29 @@ Colour, type, and space values become CSS custom properties. A value that
 disagrees with itself is listed and left out. A state the component does not
 have is listed and not invented.
 
-The room has no path to the public internet, so this reader does not call
-Figma. It reads the recorded fixture for the Tervory file and no other file.
+Live reads use the tenant/file pairing and the dedicated Figma-only proxy.
+Without a token, the recorded Tervory fixture remains available offline.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 TERVORY_FILE_KEY = "ksi7ctRwEnN8wbip1yfuhL"
 TERVORY_PAGE_ID = "0:1"
+
+FIGMA_PROXY = "http://figma-egress-proxy:8080"
+_REQUEST_SECONDS = 20
+_MAX_RESPONSE_BYTES = 5_000_000
+_REQUEST_FAILED = "Figma request failed"
+_UNPAIRED = "Figma file is not paired with this tenant"
 
 _FILE_KEY = re.compile(r"^[0-9A-Za-z]{22,128}$")
 _NODE_ID = re.compile(r"^\d+:\d+$")
@@ -522,6 +531,8 @@ def normalise_rest(file_key: str, node_id: str, nodes_payload: dict[str, Any], v
     page, frames, components, uses = components_from_document(document)
     if document.get("type") != "CANVAS":
         page = {"id": node_id, "name": str(document.get("name") or page.get("name") or "")}
+    else:
+        page = {**page, "id": node_id}
     variables, gaps, known = variables_from_rest(variables_payload)
     measured = {frame["frameId"]: frame for frame in visual_frames(document, variables_payload)}
     frames = [{**frame, **({"visual": measured[frame["id"]]} if frame["id"] in measured else {})} for frame in frames]
@@ -1047,6 +1058,7 @@ def compile_reading(source: dict[str, Any]) -> dict[str, Any]:
         "ready": not blocked,
         "blocked": blocked,
         "source": source.get("source"),
+        "collections_known": bool(source.get("collections_known")),
         "recorded_at": source.get("recorded_at"),
         "note": source.get("note"),
         "file_key": source.get("file_key"),
@@ -1089,10 +1101,62 @@ def _store(reading: dict[str, Any], tenant: str, data_root: Path | None) -> str:
     if readings not in folder.resolve().parents:
         raise FigmaError("refusing to write outside this tenant's readings")
     path = folder / f"{node_id}.json"
+    assert path.resolve().parent == folder.resolve()
     stored = path.relative_to(root).as_posix()
     reading["stored"] = stored
     path.write_text(json.dumps(reading, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return stored
+
+
+def _paired(tenant: str, file_key: str) -> bool:
+    for pair in os.environ.get("TISAN_FIGMA_FILES", "").split(","):
+        owner, separator, allowed = pair.strip().partition("=")
+        if separator and owner.strip() == tenant and allowed.strip() == file_key:
+            return True
+    return False
+
+
+async def _get_rest(
+    client: httpx.AsyncClient, path: str, token: str, *, variables: bool = False,
+) -> dict[str, Any] | None:
+    # The wall-clock deadline also bounds slow streaming bodies. Redirects and
+    # transport retries are disabled: a read makes at most these two requests.
+    try:
+        async with asyncio.timeout(_REQUEST_SECONDS):
+            async with client.stream("GET", "https://api.figma.com/v1/" + path) as response:
+                if variables and response.status_code == 403:
+                    return None
+                if response.status_code != 200:
+                    raise FigmaError(_REQUEST_FAILED)
+                length = response.headers.get("content-length")
+                if length is not None and int(length) > _MAX_RESPONSE_BYTES:
+                    raise FigmaError(_REQUEST_FAILED)
+                body = bytearray()
+                async for chunk in response.aiter_bytes(chunk_size=64 * 1024):
+                    if len(body) + len(chunk) > _MAX_RESPONSE_BYTES:
+                        raise FigmaError(_REQUEST_FAILED)
+                    body.extend(chunk)
+                result = json.loads(body)
+                # An upstream echo must never persist a credential as page data,
+                # including when the JSON encoded it using Unicode escapes.
+                if not isinstance(result, dict) or token in json.dumps(result, ensure_ascii=False):
+                    raise FigmaError(_REQUEST_FAILED)
+                return result
+    except (httpx.HTTPError, TimeoutError, ValueError, UnicodeError):
+        raise FigmaError(_REQUEST_FAILED) from None
+
+
+async def _read_live(file_key: str, node_id: str, token: str) -> dict[str, Any]:
+    try:
+        async with httpx.AsyncClient(
+            proxy=FIGMA_PROXY, trust_env=False, timeout=_REQUEST_SECONDS,
+            follow_redirects=False, headers={"X-Figma-Token": token},
+        ) as client:
+            nodes = await _get_rest(client, f"files/{file_key}/nodes?ids={node_id}", token)
+            variables = await _get_rest(client, f"files/{file_key}/variables/local", token, variables=True)
+        return normalise_rest(file_key, node_id, nodes, variables)
+    except (httpx.HTTPError, ValueError, KeyError, TypeError, RecursionError):
+        raise FigmaError(_REQUEST_FAILED) from None
 
 
 async def execute(
@@ -1100,16 +1164,23 @@ async def execute(
     tenant_id: str,
     *,
     data_root: Path | None = None,
+    live: bool = False,
 ) -> dict[str, Any]:
-    """Read the recorded page for this tenant. This does not call Figma."""
+    """Read this tenant's paired live page, or the offline Tervory fixture."""
     if not isinstance(payload, dict):
         raise FigmaError("input must be an object")
     file_key = normalise_file_key(payload.get("file_key"))
     node_id = normalise_node_id(payload.get("node_id"))
     tenant = _tenant(str(tenant_id))
-    if file_key != TERVORY_FILE_KEY:
-        raise FigmaError("this room reads the recorded Tervory page only")
-    source = load_fixture(node_id)
+    token = os.environ.get("FIGMA_TOKEN", "").strip()
+    if file_key == TERVORY_FILE_KEY and (not live or not (token and _paired(tenant, file_key))):
+        source = load_fixture(node_id)
+    else:
+        if not live or not _paired(tenant, file_key):
+            raise FigmaError(_UNPAIRED)
+        if not token:
+            raise FigmaError(_REQUEST_FAILED)
+        source = await _read_live(file_key, node_id, token)
     reading = compile_reading(source)
     reading["stored"] = _store(reading, tenant, data_root)
     return reading

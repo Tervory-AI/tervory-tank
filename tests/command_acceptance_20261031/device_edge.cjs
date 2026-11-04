@@ -1,6 +1,7 @@
 /* Actual CLI device login -> (us-east: actual Workspace adapter | za: Tank directly)
  * -> disposable loopback Tank. The browser approval step is automated by calling
- * the actual Workspace approval module with a signed-in identity. Synthetic only. */
+ * the actual Workspace approval module (US) or the offline Zitadel fixture (ZA).
+ * Synthetic only. */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -66,6 +67,13 @@ const transport = async (url, init) => {
       if (approved) return;
       approved = true;
       const page = new URL(opened.at(-1));
+      if (region === 'za') {
+        assert.equal(page.origin, 'https://auth-za.tervory.com');
+        assert.equal(page.searchParams.get('user_code'), '1234-5678');
+        // The Python fake OIDC provider issues a signed JWT at the next poll;
+        // the real Tank checks discovery/JWKS, audience and tenant mapping.
+        return;
+      }
       assert.equal(page.origin + page.pathname, 'https://app.tervory.com/cli/device');
       assert.equal(page.searchParams.get('region'), region);
       const code = page.searchParams.get('code');
@@ -116,7 +124,7 @@ const transport = async (url, init) => {
   for (const secret of [first.access_token, first.refresh_token, second.access_token, second.refresh_token]) {
     assert(!output.includes(secret));
   }
-  assert.equal(approvalCalls, 2);
+  assert.equal(approvalCalls, region === 'za' ? 0 : 2);
   if (region === 'za') assert(adapterCalls === 0 && directCalls >= 8);
   else assert(adapterCalls >= 8 && directCalls === 0);
   process.stdout.write(`PASS: CLI device login ${region} ${region === 'za' ? 'direct to Tank' : 'via Workspace adapter'}; `
