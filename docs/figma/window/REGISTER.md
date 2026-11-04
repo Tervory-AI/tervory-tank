@@ -45,6 +45,10 @@ Scope split, founder 4 Nov 06:30 PT: this register owns sign-in, empty, conversa
 | W10-1440 · Offline | 1440×900 | [557:8327](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-8327) | Proposed | [W10-1440.png](evidence/W10-1440.png) |
 | W10-1280 · Offline | 1280×800 | [557:8425](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-8425) | Proposed | [W10-1280.png](evidence/W10-1280.png) |
 
+## Wording and shared elements
+
+[wording.json](evidence/wording.json) lists every visible string, its frame IDs and explicit Proposed status. The single-file old/new example is retained; no multi-file/per-hunk controls or expanded flows from the split were drawn. Header main `553:1313` and composer main `553:1325` are reusable instances in all signed-in states; `93:4` remains the shared action main. Running/offline dim the composer as disabled; command cards are static design proposals.
+
 ## Evidence and validation
 
 Each item has its own `evidence/Wxx-nodes.json` construction ledger and `evidence/Wxx-audit.json` read-back: all descendant IDs, editable node-type counts, exact frame dimensions, Inter font assertion, component main IDs, discrete logo image slots and visible words. PNGs are exports for review only; no complete-UI raster is imported into the design. `evidence/validation.json` records screenshot dimensions and SHA-256.
