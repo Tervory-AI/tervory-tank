@@ -675,9 +675,10 @@ async def training_receipt(
 @router.post("/zenas/court-text")
 async def save_court_text_pair(body: CourtTextPair, request: Request) -> dict[str, bool]:
     """Accept only code-split official court text from the regional Zenas room."""
-    from main import TANK_API_KEY
     supplied = request.headers.get("x-tank-key", "")
-    expected = TANK_API_KEY
+    # The scheduled splitter runs in the Zenas room, which never holds the
+    # Workspace key. Only that owning room may submit official court splits.
+    expected = os.environ.get("TANK_KEY_ZENAS", "").strip()
     if not supplied or not expected or not hmac.compare_digest(supplied, expected):
         raise HTTPException(401, "Room authentication required")
     if runtime().box_region() != "za" or body.source_id not in OFFICIAL_ZA_CASE_SOURCES:
@@ -688,21 +689,26 @@ async def save_court_text_pair(body: CourtTextPair, request: Request) -> dict[st
                                       or body.reason not in {"empty", "criminal", "headings", "order"}):
         raise HTTPException(422, "Invalid court text exclusion")
     ref = f"{body.source_id}:{body.version_id}"
-    async with runtime().pool().acquire() as conn:
-        async with conn.transaction():
-            if body.status == "split":
-                value, output = dict(body.input or {}), dict(body.output or {})
-                await save_pair(
-                    conn, tenant=PLATFORM_TENANT, agent="zenas", task="zenas.reasoning",
-                    value=value, output=output, approved_by="court decision", source="court_text",
-                    ref=ref, holdout=is_holdout(PLATFORM_TENANT, "zenas.reasoning", value),
-                    client_matter=False, public=True, region="za",
+    from tenant_db import tenant_scope
+
+    # Platform-owned public data still needs an explicit transaction-local RLS
+    # tenant. No body field can choose a client tenant or an admin connection.
+    with tenant_scope(PLATFORM_TENANT):
+        async with runtime().pool().acquire() as conn:
+            async with conn.transaction():
+                if body.status == "split":
+                    value, output = dict(body.input or {}), dict(body.output or {})
+                    await save_pair(
+                        conn, tenant=PLATFORM_TENANT, agent="zenas", task="zenas.reasoning",
+                        value=value, output=output, approved_by="court decision", source="court_text",
+                        ref=ref, holdout=is_holdout(PLATFORM_TENANT, "zenas.reasoning", value),
+                        client_matter=False, public=True, region="za",
+                    )
+                await conn.execute(
+                    """INSERT INTO tank.judgment_splits(region,source_id,document_id,version_id,status,reason)
+                    VALUES('za',$1,$2,$3,$4,$5) ON CONFLICT(region,version_id) DO NOTHING""",
+                    body.source_id, body.document_id, body.version_id, body.status, body.reason,
                 )
-            await conn.execute(
-                """INSERT INTO tank.judgment_splits(region,source_id,document_id,version_id,status,reason)
-                VALUES('za',$1,$2,$3,$4,$5) ON CONFLICT(region,version_id) DO NOTHING""",
-                body.source_id, body.document_id, body.version_id, body.status, body.reason,
-            )
     return {"ok": True}
 
 
