@@ -48,9 +48,22 @@ def select(info: dict, at: datetime, deadline: datetime, *, batch_discount=None)
                 if window["start"] >= window["end"]:
                     raise ValueError("Invalid off-peak window")
                 for fold in (0, 1):
-                    start = boundary(window["start"], fold).astimezone(timezone.utc)
+                    wall = boundary(window["start"], fold)
+                    # A spring-forward boundary may not exist. Move to the
+                    # first real local minute, rather than inventing a rate.
+                    for _ in range(1441):
+                        restored = wall.astimezone(timezone.utc).astimezone(zone)
+                        if restored.replace(tzinfo=None) == wall.replace(tzinfo=None):
+                            break
+                        wall = (wall + timedelta(minutes=1)).replace(fold=fold)
+                    else:
+                        continue
+                    start = wall.astimezone(timezone.utc)
                     end = boundary(window["end"], fold).astimezone(timezone.utc)
                     start = max(at, start)
+                    local = start.astimezone(zone)
+                    if local.date() != day or not window["start"] <= local.strftime("%H:%M") < window["end"]:
+                        continue
                     if start < end and start + duration <= deadline:
                         candidates.append((discount, start + duration, start, "foreground"))
     charge, _, start, mode = min(candidates)

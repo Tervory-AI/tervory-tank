@@ -5,9 +5,12 @@ from unittest.mock import AsyncMock
 import uuid
 
 import pytest
+from fastapi import HTTPException
 
 import offpeak_schedule
 import priority_queue
+from test_tank_tenant_boundaries import boundary  # noqa: F401
+from test_tank_ladder import ladder, request  # noqa: F401
 
 
 NOW = datetime(2026, 11, 4, 12, tzinfo=timezone.utc)
@@ -67,6 +70,26 @@ def test_both_occurrences_of_a_fall_back_price_window(stamp, expected):
     assert plan["dispatch_at"] == expected and plan["charge_multiplier"] == .5
 
 
+@pytest.mark.parametrize("start,end,expected,charge", [
+    ("02:00", "02:30", "2026-03-08T09:00:00+00:00", 1),
+    ("02:30", "04:00", "2026-03-08T10:00:00+00:00", .5),
+])
+def test_spring_forward_prices_use_real_local_times(start, end, expected, charge):
+    at = datetime.fromisoformat("2026-03-08T09:00:00+00:00")
+    info = {"offpeak": {"timezone": "America/Los_Angeles", "charge_multiplier": .5,
+        "windows": [{"days": [6], "start": start, "end": end}]}}
+    plan = offpeak_schedule.select(info, at, at + timedelta(hours=3))
+    assert plan["dispatch_at"] == expected and plan["charge_multiplier"] == charge
+
+
+def test_fall_back_gap_between_window_occurrences_is_not_discounted():
+    at = datetime.fromisoformat("2026-11-01T09:15:00+00:00")
+    info = {"offpeak": {"timezone": "America/Los_Angeles", "charge_multiplier": .5,
+        "windows": [{"days": [6], "start": "01:45", "end": "02:15"}]}}
+    plan = offpeak_schedule.select(info, at, at + timedelta(hours=2))
+    assert plan["dispatch_at"] == "2026-11-01T09:45:00+00:00"
+
+
 @pytest.mark.parametrize("deadline", [NOW, NOW + timedelta(seconds=119), NOW.replace(tzinfo=None)])
 def test_invalid_or_unachievable_deadline_refuses(deadline):
     with pytest.raises(ValueError):
@@ -121,3 +144,40 @@ async def test_expired_job_is_failed_without_a_paid_call(monkeypatch):
     await priority_queue._process(tank, conn, job)
     tank.run_route.assert_not_awaited()
     assert conn.execute.await_args.args[-1] == "deadline_exceeded"
+
+
+@pytest.mark.asyncio
+async def test_over_cap_request_refuses_before_loading_roster_metadata(monkeypatch):
+    info = AsyncMock(side_effect=AssertionError("No metadata lookup for a refused request"))
+    monkeypatch.setattr(priority_queue, "model_info", info)
+    monkeypatch.setattr(priority_queue.batch_providers, "compatible", lambda *_: False)
+    tank = SimpleNamespace(_batch_price=AsyncMock(return_value={}), _call_upper=lambda *_: 2)
+    item = SimpleNamespace(req=SimpleNamespace(deadline=None),
+        policy={"model": "placeholder", "max_cost_usd": 1}, messages=[], max_tokens=10, generation={})
+    with pytest.raises(HTTPException) as error:
+        await priority_queue.enqueue(tank, item)
+    assert error.value.status_code == 409
+    info.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_deadline_before_next_discount_delivers_one_existing_receipt(ladder, monkeypatch):  # noqa: F811
+    from test_tank_priority_offpeak import prepare
+    b = ladder
+    clock, _ = await prepare(b, monkeypatch)
+    deadline = clock[0] + timedelta(hours=1)  # Discount begins two hours from now.
+    req = request(b, b.tenants[0], text="Offline deadline input", priority="offpeak")
+    req.deadline = deadline
+    job = await b.tank.run_route(req)
+    await priority_queue.process_once(b.tank)
+    await priority_queue.process_once(b.tank)
+    result = await priority_queue.status(b.tank, job.id, req.tenant_id)
+    assert result["status"] == "completed" and len(b.sent) == 1
+    async with b.pool.acquire() as conn:
+        receipt = await conn.fetchrow(
+            "SELECT outcome,cost_usd,sent_at FROM tank.ledger WHERE id=$1 AND tenant_id=$2",
+            job.id, req.tenant_id)
+        assert receipt["outcome"] == "delivered" and receipt["sent_at"] == clock[0]
+        # 80 ordinary + 20 cached input tokens and 50 output tokens, peak rates.
+        assert float(receipt["cost_usd"]) == pytest.approx(.00008412)
+        assert await conn.fetchval("SELECT count(*) FROM tank.ledger WHERE tenant_id=$1", req.tenant_id) == 1

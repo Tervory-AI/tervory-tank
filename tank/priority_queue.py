@@ -105,6 +105,9 @@ async def enqueue(tank, item, *, caller=None, task_id=None, model_override=None)
     prices = await tank._batch_price(policy['model'])
     # Reserve/check with peak prices; a window closing must not circumvent a cap.
     batched = not policy.get('moa_enabled') and batch_providers.compatible(prices, item.messages, item.generation)
+    reserve = tank._call_upper(item.messages, item.max_tokens, prices) * (prices['discount'] if batched else 1)
+    if reserve > float(policy['max_cost_usd']):
+        raise HTTPException(409, 'Task cost cap prevents this request')
     # Validate scheduling metadata before storing a request, including deployed
     # /model/info metadata rather than assuming a config file exists in Tank.
     info = await model_info(tank, policy['model'])

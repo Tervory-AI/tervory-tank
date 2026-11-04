@@ -204,7 +204,7 @@ async def run_route(
     await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
     price_info = await priority_queue.model_info(__import__("sys").modules[__name__], model) if priority == "offpeak" else None
     sent_at = priority_queue.now()
-    if _offpeak_dispatch and not priority_queue.window_open(price_info.get("offpeak"), sent_at):
+    if _offpeak_dispatch and not priority_queue.dispatch_ready(req, price_info, sent_at):
         raise priority_queue.WindowClosed()
     if _receipt_id is not None:
         async with pool().acquire() as conn:

@@ -25,3 +25,5 @@ No live settings, data, approvals or deployments are changed by this branch.
   policy and the deadline; an expired job fails without dispatch. Waiting and
   foreground execution are bounded, but provider completion is not guaranteed.
   Receipts preserve actual measured costs; predicted discounts are not savings.
+  The protected `run_route` snapshot changes only its authorized dispatch-window
+  predicate; cache and task execution snapshots remain intact.

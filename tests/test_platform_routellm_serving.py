@@ -163,7 +163,8 @@ def test_run_route_changes_only_in_the_two_reviewed_hooks():
         elif not skipping:
             old.append(line)
     assert hooks == 2 and not skipping
-    assert hashlib.sha256(''.join(old).encode()).hexdigest() == 'fdd6cbb821586b1ba97cd44a2e37290d8736cb931f063c2ca30ab38424ebcc51'
+    # A8 authorizes only the deadline-aware off-peak dispatch predicate.
+    assert hashlib.sha256(''.join(old).encode()).hexdigest() == '357628bcb7cec320553c0766457260096a4d04d95606c1c17e79245cfb5d474b'
 
 
 @pytest.mark.asyncio
