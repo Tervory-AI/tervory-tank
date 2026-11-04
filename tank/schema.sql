@@ -3099,6 +3099,15 @@ END $$;
 ALTER TABLE tank.trigger_bot_config ADD COLUMN IF NOT EXISTS settings jsonb NOT NULL DEFAULT '{}';
 ALTER TABLE tank.trigger_bot_messages ADD COLUMN IF NOT EXISTS person text;
 
+
+-- Rig store-room lifecycle registry. No store catalogue or contact data here.
+CREATE TABLE IF NOT EXISTS tank.rig_rooms (
+    tenant_id uuid PRIMARY KEY,
+    coolify_uuid text,
+    state text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
@@ -3149,11 +3158,3 @@ CREATE TABLE IF NOT EXISTS agent_tank.memory_publish_log (
     published_row uuid
 );
 -- END GENERATED AGENT MEMORY
-
--- Rig store-room lifecycle registry. No store catalogue or contact data here.
-CREATE TABLE IF NOT EXISTS tank.rig_rooms (
-    tenant_id uuid PRIMARY KEY,
-    coolify_uuid text,
-    state text NOT NULL,
-    updated_at timestamptz NOT NULL DEFAULT now()
-);

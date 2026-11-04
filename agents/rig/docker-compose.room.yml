@@ -18,7 +18,7 @@ services:
     environment:
       AGENT_NAME: rig
       RIG_ROOM_TENANT: ${RIG_ROOM_TENANT:?}
-      DATABASE_URL: postgresql://rig:${RIG_ROOM_DB_PASSWORD:?}@database:5432/rig
+      DATABASE_URL: postgresql://rig:${RIG_ROOM_DB_PASSWORD}@database:5432/rig
       DATA_DIR: /data
       TANK_REGION: us-east
       TANK_URL: http://tank:8000
