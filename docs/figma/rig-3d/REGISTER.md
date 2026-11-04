@@ -1,5 +1,7 @@
 # Rig 3D · L29 · frames 06–07
 
+**Approved 3 Nov 2026, 17:47 PT** (Claude, under the founder's 3 Nov 13:28 delegation): all 56 frames of 06 (viewer) and 07 (kiosk) and their wording, at this commit. The stand-in models and the "Stand-in models · design review only" line are Figma-only and never reach a live page; the widget shows only approved models.
+
 **Proposed. Not approved.** Figma file `ZnphBOJU6657tohGLD3IzS`, page [11 · Rig 3D · L29 · Proposed](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=514-3091), ID `514:3091`.
 
 Branch `codex/figma-rig-3d` started at `origin/main` commit `8857cd3e3fcda721694792817a6295c923a2adbd`. The existing `docs/figma/RIG-3D-FRAMES.md` states that 06–07 have no approval. US cart S06/A07 approval is unrelated. No existing approved frame or shared component was changed.
