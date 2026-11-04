@@ -1,51 +1,214 @@
 # Tervory CLI
 
-Node 22. macOS Keychain, Windows Credential Manager, or Linux Secret Service is required for login. The CLI uses the pinned `@napi-rs/keyring` binding, never a plaintext credential file. Linux requires a running unlocked Secret Service; an unavailable keychain fails without a storage fallback. Cross-platform native keychain integration has not been exercised in founder acceptance.
+Node 22 and Git are required. Login uses macOS Keychain, Windows Credential
+Manager, or an unlocked Linux Secret Service through the pinned native keyring
+binding. There is no plaintext credential fallback.
 
-## Install (self-hosted, no npm)
+## Install
 
-The CLI is never published to npm or any other third-party registry: `cli/package.json` is `"private": true` (CI asserts it) and its `publishConfig.registry` points at an invalid host. Tervory serves it from the Workspace at `https://app.tervory.com/cli/`:
+macOS and Linux, from Tervory's own host (never npm):
 
+```sh
+curl -fsSL https://app.tervory.com/cli/install.sh | sh
 ```
-curl -fsSL https://app.tervory.com/cli/install.sh | sh                          # latest
-curl -fsSL https://app.tervory.com/cli/install.sh | TERVORY_CLI_VERSION=0.1.1 sh  # pinned
-tervory update                      # latest, or TERVORY_CLI_VERSION when set
-tervory update --version 0.1.1      # a specific version (also downgrades)
+
+Successful stdout has exactly these lines. Angle brackets identify values that
+vary with the selected build, home folder and PATH; the PATH line appears only
+when the launcher directory is missing from PATH:
+
+```text
+Downloading Tervory CLI <version> (<platform>)
+SHA-256 verified: <sha256>
+Installed Tervory CLI <version> to <home>/.tervory/cli/<version>
+Launcher: <home>/.local/bin/tervory
+Add <home>/.local/bin to your PATH, for example: export PATH="<home>/.local/bin:$PATH"
+Next: tervory login
+```
+
+Pin by running `curl -fsSL https://app.tervory.com/cli/install.sh | TERVORY_CLI_VERSION=0.5.0 sh`.
+It prints the same lines for that version. `tervory version` then prints, for
+example, `tervory 0.5.0 (linux-x64-gnu)` followed by a newline. The installed
+platform appears in parentheses. A source checkout prints
+`tervory 0.5.0 (development checkout)` instead.
+
+The installer and `tervory update` verify SHA-256 against the HTTPS manifest.
+They do not verify the detached tag-release signatures. For an independently
+verified installation, use the signed archive procedure below on every OS.
+
+Windows has x64 and arm64 MSVC archives with the Credential Manager binding and
+`tervory.cmd`. Download the appropriate archive, its `.sig`, `manifest.json`,
+`manifest.json.sig`, `SHA256SUMS` and `SHA256SUMS.sig` from the founder-published
+`cli-v0.5.0` workflow artifact. Obtain the SPKI PEM public key independently from
+the founder, corresponding to `CLI_RELEASE_SIGNING_PUBLIC_KEY`. From a trusted
+checkout, verify before extracting (the same verifier works on macOS/Linux):
+
+```powershell
+node cli/scripts/verify-release.mjs ./download ./trusted-release-public.pem win32-x64-msvc 0.5.0
+```
+
+Exact successful output:
+
+```text
+Release signatures and checksums verified.
+```
+
+A failed verification prints `Release verification failed. Nothing was installed.`
+to stderr and exits 1. Do not extract on failure. To install a verified Windows
+x64 archive in PowerShell:
+
+```powershell
+tar -xzf ./download/tervory-cli-0.5.0-win32-x64-msvc.tar.gz
+New-Item -ItemType Directory -Force "$HOME/.tervory/cli" | Out-Null
+Move-Item ./tervory-cli-0.5.0 "$HOME/.tervory/cli/0.5.0"
+$env:PATH = "$HOME/.tervory/cli/0.5.0;$env:PATH"
 tervory version
 ```
 
-- `install.sh` reads `latest.json` (or the pinned version), then `releases/<version>/manifest.json`, downloads `tervory-cli-<version>-<platform>.tar.gz` and refuses it unless its SHA-256 matches the manifest (nothing is installed on a mismatch). `releases/<version>/SHA256SUMS` is the same list in `sha256sum` format. It installs to `~/.tervory/cli/<version>`, switches `~/.tervory/cli/current` and writes a `~/.local/bin/tervory` launcher. Node.js 22 must be on PATH.
-- Platforms: linux-x64/arm64 (glibc and musl) and darwin-x64/arm64; each tarball carries its own `@napi-rs/keyring` binding.
-- `tervory update` uses `https://app.tervory.com/cli` only (no URL override), verifies the SHA-256 the same way and switches `current` atomically. Installed copies check `latest.json` at most once a day (1.5 s budget, never fails a command) and print a one-line notice; `TERVORY_NO_UPDATE_CHECK=1` or a `TERVORY_CLI_VERSION` pin turns that off.
-- Releasing: bump `version` in `cli/package.json` and `CHANGELOG.md` and merge. Release files are build outputs, never committed: the Workspace image build (`workspace/Dockerfile`, `cli-release` stage, fed `cli/` through `additional_contexts` in `docker-compose.yml`) runs `node cli/scripts/build-release.mjs` and copies the result into `public/cli`, so `https://app.tervory.com/cli/` serves the version in `cli/package.json`. Pushing a tag `cli-vX.Y.Z` runs the `cli-release` workflow, which checks the tag against the version and changelog, builds twice (byte-identical) and keeps the files as a 90-day workflow artifact; it publishes and deploys nothing. On one host the build is byte-reproducible; the `cli` workflow proves the image's tarballs hold the same entries and file bytes as a direct build (archive bytes can differ between GNU tar versions) and that the image's manifest and `SHA256SUMS` match the files it serves. The image serves only its current version, so `TERVORY_CLI_VERSION` pins to an older version stop resolving after a bump (follow-up: durable release storage together with manifest signing). For local testing, `node cli/scripts/build-release.mjs --out workspace/public/cli` (ignored by git). `latest.json` and `install.sh` are `no-cache`, versioned releases are immutable.
+The extraction, directory creation, move and PATH assignment are silent on
+success. The version command prints exactly:
 
-Development: `npm ci --prefix cli`, then `node cli/bin/tervory.mjs help`. Do not install anything on the founder's laptop as part of automated work.
-
-`tervory login [--region us-east|za] [--sign-in zitadel]` signs in with device approval; nothing is pasted. By default, the CLI asks the region's public origin for a device code and opens the Workspace page, `https://app.tervory.com/cli/device?code=XXXX-XXXX&region=…` (it builds that URL itself; an explicitly selected ZA Zitadel login instead opens only `https://auth-za.tervory.com`, as described below), and polls every 5 seconds (plus 5 s on `slow_down`) for up to 10 minutes. The page uses the existing Clerk sign-in. It shows the code, when the code was created, organization, region and "Device (the name the device reported)" (the requesting machine's own hostname claim, unverified), warns to deny any code the user did not just create, with **Approve** and **Deny** buttons. On approval, Tank issues an organization-scoped credential for the approving user into `tank.personal_tokens`. Only sha256 hashes are stored. The access token lasts 1 hour, and the refresh token lasts 30 days and rotates on every use. A reused, expired or revoked refresh token is refused. `last_used_at` is updated at most once a minute. The CLI saves one JSON entry in the OS keychain: `{version, region, access_token, refresh_token, expires_at, refresh_expires_at}`. It refreshes automatically when the access token is within 60 s of expiry. `tervory logout` revokes the credential on Tank and then removes the keychain entry. Each Clerk user can also see and revoke their Workspace-approved CLI sign-ins in the Workspace at **CLI sign-ins** (`https://app.tervory.com/cli/sign-ins`, linked in the sidebar): one row per active sign-in with the device name the device reported, region, when it signed in and when it was last used, and a **Revoke** button that ends its access and refresh tokens at once. ZA rows are read and revoked on the ZA Tank with `TANK_DEVICE_APPROVAL_KEY_ZA`, which there may only list and revoke that user's own sign-ins (never create one, never for a founder). Older keychain entries holding a raw `tv1` personal token keep working until logout. The command accepts no token arguments or environment variables. Do not use a service key in this CLI.
-
-Regions: **us-east** device calls go to `https://app.tervory.com/v1/command/device/{code,token,refresh,revoke}`, which the Workspace forwards to its local Tank. **ZA** has no Workspace: `za.tervory.com` is Tank only, so the CLI calls `https://za.tervory.com/v1/command/device/…` and every later chat turn goes straight to the ZA Tank. Approval still happens on the single Clerk-backed Workspace (`app.tervory.com/cli/device?region=za`), which records the decision on the ZA Tank at `TANK_URL_ZA` with the dedicated `TANK_DEVICE_APPROVAL_KEY_ZA` (the ZA Tank accepts it as `TANK_DEVICE_APPROVAL_KEY` for the two approval routes and for listing and revoking the user's own sign-ins only, and never for a founder; the ZA homes key in `TANK_API_KEY_ZA` cannot approve). **ZA Zitadel sign-in (optional):** when the ZA Tank has `IDENTITY_ISSUER=https://auth-za.tervory.com` and the configured public CLI client, `tervory login --region za --sign-in zitadel` explicitly requests Zitadel and opens Zitadel's verification URL at that fixed origin. Both the base and complete verification URL are checked; another origin is refused. Founders can use this flow when their `zitadel:<sub>` is in the ZA `TERVORY_ADMIN_USER_IDS` setting. Organisations map to tenant UUIDs through `IDENTITY_ORG_TENANTS`; email and editable metadata never grant identity or roles. Follow [IDENTITY-ZA.md](../docs/ops/IDENTITY-ZA.md) for the separate ZA identity resource and founder steps. Plain `tervory login --region za` and older CLIs keep the Boston approval path even when `IDENTITY_ISSUER` is set. Zitadel roles are snapshots until that Tank sign-in is revoked or expires, including through refresh; removing a role in Zitadel is not Tank revocation. Run `tervory logout` on each affected Zitadel CLI sign-in, then sign in again. The Clerk Workspace sign-in list does not list `zitadel:<sub>` identities. With `IDENTITY_ISSUER` unset, the Boston approval path above is unchanged and founders still cannot sign in to ZA through Boston's limited approval key; they use `--region us-east` until Zitadel is configured. No Clerk dashboard change is part of this step.
-
-```
-tervory chat [thread]
-tervory ask "question" [--thread id] [--file path]
-tervory threads
-tervory run base batch --file path.csv [--thread id]
-tervory run agent task --args '{"argument":"value"}' [--thread id]
-tervory build "change" [--thread id]
-tervory receipts thread-or-task-id
+```text
+tervory 0.5.0 (win32-x64-msvc)
 ```
 
-Interactive chat ends on `/exit` or EOF. Tool cards require an explicit `y` or `yes`; every other answer cancels. Non-interactive input cannot confirm. `run` uses the existing Tank tool name and argument schema; Base CSV intake maps headers and records to the existing batch contract. Other tool files must use that tool's JSON schema through `--args`. Tank enforces the schema and current role. `build` displays the submitted change as its brief, proposes the existing build card, and waits for confirmation; it does not spend a model call to rewrite the user's text.
+Use `win32-arm64-msvc` for Windows arm64. Keep Node 22 on PATH. To update Windows,
+verify a new archive, extract it into its own version folder and select that
+folder in PATH. `tervory update` on Windows fails with:
 
-The token envelope selects `https://app.tervory.com` or `https://za.tervory.com`. There is no URL override or cross-box fallback. Tank verifies the complete credential hash and region; the envelope alone grants no identity. The public command route forwards only the bearer credential to its fixed local Tank. It never sends a service key or client-supplied user, tenant or role assertions.
+```text
+Update refused: on Windows, verify and extract the signed release archive again.
+```
 
-Receipt amounts are displayed exactly as Tank returns them. Answers use Auto. Model names, provider models and prices are founder-only: Tank refuses the model roster (404) and any pinned model (403, naming no model) for everyone else, and sends model names in receipts, steps and messages only to the founder. Customers see the dollar figures and "What Auto would have cost". The CLI never computes money. An interrupted stream is reported and never automatically retried, because a turn may have incurred cost.
+Linux/macOS update commands are `tervory update` or `tervory update --version 0.5.0`.
+An unchanged installation prints `Tervory CLI 0.5.0 is already installed.`.
+A successful change prints `Downloading Tervory CLI <version> (<platform>)`,
+`SHA-256 verified: <sha256>` and `Updated Tervory CLI <old-version> -> <version>.` on separate
+lines. Versioned builds currently live in the Workspace image; older pins can
+stop resolving after a new image deploy. Linux/macOS installed copies check for updates at
+most daily with a 1.5-second budget; `TERVORY_NO_UPDATE_CHECK=1` disables notices.
 
-The known-action `run` and owned task receipt endpoints are supplied by companion draft PR #465. This branch must be tested with that backend before founder acceptance. Confirmed jobs are watched with read-only snapshot polls every 500 ms, for at most 240 polls; Ctrl-C cancels watching, never the already confirmed job. The CLI prints changed steps, produced links and ledger receipts and stops at completion, failure, unknown outcome or the polling bound. Reopen `chat <thread>` to show saved messages and resume watching. No failed or interrupted turn/action is automatically resubmitted.
+## Login: US and ZA
 
-Interactive terminals show provisional answer text on a single stderr preview line; stdout receives the final answer once. Tank's `replace` event replaces the provisional answer, and duplicate sequence numbers are ignored. Non-interactive stdout receives only the validated final answer, avoiding stale previews in scripts.
+`tervory login` defaults to US; `tervory login --region us-east` is explicit.
+US approval uses the Clerk-backed Workspace. ZA uses Zitadel on the ZA box:
+`tervory login --region za` (the older explicit `--sign-in zitadel` is also
+accepted). The browser launcher accepts the pinned ZA identity host. Compare
+the printed code with the page before approving. There is no token argument,
+credential environment variable or URL override.
 
-`npm test --prefix cli` runs fake-Tank tests with synthetic credentials and data only. No provider requests or live account changes occur. Evidence in `tests/cli_1_20261031/` is labeled offline fake-Tank proof and is not a founder-browser test.
+These exact stdout transcripts use the offline fixture's device name and code.
+Live device names, codes and the provider's verification path vary. They are
+protocol examples, not evidence of a production sign-in.
+
+```text
+$ tervory login --region us-east
+Approve this device in your browser (placeholder-worker, us-east):
+  https://app.tervory.com/cli/device?code=BCDF-GHJK&region=us-east
+Confirm the page shows code BCDF-GHJK.
+Signed in on us-east. Credential saved in the OS keychain; it refreshes automatically.
+```
+
+```text
+$ tervory login --region za
+Approve this device in your browser (placeholder-worker, za):
+  https://auth-za.tervory.com/device?user_code=1234-5678
+Confirm the page shows code 1234-5678.
+Signed in on za. Credential saved in the OS keychain; it refreshes automatically.
+```
+
+ZA requires the existing #589 identity resource and configured issuer/client and
+organisation mapping. See [IDENTITY-ZA.md](../docs/ops/IDENTITY-ZA.md). Missing
+identity or a legacy Boston approval response is refused; this CLI never falls
+back to Boston for ZA login. Older CLI versions keep their backend compatibility.
+ZA device, refresh, revoke, chat and code requests use `https://za.tervory.com`;
+they do not cross through US Workspace. US requests use `https://app.tervory.com`.
+The browser talks to the identity provider; only Tank exchanges OIDC credentials.
+
+The keychain stores the Tank access/refresh pair, not provider tokens. Access
+lasts one hour; refresh lasts 30 days and rotates on use. A reused or revoked
+refresh token is refused. Zitadel organisation-to-tenant mapping and verified
+subject/roles determine access, never email or editable metadata. Roles remain a
+snapshot until revocation/expiry, including refresh. After a role change, logout
+and sign in again. US Workspace CLI sign-ins do not list Zitadel identities.
+
+```text
+$ tervory logout
+Signed out. The credential is revoked and removed from the OS keychain.
+```
+
+Logout makes a best-effort revoke and clears the keychain. Network failure can
+prevent server revocation; the local copy is still removed. A legacy raw-token
+entry instead prints `Signed out. Removed from the OS keychain.`.
+
+## Plugins
+
+Only bundled first-party plugins are installable. A tenant administrator installs
+or removes them; members may list them. A plugin install does not create a server
+connection or a credential. GitHub needs the existing approved, connected official
+GitHub MCP server for the relevant product. An installed code-enabled plugin
+narrows code-mode MCP access to its manifest's read tools. Every action below
+uses a Confirm card in the existing thread, including reads.
+
+These are exact offline fixture outputs; thread identifiers and completion
+labels can vary with Tank. Shell quotes preserve the JSON argument:
+
+```text
+$ tervory run plugins list
+Thread placeholder-thread
+plugins.list
+Confirm [y/N] y
+[done] Tank: plugins.list
+$ tervory run plugins install --args '{"name":"github","version":"1.0.0"}'
+Thread placeholder-thread
+plugins.install
+Confirm [y/N] y
+[done] Tank: plugins.install
+$ tervory run plugins remove --args '{"name":"github","version":"1.0.0"}'
+Thread placeholder-thread
+plugins.remove
+Confirm [y/N] y
+[done] Tank: plugins.remove
+```
+
+Every answer except `y` or `yes`, including EOF, cancels a Tervory card.
+Non-interactive input cannot confirm. Removal also revokes previously proposed
+code-mode cards at their later Confirm check.
+
+## Code and /undo: exact offline example
+
+Run `tervory code .` in a Git repository. The following transcript is captured by
+`cli/test/wave4.test.mjs` after ZA login. It includes an edit, local undo and a
+plugin list through the same Confirm route. `Receipt pending` is printed when
+this fixture supplies no ledger receipt; it does not claim a zero charge. Live
+answers, thread identifiers and Tank-priced receipts vary.
+
+```text
+$ tervory code .
+Thread placeholder-thread
+> Update file.txt.
+Receipt pending
+Receipt pending
+--- a/file.txt
++++ b/file.txt
+@@ -1 +1 @@
+-old
++new
+
+Apply [y/N] y
+Updated file.txt.
+Receipt pending
+> /undo
+Undo [y/N] y
+> List plugins.
+Receipt pending
+{"tool":"plugins.list","arguments":{}}
+List plugins
+Confirm [y/N] y
+[done] plugins: Plugins listed
+GitHub is installed.
+Receipt pending
+> /exit
+```
 
 ## Code mode
 
@@ -139,3 +302,36 @@ Unreadable project notes (a symlink, more than 200 KB, or invalid UTF-8) are
 skipped while the code session continues. The CLI notice is
 `AGENTS.md skipped: Code tool refused.` Repository notes are labeled as DATA,
 limited to conventions and test commands, never instructions or authority.
+
+## Signed tag builds and CI
+
+`cli-release.yml` runs on `cli-v*`, requires a matching package/changelog version,
+builds twice and compares bytes. All eight archives have SHA-256/size entries:
+Linux x64/arm64 glibc/musl, macOS x64/arm64, Windows x64/arm64 MSVC. Every archive,
+`manifest.json` and `SHA256SUMS` gets a detached base64 Ed25519 `.sig`.
+
+The founder sets GitHub Actions secret `CLI_RELEASE_SIGNING_KEY` (PKCS#8 PEM) and
+repository variable `CLI_RELEASE_SIGNING_PUBLIC_KEY` (matching SPKI PEM).
+Missing/mismatched keys fail before artifact upload. Keys are never written to
+disk or printed. Signing uses one distribution identity for the archives; this
+is detached archive signing, not Apple notarization or Windows Authenticode.
+The workflow keeps the result as a 90-day artifact and publishes/deploys nothing.
+No tag was created as part of development. The Workspace's independently built
+HTTPS distribution remains checksum-only until signed files are published.
+
+`cli.yml` runs `npm test` on Linux, macOS and Windows. Windows also builds both
+native archives twice and runs the x64 launcher. POSIX installer and POSIX
+sandbox-success cases have explicit platform skips on Windows; command refusal,
+login, ZA routing, file edits, undo, cards and signature checks run natively.
+Windows commands are refused because no Windows filesystem/network confinement
+backend is implemented here. A Job Object alone would limit processes without
+providing Bubblewrap's read/write and network boundary. There is no insecure
+fallback; file tools, edits, undo and remote Tervory cards remain available.
+
+Offline verification uses a fake OIDC server and fake Tank. The Python identity
+suite also verifies real signed JWTs against fake discovery/JWKS and checks
+issuer/audience/tenant/roles, polling races, refresh and revocation in disposable
+SQL. No real model, identity account, production SQL or deployment is involved.
+
+Development: `npm ci --prefix cli`, then `TMPDIR=<task-owned-directory> npm test --prefix cli`.
+Nothing is installed on the founder's laptop by automated work.

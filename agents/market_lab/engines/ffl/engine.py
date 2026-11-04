@@ -44,7 +44,7 @@ def load_map(path: Any = None) -> dict[str, Any]:
     _fields(data, "plan warnings")
     spec, warnings = data["plan"], data["warnings"]
     _fields(spec, "supply demand population costs surge bindings response_targets")
-    _fields(warnings, "signals outcomes pairs")
+    _fields(warnings, "signals outcomes pairs", "event_signals")
     for role, required in {
         "supply": "source prefix unit per_capita note",
         "demand": "source prefix unit note",
@@ -84,7 +84,7 @@ def load_map(path: Any = None) -> dict[str, Any]:
     downstream = {item["source"] for item in warnings["outcomes"]}
     ids = set()
     for pair in warnings["pairs"]:
-        _fields(pair, "id source ref label downstream_source direction outcome_direction baseline_value outcome_pct outcome_words prediction_words min_episodes window z_threshold pct_threshold min_lag_days max_lag_days max_gap_days")
+        _fields(pair, "id source ref label downstream_source direction outcome_direction baseline_value outcome_pct outcome_words prediction_words min_episodes window z_threshold pct_threshold min_lag_days max_lag_days max_gap_days", "trigger key_name")
         if pair["source"] not in upstream or pair["downstream_source"] not in downstream or pair["id"] in ids:
             raise ValueError("unknown warning source or duplicate pair")
         ids.add(pair["id"])
@@ -101,6 +101,36 @@ def load_map(path: Any = None) -> dict[str, Any]:
         for key in "baseline_value outcome_pct z_threshold pct_threshold".split():
             if type(pair[key]) not in (int, float) or not math.isfinite(pair[key]) or pair[key] <= 0:
                 raise ValueError("invalid warning threshold")
+    from feeds.keys import KEY_NAMES
+    import re
+    rules = warnings.get("event_signals", [])
+    if not isinstance(rules, list):
+        raise ValueError("invalid event signals")
+    refs = set()
+    for rule in rules:
+        _fields(rule, "source kind ref key_name region_source region_prefix", "stage stage_pattern")
+        if any(not isinstance(value, str) or not value for value in rule.values()):
+            raise ValueError("invalid event signal")
+        if rule["source"] not in upstream or rule["key_name"] not in KEY_NAMES or rule["ref"] in refs:
+            raise ValueError("invalid event signal source")
+        refs.add(rule["ref"])
+        if not any(r["source"] == rule["region_source"] and r["prefix"] == rule["region_prefix"] for r in spec["supply"]):
+            raise ValueError("invalid event supply region")
+        if ("stage" in rule) != ("stage_pattern" in rule):
+            raise ValueError("invalid event stage")
+        if "stage_pattern" in rule:
+            try:
+                pattern = re.compile(rule["stage_pattern"])
+                if "stage" not in pattern.groupindex:
+                    raise ValueError("invalid event stage")
+            except re.error:
+                raise ValueError("invalid event stage") from None
+    for pair in warnings["pairs"]:
+        if pair.get("trigger") not in {None, "event"} or pair.get("key_name") not in {None, *KEY_NAMES}:
+            raise ValueError("invalid event pair")
+        if pair.get("trigger") == "event" and not any(
+            r["source"] == pair["source"] and r["ref"] == pair["ref"] and r["key_name"] == pair.get("key_name") for r in rules):
+            raise ValueError("missing event signal rule")
     for values in (spec["surge"], spec["response_targets"]):
         if any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0 for v in values.values()):
             raise ValueError("invalid plan threshold")

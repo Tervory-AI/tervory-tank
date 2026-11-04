@@ -39,9 +39,9 @@ from trigger_marketing_contract import TOOLS as MARKETING_TOOLS
 
 TOOLS = {
     "trigger": ["trigger.revise", "trigger.voice.learn", "trigger.write.batch", "trigger.scorecard", "trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
-    "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.products", "base.list.to_crm"],
+    "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.products", "base.compare.apollo", "base.list.to_crm"],
     "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.position", "tiger.alerts", "tiger.watches", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk"],
-    "market_lab": ["market_lab.research", "market_lab.warnings", "market_lab.predictions", "market_lab.calibration", "market_lab.feeds", "market_lab.alerts.email", "market_lab.alerts.webhook", "market_lab.alerts.off"],
+    "market_lab": ["market_lab.research", "market_lab.warnings", "market_lab.predictions", "market_lab.calibration", "market_lab.calibration.curve", "market_lab.feeds", "market_lab.patterns", "market_lab.gate", "market_lab.briefs", "market_lab.alerts.email", "market_lab.alerts.webhook", "market_lab.alerts.off"],
     "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment"],
     "tisan": ["tisan.scaffold"],
     "radix": ["radix.scan", "radix.repo.scan", "radix.repo.findings", "radix.watch", "radix.unwatch", "radix.watches", "radix.changes"],
@@ -49,7 +49,7 @@ TOOLS = {
 }
 TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
 
-FOUNDER_TOOLS = ["tank.policy", "tank.policy.fallbacks", "base.audit.start", "base.audit.csv", "base.audit.review", "trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
+FOUNDER_TOOLS = ["tank.policy", "tank.policy.fallbacks", "base.campaign.start", "base.campaign.show", "base.campaign.csv", "base.audit.start", "base.audit.csv", "base.audit.review", "trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
                  "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
@@ -404,7 +404,7 @@ async def get_thread(thread_id: uuid.UUID, actor: Actor = Depends(identity)) -> 
         row = await owned(conn, thread_id, actor)
     state = unpack(row["state"])
     for card in state.get("cards", {}).values():
-        if (card.get("tool") == "tisan.build" and card.get("status") == "confirmed"
+        if (card.get("tool") in {"tisan.build", "tisan.request"} and card.get("status") == "confirmed"
                 and current_actor(actor).founder and isinstance(card.get("result"), dict)):
             from tisan_requests import build_result
             card["result"] = await build_result(actor.tenant_id, card["result"])
@@ -1060,6 +1060,7 @@ class ScaffoldPage(Body):
 
 
 class ScaffoldArgs(Body):
+    page_id: str | None = Field(default=None, pattern=r'^[a-z0-9-]{1,100}$')
     name: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9-]+$")
     pages: list[str | ScaffoldPage] | None = Field(default=None, min_length=1, max_length=20)
@@ -1067,6 +1068,7 @@ class ScaffoldArgs(Body):
 
 
 class TisanBuildArgs(Body):
+    page_id: str | None = Field(default=None, pattern=r'^[a-z0-9-]{1,100}$')
     name: str = Field(min_length=1, max_length=80)
     slug: str = Field(min_length=1, max_length=60, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     locale: str = Field(default="en", pattern=r"^[a-z]{2}(?:-[A-Z]{2})?$")
@@ -1077,10 +1079,18 @@ class TisanBuildArgs(Body):
     media: dict[str, str] = Field(default_factory=dict)
 
 
-# Reuse the build contract's field constraints without exposing plan/copy/media.
+class TisanAssemblyArgs(Body):
+    plan: dict[str, Any] | None = None
+    copy: dict[str, str] = Field(default_factory=dict)
+    media: dict[str, str] = Field(default_factory=dict)
+
+
+# Existing client fields remain unchanged; only a founder can submit assembly.
 TisanRequestArgs = create_model('TisanRequestArgs', __base__=Body,
     **{name: (TisanBuildArgs.model_fields[name].annotation, TisanBuildArgs.model_fields[name])
        for name in ('name', 'slug', 'locale', 'brand')},
+    page_id=(str | None, Field(default=None, pattern=r'^[a-z0-9-]{1,100}$')),
+    assembly=(TisanAssemblyArgs | None, None),
     request=(str, Field(min_length=1, max_length=16000)))
 
 
@@ -1431,6 +1441,9 @@ ADAPTERS = {
     "tisan.preview": Adapter("GET", "/v1/command/tisan/preview", TisanRequestIdArgs, "tisan.preview"),
     "tisan.feedback": Adapter("POST", "/v1/command/tisan/feedback", TisanFeedbackArgs, "tisan.feedback"),
     "tisan.handover": Adapter("POST", "/v1/command/tisan/handover", TisanRequestIdArgs, "tisan.handover"),
+    "base.campaign.start": Adapter("POST", "/v1/command/base/campaigns/start", __import__("base_campaign_commands").StartArgs, "base.campaign.start", True, "paid_run"),
+    "base.campaign.show": Adapter("GET", "/v1/command/base/campaigns/show", __import__("base_campaign_commands").CampaignArgs, "base.campaign.show"),
+    "base.campaign.csv": Adapter("GET", "/v1/command/base/campaigns/export", __import__("base_campaign_commands").CampaignArgs, "base.campaign.csv"),
     "base.audit.start": Adapter("POST", "/v1/command/base/audits/start", AuditStartArgs, "base.audit.start"),
     "base.audit.csv": Adapter("GET", "/v1/command/base/audits/export", AuditCsvArgs, "base.audit.csv"),
     "base.audit.review": Adapter("POST", "/v1/command/base/audits/review", AuditReviewArgs, "base.audit.review"),
@@ -1465,6 +1478,7 @@ ADAPTERS = {
     "base.lists": Adapter("GET", "/v1/command/base/lists", Body, "base.lists"),
     "base.list.show": Adapter("GET", "/v1/command/base/lists/show", ListArgs, "base.list.show"),
     "base.list.export": Adapter("GET", "/v1/command/base/lists/export", ListArgs, "base.list.export"),
+    "base.compare.apollo": Adapter("GET", "/v1/command/base/compare/apollo", __import__("base_compare").ApolloArgs, "base.compare.apollo"),
     "base.list.products": Adapter("GET", "/v1/command/base/lists/products", ListArgs, "base.list.products"),
     "base.list.to_crm": Adapter("POST", "/v1/command/base/lists/to-crm", SendArgs, "base.list.to_crm"),
     "tiger.watch": Adapter("POST", "/v1/tiger/watchlist", WatchArgs, "Start a price watch", True, "paid_run"),
@@ -1477,7 +1491,11 @@ ADAPTERS = {
     "market_lab.warnings": Adapter("GET", "/v1/market-lab/reads/warnings", MarketLabReadArgs, "market_lab.warnings"),
     "market_lab.predictions": Adapter("GET", "/v1/market-lab/reads/predictions", MarketLabReadArgs, "market_lab.predictions"),
     "market_lab.calibration": Adapter("GET", "/v1/market-lab/reads/calibration", MarketLabReadArgs, "market_lab.calibration"),
+    "market_lab.calibration.curve": Adapter("GET", "/v1/market-lab/reads/calibration.curve", MarketLabReadArgs, "market_lab.calibration.curve"),
     "market_lab.feeds": Adapter("GET", "/v1/market-lab/reads/feeds", MarketLabReadArgs, "market_lab.feeds"),
+    "market_lab.patterns": Adapter("GET", "/v1/market-lab/reads/patterns", MarketLabReadArgs, "market_lab.patterns"),
+    "market_lab.gate": Adapter("GET", "/v1/market-lab/reads/gate", MarketLabReadArgs, "market_lab.gate"),
+    "market_lab.briefs": Adapter("GET", "/v1/market-lab/reads/briefs", MarketLabReadArgs, "market_lab.briefs"),
     "market_lab.alerts.email": Adapter("POST", "/v1/market-lab/alerts/email", EmptyArgs, "market_lab.alerts.email"),
     "market_lab.alerts.webhook": Adapter("POST", "/v1/market-lab/alerts/webhook", MarketLabWebhookArgs, "market_lab.alerts.webhook"),
     "market_lab.alerts.off": Adapter("POST", "/v1/market-lab/alerts/off", EmptyArgs, "market_lab.alerts.off"),
@@ -1740,7 +1758,7 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, {}, {**args, **scope}
     if action.tool == "rig.quote.confirm_payment":
         return adapter.method, path, {}, {"data": args}
-    if action.tool in {"base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.audit.start", "base.audit.review", *TISAN_CLIENT_TOOLS}:
+    if action.tool in {"base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", *TISAN_CLIENT_TOOLS}:
         if adapter.method == 'GET':
             return adapter.method, path, args, None
         return adapter.method, path, {}, args  # Actor headers supply identity, never body fields.
@@ -1960,7 +1978,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 from market_lab_ml3 import confirmed
                 status, result = 200, await confirmed(action, actor, thread_id, card_id)
                 once = result.pop("_once", None)
-            elif action.tool.startswith("trigger.") or action.tool in {"zenas.draft", "zenas.playbook.add", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"zenas.draft", "zenas.playbook.add", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
@@ -2099,6 +2117,9 @@ def message_context(messages: list[dict]) -> list[dict]:
                 content += "\nAttachment " + attachment["name"] + ":\n" + attachment["text"]
             else:
                 content += "\nStored binary attachment " + attachment["name"] + ": content unavailable to the text router."
+                # The planner may hand an owned upload to a code reader without inspecting its bytes.
+                if attachment.get("attachment_id"):
+                    content += " " + dump({"attachment_id": attachment["attachment_id"]})
         result.append({"role": message["role"], "content": content})
     if len(dump(result).encode()) > 128000:
         raise HTTPException(413, "Conversation context is too large; start another thread or use shorter text attachments")

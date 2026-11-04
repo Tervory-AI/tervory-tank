@@ -1,8 +1,6 @@
 name: cli-release
-# Review of #506, should-fix 4: a tag builds the self-hosted CLI release and keeps it as a
-# workflow artifact only. Nothing is published or deployed from here: no registry, no
-# GitHub release, no upload anywhere else. app.tervory.com serves the copy that the
-# Workspace image builds (workspace/Dockerfile, cli-release stage) from the same source.
+# Tag builds stay workflow artifacts; the founder controls publication/deployment.
+# Keys are referenced by setting name only and unavailable to pull-request jobs.
 on:
   push:
     tags:
@@ -31,6 +29,13 @@ jobs:
           node cli/scripts/build-release.mjs --out "$RUNNER_TEMP/cli-check"
           diff -r "$RUNNER_TEMP/cli-release" "$RUNNER_TEMP/cli-check"
           cat "$RUNNER_TEMP/cli-release/releases/"*/SHA256SUMS
+      - name: Sign every archive and its checksum/manifest files
+        env:
+          CLI_RELEASE_SIGNING_KEY: ${{ secrets.CLI_RELEASE_SIGNING_KEY }}
+          CLI_RELEASE_SIGNING_PUBLIC_KEY: ${{ vars.CLI_RELEASE_SIGNING_PUBLIC_KEY }}
+        run: |
+          version=$(node -p 'require("./cli/package.json").version')
+          node cli/scripts/sign-release.mjs "$RUNNER_TEMP/cli-release/releases/$version"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: tervory-cli-${{ github.ref_name }}
