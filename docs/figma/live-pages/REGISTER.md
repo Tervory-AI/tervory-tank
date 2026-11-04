@@ -25,6 +25,18 @@ Source baseline: `origin/main` `c94610bd0f9f35443f9d58deb45ec44b60ecb33d`. The r
 | Cost details | https://app.tervory.com/chats/evidence/[thread]/[row] | 1440 | [631:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=631-9) | Proposed | [PNG](evidence/cost-details-figma-1440.png) | [PNG](evidence/cost-details-browser-1440.png) |
 | Cost details | https://app.tervory.com/chats/evidence/[thread]/[row] | 375 | [632:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=632-9) | Proposed | [PNG](evidence/cost-details-figma-375.png) | [PNG](evidence/cost-details-browser-375.png) |
 
+| Onboarding · Organization | https://app.tervory.com/onboarding | 1440 | [636:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=636-9) | Proposed | [PNG](evidence/onboarding-figma-1440.png) | [PNG](evidence/onboarding-browser-1440.png) |
+| Onboarding · Organization | https://app.tervory.com/onboarding | 375 | [637:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=637-9) | Proposed | [PNG](evidence/onboarding-figma-375.png) | [PNG](evidence/onboarding-browser-375.png) |
+
+| Onboarding · Industry | https://app.tervory.com/onboarding?step=industry | 1440 | [640:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=640-9) | Proposed | [PNG](evidence/onboarding-industry-figma-1440.png) | [PNG](evidence/onboarding-industry-browser-1440.png) |
+| Onboarding · Industry | https://app.tervory.com/onboarding?step=industry | 375 | [641:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=641-9) | Proposed | [PNG](evidence/onboarding-industry-figma-375.png) | [PNG](evidence/onboarding-industry-browser-375.png) |
+
+| Onboarding · File | https://app.tervory.com/onboarding | 1440 | [648:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=648-9) | Proposed | [PNG](evidence/onboarding-file-figma-1440.png) | [PNG](evidence/onboarding-file-browser-1440.png) |
+| Onboarding · File | https://app.tervory.com/onboarding | 375 | [650:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=650-9) | Proposed | [PNG](evidence/onboarding-file-figma-375.png) | [PNG](evidence/onboarding-file-browser-375.png) |
+
+| Onboarding · Run | https://app.tervory.com/onboarding | 1440 | [654:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=654-9) | Proposed | [PNG](evidence/onboarding-run-figma-1440.png) | [PNG](evidence/onboarding-run-browser-1440.png) |
+| Onboarding · Run | https://app.tervory.com/onboarding | 375 | [655:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=655-9) | Proposed | [PNG](evidence/onboarding-run-figma-375.png) | [PNG](evidence/onboarding-run-browser-375.png) |
+
 ## Data
 
 Unchanged `workspace/app/data/page.tsx`, `data.css`, actual `Shell`, global CSS, local fonts and original brand images. Existing default sample CSV and the built empty-batch message are retained. No batch, upload, enrichment or export is run. Client role excludes founder tools. The account-provider widget is unavailable offline; no company/avatar UI is invented.
@@ -40,7 +52,7 @@ Both native Figma PNGs have the same dimensions as their browser references: 144
 | Ledger | `/ledger` | Drawn; Proposed, IDs above |
 | Matters | `/matters` | Drawn; Proposed, IDs above |
 | Chat cost details | `/chats/evidence/[thread]` and `/chats/evidence/[thread]/[row]` | Drawn; Proposed, IDs above |
-| Onboarding | `/onboarding` | Pending; account-provider widget requires separate evidence |
+| Onboarding | `/onboarding` | Four built steps drawn; Proposed. Gap: external account-provider widget requires separate evidence |
 | Stored Market Lab sources | `/market-lab/sources/[id]` | Pending |
 | Moot public watch | `/moot` and `/moot/[match]` on zenas.tervory.com | Pending |
 | Autumbra public | `/autumbra` | Pending |
@@ -72,3 +84,27 @@ Unchanged client Chat costs route and chat CSS. One zero-cost fixture receipt is
 Unchanged client single-row Cost details route, with the same zero-cost fixture receipt as Chat costs. Only the built Cost, Would have cost and Saved fields render for a client. No founder-only evidence is exposed.
 
 [Every frame/node ID and exact copy](evidence/cost-details-nodes.json); [dimension, source-copy and PNG hash checks](evidence/cost-details-checks.json). All page text comes from the production render; no new product wording. Both native Figma screenshots were compared with the browser reference.
+
+## Onboarding · Organization
+
+Unchanged onboarding page, Wizard and onboarding layout/CSS. Default Organization step; no signed-in account or organization is used. Gap: the external account-provider OrganizationList widget is not available offline and is not invented. The surrounding built page is retained.
+
+[Every frame/node ID and exact copy](evidence/onboarding-nodes.json); [dimension, source-copy and PNG hash checks](evidence/onboarding-checks.json). All page text comes from the production render; no new product wording. Both native Figma screenshots were compared with the browser reference.
+
+## Onboarding · Industry
+
+Actual Wizard Industry step with the existing Example test organization and ffl engine identifier. Built labels and hints come from onboarding/csv.ts. Selection is initially empty, matching the disabled Continue control. No organization or engine endpoint is called.
+
+[Every frame/node ID and exact copy](evidence/onboarding-industry-nodes.json); [dimension, source-copy and PNG hash checks](evidence/onboarding-industry-checks.json). All page text comes from the production render; no new product wording. Both native Figma screenshots were compared with the browser reference.
+
+## Onboarding · File
+
+Actual Wizard File step before selection, with the built CSV guidance, cost lines, cost note and disabled Start control. No file is uploaded or changed. Existing source wording and styles are retained.
+
+[Every frame/node ID and exact copy](evidence/onboarding-file-nodes.json); [dimension, source-copy and PNG hash checks](evidence/onboarding-file-checks.json). All page text comes from the production render; no new product wording. Both native Figma screenshots were compared with the browser reference.
+
+## Onboarding · Run
+
+Actual Wizard Run step. Local hook state supplies the existing Example batch label and a one-record pending progress fixture; no run is started and no batch service is called. Progress labels, pass summaries and Data link come from the production component.
+
+[Every frame/node ID and exact copy](evidence/onboarding-run-nodes.json); [dimension, source-copy and PNG hash checks](evidence/onboarding-run-checks.json). All page text comes from the production render; no new product wording. Both native Figma screenshots were compared with the browser reference.
