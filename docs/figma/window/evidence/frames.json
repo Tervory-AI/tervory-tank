@@ -1,0 +1,38 @@
+[
+  {
+    "key": "W01-US-1440",
+    "id": "548:77",
+    "width": 1440,
+    "height": 900,
+    "state": "Sign in",
+    "region": "US",
+    "status": "Proposed"
+  },
+  {
+    "key": "W01-US-1280",
+    "id": "548:136",
+    "width": 1280,
+    "height": 800,
+    "state": "Sign in",
+    "region": "US",
+    "status": "Proposed"
+  },
+  {
+    "key": "W01-ZA-1440",
+    "id": "548:195",
+    "width": 1440,
+    "height": 900,
+    "state": "Sign in",
+    "region": "ZA",
+    "status": "Proposed"
+  },
+  {
+    "key": "W01-ZA-1280",
+    "id": "548:254",
+    "width": 1280,
+    "height": 800,
+    "state": "Sign in",
+    "region": "ZA",
+    "status": "Proposed"
+  }
+]
