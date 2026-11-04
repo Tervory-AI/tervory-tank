@@ -49,6 +49,8 @@ declare -A CORRIDOR=(
   [base-browser-gateway]="tervory-gw-base"
   [tiger-browser-gateway]="tervory-gw-tiger"
   [tiger-brain]="tervory-gw-tiger"
+  [market-lab-brain]="tervory-gw-market_lab"
+  [market-lab-browser-gateway]="tervory-gw-market_lab"
   [zenas-brain]="tervory-gw-zenas"
   [agent-rig]="tervory-gw-rig"
   [rig-brain]="tervory-gw-rig"
@@ -196,6 +198,10 @@ for id in $ids; do
     rig-brain) expected_nets="tervory-gw-rig ${project}_sandbox ${project}_forge-control" ;;
     tiger-brain) expected_nets="tervory-gw-tiger ${project}_sandbox" ;;
     agent-zenas) expected_nets="tervory-gw-zenas" ;;
+    market-lab-brain) expected_nets="tervory-gw-market_lab ${project}_sandbox" ;;
+    market-lab-sandbox) expected_nets="${project}_sandbox" ;;
+    market-lab-browser) expected_nets="${project}_browser" ;;
+    market-lab-browser-gateway) expected_nets="tervory-gw-market_lab ${project}_browser" ;;
     zenas-brain) expected_nets="tervory-gw-zenas ${project}_sandbox" ;;
     rig-forge) expected_nets="${project}_forge-control ${project}_forge-egress" ;;
     rig-forge-egress) expected_nets="${project}_forge-egress ${project}_forge-outbound" ;;
@@ -220,6 +226,8 @@ for id in $ids; do
            [[ "$service" == "passive-egress" && "$net" == "${project}_egress" ]] ||
            [[ "$service" == "agent-tisan" && "$net" == "tervory-gw-tisan" ]] ||
            [[ "$service" == "figma-egress-proxy" && "$net" == "${project}_egress" ]]; then
+        continue
+      elif [[ ( "$service" == "market-lab-brain" || "$service" == "market-lab-browser-gateway" ) && "$net" == "tervory-gw-market_lab" ]]; then
         continue
       elif [[ "$service" == "tiger-brain" && "$net" == "tervory-gw-tiger" ]]; then
         continue
@@ -297,7 +305,10 @@ for uuid in "${ROOMS[@]}"; do
   if [[ ( "$room" == "agent-zenas" || "$room" == "agent-zenas-za" ) && ( -n "${APP_SERVICES[$uuid/zenas-brain]+set}" || -n "${APP_SERVICES[$uuid/zenas-sandbox]+set}" ) ]]; then
     required_services="zenas-brain zenas-sandbox"
   fi
-  [[ "$room" == "agent-ghost" ]] && required_services="agent-ghost ghost-browser"
+  [[ "$room" == "agent-ghost" ]] && required_services+=" agent-ghost ghost-browser"
+  if [[ "$room" == "agent-market-lab" && ( -n "${APP_SERVICES[$uuid/market-lab-brain]+set}" || -n "${APP_SERVICES[$uuid/market-lab-sandbox]+set}" || -n "${APP_SERVICES[$uuid/market-lab-browser]+set}" || -n "${APP_SERVICES[$uuid/market-lab-browser-gateway]+set}" ) ]]; then
+    required_services+=" market-lab-brain market-lab-sandbox market-lab-browser market-lab-browser-gateway"
+  fi
   if [[ "$room" == "autumbra-enforce" || -n "${APP_SERVICES[$uuid/enforce]+set}" ]]; then
     required_services+=" enforce egress-proxy health-observer health-egress-proxy"
   fi

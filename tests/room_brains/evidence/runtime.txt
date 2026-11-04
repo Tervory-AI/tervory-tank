@@ -1,0 +1,3 @@
+{'ok': True, 'room': 'market_lab', 'hermes_version': '0.22.2'}
+{'ok': True, 'room': 'market_lab', 'backend': 'sibling-exec', 'runtime': 'cpython-wasi'}
+{"exit_code": 0, "output": "OFFLINE\n", "truncated": false, "files": {"proof": "b2ZmbGluZQ=="}, "network": "none", "backend": "sibling-exec", "runtime": "cpython-wasi"}
