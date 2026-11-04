@@ -146,5 +146,37 @@
     "height": 800,
     "state": "Plugins and MCP list",
     "status": "Proposed"
+  },
+  {
+    "key": "W09-1440",
+    "id": "557:8131",
+    "width": 1440,
+    "height": 900,
+    "state": "Error",
+    "status": "Proposed"
+  },
+  {
+    "key": "W09-1280",
+    "id": "557:8229",
+    "width": 1280,
+    "height": 800,
+    "state": "Error",
+    "status": "Proposed"
+  },
+  {
+    "key": "W10-1440",
+    "id": "557:8327",
+    "width": 1440,
+    "height": 900,
+    "state": "Offline",
+    "status": "Proposed"
+  },
+  {
+    "key": "W10-1280",
+    "id": "557:8425",
+    "width": 1280,
+    "height": 800,
+    "state": "Offline",
+    "status": "Proposed"
   }
 ]

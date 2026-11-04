@@ -126,6 +126,34 @@
       "width": 1280,
       "height": 800,
       "sha256": "2c15f793dd99e22b10cf16f58b311664d317ec5159b8b177b855b839e2c2e9de"
+    },
+    {
+      "frame": "557:8131",
+      "file": "evidence/W09-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "faa5be69a324279804144d0e3bd3b73be27ef38f0ca3497f21fcc7994e35a381"
+    },
+    {
+      "frame": "557:8229",
+      "file": "evidence/W09-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "ed5edc5c1944ddf3ee624e3b33d219709d1357e5b1d4b9251cc2f157efad9407"
+    },
+    {
+      "frame": "557:8327",
+      "file": "evidence/W10-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "df9db9f8d127685449565a14eb73785d9d6616b398c8fdfc1e4d951b8925173d"
+    },
+    {
+      "frame": "557:8425",
+      "file": "evidence/W10-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "972b9b1c49662c018105bb4ce9eecd14872cb1686ff93451d9df18383d3cfaaa"
     }
   ]
 }

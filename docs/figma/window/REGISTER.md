@@ -40,6 +40,10 @@ Scope split, founder 4 Nov 06:30 PT: this register owns sign-in, empty, conversa
 | W07-1280 · /undo / confirm local restore | 1280×800 | [557:4789](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-4789) | Proposed | [W07-1280.png](evidence/W07-1280.png) |
 | W08-1440 · Plugins and MCP list | 1440×900 | [557:6211](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-6211) | Proposed | [W08-1440.png](evidence/W08-1440.png) |
 | W08-1280 · Plugins and MCP list | 1280×800 | [557:6314](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-6314) | Proposed | [W08-1280.png](evidence/W08-1280.png) |
+| W09-1440 · Error | 1440×900 | [557:8131](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-8131) | Proposed | [W09-1440.png](evidence/W09-1440.png) |
+| W09-1280 · Error | 1280×800 | [557:8229](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-8229) | Proposed | [W09-1280.png](evidence/W09-1280.png) |
+| W10-1440 · Offline | 1440×900 | [557:8327](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-8327) | Proposed | [W10-1440.png](evidence/W10-1440.png) |
+| W10-1280 · Offline | 1280×800 | [557:8425](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=557-8425) | Proposed | [W10-1280.png](evidence/W10-1280.png) |
 
 ## Evidence and validation
 
