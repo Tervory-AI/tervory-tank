@@ -19,6 +19,12 @@ Source baseline: `origin/main` `c94610bd0f9f35443f9d58deb45ec44b60ecb33d`. The r
 | Matters | https://app.tervory.com/matters | 1440 | [618:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=618-9) | Proposed | [PNG](evidence/matters-figma-1440.png) | [PNG](evidence/matters-browser-1440.png) |
 | Matters | https://app.tervory.com/matters | 375 | [619:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=619-9) | Proposed | [PNG](evidence/matters-figma-375.png) | [PNG](evidence/matters-browser-375.png) |
 
+| Chat costs | https://app.tervory.com/chats/evidence/[thread] | 1440 | [626:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=626-9) | Proposed | [PNG](evidence/chat-costs-figma-1440.png) | [PNG](evidence/chat-costs-browser-1440.png) |
+| Chat costs | https://app.tervory.com/chats/evidence/[thread] | 375 | [630:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=630-9) | Proposed | [PNG](evidence/chat-costs-figma-375.png) | [PNG](evidence/chat-costs-browser-375.png) |
+
+| Cost details | https://app.tervory.com/chats/evidence/[thread]/[row] | 1440 | [631:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=631-9) | Proposed | [PNG](evidence/cost-details-figma-1440.png) | [PNG](evidence/cost-details-browser-1440.png) |
+| Cost details | https://app.tervory.com/chats/evidence/[thread]/[row] | 375 | [632:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=632-9) | Proposed | [PNG](evidence/cost-details-figma-375.png) | [PNG](evidence/cost-details-browser-375.png) |
+
 ## Data
 
 Unchanged `workspace/app/data/page.tsx`, `data.css`, actual `Shell`, global CSS, local fonts and original brand images. Existing default sample CSV and the built empty-batch message are retained. No batch, upload, enrichment or export is run. Client role excludes founder tools. The account-provider widget is unavailable offline; no company/avatar UI is invented.
@@ -33,7 +39,7 @@ Both native Figma PNGs have the same dimensions as their browser references: 144
 | --- | --- | --- |
 | Ledger | `/ledger` | Drawn; Proposed, IDs above |
 | Matters | `/matters` | Drawn; Proposed, IDs above |
-| Chat cost details | `/chats/evidence/[thread]` and `/chats/evidence/[thread]/[row]` | Pending |
+| Chat cost details | `/chats/evidence/[thread]` and `/chats/evidence/[thread]/[row]` | Drawn; Proposed, IDs above |
 | Onboarding | `/onboarding` | Pending; account-provider widget requires separate evidence |
 | Stored Market Lab sources | `/market-lab/sources/[id]` | Pending |
 | Moot public watch | `/moot` and `/moot/[match]` on zenas.tervory.com | Pending |
@@ -54,3 +60,15 @@ Unchanged `workspace/app/ledger/page.tsx`, Shell and global CSS. Existing test i
 Unchanged `workspace/app/matters/page.tsx`, `board.tsx`, the Matters layout/CSS and actual Shell. Empty successful matters response; the Open form, default law selection, lawyer-release explanation and built empty state are retained. No matter or document is created.
 
 [Every frame/node ID and exact copy](evidence/matters-nodes.json); [dimension, source-copy and PNG hash checks](evidence/matters-checks.json). All page text comes from the production render; no new product wording. Both native Figma screenshots were compared with the browser reference.
+
+## Chat costs
+
+Unchanged client Chat costs route and chat CSS. One zero-cost fixture receipt is supplied through the commandRequest boundary; no chat or ledger service is read. Founder-only model and ledger labels remain hidden.
+
+[Every frame/node ID and exact copy](evidence/chat-costs-nodes.json); [dimension, source-copy and PNG hash checks](evidence/chat-costs-checks.json). All page text comes from the production render; no new product wording. Both native Figma screenshots were compared with the browser reference.
+
+## Cost details
+
+Unchanged client single-row Cost details route, with the same zero-cost fixture receipt as Chat costs. Only the built Cost, Would have cost and Saved fields render for a client. No founder-only evidence is exposed.
+
+[Every frame/node ID and exact copy](evidence/cost-details-nodes.json); [dimension, source-copy and PNG hash checks](evidence/cost-details-checks.json). All page text comes from the production render; no new product wording. Both native Figma screenshots were compared with the browser reference.
