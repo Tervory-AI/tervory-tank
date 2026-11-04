@@ -10,6 +10,7 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 **Market Lab email:** MARKET_LAB_SMTP_HOST, MARKET_LAB_SMTP_PORT, MARKET_LAB_SMTP_USER, MARKET_LAB_SMTP_PASSWORD, MARKET_LAB_SMTP_FROM, MARKET_LAB_SMTP_ALERT_ADDRESSES
 
 **Zenas US:** CONGRESS_GOV_API_KEY, LEGISCAN_API_KEY (the same key as Market Lab)
+**Zenas review (each room):** ZENAS_REVIEW (default off; scope, identifier and citation checks remain on)
 **Zenas email:** ZENAS_SMTP_HOST, ZENAS_SMTP_PORT, ZENAS_SMTP_USER, ZENAS_SMTP_PASSWORD, ZENAS_SMTP_FROM, ZENAS_SMTP_ALERT_ADDRESSES
 
 **Trigger CRM:** TRIGGER_CRM_URL, TRIGGER_CRM_PAT_CONNECTOR, TRIGGER_CRM_TENANT_BINDINGS
@@ -36,8 +37,11 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 
 ## B. Coolify settings, ZA box
 
-- LAWS_AFRICA_API_TOKEN (if not already set)
-- Zenas training: HF_TOKEN, HF_ORG; HF_TRAIN_MAX_USD is optional (default 50); ZENAS_OWN_MODEL_KEY (#639, once that fix lands)
+- LAWS_AFRICA_API_TOKEN (if not already set; question-time retrieval only, never training)
+- ZENAS_REVIEW (ZA room; default off)
+- ZA regulation email uses the same ZENAS_SMTP_HOST, ZENAS_SMTP_PORT, ZENAS_SMTP_USER, ZENAS_SMTP_PASSWORD, ZENAS_SMTP_FROM and ZENAS_SMTP_ALERT_ADDRESSES names above, on the ZA room.
+- Existing Zenas training handoff: TANK_KEY_ZENAS on ZA Tank; its matching TANK_KEY on the ZA Zenas room. Never use the Workspace TANK_API_KEY for this room handoff.
+- Zenas training: HF_TOKEN, HF_ORG; HF_TRAIN_MAX_USD is optional (default 50); ZENAS_OWN_MODEL_KEY (dedicated ZA llama.cpp server key)
 - ZENAS_BRAIN_ENABLED (leave off), SANDBOX_KEY_ZENAS
 
 ## C. Domains and accounts (once, in Coolify or the provider)
