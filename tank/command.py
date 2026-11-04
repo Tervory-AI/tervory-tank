@@ -670,7 +670,7 @@ async def _finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, message
                        "The answer could not be completed. Check routing policy and service availability.")
             await conn.execute(
                 "UPDATE tank.tasks SET status='failed',error=$3,finished_at=now() "
-                "WHERE id=$1 AND tenant_id=$2 AND status='running'", uuid.UUID(turn_id), actor.tenant_id, message)
+                "WHERE id=$1 AND tenant_id=$2 AND status IN ('queued','running')", uuid.UUID(turn_id), actor.tenant_id, message)
             await event(conn, row, "error", {"message": message})
             if state["active_turn"] == turn_id:
                 state["active_turn"] = None

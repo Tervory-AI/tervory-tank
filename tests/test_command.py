@@ -176,7 +176,7 @@ async def command_pool():
         async with pool.acquire() as conn:
             await conn.execute(schema)
             await conn.execute(schema)  # Empty database and idempotent reapplication.
-            await __import__("paid_fixture").auto(conn, "placeholder-pin", "placeholder-model")
+            await __import__("paid_fixture").auto(conn, "fixture-pin", "fixture-auto", "fixture-model", "placeholder-pin", "placeholder-model")
             # Match Tank startup; this fixture mounts only the command router.
             from savings_defaults import initialize
             await initialize(conn)
@@ -828,6 +828,8 @@ def shared_router(monkeypatch):
     conn = SimpleNamespace(execute=AsyncMock(), fetchval=AsyncMock(return_value=False), fetch=AsyncMock(return_value=[]))
 
     async def fetch_value(sql, *args):
+        if 'paid_step_settings' in sql:
+            return 'auto'  # Explicit synthetic authorization for shared routing checks.
         return 'us-east' if 'FROM tank.tenants' in sql else conn.fetchval.return_value
 
     conn.fetchval.side_effect = fetch_value

@@ -344,3 +344,46 @@ async def test_schema_reapply_enables_paid_table_rls_and_lease_boolean(boundary)
     await paid.heartbeat()
     assert await b.pool.fetchval('SELECT tank.paid_worker_alive($1)', paid.SERVER)
     assert not await b.pool.fetchval('SELECT tank.paid_worker_alive($1)', uuid.uuid4())
+
+
+@pytest.mark.asyncio
+async def test_cancelled_chat_approval_finishes_task_without_dispatch(boundary, monkeypatch):  # noqa: F811
+    import command
+    b = boundary
+    monkeypatch.setattr(paid, 'POLL_SECONDS', .01)
+    calls = []
+    async def answer(actor, messages, **kwargs):
+        await paid.authorize('vendor.brave', {'input':'bound'}, tenant=actor.tenant_id)
+        calls.append(True)
+        pytest.fail('Cancelled Ask was dispatched')
+    monkeypatch.setattr(command, 'route_turn', answer)
+    headers = {'X-Tervory-User':'founder-fixture','X-Tervory-Tenant':str(b.tenants[0])}
+    thread = (await b.client.post('/v1/command/threads', headers=headers, json={})).json()['thread_id']
+    await b.client.post(f'/v1/command/threads/{thread}/turn', headers=headers, json={'text':'Do it'})
+    saved = (await b.client.get(f'/v1/command/threads/{thread}', headers=headers)).json()
+    card = saved['cards'][0] if isinstance(saved['cards'],list) else next(iter(saved['cards'].values()))
+    # A formerly-authorized saved card does not survive founder revocation.
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'someone-else')
+    assert (await b.client.post('/v1/command/cards/'+card['card_id'], headers=headers, json={'action':'confirm'})).status_code == 403
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder-fixture')
+    result = await b.client.post('/v1/command/cards/'+card['card_id'], headers=headers, json={'action':'cancel'})
+    assert result.status_code == 200, result.text
+    async with asyncio.timeout(3):
+        while await b.pool.fetchval("SELECT status FROM tank.tasks WHERE tenant_id=$1 AND task_type='command.turn'", b.tenants[0]) != 'failed':
+            await asyncio.sleep(.01)
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_waiting_sibling_does_not_remove_active_timeout(boundary, monkeypatch):  # noqa: F811
+    b = boundary
+    monkeypatch.setattr(paid, 'POLL_SECONDS', .01)
+    work = asyncio.create_task(paid.authorize('vendor.brave', {'input':'bound'}, tenant=b.tenants[0]))
+    try:
+        await waiting(b)
+        with pytest.raises(TimeoutError):
+            async with paid.execution_timeout(.05):
+                await asyncio.sleep(1)
+    finally:
+        work.cancel()
+        await asyncio.gather(work, return_exceptions=True)

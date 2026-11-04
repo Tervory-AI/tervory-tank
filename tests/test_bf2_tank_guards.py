@@ -69,6 +69,8 @@ class _Conn:
         self.queries.append((sql, args))
         if "FROM tank.tenants" in sql:
             return main.box_region()
+        if "paid_step_settings" in sql:
+            return 'auto'  # Explicit authorization for the synthetic gateway.
         if "tank.controls" in sql:
             return False  # Fixture has paid work enabled.
         raise AssertionError(f"unexpected scalar query: {sql}")

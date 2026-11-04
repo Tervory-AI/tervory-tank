@@ -418,6 +418,8 @@ class _Conn:
         }
 
     async def fetchval(self, sql: str, *_args: object, **_kwargs: object) -> str | bool:
+        if 'paid_step_settings' in sql:
+            return 'auto'  # Unit transport explicitly authorizes this model step.
         if "tank.controls" in sql:
             return False  # Paid work is enabled in this routing fixture.
         return "candidate"
@@ -598,7 +600,9 @@ class _CourtPool:
             "cache_scope": "none",
         }
 
-    async def fetchval(self, sql: str, *_args: object) -> bool:
+    async def fetchval(self, sql: str, *_args: object) -> bool | str:
+        if 'paid_step_settings' in sql:
+            return 'auto'  # Already-authorized synthetic model transport.
         assert "tank.controls" in sql
         return False
 

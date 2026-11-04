@@ -338,6 +338,8 @@ class _Conn:
     async def fetchval(self, sql: str, *_args: object) -> bool | str:
         if "FROM tank.tenants" in sql:
             return main.box_region()
+        if 'paid_step_settings' in sql:
+            return 'auto'  # Authorized synthetic completion, never a paid call.
         assert "tank.controls" in sql
         return False
 

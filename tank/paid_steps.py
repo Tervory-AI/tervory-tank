@@ -620,18 +620,21 @@ def install(app, tank):
 
     async def maintain():
         while True:
-            with tenant_scope(PLATFORM_TENANT):
-                async with tank.pool().acquire() as conn:
-                    await conn.execute('''INSERT INTO tank.paid_step_workers(tenant_id,id) VALUES($1,$2)
-                        ON CONFLICT(tenant_id,id) DO UPDATE SET heartbeat=now()''', PLATFORM_TENANT, SERVER)
-            with tenant_scope(None, administrative=True):
-                async with tank.admin_pool().acquire() as conn, conn.transaction():
-                    await conn.execute('''UPDATE tank.paid_runs r SET status='interrupted',finished_at=now()
-                        WHERE region=$1 AND status IN ('waiting','running') AND NOT EXISTS
-                        (SELECT 1 FROM tank.paid_step_workers w WHERE w.tenant_id=$2 AND w.id=r.server_id AND w.heartbeat>now()-interval '90 seconds')''', tank.box_region(), PLATFORM_TENANT)
-                    await conn.execute('''UPDATE tank.paid_step_approvals a SET status='interrupted'
-                        FROM tank.paid_runs r WHERE a.tenant_id=r.tenant_id AND a.run_id=r.id AND r.region=$1
-                        AND r.status='interrupted' AND a.status IN ('waiting','approved')''', tank.box_region())
+            try:
+                with tenant_scope(PLATFORM_TENANT):
+                    async with tank.pool().acquire() as conn:
+                        await conn.execute('''INSERT INTO tank.paid_step_workers(tenant_id,id) VALUES($1,$2)
+                            ON CONFLICT(tenant_id,id) DO UPDATE SET heartbeat=now()''', PLATFORM_TENANT, SERVER)
+                with tenant_scope(None, administrative=True):
+                    async with tank.admin_pool().acquire() as conn, conn.transaction():
+                        await conn.execute('''UPDATE tank.paid_runs r SET status='interrupted',finished_at=now()
+                            WHERE region=$1 AND status IN ('waiting','running') AND NOT EXISTS
+                            (SELECT 1 FROM tank.paid_step_workers w WHERE w.tenant_id=$2 AND w.id=r.server_id AND w.heartbeat>now()-interval '90 seconds')''', tank.box_region(), PLATFORM_TENANT)
+                        await conn.execute('''UPDATE tank.paid_step_approvals a SET status='interrupted'
+                            FROM tank.paid_runs r WHERE a.tenant_id=r.tenant_id AND a.run_id=r.id AND r.region=$1
+                            AND r.status='interrupted' AND a.status IN ('waiting','approved')''', tank.box_region())
+            except Exception as exc:
+                logging.getLogger(__name__).warning('Paid run maintenance deferred: %s', type(exc).__name__)
             await asyncio.sleep(10)
     worker = None
     @app.on_event('startup')

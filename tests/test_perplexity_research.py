@@ -146,6 +146,10 @@ class Connection:
         self.price_reads.append((query, args))
         return [{"outcome_type": research.FEE_TYPES[tool], "unit_price": rate} for tool, rate in RATES.items()]
 
+    async def fetchval(self, query, *args):
+        assert 'paid_step_settings' in query
+        return 'auto'  # This harness tests the already-authorized native bundle.
+
     async def execute(self, query, *args):
         if "tank.ledger" in query:
             assert self.in_transaction
@@ -173,6 +177,7 @@ def harness(monkeypatch):
                "PLATFORM_TENANT": main.PLATFORM_TENANT, "load_policy": load,
                "box_region": lambda: "us-east", "home_region_refusal": main.home_region_refusal,
                "call_home": main.call_home, "model_call_refusal": main.model_call_refusal}
+    monkeypatch.setattr(__import__('paid_steps'), 'runtime', lambda: SimpleNamespace(pool=runtime['pool']))
     state = SimpleNamespace(conn=conn, policy=policy, runtime=runtime, seen=seen,
                             data=response_fixture(), code=200, exception=None)
 

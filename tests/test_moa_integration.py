@@ -494,6 +494,7 @@ async def test_shadow_seat_receipts_bill_platform_never_client(database, monkeyp
     monkeypatch.setattr(controls, 'db', lambda: pool)
     config = policy(max_attempts=1)
     config.seats[0].candidate = 'candidate'
+    await __import__('paid_fixture').auto(pool, 'candidate')
     await pool.execute("INSERT INTO tank.policy(task_type,model,baseline_model,max_tokens_out) VALUES('fixture','top','top',32)")
     await pool.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) VALUES('top','fixture',.001,.002)")
     row = dict(await pool.fetchrow("SELECT * FROM tank.policy WHERE task_type='fixture'"))
