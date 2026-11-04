@@ -52,6 +52,6 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 ## D. Wording only you can write (legal text)
 
 1. Radix: the client consent text a tenant admin agrees to before an active scan of their domain (#651).
-2. Chat bot: the privacy notice and how long conversations are kept (decision 35; 12 months suggested).
+2. Chat bot (**D2**): the client’s privacy notice and conversation-retention wording (decision 35). The shipped retention job removes expired conversations after 12 calendar months; agree the wording against that behavior before enabling capture. Save the actual notice and its version as tenant data fields `privacy_notice` and `notice_version` using the existing confirmed `trigger.bot.settings` tool. They are not environment settings. Without both, visitor lead/quote capture stays disabled; changed versions require a fresh notice before submission.
 
 Nothing else needs you before testing. Any name a later PR adds is added to this file, not sent separately.
