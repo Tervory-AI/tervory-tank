@@ -50,10 +50,14 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=59f8cnpelzwsyte1atyjc4fv
-      - traefik.http.routers.rig-http.rule=Host(`rig.tervory.com`)
+      # Preserve widget/store paths byte-for-byte; Workspace owns all other paths.
+      # Inventory and shared-host cutover: docs/ops/PRODUCT-HOSTS.md.
+      - traefik.http.routers.rig-http.rule=Host(`rig.tervory.com`) && (Path(`/v1/rig`) || PathPrefix(`/v1/rig/`) || Path(`/widget`) || PathPrefix(`/widget/`) || Path(`/3d`) || PathPrefix(`/3d/`) || Path(`/page`) || PathPrefix(`/page/`) || Path(`/product`) || PathPrefix(`/product/`) || Path(`/v5`) || PathPrefix(`/v5/`) || Path(`/cn-classic`) || Path(`/house`) || Path(`/health`) || Path(`/storage`) || PathPrefix(`/storage/`))
+      - traefik.http.routers.rig-http.priority=1000
       - traefik.http.routers.rig-http.entrypoints=http
       - traefik.http.routers.rig-http.middlewares=redirect-to-https
-      - traefik.http.routers.rig-https.rule=Host(`rig.tervory.com`)
+      - traefik.http.routers.rig-https.rule=Host(`rig.tervory.com`) && (Path(`/v1/rig`) || PathPrefix(`/v1/rig/`) || Path(`/widget`) || PathPrefix(`/widget/`) || Path(`/3d`) || PathPrefix(`/3d/`) || Path(`/page`) || PathPrefix(`/page/`) || Path(`/product`) || PathPrefix(`/product/`) || Path(`/v5`) || PathPrefix(`/v5/`) || Path(`/cn-classic`) || Path(`/house`) || Path(`/health`) || Path(`/storage`) || PathPrefix(`/storage/`))
+      - traefik.http.routers.rig-https.priority=1000
       - traefik.http.routers.rig-https.entrypoints=https
       - traefik.http.routers.rig-https.tls=true
       - traefik.http.routers.rig-https.tls.certresolver=letsencrypt

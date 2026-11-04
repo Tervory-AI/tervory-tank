@@ -32,6 +32,7 @@ services:
       - NET_RAW
     environment:
       AGENT_NAME: radix
+      RADIX_BRAIN_ENABLED: ${RADIX_BRAIN_ENABLED:-false}
       R2_BUCKET: tervory-radix
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_ACCESS_KEY_ID_RADIX: ${R2_ACCESS_KEY_ID_RADIX:-}
@@ -125,12 +126,178 @@ services:
 # The volume the room used before the raw-compose switch, by its live name, so
 # the data survives. external: compose reuses it and never recreates it. On a new
 # server, create it once first: docker volume create <name>
+  radix-brain:
+    profiles:
+    - brain
+    build:
+      context: ../..
+      dockerfile: agents/rig/Dockerfile.brain
+    command:
+    - uvicorn
+    - brain.standby:app
+    - --host
+    - 0.0.0.0
+    - --port
+    - '8001'
+    - --no-access-log
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 1
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=32m
+    environment:
+      BRAIN_ROOM: radix
+      TANK_REGION: us-east
+      TANK_URL: http://tank:8000
+      TANK_KEY: ${TANK_KEY_RADIX:-}
+      HERMES_URL: http://hermes:8000
+      RADIX_URL: http://agent-radix:8000
+      RADIX_SANDBOX_URL: http://radix-sandbox:8002
+      SANDBOX_KEY: ${SANDBOX_KEY_RADIX:-}
+      DATA_DIR: /data
+      RADIX_BROWSER_URL: http://radix-browser-gateway:3000
+    volumes:
+    - radix_brain_data:/data
+    networks:
+    - gw
+    - sandbox
+    depends_on:
+      radix-sandbox:
+        condition: service_healthy
+      radix-browser-gateway:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+  radix-sandbox:
+    profiles:
+    - brain
+    build:
+      context: ../..
+      dockerfile: agents/base/Dockerfile.sandbox
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    pids_limit: 64
+    environment:
+      BRAIN_ROOM: radix
+      SANDBOX_KEY: ${SANDBOX_KEY_RADIX:-}
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=32m
+    - /work:rw,nosuid,nodev,size=128m,uid=1000,gid=1000,mode=0700
+    networks:
+    - sandbox
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health', timeout=3)
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+  radix-browser:
+    build:
+      context: ../..
+      dockerfile: agents/base/Dockerfile.browser
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 0.5
+    shm_size: 256m
+    environment:
+      ACCESS_ROOM: radix
+      ACCESS_GATEWAY_URL: http://radix-browser-gateway:3000
+      BROWSER_PROXY_URL: http://radix-browser-gateway:3128
+    volumes:
+    - radix_browser_data:/browser-data
+    networks:
+    - browser
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    profiles:
+    - brain
+    read_only: true
+    pids_limit: 128
+    tmpfs:
+    - /tmp:rw,nosuid,nodev,size=128m
+    init: true
+  radix-browser-gateway:
+    build:
+      context: ../..
+      dockerfile: agents/base/Dockerfile.gateway
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+    environment:
+      TANK_KEY: ${TANK_KEY_RADIX:-}
+      TANK_REGION: us-east
+      ACCESS_ROOM: radix
+      BROWSER_HOST: radix-browser
+    networks:
+    - gw
+    - browser
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    profiles:
+    - brain
+    read_only: true
+    pids_limit: 128
+    tmpfs:
+    - /tmp:rw,nosuid,nodev,size=128m
+
 volumes:
   agent_radix_data:
     external: true
     name: liv4x7vshraiwnnowjv0kgfd_agent-radix-data
 
+  radix_brain_data:
+    name: tervory-radix-brain-data
+  radix_browser_data:
+    name: tervory-radix-browser-data
 networks:
+  sandbox:
+    internal: true
+  browser:
+    internal: true
   gw:
     external: true
     name: tervory-gw-radix

@@ -51,6 +51,8 @@ TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
 
 FOUNDER_TOOLS = ["tank.policy", "tank.policy.fallbacks", "base.campaign.start", "base.campaign.show", "base.campaign.csv", "base.audit.start", "base.audit.csv", "base.audit.review", "trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
                  "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
+                 "training.status",
+                 "training.run", "training.receipt",
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
 FOUNDER_TOOLS += TISAN_CLIENT_TOOLS
@@ -955,6 +957,16 @@ class EmptyArgs(Body):
     pass
 
 
+class TrainingRunArgs(Body):
+    agent: Literal["zenas"]
+    minutes: int = Field(ge=1, le=240)
+
+
+class TrainingReceiptArgs(Body):
+    job_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
+    billed_usd: Decimal = Field(ge=0)
+
+
 class RepoPRsArgs(Body):
     """Open PRs on Tervory-AI/tervory-tank, with head-commit checks and statuses."""
 
@@ -1437,6 +1449,9 @@ from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServ
 ADAPTERS = {
     "tank.policy": Adapter("GET", "/v1/command/tank/policy", PolicyArgs, "tank.policy"),
     "tank.policy.fallbacks": Adapter("POST", "/v1/command/tank/policy/fallbacks", PolicyFallbackArgs, "tank.policy.fallbacks"),
+    "training.status": Adapter("GET", "/v1/training/status", EmptyArgs, "training.status"),
+    "training.run": Adapter("POST", "/v1/training/run", TrainingRunArgs, "Start Zenas training", True, "paid_run"),
+    "training.receipt": Adapter("POST", "/v1/training/receipt", TrainingReceiptArgs, "Record training receipt"),
     "tisan.request": Adapter("POST", "/v1/command/tisan/request", TisanRequestArgs, "tisan.request"),
     "tisan.preview": Adapter("GET", "/v1/command/tisan/preview", TisanRequestIdArgs, "tisan.preview"),
     "tisan.feedback": Adapter("POST", "/v1/command/tisan/feedback", TisanFeedbackArgs, "tisan.feedback"),
@@ -1654,6 +1669,16 @@ async def propose_action(conn: Any, row: dict, state: dict, action: PlannedActio
     if action.tool == "tank.policy.fallbacks":
         require_tool(actor, action.tool)
         await policy_fallbacks_prepare(conn, action.arguments, actor)
+    preview = None
+    if action.tool == "training.run":
+        from training import TrainingRunRequest, training_run_plan
+        from gold import Reviewer
+
+        owner = await authorized_actor(actor or Actor(row["tenant_id"], row["user_id"], False), conn)
+        preview = await training_run_plan(
+            TrainingRunRequest(**action.arguments),
+            Reviewer(owner.user_id, owner.tenant_id, owner.founder),
+        )
     if action.tool.startswith("plugins."):
         from plugins import prepare
         action = await prepare(action, actor, conn)
@@ -1676,6 +1701,9 @@ async def propose_action(conn: Any, row: dict, state: dict, action: PlannedActio
     card = {"card_id": card_id, "kind": adapter.kind if adapter else "build", "summary": label,
             "tool": action.tool, "arguments": display_arguments, "status": "pending",
             "payload": {"tool": action.tool, "arguments": action.arguments}}
+    if preview:
+        card["result"] = preview
+        card.update({key: preview[key] for key in ("name", "cost_usd", "count") if key in preview})
     if origin is not None:
         card["origin"] = origin
     state["cards"][card_id] = card
@@ -1754,6 +1782,10 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, args if adapter.method == "GET" else {}, None if adapter.method == "GET" else args
     if action.tool == "trigger.scorecard":
         return adapter.method, path, scope, None
+    if action.tool == "training.status":
+        return adapter.method, path, {}, None
+    if action.tool in {"training.run", "training.receipt"}:
+        return adapter.method, path, {}, args
     if action.tool.startswith("trigger."):
         return adapter.method, path, {}, {**args, **scope}
     if action.tool == "rig.quote.confirm_payment":
@@ -1776,7 +1808,7 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     import httpx
     from main import app, TANK_API_KEY
     actor = await authorized_actor(actor)
-    if action.tool in {"zenas.draft", "zenas.playbook.add"}:
+    if action.tool in {"zenas.draft", "zenas.playbook.add", "training.run"}:
         from trigger_commands import confirmation
         confirmation(actor, action.tool, action.arguments)
     method, path, params, body = adapter_request(action, actor)
@@ -1811,6 +1843,9 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
                             for row in result.get("items", [])]}
         result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="zenas"))
     if action.tool == "zenas.watch.list" and 200 <= response.status_code < 300:
+        from trigger_routes import code_receipt
+        result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="zenas"))
+    if action.tool == "training.status" and 200 <= response.status_code < 300:
         from trigger_routes import code_receipt
         result["ledger_id"] = str(await code_receipt(actor.tenant_id, action.tool, agent="zenas"))
     if action.tool == "radix.domain.prove" and 200 <= response.status_code < 300:
@@ -1961,7 +1996,17 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
         adapter = action_adapter(action, actor)
         if adapter is None:
             raise HTTPException(403, "This tool is not available to this user")
-        if adapter.paid:
+        chargeable = adapter.paid
+        if action.tool == "training.run":
+            from gold import Reviewer
+            from training import TrainingRunRequest, training_run_plan
+
+            preview = await training_run_plan(
+                TrainingRunRequest(**action.arguments),
+                Reviewer(actor.user_id, actor.tenant_id, actor.founder),
+            )
+            chargeable = preview.get("status") == "ready"
+        if chargeable:
             from controls import refuse_paid
             await refuse_paid(task=action.tool, path="command.confirm")
         # Recheck immediately before dispatch; a queued card is not authority.
@@ -1978,7 +2023,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 from market_lab_ml3 import confirmed
                 status, result = 200, await confirmed(action, actor, thread_id, card_id)
                 once = result.pop("_once", None)
-            elif action.tool.startswith("trigger.") or action.tool in {"zenas.draft", "zenas.playbook.add", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"zenas.draft", "zenas.playbook.add", "training.run", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:

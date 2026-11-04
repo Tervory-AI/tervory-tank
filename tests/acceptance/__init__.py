@@ -1,1 +1,1 @@
-"""Executable founder acceptance sheets, isolated from legacy test module names."""
+"""Product acceptance suites, isolated from same-named historical test modules."""

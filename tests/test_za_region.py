@@ -73,12 +73,14 @@ def test_model_keys_reach_only_litellm_in_za() -> None:
 
 def test_za_zenas_room_is_its_own_resource_on_the_corridor() -> None:
     room = yaml.safe_load(ROOM_COMPOSE)
-    assert set(room["services"]) == {"agent-zenas", "pool-loader", "zenas-brain", "zenas-sandbox"}
+    assert set(room["services"]) == {"agent-zenas", "pool-loader", "zenas-own-model", "zenas-brain", "zenas-sandbox"}
     assert room["networks"]["gw"] == {"external": True, "name": "tervory-gw-zenas"}
     # Contracts are assembled inside agent-zenas; no Docassemble network or resource.
-    # The optional brain (profile "brain", off by default) adds only its internal sandbox network.
-    assert set(room["networks"]) == {"gw", "sandbox"}
+    # The optional brain (profile "brain", off by default) adds only its internal sandbox network;
+    # the owned model (profile "own-model") is reached only on its own external network.
+    assert set(room["networks"]) == {"gw", "sandbox", "own_model"}
     assert room["networks"]["sandbox"] == {"internal": True}
+    assert room["networks"]["own_model"] == {"external": True, "name": "tervory-own-zenas-za"}
     brain, sandbox = room["services"]["zenas-brain"], room["services"]["zenas-sandbox"]
     assert brain["profiles"] == ["brain"] and sandbox["profiles"] == ["brain"]
     assert brain["networks"] == ["gw", "sandbox"] and sandbox["networks"] == ["sandbox"]
@@ -87,9 +89,8 @@ def test_za_zenas_room_is_its_own_resource_on_the_corridor() -> None:
         assert "ports" not in service and "env_file" not in service, name
         for banned in ("POSTGRES_PASSWORD", "POSTGRES_USER", "LITELLM_MASTER_KEY", "TANK_API_KEY", "QDRANT_API_KEY"):
             assert banned not in (service.get("environment") or {}), (name, banned)
-    for name, service in room["services"].items():
-        if name in {"zenas-brain", "zenas-sandbox"}:
-            continue
+    for name in ("agent-zenas", "pool-loader"):
+        service = room["services"][name]
         assert service["environment"]["TANK_REGION"] == "za", name
         assert service["networks"] == ["gw"], name
         assert "ports" not in service, name
@@ -122,19 +123,24 @@ def test_za_compose_names_no_us_host_and_does_not_replicate() -> None:
         assert banned not in lowered
 
 
-def test_za_roster_matches_the_funded_models_and_has_no_sa_model_yet() -> None:
+def test_za_roster_includes_the_gated_own_model() -> None:
     za_names = [item["model_name"] for item in ZA_CONFIG["model_list"]]
     us_names = [item["model_name"] for item in US_CONFIG["model_list"]]
-    assert za_names == us_names
+    assert set(za_names) == set(us_names) | {"tervory-own-zenas-za"}
     assert "za-local" not in za_names
     raw = (ROOT / "litellm" / "config.za.yaml").read_text(encoding="utf-8")
     assert "model_name: za-local" in raw
     assert "hosted_in: za" in raw
     for item in ZA_CONFIG["model_list"]:
+        if item["model_name"] == "tervory-own-zenas-za":
+            assert item["litellm_params"]["api_base"] == "http://zenas-own-model:8080/v1"
+            assert item["litellm_params"]["api_key"] == "os.environ/ZENAS_OWN_MODEL_KEY"
+            assert item["model_info"]["hosted_in"] == "za"
+            continue
         # MODELS-3: the public Hugging Face router is the only api_base; it is not SA hosting.
         assert item["litellm_params"].get("api_base") in (None, "https://router.huggingface.co/v1"), item["model_name"]
         assert "hosted_in" not in (item.get("model_info") or {}), item["model_name"]
-    assert main.sa_hosted_models() == frozenset()
+    assert main.sa_hosted_models() == frozenset({"tervory-own-zenas-za"})
 
 
 def test_za_litellm_gets_the_deepseek_and_moonshot_keys_like_boston() -> None:
@@ -229,6 +235,18 @@ def test_sa_hosted_model_may_see_an_identifier_and_the_allow_list_can_narrow_it(
         )
         == main.IDENTIFIER_REFUSAL
     )
+
+
+def test_owned_za_route_only_receives_identifiers_after_graduation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ZA_HOSTED_MODELS", raising=False)
+    main._graduated_sa_models.discard(main._OWN_ZA_MODEL)
+    text = f"ID {SA_ID}"
+    assert main.model_call_refusal(text, main._OWN_ZA_MODEL, box="za", tenant_id=TENANT) == main.IDENTIFIER_REFUSAL
+    main._graduated_sa_models.add(main._OWN_ZA_MODEL)
+    try:
+        assert main.model_call_refusal(text, main._OWN_ZA_MODEL, box="za", tenant_id=TENANT) is None
+    finally:
+        main._graduated_sa_models.discard(main._OWN_ZA_MODEL)
 
 
 def test_pure_code_detect_is_not_a_model_refusal() -> None:

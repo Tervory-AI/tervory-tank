@@ -1,0 +1,90 @@
+.....F....................................................F............. [ 26%]
+........................................................................ [ 52%]
+........................................................................ [ 78%]
+............................................................             [100%]
+=================================== FAILURES ===================================
+_____ test_owning_key_policy_pause_refusal_receipt_and_export[market_lab] ______
+
+owning = namespace(app=<fastapi.applications.FastAPI object at 0x7dba7c1a9790>, tank=namespace(pool=<function corridor.<locals>...ey', 'tiger': 'placeholder-tiger-key', 'market_lab': 'placeholder-market_lab-key'}, client=<class 'httpx.AsyncClient'>)
+room = 'market_lab'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7dba7ca5ae40>
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('room', ROOMS)
+    async def test_owning_key_policy_pause_refusal_receipt_and_export(owning, room, monkeypatch):
+        response = await chat(owning, room)
+        assert response.status_code == 200, response.text
+        owning.tank.load_policy.assert_awaited_once_with('agent.' + room + '.think', TENANT)
+        assert owning.tank.model_call_refusal.call_args.kwargs['caller'] == room
+        assert len(owning.sent) == 1 and len(owning.pool.rows) == 3
+        assert owning.pool.rows[0][1][13:15] == (room, 'agent.' + room + '.think')
+        assert all(row[1][1] == TENANT for row in owning.pool.rows)
+        assert response.json()['receipt']['room'] == room
+        owning.pool.paused = True
+        assert (await chat(owning, room)).status_code == 503
+        owning.pool.paused = False
+        owning.tank.model_call_refusal.return_value = 'placeholder refusal'
+        assert (await chat(owning, room)).status_code == 403
+        assert (await chat(owning, room, region='za')).status_code == 403
+        assert len(owning.sent) == 1
+        export = AsyncMock(return_value={'skills': []})
+        monkeypatch.setattr(agent_skills, 'export_skills', export)
+        async with owning.client(transport=httpx.ASGITransport(app=owning.app), base_url='http://placeholder.invalid') as client:
+>           response = await client.get(owning.app.url_path_for('skills', room=room), params={'tenant_id': str(TENANT)}, headers={'X-Tank-Key': owning.keys[room]})
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/room_brains/test_rooms.py:171:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/usr/local/lib/python3.12/site-packages/starlette/applications.py:90: in url_path_for
+    return self.router.url_path_for(name, **path_params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <fastapi.routing.APIRouter object at 0x7dba7c1a9880>, name = 'skills'
+path_params = {'room': 'market_lab'}
+
+    def url_path_for(self, name: str, /, **path_params: Any) -> URLPath:
+        for route in self.routes:
+            try:
+                return route.url_path_for(name, **path_params)
+            except NoMatchFound:
+                pass
+>       raise NoMatchFound(name, path_params)
+E       starlette.routing.NoMatchFound: No route exists for name "skills" and params "room".
+
+/usr/local/lib/python3.12/site-packages/starlette/routing.py:650: NoMatchFound
+------------------------------ Captured log call -------------------------------
+WARNING  tank.controls:controls.py:64 paid_refused task=agent.market_lab.think path=agent.chat at=2026-11-04T00:39:26.278492+00:00
+_ test_raw_compose_files_need_nothing_from_coolify[agents/market_lab/docker-compose.yml] _
+
+path = PosixPath('/repo/agents/market_lab/docker-compose.yml')
+
+    @pytest.mark.parametrize("path", [p for p in ROOM_FILES if is_raw(p.read_text(encoding="utf-8"))],
+                             ids=lambda p: str(p.relative_to(ROOT)))
+    def test_raw_compose_files_need_nothing_from_coolify(path: Path) -> None:
+        compose = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for name, service in compose["services"].items():
+            # Raw mode has no env_file and adds no network: everything is spelled out.
+            assert "env_file" not in service, name
+            assert service.get("networks"), f"{name} must name its networks"
+            assert "ports" not in service, name
+            for key, value in (service.get("environment") or {}).items():
+                assert isinstance(value, (str, int, float)), f"{name}.{key} must be explicit"
+        for key, spec in (compose.get("volumes") or {}).items():
+            if path.parent.name == "zenas":
+                # Existing Zenas room volumes must retain main's declarations.
+                # Its new brain volume still requires its own explicit name below.
+                room_data = "za_agent_data" if path.name == "docker-compose.za.yml" else "agent_zenas_data"
+                if key == room_data:
+                    assert spec is None, f"volume {key} must stay unchanged from main"
+                    continue
+            # The live name, so the data survives the switch from normal mode.
+>           assert spec and spec.get("name"), f"volume {key} must keep its live name"
+E           AssertionError: volume agent_market_lab_data must keep its live name
+E           assert (None)
+
+tests/test_room_seal.py:166: AssertionError
+=========================== short test summary info ============================
+FAILED tests/room_brains/test_rooms.py::test_owning_key_policy_pause_refusal_receipt_and_export[market_lab]
+FAILED tests/test_room_seal.py::test_raw_compose_files_need_nothing_from_coolify[agents/market_lab/docker-compose.yml]
+2 failed, 274 passed, 87 warnings in 268.06s (0:04:28)

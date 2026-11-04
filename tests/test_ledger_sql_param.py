@@ -1,6 +1,6 @@
 """Radix scan follow-up: tank/agent_skills.py passes room and task type as bound parameters.
 
-room_key() allows only Base, Rig, Tiger or Zenas. These tests keep it safe if
+room_key() accepts only an approved room's owning key. These tests keep it safe if
 that guard ever moves: a hostile room value never reaches SQL text, and every write stays
 tied to the tenant. All gateway and database traffic is faked.
 """
@@ -19,7 +19,7 @@ from fastapi import FastAPI, HTTPException
 import agent_skills as route
 
 HOSTILE = ["base'); DELETE FROM tank.ledger; --", "rig' OR '1'='1",
-           "tiger'); DELETE FROM tank.ledger; --", "zenas' OR '1'='1", "Base", "Tiger", "Zenas", "radix", "", None, 7, [], {}]
+           "tiger'); DELETE FROM tank.ledger; --", "zenas' OR '1'='1", "market_lab'); DELETE FROM tank.ledger; --", "tisan' OR '1'='1", "trigger'); DELETE FROM tank.ledger; --", "ghost' OR '1'='1", "Base", "Tiger", "Zenas", "radix' OR '1'='1", "enforce", "autumbra_enforce", "autumbra-watch", "", None, 7, [], {}]
 
 
 class Pool:
@@ -52,7 +52,7 @@ class Pool:
 
 @pytest.fixture
 def setup(monkeypatch):
-    keys = {room: uuid.uuid4().hex for room in ("base", "rig", "tiger", "zenas")}
+    keys = {room: uuid.uuid4().hex for room in route.ROOMS}
     for room, key in keys.items():
         monkeypatch.setenv("TANK_KEY_" + room.upper(), key)
     pool = Pool()
@@ -84,7 +84,7 @@ def setup(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("room", ["base", "rig", "tiger", "zenas"])
+@pytest.mark.parametrize("room", list(route.ROOMS))
 async def test_room_and_task_type_are_bound_parameters_and_rows_carry_the_tenant(setup, room):
     app, _tank, pool, keys, original = setup
     tenant = uuid.uuid4()
@@ -123,7 +123,7 @@ async def test_hostile_room_never_reaches_sql(setup, room):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("room", ["base", "rig", "tiger", "zenas"])
+@pytest.mark.parametrize("room", list(route.ROOMS))
 async def test_reads_bind_room_and_filter_by_tenant(setup, room):
     app, tank, pool, keys, original = setup
     tenant = uuid.uuid4()
