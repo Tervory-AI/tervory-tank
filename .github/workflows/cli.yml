@@ -198,9 +198,11 @@ jobs:
           git checkout-index --force --all
       - run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: cli
-      - name: Full CLI suite, including Windows command refusal
+      - name: Full CLI suite, including approved Windows commands
         run: npm test
         working-directory: cli
+      - name: Run a real approved command in the selected Windows folder
+        run: node --test --test-name-pattern='approved commands execute on Windows and every host fallback' cli/test/code-mode.test.mjs
       - name: Build Windows archives twice and compare bytes
         run: |
           node cli/scripts/build-release.mjs --platforms win32-x64-msvc,win32-arm64-msvc --out "$RUNNER_TEMP/cli-a"
