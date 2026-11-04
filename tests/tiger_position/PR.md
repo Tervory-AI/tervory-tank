@@ -78,12 +78,41 @@ Validation at the Workspace gate:
   New model, loader, action and confirmation-transport tests pass as well.
 - The real Tank card/decision flow, catalogue outage and tenant-scoped site counts
   passed against isolated Postgres. A focused timestamp regression also passed.
-- The final broad Tiger and Workspace Python regression is still running; gate 3
-  records its final result before the task stops.
+- Final regression results and the disposable-environment rerun are recorded below.
 
 Evidence is in `evidence/`, with actual screenshots in `evidence/screenshots/`.
 The browser fixture uses the actual React components and production styles with
 server boundaries mocked; the separate Tank test uses real durable cards/routes.
+
+## Gate 3: final regression evidence
+
+All 502 collected Tiger cases are accounted for: 501 passed across the broad run
+and the focused rerun; one existing gold-set case remains skipped because its
+human-checked expected data is absent. No test was removed or loosened.
+
+The broad run covered every `test_tiger*` / `test_tg2*` module and every
+`tiger_*` test directory, including tenant-bus history, real Chromium reading,
+brain profiles, alerts and watch commands. It passed 470 cases. Its remaining
+31 cases initially failed because the embedded PostgreSQL lacked `pg_trgm`, or
+parallel workers shared cluster-wide role names. Those exact 31 cases then passed
+serially on disposable PostgreSQL 16.15 with its extensions. Both logs are retained.
+The PostgreSQL/Redis processes were isolated to this task; no deployment database,
+existing volume or live tenant was used.
+
+Additional completed checks:
+
+- 34 existing Workspace Python checks passed.
+- All 66 Workspace TypeScript, 19 legacy Tiger Node and 10 new TG2 tests passed.
+- All 29 one-door and secret guards passed. The new transport test's environment
+  restoration was expanded to avoid a secret-scanner false positive; its key and
+  host remain explicit placeholders, with no allowlist change.
+- The existing Chats contract, header and stall scripts, Next-fetch guard and CLI
+  sign-in script passed. Production build, TypeScript and all ten visual checks
+  passed as recorded above.
+- The exact CI Ruff E9/F command printed `All checks passed!` before each push.
+
+`evidence/README.md` maps the logs and explains the rerun. Hosted CI and production
+acceptance remain for Claude's PR and deployment; no PR was opened by this thread.
 
 ## Remaining frame gaps and live acceptance
 

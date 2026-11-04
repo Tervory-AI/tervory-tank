@@ -90,7 +90,7 @@ test('server action takes identity only from the current session and validates i
   assert.deepEqual(calls, [[actor, id, 'undo'], '/tiger']);
 });
 test('Tank helper uses durable proposals and confirmations without a model turn', async () => {
-  const previousFetch = global.fetch, previousUrl = process.env.TANK_URL, previousKey = process.env.TANK_API_KEY;
+  const previousFetch = global.fetch, previousUrl = process.env.TANK_URL, priorKey = process.env.TANK_API_KEY;
   process.env.TANK_URL = 'http://placeholder.invalid'; process.env.TANK_API_KEY = 'placeholder-service-key';
   const actor = { tenantId: 'tenant-a', userId: 'user-a' }, id = '00000000-0000-4000-8000-000000000001';
   const calls = [];
@@ -103,7 +103,13 @@ test('Tank helper uses durable proposals and confirmations without a model turn'
     assert.deepEqual(calls[1].body, { tool: 'tiger.match.undo', arguments: { match_id: id } });
     assert.deepEqual(calls[2].body, { action: 'confirm' });
     for (const call of calls) { assert.equal(call.headers.get('x-tervory-tenant'), actor.tenantId); assert.equal(call.headers.get('x-tervory-user'), actor.userId); }
-  } finally { global.fetch = previousFetch; if (previousUrl === undefined) delete process.env.TANK_URL; else process.env.TANK_URL = previousUrl; if (previousKey === undefined) delete process.env.TANK_API_KEY; else process.env.TANK_API_KEY = previousKey; }
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.TANK_URL;
+    else process.env.TANK_URL = previousUrl;
+    if (priorKey === undefined) delete process.env.TANK_API_KEY;
+    else process.env.TANK_API_KEY = priorKey;
+  }
 });
 test('frame-only examples never appear in production Tiger sources', () => {
   const folder = path.join(root, 'workspace/app/tiger');
