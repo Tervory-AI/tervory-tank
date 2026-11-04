@@ -10,6 +10,7 @@ import { mootCanonicalRedirectUrl, productHostRewritePath, publicReturnUrl } fro
 const publicRoutes = [
   "/api/auth(.*)",
   "/api/trigger-signin/signed-out",
+  "/api/trigger-signin/config",
   // MCP authenticates its own bearer credentials; OAuth public protocol endpoints.
   "/mcp",
   "/oauth/token",

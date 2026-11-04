@@ -4,11 +4,13 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 
 ## A. Coolify settings, Boston (the main app unless noted)
 
-**Trigger sign-in, Boston resource (names only):** TRIGGER_SIGNIN_MASTERKEY, TRIGGER_SIGNIN_SESSION_COOKIE_SECRET, TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD, TRIGGER_SIGNIN_DB_PASSWORD, TRIGGER_SIGNIN_ADMIN_EMAIL, TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD, TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION, TRIGGER_SIGNIN_LOGIN_CLIENT_PAT_EXPIRATION, TRIGGER_SIGNIN_MACHINE_TOKEN, TRIGGER_SIGNIN_SETUP_TOKEN, TRIGGER_SIGNIN_SETUP_TOKEN_ZA
+**Trigger sign-in, Boston resource (names only):** TRIGGER_SIGNIN_MASTERKEY, TRIGGER_SIGNIN_SESSION_COOKIE_SECRET, TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD, TRIGGER_SIGNIN_DB_PASSWORD, TRIGGER_SIGNIN_ADMIN_EMAIL, TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD, TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION, TRIGGER_SIGNIN_LOGIN_CLIENT_PAT_EXPIRATION, TRIGGER_SIGNIN_MACHINE_TOKEN, TRIGGER_SIGNIN_SETUP_TOKEN, TRIGGER_SIGNIN_CONFIG_TOKEN
 
-**Trigger sign-in, Boston Tank/Workspace (names only):** TRIGGER_SIGNIN_SETUP_TOKEN, TRIGGER_SIGNIN_WORKSPACE_SECRET, TRIGGER_SIGNIN_DIRECTORY_TOKEN, TRIGGER_SIGNIN_SESSIONS_KEY_ZA
+**Trigger sign-in, Boston Tank/Workspace (names only):** TRIGGER_SIGNIN_SETUP_TOKEN, TRIGGER_SIGNIN_CONFIG_TOKEN, TRIGGER_SIGNIN_WORKSPACE_SECRET, TRIGGER_SIGNIN_DIRECTORY_TOKEN, TRIGGER_SIGNIN_SESSIONS_KEY
 
-**Trigger sign-in, Boston routing (names only):** TRIGGER_SIGNIN_REGION, TRIGGER_SIGNIN_HOST, TRIGGER_SIGNIN_VOLUME_PREFIX, TRIGGER_SIGNIN_PROXY_NETWORK
+**Trigger sign-in, Boston routing (names only):** TRIGGER_SIGNIN_PROXY_NETWORK
+
+One Boston resource serves every country. The initial founder changes the temporary password at first Trigger sign-in and may enrol a passkey. Setup binds the native subject, never email. Only Boston Tank/setup receive the setup token; Workspace receives the read-only configuration token, not a setup credential. The ZA Tank is a consumer, not a second sign-in server.
 
 **Shared email** (the morning report and default alerts): SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
 
@@ -42,13 +44,9 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 
 ## B. Coolify settings, ZA box
 
-**Trigger sign-in, ZA resource (names only):** TRIGGER_SIGNIN_MASTERKEY, TRIGGER_SIGNIN_SESSION_COOKIE_SECRET, TRIGGER_SIGNIN_POSTGRES_ADMIN_PASSWORD, TRIGGER_SIGNIN_DB_PASSWORD, TRIGGER_SIGNIN_ADMIN_EMAIL, TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD, TRIGGER_SIGNIN_BOOTSTRAP_KEY_EXPIRATION, TRIGGER_SIGNIN_LOGIN_CLIENT_PAT_EXPIRATION, TRIGGER_SIGNIN_MACHINE_TOKEN, TRIGGER_SIGNIN_SETUP_TOKEN
 
-**Trigger sign-in, ZA Tank (names only):** TRIGGER_SIGNIN_SETUP_TOKEN, TRIGGER_SIGNIN_SESSIONS_KEY
+**Trigger sign-in, ZA Tank consumer (names only):** TRIGGER_SIGNIN_CONFIG_TOKEN, TRIGGER_SIGNIN_SESSIONS_KEY
 
-**Trigger sign-in, ZA routing (names only):** TRIGGER_SIGNIN_REGION, TRIGGER_SIGNIN_HOST, TRIGGER_SIGNIN_VOLUME_PREFIX, TRIGGER_SIGNIN_PROXY_NETWORK
-
-The initial native founder account must change its temporary password at first Trigger sign-in; it can then enrol a passkey. The setup job reads the created account’s native subject, not its email, and binds/grants that subject through the Tervory project. Machine/directory tokens are secret values entered only in Coolify; no subject or app ID is copied by hand.
 
 - LAWS_AFRICA_API_TOKEN (if not already set)
 - Zenas training: HF_TOKEN, HF_ORG; HF_TRAIN_MAX_USD is optional (default 50); ZENAS_OWN_MODEL_KEY (#639, once that fix lands)

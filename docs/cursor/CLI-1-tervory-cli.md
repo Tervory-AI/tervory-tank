@@ -32,7 +32,7 @@
 
 The CLI starts the region's native device flow through Tank. Only that region's
 Trigger sign-in host approves the code: `auth.tervory.com` in the US and
-`auth-za.tervory.com` in ZA. Tank verifies the native token's signature, issuer,
+`auth.tervory.com` in ZA. Tank verifies the native token's signature, issuer,
 audience, expiry, subject and Tervory-project grants before issuing its existing
 hashed CLI credential. The subject is unchanged; an organisation maps only to
 its setup-published existing Tank tenant. Email, names and metadata grant nothing.

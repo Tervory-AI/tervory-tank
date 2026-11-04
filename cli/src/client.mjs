@@ -95,7 +95,7 @@ export async function keychain() {
 
 const REFRESH = /^tvr1\.(us-east|za)\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/;
 const DEVICE_ERRORS = ['authorization_pending', 'slow_down', 'access_denied', 'expired_token', 'invalid_grant'];
-const SIGNIN_ORIGINS = { 'us-east': 'https://auth.tervory.com', za: 'https://auth-za.tervory.com' };
+const SIGNIN_ORIGINS = { 'us-east': 'https://auth.tervory.com', za: 'https://auth.tervory.com' };
 
 export function identityApprovalUrl(start, region) {
   if (start.identity_provider !== 'trigger-signin' || !SIGNIN_ORIGINS[region] || typeof start.user_code !== 'string' || !/^[A-Z0-9-]{4,40}$/.test(start.user_code)) {

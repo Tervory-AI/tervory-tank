@@ -11,8 +11,8 @@ import httpx
 import jwt
 import trigger_signin_config as registry
 
-ISSUERS = {'us-east': 'https://auth.tervory.com', 'za': 'https://auth-za.tervory.com'}
-ISSUER = ISSUERS['za']
+ISSUERS = registry.ISSUERS
+ISSUER = registry.ISSUER
 ORG_CLAIM = 'urn:zitadel:iam:user:resourceowner:id'
 # Zitadel defines this reserved claim as roles for the requesting application's
 # own project. Never combine it with project-specific claims from other projects.
@@ -27,8 +27,7 @@ class IdentityError(ValueError):
 
 
 def configured() -> bool:
-    from main import box_region
-    return box_region() in registry._records
+    return 'us-east' in registry._records
 
 
 def settings(*, workspace: bool = False) -> tuple[str, str]:

@@ -7,12 +7,15 @@ import os
 import time
 import uuid
 
+import httpx
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from tenant_db import tenant_scope
 
-ISSUERS = {'us-east': 'https://auth.tervory.com', 'za': 'https://auth-za.tervory.com'}
+ISSUER = 'https://auth.tervory.com'
+ISSUERS = dict.fromkeys(('us-east', 'za'), ISSUER)
 PLATFORM = uuid.UUID('00000000-0000-0000-0000-000000000001')
 _records: dict[str, dict] = {}
 _expires = 0.0
@@ -23,7 +26,41 @@ proof: ContextVar[dict[str, str]] = ContextVar('trigger_signin_proof', default={
 
 def setup_authorized(request: Request) -> bool:
     from command import key_matches
-    return key_matches(request.headers.get('x-trigger-signin-setup', ''), os.environ.get('TRIGGER_SIGNIN_SETUP_TOKEN', ''))
+    from main import box_region
+    return box_region() == 'us-east' and key_matches(request.headers.get('x-trigger-signin-setup', ''), os.environ.get('TRIGGER_SIGNIN_SETUP_TOKEN', ''))
+
+
+def reader_authorized(request: Request) -> bool:
+    from command import key_matches
+    return key_matches(request.headers.get('x-trigger-signin-config', ''), os.environ.get('TRIGGER_SIGNIN_CONFIG_TOKEN', ''))
+
+
+def http_client():
+    return httpx.AsyncClient(timeout=10, trust_env=False, follow_redirects=False)
+
+
+async def remote_tenants() -> set[uuid.UUID]:
+    token = os.environ.get('TRIGGER_SIGNIN_CONFIG_TOKEN', '')
+    if not token:
+        raise HTTPException(503, 'Trigger sign-in tenant directory is unavailable')
+    result = set()
+    try:
+        async with http_client() as client:
+            for offset in range(0, 100000, 500):
+                response = await client.get('https://za.tervory.com/v1/case-studies/clients',
+                    headers={'x-trigger-signin-config': token}, params={'offset': offset, 'limit': 500})
+                response.raise_for_status()
+                page = response.json()
+                for tenant in page['clients']:
+                    ident = uuid.UUID(tenant['tenant_id'])
+                    if ident in result:
+                        raise ValueError
+                    result.add(ident)
+                if page['has_more'] is False:
+                    return result
+    except (httpx.HTTPError, ValueError, KeyError, TypeError):
+        pass
+    raise HTTPException(503, 'Trigger sign-in tenant directory is unavailable')
 
 
 async def require_setup(request: Request):
@@ -32,7 +69,7 @@ async def require_setup(request: Request):
 
 
 def config(region: str) -> dict:
-    record = _records.get(region)
+    record = _records.get('us-east') if region in ISSUERS else None
     if record is None:
         raise HTTPException(503, 'Trigger sign-in setup is incomplete')
     return record
@@ -54,6 +91,28 @@ async def refresh(*, force: bool = False):
     async with _lock:
         if not force and _expires > time.monotonic():
             return
+        from main import box_region
+        if box_region() == 'za':
+            try:
+                token = os.environ.get('TRIGGER_SIGNIN_CONFIG_TOKEN', '')
+                if not token:
+                    raise ValueError
+                async with http_client() as client:
+                    response = await client.get('https://app.tervory.com/api/trigger-signin/config',
+                        headers={'x-trigger-signin-config': token})
+                    response.raise_for_status()
+                    records = response.json()['regions']
+                record = records['us-east']
+                Deployment.model_validate({key: record[key] for key in (
+                    'region', 'issuer', 'client_id', 'workspace_client_id', 'project_id')} | {
+                    'founder_subject': record['founders'][0],
+                    'organisations': [{'org_id': org, 'tenant_id': tenant} for org, tenant in record['organisations'].items()]})
+                if set(records) != {'us-east'} or record['issuer'] != ISSUER or len(record['founders']) != 1:
+                    raise ValueError
+            except (httpx.HTTPError, ValueError, KeyError, TypeError, IndexError):
+                raise HTTPException(503, 'Trigger sign-in setup is unavailable') from None
+            _records, _expires = records, time.monotonic() + 30
+            return
         from command import db
         with tenant_scope(PLATFORM, administrative=True):
             async with db().acquire() as conn:
@@ -62,6 +121,8 @@ async def refresh(*, force: bool = False):
                 owners = await conn.fetch('SELECT region,subject FROM tank.trigger_signin_founders')
         records = {}
         for row in rows:
+            if row['region'] != 'us-east' or row['issuer'] != ISSUER:
+                continue
             record = dict(row)
             record['organisations'] = {binding['org_id']: str(binding['tenant_id']) for binding in bindings if binding['region'] == row['region']}
             record['founders'] = [owner['subject'] for owner in owners if owner['region'] == row['region']]
@@ -93,7 +154,7 @@ router = APIRouter(prefix='/v1/trigger-signin', include_in_schema=False)
 async def read_config(request: Request, response: Response):
     from command import key_matches
     from main import TANK_API_KEY
-    if not setup_authorized(request) and not key_matches(request.headers.get('x-tank-key', ''), TANK_API_KEY):
+    if not setup_authorized(request) and not reader_authorized(request) and not key_matches(request.headers.get('x-tank-key', ''), TANK_API_KEY):
         raise HTTPException(404, 'not found')
     await refresh()
     response.headers['Cache-Control'] = 'private, no-store'
@@ -102,12 +163,13 @@ async def read_config(request: Request, response: Response):
 
 @router.put('/config', dependencies=[Depends(require_setup)])
 async def write_config(body: Deployment):
-    if ISSUERS.get(body.region) != body.issuer:
+    if body.region != 'us-east' or body.issuer != ISSUER:
         raise HTTPException(422, 'Trigger sign-in region refused')
     organisations = {binding.org_id: binding.tenant_id for binding in body.organisations}
     if len(organisations) != len(body.organisations) or len(set(organisations.values())) != len(organisations):
         raise HTTPException(422, 'Trigger sign-in organisations refused')
     from command import db
+    remote = await remote_tenants()
     with tenant_scope(PLATFORM, administrative=True):
         async with db().acquire() as conn, conn.transaction():
             await conn.execute('SELECT pg_advisory_xact_lock(72451301)')
@@ -117,7 +179,7 @@ async def write_config(body: Deployment):
             await conn.execute('''INSERT INTO tank.trigger_signin_config(region,issuer,client_id,workspace_client_id,project_id)
                 VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING''', body.region, body.issuer, body.client_id, body.workspace_client_id, body.project_id)
             for org_id, tenant in organisations.items():
-                if not await conn.fetchval('SELECT EXISTS(SELECT 1 FROM tank.case_study_clients WHERE tenant_id=$1)', tenant):
+                if tenant not in remote and not await conn.fetchval('SELECT EXISTS(SELECT 1 FROM tank.case_study_clients WHERE tenant_id=$1)', tenant):
                     raise HTTPException(422, 'Trigger sign-in tenant does not exist')
                 existing = await conn.fetchrow('SELECT org_id,tenant_id FROM tank.trigger_signin_organisations WHERE region=$1 AND (org_id=$2 OR tenant_id=$3)', body.region, org_id, tenant)
                 if existing and (existing['org_id'] != org_id or existing['tenant_id'] != tenant):

@@ -3133,7 +3133,7 @@ ALTER TABLE tank.oauth_codes ADD COLUMN IF NOT EXISTS trigger_signin boolean NOT
 ALTER TABLE tank.personal_tokens ADD COLUMN IF NOT EXISTS trigger_signin_issuer text;
 
 CREATE TABLE IF NOT EXISTS tank.trigger_signin_config (
-    region text PRIMARY KEY CHECK (region IN ('us-east','za')),
+    region text PRIMARY KEY CHECK (region = 'us-east'),
     issuer text NOT NULL UNIQUE,
     client_id text NOT NULL,
     workspace_client_id text NOT NULL,
@@ -3142,7 +3142,7 @@ CREATE TABLE IF NOT EXISTS tank.trigger_signin_config (
 CREATE TABLE IF NOT EXISTS tank.trigger_signin_organisations (
     region text NOT NULL REFERENCES tank.trigger_signin_config(region),
     org_id text NOT NULL,
-    tenant_id uuid NOT NULL REFERENCES tank.case_study_clients(tenant_id),
+    tenant_id uuid NOT NULL,
     PRIMARY KEY (region,org_id),
     UNIQUE (region,tenant_id)
 );

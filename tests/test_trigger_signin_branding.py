@@ -90,5 +90,5 @@ def test_branding_failure_does_not_publish_a_completion_marker(resources):
     api = NativeSettings()
     api.default = {}
     with pytest.raises(ValueError, match='native email text unavailable'):
-        BRAND['configure_branding'](api, bootstrap, assets, 'https://auth-za.tervory.com')
+        BRAND['configure_branding'](api, bootstrap, assets, 'https://auth.tervory.com')
     assert not (bootstrap / 'trigger-signin-branding.json').exists()

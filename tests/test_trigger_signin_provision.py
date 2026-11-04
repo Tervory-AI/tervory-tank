@@ -127,13 +127,16 @@ def test_setup_recovers_created_org_without_response_and_never_relinks_email(tmp
     assert api.writes == before
 
 
-def test_workspace_publication_only_links_tenants_already_on_destination(tmp_path):
-    payload = configure(Native(), Tank(), tmp_path)
-    destination = Tank()
-    destination.clients = [SECOND]
-    PROVISION['publish_workspace'](destination, payload)
-    assert destination.regions['us-east']['organisations'] == {}
-    assert destination.regions['us-east']['founders'] == ['50001']
+def test_one_setup_links_both_work_regions_without_writing_to_za(tmp_path):
+    api, tank, regional = Native(), Tank(), Tank()
+    regional.clients = [FIRST, SECOND]
+    record = {'owner_org_id': '10001', 'project_id': '20001', 'client_id': '30001@tervory', 'workspace_client_id': '30002@tervory'}
+    payload = PROVISION['provision'](api, tank, record, 'us-east', 'https://auth.tervory.com', tmp_path,
+                                     regional_tanks=(regional,))
+    assert {binding['tenant_id'] for binding in payload['organisations']} == {FIRST, SECOND}
+    assert len(api.organisations) == 2
+    assert set(tank.regions) == {'us-east'}
+    assert regional.regions == {}
 
 
 def test_setup_never_adopts_an_organisation_by_display_name(tmp_path):
@@ -147,7 +150,7 @@ def test_setup_never_adopts_an_organisation_by_display_name(tmp_path):
 
 def test_setup_refuses_ledger_from_another_issuer(tmp_path):
     (tmp_path / 'tenant-organisations-us-east.json').write_text(json.dumps({
-        'issuer': 'https://auth-za.tervory.com', 'organisations': {},
+        'issuer': 'https://retired.example.invalid', 'organisations': {},
     }))
     api, tank = Native(), Tank()
     with pytest.raises(PROVISION['ProvisionError'], match='ledger refused'):

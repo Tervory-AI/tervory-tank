@@ -27,10 +27,9 @@ def boundary(monkeypatch, request):
     web.claims['aud'] = WEB_CLIENT
     local = Provider(request.param)
     install_registry(monkeypatch, [web, local], {ORG: TENANT, '99999': OTHER}, workspace_client=WEB_CLIENT)
-    if request.param == 'us-east':
-        local.private = web.private
-        local.keys = [local.jwk()]
-    providers = {'auth.tervory.com': web, 'auth-za.tervory.com': local}
+    local.private = web.private
+    local.keys = [local.jwk()]
+    providers = {'auth.tervory.com': web}
     monkeypatch.setenv('TRIGGER_SIGNIN_ISSUER', local.issuer)
     monkeypatch.setenv('TRIGGER_SIGNIN_CLIENT_ID', CLIENT)
     monkeypatch.setenv('TRIGGER_SIGNIN_WORKSPACE_CLIENT_ID', WEB_CLIENT)
@@ -62,7 +61,7 @@ async def test_workspace_token_is_required_and_verified_on_both_boxes(boundary):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('change', [{'aud': CLIENT}, {'iss': 'https://auth-za.tervory.com'}, {'exp': 1}])
+@pytest.mark.parametrize('change', [{'aud': CLIENT}, {'iss': 'https://retired.example.invalid'}, {'exp': 1}])
 async def test_other_audience_issuer_and_expired_tokens_are_refused(boundary, change):
     app, provider, _, headers = boundary
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://offline') as client:

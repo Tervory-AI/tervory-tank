@@ -14,10 +14,8 @@ SUB = '20001'
 
 def set_founders(monkeypatch, subjects):
     from contextvars import ContextVar
-    import sys
     import trigger_signin_config as registry
-    runtime = sys.modules.get('main')
-    region = runtime.box_region() if runtime and hasattr(runtime, 'box_region') else 'us-east'
+    region = 'us-east'
     issuer = registry.ISSUERS[region]
     record = {**registry._records.get(region, {}), 'issuer': issuer,
               'founders': [subject.strip() for subject in subjects.split(',') if subject.strip()]}
@@ -31,7 +29,7 @@ def set_founders(monkeypatch, subjects):
 
 def install_registry(monkeypatch, providers, bindings, *, workspace_client=None):
     import trigger_signin_config as registry
-    records = {provider.region: {'region': provider.region, 'issuer': provider.issuer, 'client_id': CLIENT,
+    records = {'us-east': {'region': 'us-east', 'issuer': provider.issuer, 'client_id': CLIENT,
                'workspace_client_id': workspace_client or CLIENT, 'project_id': '30001',
                'organisations': dict(bindings), 'founders': []} for provider in providers}
     monkeypatch.setattr(registry, '_records', records)

@@ -33,7 +33,7 @@ async function recordingFetch(url, init) {
   return answer(String(url), init);
 }
 const env = { TANK_URL: HOME, TANK_API_KEY: 'dummy-workspace-key', TANK_REGION: 'us-east',
-              TANK_URL_ZA: ZA, TANK_API_KEY_ZA: 'dummy-za-workspace-key', TRIGGER_SIGNIN_SESSIONS_KEY_ZA: 'dummy-za-sessions-key' };
+              TANK_URL_ZA: ZA, TANK_API_KEY_ZA: 'dummy-za-workspace-key', TRIGGER_SIGNIN_SESSIONS_KEY: 'dummy-za-sessions-key' };
 const load = workspace({ env, fetch: (...args) => recordingFetch(...args) });
 const lib = load('lib/cli-sign-ins.ts');
 const within = (promise, ms, label) => Promise.race([promise,

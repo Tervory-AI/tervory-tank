@@ -1,114 +1,80 @@
 # Trigger sign-in
 
-Trigger sign-in is the only sign-in for the Workspace, every product host,
-the CLI in both regions, the window and mobile. There is no alternate provider,
-Workspace device-approval page or automatic fallback. The server and hosted
-login run the unchanged, digest-pinned upstream images inherited from #589.
-Configuration uses supported APIs only; no upstream source is copied or patched.
+One Trigger sign-in serves every user in every country at **auth.tervory.com**
+on the existing Boston server. The sole Coolify resource is **trigger-signin**,
+in `ops/trigger-signin/`, with its own PostgreSQL and named volumes. ZA runs no
+sign-in server or setup job. Region selects where work runs, not identity.
+Zenas ZA, ZA Tank, the Workspace, all product hosts, CLI, window and mobile
+trust this same issuer. There is no fallback or Workspace device approval page.
 
 ## Founder deployment
 
-1. Have Claude review and merge the cutover. Before deployment, preserve the
-   existing ZA database and named volumes, and its existing proxy/TLS settings.
-   Rename the existing Coolify resource to **trigger-signin-za**, retaining
-   `TRIGGER_SIGNIN_VOLUME_PREFIX=identity-za`. Do not recreate its database.
-2. On the existing Boston server, add **trigger-signin-us** (not a new box).
-   Both resources use `ops/trigger-signin/docker-compose.yml`, raw compose,
-   their own PostgreSQL and named volumes. Boston uses volume prefix
-   `trigger-signin-us`. The checked-in image digests are authoritative.
-3. Keep ZA at **auth-za.tervory.com**; route Boston at **auth.tervory.com**.
-   Reuse each box's existing Coolify proxy network, HTTPS entrypoint, certificate
-   resolver and valid certificate. API traffic remains h2c behind TLS. Verify
-   certificate coverage and existing Cloudflare gRPC/HTTP2-to-origin settings;
-   do not change a shared proxy, firewall or paid service to work around a failure.
-4. Fill the **names only** in sections A and B of
-   [FOUNDER-SETTINGS.md](FOUNDER-SETTINGS.md) directly in Coolify. Use independent
-   regional database/master/session secrets. Match each region's
-   `TRIGGER_SIGNIN_SETUP_TOKEN` on its Tank and setup job; Boston's
-   `TRIGGER_SIGNIN_SETUP_TOKEN_ZA` matches the ZA capability. Never print values
-   or rendered compose exports. Retain the existing ZA immutable master key.
-5. Deploy Tank's additive registry migration first, then the regional sign-in
-   resources and their setup jobs. The existing `tervory-setup` pattern creates
-   the Tervory project, public PKCE Workspace app, native device app and project
-   roles. Generated `TRIGGER_SIGNIN_ISSUER` and `TRIGGER_SIGNIN_CLIENT_ID` are
-   published to Tank and read automatically by Tank and the Workspace. Nobody
-   copies an app ID, project ID, organisation ID or subject into Coolify.
-6. Setup reads existing tenants through Tank's capability-protected
-   `/v1/case-studies/clients` read, creates one native organisation per existing
-   tenant, and writes the organisation-to-tenant registry through Tank's
-   setup-only API. It never accesses Tank SQL directly or invents a tenant UUID.
-   Re-run setup on redeploy and after adding a tenant: existing bindings remain
-   immutable and new tenants gain organisations. Renew an expired machine
-   credential in Coolify; an expired bootstrap cannot report a successful run.
-7. The first native human is created from `TRIGGER_SIGNIN_ADMIN_EMAIL` and
-   `TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD`. Setup records that account's subject
-   in Tank's issuer-scoped founder allowlist and grants the Tervory project's
-   `org_admin` for the tenant organisations. Change the temporary password at
-   first Trigger sign-in; enrol a passkey if desired. Link later admins by
-   selecting their native subject in the correct tenant organisation and
-   granting that project's `org_admin` in the console. Never match by email.
-   Self-registration creates only a native account; an unassigned account cannot
-   enter a tenant until its subject receives a Tervory-project grant there.
-8. Deploy the Workspace and shared CLI release together. Setup configures
-   native light-only branding, the original logo and Inter, approved English
-   translations and Trigger sign-in email names. Existing native email bodies,
-   code substitutions, action URLs and templates remain upstream-rendered;
-   pending post-approval email body rewrites are not applied. Configure SMTP and
-   check the native branding/email settings against the approved
-   [sign-in frames](../figma/SIGN-IN-FRAMES.md). The 4 Nov sign-up order supersedes
-   the older registration-off design prerequisite; it does not authorise a
-   custom registration form. Remove the obsolete Coolify names listed in
-   Claude's PR. No previous-provider credential is accepted after cutover.
-
-## Acceptance
-
-Offline rows live in `tests/acceptance/test_trigger_signin.py`: S01 sign in,
-S02 sign out, S03 organisation switching, S04 CLI US, S05 CLI ZA and S06
-client refused founder-only pages. Cryptographic verifier/device/guard tests
-use synthetic RSA keys and fake upstream HTTP; database proofs use disposable
-PostgreSQL. Offline results are not a claim of live founder acceptance.
-
-After deployment, the founder checks app.tervory.com, each product host and the
-window, then `tervory login --region us-east` and `tervory login --region za`.
-Each CLI opens only its region's native device approval host. Check sign-out
-and revoke, switch A/B/A without leaking either tenant's data, and confirm a
-client receives 404 on founder-only pages. Record the deployed head, region,
-surface and result, never a password, token or device code.
+1. Fill the setting names in sections A and B of
+   [FOUNDER-SETTINGS.md](FOUNDER-SETTINGS.md) directly in Coolify. No secret values
+   or rendered compose exports belong in Git. Only Boston Tank and setup receive
+   the setup token. The read-only configuration token is shared by Boston
+   Tank/Workspace/setup and ZA Tank; it cannot write links, grant roles, mint
+   sessions or approve devices. Match the own-session key between the Workspace
+   and ZA Tank for authenticated list/revoke only.
+2. Have Claude review and merge the coordinated cutover. Deploy Tank's additive
+   registry schema and consumers, then the single Boston resource from
+   `ops/trigger-signin/docker-compose.yml`. Use its pinned image digests and the
+   existing Coolify proxy network, HTTPS certificate and h2c API transport.
+   Do not create another server, attach a Tank database or delete old volumes.
+3. Run Boston's `tervory-setup`. The reused #589 pattern creates one Tervory
+   project, public PKCE Workspace app, native CLI device app and project roles.
+   It reads existing tenants through both Tanks' capability-protected
+   `/v1/case-studies/clients` APIs, deduplicates UUIDs and creates one native
+   organisation per existing tenant regardless of home region. It writes
+   immutable links only to Boston's registry API, never directly to SQL.
+   Re-run after adding tenants and on redeploy. Expired machine credentials
+   fail closed and must be renewed in Coolify.
+4. Project/client IDs and issuer are published automatically to Tank and the
+   Workspace. Generated setting names are `TRIGGER_SIGNIN_ISSUER` and
+   `TRIGGER_SIGNIN_CLIENT_ID`; nobody copies IDs, subjects or JSON mappings.
+   ZA Tank reads the canonical registry through the authenticated, no-store
+   Boston Workspace configuration endpoint; it never accepts a local issuer
+   or an alternative if Boston is unavailable.
+5. The native first founder is created from `TRIGGER_SIGNIN_ADMIN_EMAIL` and
+   `TRIGGER_SIGNIN_ADMIN_TEMP_PASSWORD`. Setup records that user's native subject
+   in the founder allowlist and grants the Tervory project's `org_admin` in the
+   tenant organisations. Change the temporary password at first Trigger sign-in;
+   enrol a passkey if desired. Later admins are linked by native subject and
+   tenant in the console, never email. Self-registration grants no tenant access.
+6. Deploy the Workspace and shared CLI release together. Setup configures native
+   branding, the original logo/Inter and Trigger sign-in page/email names against
+   the approved [frames](../figma/SIGN-IN-FRAMES.md), using supported APIs only.
+   Configure SMTP in the native console. Preserve upstream email bodies, action
+   URLs and substitutions. Remove obsolete Coolify names listed in the PR.
+   Keep retired regional data volumes untouched: no automatic account matching,
+   live-data migration or deletion is implied.
+7. Enable the encrypted backup worker for Boston's single database and preserve
+   its private bootstrap volume. Founder acceptance covers app.tervory.com,
+   product hosts, window, and `tervory login --region us-east` plus
+   `tervory login --region za`. Both approve at auth.tervory.com; only work
+   endpoints differ. Check sign-out, own-session revoke, organisation A/B/A
+   isolation and client refusal on founder pages. Record head, work region,
+   surface and result, never secrets or device codes.
 
 ## Identity and operation
 
-Historical product screenshots and transport reports are not evidence of this
-cutover. Use the new acceptance rows, current-head tests/CI and the founder's
-live checks; renamed historical instructions do not constitute new sign-in proof.
+`user_id` is the verified native `sub`, unchanged across work regions. Email,
+names and metadata are display data only. `tenant_admin` comes only from the
+requesting Tervory project's signed `org_admin` grant. Other project roles,
+unlinked organisations, unsigned human assertions and retired credentials are
+refused. Private conversations and CLI sessions retain the verified issuer.
 
-`user_id` is the verified native `sub`, unchanged. Names, email and metadata
-are display data, never identity, tenant links or authority. `tenant_admin`
-comes only from the requesting Tervory project's signed `org_admin` grant.
-Setup reserves native organisation IDs durably in the existing private bootstrap
-volume before creating organisations through the native v2 API. Retries recover
-by reserved ID, never by organisation name. Preserve this volume along with each
-region's database; losing a pending reservation requires an operator to reconcile
-the native resources, not an automatic name/email match. Published Tank bindings
-remain authoritative on subsequent runs.
-Roles from another project or an unlinked organisation are refused. Workspace
-service keys alone cannot attest a human. Old opaque credentials and old
-device/OAuth codes lack native provenance and are refused immediately.
+Setup reserves native organisation IDs durably before creation in its private
+bootstrap volume. Retries recover by reserved ID, never name or email. Published
+Tank bindings remain authoritative. Losing a pending reservation requires
+operator reconciliation, not automatic identity matching.
 
-Private conversations and CLI sessions also retain the verified issuer as their
-ownership scope. Equal subjects on the two independent regional servers are
-not linked by email or presumed to identify the same person. The Workspace
-shows sessions issued for its current native identity; a separate ZA-native
-account signs out/revokes its CLI credential with `tervory logout` in ZA.
+The unchanged, digest-pinned upstream images inherited from #589 are configured,
+never patched, forked or renamed inside their AGPL-3.0 source. Required upstream
+image/API spellings remain unchanged. Trigger sign-in is separate from Trigger
+CRM and its tool namespace and hostname.
 
-The shared encrypted backup/restore worker covers each resource's own database;
-retain the existing ZA backup settings and enable Boston's separate copy before
-live acceptance. Do not delete or rename existing data volumes. The upstream
-API identifiers and pinned image paths keep their required original spelling.
-The resource, product, setting prefix, emails and reports are Trigger sign-in,
-separate from Trigger CRM and its tools/hostname.
-
-Configuration reference: the pinned upstream
-[hosted-translation schema](https://github.com/zitadel/zitadel/blob/v4.20.0/proto/zitadel/settings/v2/settings_service.proto),
-[label/email API schema](https://github.com/zitadel/zitadel/blob/v4.20.0/proto/zitadel/admin.proto)
-[asset API routes](https://github.com/zitadel/zitadel/blob/v4.20.0/internal/api/assets/generator/asset.yaml)
-and [native organisation API](https://github.com/zitadel/zitadel/blob/v4.20.0/proto/zitadel/org/v2/org_service.proto).
+Offline rows S01–S06 in `tests/acceptance/test_trigger_signin.py` cover sign in,
+sign out, organisation switching, both CLI work regions and founder refusal.
+Synthetic RSA keys/fake upstream HTTP and disposable PostgreSQL prove integration
+boundaries, not live founder acceptance or historical screenshot validity.

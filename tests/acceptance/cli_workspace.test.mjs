@@ -47,7 +47,9 @@ test('CLI acceptance: sign-in list renders active devices and Revoke ends the se
   assert(tree.includes('No active CLI sign-ins')); assert(!tree.includes('placeholder-worker'));
 });
 test('CLI acceptance: native approval replaces Workspace approval', () => {
-  const output = execFileSync(process.execPath, ['--test', 'cli/test/trigger-signin.test.mjs'], {encoding: 'utf8'});
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  const output = execFileSync(process.execPath, ['--test', 'cli/test/trigger-signin.test.mjs'], { encoding: 'utf8', env });
   assert.match(output, /# fail 0/);
 });
 

@@ -92,8 +92,8 @@ def test_unmapped_organisation_and_metadata_do_not_grant_identity(provider, monk
 
 @pytest.mark.asyncio
 async def test_provider_endpoints_cannot_escape_fixed_origin(provider, monkeypatch):
-    for endpoint in ['https://evil.example/token', 'http://auth-za.tervory.com/token',
-                     'https://user@auth-za.tervory.com/token', 'https://auth-za.tervory.com:444/token']:
+    for endpoint in ['https://evil.example/token', 'http://auth.tervory.com/token',
+                     'https://user@auth.tervory.com/token', 'https://auth.tervory.com:444/token']:
         with pytest.raises(oidc.IdentityError):
             oidc.endpoint(endpoint)
 
@@ -107,9 +107,8 @@ async def test_missing_or_misplaced_issuer_fails_closed(device, monkeypatch, reg
     monkeypatch.setattr(oidc, 'http_client', lambda: pytest.fail('Unconfigured issuer made an HTTP request'))
     result = await client.post('/v1/command/device/code', json={'device_name': 'synthetic'})
     assert result.status_code == 503
-    other = 'za' if region == 'us-east' else 'us-east'
-    record = {'issuer': oidc.ISSUERS[other], 'client_id': CLIENT, 'workspace_client_id': CLIENT, 'organisations': {}}
-    monkeypatch.setitem(oidc.registry._records, region, record)
+    record = {'issuer': 'https://retired.example.invalid', 'client_id': CLIENT, 'workspace_client_id': CLIENT, 'organisations': {}}
+    monkeypatch.setitem(oidc.registry._records, 'us-east', record)
     assert (await client.post('/v1/command/device/code', json={'device_name': 'synthetic'})).status_code == 503
 
 

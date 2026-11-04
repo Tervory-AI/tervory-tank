@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { identityApprovalUrl, run, safe, StreamSanitizer } from '../src/client.mjs';
 
-const issuers = { 'us-east': 'https://auth.tervory.com', za: 'https://auth-za.tervory.com' };
+const issuers = { 'us-east': 'https://auth.tervory.com', za: 'https://auth.tervory.com' };
 
 function startFor(region) {
   return { identity_provider: 'trigger-signin', device_code: 'tzd1.synthetic-offline', user_code: '1234-5678',
@@ -17,7 +17,7 @@ for (const region of ['us-east', 'za']) {
     for (const field of ['verification_uri', 'verification_uri_complete']) {
       for (const url of ['https://evil.example/device', issuers[region].replace('https:', 'http:') + '/device',
         issuers[region] + '.evil.example/device', issuers[region].replace('https://', 'https://user@') + '/device',
-        issuers[region] + ':444/device', issuers[region] + '/device#fragment', startFor(region === 'za' ? 'us-east' : 'za').verification_uri]) {
+        issuers[region] + ':444/device', issuers[region] + '/device#fragment', 'https://retired.example.invalid/device']) {
         assert.throws(() => identityApprovalUrl({ ...start, [field]: url }, region), /Login refused by Tank/);
       }
     }

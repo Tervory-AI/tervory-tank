@@ -64,7 +64,7 @@ function deviceHarness({ region = 'us-east', outcomes = ['authorization_pending'
     assert.equal(init.headers.Authorization, undefined);
     if (call.path.endsWith('/device/code')) {
       return Response.json({ device_code: `tzd1.offline-${region}`, user_code: 'BCDF-GHJK', interval: 5, expires_in: 600,
-        identity_provider: 'trigger-signin', verification_uri: `https://${region === 'za' ? 'auth-za' : 'auth'}.tervory.com/device`, verification_uri_complete: `https://${region === 'za' ? 'auth-za' : 'auth'}.tervory.com/device?code=BCDF-GHJK` });
+        identity_provider: 'trigger-signin', verification_uri: 'https://auth.tervory.com/device', verification_uri_complete: 'https://auth.tervory.com/device?code=BCDF-GHJK' });
     }
     if (call.path.endsWith('/device/token')) {
       const next = outcomes.shift();
@@ -102,7 +102,7 @@ test('ZA login goes straight to the ZA Tank and opens ZA Trigger sign-in', async
   const h = deviceHarness({ region: 'za', outcomes: ['grant'] });
   await run(['login', '--region', 'za'], h);
   assert(h.calls.every(call => call.origin === 'https://za.tervory.com'));
-  assert.deepEqual(h.opened, ['https://auth-za.tervory.com/device?code=BCDF-GHJK']);
+  assert.deepEqual(h.opened, ['https://auth.tervory.com/device?code=BCDF-GHJK']);
   assert.equal(h.calls[0].body.approval, 'trigger-signin');
   assert.equal(JSON.parse(h.saved()).region, 'za');
   await assert.rejects(run(['login', '--region', 'eu'], h), /only --region/);

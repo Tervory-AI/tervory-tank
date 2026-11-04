@@ -9,7 +9,7 @@ export function signinRegion(value: unknown): Region | null {
 export function signinTank(region: Region): { url: string; key: string } | null {
   if (region === homeRegion()) return regionTank(region);
   const url = ((region === "za" ? process.env.TANK_URL_ZA : process.env.TANK_URL_US) ?? "").trim().replace(/\/+$/, "");
-  const key = ((region === "za" ? process.env.TRIGGER_SIGNIN_SESSIONS_KEY_ZA : process.env.TRIGGER_SIGNIN_SESSIONS_KEY_US) ?? "").trim();
+  const key = (process.env.TRIGGER_SIGNIN_SESSIONS_KEY ?? "").trim();
   if (!url || !key) return null;
   let parsed: URL;
   try { parsed = new URL(url); } catch { return null; }

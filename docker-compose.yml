@@ -241,7 +241,8 @@ services:
         GIT_SHA: ${GIT_SHA:-}
     restart: unless-stopped
     environment:
-      TRIGGER_SIGNIN_SETUP_TOKEN: ${TRIGGER_SIGNIN_SETUP_TOKEN:?founder sets regional setup token}
+      TRIGGER_SIGNIN_CONFIG_TOKEN: ${TRIGGER_SIGNIN_CONFIG_TOKEN:?founder sets read-only directory capability}
+      TRIGGER_SIGNIN_SETUP_TOKEN: ${TRIGGER_SIGNIN_SETUP_TOKEN:?founder sets Boston setup token}
       FOUNDER_REPORT_TO: ${FOUNDER_REPORT_TO:-}
       FOUNDER_REPORT_SMTP_HOST: ${FOUNDER_REPORT_SMTP_HOST:-}
       FOUNDER_REPORT_SMTP_PORT: ${FOUNDER_REPORT_SMTP_PORT:-}
@@ -424,6 +425,7 @@ services:
     environment:
       TANK_URL: http://tank:8000
       NEXTAUTH_URL: https://app.tervory.com
+      TRIGGER_SIGNIN_CONFIG_TOKEN: ${TRIGGER_SIGNIN_CONFIG_TOKEN:?founder sets read-only directory capability}
       TRIGGER_SIGNIN_WORKSPACE_SECRET: ${TRIGGER_SIGNIN_WORKSPACE_SECRET:?founder sets Workspace session secret}
       TRIGGER_SIGNIN_DIRECTORY_TOKEN: ${TRIGGER_SIGNIN_DIRECTORY_TOKEN:-}
       TRIGGER_SIGNIN_REVIEWERS: ${TRIGGER_SIGNIN_REVIEWERS:-}
@@ -434,7 +436,7 @@ services:
       # Opt-in tenant content connection; homes/feeds credentials remain separate.
       TANK_CONTENT_API_KEY_ZA: ${TANK_CONTENT_API_KEY_ZA:-}
       TANK_CONTENT_API_KEY_US: ${TANK_CONTENT_API_KEY_US:-}
-      TRIGGER_SIGNIN_SESSIONS_KEY_ZA: ${TRIGGER_SIGNIN_SESSIONS_KEY_ZA:-}
+      TRIGGER_SIGNIN_SESSIONS_KEY: ${TRIGGER_SIGNIN_SESSIONS_KEY:-}
       # Shared with Watch + Enforce: signed owner Undo / receipts email links. Coolify secret NAME only.
       AUTUMBRA_UNDO_TOKEN_SECRET: ${AUTUMBRA_UNDO_TOKEN_SECRET:-}
       # W-2 billing. Empty until set in Coolify; the billing page then says pricing is being finalised.

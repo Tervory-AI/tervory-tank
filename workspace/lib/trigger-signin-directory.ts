@@ -11,7 +11,7 @@ type UpstreamUser = { id: string; details?: { creationDate?: string }; human?: {
 async function request(path: string, orgId: string, body?: unknown): Promise<Record<string, unknown>> {
   if (!Object.hasOwn(tenantBindings(), orgId)) throw new Error("Trigger sign-in organisation refused");
   const issuer = process.env.TRIGGER_SIGNIN_ISSUER;
-  if (!issuer || !["https://auth.tervory.com", "https://auth-za.tervory.com"].includes(issuer)) throw new Error("Trigger sign-in issuer refused");
+  if (!issuer || !["https://auth.tervory.com"].includes(issuer)) throw new Error("Trigger sign-in issuer refused");
   const credential = process.env.TRIGGER_SIGNIN_DIRECTORY_TOKEN;
   if (!credential) throw new Error("Trigger sign-in directory is not configured");
   const response = await fetch(issuer + path, { method: body === undefined ? "GET" : "POST", redirect: "error", cache: "no-store", signal: AbortSignal.timeout(10000),

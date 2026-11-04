@@ -137,7 +137,7 @@ services:
         GIT_SHA: ${GIT_SHA:-}
     restart: unless-stopped
     environment:
-      TRIGGER_SIGNIN_SETUP_TOKEN: ${TRIGGER_SIGNIN_SETUP_TOKEN:?founder sets regional setup token}
+      TRIGGER_SIGNIN_CONFIG_TOKEN: ${TRIGGER_SIGNIN_CONFIG_TOKEN:?founder sets read-only directory capability}
       FOUNDER_REPORT_TO: ${FOUNDER_REPORT_TO:-}
       FOUNDER_REPORT_SMTP_HOST: ${FOUNDER_REPORT_SMTP_HOST:-}
       FOUNDER_REPORT_SMTP_PORT: ${FOUNDER_REPORT_SMTP_PORT:-}

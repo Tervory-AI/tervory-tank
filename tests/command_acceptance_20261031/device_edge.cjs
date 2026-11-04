@@ -47,7 +47,7 @@ const transport = async (url, init) => {
       if (approved) return;
       approved = true;
       const page = new URL(opened.at(-1));
-      assert.equal(page.origin, region === 'za' ? 'https://auth-za.tervory.com' : 'https://auth.tervory.com');
+      assert.equal(page.origin, region === 'za' ? 'https://auth.tervory.com' : 'https://auth.tervory.com');
       assert.equal(page.searchParams.get('user_code'), '1234-5678');
     },
   };

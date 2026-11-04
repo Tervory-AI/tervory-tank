@@ -46,8 +46,8 @@ test('offline ZA OIDC device approval to keychain to ZA code, plugin Confirm and
         assert.equal(json.approval, 'trigger-signin');
         const start = await (await fetch(base + '/oidc/device_authorization', { method: 'POST' })).json();
         return send({ ...start, device_code: 'tzd1.placeholder', identity_provider: 'trigger-signin', interval: 1,
-          verification_uri: 'https://auth-za.tervory.com/device',
-          verification_uri_complete: 'https://auth-za.tervory.com/device?user_code=1234-5678' });
+          verification_uri: 'https://auth.tervory.com/device',
+          verification_uri_complete: 'https://auth.tervory.com/device?user_code=1234-5678' });
       }
       if (req.url.endsWith('/device/token')) {
         const result = await (await fetch(base + '/oidc/token', { method: 'POST' })).json();
@@ -83,7 +83,7 @@ test('offline ZA OIDC device approval to keychain to ZA code, plugin Confirm and
     await run(['login', '--region', 'za'], { store, transport, io: {
       deviceName: () => 'placeholder-worker', write: value => { output += value; }, sleep: async () => {},
       open: async url => {
-        assert.equal(new URL(url).origin, 'https://auth-za.tervory.com');
+        assert.equal(new URL(url).origin, 'https://auth.tervory.com');
         await fetch(base + '/oidc/approve', { method: 'POST' });
       },
     } });

@@ -90,9 +90,10 @@ most daily with a 1.5-second budget; `TERVORY_NO_UPDATE_CHECK=1` disables notice
 ## Trigger sign-in: US and ZA
 
 `tervory login` defaults to US; `tervory login --region us-east` is explicit.
-Both regions use Trigger sign-in's hosted device approval on their existing boxes.
+Every country uses Trigger sign-in at auth.tervory.com on Boston.
+Region selects where work runs, never where a user signs in.
 Use `tervory login --region za` for ZA. No approval selector or fallback is
-accepted. The browser launcher accepts only the matching regional host. Compare
+accepted. The browser launcher accepts only the single global host. Compare
 the printed code with the page before approving. There is no token argument,
 credential environment variable or URL override.
 
@@ -111,7 +112,7 @@ Signed in on us-east. Credential saved in the OS keychain; it refreshes automati
 ```text
 $ tervory login --region za
 Approve this device in your browser (placeholder-worker, za):
-  https://auth-za.tervory.com/ui/v2/login/device?user_code=1234-5678
+  https://auth.tervory.com/ui/v2/login/device?user_code=1234-5678
 Confirm the page shows code 1234-5678.
 Signed in on za. Credential saved in the OS keychain; it refreshes automatically.
 ```
@@ -130,7 +131,7 @@ lasts one hour; refresh lasts 30 days and rotates on use. A reused or revoked
 refresh token is refused. Trigger sign-in organisation-to-tenant mapping and verified
 subject/roles determine access, never email or editable metadata. Roles remain a
 snapshot until revocation/expiry, including refresh. After a role change, logout
-and sign in again. US Workspace CLI sign-ins do not list Trigger sign-in identities.
+and sign in again. The Workspace lists this same native identity’s CLI sessions in both work regions.
 
 ```text
 $ tervory logout

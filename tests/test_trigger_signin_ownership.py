@@ -28,7 +28,7 @@ async def test_thread_owner_is_bound_to_native_issuer_and_raw_subject(api):
             row = await connection.fetchrow('SELECT user_id,trigger_signin_issuer FROM tank.command_threads WHERE thread_id=$1', uuid.UUID(thread_id))
         assert row['user_id'] == 'founder'
         assert row['trigger_signin_issuer'] == registry.ISSUERS['us-east']
-        registry._issuer.set(registry.ISSUERS['za'])
+        registry._issuer.set('https://retired.example.invalid')
         assert (await client.get('/v1/command/threads/' + thread_id)).status_code == 404
         assert (await client.get('/v1/command/threads')).json() == []
         registry._issuer.set(registry.ISSUERS['us-east'])
@@ -41,17 +41,17 @@ async def test_thread_owner_is_bound_to_native_issuer_and_raw_subject(api):
 async def test_session_list_and_revoke_do_not_link_issuer_collisions(command_pool, runtime, monkeypatch):
     monkeypatch.setattr(command, 'db', lambda: command_pool)
     actor = command.Actor(command_proofs.TENANT, '20001', False)
-    context = registry._issuer.set(registry.ISSUERS['za'])
+    context = registry._issuer.set(registry.ISSUER)
     try:
         created = await personal_tokens.create_token(personal_tokens.NewToken(name='ZA native subject'), Response(), actor)
         identifier = created['token_id']
         assert len(await personal_tokens.list_tokens(Response(), actor)) == 1
-        registry._issuer.set(registry.ISSUERS['us-east'])
+        registry._issuer.set('https://retired.example.invalid')
         assert await personal_tokens.list_tokens(Response(), actor) == []
         with pytest.raises(HTTPException) as refused:
             await personal_tokens.revoke_token(identifier, actor)
         assert refused.value.status_code == 404
-        registry._issuer.set(registry.ISSUERS['za'])
+        registry._issuer.set(registry.ISSUER)
         assert (await personal_tokens.revoke_token(identifier, actor)).status_code == 204
     finally:
         registry._issuer.reset(context)

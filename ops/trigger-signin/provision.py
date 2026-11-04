@@ -92,21 +92,26 @@ def reserved_organisation(api, tenant: str, issuer: str, path: Path) -> str:
     return org
 
 
-def provision(api, tank, record, region, issuer, bootstrap: Path):
+def provision(api, tank, record, region, issuer, bootstrap: Path, *, regional_tanks=()):
+    if region != 'us-east' or issuer != 'https://auth.tervory.com':
+        raise ProvisionError('Trigger sign-in deployment refused')
     with (bootstrap / ('tenant-organisations-' + region + '.lock')).open('a') as lock:
         os.fchmod(lock.fileno(), 0o600)
         fcntl.flock(lock, fcntl.LOCK_EX)
-        return provision_locked(api, tank, record, region, issuer, bootstrap / ('tenant-organisations-' + region + '.json'))
+        return provision_locked(api, tank, record, region, issuer, bootstrap / ('tenant-organisations-' + region + '.json'), regional_tanks)
 
 
-def provision_locked(api, tank, record, region, issuer, ledger: Path):
+def provision_locked(api, tank, record, region, issuer, ledger: Path, regional_tanks):
     previous = tank_request(tank, 'GET', '/v1/trigger-signin/config')['regions'].get(region)
     subject = initial_founder(api, record['owner_org_id'], previous)
     existing = previous['organisations'] if previous else {}
     by_tenant = {tenant: org for org, tenant in existing.items()}
     project = '/management/v1/projects/' + record['project_id']
     bindings = []
-    for tenant in tenants(tank):
+    all_tenants = set(tenants(tank))
+    for regional in regional_tanks:
+        all_tenants.update(tenants(regional))
+    for tenant in sorted(all_tenants):
         org = by_tenant.get(tenant)
         if not org:
             org = reserved_organisation(api, tenant, issuer, ledger)
@@ -148,9 +153,3 @@ def provision_locked(api, tank, record, region, issuer, ledger: Path):
     payload.update(region=region, issuer=issuer, founder_subject=subject, organisations=bindings)
     tank_request(tank, 'PUT', '/v1/trigger-signin/config', json=payload)
     return payload
-
-
-def publish_workspace(tank, payload):
-    allowed = set(tenants(tank))
-    restricted = {**payload, 'organisations': [binding for binding in payload['organisations'] if binding['tenant_id'] in allowed]}
-    tank_request(tank, 'PUT', '/v1/trigger-signin/config', json=restricted)

@@ -88,7 +88,7 @@ def identity_dump_configuration() -> tuple[dict[str, str], str]:
         raise StorageError('Trigger sign-in backup region refused')
     password = os.environ.get('TRIGGER_SIGNIN_DB_PASSWORD', '')
     if not password or not shutil.which('pg_dump') or not shutil.which('age'):
-        raise StorageError('Identity backup settings or tools are missing')
+        raise StorageError('Trigger sign-in backup settings or tools are missing')
     env = {**tool_environment(), 'PGHOST': 'identity-postgres', 'PGPORT': '5432',
            'PGDATABASE': 'zitadel', 'PGUSER': 'zitadel', 'PGPASSWORD': password,
            'PGSSLMODE': 'disable'}
@@ -313,7 +313,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--owner', choices=['uploads', 'zenas'], default='uploads')
     parser.add_argument('--target', choices=['database', 'qdrant', 'all'], default='all')
-    parser.add_argument('--identity', action='store_true', help='ZA identity database only')
+    parser.add_argument('--identity', action='store_true', help='Trigger sign-in database only')
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--once', action='store_true')
     mode.add_argument('--nightly', action='store_true')

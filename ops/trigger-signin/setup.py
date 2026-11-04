@@ -13,7 +13,7 @@ import jwt
 
 def issuer_settings():
     issuer = os.environ['TRIGGER_SIGNIN_ISSUER']
-    if issuer not in {'https://auth.tervory.com', 'https://auth-za.tervory.com'}:
+    if issuer != 'https://auth.tervory.com':
         raise SetupError('Trigger sign-in issuer refused')
     return issuer, issuer.removeprefix('https://')
 APP = {
@@ -139,7 +139,7 @@ def completed_setup(bootstrap: Path) -> dict | None:
 def main(bootstrap: Path = Path('/bootstrap')):
     os.umask(0o077)
     issuer, host = issuer_settings()
-    region = 'us-east' if issuer == 'https://auth.tervory.com' else 'za'
+    region = 'us-east'
     credential = os.environ.get('TRIGGER_SIGNIN_MACHINE_TOKEN', '')
     if not credential:
         if completed_setup(bootstrap) is not None:
@@ -166,15 +166,13 @@ def main(bootstrap: Path = Path('/bootstrap')):
         result = api.run()
         from branding import configure_branding
         configure_branding(api, bootstrap, Path('/app/brand'), issuer)
-        from provision import provision, publish_workspace
+        from provision import provision
         setup_token = os.environ['TRIGGER_SIGNIN_SETUP_TOKEN']
         with httpx.Client(base_url='http://tank:8000', timeout=30, trust_env=False, follow_redirects=False,
-                          headers={'x-trigger-signin-setup': setup_token}) as tank:
-            payload = provision(api, tank, result, region, issuer, bootstrap)
-        if region == 'us-east':
-            with httpx.Client(base_url='https://za.tervory.com', timeout=30, trust_env=True, follow_redirects=False,
-                              headers={'x-trigger-signin-setup': os.environ['TRIGGER_SIGNIN_SETUP_TOKEN_ZA']}) as tank:
-                publish_workspace(tank, payload)
+                          headers={'x-trigger-signin-setup': setup_token}) as tank, httpx.Client(
+                          base_url='https://za.tervory.com', timeout=30, trust_env=False, follow_redirects=False,
+                          headers={'x-trigger-signin-config': os.environ['TRIGGER_SIGNIN_CONFIG_TOKEN']}) as regional:
+            provision(api, tank, result, region, issuer, bootstrap, regional_tanks=(regional,))
     (bootstrap / 'tervory.json').write_text(json.dumps(result) + '\n')
     print('Trigger sign-in setup complete')
 

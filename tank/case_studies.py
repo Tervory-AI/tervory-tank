@@ -93,8 +93,8 @@ _SETUP_TENANT_READER = Actor(uuid.UUID('00000000-0000-0000-0000-000000000001'), 
 
 
 async def tenant_listing_identity(request: Request) -> Actor:
-    from trigger_signin_config import setup_authorized
-    if setup_authorized(request):
+    from trigger_signin_config import setup_authorized, reader_authorized
+    if setup_authorized(request) or reader_authorized(request):
         return _SETUP_TENANT_READER
     return await identity(request)
 
