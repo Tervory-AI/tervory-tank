@@ -29,8 +29,10 @@ async def test_mobile_sessions_shares_and_notify_with_forced_tenant_rls(monkeypa
     admin = await asyncpg.connect(url)
     raw = None
     try:
-        await admin.execute(f'CREATE DATABASE "{name}"')
-        await admin.execute(f'CREATE ROLE "{role}" LOGIN NOSUPERUSER NOBYPASSRLS')
+        create_database = await admin.fetchval("SELECT format('CREATE DATABASE %I', $1::text)", name)
+        await admin.execute(create_database)
+        create_role = await admin.fetchval("SELECT format('CREATE ROLE %I LOGIN NOSUPERUSER NOBYPASSRLS', $1::text)", role)
+        await admin.execute(create_role)
         database = urlunsplit((parsed.scheme, parsed.netloc, "/" + name, "", ""))
         owner = await asyncpg.connect(database)
         try:
@@ -43,8 +45,10 @@ async def test_mobile_sessions_shares_and_notify_with_forced_tenant_rls(monkeypa
             migration = schema[schema.index("CREATE TABLE IF NOT EXISTS tank.mobile_codes"):]
             await owner.execute(migration)
             await owner.execute(migration)
-            await owner.execute(f'GRANT USAGE ON SCHEMA tank TO "{role}"')
-            await owner.execute(f'GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA tank TO "{role}"')
+            grant_schema = await owner.fetchval("SELECT format('GRANT USAGE ON SCHEMA tank TO %I', $1::text)", role)
+            await owner.execute(grant_schema)
+            grant_tables = await owner.fetchval("SELECT format('GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA tank TO %I', $1::text)", role)
+            await owner.execute(grant_tables)
         finally:
             await owner.close()
         authority = f"{role}@{parsed.hostname}:{parsed.port or 5432}"
@@ -91,6 +95,8 @@ async def test_mobile_sessions_shares_and_notify_with_forced_tenant_rls(monkeypa
     finally:
         if raw is not None:
             await raw.close()
-        await admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
-        await admin.execute(f'DROP ROLE IF EXISTS "{role}"')
+        drop_database = await admin.fetchval("SELECT format('DROP DATABASE IF EXISTS %I WITH (FORCE)', $1::text)", name)
+        await admin.execute(drop_database)
+        drop_role = await admin.fetchval("SELECT format('DROP ROLE IF EXISTS %I', $1::text)", role)
+        await admin.execute(drop_role)
         await admin.close()

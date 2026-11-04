@@ -184,7 +184,8 @@ def share_files(body: Share) -> list[tuple[str, bytes]]:
 async def create_share(body: Share, actor: Actor = Depends(identity)):
     files = share_files(body)
     async with db().acquire() as conn, conn.transaction():
-        await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", f"mobile:{actor.tenant_id}:{actor.user_id}:{body.share_id}")
+        lock_key = ":".join(("mobile", str(actor.tenant_id), actor.user_id, body.share_id))
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", lock_key)
         existing = await conn.fetchrow("SELECT id FROM tank.mobile_drafts WHERE tenant_id=$1 AND user_id=$2 AND share_id=$3", actor.tenant_id, actor.user_id, body.share_id)
         if existing:
             return {"draft_id": str(existing["id"])}
