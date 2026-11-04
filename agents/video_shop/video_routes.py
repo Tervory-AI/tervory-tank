@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Request
 from rigbox.api import _admin, _auth, _ok as rig_ok, _tenant, _service
 from .video_engine import Engine, Repository, MAX_BYTES
 from .video_media import download
+from .video_models import ModelsUnavailable
 
 router = APIRouter(prefix='/v1/rig/video-shop')
 
@@ -59,8 +60,10 @@ async def create(request: Request):
                       for sku, value in data.get('references', {}).items()}
         result = await asyncio.wait_for(
             engine(request).ingest(_tenant(request), video, data.get('transcript', []), references,
-                                   permission={'confirmed': True, 'at': datetime.now(timezone.utc).isoformat()}), 120)
+                                   permission={'confirmed': True, 'at': datetime.now(timezone.utc).isoformat()}), 1800)
         return _ok(request, result)
+    except ModelsUnavailable:
+        raise HTTPException(503, 'video_processing_unavailable') from None
     except (ValueError, KeyError, TypeError, IndexError, OSError, TimeoutError):
         raise HTTPException(422, 'invalid_media') from None
 

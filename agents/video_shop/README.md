@@ -1,19 +1,40 @@
 # video-shop
 
-Internal room for store-owned videos and catalogues. Compose `video_room.mount(rig_app,
-Path(DATA_DIR) / 'video-shop')` onto an initialized Rig host. The provided Dockerfile supplies FFmpeg; mounting on another host requires FFmpeg there; no paid services, new model routes or credentials. Durable data must be
-on the host's data volume. This change does not alter deployment configuration.
+Internal room for store-owned videos and catalogues, composed onto the existing
+Rig host. No provider APIs, paid services or credentials are used for analysis.
+The founder explicitly requested these local CPU engines for gate 1 (4 Nov).
 
-Admin routes reuse Rig admin keys. `POST /v1/rig/video-shop/admin/videos` accepts
-exactly one of `video_base64` or a public HTTPS `url`, optional timestamped `transcript` segments (`start`, `end`, `text`),
-a required `rights_confirmed: true`, and `references` mapping catalogue SKUs to base64 image bytes. Images must belong
-to the same store catalogue. Catalogue image URLs are fetched automatically over
-guarded HTTPS (up to 100); explicit references replace inaccessible photos. FFmpeg
-samples every five seconds (maximum ten minutes, 32 MiB), compares normalized
-frames to references, and reuses Rig's catalogue search on transcript segments.
-Simple image distance is conservative candidate generation, not general object
-recognition. All suggestions require store approval. Silent/unclear videos can
-produce an empty draft. No model is called; each result saves a code receipt.
+`POST /v1/rig/video-shop/admin/videos` accepts exactly one of `video_base64` or a
+public HTTPS `url`, plus `rights_confirmed: true`. The store does **not** supply a
+transcript. Nonempty supplied transcripts are rejected rather than recorded as
+automatic evidence. Catalogue image URLs are fetched automatically through the
+existing guarded HTTPS transport (up to 100). Optional `references` map catalogue
+SKUs to replacement base64 image bytes when a photo is inaccessible.
+
+FFmpeg extracts mono 16 kHz PCM and samples one frame every five seconds. Pinned
+MIT faster-whisper 1.2.1 transcribes locally with the multilingual Whisper tiny
+weights, CPU/int8, speech activity detection and timestamped segments. Pinned MIT
+OpenCLIP 3.3.0 embeds each frame and catalogue image using ViT-B-32-quickgelu,
+CPU/fp32. L2-normalized embeddings match at cosine similarity >= 0.85. Rig search
+proposes transcript candidates; a complete product name or SKU must occur in the
+recognized text. The union of both sources produces one suggestion per SKU per
+five-second window, with both evidence fields when applicable. The generated
+transcript is saved in the private draft. All suggestions require store review.
+
+Receipts include model and engine identifiers, SHA-256 for every staged speech/image
+asset, CPU device, threshold, sampling interval, detected language, source digest,
+image coverage/errors and `provider_calls=0`. `model_calls` counts the local
+speech/image analysis stages (two with audio, one without). Silent videos use
+vision alone; uncertain speech or images can yield no suggestions. No RGB-distance
+fallback or provider fallback exists.
+
+The image build uses `requirements.lock` (Python 3.12, Linux x86_64 CPU wheels,
+including the Rig chassis) with required hashes. `models.json` pins immutable
+Hub revisions and asset checksums. `prepare_models.py` downloads and verifies
+those public assets at build time; serving only loads local paths and verifies
+them before first use. It never downloads missing models. Missing/modified assets
+fail closed with HTTP 503. Container model files are root-owned/read-only to the
+room user. See `THIRD_PARTY_NOTICES.md` for engine and weight licenses.
 
 GET the admin video route to reopen a draft. PUT it with `revision` and `moments`
 to replace/edit/approve suggestions. Every moment has `start`, `end`,

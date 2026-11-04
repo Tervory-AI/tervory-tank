@@ -1,8 +1,8 @@
 # video-shop acceptance
 
 Internal name only; the founder supplies the product name. No model provider or
-paid service is added. Each processing result contains a code receipt, source
-SHA-256, vision method, sampled-frame count and reference-image diagnostics.
+paid service is added. Each draft contains a local CPU receipt, weight checksums, the generated
+transcript, source SHA-256, frame count and catalogue-image diagnostics.
 
 ## Automated evidence
 
@@ -14,8 +14,9 @@ TMPDIR="$PWD/.tmp" python3 -m pytest -q tests/test_video_shop.py tests/test_vide
 
 `tests/acceptance/test_video_shop.py` loads the sample video, catalogue CSV and
 catalogue photo in `tests/fixtures/video_shop`. It uses the real Rig catalogue
-import, search, authentication, product, cart and commerce adapter code. Only
-store HTTP is simulated; no live catalogue, order, payment or model call occurs.
+import, search, authentication, product, cart and commerce adapter code. The `stub` cases inject explicit analysis doubles for fast API/storage tests.
+The `cpu` cases run the real pinned speech and embedding engines, with only store
+HTTP simulated. No live catalogue, order, payment or provider call occurs.
 
 | Check | Evidence |
 | --- | --- |
@@ -27,7 +28,10 @@ store HTTP is simulated; no live catalogue, order, payment or model call occurs.
 | Product detail and add | Overlay uses Rig product route, obtains Rig session, adds existing SKU |
 | Store-owned checkout | Real Rig commerce adapter creates product 1, quantity 1, total USD 10.00 in the offline WooCommerce store and returns that store's checkout URL |
 | Guarded links | HTTPS only, no credentials or custom ports, all DNS addresses public, pinned IP connection, no redirects, bounded download |
-| No model spend | Saved receipt has `route=code` and `model_calls=0` |
+| No provider spend | Saved receipt has `route=local_cpu`, `device=cpu`, `provider_calls=0` and exact weight checksums |
+| Automatic speech | Upload contains no transcript; locally recognized “red cup” appears in timestamped private draft segments |
+| Image embeddings | Real OpenCLIP cosine match exceeds the recorded threshold; second sample matches without speech |
+| Offline execution | CPU cases run with sockets and external DNS disabled, using staged checksummed assets |
 
 Browser behavior at 375px and 1440px is covered by:
 
@@ -40,29 +44,35 @@ Requires an installed Playwright package and Chromium. `PLAYWRIGHT_MODULE` and
 plays the sample MP4, seeks into and out of the product moment, opens detail,
 adds once, checks pause/list/jump and disabled store-cart behavior, checks product text is rendered safely, and destroys the embed.
 
-## Hosted CI evidence
+## Real CPU acceptance
 
-The first final-head full run, [41867395324](https://github.com/Tervory-AI/tervory-tank/actions/runs/41867395324),
-passed lint, Workspace, savings-page, command acceptance and seven Python shards.
-It exposed missing FFmpeg/ffprobe in the hosted Python runners; the workflow now
-provisions those tools rather than skipping the video tests. Local validation of
-that repair and the transport checks passed 100 tests. Download transport tests
-assert pinned TCP addresses, original-host TLS certificate verification, original
-HTTP Host and refusal of redirects. No scanner suppression was added.
+The dedicated `.github/workflows/video-shop.yml` installs the hashed CPU runtime,
+stages public immutable model assets, then disables sockets and external DNS for
+the tests. Run the same checks locally on a Linux x86_64 Python 3.12 build host:
 
-That manual dispatch intentionally runs a full repository security audit, unlike
-the PR's baseline comparison. It also reported existing history/fixture Gitleaks
-findings, existing dependency advisories and unrelated Semgrep findings. The
-branch changes no dependency pins. The original transport's HTTPSConnection audit
-notice was removed by using the existing httpcore dependency's verified TLS
-transport with a pinned network backend. Security policy and allowlists remain
-unchanged. Normal PR security validation remains required when Claude opens the
-single PR. An unchanged Rig landing screenshot equality test also failed once in
-that full run (`landing-tervory-375`); no Rig landing files are changed here.
+```sh
+mkdir -p "$PWD/.tmp"
+export TMPDIR="$PWD/.tmp"
+python3 -m venv .tmp/video-shop-venv
+.tmp/video-shop-venv/bin/python -m pip install --require-hashes -r agents/video_shop/requirements.lock -r agents/video_shop/requirements-test.lock
+.tmp/video-shop-venv/bin/python agents/video_shop/prepare_models.py .tmp/models
+VIDEO_SHOP_TEST_MODELS="$PWD/.tmp/models" HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 OMP_NUM_THREADS=1 .tmp/video-shop-venv/bin/python -m pytest -q tests/test_video_shop.py tests/test_video_shop_models.py tests/test_video_shop_overlay.py tests/acceptance/test_video_shop.py --disable-socket --allow-unix-socket
+```
+
+FFmpeg and curl must already be installed on that build host. Weights are staged
+once (about 680 MB); network is unnecessary during inference. The ordinary suite
+runs explicit analysis doubles and skips the real CPU parameters unless
+`VIDEO_SHOP_TEST_MODELS` points to staged assets. The dedicated CI job sets this
+value, so its real cases cannot skip. No founder laptop installation is needed.
+
+PR #693's differential security check passed on its initial head; the unrelated
+whole-repository manual audit is not the PR gate. The room's Docker base and all
+Python installs now use a digest and hashed locks for the install-pins check.
+No scanner suppression or security policy change is added.
 
 ## Runtime composition and limits
 
-`agents/video_shop/Dockerfile`, built with `agents/` as context, provides FFmpeg
+`agents/video_shop/Dockerfile`, built with `agents/` as context, provides FFmpeg, pinned local CPU engines and baked-in verified weights,
 and the `video_shop.video_asgi:app` entry point. It composes the existing Rig host,
 retains its schema, tenant authentication and cart configuration, and stores video
 reviews and media in `DATA_DIR/video-shop` on the persistent volume. Existing Rig
@@ -73,12 +83,21 @@ that has FFmpeg. This does not change existing service or regional configuration
 Processing is bounded: 32 MiB upload/download, ten minutes, five-second sample
 windows, 120 frames and 100 catalogue images per video. Catalogue images are
 fetched automatically over guarded HTTPS; inaccessible images are recorded and
-explicit reference uploads may replace them. Image comparison is conservative
-RGB frame distance, useful for close visual matches. It is not a general object
-recognizer: different angles, occlusion and small products may need manual edits.
-Transcript segments are supplied with the video; automatic speech recognition
-is not enabled. No Tank model fallback is enabled. Any future fallback must use
-Tank's existing routing and preserve its receipts.
+explicit reference uploads may replace them. Image matching uses OpenCLIP
+ViT-B-32-quickgelu embeddings with cosine threshold 0.85. Full-frame samples can
+miss small, occluded or briefly visible products, and similar catalogue variants
+can match together; the threshold is candidate generation, not proof of identity.
+Speech uses faster-whisper tiny CPU/int8 and may misrecognize names or languages.
+Both sources are combined into unapproved review windows. Store review remains
+required. There is no provider fallback. One serialized CPU worker protects room
+memory; cancellation waits for in-flight inference before removing temporary PCM.
+PCM is deleted after analysis. Private transcripts stay out of the public timeline.
+The synchronous ingest endpoint allows up to 30 minutes for bounded local CPU work;
+large uploads may require a longer reverse-proxy timeout. The models add roughly
+1 GB of working memory plus Python/runtime overhead; provision and measure on the
+actual room host before deployment. Catalogue analysis is capped at 100 images,
+with skipped/failing images identified in the receipt. The first image per SKU
+is used; multiple angles and detection crops are future improvements.
 
 Cart availability and checkout platforms follow Rig's existing store settings;
 the room does not enable cart mode for a live store. Media must be browser-playable

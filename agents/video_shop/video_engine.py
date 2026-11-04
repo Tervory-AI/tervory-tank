@@ -1,4 +1,4 @@
-"""Bounded FFmpeg vision and Rig search; uncertain matches stay in review."""
+"""Local CPU speech/image matching and Rig search; uncertain matches stay in review."""
 from __future__ import annotations
 
 import asyncio
@@ -11,6 +11,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from rigbox.rank import search
+from .video_models import MODELS, FRAME_SIZE, SAMPLE_SECONDS
 
 MAX_BYTES = 32 * 1024 * 1024
 
@@ -37,13 +38,10 @@ async def frames(path: Path):
     # Disable network protocols inside the decoder. At most 120 samples / 10 minutes.
     raw = await command('ffmpeg', '-v', 'error', '-protocol_whitelist', 'file,pipe',
                         '-format_whitelist', 'mov,matroska,webm,avi',
-                        '-i', str(path), '-t', '600', '-vf', 'fps=1/5:start_time=0:round=up,scale=32:32',
+                        '-i', str(path), '-t', '600', '-vf', 'fps=1/5:start_time=0:round=up,scale=224:224',
                         '-frames:v', '120', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1')
-    return [raw[i:i + 3072] for i in range(0, len(raw), 3072) if len(raw[i:i + 3072]) == 3072]
-
-
-def similarity(left: bytes, right: bytes) -> float:
-    return 1 - sum(abs(a - b) for a, b in zip(left, right)) / (3072 * 255)
+    return [raw[i:i + FRAME_SIZE * FRAME_SIZE * 3] for i in range(0, len(raw), FRAME_SIZE * FRAME_SIZE * 3)
+            if len(raw[i:i + FRAME_SIZE * FRAME_SIZE * 3]) == FRAME_SIZE * FRAME_SIZE * 3]
 
 
 class Repository:
@@ -90,21 +88,20 @@ class Repository:
 
 
 class Engine:
-    def __init__(self, rig, repository):
+    def __init__(self, rig, repository, models=None):
         self.rig, self.repository = rig, repository
         self.lock = asyncio.Semaphore(1)
+        self.models = models if models is not None else MODELS
 
-    async def ingest(self, tenant, video: bytes, transcript: list, references: dict, *, permission=None):
-        if not isinstance(transcript, list) or not isinstance(references, dict):
+    async def ingest(self, tenant, video: bytes, transcript=None, references=None, *, permission=None):
+        # Supplied transcripts cannot substitute for audio analysis.
+        if transcript:
+            raise ValueError('transcript_is_automatic')
+        references = {} if references is None else references
+        if not isinstance(references, dict):
             raise ValueError('media_input')
-        if not video or len(video) > MAX_BYTES or len(transcript) > 1000 or len(references) > 100:
+        if not video or len(video) > MAX_BYTES or len(references) > 100:
             raise ValueError('media_limit')
-        for segment in transcript:
-            if not isinstance(segment, dict):
-                raise ValueError('transcript')
-            start, end = float(segment['start']), float(segment['end'])
-            if not (0 <= start < end <= 600) or not isinstance(segment['text'], str) or len(segment['text']) > 10000:
-                raise ValueError('transcript')
         identifier = uuid4().hex
         path = self.repository.directory(tenant) / (identifier + '.mp4')
         path.write_bytes(video)
@@ -112,7 +109,7 @@ class Engine:
             async with self.lock:
                 metadata = json.loads(await command(
                     'ffprobe', '-v', 'error', '-protocol_whitelist', 'file,pipe',
-                    '-format_whitelist', 'mov,matroska,webm,avi', '-show_entries', 'format=duration,format_name',
+                    '-format_whitelist', 'mov,matroska,webm,avi', '-show_entries', 'format=duration,format_name:stream=codec_type',
                     '-of', 'json', str(path)))
                 duration = float(metadata['format']['duration'])
                 if not (0 < duration <= 600):
@@ -157,9 +154,9 @@ class Engine:
                         fingerprints[sku] = await command(
                             'ffmpeg', '-v', 'error', '-protocol_whitelist', 'file,pipe',
                             '-format_whitelist', 'png_pipe,jpeg_pipe,ppm_pipe',
-                            '-i', str(reference), '-vf', 'scale=32:32', '-frames:v', '1',
+                            '-i', str(reference), '-vf', 'scale=224:224', '-frames:v', '1',
                             '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1')
-                        if len(fingerprints[sku]) != 3072:
+                        if len(fingerprints[sku]) != FRAME_SIZE * FRAME_SIZE * 3:
                             raise ValueError('reference_invalid')
                     except (ValueError, TimeoutError):
                         fingerprints.pop(sku, None)
@@ -168,9 +165,27 @@ class Engine:
                         image_errors.append(sku)
                     finally:
                         reference.unlink(missing_ok=True)
+                audio = path.with_suffix('.wav')
+                try:
+                    has_audio = any(stream.get('codec_type') == 'audio' for stream in metadata.get('streams', []))
+                    if has_audio:
+                        await command('ffmpeg', '-v', 'error', '-protocol_whitelist', 'file,pipe',
+                                      '-format_whitelist', 'mov,matroska,webm,avi', '-i', str(path),
+                                      '-t', '600', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', str(audio))
+                    inference = asyncio.create_task(asyncio.to_thread(
+                        self.models.analyse, audio if has_audio else None, samples, fingerprints))
+                    try:
+                        analysis = await asyncio.shield(inference)
+                    except asyncio.CancelledError:
+                        # Keep CPU slot and audio until the worker has stopped.
+                        await inference
+                        raise
+                finally:
+                    audio.unlink(missing_ok=True)
+                transcript = analysis['transcript']
                 moments = []
-                for index, frame in enumerate(samples):
-                    start, end = index * 5, min((index + 1) * 5, duration)
+                for index in range(len(samples)):
+                    start, end = index * SAMPLE_SECONDS, min((index + 1) * SAMPLE_SECONDS, duration)
                     text = ' '.join(str(s['text']) for s in transcript
                                     if float(s['start']) < end and float(s['end']) > start)
                     ids = search({'tenant_id': tenant, 'products': products, 'q': text, 'limit': 5})['ids']
@@ -180,20 +195,21 @@ class Engine:
                     evidence = {sku: {'transcript': True} for sku in ids if sku in catalogue
                                 and any(' ' + re.sub(r'[^\w]+', ' ', str(term).casefold()).strip() + ' '
                                         in normalized for term in (sku, catalogue[sku].get('name', '')) if term)}
-                    for sku, reference in fingerprints.items():
-                        score = similarity(frame, reference)
-                        if score >= .96:
-                            evidence.setdefault(sku, {})['vision_score'] = round(score, 4)
+                    for sku, score in analysis['matches'][index].items():
+                        if sku in catalogue:
+                            evidence.setdefault(sku, {})['vision_score'] = score
                     for sku, proof in evidence.items():
                         moments.append({'start': start, 'end': end, 'product_id': sku,
                                         'evidence': proof, 'approved': False})
                 body = {'id': identifier, 'duration': duration,
                         'media_type': 'video/webm' if 'webm' in metadata['format']['format_name'] else 'video/mp4',
                         'revision': 1, 'status': 'draft', 'moments': moments,
-                        'permission': permission,
-                        'receipt': {'route': 'code', 'model_calls': 0, 'media_sha256': hashlib.sha256(video).hexdigest(),
-                                    'vision': 'ffmpeg-rgb-distance-v1', 'samples': len(samples),
+                        'permission': permission, 'transcript': transcript,
+                        'receipt': {**analysis['receipt'], 'route': 'local_cpu', 'model_calls': 2 if has_audio else 1, 'media_sha256': hashlib.sha256(video).hexdigest(),
+                                    'samples': len(samples),
                                     'reference_images': len(fingerprints), 'image_errors': image_errors,
+                                    'catalogue_image_sha256': {sku: hashlib.sha256(images[sku]).hexdigest()
+                                                               for sku in fingerprints},
                                     'catalogue_images_truncated': len(catalogue) > 100}}
                 self.repository.save(tenant, body)
                 return body

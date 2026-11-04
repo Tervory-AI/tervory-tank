@@ -12,5 +12,15 @@ ffmpeg -v error -f lavfi -i 'color=c=white:s=96x96:d=10:r=2,drawbox=x=24:y=24:w=
 ffmpeg -v error -i tests/fixtures/video_shop/sample.mp4 -frames:v 1 -y tests/fixtures/video_shop/cup.ppm
 ```
 
-Acceptance supplies a timestamped transcript saying “Red cup” in seconds 0–5.
-Vision independently finds the cup in seconds 5–10, without transcript evidence.
+`speech.mp4` adds synthetic speech from FFmpeg's open-source Flite `slt` voice:
+“This is a red cup. The red cup is on the table.” No transcript is supplied to the
+room. The second five-second window contains the cup without spoken evidence.
+Regenerate the spoken fixture (FFmpeg build must include Flite):
+
+```sh
+ffmpeg -v error -threads 1 -filter_threads 1 -i tests/fixtures/video_shop/sample.mp4 -f lavfi -i "flite=text='This is a red cup. The red cup is on the table.':voice=slt" -map 0:v -map 1:a -c:v copy -c:a aac -af apad -t 10 -y tests/fixtures/video_shop/speech.mp4
+```
+
+The drawing and script are original test material. The synthesized voice uses the
+CMU Flite permissive license; see the room's third-party notices. Both silent and
+spoken fixtures remain ten seconds so the overlay playback tests stay stable.

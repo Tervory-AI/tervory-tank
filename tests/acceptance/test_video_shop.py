@@ -1,5 +1,6 @@
 """Video -> reviewed moments -> Rig cart -> store-owned checkout, offline."""
 import base64
+import os
 import sys
 from pathlib import Path
 
@@ -12,7 +13,8 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'tests'))
 sys.path.insert(0, str(ROOT / 'agents/rig'))
 from agents.video_shop.video_room import mount
-from agents.video_shop.video_engine import Repository
+from agents.video_shop.video_engine import Engine, Repository
+from video_shop_support import StubModels, cpu_models
 from rigbox.api import mount as mount_rig
 from rigbox.cart_api import mount as mount_cart
 from rigbox.service import hash_key
@@ -26,7 +28,9 @@ ADMIN = 'offline-video-review-fixture'
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('source', ['upload', 'link'])
-async def test_video_produces_timestamps_and_store_cart_line(tmp_path, monkeypatch, source):
+@pytest.mark.parametrize('backend', ['stub', pytest.param('cpu', marks=pytest.mark.skipif(
+    not os.environ.get('VIDEO_SHOP_TEST_MODELS'), reason='CPU weights staged in dedicated offline test'))])
+async def test_video_produces_timestamps_and_store_cart_line(tmp_path, monkeypatch, source, backend):
     cart, store_platform, _, _, _, transport_client = await setup(monkeypatch)
     rig = cart.service
     rig.cart = cart
@@ -36,11 +40,17 @@ async def test_video_produces_timestamps_and_store_cart_line(tmp_path, monkeypat
         await rig.store.upsert_product(TENANT, product)
     await rig.store.put_key(TENANT, hash_key(PUBLIC), 'publishable', ['https://store.example'])
     await rig.store.put_key(TENANT, hash_key(ADMIN), 'admin', [])
+    from agents.video_shop import video_media
+    monkeypatch.setattr(video_media, 'download', lambda url, limit: (FIXTURES / 'cup.ppm').read_bytes())
+    await rig.store.upsert_product(TENANT, {**catalogue['rows'][0],
+        'image_url': 'https://store.example/cup.ppm'})
     app = FastAPI()
     app.state.rig = rig
     mount_rig(app)
     mount_cart(app)
     mount(app, tmp_path / 'durable')
+    models = cpu_models(os.environ['VIDEO_SHOP_TEST_MODELS']) if backend == 'cpu' else StubModels()
+    app.state.video_shop = Engine(rig, Repository(tmp_path / 'durable'), models=models)
     admin = {'X-Rig-Key': ADMIN}
     shopper = {'X-Rig-Key': PUBLIC, 'Origin': 'https://store.example'}
     prefix = '/v1/rig/video-shop'
@@ -48,28 +58,34 @@ async def test_video_produces_timestamps_and_store_cart_line(tmp_path, monkeypat
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='https://rig.example') as api:
             from agents.video_shop import video_routes
             if source == 'link':
-                monkeypatch.setattr(video_routes, 'download', lambda url: (FIXTURES / 'sample.mp4').read_bytes())
+                monkeypatch.setattr(video_routes, 'download', lambda url: (FIXTURES / 'speech.mp4').read_bytes())
                 source_data = {'url': 'https://store.example/sample.mp4'}
             else:
-                source_data = {'video_base64': base64.b64encode((FIXTURES / 'sample.mp4').read_bytes()).decode()}
+                source_data = {'video_base64': base64.b64encode((FIXTURES / 'speech.mp4').read_bytes()).decode()}
             created = await api.post(prefix + '/admin/videos', headers=admin, json={
                 **source_data,
-                'rights_confirmed': True,
-                'references': {'stock': base64.b64encode((FIXTURES / 'cup.ppm').read_bytes()).decode()},
-                'transcript': [{'start': 0, 'end': 5, 'text': 'Red cup'}]})
+                'rights_confirmed': True})
             assert created.status_code == 200, created.text
             draft = created.json()
-            assert draft['receipt']['model_calls'] == 0
+            assert draft['receipt']['provider_calls'] == 0
+            assert 'red cup' in ' '.join(s['text'] for s in draft['transcript']).casefold()
+            assert draft['receipt']['device'] == 'cpu'
+            if backend == 'cpu':
+                assert draft['receipt']['weights']
+                assert draft['receipt']['speech'].startswith('faster-whisper==1.2.1')
             assert draft['permission']['confirmed'] is True
             denied = await api.post(prefix + '/admin/videos', headers=admin, json=source_data)
             assert denied.status_code == 422
             assert [m['start'] for m in draft['moments']] == [0, 5]
             assert draft['moments'][0]['evidence']['transcript']
-            assert draft['moments'][0]['evidence']['vision_score'] >= .96
+            assert 'transcript' not in draft['moments'][1]['evidence']
+            assert all(not moment['approved'] for moment in draft['moments'])
+            assert not list((tmp_path / 'durable').rglob('*.wav'))
+            assert draft['moments'][0]['evidence']['vision_score'] >= draft['receipt']['vision_threshold']
             identifier = draft['id']
             assert (await api.get(prefix + '/admin/videos', headers=admin)).json()['videos'][0]['id'] == identifier
             preview = await api.get(prefix + '/admin/videos/' + identifier + '/media', headers=admin)
-            assert preview.status_code == 200 and preview.content == (FIXTURES / 'sample.mp4').read_bytes()
+            assert preview.status_code == 200 and preview.content == (FIXTURES / 'speech.mp4').read_bytes()
             public_route = prefix + '/videos/' + identifier
             assert (await api.get(public_route, headers=shopper)).status_code == 404
             edited = [{'start': 1, 'end': 7, 'product_id': 'stock', 'approved': True}]
@@ -80,7 +96,7 @@ async def test_video_produces_timestamps_and_store_cart_line(tmp_path, monkeypat
             timeline = (await api.get(public_route, headers=shopper)).json()
             assert timeline['moments'] == edited and set(timeline['products']) == {'stock'}
             media = await api.get(public_route + '/media', headers=shopper)
-            assert media.status_code == 200 and media.content == (FIXTURES / 'sample.mp4').read_bytes()
+            assert media.status_code == 200 and media.content == (FIXTURES / 'speech.mp4').read_bytes()
             session = (await api.post('/v1/rig/cart/session', headers=shopper, json={})).json()['session']
             added = await api.post('/v1/rig/cart/add', headers=shopper,
                                    json={'session': session, 'product_id': 'stock', 'quantity': 1})

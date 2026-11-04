@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'agents/rig'))
 from agents.video_shop.video_engine import Engine, Repository, command
 from rigbox.store import MemoryStore
+from video_shop_support import StubModels
 
 TENANT = '20000000-0000-0000-0000-000000000001'
 OTHER = '20000000-0000-0000-0000-000000000002'
@@ -25,11 +26,11 @@ async def test_video_review_and_isolation(tmp_path):
     await command('ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=64x64:d=10',
                   '-pix_fmt', 'yuv420p', str(video))
     image = b'P6\n32 32\n255\n' + bytes([253, 0, 0]) * 1024
-    engine = Engine(SimpleNamespace(store=store), Repository(tmp_path / 'data'))
+    engine = Engine(SimpleNamespace(store=store), Repository(tmp_path / 'data'), models=StubModels())
     draft = await engine.ingest(TENANT, video.read_bytes(), [], {'red': image})
     assert draft['moments'] and all(m['product_id'] == 'red' for m in draft['moments'])
     assert draft['moments'][0]['evidence']['vision_score'] >= .96
-    assert draft['receipt']['model_calls'] == 0
+    assert draft['receipt']['provider_calls'] == 0
     assert not any(m['approved'] for m in draft['moments'])
     with pytest.raises(KeyError):
         engine.repository.get(OTHER, draft['id'])
@@ -59,7 +60,7 @@ async def test_catalogue_images_are_reused_without_reference_upload(tmp_path, mo
     store = MemoryStore()
     await store.upsert_product(TENANT, {'sku': 'cup', 'name': 'Red cup', 'active': True,
         'image_url': 'https://store.example/cup.ppm', 'price': '10', 'currency': 'USD'})
-    engine = Engine(SimpleNamespace(store=store), Repository(tmp_path / 'data'))
+    engine = Engine(SimpleNamespace(store=store), Repository(tmp_path / 'data'), models=StubModels())
     result = await engine.ingest(TENANT, (fixture / 'sample.mp4').read_bytes(), [], {})
     assert calls == ['https://store.example/cup.ppm']
     assert result['receipt']['reference_images'] == 1
@@ -85,7 +86,7 @@ def test_link_rejects_private_addresses_before_connect(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_bad_media_does_not_leave_a_published_file(tmp_path):
-    engine = Engine(SimpleNamespace(store=MemoryStore()), Repository(tmp_path))
+    engine = Engine(SimpleNamespace(store=MemoryStore()), Repository(tmp_path), models=StubModels())
     with pytest.raises(ValueError, match='media_decode'):
         await engine.ingest(TENANT, b'not video', [], {})
     assert not list(tmp_path.rglob('*.mp4'))
@@ -96,7 +97,7 @@ async def test_webm_keeps_its_browser_media_type(tmp_path):
     video = tmp_path / 'sample.webm'
     await command('ffmpeg', '-v', 'error', '-i', str(ROOT / 'tests/fixtures/video_shop/sample.mp4'),
                   '-c:v', 'libvpx-vp9', '-deadline', 'realtime', str(video))
-    engine = Engine(SimpleNamespace(store=MemoryStore()), Repository(tmp_path / 'data'))
+    engine = Engine(SimpleNamespace(store=MemoryStore()), Repository(tmp_path / 'data'), models=StubModels())
     result = await engine.ingest(TENANT, video.read_bytes(), [], {})
     assert result['media_type'] == 'video/webm'
     assert result['duration'] == 10
