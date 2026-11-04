@@ -4,13 +4,20 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from rigbox.api import _admin, _ok, _tenant, _service
+from rigbox.api import _admin, _auth, _ok as rig_ok, _tenant, _service
 from .video_engine import Engine, Repository, MAX_BYTES
 from .video_media import download
 
 router = APIRouter(prefix='/v1/rig/video-shop')
+
+
+def _ok(request, data):
+    response = rig_ok(request, data)
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
 
 
 def engine(request):
@@ -78,3 +85,43 @@ async def review(identifier: str, request: Request):
 def mount(app, root):
     app.state.video_shop_root = str(root)
     app.include_router(router)
+
+
+@router.get('/videos/{identifier}')
+async def timeline(identifier: str, request: Request):
+    from rigbox.logic import public_product
+    from rigbox.shopper_attributes import shopper_row
+    await _auth(request)
+    try:
+        saved = engine(request).repository.get(_tenant(request), identifier)
+    except KeyError:
+        raise HTTPException(404, 'video') from None
+    if saved['status'] != 'reviewed':
+        raise HTTPException(404, 'video')
+    products = {str(p.get('sku') or p.get('id')): p for p in
+                await _service(request).store.products(_tenant(request)) if p.get('active', True)}
+    moments = [m for m in saved['moments'] if m['approved'] and m['product_id'] in products]
+    return _ok(request, {'id': identifier, 'revision': saved['revision'], 'moments': moments,
+                        'products': {m['product_id']: public_product(shopper_row(products[m['product_id']]))
+                                     for m in moments}})
+
+
+@router.get('/videos/{identifier}/media')
+async def media(identifier: str, request: Request):
+    from fastapi.responses import FileResponse
+    await timeline(identifier, request)
+    # Derive the file name from the saved UUID, never a caller-controlled path.
+    saved = engine(request).repository.get(_tenant(request), identifier)
+    path = engine(request).repository.directory(_tenant(request)) / (saved['id'] + '.mp4')
+    headers = dict(_ok(request, {}).headers)
+    headers.pop('content-length', None)
+    headers.pop('content-type', None)
+    headers.update({'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'})
+    return FileResponse(path, media_type='video/mp4', headers=headers)
+
+
+@router.get('/widget.js')
+async def widget():
+    from fastapi.responses import FileResponse
+    return FileResponse(Path(__file__).with_name('widget.js'), media_type='text/javascript',
+                        headers={'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff'})
