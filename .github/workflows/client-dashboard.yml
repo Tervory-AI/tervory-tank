@@ -17,23 +17,6 @@ on:
       - 'workspace/package*.json'
       - 'workspace/app/fonts/**'
       - 'workspace/public/brand/**'
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/client-dashboard.yml'
-      - 'tests/client-dashboard*'
-      - 'workspace/app/page.tsx'
-      - 'workspace/app/dashboard*'
-      - 'workspace/app/control/dashboard.css'
-      - 'workspace/app/tasks/page.tsx'
-      - 'workspace/app/shell.tsx'
-      - 'workspace/app/squad-links.tsx'
-      - 'workspace/app/product-nav.ts'
-      - 'workspace/app/globals.css'
-      - 'workspace/app/tank/proof/savings-set.tsx'
-      - 'workspace/package*.json'
-      - 'workspace/app/fonts/**'
-      - 'workspace/public/brand/**'
 
 permissions:
   contents: read
