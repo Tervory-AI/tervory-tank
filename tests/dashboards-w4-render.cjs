@@ -16,13 +16,13 @@ const screen = process.env.W4_SCREEN || 'founder';
 const now = Date.UTC(2026,10,3,20);
 Date.now = ()=>now;
 process.env.TANK_URL='http://offline.invalid';
-process.env.TANK_API_KEY='placeholder-w4-key';
+process.env.TANK_API_KEY='placeholder';
 process.env.TERVORY_ADMIN_USER_IDS='placeholder-founder';
 const calls=[];
 global.fetch=async(url,init={})=>{
   const target=new URL(url);assert.equal(target.hostname,'offline.invalid','No live network');
   const key=target.pathname+target.search;calls.push(key);
-  assert.equal(new Headers(init.headers).get('x-tank-key'),'placeholder-w4-key');
+  assert.equal(new Headers(init.headers).get('x-tank-key'),'placeholder');
   assert(routes[key],`No production-route response for ${key}`);
   return Response.json(routes[key]);
 };
