@@ -20,6 +20,8 @@ async def test_founder_onboarding_is_immutable_and_wrong_box_cannot_run(boundary
         assert response.status_code == 200 and response.json()['home_region'] == 'za'
     assert (await b.client.put(url, json={'home_region': 'us-east'}, headers=headers)).status_code == 409
     assert (await b.client.get(url)).json()['home_region'] == 'za'
+    client_headers = {'X-Tervory-Tenant':str(tenant), 'X-Tervory-User':'client-a'}
+    assert (await b.client.get('/v1/command/tools', headers=client_headers)).status_code == 403
     for claim in (None, 'us-east', 'za'):
         with pytest.raises(HTTPException) as foreign:
             await tenant_regions.local(b.tank, tenant, claim)

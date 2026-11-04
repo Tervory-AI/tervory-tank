@@ -25,13 +25,18 @@ async def home(tank, tenant: UUID) -> str:
     return value
 
 
-async def local(tank, tenant: UUID, claimed=None):
-    region = await home(tank, tenant)
+def check_local(region, box, claimed=None):
+    if region not in ('us-east', 'za'):
+        raise HTTPException(409, {'code': 'tenant_onboarding_required'})
     if claimed is not None and claimed != region:
         raise HTTPException(403, 'The request home differs from the tenant record.')
-    if region != tank.box_region():
+    if region != box:
         raise HTTPException(403, {'code': 'tenant_home_region', 'home_region': region})
     return region
+
+
+async def local(tank, tenant: UUID, claimed=None):
+    return check_local(await home(tank, tenant), tank.box_region(), claimed)
 
 
 def install(app, tank):

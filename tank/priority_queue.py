@@ -165,14 +165,21 @@ async def status(tank, job_id, tenant_id, *, caller=None) -> dict:
 
 
 async def _finish(tank, conn, job, result=None, *, error=None, uncertain=False):
-    state = 'uncertain' if uncertain else 'failed' if error else 'completed'
-    await conn.execute("""UPDATE tank.offpeak_jobs SET status=$3,result=$4::jsonb,error=$5,finished_at=now()
-        WHERE id=$1 AND tenant_id=$2""", job['id'], job['tenant_id'], state,
-        json.dumps(result, default=str) if result is not None else None, error)
-    if error:
-        await conn.execute("""UPDATE tank.ledger SET outcome=$3,error=$4
-            WHERE id=$1 AND tenant_id=$2 AND outcome IN ('queued','sent')""",
-            job['id'], job['tenant_id'], 'unverified' if uncertain else 'failed', error)
+    async with conn.transaction():
+        state = 'uncertain' if uncertain else 'failed' if error else 'completed'
+        await conn.execute("""UPDATE tank.offpeak_jobs SET status=$3,result=$4::jsonb,error=$5,finished_at=now()
+            WHERE id=$1 AND tenant_id=$2""", job['id'], job['tenant_id'], state,
+            json.dumps(result, default=str) if result is not None else None, error)
+        if error:
+            await conn.execute("""UPDATE tank.ledger SET outcome=$3,error=$4
+                WHERE id=$1 AND tenant_id=$2 AND outcome IN ('queued','sent')""",
+                job['id'], job['tenant_id'], 'unverified' if uncertain else 'failed', error)
+
+        # Receipt and task completion use the same owning tenant and durable job id.
+        await conn.execute("""UPDATE tank.tasks SET status=$3,result=$4,error=$5,ledger_id=$1,finished_at=now()
+            WHERE tenant_id=$2 AND id=(SELECT task_id FROM tank.offpeak_jobs WHERE id=$1 AND tenant_id=$2)""",
+            job['id'], job['tenant_id'], 'done' if state == 'completed' else 'failed',
+            (result or {}).get('content'), error)
 
 
 async def _process(tank, conn, job):
@@ -229,6 +236,9 @@ async def _process(tank, conn, job):
     sent_at = now()
     await conn.execute("""UPDATE tank.offpeak_jobs SET status='dispatching',sent_at=$3
         WHERE id=$1 AND tenant_id=$2""", job['id'], job['tenant_id'], sent_at)
+    await conn.execute("""UPDATE tank.tasks SET status='running',started_at=coalesce(started_at,now())
+        WHERE tenant_id=$2 AND id=(SELECT task_id FROM tank.offpeak_jobs WHERE id=$1 AND tenant_id=$2)
+        AND finished_at IS NULL""", job['id'], job['tenant_id'])
     try:
         async with asyncio.timeout(max(0.001, (deadline-now()).total_seconds())):
             result = await tank.run_route(req, caller=job['caller'], task_id=job['task_id'],

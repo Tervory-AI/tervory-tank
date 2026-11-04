@@ -37,6 +37,9 @@ const events = [];
 console.warn = (...args) => events.push(args);
 console.info = (...args) => events.push(args);
 global.fetch = async (url, init) => {
+  const registryResponse = require('../platform/registry_fixture.cjs')(url);
+  if (registryResponse) return registryResponse;
+
   assert.equal(new URL(url).origin, process.env.TANK_URL);
   assert.equal(init.method, 'POST');
   assert.equal(init.redirect, 'manual');

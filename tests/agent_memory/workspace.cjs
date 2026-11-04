@@ -34,6 +34,9 @@ const calls = [];
 let status = 200;
 let fail = false;
 global.fetch = async (target, init) => {
+  const registryResponse = require('../platform/registry_fixture.cjs')(target);
+  if (registryResponse) return registryResponse;
+
   const url = new URL(target);
   assert.equal(url.origin, 'http://tank.offline.invalid');
   calls.push({url, ...init});

@@ -161,6 +161,8 @@ async def bearer_identity(request: Request, *, audience: str) -> tuple[command.A
                 AND audience=$4 AND (expires_at IS NULL OR expires_at > now())""",
                 tenant, region, digest(token), audience,
             )
+            if row is not None:
+                await command.assert_tenant_home(tenant, conn)
             if row is not None and row.get("stale") is not False:
                 # At most one write a minute per credential; NULL means never used.
                 await conn.execute("UPDATE tank.personal_tokens SET last_used_at=now() WHERE tenant_id=$1 AND token_id=$2",

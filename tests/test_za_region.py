@@ -31,6 +31,20 @@ US_CONFIG = yaml.safe_load((ROOT / "litellm" / "config.yaml").read_text(encoding
 SA_ID = "8001015009087"
 TENANT = "11111111-1111-1111-1111-111111111111"
 
+@pytest.fixture(autouse=True)
+def onboarded_tenant_record(monkeypatch):
+    # These unit tests isolate PII/provider guards. Their tenant is already
+    # founder-onboarded to the box under test; real registry SQL is covered by
+    # test_platform_regions.py, including missing and conflicting authority.
+    import tenant_regions
+
+    async def stored_home(tank, tenant):
+        assert tenant in {uuid.UUID(TENANT), tank.PLATFORM_TENANT}
+        return tank.box_region()
+
+    monkeypatch.setattr(tenant_regions, "home", stored_home)
+
+
 
 def _parsed() -> dict:
     return yaml.safe_load(COMPOSE)
@@ -363,7 +377,7 @@ async def test_empty_or_unknown_home_makes_no_call(
     monkeypatch.setattr(main, "_http", _Transport())
     monkeypatch.setattr(main, "_redis", _Transport())
     monkeypatch.setattr(main.httpx, "AsyncClient", _Provider)
-    tenant = uuid.uuid4()
+    tenant = uuid.UUID(TENANT)
     if kind == "route":
         call = main.run_route(main.RouteRequest(
             tenant_id=tenant,
@@ -447,7 +461,7 @@ class _Gateway:
 
 
 @pytest.mark.asyncio
-async def test_a_request_with_no_home_is_accepted_on_us_east(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_onboarded_request_without_a_claim_uses_its_record(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TANK_REGION", "us-east")
     monkeypatch.setattr(main, "pool", lambda: _Pool())
     monkeypatch.setattr(main, "_redis", None)
@@ -463,7 +477,7 @@ async def test_a_request_with_no_home_is_accepted_on_us_east(monkeypatch: pytest
 
     monkeypatch.setattr(main, "_run_task", remember_task)
     monkeypatch.setattr(main, "_run_one_skill", remember_skill)
-    tenant = uuid.uuid4()
+    tenant = uuid.UUID(TENANT)
     response = await main.run_route(main.RouteRequest(
         tenant_id=tenant,
         messages=[main.Message(role="user", content="What does VAT stand for?")],
@@ -530,7 +544,7 @@ async def test_evals_pass_for_a_skill_that_calls_a_model(tmp_path, monkeypatch: 
     assert result["total"] == 1
     assert result["gate"] == "failed"
     assert result["eligible"] is False
-    preview = main.make_ctx(pkg, uuid.uuid4(), preview=True)
+    preview = main.make_ctx(pkg, uuid.UUID(TENANT), preview=True)
     await preview.model([{"role": "user", "content": "hi"}], task_type="tier0.answer")
     assert homes == ["us-east", "us-east"]
 

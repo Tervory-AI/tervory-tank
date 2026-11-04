@@ -47,6 +47,9 @@ const record = (id, changes = {}) => ({ id, task_id: null, batch: 'shared-name',
     '7': { checks: { phone_matches_site: true } } },
   status: 'done', confidence: 70, error: null, created_at: '2026-10-26T00:00:00Z', ...changes });
 global.fetch = async (input, init) => {
+  const registryResponse = require('./platform/registry_fixture.cjs')(input);
+  if (registryResponse) return registryResponse;
+
   const url = new URL(input);
   const body = init?.body ? JSON.parse(init.body) : null;
   calls.push({ path: url.pathname, tenant: url.searchParams.get('tenant_id'), body });

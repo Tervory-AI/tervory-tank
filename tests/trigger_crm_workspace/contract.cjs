@@ -31,6 +31,9 @@ const id = '33333333-3333-4333-8333-333333333333';
 let count = 0;
 let upstream = () => Response.json({ resource: 'leads', items: [], page: 1, count: 0 });
 global.fetch = async (target, init) => {
+  const registryResponse = require('../platform/registry_fixture.cjs')(target);
+  if (registryResponse) return registryResponse;
+
   count++;
   const url = new URL(target);
   assert.equal(url.origin, 'http://tank.offline.invalid');

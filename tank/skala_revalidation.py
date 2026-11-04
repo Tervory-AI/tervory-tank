@@ -156,13 +156,27 @@ async def drain(tank: Any, limit: int = 20) -> int:
         try:
             for _ in range(limit):
                 row = await lock.fetchrow(
-                    "SELECT * FROM tank.skill_revalidations WHERE tenant_id=$1 AND completed_at IS NULL ORDER BY queued_at,id LIMIT 1",
+                    """SELECT * FROM tank.skill_revalidations WHERE tenant_id=$1 AND completed_at IS NULL
+                    AND (preflight_hash IS NULL OR NOT EXISTS(SELECT 1 FROM tank.roster_heads WHERE tenant_id=$1 AND unavailable))
+                    ORDER BY queued_at,id LIMIT 1""",
                     PLATFORM_TENANT)
                 if row is None:
                     break
                 job = dict(row)
                 token = ACTIVE.set(job)
                 try:
+                    if job.get("preflight_hash"):
+                        if job.get("started_at") is not None:
+                            # An interrupted eval may already have charged. Hold
+                            # its proof rather than buying the same cases again.
+                            await record(tank, failed_result(tank, job))
+                            count += 1
+                            continue
+                        claimed = await lock.fetchval("""UPDATE tank.skill_revalidations SET started_at=clock_timestamp()
+                            WHERE id=$1 AND tenant_id=$2 AND started_at IS NULL AND completed_at IS NULL RETURNING id""",
+                            job["id"], PLATFORM_TENANT)
+                        if claimed is None:
+                            continue
                     pkg = tank.get_package(job["skill_id"], job["version"])
                     if pkg.task_type is not None and pkg.task_type != job["task_type"]:
                         raise ValueError("Package task type changed")

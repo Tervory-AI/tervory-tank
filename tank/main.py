@@ -63,7 +63,7 @@ from command_stream import StreamFailure, TokenSink, completion as stream_comple
 import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
-from pydantic import AwareDatetime, BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
 import batch_providers
 import prompt_cache
@@ -716,6 +716,8 @@ class PolicyRow(BaseModel):
 
 
 class TaskCreate(BaseModel):
+    deadline_at: AwareDatetime | None = None
+    priority: Literal["urgent", "standard", "offpeak", "batch"] | None = None
     tenant_id: uuid.UUID
     created_by: str | None = None
     title: str = Field(min_length=1, max_length=200)
@@ -727,9 +729,18 @@ class TaskCreate(BaseModel):
 
 class Feedback(BaseModel):
     tenant_id: uuid.UUID
-    feedback: Literal["accepted", "rejected"]
+    feedback: Literal["accepted", "rejected", "wrong"]
     note: str | None = Field(default=None, max_length=1000)
     by: str | None = None
+
+
+    @model_validator(mode="after")
+    def wrong_requires_note(self):
+        if self.feedback == "wrong" and not (self.note or "").strip():
+            raise ValueError("Explain what was wrong.")
+        if self.note is not None:
+            self.note = self.note.strip()
+        return self
 
 
 # ---------- lifecycle ----------
@@ -1657,6 +1668,8 @@ def _roster_row(item: Any) -> dict[str, Any] | None:
 
     return {
         "model_name": name,
+        "deployment_fingerprint": hashlib.sha256(json.dumps(
+            [info.get("id"), params.get("api_base"), params.get("model")], default=str).encode()).hexdigest(),
         "litellm_params": {"model": str(params.get("model") or "")},
         "model_info": {
             "input_cost_per_token": price("input_cost_per_token"),
@@ -1668,12 +1681,21 @@ def _roster_row(item: Any) -> dict[str, Any] | None:
     }
 
 
-async def _roster_models() -> list[dict[str, Any]]:
+def _roster_aliases(rows, all_deployments):
+    if all_deployments:
+        return rows
+    aliases = {}
+    for row in rows:
+        aliases.setdefault(row["model_name"], row)
+    return list(aliases.values())
+
+
+async def _roster_models(*, all_deployments: bool = False) -> list[dict[str, Any]]:
     """Models LiteLLM serves, with per-token prices, cached five minutes. The file roster is the fallback."""
     global _roster_cache
     now = time.time()
-    if _roster_cache is not None and now - _roster_cache[0] < _ROSTER_TTL_S:
-        return _roster_cache[1]
+    if not all_deployments and _roster_cache is not None and now - _roster_cache[0] < _ROSTER_TTL_S:
+        return _roster_aliases(_roster_cache[1], all_deployments)
     rows: list[dict[str, Any]] = []
     if _http is not None and hasattr(_http, "get"):
         try:
@@ -1685,26 +1707,27 @@ async def _roster_models() -> list[dict[str, Any]]:
             if response.status_code == 200:
                 payload = response.json()
                 data = payload.get("data") if isinstance(payload, dict) else None
-                seen: set[str] = set()
                 for item in data or []:
                     row = _roster_row(item)
                     if row is not None and _build_row(row):
                         continue
-                    if row is not None and row["model_name"] not in seen:
-                        seen.add(row["model_name"])
+                    if row is not None:
                         rows.append(row)
         except Exception:  # noqa: BLE001 - a missing or odd LiteLLM answer falls back to the file roster
             rows = []
     if rows:
         _roster_cache = (now, rows)  # only LiteLLM's live answer is cached
-        return rows
+        return _roster_aliases(rows, all_deployments)
+    if all_deployments:
+        return []  # Policy validation requires the served roster, never the file fallback.
     path = _roster_path()
     if not path.is_file():
         return []
     import yaml
 
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return [row for row in (_roster_row(item) for item in raw.get("model_list") or []) if row and not _build_row(row)]
+    return _roster_aliases([row for row in (_roster_row(item) for item in raw.get("model_list") or [])
+                            if row and not _build_row(row)], all_deployments)
 
 
 async def _live_price_quotes() -> list[graduate.Quote]:
@@ -2973,6 +2996,9 @@ async def _process_batch(conn: Any, batch: Any) -> None:
         await conn.execute("""UPDATE tank.offpeak_jobs SET sent_at=now() WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"])
         await conn.execute("""UPDATE tank.ledger SET outcome='sent',sent_at=now()
             WHERE offpeak_job_id=$1 AND tenant_id=$2 AND outcome='queued'""", batch["id"], batch["tenant_id"])
+        await conn.execute("""UPDATE tank.tasks SET status='running',started_at=coalesce(started_at,now())
+            WHERE tenant_id=$2 AND id=(SELECT task_id FROM tank.offpeak_jobs WHERE id=$1 AND tenant_id=$2)
+            AND finished_at IS NULL""", batch["id"], batch["tenant_id"])
         provider_id, file_id = await batch_providers.submit(_batch_gateway, batch, lines)
         await conn.execute("""UPDATE tank.batches SET status='submitted',provider_id=$3,input_file_id=$4
             WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"], provider_id, file_id)
@@ -3057,19 +3083,26 @@ TASK_COLUMNS = "id, tenant_id, created_by, agent, task_type, title, status, resu
 def task_dict(row: asyncpg.Record, ledger: asyncpg.Record | None = None) -> dict[str, Any]:
     d = dict(row)
     d["call"] = dict(ledger) if ledger else None
+    d["board_state"] = __import__("task_board").state(d)
     return d
 
 
 @tenant_path("req")
 async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
     async with pool().acquire() as conn:
-        await conn.execute("UPDATE tank.tasks SET status='running', started_at=now() WHERE id=$1", task_id)
+        await conn.execute("UPDATE tank.tasks SET status='running', started_at=now() WHERE id=$1 AND tenant_id=$2", task_id, req.tenant_id)
     try:
         res = await run_route(req, task_id=task_id)
         async with pool().acquire() as conn:
+            if isinstance(res, priority_queue.QueuedResponse):
+                await conn.execute("""UPDATE tank.tasks SET ledger_id=$3,status=CASE WHEN EXISTS(
+                    SELECT 1 FROM tank.offpeak_jobs j WHERE j.id=$3 AND j.tenant_id=$2 AND j.sent_at IS NOT NULL)
+                    THEN 'running' ELSE 'queued' END WHERE id=$1 AND tenant_id=$2 AND finished_at IS NULL""",
+                    task_id, req.tenant_id, res.ledger_id)
+                return
             await conn.execute(
-                "UPDATE tank.tasks SET status='done', result=$2, ledger_id=$3, finished_at=now() WHERE id=$1",
-                task_id, res.content, res.ledger_id,
+                "UPDATE tank.tasks SET status='done', result=$2, ledger_id=$3, finished_at=now() WHERE id=$1 AND tenant_id=$4",
+                task_id, res.content, res.ledger_id, req.tenant_id,
             )
     except Exception as exc:  # noqa: BLE001 — anything that stops a task is recorded on the task
         detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
@@ -3080,8 +3113,8 @@ async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
             ledger_id = None
         async with pool().acquire() as conn:
             await conn.execute(
-                "UPDATE tank.tasks SET status='failed', error=$2, ledger_id=$3, finished_at=now() WHERE id=$1",
-                task_id, str(detail), uuid.UUID(ledger_id) if ledger_id else None,
+                "UPDATE tank.tasks SET status='failed', error=$2, ledger_id=$3, finished_at=now() WHERE id=$1 AND tenant_id=$4",
+                task_id, str(detail), uuid.UUID(ledger_id) if ledger_id else None, req.tenant_id,
             )
 
 
@@ -3100,8 +3133,12 @@ async def create_task(body: TaskCreate) -> dict[str, Any]:
     )
     if early:
         raise HTTPException(status_code=403, detail=early)
+    if body.deadline_at is not None:
+        at = priority_queue.now()
+        if body.deadline_at <= at or body.deadline_at > at + priority_queue.price_windows.MAX_WAIT:
+            raise HTTPException(422, "Choose a deadline within the next seven days.")
     # Fail fast on a bad task_type rather than queueing a task that can only fail.
-    await load_policy(body.task_type, body.tenant_id)
+    task_policy = await load_policy(body.task_type, body.tenant_id)
     async with pool().acquire() as conn:
         row = await conn.fetchrow(
             f"""
@@ -3114,8 +3151,11 @@ async def create_task(body: TaskCreate) -> dict[str, Any]:
         )
     req = RouteRequest(
         tenant_id=body.tenant_id, agent=body.agent, task_type=body.task_type,
-        home_region=home, messages=body.messages,
+        home_region=home, messages=body.messages, interactive=False,
+        deadline_at=body.deadline_at, priority=body.priority,
     )
+    if _background_batch(req, task_policy):
+        req = req.model_copy(update={"priority": "offpeak"})
     t = asyncio.create_task(_run_task(row["id"], req))
     _background.add(t)
     t.add_done_callback(_background.discard)
@@ -3128,14 +3168,15 @@ async def list_tasks(tenant_id: uuid.UUID, limit: int = 50) -> list[dict[str, An
     async with pool().acquire() as conn:
         rows = await conn.fetch(
             f"""
-            SELECT t.*, l.model, l.rung, l.cost_usd, l.latency_ms, l.feedback
+            SELECT t.*, l.model, l.rung, l.cost_usd, l.latency_ms, l.feedback,
+                   l.outcome AS receipt_outcome,l.feedback_note,l.feedback_by
             FROM (SELECT {TASK_COLUMNS} FROM tank.tasks WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT $2) t
-            LEFT JOIN tank.ledger l ON l.id = t.ledger_id
+            LEFT JOIN tank.ledger l ON l.id = t.ledger_id AND l.tenant_id=t.tenant_id
             ORDER BY t.created_at DESC
             """,
             tenant_id, limit,
         )
-    return [dict(r) for r in rows]
+    return [{**dict(r), "board_state": __import__("task_board").state(r)} for r in rows]
 
 
 @app.get("/v1/tasks/{task_id}", dependencies=[Depends(require_key)])
@@ -3143,15 +3184,16 @@ async def get_task(task_id: uuid.UUID, tenant_id: uuid.UUID) -> dict[str, Any]:
     async with pool().acquire() as conn:
         row = await conn.fetchrow(
             f"""
-            SELECT t.*, l.model, l.rung, l.cost_usd, l.latency_ms, l.feedback
+            SELECT t.*, l.model, l.rung, l.cost_usd, l.latency_ms, l.feedback,
+                   l.outcome AS receipt_outcome,l.feedback_note,l.feedback_by
             FROM (SELECT {TASK_COLUMNS} FROM tank.tasks WHERE id=$1 AND tenant_id=$2) t
-            LEFT JOIN tank.ledger l ON l.id = t.ledger_id
+            LEFT JOIN tank.ledger l ON l.id = t.ledger_id AND l.tenant_id=t.tenant_id
             """,
             task_id, tenant_id,
         )
     if row is None:
         raise HTTPException(status_code=404, detail="no such task for this tenant")
-    return dict(row)
+    return {**dict(row), "board_state": __import__("task_board").state(row)}
 
 
 
@@ -3512,7 +3554,7 @@ async def _run_one_skill(
     if caller == "base":
         await __import__("agent_skills").guard_base_run(__import__("sys").modules[__name__], pkg, body, ctx)
     request = RouteRequest(tenant_id=body.tenant_id, agent=caller or pkg.agent,
-                           task_type=pkg.task_type or pkg.id, skill=pkg.ref,
+                           task_type=pkg.task_type or pkg.id, skill=pkg.ref + ("#preview" if body.preview else ""),
                            messages=[Message(role="user", content=json.dumps(body.input))])
     try:
         receipt_policy = await load_policy(request.task_type, body.tenant_id)
@@ -3840,41 +3882,29 @@ async def zenas_proxy(path: str, request: Request) -> Response:
 
 @app.post("/v1/ledger/{ledger_id}/feedback", dependencies=[Depends(require_key)])
 async def ledger_feedback(ledger_id: uuid.UUID, body: Feedback) -> dict[str, Any]:
-    """A person's verdict on one answer. The tenant_id in the body must match the row,
-    so one tenant can never rate — or even discover — another tenant's calls."""
-    async with pool().acquire() as conn:
+    """Tenant-owned human feedback; wrong is the existing negative training verdict."""
+    verdict = "rejected" if body.feedback == "wrong" else body.feedback
+    async with pool().acquire() as conn, conn.transaction():
         updated = await conn.fetchval(
-            """
-            UPDATE tank.ledger
-            SET feedback=$3, feedback_note=$4, feedback_at=now(), feedback_by=$5
-            WHERE id=$1 AND tenant_id=$2 AND outcome='delivered'
-            RETURNING id
-            """,
-            ledger_id, body.tenant_id, body.feedback, body.note, body.by,
-        )
-    if updated is None:
-        raise HTTPException(status_code=404, detail="no delivered call with that id for this tenant")
-    # A verdict on a real answer is a golden case: accepted → "this is right", rejected → "never this".
-    async with pool().acquire() as conn:
+            """UPDATE tank.ledger SET feedback=$3,feedback_note=$4,feedback_at=now(),feedback_by=$5
+            WHERE id=$1 AND tenant_id=$2 AND
+              (outcome='delivered' OR (outcome='unverified' AND $3='rejected')) RETURNING id""",
+            ledger_id, body.tenant_id, verdict, body.note, body.by)
+        if updated is None:
+            raise HTTPException(404, "No answer with that id for this workspace.")
         await conn.execute(
-            """
-            INSERT INTO tank.evals (task_type, input, expected, tolerance, source, tenant_id, ledger_id, verdict, note)
-            SELECT t.task_type, t.messages, jsonb_build_object('text', t.content), 'semantic', 'tester_feedback',
-                   t.tenant_id, t.ledger_id, $2, $3
-            FROM tank.transcripts t WHERE t.ledger_id = $1
-            ON CONFLICT (ledger_id) WHERE ledger_id IS NOT NULL
-            DO UPDATE SET verdict = EXCLUDED.verdict, note = EXCLUDED.note
-            """,
-            ledger_id, body.feedback, body.note,
-        )
-    async with pool().acquire() as conn:
-        async with conn.transaction():
-            await __import__("training").collect_ledger(conn, body.tenant_id)
-            if body.feedback == "rejected":
-                await conn.execute("""DELETE FROM tank.route_cache c WHERE c.tenant_id=$1
-                    AND c.task_type=(SELECT task_type FROM tank.ledger WHERE tenant_id=$1 AND id=$2)""",
-                    body.tenant_id, ledger_id)
-    return {"ok": True, "ledger_id": str(ledger_id), "feedback": body.feedback}
+            """INSERT INTO tank.evals(task_type,input,expected,tolerance,source,tenant_id,ledger_id,verdict,note)
+            SELECT t.task_type,t.messages,jsonb_build_object('text',t.content),'semantic','tester_feedback',
+                   t.tenant_id,t.ledger_id,$2,$3 FROM tank.transcripts t WHERE t.ledger_id=$1 AND t.tenant_id=$4
+            ON CONFLICT(ledger_id) WHERE ledger_id IS NOT NULL DO UPDATE
+              SET verdict=EXCLUDED.verdict,note=EXCLUDED.note WHERE tank.evals.tenant_id=EXCLUDED.tenant_id""",
+            ledger_id, verdict, body.note, body.tenant_id)
+        await __import__("training").collect_ledger(conn, body.tenant_id)
+        if verdict == "rejected":
+            await conn.execute("""DELETE FROM tank.route_cache c WHERE c.tenant_id=$1
+                AND c.task_type=(SELECT task_type FROM tank.ledger WHERE tenant_id=$1 AND id=$2)""",
+                body.tenant_id, ledger_id)
+    return {"ok": True, "ledger_id": str(ledger_id), "feedback": body.feedback, "verdict": verdict}
 
 
 @app.get("/v1/evals/summary", dependencies=[Depends(require_key)])
@@ -4789,9 +4819,11 @@ from memory_routes import router as memory_router
 app.include_router(memory_router)
 
 # B3: process committed model changes through the existing skill-eval handler.
+__import__("roster_validation").install(app, __import__("sys").modules[__name__])
+
 __import__("skala_revalidation").install(app, __import__("sys").modules[__name__])
 
-__import__("roster_validation").install(app, __import__("sys").modules[__name__])
+__import__("task_board").install(app, __import__("sys").modules[__name__])
 
 __import__("tenant_regions").install(app, __import__("sys").modules[__name__])
 

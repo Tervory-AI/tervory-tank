@@ -31,6 +31,13 @@ def runtime(monkeypatch):
     monkeypatch.setitem(sys.modules, 'main', runtime)
     monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
     monkeypatch.setenv('TANK_KEY_WORKERS', 'dummy-worker-key')
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def acquire():
+        yield SimpleNamespace(fetchval=AsyncMock(return_value='us-east'), fetch=AsyncMock(return_value=[]))
+
+    monkeypatch.setattr(command, 'db', lambda: SimpleNamespace(acquire=acquire))
     return runtime
 
 
@@ -40,7 +47,7 @@ async def test_identity_roles_and_region(runtime, monkeypatch):
 
     @asynccontextmanager
     async def acquire():
-        yield SimpleNamespace(fetch=AsyncMock(return_value=[{'agent': 'tiger'}]))
+        yield SimpleNamespace(fetchval=AsyncMock(return_value='us-east'), fetch=AsyncMock(return_value=[{'agent': 'tiger'}]))
 
     monkeypatch.setattr(command, 'db', lambda: SimpleNamespace(acquire=acquire))
     headers = {'x-tank-key': runtime.TANK_API_KEY, 'x-tervory-tenant': str(TENANT),
@@ -172,6 +179,8 @@ async def command_pool():
             # Match Tank startup; this fixture mounts only the command router.
             from savings_defaults import initialize
             await initialize(conn)
+            for tenant in (TENANT, OTHER):
+                await conn.execute("INSERT INTO tank.tenants(tenant_id,home_region,onboarded_by) VALUES($1,'us-east','fixture') ON CONFLICT DO NOTHING", tenant)
         yield pool
     finally:
         if command._background:
@@ -815,6 +824,11 @@ def shared_router(monkeypatch):
     policy = {'model': 'fixture-auto', 'priority': 'standard', 'rung': 1, 'system_prompt': 'Policy prompt',
               'max_tokens_out': 32, 'cache_scope': 'tenant', 'candidate_model': None, 'shadow_rate': 0}
     conn = SimpleNamespace(execute=AsyncMock(), fetchval=AsyncMock(return_value=False), fetch=AsyncMock(return_value=[]))
+
+    async def fetch_value(sql, *args):
+        return 'us-east' if 'FROM tank.tenants' in sql else conn.fetchval.return_value
+
+    conn.fetchval.side_effect = fetch_value
 
     @asynccontextmanager
     async def acquire():

@@ -14,7 +14,7 @@ FIELDS = ('model', 'rung', 'system_prompt', 'max_tokens_out')
 
 async def prepare(tank, proposed=None, *, remove=False):
     """Persist the entire eval batch before returning pending; no paid work here."""
-    roster = await tank._roster_models()
+    roster = await tank._roster_models(all_deployments=True)
     with tenant_scope(None, administrative=True):
         async with tank.admin_pool().acquire() as conn, conn.transaction():
             await conn.execute('SELECT pg_advisory_xact_lock(73202104)')
@@ -22,6 +22,8 @@ async def prepare(tank, proposed=None, *, remove=False):
                 FROM tank.skills s LEFT JOIN tank.agent_skill_submissions a ON a.skill_id=s.id AND a.version=s.version
                 WHERE s.state='approved' AND s.present AND (a.region IS NULL OR a.region=$1)
                 ORDER BY s.id,s.version""", tank.box_region())
+            if skills and not roster:
+                raise HTTPException(503, 'The served model roster is unavailable')
             policies = [dict(r) for r in await conn.fetch('SELECT * FROM tank.policy ORDER BY task_type,tenant_id NULLS FIRST')]
             if proposed:
                 previous = next((p for p in policies if (p['task_type'], p.get('tenant_id')) ==
@@ -63,17 +65,31 @@ async def prepare(tank, proposed=None, *, remove=False):
                 count(*) FILTER(WHERE error IS NOT NULL) AS failed FROM tank.skill_revalidations
                 WHERE tenant_id=$1 AND preflight_hash=$2''', PLATFORM_TENANT, signature)
             if proposed is None:
-                await conn.execute('''INSERT INTO tank.roster_heads(tenant_id,region,fingerprint,roster_hash)
-                    VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,region) DO UPDATE SET fingerprint=EXCLUDED.fingerprint,roster_hash=EXCLUDED.roster_hash''',
+                await conn.execute('''INSERT INTO tank.roster_heads(tenant_id,region,fingerprint,roster_hash,unavailable)
+                    VALUES($1,$2,$3,$4,false) ON CONFLICT(tenant_id,region) DO UPDATE
+                    SET fingerprint=EXCLUDED.fingerprint,roster_hash=EXCLUDED.roster_hash,unavailable=false''',
                     PLATFORM_TENANT, tank.box_region(), signature, roster_hash)
             return {'fingerprint': signature, 'pending': result['pending'], 'failed': result['failed']}
 
 
 async def ensure(tank, proposed=None, *, remove=False):
-    result = await prepare(tank, proposed, remove=remove)
+    try:
+        result = await prepare(tank, proposed, remove=remove)
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            await mark_unavailable(tank)
+        raise
     if result['pending'] or result['failed']:
         raise HTTPException(409, {'code': 'models_validation_required', **result})
     return result
+
+
+async def mark_unavailable(tank):
+    with tenant_scope(None, administrative=True):
+        async with tank.admin_pool().acquire() as conn:
+            await conn.execute("""INSERT INTO tank.roster_heads(tenant_id,region,fingerprint,roster_hash,unavailable)
+                VALUES($1,$2,'unavailable','unavailable',true) ON CONFLICT(tenant_id,region)
+                DO UPDATE SET unavailable=true""", PLATFORM_TENANT, tank.box_region())
 
 
 def install(app, tank):
@@ -94,6 +110,7 @@ def install(app, tank):
             try:
                 await prepare(tank)
             except Exception as exc:  # noqa: BLE001 -- retain the previous barrier if the roster is unavailable
+                await mark_unavailable(tank)
                 log.warning('Roster observation: %s', type(exc).__name__)
             await asyncio.sleep(60)
 
@@ -102,7 +119,11 @@ def install(app, tank):
         nonlocal task
         with tenant_scope(None, administrative=True):
             # Establish the barrier before accepting any policy mutation.
-            await prepare(tank)
+            try:
+                await prepare(tank)
+            except Exception as exc:  # noqa: BLE001 -- keep free paths available, with policy writes held
+                await mark_unavailable(tank)
+                log.warning('Roster startup: %s', type(exc).__name__)
             task = asyncio.create_task(work())
 
     async def stop():

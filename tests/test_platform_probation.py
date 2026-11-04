@@ -15,10 +15,13 @@ async def test_requires_real_thirty_day_run_and_retains_rollback(boundary):  # n
             await conn.execute("""INSERT INTO tank.skills(id,version,agent,state,present,approved_at)
                 VALUES('base.probation',$1,'base',$2,true,$3)""", version, state, start)
         assert not (await skala_probation.evidence(conn, 'base.probation', '1.0.0', now=start+timedelta(days=90)))['allowed']
-        for stamp in (start+timedelta(days=5), start+timedelta(days=35)):
+        for index, stamp in enumerate((start+timedelta(days=5), start+timedelta(days=35))):
             await conn.execute("""INSERT INTO tank.ledger(tenant_id,agent,skill,task_type,rung,model,outcome,ts)
-                VALUES($1,'base','base.probation@2.0.0','fixture',3,'skill:base.probation@2.0.0','delivered',$2)""", PLATFORM_TENANT, stamp)
+                VALUES($1,'base',$3,'fixture',3,'skill:base.probation@2.0.0','delivered',$2)""", PLATFORM_TENANT, stamp, 'base.probation@2.0.0' if index == 0 else None)
         assert not (await skala_probation.evidence(conn, 'base.probation', '1.0.0', now=start+timedelta(days=34)))['allowed']
+        await conn.execute("""INSERT INTO tank.ledger(tenant_id,agent,skill,task_type,rung,model,outcome,ts)
+            VALUES($1,'base','base.probation@2.0.0#preview','fixture',3,'skill:base.probation@2.0.0','unverified',$2)""",
+            PLATFORM_TENANT, start+timedelta(days=34))
         assert (await skala_probation.evidence(conn, 'base.probation', '1.0.0', now=start+timedelta(days=35)))['allowed']
         await conn.execute("""INSERT INTO tank.ledger(tenant_id,agent,skill,task_type,rung,model,outcome,ts)
             VALUES($1,'base','base.probation@2.0.0','fixture',3,'skill:base.probation@2.0.0','failed',$2)""", PLATFORM_TENANT, start+timedelta(days=34))

@@ -28,7 +28,7 @@ def request(token=TOKEN, method='GET', path='/v1/command/tools', **headers):
 @pytest.fixture
 def runtime(monkeypatch):
     conn = SimpleNamespace(fetchrow=AsyncMock(return_value={'token_id': uuid.uuid4(), 'user_id': 'client', 'stale': None}),
-                           execute=AsyncMock(),
+                           execute=AsyncMock(), fetchval=AsyncMock(return_value='us-east'),
                            fetch=AsyncMock(return_value=[{'agent': 'tiger'}]))
     @asynccontextmanager
     async def acquire():
@@ -110,3 +110,12 @@ def test_register_reuses_command_identity_without_global_service_key_override():
     app = FastAPI()
     pat.register(app)
     assert app.dependency_overrides == {command.identity: pat.identity}
+
+
+@pytest.mark.asyncio
+async def test_valid_token_refuses_a_different_recorded_tenant_home(runtime):
+    runtime.fetchval.return_value = 'za'
+    with pytest.raises(HTTPException) as error:
+        await pat.identity(request())
+    assert error.value.status_code == 403
+    runtime.execute.assert_not_awaited()

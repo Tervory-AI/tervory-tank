@@ -51,13 +51,16 @@ export async function zenas(path: string, init: RequestInit = {}): Promise<Respo
 /**
  * The Tank that owns a region. This server's own Tank for its own region.
  * The other region's Tank only through its public HTTPS address and its own
- * Workspace key (TANK_URL_ZA + TANK_API_KEY_ZA, or TANK_URL_US + TANK_API_KEY_US).
+ * credential. Metadata uses the existing homes/feeds key; content requires
+ * explicit TANK_CONTENT_API_KEY_ZA/US settings and never borrows a homes key.
  * Null when that region is not connected here.
  */
-export function regionTank(region: Region): { url: string; key: string } | null {
+export function regionTank(region: Region, purpose: "metadata" | "content" = "metadata"): { url: string; key: string } | null {
   if (region === homeRegion()) return { url: TANK_URL, key: TANK_API_KEY };
   const url = ((region === "za" ? process.env.TANK_URL_ZA : process.env.TANK_URL_US) ?? "").trim().replace(/\/+$/, "");
-  const key = ((region === "za" ? process.env.TANK_API_KEY_ZA : process.env.TANK_API_KEY_US) ?? "").trim();
+  const key = (purpose === "content"
+    ? (region === "za" ? process.env.TANK_CONTENT_API_KEY_ZA : process.env.TANK_CONTENT_API_KEY_US)
+    : (region === "za" ? process.env.TANK_API_KEY_ZA : process.env.TANK_API_KEY_US))?.trim() ?? "";
   if (!url || !key) return null;
   let parsed: URL;
   try {

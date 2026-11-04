@@ -36,7 +36,8 @@ async def evidence(conn: Any, skill_id: str, version: str, *, now: datetime | No
     # Preview/eval receipts cannot age a replacement into retirement eligibility.
     live = await conn.fetchrow("""SELECT min(ts) FILTER(WHERE outcome='delivered') AS first_run,
         max(ts) FILTER(WHERE outcome IS DISTINCT FROM 'delivered' OR feedback='rejected') AS failed_run
-        FROM tank.ledger WHERE skill=$1 AND ts >= $2 AND ts <= $3""",
+        FROM tank.ledger WHERE (skill=$1 OR (model='skill:'||$1 AND skill IS NULL))
+        AND ts >= $2 AND ts <= $3""",
         f"{skill_id}@{newer['version']}", newer["approved_at"], current)
     if live["first_run"] is None:
         return {"allowed": False, "code": "live_probation_required", "newer_version": newer["version"]}
@@ -44,7 +45,7 @@ async def evidence(conn: Any, skill_id: str, version: str, *, now: datetime | No
     allowed, eligible_at = clean_window(max(newer["approved_at"], live["first_run"]),
         max(failures) if failures else None, rollback_at, current)
     # A success after the complete clean interval proves the replacement is still running.
-    recent = await conn.fetchval("""SELECT EXISTS(SELECT 1 FROM tank.ledger WHERE skill=$1
+    recent = await conn.fetchval("""SELECT EXISTS(SELECT 1 FROM tank.ledger WHERE (skill=$1 OR (model='skill:'||$1 AND skill IS NULL))
         AND outcome='delivered' AND feedback IS DISTINCT FROM 'rejected' AND ts >= $2 AND ts <= $3)""",
         f"{skill_id}@{newer['version']}", eligible_at, current)
     return {"allowed": allowed and bool(recent) and not pending, "code": "retirement_probation",

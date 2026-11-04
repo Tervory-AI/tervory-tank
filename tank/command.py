@@ -91,6 +91,20 @@ async def identity(request: Request) -> Actor:
     return await signed_in_actor(request)
 
 
+@tenant_path("tenant")
+async def assert_tenant_home(tenant: uuid.UUID, conn=None):
+    from gold import PLATFORM_TENANT
+    from main import box_region
+    from tenant_regions import check_local
+    if tenant == PLATFORM_TENANT:
+        return box_region()
+    if conn is None:
+        async with db().acquire() as connection:
+            return await assert_tenant_home(tenant, connection)
+    region = await conn.fetchval('SELECT home_region FROM tank.tenants WHERE tenant_id=$1', tenant)
+    return check_local(region, box_region())
+
+
 async def signed_in_actor(request: Request) -> Actor:
     """The Clerk-derived user and tenant headers. Call only after the service key is checked."""
     from main import box_region
@@ -105,6 +119,7 @@ async def signed_in_actor(request: Request) -> Actor:
     home = request.headers.get("x-tervory-home-region", box_region())
     if home != box_region():
         raise HTTPException(403, "This conversation must stay on its home box")
+    await assert_tenant_home(tenant_id)
     admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
     return await authorized_actor(Actor(tenant_id, user, user in admins, tenant_admin=request.headers.get("x-tervory-role") == "org:admin"))
 

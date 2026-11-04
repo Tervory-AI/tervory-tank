@@ -14,7 +14,8 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
 process.env.TANK_URL = 'http://tank.offline.invalid';
 process.env.TANK_API_KEY = 'offline-us';
 process.env.TANK_URL_ZA = 'https://za.offline.invalid';
-process.env.TANK_API_KEY_ZA = 'offline-za';
+process.env.TANK_API_KEY_ZA = 'offline-homes';
+process.env.TANK_CONTENT_API_KEY_ZA = 'offline-za';
 const tenant = '11111111-1111-4111-8111-111111111111';
 const calls = [];
 let missing = false;
@@ -25,6 +26,11 @@ global.fetch = async (target, init) => {
     assert.equal(new Headers(init.headers).get('x-tank-key'), 'offline-us');
     assert.equal(init.body, undefined); // No content leaves before routing authority is known.
     return missing ? new Response('', {status: 409}) : Response.json({home_region: 'za'});
+  }
+  if (new Headers(init.headers).has('authorization') || url.pathname.startsWith('/v1/command/device/')) {
+    assert.equal(url.origin, process.env.TANK_URL);
+    assert.equal(new Headers(init.headers).get('x-tank-key'),null);
+    return new Response('',{status:401});
   }
   assert.equal(url.origin, process.env.TANK_URL_ZA);
   assert.equal(new Headers(init.headers).get('x-tank-key'), 'offline-za');
@@ -37,11 +43,24 @@ global.fetch = async (target, init) => {
     body:JSON.stringify({tenant_id:tenant, home_region:'us-east', messages:[{content:'private input'}]})});
   assert.equal(calls.length, 2);
   assert.equal(calls[0].url.pathname, '/v1/tenants/'+tenant);
+  delete process.env.TANK_CONTENT_API_KEY_ZA;
+  await assert.rejects(() => tank.tenantFetch(process.env.TANK_URL+'/v1/route', {
+    method:'POST',body:JSON.stringify({tenant_id:tenant}),
+  }));
+  assert.equal(calls.length, 3); // A homes key cannot be reused for content.
+  process.env.TANK_CONTENT_API_KEY_ZA = 'offline-za';
   missing = true;
   await assert.rejects(() => tank.tenantFetch(process.env.TANK_URL+'/v1/route', {method:'POST', body:JSON.stringify({tenant_id:tenant})}));
-  assert.equal(calls.length, 3); // No content request after failed authority lookup.
+  assert.equal(calls.length, 4); // No content request after failed authority lookup.
   await assert.rejects(() => tank.tenantFetch(process.env.TANK_URL+'/v1/route?tenant_id=other', {
     method:'POST', body:JSON.stringify({tenant_id:tenant})}));
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
+  await tank.tenantFetch(process.env.TANK_URL+'/v1/command/threads', {
+    method:'POST',headers:{authorization:'Bearer offline-token'},body:JSON.stringify({tenant_id:tenant,home_region:'za'}),
+  });
+  await tank.tenantFetch(process.env.TANK_URL+'/v1/command/device/code', {
+    method:'POST',body:JSON.stringify({tenant_id:tenant}),
+  });
+  assert.equal(calls.length, 6); // Caller fields cannot redirect opaque token/device corridors.
   console.log('PASS: recorded ZA home, ZA key, authority-only lookup, missing-home refusal and mixed-tenant refusal.');
 })().catch(error => { console.error(error); process.exitCode=1; });

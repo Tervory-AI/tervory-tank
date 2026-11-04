@@ -57,3 +57,46 @@ A8 validation: 4 tests passed in 177.18s on this host: cheapest versus first win
 Both LiteLLM router configurations explicitly select simple-shuffle, so multiple deployments under one approved model_name are balanced by LiteLLM. No alias, provider, key, fallback or replica was added. Both model lists exactly match base 55b2e224; currently neither file has replicated aliases, so no multi-deployment production traffic was claimed. Runtime-only change: commit 8360d7a6, PR #645, pushed before the standing no-PR rule. It redeploys the main stack and tervory-tank-za and must land before this dependent backend.
 
 Verification: both YAML files parse, strategy is explicit and model_list is unchanged. The routing contract is documented in the official LiteLLM routing guide: https://docs.litellm.ai/docs/routing . No provider calls were made.
+
+## C3/C6: task board and feedback backend
+
+GET /v1/task-board returns receipt-derived status values: queued, running, delivered, unverified or failed. Existing /v1/tasks CRUD retains its execution status for compatibility and adds board_state plus receipt outcome/feedback metadata. A completed task without an owning delivered receipt is unverified. A wrong verdict, an uncertain receipt, or a failed task with a sent/delivered receipt also remains unverified. Ledger joins and every task mutation include the owning tenant.
+
+POST /v1/tasks/{id}/feedback accepts accepted or wrong. Wrong requires a nonblank note (at most 1000 characters). Actor/tenant come from the existing authenticated Workspace headers; body overrides have no authority. Wrong maps to the existing rejected training verdict. Feedback, the tenant transcript's eval verdict, training collection and cache invalidation commit together. An unverified answer may be marked wrong, but cannot be turned into a delivered answer by an accepted verdict. Workspace has server-only /api/task-board and /api/tasks/{id}/feedback proxies; no screens were invented.
+
+Tasks accept deadline/priority, run unattended eligible work through the scheduler, remain queued while waiting, and finish only with the durable job. Job/receipt/task completion is transactional. This also fixes treating QueuedResponse as a completed answer.
+
+Validation: real SQL covers delivered/unverified states, wrong+note validation, a foreign task and foreign receipt reference, atomic feedback rollback, and deferred task completion. The offline Node proxy proof checks forged identity fields, required note, recorded-home selection and the correct regional key. TypeScript noEmit passed.
+
+B3/A22 follow-up: validation observes every deployment, including replica replacement, while ordinary model pickers still see one alias. Only a hash of deployment identity/endpoint metadata is retained; provider keys never enter that snapshot. An unavailable served roster holds changes. A durable eval-start claim turns an interrupted preflight into failed proof without replaying possibly charged cases.
+
+B4 follow-up: live policy-selected code receipts also count when their skill column is absent but model names the exact version. Preview receipts are explicitly marked #preview and excluded.
+
+## Missing frames
+
+- Task board with delivered/unverified states and receipt detail.
+- Wrong-answer feedback sheet with required note, validation and saved/error states.
+- Founder report preview/status and SMTP configuration help.
+- Roster-validation pending/failed state and evidence detail.
+- Founder Tank onboarding, unavailable-region state and immutable-home conflict.
+- Deadline input, scheduled start/price explanation and expiry state.
+
+## Reproducing the focused checks
+
+Use disposable PostgreSQL via POOL_SCHEMA_DATABASE_URL (never a deployed database), PYTHONPATH=tank:agents/_chassis and Python 3.12. Run the six tests/test_platform_*.py modules serially with pytest -q --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1. They stub SMTP, repository reads and provider boundaries. The cloud harness creates a private localhost cluster, strips provider credentials from the environment and cleans it up; later runs set synchronous_commit=off and fsync=off only in that disposable cluster to avoid host disk waits. These checks prove SQL behavior and dispatch ownership, not power-loss durability.
+
+Affected Workspace/region contracts: test_tenant_registration_workspace.py, test_command_1b_workspace.py, test_homes_region.py and test_za_region.py: 41 passed in 20.39s. Their existing fixture tenants are explicitly onboarded to their test box; the new region tests exercise missing, conflicting and foreign authority. Registry lookups use the same hard deadline as content requests and preserve existing transport header types. No live mail or paid provider was contacted.
+
+Before every subsequent push, CI's exact lint is required:
+
+    ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+
+Full suite is CI's record; no parallel offline suite or 50-run loop was run for this wave.
+
+
+Final connection boundary: TANK_API_KEY_ZA retains its existing homes/feeds scope. Foreign tenant content and mirrored Tank onboarding use opt-in TANK_CONTENT_API_KEY_ZA/US settings, reusing an already-approved destination Workspace key only when the founder enables that connection in Coolify. Empty content credentials refuse the route before sending tenant content. The runtime-only follow-up is in #645; no key was generated or copied by the builder. PAT, MCP/OAuth and device corridors retain their fixed token host; untrusted body fields never choose their region. Both Workspace and bearer identities check their tenant's recorded home before Command tools can execute.
+
+The combined Wave 4 plus legacy lifecycle checks passed 40 tests in 300.73s; Command, personal-token and recorded-home checks passed 97 tests in 50.67s. Legacy committed-swap tests now set up legacy SQL swaps directly; the Wave 4 API tests require preflight. Retirement fixtures include actual live deliveries. An unavailable live roster holds policy writes and eval dispatch while free paths remain available; validation bypasses the model-picker cache and file fallback.
+
+
+Final transport checks passed serially: recorded-home routing (including no homes-key fallback and opaque token/device host preservation), task feedback, founder memory, tenant bus, Base workflow, Trigger CRM and squad UI contracts; TypeScript noEmit passed. The runtime prerequisite head is 4f611af5 on codex/platform-wave4-runtime (#645), including only setting names and explicit replica balancing. Backend uses those settings only after that config is deployed. No new PR was opened after the standing instruction.

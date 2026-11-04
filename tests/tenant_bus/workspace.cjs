@@ -28,6 +28,9 @@ process.env.TERVORY_ADMIN_USER_IDS = 'founder';
 const calls = [];
 let fail = false;
 global.fetch = async (target, init) => {
+  const registryResponse = require('../platform/registry_fixture.cjs')(target);
+  if (registryResponse) return registryResponse;
+
   const url = new URL(target);
   assert.equal(url.origin, 'http://tank.offline.invalid');
   calls.push({url, ...init});

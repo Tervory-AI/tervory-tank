@@ -1,4 +1,4 @@
-"""Offline B3/B4 contracts; real disposable Postgres, stubbed model transport."""
+"""Legacy committed-swap queue and rollback contracts; Wave 4 API preflight lives in test_platform_roster.py."""
 from __future__ import annotations
 
 import asyncio
@@ -64,7 +64,7 @@ async def env(monkeypatch):
     async with db.acquire() as conn:
         await conn.execute((ROOT / "tank/schema.sql").read_text())
         await conn.execute((ROOT / "tank/schema.sql").read_text())
-        await conn.execute("TRUNCATE tank.skill_revalidations,tank.skill_evals,tank.skill_approvals,tank.agent_skill_submissions,tank.skills CASCADE")
+        await conn.execute("TRUNCATE tank.roster_heads,tank.roster_checks,tank.skill_revalidations,tank.skill_evals,tank.skill_approvals,tank.agent_skill_submissions,tank.skills CASCADE")
         await conn.execute("DELETE FROM tank.policy WHERE task_type LIKE $1", "test.b3.%")
         await conn.execute("DELETE FROM tank.ledger WHERE tenant_id=$1 AND task_type LIKE $2", PLATFORM_TENANT, "test.b3.%")
     monkeypatch.setattr(tank, "_pool", db)
@@ -96,7 +96,19 @@ async def seed(env, pkg, state="approved", approved_at=START):
 
 
 async def policy(env, model="luna", task=TASK, tenant=None):
-    return await env.tank.put_policy(task, env.tank.PolicyRow(task_type=task, model=model, tenant_id=tenant))
+    # Simulate already-committed legacy database swaps. Runtime API mutations
+    # now require the preflight proven by test_platform_roster.py.
+    await env.db.execute("""INSERT INTO tank.policy(task_type,tenant_id,model,rung,max_tokens_out)
+        VALUES($1,$2,$3,$4,1024)
+        ON CONFLICT(task_type,COALESCE(tenant_id,'00000000-0000-0000-0000-000000000000'::uuid))
+        DO UPDATE SET model=EXCLUDED.model,rung=EXCLUDED.rung,updated_at=now()""",
+        task, tenant, model, 3 if model.startswith('skill:') else 1)
+
+
+async def live(env, pkg, days):
+    await env.db.execute("""INSERT INTO tank.ledger(tenant_id,agent,skill,task_type,rung,model,outcome,ts)
+        VALUES($1,$2,$3,$4,1,'offline','delivered',$5)""", PLATFORM_TENANT, pkg.agent, pkg.ref,
+        pkg.task_type or pkg.id, START + timedelta(days=days))
 
 
 async def jobs(env):
@@ -210,7 +222,7 @@ async def test_graduation_to_code_calls_no_model(env, tmp_path):
     await seed(env, package(tmp_path))
     code = package(tmp_path, name="base.code", task=None, code=True)
     await seed(env, code)
-    await env.tank.put_policy(TASK, env.tank.PolicyRow(task_type=TASK, model="skill:base.code@1.0.0", rung=3))
+    await policy(env, "skill:base.code@1.0.0")
     assert await skala_revalidation.drain(env.tank) == 1
     assert env.calls == []
     row = await env.db.fetchrow("SELECT * FROM tank.skills WHERE id=$1 AND version=$2", "base.b3", "1.0.0")
@@ -239,6 +251,8 @@ async def test_retire_day_29_refused_day_30_allowed_files_kept_and_rollback_work
     newer = package(tmp_path, version="2.0.0")
     await seed(env, old, "staging", START - timedelta(days=1))
     await seed(env, newer, "approved", START)
+    await live(env, newer, 0)
+    await live(env, newer, 30)
     source = (old.path / "run.py").read_bytes()
     with pytest.raises(HTTPException) as error:
         await skala.retire_version(env.db, old.id, old.version, "founder", now=START + timedelta(days=29))
@@ -274,6 +288,8 @@ async def test_pending_revalidation_blocks_retirement_even_after_30_days(env, tm
     newer = package(tmp_path, version="2.0.0")
     await seed(env, old, "staging")
     await seed(env, newer)
+    await live(env, newer, 0)
+    await live(env, newer, 60)
     await policy(env, "sol")
     with pytest.raises(HTTPException) as error:
         await skala.retire_version(env.db, old.id, old.version, "founder", now=START + timedelta(days=60))
@@ -317,6 +333,8 @@ async def test_database_probation_uses_failure_and_rollback_history(env, tmp_pat
     old, newer = package(tmp_path), package(tmp_path, version="2.0.0")
     await seed(env, old, "staging")
     await seed(env, newer)
+    await live(env, newer, 0)
+    await live(env, newer, 45)
     at = START + timedelta(days=15)
     if event == "failed_eval":
         await env.db.execute("INSERT INTO tank.skill_evals(skill_id,version,score,passed,total,ran_at,details) VALUES($1,$2,.8,4,5,$3,'[]'::jsonb)", newer.id, newer.version, at)

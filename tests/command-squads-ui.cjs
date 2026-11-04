@@ -31,6 +31,9 @@ Module._load = function(name,parent,isMain) {
 };
 for(const ext of ['.ts','.tsx'])require.extensions[ext]=(module,filename)=>module._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true,target:ts.ScriptTarget.ES2022}}).outputText,filename);
 global.fetch = async(url,options)=>{
+  const registryResponse = require('./platform/registry_fixture.cjs')(url);
+  if (registryResponse) return registryResponse;
+
   calls.push({url,options});
   assert.equal(options.headers['X-Tervory-Tenant'],tenant);
   assert.equal(options.headers['X-Tervory-User'],'founder-fixture');

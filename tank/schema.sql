@@ -2942,6 +2942,7 @@ CREATE TABLE IF NOT EXISTS tank.roster_heads (
     roster_hash text NOT NULL,
     PRIMARY KEY(tenant_id,region)
 );
+ALTER TABLE tank.roster_heads ADD COLUMN IF NOT EXISTS unavailable boolean NOT NULL DEFAULT false;
 ALTER TABLE tank.skill_revalidations ADD COLUMN IF NOT EXISTS preflight_hash text;
 CREATE UNIQUE INDEX IF NOT EXISTS skill_preflight_once ON tank.skill_revalidations
     (tenant_id,preflight_hash,skill_id,version,COALESCE(policy_tenant_id,'00000000-0000-0000-0000-000000000000'::uuid))
@@ -2953,6 +2954,10 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,tank AS $$ BEGIN
     IF current_setting('tank.schema_apply',true)='on' THEN
         IF TG_OP='DELETE' THEN RETURN OLD; END IF;
         RETURN NEW;
+    END IF;
+    IF EXISTS(SELECT 1 FROM tank.roster_heads WHERE
+        tenant_id='00000000-0000-0000-0000-000000000001'::uuid AND unavailable) THEN
+        RAISE EXCEPTION 'models_validation_required' USING ERRCODE='P0409';
     END IF;
     IF EXISTS(SELECT 1 FROM tank.roster_heads h JOIN tank.skill_revalidations r
         ON r.tenant_id=h.tenant_id AND r.preflight_hash=h.fingerprint
@@ -3030,3 +3035,6 @@ ALTER TABLE tank.offpeak_jobs ADD COLUMN IF NOT EXISTS deadline_at timestamptz;
 ALTER TABLE tank.offpeak_jobs ADD COLUMN IF NOT EXISTS not_before timestamptz;
 ALTER TABLE tank.offpeak_jobs ADD COLUMN IF NOT EXISTS dispatch_mode text CHECK(dispatch_mode IN ('batch','direct'));
 ALTER TABLE tank.offpeak_jobs ADD COLUMN IF NOT EXISTS scheduled_multiplier double precision;
+
+-- A31: never replay a possibly charged preflight after an interrupted worker.
+ALTER TABLE tank.skill_revalidations ADD COLUMN IF NOT EXISTS started_at timestamptz;
