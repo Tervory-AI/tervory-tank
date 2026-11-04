@@ -1,0 +1,71 @@
+ML5 verification, source head 6ba77b7a; no outside network, providers or live data.
+Working directory: /workspace/codex-market-lab-w3
+
+Setup:
+git status --short (clean before reset)
+git fetch origin main && git checkout -B codex/market-lab-w3 origin/main && git config user.name Codex && git config user.email codex@users.noreply.github.com && mkdir -p .tmp
+Result: exit 0; base f0072e8e. No main merge.
+python3.12 -m pytest --version
+Result: no pytest installed; no tests ran.
+TMPDIR=/workspace/codex-market-lab-w3/.tmp python3.12 -m venv .venv
+TMPDIR=/workspace/codex-market-lab-w3/.tmp .venv/bin/pip install -r tank/requirements.txt -r tank/requirements-dev.txt
+Result: exit 0; existing repository pins, no dependency changes or model weights.
+
+$ TMPDIR=/workspace/codex-market-lab-w3/.tmp PYTHONPATH=tank .venv/bin/python -m pytest -q tests/test_market_lab_ml5.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --timeout=120
+Result: exit 0
+......                                                                   [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-w3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-w3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-w3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+6 passed, 3 warnings in 5.76s
+
+$ TMPDIR=/workspace/codex-market-lab-w3/.tmp PYTHONPATH=tank .venv/bin/python -m pytest -q tests/test_market_lab*.py tests/test_feeds*.py tests/market_lab_feeds/test_official_feeds.py tests/market_lab_keyless_feeds/test_keyless.py tests/market_lab_keyless_feeds/test_subscriptions.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --timeout=120
+Result: exit 0
+...................................s.....................s.............. [ 24%]
+.....................................s.........s...............s........ [ 48%]
+.........................................................s.............. [ 72%]
+........................................................................ [ 96%]
+.........s                                                               [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-w3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "ScaffoldPage" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-w3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "copy" in "TisanBuildArgs" shadows an attribute in parent "Body"
+    warnings.warn(
+
+.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192
+  /workspace/codex-market-lab-w3/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+291 passed, 7 skipped, 3 warnings in 52.38s
+
+$ TMPDIR=/workspace/codex-market-lab-w3/.tmp PYTHONPATH=tank .venv/bin/python -m pytest -q tests/market_lab_gpt_researcher tests/test_autumbra_market_lab_intel.py tests/test_access1_feeds.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1 --timeout=120
+Result: exit 0
+.......                                                                  [100%]
+7 passed, 1 skipped in 0.83s
+
+$ .venv/bin/ruff check --select E9,F tank/command.py tank/market_lab_ml3.py agents/market_lab/core/ml3.py agents/market_lab/core/predictions.py tests/test_market_lab_ml5.py
+Result: exit 0; All checks passed!
+
+$ git diff --check f0072e8e
+Result: exit 0; no output.
+
+Each finished file was committed and pushed serially using:
+git add <file> && git commit -m <message> && git push origin codex/market-lab-w3
+First push used git push -u origin codex/market-lab-w3. All pushes succeeded.
+
+No test containers were started. Database-backed ML3/ML5 tests use pgserver under the assigned TMPDIR. Optional service/database checks retain their existing skips. No founder browser screenshots or live acceptance are claimed. CI Tank/Workspace results for the final head are pending Claude opening the PR.

@@ -10,6 +10,7 @@
 # corridor services (matched by compose service name):
 #   agent-base, base-brain and base-browser-gateway on tervory-gw-base;
 #   tiger-brain and tiger-browser-gateway on tervory-gw-tiger;
+#   zenas-brain on this box's tervory-gw-zenas;
 #   agent-rig, rig-brain and rig-browser-gateway on tervory-gw-rig;
 #   egress-proxy on egress (compose names it <project>_egress).
 # Trigger and Radix passive-egress use the exact compose attachments below;
@@ -48,6 +49,7 @@ declare -A CORRIDOR=(
   [base-browser-gateway]="tervory-gw-base"
   [tiger-browser-gateway]="tervory-gw-tiger"
   [tiger-brain]="tervory-gw-tiger"
+  [zenas-brain]="tervory-gw-zenas"
   [agent-rig]="tervory-gw-rig"
   [rig-brain]="tervory-gw-rig"
   [rig-browser-gateway]="tervory-gw-rig"
@@ -193,10 +195,13 @@ for id in $ids; do
     agent-rig) expected_nets="tervory-gw-rig 59f8cnpelzwsyte1atyjc4fv" ;;
     rig-brain) expected_nets="tervory-gw-rig ${project}_sandbox ${project}_forge-control" ;;
     tiger-brain) expected_nets="tervory-gw-tiger ${project}_sandbox" ;;
+    agent-zenas) expected_nets="tervory-gw-zenas" ;;
+    zenas-brain) expected_nets="tervory-gw-zenas ${project}_sandbox" ;;
     rig-forge) expected_nets="${project}_forge-control ${project}_forge-egress" ;;
     rig-forge-egress) expected_nets="${project}_forge-egress ${project}_forge-outbound" ;;
     rig-sandbox) expected_nets="${project}_sandbox" ;;
     tiger-sandbox) expected_nets="${project}_sandbox" ;;
+    zenas-sandbox) expected_nets="${project}_sandbox" ;;
     rig-browser) expected_nets="${project}_browser" ;;
     rig-browser-gateway) expected_nets="tervory-gw-rig ${project}_browser" ;;
   esac
@@ -217,6 +222,8 @@ for id in $ids; do
            [[ "$service" == "figma-egress-proxy" && "$net" == "${project}_egress" ]]; then
         continue
       elif [[ "$service" == "tiger-brain" && "$net" == "tervory-gw-tiger" ]]; then
+        continue
+      elif [[ ( "$service" == "agent-zenas" || "$service" == "zenas-brain" ) && "$net" == "tervory-gw-zenas" ]]; then
         continue
       elif [[ "$service" != "agent-rig" && "$net" != "tervory-gw-rig" && !( "$service" == "rig-forge-egress" && "$net" == "${project}_forge-outbound" ) ]]; then
         internal_flag "$net"
@@ -286,6 +293,9 @@ for uuid in "${ROOMS[@]}"; do
   required_services=""
   if [[ "$room" == "agent-tiger" && ( -n "${APP_SERVICES[$uuid/tiger-brain]+set}" || -n "${APP_SERVICES[$uuid/tiger-sandbox]+set}" ) ]]; then
     required_services="tiger-brain tiger-sandbox"
+  fi
+  if [[ ( "$room" == "agent-zenas" || "$room" == "agent-zenas-za" ) && ( -n "${APP_SERVICES[$uuid/zenas-brain]+set}" || -n "${APP_SERVICES[$uuid/zenas-sandbox]+set}" ) ]]; then
+    required_services="zenas-brain zenas-sandbox"
   fi
   [[ "$room" == "agent-ghost" ]] && required_services="agent-ghost ghost-browser"
   if [[ "$room" == "autumbra-enforce" || -n "${APP_SERVICES[$uuid/enforce]+set}" ]]; then

@@ -1,0 +1,22 @@
+$ tervory login --region us-east
+Approve this device in your browser (placeholder-worker, us-east):
+  https://app.tervory.com/cli/device?code=BCDF-GHJK&region=us-east
+Confirm the page shows code BCDF-GHJK.
+Signed in on us-east. Credential saved in the OS keychain; it refreshes automatically.
+$ tervory run plugins list
+Thread placeholder-thread
+plugins.list
+Confirm [y/N] y
+[done] Tank: plugins.list
+$ tervory run plugins install --args '{"name":"github","version":"1.0.0"}'
+Thread placeholder-thread
+plugins.install
+Confirm [y/N] y
+[done] Tank: plugins.install
+$ tervory run plugins remove --args '{"name":"github","version":"1.0.0"}'
+Thread placeholder-thread
+plugins.remove
+Confirm [y/N] y
+[done] Tank: plugins.remove
+$ tervory logout
+Signed out. The credential is revoked and removed from the OS keychain.
