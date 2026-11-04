@@ -16,13 +16,13 @@ const screen = process.env.W4_SCREEN || 'founder';
 const now = Date.UTC(2026,10,3,20);
 Date.now = ()=>now;
 process.env.TANK_URL='http://offline.invalid';
-process.env.TANK_API_KEY='offline-w4-key';
+process.env.TANK_API_KEY='placeholder-w4-key';
 process.env.TERVORY_ADMIN_USER_IDS='placeholder-founder';
 const calls=[];
 global.fetch=async(url,init={})=>{
   const target=new URL(url);assert.equal(target.hostname,'offline.invalid','No live network');
   const key=target.pathname+target.search;calls.push(key);
-  assert.equal(new Headers(init.headers).get('x-tank-key'),'offline-w4-key');
+  assert.equal(new Headers(init.headers).get('x-tank-key'),'placeholder-w4-key');
   assert(routes[key],`No production-route response for ${key}`);
   return Response.json(routes[key]);
 };
@@ -33,7 +33,7 @@ class StripeRows {
     this.subscriptions={list:async function*(){for(const i of [0,1])yield {id:`placeholder-sub-${i}`,customer:`placeholder-customer-${i}`,livemode:true,status:'active',start_date:Math.floor((now-86400000)/1000),items:{data:[{quantity:1,price:{unit_amount:1200}}]},latest_invoice:{id:`placeholder-invoice-${i}`,livemode:true,status:'paid',amount_paid:1200,currency:'usd'}}}};
   }
 }
-process.env.STRIPE_SECRET_KEY='offline-provider-double';
+process.env.STRIPE_SECRET_KEY='placeholder-provider-double';
 const load=Module._load;
 Module._load=function(name,parent,main){
   if(name==='server-only')return {};

@@ -76,3 +76,9 @@ Passed: both route-to-screen checks, both screens at both widths, F06 browser re
 Reproduced savings-page's exact `What you saved` visibility timeout (10,000ms). This was caused by two stale harness assumptions introduced by the dashboard change: the mocked dashboard payload omitted required `granted_squads`, and the browser never opened the now-collapsed report through the real “You saved” link. The fixture now supplies an empty grants list and both normal/tiny client cases assert the report is initially hidden, click its actual anchor, then run the unchanged report assertions. No savings production component or timeout threshold changed.
 
 The complete savings browser check passed locally in **6.27 seconds**, covering client/founder 1440/375, charts, tiny values, private drawers, pagination, exports, tenant selection, baseline re-pricing and refreshes. This measures the offline harness, not production response time. Also removed unused `asyncio` and `admin` imports. CI's exact lint command passed: `ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"`.
+
+### CI fixture follow-up at bab80f1e
+
+Both renderer dummy credential strings now explicitly contain `placeholder`; the route fixture uses the same dummy Tank key. The command page-boundary fixture now supplies the actual dashboard contract (`granted_squads` and monthly savings) while every existing command assertion stays unchanged. Full BF1 TAP output showed customer/founder authorization passing; only its last shell-boundary subtest failed because `/` now owns its approved dashboard navigation. Updated that route classification without changing access decisions or the remaining shared-route assertions.
+
+Validation: all three requested pytest files passed (10 tests, 17.46 seconds); CI’s exact Ruff command passed. Both offline route-to-screen renders also passed with the renamed dummy key.

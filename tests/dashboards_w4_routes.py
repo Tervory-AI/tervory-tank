@@ -15,7 +15,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tank"))
-os.environ["TANK_API_KEY"] = "offline-w4-key"
+os.environ["TANK_API_KEY"] = "placeholder-w4-key"
 os.environ["TERVORY_ADMIN_USER_IDS"] = "placeholder-founder"
 from fastapi import FastAPI, Header, Depends
 from fastapi.testclient import TestClient
@@ -135,7 +135,7 @@ app.include_router(gold.router)
 app.include_router(workers_status.founder_router)
 app.include_router(proof.client_router)
 app.get("/v1/graduation", dependencies=[Depends(dashboards.workspace_only)])(scope["graduation"])
-headers = {"x-tank-key": "offline-w4-key", "x-tervory-admin": "placeholder-founder",
+headers = {"x-tank-key": "placeholder-w4-key", "x-tervory-admin": "placeholder-founder",
            "x-tervory-user": "placeholder-founder", "x-tervory-tenant": str(gold.PLATFORM_TENANT), "x-tervory-role": "founder"}
 client = TestClient(app)
 assert client.get("/v1/dashboards/founder").status_code == 404
