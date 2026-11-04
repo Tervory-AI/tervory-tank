@@ -20,9 +20,22 @@ function activate(context) {
   const provider = {
     onDidChangeTreeData: changes.event,
     getTreeItem: item => item,
-    async getChildren() { return []; },
+    async getChildren() {
+      try {
+        return (await call('jobs')).map(row => {
+          const item = new vscode.TreeItem(row.repo);
+          item.description = row.status;
+          item.tooltip = row.job_id;
+          item.jobId = row.job_id;
+          item.contextValue = ['queued', 'running'].includes(row.status) ? 'tervoryAgent.running' : 'tervoryAgent.finished';
+          return item;
+        });
+      } catch { return []; }
+    },
   };
   context.subscriptions.push(vscode.window.registerTreeDataProvider('tervory.agents', provider), changes);
+  const refresh = setInterval(() => changes.fire(), 10000);
+  context.subscriptions.push({ dispose: () => clearInterval(refresh) });
   const register = (name, action) => context.subscriptions.push(vscode.commands.registerCommand(name, async (...args) => {
     try { await action(...args); changes.fire(); }
     catch (error) { vscode.window.showErrorMessage(error.message); }
