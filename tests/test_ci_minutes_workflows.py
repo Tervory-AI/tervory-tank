@@ -58,7 +58,7 @@ def test_no_workflow_uses_pull_request_target(path: Path) -> None:
 def test_ci_keeps_job_names_and_no_main_push_trigger() -> None:
     text = CI.read_text(encoding="utf-8")
     jobs = _load(CI)["jobs"]
-    assert set(jobs) == {"security", "changes", "runner", "tank", "workspace", "command-acceptance", "savings-page", "ci-ok"}
+    assert set(jobs) == {"security", "lint", "changes", "runner", "tank", "workspace", "command-acceptance", "savings-page", "ci-ok"}
     # ci-ok is the one check the merge queue requires: it waits for every other job.
     assert jobs["ci-ok"]["if"] == "always()"
     assert set(jobs["ci-ok"]["needs"]) == set(jobs) - {"runner", "ci-ok"}
@@ -474,3 +474,13 @@ def test_manual_ci_head_runs_full_suite_without_a_push_or_pr_base(monkeypatch):
     assert paths == ['unknown-change']
     scope = module.select(paths)
     assert scope['run'] and scope['full'] and scope['tests'] == ['.']
+
+
+def test_full_suite_runs_once_in_the_merge_queue_not_on_pull_requests() -> None:
+    """Founder, 3 Nov: a PR runs the fast checks; the merge queue runs the full suite once."""
+    jobs = _load(ROOT / ".github/workflows/ci.yml")["jobs"]
+    for name in ("tank", "workspace", "command-acceptance", "savings-page"):
+        assert "github.event_name != 'pull_request'" in jobs[name]["if"], name
+    for name in ("security", "lint", "changes"):
+        assert "event_name" not in str(jobs[name].get("if", "")), name
+    assert "ruff check tank tests --select E9,F" in str(jobs["lint"]["steps"])
