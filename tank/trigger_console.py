@@ -107,7 +107,7 @@ async def marketing(area: str, actor: Annotated[command.Actor, Depends(command.i
                 raise HTTPException(502, error.message) from None
         reviews = await pool.fetch('''SELECT location,review_id,rating,text,updated_at FROM tank.trigger_gbp_reviews
             WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 100''', tenant)
-        replies = await pool.fetch('''SELECT id,review_id,location,text,state,revision,report FROM tank.trigger_gbp_replies
+        replies = await pool.fetch('''SELECT id,review_id,location,text,state,revision,report,ledger_id,platform_error FROM tank.trigger_gbp_replies
             WHERE tenant_id=$1 ORDER BY id LIMIT 100''', tenant)
         result = {'reviews': [{**dict(r), 'id': str(uuid5(NAMESPACE_URL, r['location']+'/'+r['review_id']))} for r in reviews],
                   'replies': [{**dict(r), 'report': obj(r['report'])} for r in replies], 'voice': await bot().voice(tenant)}
