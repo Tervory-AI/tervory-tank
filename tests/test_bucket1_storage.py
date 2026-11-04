@@ -13,6 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'agents' / '_chassis'))
 sys.path.insert(0, str(ROOT / 'jobs' / 'train'))
+sys.path.insert(0, str(ROOT / 'tank' / 'training_jobs'))
 from chassis.storage import PLATFORM_TENANT, ROOMS, Storage, StorageError  # noqa: E402
 from chassis.storage_api import storage_router  # noqa: E402
 import r2_archive  # noqa: E402

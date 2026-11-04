@@ -1,0 +1,10 @@
+{
+  "main": "de113044",
+  "volumes": "  agent_tisan_data:\n\n",
+  "mounts": {
+    "agent-tisan": [
+      "agent_tisan_data:/data"
+    ],
+    "figma-egress-proxy": null
+  }
+}

@@ -243,7 +243,8 @@ def test_sources_and_jobs_and_webhook_isolated_surface(client):
         "/ghost/autumbra/webhooks/edge",
         content=body,
         headers={
-            "X-Autumbra-Signature": sig,
+            "X-Tank-Key": "test-tank-key",
+                "X-Autumbra-Signature": sig,
             "X-Autumbra-Timestamp": ts,
             "X-Autumbra-Nonce": nonce,
         },

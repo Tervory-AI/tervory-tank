@@ -55,11 +55,13 @@ def select_control(*, site: str, settings: ClientAutumbraSettings,
             return edge
         if not os.environ.get(TOKEN_ENV, "").strip():
             raise CloudflareEdgeError("Cloudflare request failed.")
+        probe_result = {}
         live = CloudflareEdgeControl(
             tenant_id=settings.tenant_id, site=site, transport=CloudflareProxyTransport(),
             token=os.environ[TOKEN_ENV], health_probe=lambda: read_health(site),
-            fresh_health_probe=lambda after: read_health(site, after=after, wait_seconds=60),
+            fresh_health_probe=lambda after: read_health(site, after=after, wait_seconds=30, result_out=probe_result),
         )
+        live.last_health_result = probe_result
         live.blocked.update(edge.blocked)
         return live
     configured = bool(os.environ.get(TOKEN_ENV, "").strip())
@@ -73,11 +75,13 @@ def select_control(*, site: str, settings: ClientAutumbraSettings,
         if edge.tenant_id != settings.tenant_id or edge.site != site:
             raise ValueError("Cloudflare control does not belong to this client and site.")
         return edge
+    probe_result = {}
     live = CloudflareEdgeControl(
         tenant_id=settings.tenant_id, site=site, transport=CloudflareProxyTransport(),
         token=os.environ[TOKEN_ENV], health_probe=lambda: read_health(site),
-        fresh_health_probe=lambda after: read_health(site, after=after, wait_seconds=60),
+        fresh_health_probe=lambda after: read_health(site, after=after, wait_seconds=30, result_out=probe_result),
     )
+    live.last_health_result = probe_result
     live.blocked.update(edge.blocked)
     return live
 
@@ -85,7 +89,14 @@ def select_control(*, site: str, settings: ClientAutumbraSettings,
 def _health_after_apply(edge: FixtureEdgeControl, row: dict | None = None) -> bool:
     from .cloudflare_edge import CloudflareEdgeControl
     if row is not None and isinstance(edge, CloudflareEdgeControl):
-        return edge.health_check(applied_after=row["applied_at"])
+        healthy = edge.health_check(applied_after=row["applied_at"])
+        from .site_health import _read_result
+        result = getattr(edge, "last_health_result", None)
+        if not result:
+            result = _read_result(edge.site)
+        if result is not None and result["checked_at"] > row["applied_at"]:
+            edge.last_health_result = result
+        return healthy
     return edge.health_check()
 
 
@@ -125,7 +136,6 @@ def apply_from_payload(
     settings: ClientAutumbraSettings,
     control: FixtureEdgeControl | None = None,
     source_credits: list[dict[str, str]] | None = None,
-    auto_undo_on_health_fail: bool = True,
     data_dir: Path | str | None = None,
 ) -> dict[str, Any]:
     """ThreatPayload only → never-block → client shield_mode → fixture apply."""
@@ -162,6 +172,9 @@ def apply_from_payload(
     edge = select_control(site=payload.site, settings=settings, control=control)
     name = control_name(edge)
     receipt["control"] = name
+    if name == "cloudflare":
+        edge.measurements = []
+        receipt["edge_requests"] = edge.measurements
 
     decision_seconds = time.perf_counter() - t0
     stamp_budget(receipt, stage="event_to_decision", seconds=decision_seconds)
@@ -237,13 +250,17 @@ def apply_from_payload(
     elif mode is ApplyMode.never:
         receipt["undo"] = {"rule_id": None, "control": name, "report_only": True}
     stamp_budget(receipt, stage="decision_to_shield", seconds=time.perf_counter() - t1)
+    if applied:
+        stamp_budget(receipt, stage="event_to_shield_e2e", seconds=time.perf_counter() - t0)
 
     t2 = time.perf_counter()
     healthy = _health_after_apply(edge, receipt.get("applied_record") if applied else None)
     stamp_budget(receipt, stage="health_check", seconds=time.perf_counter() - t2)
     receipt["health_ok"] = healthy
+    if getattr(edge, "last_health_result", None):
+        receipt["health_probe"] = dict(edge.last_health_result)
 
-    if applied and auto_undo_on_health_fail and not healthy:
+    if applied and not healthy:
         # Full event→undo window starts at apply begin for budget honesty.
         undone = undo_applied(receipt, control=edge, data_dir=data_dir)
         stamp_budget(undone, stage="auto_undo_e2e", seconds=time.perf_counter() - t0)
@@ -282,6 +299,8 @@ def undo_applied(
     name = control_name(edge)
     if undo.get("control", name) != name:
         raise LookupError("shield belongs to another control")
+    if name == "cloudflare":
+        edge.measurements = []
     stored = next((r for r in edge.list_blocked() if r.get("rule_id") == str(rule_id)), {})
     if stored.get("control", name) != name:
         raise LookupError("shield belongs to another control")
@@ -308,6 +327,8 @@ def undo_applied(
         "timestamp": utc_now(),
         "tenant_id": receipt.get("tenant_id"),
     }
+    if name == "cloudflare":
+        out["edge_requests"] = list(edge.measurements)
     stamp_budget(out, stage="auto_undo_e2e", seconds=time.perf_counter() - t0)
     return out
 
@@ -446,6 +467,8 @@ def approve_pending(
         why = classify_never_block(address, client_own_cidrs=settings.own_cidrs)
         if why:
             raise ValueError("pending address is on the never-block list")
+    if name == "cloudflare":
+        edge.measurements = []
     ref = f"approve-{rid.replace('-', '')[:16]}"
     t0 = time.perf_counter()
     try:
@@ -479,9 +502,15 @@ def approve_pending(
         **settings.receipt_stamp(),
     }
 
+    if name == "cloudflare":
+        receipt["edge_requests"] = list(edge.measurements)
+
+    stamp_budget(receipt, stage="event_to_shield_e2e", seconds=shield_seconds)
     stamp_budget(receipt, stage="decision_to_shield", seconds=shield_seconds)
     t_health = time.perf_counter()
     receipt["health_ok"] = _health_after_apply(edge, applied_row)
+    if getattr(edge, "last_health_result", None):
+        receipt["health_probe"] = dict(edge.last_health_result)
     stamp_budget(receipt, stage="health_check", seconds=time.perf_counter() - t_health)
     if not receipt["health_ok"]:
         receipt["auto_undo"] = undo_applied(receipt, control=edge, data_dir=data_dir)
