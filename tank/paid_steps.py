@@ -89,9 +89,11 @@ class ApprovalRequired(BaseException):
         super().__init__("Paid step requires tenant administrator approval")
 
 
-async def register(conn, step_id: str, owner: str, kind: str, source: str):
-    await conn.execute("""INSERT INTO tank.paid_steps(step_id,product,kind,source)
-        VALUES($1,$2,$3,$4) ON CONFLICT(step_id) DO NOTHING""", step_id, owner, kind, source)
+async def register(conn, step_id: str, owner: str, kind: str, source: str, *, task=None, model=None):
+    await conn.execute("""INSERT INTO tank.paid_steps(step_id,product,kind,source,task_type,model)
+        VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(step_id) DO UPDATE
+        SET task_type=coalesce(tank.paid_steps.task_type,EXCLUDED.task_type),
+            model=coalesce(tank.paid_steps.model,EXCLUDED.model)""", step_id, owner, kind, source, task, model)
 
 
 def free_model(info):
@@ -104,7 +106,7 @@ def free_model(info):
 async def sync_registry(conn, tenant_id):
     visible = {step[0] for step in VENDOR_STEPS}
     for step_id, owner, kind, source in VENDOR_STEPS:
-        await register(conn, step_id, owner, kind, source)
+        await register(conn, step_id, owner, kind, source, task=step_id.rsplit(".",1)[0])
     policies = await conn.fetch("SELECT * FROM tank.policy WHERE tenant_id IS NULL OR tenant_id=$1", tenant_id)
     # Configured chains are metadata only: reading them does not dispatch a model.
     from pathlib import Path
@@ -118,7 +120,7 @@ async def sync_registry(conn, tenant_id):
     async def seat(task, model):
         if model and model not in free and not model.startswith(("skill:", "cache:", "routellm:", "tool:")):
             step_id = model_step(task, model)
-            await register(conn, step_id, product(task), "model", "tank.policy")
+            await register(conn, step_id, product(task), "model", "tank.policy", task=task, model=model)
             visible.add(step_id)
     for row in policies:
         task = row["task_type"]
@@ -144,7 +146,7 @@ async def sync_registry(conn, tenant_id):
 
 
 async def admit(step_id: str, *, tenant_id: uuid.UUID, owner: str, kind: str, source: str,
-                task: str, paid: bool = True) -> dict | None:
+                task: str, paid: bool = True, model: str | None = None) -> dict | None:
     if not paid:
         return None
     from controls import refuse_paid
@@ -159,7 +161,7 @@ async def admit(step_id: str, *, tenant_id: uuid.UUID, owner: str, kind: str, so
         raise HTTPException(503, "Paid-step run context is unavailable")
     async with db().acquire() as conn:
         async with conn.transaction():
-            await register(conn, step_id, owner, kind, source)
+            await register(conn, step_id, owner, kind, source, task=task, model=model)
             await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", f"{tenant_id}:{run.run_id}:{step_id}")
             prior = await conn.fetchrow("""SELECT * FROM tank.paid_step_approvals
                 WHERE tenant_id=$1 AND run_id=$2 AND step_id=$3 FOR UPDATE""", tenant_id, run.run_id, step_id)
@@ -248,7 +250,7 @@ def build_router():
         admin(actor)
         async with db().acquire() as conn:
             visible = await sync_registry(conn, actor.tenant_id)
-            rows = await conn.fetch("""SELECT p.step_id,p.product,p.kind,p.source,coalesce(s.mode,'ask') AS mode
+            rows = await conn.fetch("""SELECT p.step_id,p.product,p.kind,p.source,p.task_type,p.model,coalesce(s.mode,'ask') AS mode
                 FROM tank.paid_steps p LEFT JOIN tank.paid_step_settings s
                 ON s.step_id=p.step_id AND s.tenant_id=$1 WHERE p.step_id=ANY($2::text[])
                 ORDER BY p.product,p.step_id""", actor.tenant_id, visible)
@@ -371,7 +373,7 @@ async def model_admission(tenant_id: uuid.UUID, task: str, model: str, *, agent:
     info = next((r.get("model_info", {}) for r in roster if r.get("model_name") == model), {})
     free = free_model(info)
     return await admit(model_step(task, model, agent=agent), tenant_id=tenant_id,
-                       owner=product(task, agent), kind="model", source="tank.policy", task=task, paid=not free)
+                       owner=product(task, agent), kind="model", source="tank.policy", task=task, paid=not free, model=model)
 
 
 async def http_admission(request):
@@ -405,9 +407,10 @@ async def sync_cards(thread_id, actor):
     if not any(cards.get(str(item["id"]), {}).get("status") != statuses[item["state"]] for item in pending):
         return
     async with command.editing(thread_id, actor) as (conn, row, state):
-        approvals = await conn.fetch("""SELECT id,step_id,state,authorization_mode,reason,continuation FROM tank.paid_step_approvals
-            WHERE tenant_id=$1 AND (delivery_thread_id=$2 OR (delivery_thread_id IS NULL AND state='pending'))
-            ORDER BY created_at LIMIT 100 FOR UPDATE SKIP LOCKED""", actor.tenant_id, thread_id)
+        approvals = await conn.fetch("""SELECT a.id,a.step_id,a.state,a.authorization_mode,a.reason,a.continuation,p.model,p.task_type
+            FROM tank.paid_step_approvals a JOIN tank.paid_steps p USING(step_id)
+            WHERE a.tenant_id=$1 AND (a.delivery_thread_id=$2 OR (a.delivery_thread_id IS NULL AND a.state='pending'))
+            ORDER BY a.created_at LIMIT 100 FOR UPDATE OF a SKIP LOCKED""", actor.tenant_id, thread_id)
         for approval in approvals:
             key = str(approval["id"])
             status = {"pending": "pending", "approved": "confirmed", "denied": "cancelled"}[approval["state"]]
@@ -416,7 +419,8 @@ async def sync_cards(thread_id, actor):
                 continue
             await conn.execute("""UPDATE tank.paid_step_approvals SET delivery_thread_id=$3
                 WHERE tenant_id=$1 AND id=$2 AND delivery_thread_id IS NULL""", actor.tenant_id, approval["id"], thread_id)
-            card = {"card_id": key, "kind": "paid_run", "summary": approval["step_id"],
+            card = {"card_id": key, "kind": "paid_run",
+                    "summary": f"{approval['task_type']} · {approval['model']}" if approval["model"] else approval["step_id"],
                     "tool": "paid_steps.approve", "arguments": {"step_id": approval["step_id"]},
                     "status": status, "result": {"authorization_mode": approval["authorization_mode"], "reason": approval["reason"]}}
             state["cards"][key] = card

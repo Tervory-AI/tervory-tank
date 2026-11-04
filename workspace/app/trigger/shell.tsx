@@ -7,8 +7,10 @@ import { NAV } from "./copy";
 
 export default function TriggerShell({
   children,
+  title = "Trigger",
 }: {
   children: React.ReactNode;
+  title?: string;
 }) {
   const [open, setOpen] = useState(false),
     path = usePathname();
@@ -55,7 +57,7 @@ export default function TriggerShell({
   return (
     <div className="trigger-console">
       <div className="trigger-mobile-bar">
-        <strong>Trigger</strong>
+        <strong>{title}</strong>
         <button
           ref={toggle}
           aria-label="Menu"
@@ -77,7 +79,7 @@ export default function TriggerShell({
         ref={menu}
         id="trigger-menu"
         className={`trigger-sidebar ${open ? "is-open" : ""}`}
-        aria-label="Trigger"
+        aria-label={title}
       >
         <div className="trigger-identity">
           <div className="trigger-logo-row">
@@ -111,7 +113,7 @@ export default function TriggerShell({
               }}
             />
           </div>
-          <span className="trigger-product">Trigger</span>
+          <span className="trigger-product">{title}</span>
         </div>
         <nav className="trigger-areas">
           {NAV.map(([title, links]) => (

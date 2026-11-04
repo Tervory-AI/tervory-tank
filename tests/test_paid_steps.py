@@ -502,6 +502,7 @@ async def exercise_model_router(router_database, monkeypatch, owner, *, fail_pri
             card = snapshot.json()['cards'][0]
             assert card['card_id'] == str(stopped.value.approval_id)
             assert card['kind'] == 'paid_run' and card['status'] == 'pending'
+            assert task_type in card['summary'] and 'placeholder-model' in card['summary']
             confirmed = await client.post('/v1/command/cards/'+card['card_id'],json={'action':'confirm','reason':'placeholder approved'})
             assert confirmed.status_code == 200 and confirmed.json()['status'] == 'confirmed'
     else:
@@ -652,6 +653,8 @@ async def test_registry_lists_configured_seats_defaults_and_tenant_boundaries(ro
         entries = {item['step_id']:item for item in result.json()['steps']}
         primary = p.model_step('tisan.placeholder_registry','placeholder-primary')
         assert entries[primary]['mode'] == 'ask'
+        assert entries[primary]['task_type'] == 'tisan.placeholder_registry'
+        assert entries[primary]['model'] == 'placeholder-primary'
         assert p.model_step('tisan.placeholder_registry','placeholder-fallback') in entries
         assert p.model_step('base.placeholder_private','placeholder-private-model') not in entries
         assert (await client.put('/v1/command/paid-steps/'+primary,json={'mode':'auto'})).status_code == 200

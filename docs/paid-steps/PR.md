@@ -52,3 +52,15 @@ Local regression repairs: the reader email matcher now bounds token lengths to a
 Current focused validation: 58 passed, 4 skipped (paid runtime, ten HTTP acceptance rows, settings transport and command cross-lane regressions); two direct Research-card continuation cases passed separately after their addition. Off-peak hold/dispatch and provider-batch receipt/tenant-isolation checks: 2 passed. Settings browser/transport at 375, 390 and 1440: 4 passed. Workspace typecheck passed.
 
 The broad precheck found a room-corridor protocol fixture missing explicit admission setup; its shared fixture now checks the real master stop before its fixture model dispatch. A separate room topology run hit the existing 30-second seal-check subprocess limit under host load; no seal-check behavior or timeout has been changed. Full precheck and CI status remain pending; no green full-suite result is claimed.
+
+## Gate 2: settings
+
+PR #685 landed while this task was running. `/settings/paid-steps` implements its desktop/mobile Ask/Auto layout with real tenant step records, not the sample inventory. Founder and tenant-admin authorization uses existing identity checks on both page and Tank API. The global pause retains its existing founder-only action. Each save changes only the selected step; partial errors never report a successful save. Empty/loading/error/paused/saved states use the frame text. The onboarding CSV retains only its previously approved prefix, removing the obsolete no-waits claim.
+
+`python -m pytest tests/test_paid_steps_settings.py -n 2 -q` — 4 passed; browser tests use the real React component, existing Next webpack and local fonts, intercept every HTTP request, and refuse every non-loopback host. Tested 375, 390 and 1440px without horizontal scroll, loading, empty, save/error, master pause and tenant-admin presentation. `workspace/node_modules/.bin/tsc --project workspace/tsconfig.json --noEmit` — passed. See [frame register and screenshots](FRAMES.md).
+
+## Gate 3: product testing sheets
+
+Ten product paid-rung rows (Base, Tiger, Market Lab, Rig, Tisan, Radix, Zenas, Trigger, Autumbra and Tank/model routing) have ten matching offline HTTP cases and a row/case guard. Each exercises Ask → existing confirmation card → approved receipt, idempotent replay, Auto → automatic receipt, and master pause → no paid dispatch. `python -m pytest tests/acceptance/test_paid_steps.py -n 2 -q` — 11 passed, also included in the 58-case focused run above.
+
+Final focused settings/runtime check: `PAID_STEPS_TEST_DATABASE_URL=<loopback throwaway Postgres> PYTHONPATH=tank:tests python -m pytest tests/test_paid_steps.py tests/test_paid_steps_settings.py -n 2 -q --assert=plain --timeout=600 --disable-socket --allow-unix-socket --allow-hosts=localhost,127.0.0.1,::1` — **49 passed**. The same flags on `tests/acceptance/test_paid_steps.py` — **11 passed**, including actual task/model names in confirmation cards. Registry task/model display columns are additive; stable authorization IDs do not change. Final Workspace typecheck passed.

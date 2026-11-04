@@ -55,3 +55,7 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 2. Chat bot: the privacy notice and how long conversations are kept (decision 35; 12 months suggested).
 
 Nothing else needs you before testing. Any name a later PR adds is added to this file, not sent separately.
+
+## Paid ladder decisions (tenant settings; no Coolify value)
+
+`paid_step_settings.mode`: `ask` (default) or `auto`, stored separately for each tenant and exact `step_id`. The authenticated founder or tenant administrator can list steps at `GET /v1/command/paid-steps` and save one at `PUT /v1/command/paid-steps/{step_id}`. Workspace backend: `GET/PUT /settings/paid-steps/api`. These are database preferences, not new environment variables or paid-service keys. Pending approvals use existing /chats Confirm/Cancel cards. The platform control `paid_paused` (“Pause all paid work”) overrides every Auto setting and every prior approval. Settings screens await the Proposed paid-step frames in `codex/figma-w5`; see `docs/paid-steps/FRAMES.md`.

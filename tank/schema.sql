@@ -3231,3 +3231,7 @@ ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS paid_steps jsonb NOT NULL DEFAU
 
 -- Keep the originating private turn separate from its administrator decision card.
 ALTER TABLE tank.paid_step_approvals ADD COLUMN IF NOT EXISTS delivery_thread_id uuid;
+
+-- Human-readable route metadata accompanies stable switch identities.
+ALTER TABLE tank.paid_steps ADD COLUMN IF NOT EXISTS task_type text;
+ALTER TABLE tank.paid_steps ADD COLUMN IF NOT EXISTS model text;
