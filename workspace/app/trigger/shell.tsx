@@ -63,7 +63,7 @@ export default function TriggerShell({
           aria-controls="trigger-menu"
           onClick={() => setOpen(!open)}
         >
-          ☰
+          <span className="trigger-hamburger" aria-hidden="true" />
         </button>
       </div>
       {open && (
