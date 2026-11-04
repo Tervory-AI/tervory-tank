@@ -100,9 +100,14 @@ def _figma_cache() -> dict[str, Any]:
 SCAFFOLD_TIMEOUT_S = 1200
 
 async def _approved_build(ctx: JobContext) -> bool:
+    pool = getattr(app.state, 'pool', None)
+    if pool is None:
+        # Standalone handler calls have no orchestration store. The running
+        # room configures its pool before starting the job loop.
+        return True
     module = _load_beside(_figma_cache(), 'tisan_pipeline_room', 'pipeline.py')
     loader = lambda key, filename: _load_beside(_figma_cache(), key, filename)
-    service = module.service(ctx, app.state.pool, loader, Path(os.environ.get('DATA_DIR', '/data')))
+    service = module.service(ctx, pool, loader, Path(os.environ.get('DATA_DIR', '/data')))
     try:
         approval = await service.approved_page(str(ctx.tenant_id), ctx.input.get('page_id'))
         source = ctx.input.get('figma')

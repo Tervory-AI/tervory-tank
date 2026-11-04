@@ -93,7 +93,7 @@ async def test_incomplete_foreign_or_wrong_artifact_scan_fails_closed(tmp_path, 
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('header,value', [('x-tank-key', 'placeholder-other'), ('x-tervory-tenant', str(uuid4())),
+@pytest.mark.parametrize('header,value', [('x-tank-key', 'placeholder-other'), ('x-tervory-tenant', '00000000-0000-4000-8000-000000000999'),
                                          ('x-tervory-region', 'za')])
 async def test_corridor_requires_room_tenant_and_region(corridor, header, value):
     app, state = corridor
