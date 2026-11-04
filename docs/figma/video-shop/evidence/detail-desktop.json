@@ -1,0 +1,303 @@
+{
+  "frames": [
+    {
+      "id": "581:525",
+      "name": "Product detail / Default / 1440 · Proposed",
+      "screen": "Product detail",
+      "state": "Default",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:532",
+        "products": "581:534",
+        "add": "581:544"
+      },
+      "screenshot": "product-detail-default-1440.png"
+    },
+    {
+      "id": "581:547",
+      "name": "Product detail / Added / 1440 · Proposed",
+      "screen": "Product detail",
+      "state": "Added",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:554",
+        "products": "581:556",
+        "keep": "581:567",
+        "cart": "581:569"
+      },
+      "screenshot": "product-detail-added-1440.png"
+    },
+    {
+      "id": "581:572",
+      "name": "Product detail / Cart error / 1440 · Proposed",
+      "screen": "Product detail",
+      "state": "Cart error",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:579",
+        "products": "581:581",
+        "retry": "581:592"
+      },
+      "screenshot": "product-detail-cart-error-1440.png"
+    },
+    {
+      "id": "581:595",
+      "name": "Product detail / Empty / 1440 · Proposed",
+      "screen": "Product detail",
+      "state": "Empty",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:602",
+        "products": "581:604"
+      },
+      "screenshot": "product-detail-empty-1440.png"
+    },
+    {
+      "id": "581:609",
+      "name": "Product detail / Loading / 1440 · Proposed",
+      "screen": "Product detail",
+      "state": "Loading",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:616",
+        "products": "581:618"
+      },
+      "screenshot": "product-detail-loading-1440.png"
+    },
+    {
+      "id": "581:626",
+      "name": "Product detail / Error / 1440 · Proposed",
+      "screen": "Product detail",
+      "state": "Error",
+      "width": 1440,
+      "height": 990,
+      "mobile": false,
+      "actions": {
+        "watch": "581:633",
+        "products": "581:635",
+        "retry": "581:639"
+      },
+      "screenshot": "product-detail-error-1440.png"
+    }
+  ],
+  "checks": [
+    {
+      "id": "581:525",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 12,
+        "INSTANCE": 4
+      },
+      "images": []
+    },
+    {
+      "id": "581:547",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 14,
+        "INSTANCE": 5
+      },
+      "images": []
+    },
+    {
+      "id": "581:572",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 13,
+        "INSTANCE": 4
+      },
+      "images": []
+    },
+    {
+      "id": "581:595",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "images": []
+    },
+    {
+      "id": "581:609",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 8,
+        "TEXT": 6,
+        "INSTANCE": 2
+      },
+      "images": []
+    },
+    {
+      "id": "581:626",
+      "nonInter": [],
+      "textOverflow": [],
+      "counts": {
+        "FRAME": 5,
+        "TEXT": 7,
+        "INSTANCE": 3
+      },
+      "images": []
+    }
+  ],
+  "createdNodeIds": [
+    "581:525",
+    "581:526",
+    "581:527",
+    "581:528",
+    "581:529",
+    "581:530",
+    "581:531",
+    "581:532",
+    "I581:532;266:3035",
+    "581:534",
+    "I581:534;266:3035",
+    "581:536",
+    "581:537",
+    "I581:537;289:13958",
+    "I581:537;289:13959",
+    "I581:537;289:13960",
+    "I581:537;289:13961",
+    "581:542",
+    "581:543",
+    "581:544",
+    "I581:544;266:3033",
+    "581:546",
+    "581:547",
+    "581:548",
+    "581:549",
+    "581:550",
+    "581:551",
+    "581:552",
+    "581:553",
+    "581:554",
+    "I581:554;266:3035",
+    "581:556",
+    "I581:556;266:3035",
+    "581:558",
+    "581:559",
+    "I581:559;289:13958",
+    "I581:559;289:13959",
+    "I581:559;289:13960",
+    "I581:559;289:13961",
+    "581:564",
+    "581:565",
+    "581:566",
+    "581:567",
+    "I581:567;266:3033",
+    "581:569",
+    "I581:569;266:3035",
+    "581:571",
+    "581:572",
+    "581:573",
+    "581:574",
+    "581:575",
+    "581:576",
+    "581:577",
+    "581:578",
+    "581:579",
+    "I581:579;266:3035",
+    "581:581",
+    "I581:581;266:3035",
+    "581:583",
+    "581:584",
+    "I581:584;289:13958",
+    "I581:584;289:13959",
+    "I581:584;289:13960",
+    "I581:584;289:13961",
+    "581:589",
+    "581:590",
+    "581:591",
+    "581:592",
+    "I581:592;266:3033",
+    "581:594",
+    "581:595",
+    "581:596",
+    "581:597",
+    "581:598",
+    "581:599",
+    "581:600",
+    "581:601",
+    "581:602",
+    "I581:602;266:3035",
+    "581:604",
+    "I581:604;266:3035",
+    "581:606",
+    "581:607",
+    "581:608",
+    "581:609",
+    "581:610",
+    "581:611",
+    "581:612",
+    "581:613",
+    "581:614",
+    "581:615",
+    "581:616",
+    "I581:616;266:3035",
+    "581:618",
+    "I581:618;266:3035",
+    "581:620",
+    "581:621",
+    "581:622",
+    "581:623",
+    "581:624",
+    "581:625",
+    "581:626",
+    "581:627",
+    "581:628",
+    "581:629",
+    "581:630",
+    "581:631",
+    "581:632",
+    "581:633",
+    "I581:633;266:3035",
+    "581:635",
+    "I581:635;266:3035",
+    "581:637",
+    "581:638",
+    "581:639",
+    "I581:639;266:3033",
+    "581:641"
+  ],
+  "status": "Proposed",
+  "copy": [
+    "Proposed",
+    "Illustrative video, product and timing · Figma only",
+    "Product details",
+    "Watch video",
+    "Products in this video",
+    "COMPACT TRIPOD",
+    "CT-01",
+    "$120.00",
+    "Delivery: 2–3 business days",
+    "Quantity: 1",
+    "Added to the store’s own cart. Payment stays with the store.",
+    "Add to cart",
+    "Added to your store’s cart.",
+    "Keep watching",
+    "Open store cart",
+    "The store’s cart could not be updated.",
+    "Try again",
+    "This product is unavailable.",
+    "Loading…",
+    "The product could not be loaded."
+  ]
+}
