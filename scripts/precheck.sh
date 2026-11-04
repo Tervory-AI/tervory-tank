@@ -2,8 +2,9 @@
 # Run CI's fast checks locally before every push (founder, 3 Nov 2026: every PR failed CI on
 # something a local run would have caught). Same commands as .github/workflows/ci.yml.
 #
-#   scripts/precheck.sh            # lint, secrets, gitleaks, semgrep, osv, tests for changed files
-#   PRECHECK_SKIP_SEMGREP=1 ...    # only if Docker is unavailable; CI still runs it
+#   scripts/precheck.sh            # lint, secrets, gitleaks, osv, tests for changed files
+#   PRECHECK_SEMGREP=1 ...         # also run Semgrep locally on changed files (off by default:
+#                                  # founder, 4 Nov 2026 — CI's security job runs it on every PR)
 #
 # Exit code 0 means push. Anything else: fix first.
 set -uo pipefail
@@ -66,7 +67,7 @@ mkdir -p "$out"
 step "gitleaks over this branch's commits (as CI)"
 python3 .github/scripts/security_scan.py gitleaks --base "$base" --output "$out" || failed+=(gitleaks)
 
-if [ "${PRECHECK_SKIP_SEMGREP:-}" != 1 ]; then
+if [ "${PRECHECK_SEMGREP:-}" = 1 ] && [ "${PRECHECK_SKIP_SEMGREP:-}" != 1 ]; then
   step "semgrep on changed files (as CI)"
   python3 .github/scripts/security_scan.py semgrep --base "$base" --output "$out" || failed+=(semgrep)
   # subprocess timeout can kill the Docker client while its scanner keeps going.
