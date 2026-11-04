@@ -70,3 +70,9 @@ Passed: both route-to-screen checks, both screens at both widths, F06 browser re
 - [ ] Client: compare monthly completed jobs, monthly savings and recent titles/statuses with tenant sources; open number links and savings report.
 - [ ] Client: confirm approved granted teams, Ask and five navigation routes; verify empty/zero states and absence of internal words/model names.
 - [ ] Founder accepts client at 1440/375 after deploy. Builder captures are offline only.
+
+## CI follow-up at 402ba77b
+
+Reproduced savings-page's exact `What you saved` visibility timeout (10,000ms). This was caused by two stale harness assumptions introduced by the dashboard change: the mocked dashboard payload omitted required `granted_squads`, and the browser never opened the now-collapsed report through the real “You saved” link. The fixture now supplies an empty grants list and both normal/tiny client cases assert the report is initially hidden, click its actual anchor, then run the unchanged report assertions. No savings production component or timeout threshold changed.
+
+The complete savings browser check passed locally in **6.27 seconds**, covering client/founder 1440/375, charts, tiny values, private drawers, pagination, exports, tenant selection, baseline re-pricing and refreshes. This measures the offline harness, not production response time. Also removed unused `asyncio` and `admin` imports. CI's exact lint command passed: `ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"`.
