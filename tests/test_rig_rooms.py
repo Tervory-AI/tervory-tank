@@ -12,6 +12,8 @@ import yaml
 from agents.ghost import enforce_lifecycle
 from agents.ghost.enforce_api import create_app
 from agents.ghost.rig_lifecycle import CoolifyRigBackend, SETTINGS, plan_create, plan_destroy
+import sys  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents" / "rig"))  # rigbox, as CI runs with PYTHONPATH=tank
 from rigbox.rooms import api_base, require_owner
 from rigbox.service import RigError
 

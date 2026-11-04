@@ -1,4 +1,4 @@
-"""Local RouteLLM diagnostics and sampled evidence. Never a serving route."""
+"""Local RouteLLM evidence and founder-promoted, fingerprint-pinned serving."""
 from __future__ import annotations
 
 import asyncio
@@ -80,6 +80,8 @@ async def configure(task_type: str, body: Settings) -> dict:
         row = await conn.fetchrow("SELECT * FROM tank.policy WHERE task_type=$1 AND tenant_id IS NOT DISTINCT FROM $2::uuid FOR UPDATE", task_type, body.tenant_id)
         if row is None:
             raise HTTPException(404, "no such policy")
+        if str(row["model"]).startswith("routellm:"):
+            raise HTTPException(409, graduate.ROUTER_BLOCK)
         policy = {**dict(row), **body.model_dump()}
         both = body.routellm_weak_model is not None and body.routellm_threshold is not None
         neither = body.routellm_weak_model is None and body.routellm_threshold is None
@@ -116,6 +118,79 @@ def score(prompt: str) -> float:
     if not math.isfinite(value) or not 0 <= value <= 1:
         raise ValueError("RouteLLM returned an invalid score")
     return value
+
+
+# Bound added foreground latency. Cold loading/scoring may finish in the
+# background; its slot remains occupied until the actual thread completes.
+SERVE_TIMEOUT_SECONDS = 0.5
+
+
+def promoted_configuration(policy: dict) -> Configuration | None:
+    return configuration({**policy, "model": policy.get("previous_model")})
+
+
+async def serve(tank: Any, policy: dict, messages: list[dict], *, tenant_id: uuid.UUID,
+                priority: str = "standard", task_type: str | None = None,
+                skill: str | None = None, caller: str | None = None, pool_read: bool = False) -> dict:
+    """Resolve a promoted conditional route; every unavailable path uses its strong model."""
+    global _pending
+    strong = str(policy.get("previous_model") or "").strip()
+    if not strong or graduate.router_cannot_serve(strong) or graduate.is_skill(strong):
+        raise ValueError("Invalid promoted RouteLLM strong model")
+    config = promoted_configuration(policy)
+    decision = {"model": strong, "score": None,
+                "threshold": config.threshold if config else None,
+                "weak_model": config.weak if config else None,
+                "config": config.fingerprint if config else None}
+    if (config is None or policy.get("model") != config.candidate
+            or not policy.get("promoted_at") or priority == "urgent"):
+        return decision
+    refusal_messages = list(messages)
+    system = policy.get("system_prompt")
+    if system and (not messages or messages[0] != {"role": "system", "content": system}):
+        refusal_messages.insert(0, {"role": "system", "content": system})
+    sent = "\n".join(str(message.get("content") or "") for message in refusal_messages)
+    if tank.model_call_refusal(sent, config.weak, box=tank.box_region(), tenant_id=str(tenant_id),
+                               task_type=task_type, skill=skill, caller=caller, pool_read=pool_read):
+        return decision
+    if _pending >= 4:
+        return decision
+    prompt = next((str(message.get("content") or "") for message in reversed(messages)
+                   if message.get("role") == "user"), "")
+    _pending += 1
+    task = asyncio.create_task(asyncio.to_thread(score, prompt))
+
+    def completed(work):
+        global _pending
+        _pending -= 1
+        if not work.cancelled():
+            work.exception()  # Consume errors after a caller timed out; never log prompt text.
+
+    task.add_done_callback(completed)
+    try:
+        value = float(await asyncio.wait_for(asyncio.shield(task), SERVE_TIMEOUT_SECONDS))
+        if not math.isfinite(value) or not 0 <= value <= 1:
+            return decision
+    except Exception as exc:
+        log.warning("RouteLLM serving scorer unavailable (%s)", type(exc).__name__)
+        return decision
+    return {**decision, "model": config.strong if value >= config.threshold else config.weak, "score": value}
+
+
+def serving_policy(policy: dict, decision: dict) -> dict:
+    # Keep the JSON-safe decision through existing deferred/offpeak policy snapshots.
+    # Clearing observation settings suppresses both ordinary shadow and observe().
+    return {**policy, "model": decision["model"], "rung": 1, "candidate_model": None,
+            "shadow_rate": 0, "routellm_weak_model": None, "routellm_threshold": None,
+            "_routellm_served": dict(decision)}
+
+
+async def record_served(tank: Any, tenant: uuid.UUID, ledger: uuid.UUID, decision: dict) -> None:
+    async with tank.pool().acquire() as conn:
+        await conn.execute("""UPDATE tank.ledger SET routellm_model=$3,routellm_score=$4,
+            routellm_threshold=$5,routellm_weak_model=$6,routellm_config=$7,routellm_status='served'
+            WHERE id=$1 AND tenant_id=$2""", ledger, tenant, decision["model"], decision["score"],
+            decision["threshold"], decision["weak_model"], decision["config"])
 
 
 async def status(tank: Any, tenant: uuid.UUID, ledger: uuid.UUID, value: str) -> None:

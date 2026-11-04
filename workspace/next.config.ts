@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   async headers() {
     // The CLI approval page grants a credential: never framed, never cached.
     return [{
+      source: "/sw.js",
+      headers: [{ key: "Cache-Control", value: "no-cache, no-store" }, { key: "Service-Worker-Allowed", value: "/" }, { key: "X-Content-Type-Options", value: "nosniff" }],
+    }, {
       // Public OFL widget fonts must load from approved stores on other origins.
       source: "/trigger/:font(AtkinsonHyperlegible-Regular|Literata).ttf",
       headers: [{ key: "Access-Control-Allow-Origin", value: "*" }, { key: "X-Content-Type-Options", value: "nosniff" }],

@@ -257,7 +257,8 @@ def test_inference_token_reaches_only_litellm(filename):
 
 def test_no_room_or_agent_compose_names_the_inference_token():
     for path in ROOT.rglob("*.y*ml"):
-        if any(part in {"node_modules", ".git", "litellm"} for part in path.parts):
+        # TMPDIR contains generated fixture copies, not deployed configuration.
+        if any(part in {"node_modules", ".git", ".tmp", "litellm"} for part in path.parts):
             continue
         if path.name in {"docker-compose.yml", "docker-compose.za.yml"}:
             continue
