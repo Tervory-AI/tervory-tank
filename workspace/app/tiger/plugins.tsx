@@ -22,8 +22,8 @@ import {
   type PluginTab,
 } from "./plugins-data";
 
-export function Plugins({ plugins, onClose }: { plugins: PluginPanel; onClose: () => void }) {
-  const [tab, setTab] = useState<PluginTab>("API keys");
+export function Plugins({ plugins, onClose, initialTab = "API keys" }: { plugins: PluginPanel; onClose: () => void; initialTab?: PluginTab }) {
+  const [tab, setTab] = useState<PluginTab>(initialTab);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [often, setOften] = useState<"Daily" | "Weekly">("Daily");
