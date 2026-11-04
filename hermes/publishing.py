@@ -79,15 +79,25 @@ class Publisher:
                     tenant_id,
                     source,
                 )
-                if not row:
+                withdrawn = await conn.fetchval(
+                    _sql("SELECT EXISTS(SELECT 1 FROM {schema}.memory_publish_log WHERE tenant_id=$1 AND source_row=$2 AND result='withdrawn')", s),
+                    tenant_id, source)
+                if withdrawn:
+                    result = "refused"
+                elif not row:
                     result = "missing"
                 else:
+                    meta = row.get("meta") or {}
+                    meta = json.loads(meta) if isinstance(meta, str) else meta
+                    public_addresses = meta.get("public_addresses") or []
+                    public_addresses = [a for a in public_addresses if isinstance(a, str)][:16] if isinstance(public_addresses, list) else []
                     try:
                         claim, evidence = deidentify(
                             row["claim"],
                             json.loads(row["evidence"]),
                             tenant,
                             json.loads(policy["identifiers"]),
+                            public_addresses=public_addresses,
                         )
                     except ValueError:
                         result = "refused"
@@ -95,24 +105,20 @@ class Publisher:
                         await self.records.lock(conn, s, target)
                         created = await conn.fetchval(
                             _sql("""INSERT INTO {schema}.memory_records
-                            (id,tenant_id,claim,evidence,confidence,last_verified,tier)
-                            VALUES($1,$2,$3,$4::jsonb,$5,$6,'platform') ON CONFLICT(id) DO NOTHING RETURNING id""", s),
+                            (id,tenant_id,claim,evidence,confidence,last_verified,tier,kind,meta)
+                            VALUES($1,$2,$3,$4::jsonb,$5,$6,'platform',$7,$8::jsonb) ON CONFLICT(id) DO NOTHING RETURNING id""", s),
                             target,
                             uuid.UUID(PLATFORM_TENANT),
                             claim,
                             json.dumps(evidence),
                             row["confidence"],
-                            row["last_verified"],
+                            row["last_verified"], row.get("kind", "fact"),
+                            json.dumps({"_index_enabled": False} if meta.get("_index_enabled") is False else {}),
                         )
                         result = "published" if created else "already_published"
                         published = target
-                        await self.records.enqueue(
-                            conn,
-                            s,
-                            target,
-                            uuid.UUID(PLATFORM_TENANT),
-                            self.records.model,
-                        )
+                        if meta.get("_index_enabled") is not False:
+                            await self.records.enqueue(conn, s, target, uuid.UUID(PLATFORM_TENANT), self.records.model)
             await conn.execute(
                 _sql("""INSERT INTO {schema}.memory_publish_log(tenant_id,actor,source_row,result,published_row)
                 VALUES($1,$2,$3,$4,$5)""", s),
@@ -124,3 +130,31 @@ class Publisher:
             )
         # Indexing is durable but deliberately not coupled to publication success.
         return dict(result=result, published_row=str(published) if published else None)
+
+
+    async def withdraw(self, agent: str, tenant: str, published_id: str, actor: str) -> dict:
+        """One source-bound platform record, only if the publication audit proves origin."""
+        s = self.records.schema(agent)
+        tenant_id, target = uuid.UUID(tenant), uuid.UUID(published_id)
+        platform = uuid.UUID(PLATFORM_TENANT)
+        async with self.records.pool.acquire() as conn, conn.transaction():
+            await self.records.lock(conn, s, target)
+            publication = await conn.fetchrow(_sql(
+                "SELECT source_row FROM {schema}.memory_publish_log WHERE tenant_id=$1 AND published_row=$2 AND result IN ('published','already_published') ORDER BY happened_at DESC LIMIT 1", s), tenant_id, target)
+            if not publication or target != uuid.uuid5(publication["source_row"], "platform-memory:" + tenant):
+                raise ValueError("No matching publication")
+            row = await conn.fetchrow(_sql(
+                "DELETE FROM {schema}.memory_records WHERE id=$1 AND tenant_id=$2 AND tier='platform' RETURNING id,embed_model", s), target, platform)
+            if row is None:
+                prior = await conn.fetchval(_sql(
+                    "SELECT EXISTS(SELECT 1 FROM {schema}.memory_publish_log WHERE tenant_id=$1 AND published_row=$2 AND result='withdrawn')", s), tenant_id, target)
+                if prior:
+                    return {"result": "withdrawn", "published_row": str(target)}
+                raise ValueError("No matching platform record")
+            pending = await conn.fetch(_sql(
+                "DELETE FROM {schema}.memory_index_jobs WHERE tenant_id=$1 AND row_id=$2 RETURNING target_model", s), platform, target)
+            for model in {row["embed_model"], *(j["target_model"] for j in pending)} - {""}:
+                await self.records.enqueue(conn, s, target, platform, model, "delete")
+            await conn.execute(_sql(
+                "INSERT INTO {schema}.memory_publish_log(tenant_id,actor,source_row,result,published_row) VALUES($1,$2,$3,'withdrawn',$4)", s), tenant_id, actor, publication["source_row"], target)
+        return {"result": "withdrawn", "published_row": str(target)}

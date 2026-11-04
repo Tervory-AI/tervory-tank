@@ -34,6 +34,9 @@ services:
       # GHOST-2 inventory: read-only Coolify API token, by name only. Empty = not connected.
       COOLIFY_TOKEN_GHOST: ${COOLIFY_TOKEN_GHOST:-}
       COOLIFY_URL_GHOST: ${COOLIFY_URL_GHOST:-}
+      # Existing draft-only dogfood PR path; founder fills the existing scoped token.
+      GHOST_PATCH_PR_ENABLED: ${GHOST_PATCH_PR_ENABLED:-0}
+      GHOST_GITHUB_TOKEN: ${GHOST_GITHUB_TOKEN:-}
       # Air gap: Watch has NO edge write credential. Per-client Enforce holds
       # Edge credential names held until a real connected edge client (agnostic).
     volumes:
@@ -48,6 +51,28 @@ services:
       timeout: 5s
       retries: 10
     expose: ["8000"]
+  enforce-lifecycle:
+    build:
+      context: ..
+      dockerfile: ghost/Dockerfile
+    command: [uvicorn, ghost.enforce_api:create_app, --factory, --host, 0.0.0.0, --port, "8000", --no-access-log]
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      AUTUMBRA_LIFECYCLE_KEY: ${AUTUMBRA_LIFECYCLE_KEY:-}
+      PYTHONDONTWRITEBYTECODE: "1"
+      AUTUMBRA_COOLIFY_URL: ${AUTUMBRA_COOLIFY_URL:-}
+      AUTUMBRA_COOLIFY_TOKEN: ${AUTUMBRA_COOLIFY_TOKEN:-}
+      AUTUMBRA_COOLIFY_PROJECT_UUID: ${AUTUMBRA_COOLIFY_PROJECT_UUID:-}
+      AUTUMBRA_COOLIFY_SERVER_UUID: ${AUTUMBRA_COOLIFY_SERVER_UUID:-}
+      AUTUMBRA_COOLIFY_ENVIRONMENT: ${AUTUMBRA_COOLIFY_ENVIRONMENT:-}
+      AUTUMBRA_COOLIFY_GITHUB_APP_UUID: ${AUTUMBRA_COOLIFY_GITHUB_APP_UUID:-}
+    networks: [gw]
   ghost-browser:
     build:
       context: ..

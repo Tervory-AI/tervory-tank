@@ -8,6 +8,7 @@
     ],
     "ghost-browser": [
       "ghost_browser_data:/data"
-    ]
+    ],
+    "enforce-lifecycle": null
   }
 }

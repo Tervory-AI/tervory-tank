@@ -165,6 +165,8 @@ def apply_from_payload(
         "severity": fields.get("severity"),
         **settings.receipt_stamp(),
     }
+    if payload.source_data:
+        receipt["source_data"] = dict(payload.source_data)
     if source_credits:
         receipt["sources"] = source_credits
         receipt["intel_via"] = "Market Lab"
@@ -501,6 +503,9 @@ def approve_pending(
         "control": name,
         **settings.receipt_stamp(),
     }
+
+    if (row.get("payload") or {}).get("source_data"):
+        receipt["source_data"] = dict(row["payload"]["source_data"])
 
     if name == "cloudflare":
         receipt["edge_requests"] = list(edge.measurements)

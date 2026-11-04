@@ -5,6 +5,7 @@ import asyncio
 import json
 import hashlib
 import hmac
+import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -49,7 +50,6 @@ from .market_lab_intel import (
 )
 from .webhooks import WebhookRejected, accept_webhook, drop_counts
 from .red_team import list_exercises, run_exercise
-from .enforce_lifecycle import FixtureComposeBackend, plan_create, plan_destroy, receipt_for
 from .owner_email import send_owner_update
 from .smtp_email import smtp_available_since, transport_status
 from .durable_state import locked_state
@@ -225,6 +225,7 @@ def enqueue_fixture_attack_for_watch(
     tenant_id: str | None = None,
     advisory: dict | None = None,
     queue: ThreatPayloadQueue | None = None,
+    source_data: dict[str, int] | None = None,
 ) -> dict:
     """Production Watch enqueue entrypoint used by /ghost/autumbra/queue/fixture-attack.
 
@@ -245,6 +246,7 @@ def enqueue_fixture_attack_for_watch(
         reason=reason,
         tenant_id=tenant_id,
         advisory=advisory,
+        source_data=source_data,
     )
 
 
@@ -337,6 +339,27 @@ async def _market_lab_intel_loop(app: FastAPI) -> None:
         await asyncio.sleep(3600)
 
 
+def _block_memory_unavailable(app):
+    app.state.block_memory_failures += 1
+    logging.getLogger(__name__).warning("Autumbra block-memory reconciliation unavailable")
+
+
+async def _standing_blocks_loop(app):
+    while True:
+        root = queue_root_base()
+        if root and root.exists():
+            for path in root.iterdir():
+                try:
+                    tenant = str(UUID(path.name))
+                except ValueError:
+                    continue
+                try:
+                    await app.state.shared_blocks.reconcile(tenant)
+                except Exception:
+                    _block_memory_unavailable(app)
+        await asyncio.sleep(60)
+
+
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -364,8 +387,16 @@ def create_app() -> FastAPI:
                 except Exception:
                     app.state.threat_queue = None
             app.state.threat_queue_root = queue_root_base()
+            from chassis.memory import MemoryClient
+            from .shared_blocks import StandingBlocks
+            app.state.block_memory_failures = 0
+            app.state.shared_blocks = StandingBlocks(
+                MemoryClient(base_url="http://tank:8000/v1/ghost/autumbra/memory", http=http),
+                tank, store, watch_threat_queue)
+
             tasks = [
                 asyncio.create_task(watch(app)),
+                asyncio.create_task(_standing_blocks_loop(app)),
                 asyncio.create_task(nightly(app)),
                 asyncio.create_task(advisory_watch.watch(app)),
                 asyncio.create_task(_weekly_owner_email_loop(app)),
@@ -686,6 +717,15 @@ def create_app() -> FastAPI:
             **result,
         }
 
+    @app.get("/ghost/autumbra/blocks", dependencies=[Depends(require_tank)])
+    async def standing_blocks(tenant_id: UUID):
+        return await app.state.shared_blocks.items(str(tenant_id))
+
+    @app.get("/ghost/patch/fixes", dependencies=[Depends(require_tank)])
+    async def patch_fixes():
+        from .fix_approval import fixes
+        return fixes(app.state.store, PLATFORM_TENANT)
+
     @app.post("/ghost/patch/from-match", dependencies=[Depends(require_tank)])
     async def patch_from_match(request: Request):
         """CONNECT: advisory match fixture → PatchBrief → draft/dry-run plan. Never merges."""
@@ -697,7 +737,16 @@ def create_app() -> FastAPI:
         if not isinstance(data, dict):
             raise HTTPException(422, PATCH_BURN_DETAIL)
         try:
-            return connect_match_to_plan(data)
+            from .fix_approval import stored_match, brief_for
+            if set(data) == {"match_id"}:
+                data = stored_match(app.state.store, PLATFORM_TENANT, str(data["match_id"]))
+            brief_for(data)
+            result = connect_match_to_plan(data)
+            pr_url = (result.get("result") or {}).get("pr_url")
+            brief = result["brief"]
+            return {**result, "name": brief["package"], "status": result["result"]["mode"],
+                    "summary": brief["from_version"] + " → " + brief["to_version"],
+                    **({"pr_url": pr_url} if pr_url else {})}
         except PatchBurned:
             raise HTTPException(422, PATCH_BURN_DETAIL) from None
 
@@ -901,9 +950,19 @@ def create_app() -> FastAPI:
                         {"accepted": False, "stored": False, "detail": "tenant_id must be a UUID"},
                         status_code=400,
                     )
-                ok, why = may_block_ip(address, raw_log=raw_log)
+                settings = load_settings(app.state.store, tenant_id)
+                ok, why = may_block_ip(address, raw_log=raw_log, client_own_cidrs=settings.own_cidrs)
                 if ok:
                     advisory = data.get("advisory") if isinstance(data.get("advisory"), dict) else None
+                    source_data = {}
+                    blocks = getattr(app.state, "shared_blocks", None)
+                    if blocks is not None:
+                        try:
+                            count = await blocks.count(tenant_id, address)
+                            if count:
+                                source_data = {"autumbra.shared_blocks": count}
+                        except Exception:
+                            _block_memory_unavailable(app)
                     try:
                         queue_receipt = enqueue_fixture_attack_for_watch(
                             raw_log=raw_log,
@@ -912,6 +971,7 @@ def create_app() -> FastAPI:
                             reason=str(data.get("reason") or f"signed {provider} webhook")[:300],
                             tenant_id=tenant_id,
                             advisory=advisory,
+                            source_data=source_data,
                         )
                     except ValueError as exc:
                         # Fixed copy only — never echo exception/stack to the caller (CodeQL).
@@ -1037,7 +1097,7 @@ def create_app() -> FastAPI:
             tenant_id = _require_tenant_uuid(tenant_id)
             q = watch_threat_queue(tenant_id)
             tz = owner_time_zone(_load_tz(app.state.store, tenant_id))
-            return watch_enqueue_undo(
+            result = watch_enqueue_undo(
                 queue=q,
                 rule_id=str(rule_id) if rule_id else None,
                 prior_receipt_id=str(prior_receipt_id) if prior_receipt_id else None,
@@ -1045,6 +1105,13 @@ def create_app() -> FastAPI:
                 tenant_id=tenant_id,
                 time_zone=tz,
             )
+            blocks = getattr(app.state, "shared_blocks", None)
+            if blocks is not None:
+                try:
+                    await blocks.reconcile(tenant_id)
+                except Exception:
+                    _block_memory_unavailable(app)
+            return result
         except ThreatBurned:
             return JSONResponse(
                 {"outcome": "burned", "detail": BURN_DETAIL, "queued": False},
@@ -1209,46 +1276,8 @@ def create_app() -> FastAPI:
             "note": "Weekly owner-update receipt page.",
         }
 
-    @app.post("/ghost/autumbra/enforce/plan-create", dependencies=[Depends(require_tank)])
-    async def autumbra_enforce_plan_create(request: Request):
-        raw = await bounded_json(request, 4_000)
-        try:
-            data = json.loads(raw.decode("utf-8"))
-            tenant_id = str(data["tenant_id"])
-            existing = int(data.get("existing_count") or 0)
-            execute = bool(data.get("execute"))
-        except Exception:
-            raise HTTPException(422, "Create plan was not understood.") from None
-        try:
-            plan = plan_create(tenant_id, existing_count=existing)
-        except (ValueError, RuntimeError) as exc:
-            raise HTTPException(422, str(exc)) from None
-        if execute:
-            root = os.environ.get("AUTUMBRA_FIXTURE_COMPOSE_ROOT", "").strip()
-            if not root:
-                raise HTTPException(422, "Fixture compose root is not configured.")
-            receipt = FixtureComposeBackend(Path(root)).create(plan)
-        else:
-            receipt = receipt_for(plan)
-        return {"plan": plan, "receipt": receipt}
-
-    @app.post("/ghost/autumbra/enforce/plan-destroy", dependencies=[Depends(require_tank)])
-    async def autumbra_enforce_plan_destroy(request: Request):
-        raw = await bounded_json(request, 4_000)
-        try:
-            data = json.loads(raw.decode("utf-8"))
-            plan = plan_destroy(str(data["tenant_id"]))
-            execute = bool(data.get("execute"))
-        except Exception:
-            raise HTTPException(422, "Destroy plan was not understood.") from None
-        if execute:
-            root = os.environ.get("AUTUMBRA_FIXTURE_COMPOSE_ROOT", "").strip()
-            if not root:
-                raise HTTPException(422, "Fixture compose root is not configured.")
-            receipt = FixtureComposeBackend(Path(root)).destroy(plan)
-        else:
-            receipt = receipt_for(plan)
-        return {"plan": plan, "receipt": receipt}
+    from .enforce_api import register as register_enforce
+    register_enforce(app, require_tank, bounded_json)
 
     @app.post("/ghost/autumbra/owner-update", dependencies=[Depends(require_tank)])
     async def autumbra_owner_update(request: Request):

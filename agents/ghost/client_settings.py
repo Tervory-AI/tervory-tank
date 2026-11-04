@@ -105,6 +105,8 @@ def load_settings(store, tenant_id: str) -> ClientAutumbraSettings:
     raw = store.get_state(tenant_id, "autumbra_client_settings", None)
     if not isinstance(raw, dict):
         return ClientAutumbraSettings(tenant_id=tenant_id)
+    if raw.get("fix_mode") == ApplyMode.auto_when_checks_pass.value:
+        raw = {**raw, "fix_mode": ApplyMode.approve_each.value}
     try:
         return ClientAutumbraSettings.model_validate({**raw, "tenant_id": tenant_id})
     except Exception:

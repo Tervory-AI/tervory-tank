@@ -31,7 +31,9 @@ class MemoryClient:
 
     async def remember(self, tenant_id: str, text: str, kind: str, source: str, *,
                        evidence: list[str] | None = None, confidence: float = .5,
-                       record_id: str | None = None) -> dict[str, Any]:
+                       record_id: str | None = None, row_id: str | None = None,
+                       last_verified: str | None = None, meta: dict | None = None,
+                       index: bool = True) -> dict[str, Any]:
         from uuid import UUID
         identity = {"id": str(UUID(record_id))} if record_id is not None else {}
         data = await self._send(
@@ -45,6 +47,10 @@ class MemoryClient:
                 "source": source,
                 "evidence": evidence or [],
                 "confidence": confidence,
+                **({"id": row_id} if row_id else {}),
+                **({"last_verified": last_verified} if last_verified else {}),
+                **({"meta": meta} if meta is not None else {}),
+                **({"index": False} if not index else {}),
             },
         )
         if not isinstance(data, dict):
@@ -85,10 +91,17 @@ class MemoryClient:
         from urllib.parse import urlencode
         if tier not in {"client", "platform"}:
             raise ValueError("invalid memory tier")
-        data = await self._send("GET", "/records?" + urlencode({"tenant_id": str(UUID(tenant_id)), "tier": tier}))
-        if not isinstance(data, dict) or not isinstance(data.get("memories"), list) or any(not isinstance(row, dict) for row in data["memories"]):
-            raise RuntimeError("hermes answer was not an object")
-        return data["memories"]
+        rows = []
+        for offset in range(0, 20000, 200):
+            data = await self._send("GET", "/records?" + urlencode({"tenant_id": str(UUID(tenant_id)), "tier": tier,
+                                                                    "limit": 200, "offset": offset}))
+            if not isinstance(data, dict) or not isinstance(data.get("memories"), list) or any(not isinstance(row, dict) for row in data["memories"]):
+                raise RuntimeError("hermes answer was not an object")
+            page = data["memories"]
+            rows.extend(page)
+            if len(page) < 200:
+                return rows
+        raise RuntimeError("Memory record list exceeds the limit")
 
     async def forget(self, memory_id: str, tenant_id: str) -> None:
         from uuid import UUID

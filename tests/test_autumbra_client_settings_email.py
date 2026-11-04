@@ -101,7 +101,7 @@ def test_owner_email_three_fix_paragraphs():
             assert other_needle not in mail["body"]
 
 
-def test_three_fixture_clients_get_matching_paragraphs():
+def test_supported_fix_modes_get_matching_paragraphs():
     """Three fixture clients — one per client mode — each get the matching paragraph."""
     fixtures = [
         ("00000000-0000-0000-0000-0000000000f1", ApplyMode.auto_when_checks_pass,
@@ -216,7 +216,7 @@ def test_agnostic_hands_catalog_no_required_provider():
     assert all(h["required"] is False and h["pro_required"] is False for h in hands)
 
 
-def test_owner_email_sender_is_called_for_three_fixture_clients():
+def test_owner_email_sender_is_called_for_supported_fix_modes():
     transport = FixtureEmailTransport()
     critical = [{
         "stack": "PHP", "rating": "critical", "advisory_id": "CVE-2026-109618",

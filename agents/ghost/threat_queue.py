@@ -244,6 +244,7 @@ def watch_enqueue_fixture_attack(
     reason: str = "fixture attacking address",
     tenant_id: str | None = None,
     advisory: dict[str, Any] | None = None,
+    source_data: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Watch side: rules-first check on dirty log, then enqueue ThreatPayload only.
 
@@ -276,6 +277,7 @@ def watch_enqueue_fixture_attack(
         "confidence": adv["confidence"],
         "cve_ids": adv["cve_ids"],
         "queued_at": utc_now(),
+        "source_data": source_data or {},
     }
     if tenant_id:
         payload_raw["tenant_id"] = tenant_id

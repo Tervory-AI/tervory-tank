@@ -57,6 +57,8 @@ FOUNDER_TOOLS = ["tank.policy", "tank.policy.fallbacks", "base.campaign.start", 
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
 FOUNDER_TOOLS += TISAN_CLIENT_TOOLS
+FOUNDER_TOOLS += ["autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy",
+                  "autumbra.fixes", "autumbra.fix.approve", "autumbra.blocks", "autumbra.blocks.share"]
 TOOLS["plugins"] = ["plugins.list", "plugins.install", "plugins.remove"]
 
 
@@ -498,6 +500,9 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
     if planned is not None:
         return planned
     from main import Message, RouteRequest, box_region, run_route
+    planned = await autumbra_enforce_code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     planned = await policy_code_plan(actor, messages, task_id)
     if planned is not None:
         return planned
@@ -954,6 +959,22 @@ def action_timeout(tool: str | None) -> int:
 
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 MAX_THREAD_ATTACHMENT_BYTES = 20 * 1024 * 1024
+
+
+class BlockTenantArgs(Body):
+    tenant_id: uuid.UUID
+
+
+class BlockShareArgs(BlockTenantArgs):
+    record_ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
+
+
+class FixMatchArgs(Body):
+    match_id: uuid.UUID
+
+
+class EnforceTenantArgs(Body):
+    tenant_id: uuid.UUID
 
 
 class EmptyArgs(Body):
@@ -1489,6 +1510,13 @@ from mcp_connections import ApproveArgs as MCPApproveArgs, ServerArgs as MCPServ
 ADAPTERS = {
     "tank.policy": Adapter("GET", "/v1/command/tank/policy", PolicyArgs, "tank.policy"),
     "tank.policy.fallbacks": Adapter("POST", "/v1/command/tank/policy/fallbacks", PolicyFallbackArgs, "tank.policy.fallbacks"),
+    "autumbra.blocks": Adapter("GET", "/v1/ghost/autumbra/blocks", BlockTenantArgs, "autumbra.blocks"),
+    "autumbra.blocks.share": Adapter("POST", "/v1/ghost/autumbra/blocks/share", BlockShareArgs, "autumbra.blocks.share"),
+    "autumbra.fixes": Adapter("GET", "/v1/ghost/autumbra/fixes", EmptyArgs, "autumbra.fixes"),
+    "autumbra.fix.approve": Adapter("POST", "/v1/ghost/autumbra/fix/approve", FixMatchArgs, "autumbra.fix.approve"),
+    "autumbra.enforce.list": Adapter("GET", "/v1/ghost/autumbra/enforce/list", EmptyArgs, "autumbra.enforce.list"),
+    "autumbra.enforce.create": Adapter("POST", "/v1/ghost/autumbra/enforce/create", EnforceTenantArgs, "autumbra.enforce.create"),
+    "autumbra.enforce.destroy": Adapter("POST", "/v1/ghost/autumbra/enforce/destroy", EnforceTenantArgs, "autumbra.enforce.destroy"),
     "training.status": Adapter("GET", "/v1/training/status", EmptyArgs, "training.status"),
     "training.run": Adapter("POST", "/v1/training/run", TrainingRunArgs, "Start Zenas training", True, "paid_run"),
     "training.receipt": Adapter("POST", "/v1/training/receipt", TrainingReceiptArgs, "Record training receipt"),
@@ -1852,7 +1880,7 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, {}, {**args, **scope}
     if action.tool == "rig.quote.confirm_payment":
         return adapter.method, path, {}, {"data": args}
-    if action.tool in {"base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", *TISAN_CLIENT_TOOLS}:
+    if action.tool in {"base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", "autumbra.enforce.list", "autumbra.enforce.create", "autumbra.enforce.destroy", "autumbra.fixes", "autumbra.fix.approve", "autumbra.blocks", "autumbra.blocks.share", *TISAN_CLIENT_TOOLS}:
         if adapter.method == 'GET':
             return adapter.method, path, args, None
         return adapter.method, path, {}, args  # Actor headers supply identity, never body fields.
@@ -2088,7 +2116,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 from market_lab_ml3 import confirmed
                 status, result = 200, await confirmed(action, actor, thread_id, card_id)
                 once = result.pop("_once", None)
-            elif (action.tool.startswith("trigger.") and action.tool not in {"trigger.crm.list", "trigger.crm.get"}) or action.tool in {"zenas.draft", "zenas.playbook.add", "training.run", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan", "radix.active.consent", "radix.active.consent.withdraw", "radix.active.scan", "radix.deploy.override", "radix.infra.scan"}:
+            elif (action.tool.startswith("trigger.") and action.tool not in {"trigger.crm.list", "trigger.crm.get"}) or action.tool in {"zenas.draft", "zenas.playbook.add", "training.run", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan", "autumbra.blocks.share", "autumbra.enforce.create", "autumbra.enforce.destroy", "autumbra.fix.approve", "radix.active.consent", "radix.active.consent.withdraw", "radix.active.scan", "radix.deploy.override", "radix.infra.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
@@ -2259,6 +2287,37 @@ async def repeat_messages(conn: Any, state: dict, actor: Actor, messages: list[d
             or [m for m in original if m["role"] == "system"] != [m for m in messages if m["role"] == "system"]):
         return messages
     return original
+
+
+async def autumbra_enforce_code_plan(actor: Actor, messages: list[dict], task_id):
+    """Explicit lifecycle commands propose existing Confirm cards for zero model cost."""
+    from types import SimpleNamespace
+    from trigger_routes import code_receipt
+    last = messages[-1] if messages else {}
+    text = last.get("content", "").strip()
+    if last.get("role") != "user" or not text.startswith("autumbra."):
+        return None
+    parts = text.split()
+    tool = parts[0]
+    fields = {"autumbra.enforce.list": None, "autumbra.enforce.create": "tenant_id",
+              "autumbra.enforce.destroy": "tenant_id", "autumbra.fixes": None,
+              "autumbra.fix.approve": "match_id", "autumbra.blocks": "tenant_id",
+              "autumbra.blocks.share": "record_ids"}
+    if tool not in fields:
+        return None
+    actor = await authorized_actor(actor)
+    require_tool(actor, tool)
+    if tool == "autumbra.blocks.share":
+        if len(parts) < 3:
+            raise HTTPException(422, "The action arguments are invalid")
+        arguments = {"tenant_id": parts[1], "record_ids": parts[2:]}
+    else:
+        if len(parts) != (1 if fields[tool] is None else 2):
+            raise HTTPException(422, "Use: autumbra.enforce.create|destroy <tenant-uuid>")
+        arguments = {} if fields[tool] is None else {fields[tool]: parts[1]}
+    action = validate_action(PlannedAction(tool=tool, arguments=arguments), actor)
+    ledger = await code_receipt(actor.tenant_id, tool, task_id=task_id, agent="ghost")
+    return SimpleNamespace(content=dump({"text": tool, "actions": [action.model_dump(mode="json")]}), ledger_id=ledger)
 
 
 async def tiger_code_plan(actor: Actor, messages: list[dict], task_id):

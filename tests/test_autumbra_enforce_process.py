@@ -153,7 +153,7 @@ def test_enforce_loads_client_mode_for_tenant_id_all_three(monkeypatch, tmp_path
             tenant_id=TENANT,
             site_name="coolify.tervory.com",
             shield_mode=mode,
-            fix_mode=mode,
+            fix_mode=ApplyMode.approve_each,
         ))
         monkeypatch.setenv("DATA_DIR", str(tmp_path))
         monkeypatch.setenv("TENANT_ID", TENANT)
