@@ -1466,6 +1466,9 @@ export async function tenantFetch(input: string | URL, init: RequestInit = {}): 
   const url = new URL(input, TANK_URL);
   if (url.origin !== new URL(TANK_URL).origin || !url.pathname.startsWith("/v1/") ||
       url.pathname.startsWith("/v1/tenants/") || url.pathname.startsWith("/v1/command/device/")) return fetch(input, init);
+  // Sign-in listing/revocation address the token's issuing box, including old foreign tokens.
+  if (["GET", "DELETE"].includes((init.method ?? "GET").toUpperCase()) &&
+      (url.pathname === "/v1/personal-tokens" || url.pathname.startsWith("/v1/personal-tokens/"))) return fetch(input, init);
   const headers = new Headers(init.headers);
   if (/^Bearer /i.test(headers.get("authorization") ?? "")) return fetch(input, init);
   let body = init.body;
