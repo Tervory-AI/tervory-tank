@@ -29,8 +29,8 @@ self = <Coroutine test_each_type_exact_email_and_no_repeat_for_two_tenants[postg
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -57,7 +57,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -83,8 +83,8 @@ self = <Coroutine test_each_type_exact_email_and_no_repeat_for_two_tenants[postg
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -111,7 +111,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -137,8 +137,8 @@ self = <Coroutine test_each_type_exact_email_and_no_repeat_for_two_tenants[postg
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -165,7 +165,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -191,8 +191,8 @@ self = <Coroutine test_switch_off_prevents_email_and_preserves_other_tenant[post
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -219,7 +219,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -245,8 +245,8 @@ self = <Coroutine test_switch_off_prevents_email_and_preserves_other_tenant[post
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -273,7 +273,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -299,8 +299,8 @@ self = <Coroutine test_switch_off_prevents_email_and_preserves_other_tenant[post
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -327,7 +327,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -353,8 +353,8 @@ self = <Coroutine test_switch_off_prevents_email_and_preserves_other_tenant[post
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -381,7 +381,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -407,8 +407,8 @@ self = <Coroutine test_switch_off_prevents_email_and_preserves_other_tenant[post
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -435,7 +435,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -461,8 +461,8 @@ self = <Coroutine test_switch_off_prevents_email_and_preserves_other_tenant[post
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -489,7 +489,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -515,8 +515,8 @@ self = <Coroutine test_listing_empty_baseline_reorder_failed_check_and_recovery[
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -543,7 +543,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -569,8 +569,8 @@ self = <Coroutine test_cost_requires_own_matching_row_currency_and_transition[po
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -597,7 +597,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -623,8 +623,8 @@ self = <Coroutine test_microdata_third_product_sends_one_new_product_email[postg
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -651,7 +651,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -677,8 +677,8 @@ self = <Coroutine test_microdata_third_product_sends_one_new_product_email[postg
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -705,7 +705,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -731,8 +731,8 @@ self = <Coroutine test_microdata_third_product_sends_one_new_product_email[postg
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -759,7 +759,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -785,8 +785,8 @@ self = <Coroutine test_microdata_third_product_sends_one_new_product_email[postg
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -813,7 +813,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -839,8 +839,8 @@ self = <Coroutine test_below_cost_ten_against_fifteen_needs_no_stock[postgres]>
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -867,7 +867,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -893,8 +893,8 @@ self = <Coroutine test_market_gap_all_competitors_out_without_prices[postgres]>
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -921,7 +921,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -947,8 +947,8 @@ self = <Coroutine test_watch_url_change_starts_new_baseline_and_peer_reading[pos
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -975,7 +975,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -1001,8 +1001,8 @@ self = <Coroutine test_market_gap_counts_muted_competitor_unknowns_own_stock_and
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:925: in pytest_fixture_setup
     return (yield)
             ^^^^^
@@ -1029,7 +1029,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -1055,8 +1055,8 @@ self = <Coroutine test_concurrent_checks_create_one_alert_and_state_rolls_back_w
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
     hook_result = yield
                   ^^^^^
@@ -1077,7 +1077,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -1103,8 +1103,8 @@ self = <Coroutine test_migration_twice_preserves_switches_and_rejects_schema_inj
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
     hook_result = yield
                   ^^^^^
@@ -1125,7 +1125,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -1151,8 +1151,8 @@ self = <Coroutine test_private_cost_read_uses_same_tenant_sku_and_never_retail_p
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
     hook_result = yield
                   ^^^^^
@@ -1173,7 +1173,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -1199,8 +1199,8 @@ self = <Coroutine test_agent_job_to_existing_email_path[new_product]>
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
     hook_result = yield
                   ^^^^^
@@ -1221,7 +1221,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -1247,8 +1247,8 @@ self = <Coroutine test_agent_job_to_existing_email_path[below_cost]>
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
     hook_result = yield
                   ^^^^^
@@ -1269,7 +1269,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -1295,8 +1295,8 @@ self = <Coroutine test_agent_job_to_existing_email_path[market_gap]>
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
     hook_result = yield
                   ^^^^^
@@ -1317,7 +1317,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -1343,8 +1343,8 @@ self = <Coroutine test_switches_create_patch_read_and_cross_tenant_refusal>
 >       return super().setup()
                ^^^^^^^^^^^^^^^
 
-.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
     hook_result = yield
                   ^^^^^
@@ -1365,7 +1365,7 @@ tests/tiger_g5/conftest.py:31: in database
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.FeatureNotSupportedError: extension "pg_trgm" is not available
@@ -1382,8 +1382,8 @@ database = <asyncpg.pool.Pool object at 0x72834ff4e140>, tables_first = True
             await run_claimed(conn,'tiger',continuation,{'competitor_match':corridor.agent.competitor_match},
                               lambda job:SimpleNamespace(tenant_id=str(TENANT),job_id=str(job['id']),input=json.loads(job['input'])))
         assert corridor.agent._fetch_text.await_count == 2
-    
-    
+
+
     @pytest.mark.asyncio
     @pytest.mark.parametrize('tables_first',[True,False])
     async def test_room_migration_and_nonowner_tank_admin_after_role_ownership(database,tables_first):
@@ -1438,12 +1438,12 @@ database = <asyncpg.pool.Pool object at 0x72834ff4e140>, tables_first = True
 >                   assert not await conn.fetchval('SELECT relrowsecurity OR relforcerowsecurity FROM pg_class WHERE oid=$1::regclass','agent_tiger.'+table)
                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/test_tiger_competitors.py:854: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_tiger_competitors.py:854:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.DependentObjectsStillExistError: role "agent_tiger" cannot be dropped because some objects depend on it
@@ -1458,17 +1458,17 @@ database = <asyncpg.pool.Pool object at 0x72834ff4f040>, tables_first = False
             await run_claimed(conn,'tiger',continuation,{'competitor_match':corridor.agent.competitor_match},
                               lambda job:SimpleNamespace(tenant_id=str(TENANT),job_id=str(job['id']),input=json.loads(job['input'])))
         assert corridor.agent._fetch_text.await_count == 2
-    
-    
+
+
 >   @pytest.mark.asyncio
             ^^^^^^^^^^^^^
 
-tests/test_tiger_competitors.py:803: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_tiger_competitors.py:803:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists
@@ -1484,18 +1484,18 @@ enforced = False
         monkeypatch.setattr(corridor.agent.app.state,'pool',SimpleNamespace(raw=corridor.pool))
         async with corridor.agent.app.router.lifespan_context(corridor.agent.app):
             assert await corridor.pool.fetchval("SELECT to_regclass('agent_tiger.match_runs') IS NOT NULL")
-    
-    
+
+
     @pytest.mark.asyncio
 >   @pytest.mark.parametrize('enforced',[False,True])
             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/test_tiger_competitors.py:1057: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_tiger_competitors.py:1057:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists
@@ -1511,18 +1511,18 @@ enforced = True
         monkeypatch.setattr(corridor.agent.app.state,'pool',SimpleNamespace(raw=corridor.pool))
         async with corridor.agent.app.router.lifespan_context(corridor.agent.app):
             assert await corridor.pool.fetchval("SELECT to_regclass('agent_tiger.match_runs') IS NOT NULL")
-    
-    
+
+
     @pytest.mark.asyncio
 >   @pytest.mark.parametrize('enforced',[False,True])
             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/test_tiger_competitors.py:1057: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_tiger_competitors.py:1057:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists
@@ -1535,12 +1535,12 @@ database = <asyncpg.pool.Pool object at 0x72834fc3bb80>
 
 >   ???
 
-tests/test_tiger_competitors.py:1093: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_tiger_competitors.py:1093:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .tmp/tank-python/asyncpg/connection.py:349: in execute
     result = await self._protocol.query(query, timeout)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 >   ???
 E   asyncpg.exceptions.DuplicateObjectError: role "agent_tiger" already exists

@@ -10,7 +10,7 @@ import pytest_asyncio
 from test_tiger import ROOT, _load, _watch
 from test_tg2_tiger_watchlist import _request
 from rig_tiger_prices.test_prices import corridor, product  # noqa: F401
-from test_alerts import A, B, KINDS, URL, PEER, listing, watched, checked
+from tiger_g5.test_alerts import A, B, KINDS, URL, PEER, listing, watched, checked
 from tiger_works.fixture import extract, no_paid_call, saved_page  # noqa: F401 (pytest fixture import)
 from test_tiger_alert_email import catcher  # noqa: F401
 from alert_email import deliver_pending

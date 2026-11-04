@@ -3,7 +3,7 @@
     "id": "256-10",
     "width": 1440,
     "height": 1360,
-    "changedRatio": 0.028136233660130718,
+    "changedRatio": 0.028121936274509804,
     "geometry": [
       {
         "class": "body",
@@ -133,7 +133,7 @@
     "id": "256-283",
     "width": 1440,
     "height": 1076,
-    "changedRatio": 0.03182440107393639,
+    "changedRatio": 0.03180633002891367,
     "geometry": [
       {
         "class": "body",
@@ -263,7 +263,7 @@
     "id": "256-471",
     "width": 1440,
     "height": 1056,
-    "changedRatio": 0.03202927714646465,
+    "changedRatio": 0.032010863846801345,
     "geometry": [
       {
         "class": "body",
@@ -393,7 +393,7 @@
     "id": "267-19232",
     "width": 1440,
     "height": 848,
-    "changedRatio": 0.01069428066037736,
+    "changedRatio": 0.010671350890985325,
     "geometry": [
       {
         "class": "body",
@@ -495,7 +495,7 @@
     "id": "267-19424",
     "width": 1440,
     "height": 848,
-    "changedRatio": 0.012492629716981132,
+    "changedRatio": 0.012469699947589098,
     "geometry": [
       {
         "class": "body",

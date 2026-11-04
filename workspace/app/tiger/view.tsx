@@ -79,13 +79,13 @@ export function TigerApp({
   return (
     <div className={rootClass}>
       <header className="topbar">
-        <img src={comparing ? "/brand/tervory-logo-on-white.png" : "/brand/tervory-logo-reversed.png"} alt="Tervory" />
+        <img src={comparing ? "/brand/tervory-logo.png" : "/brand/tervory-logo-reversed.png"} alt="Tervory" />
         <button type="button" className="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>Menu</button>
       </header>
 
       <aside className="panel" aria-label="Tiger">
         <div className="panel-top">
-          {comparing ? <><img src="/brand/tervory-logo-on-white.png" alt="Tervory" width={208} height={38} /><div className="position-account">{accountName?.trim()}<span aria-hidden="true">⌄</span></div><p className="panel-identity">Tiger</p></> : <img src="/brand/tiger-on-dark.png" alt="Tiger" width={2607} height={801} />}
+          {comparing ? <><img src="/brand/tervory-logo.png" alt="Tervory" width={208} height={38} /><div className="position-account">{accountName?.trim()}<span aria-hidden="true">⌄</span></div><p className="panel-identity">Tiger</p></> : <img src="/brand/tiger-on-dark.png" alt="Tiger" width={2607} height={801} />}
         </div>
         <nav className="panel-account" aria-label="Account">
           <p hidden={comparing} className="account" role={accountName?.trim() ? undefined : "status"}>{accountName?.trim() || "Account name could not be loaded."}</p>

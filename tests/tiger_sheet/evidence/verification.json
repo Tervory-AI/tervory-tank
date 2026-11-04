@@ -1,0 +1,54 @@
+{
+  "date_utc": "2026-11-04",
+  "base": "d5d3ea2eeb08c9b7a9061274504f0acf53bab2a6",
+  "acceptance": {
+    "command": "python3 -m pytest -q -n 2 -p no:cacheprovider tests/acceptance/test_tiger.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost",
+    "passed": 53,
+    "failed": 0,
+    "rows": 51,
+    "metadata_checks": 2
+  },
+  "real_html": {
+    "path": "tests/tiger_alert_page/fixtures/live/www-adafruit-com--product-4296.html",
+    "sha256": "1d5b055a15119a3156ecb4121cb4abf48f130ef89dc419c58412eb87d7a5dddc",
+    "observed_price": "120.00",
+    "currency": "USD",
+    "mutated": false,
+    "path_under_test": "Command watch -> actual room -> actual price extractor -> observation -> Command read"
+  },
+  "regression": {
+    "tiger_backend_passed": 313,
+    "branding_and_tiger_page_passed": 10,
+    "tiger_node_passed": 29,
+    "workspace_typecheck": "passed",
+    "workspace_production_build": "passed",
+    "workspace_typescript": {
+      "passed": 65,
+      "failed": 1,
+      "unchanged_main_failure": "workspace/app/control/values.test.ts:72 expects removed WorkersTile markup"
+    }
+  },
+  "visual": {
+    "frames": 10,
+    "max_changed_pixel_percent": 4.9914,
+    "geometry_and_copy": "passed",
+    "asset": "existing transparent tervory-logo.png"
+  },
+  "local_prechecks": {
+    "ruff": "passed",
+    "gitleaks": "clean",
+    "osv": "clean",
+    "semgrep": "incomplete: 900-second subprocess deadline on overloaded executor",
+    "broad_tests": "not green: latency/subprocess limits; interrupted after scanner failure; not presented as full passing"
+  },
+  "hosted_run": {
+    "url": "https://github.com/Tervory-AI/tervory-tank/actions/runs/41853853820",
+    "head": "2e64a1fa94b46fd659cbafb70ee1fad7534f0040",
+    "workspace": "success",
+    "command_acceptance": "success",
+    "tank_shards_passed": 9,
+    "tank_shards_failed": 1,
+    "failure": "test_brand_logo.py white-background logo; corrected in this branch",
+    "security": "whole audit findings; workflow_dispatch deliberately has no comparison base; not a green PR gate"
+  }
+}

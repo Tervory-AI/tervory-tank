@@ -10,7 +10,9 @@ const prefix = process.env.TIGER_TEST_TOOLS || path.join(root, '.tmp/browser/nod
 const { build } = require(path.join(prefix, 'esbuild'));
 const { chromium } = require(path.join(prefix, 'playwright'));
 const { PNG } = require(path.join(prefix, 'pngjs'));
-const output = path.join(root, '.tmp/tg2-screenshots');
+const acceptance = process.env.TIGER_ACCEPTANCE_ROW;
+assert(!acceptance || ['TG31', 'TG32'].includes(acceptance));
+const output = path.join(root, '.tmp/tg2-screenshots', acceptance || 'all');
 const copy = require('./frames/copy.json');
 fs.mkdirSync(output, { recursive: true });
 
@@ -64,14 +66,15 @@ async function main() {
   ];
   const results = [];
   try {
-    for (const [id, view, width, empty] of frames) {
+    for (const [id, view, width, empty] of frames.filter(frame => !acceptance || frame[3] === (acceptance === 'TG32'))) {
       const reference = PNG.sync.read(fs.readFileSync(path.join(__dirname, 'frames', `${id}.png`)));
       // The 89px approval/illustrative-data bar belongs to Figma review, not the app.
       const height = reference.height - 89;
       const page = await browser.newPage({ viewport: { width, height }, colorScheme: 'light' });
       await page.route('**/*', route => route.request().url().startsWith(origin) ? route.continue() : route.abort());
-      await page.goto(`${origin}/?view=${view}${empty ? '&empty=1' : ''}`);
+      await page.goto(`${origin}/?view=${view}${empty ? '&empty=1' : ''}`, {waitUntil:'domcontentloaded'});
       await page.locator('.position-block').waitFor(); await page.evaluate(() => document.fonts.ready);
+      await page.waitForFunction(() => Array.from(document.images).every(image => image.complete));
       assert.equal(await page.locator('.watch-views [aria-selected=true]').innerText(), {position:'Price position', matches:'Matches to review', sites:'Competitor sites'}[view]);
       assert.equal(await page.locator('.search input').getAttribute('placeholder'), 'Search watched products, readings and alerts');
       assert.equal(await page.locator('.position-block').evaluate(el => el.scrollWidth <= el.clientWidth), true);
@@ -122,11 +125,11 @@ async function main() {
     }
     for(const width of [375,1440]) {
       const page=await browser.newPage({viewport:{width,height:900}});
-      await page.goto(`${origin}/?view=matches&unavailable=1`); await page.locator('.position-block').waitFor();
+      await page.goto(`${origin}/?view=matches&unavailable=1`, {waitUntil:'domcontentloaded'}); await page.locator('.position-block').waitFor();
       assert.equal(await page.getByText('No matches to review.',{exact:true}).count(),0);
       await page.close();
       const failed=await browser.newPage({viewport:{width,height:900}});
-      await failed.goto(`${origin}/?view=matches`); await failed.locator('.position-block').waitFor();
+      await failed.goto(`${origin}/?view=matches`, {waitUntil:'domcontentloaded'}); await failed.locator('.position-block').waitFor();
       await failed.evaluate(()=>window.__failDecision=true);
       const scope=failed.locator(width===375?'.matches-cards':'.matches-table');
       await scope.getByRole('button',{name:'Reject',exact:true}).click();

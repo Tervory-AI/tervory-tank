@@ -23,8 +23,8 @@ The top 89px is a Figma review annotation, excluded from the app comparison.
 production does not import them. `../evidence/frame-sha256.json` identifies the
 exports, and `../evidence/visual-results.json` records the actual comparisons.
 
-The Figma white logo is byte-identical to the existing
-`workspace/public/brand/tervory-logo-on-white.png`, reused at 208 × 38 desktop
+The app uses the existing transparent
+`workspace/public/brand/tervory-logo.png`, preserving main’s branding rule, at 208 × 38 desktop
 and 186 × 34 mobile. Search (16 × 16), warning dot (6 × 6), neutral hollow dot
 (6 × 6) and checked dot (6 × 6) are original downloaded SVGs under
 `workspace/public/tiger/`. They are checked for load success and effective geometry.
