@@ -7,6 +7,7 @@ These copy the built pages, not a redesign. Existing wording, fonts, colours, da
 Source baseline: `origin/main` `c94610bd0f9f35443f9d58deb45ec44b60ecb33d`. The requested route source matches this branch. Public Autumbra and Moot returned HTTP 200 on 4 Nov. Protected pages are rendered from unchanged production components with offline identity/data boundaries, without credentials, founder sessions or production reads. They are source-faithful fixture states, not signed-in live captures or claims about live client values. Provider-hosted widgets that cannot be reproduced without an account must be listed as gaps rather than invented.
 
 ## Frames
+
 | Page / built state | Address | Width | Frame ID | Status | Figma screenshot | Browser reference |
 | --- | --- | --- | --- | --- | --- | --- |
 | Data · empty batch | https://app.tervory.com/data | 1440 | [604:9](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=604-9) | Proposed | [PNG](evidence/data-figma-1440.png) | [PNG](evidence/data-browser-1440.png) |
@@ -52,7 +53,7 @@ Both native Figma PNGs have the same dimensions as their browser references: 144
 
 | Page | Route | Progress |
 | --- | --- | --- |
-| --- | --- | --- |
+| Data | `/data` | Drawn; Proposed, IDs above |
 | Ledger | `/ledger` | Drawn; Proposed, IDs above |
 | Matters | `/matters` | Drawn; Proposed, IDs above |
 | Chat cost details | `/chats/evidence/[thread]` and `/chats/evidence/[thread]/[row]` | Drawn; Proposed, IDs above |
@@ -149,3 +150,9 @@ Unchanged Moot public index and moot-watch.css. The live public URL returned HTT
 Unchanged Moot watch route, store validation and WatchPanel. No published live match exists on the public index, so this is a source-faithful offline view using the existing acceptance-test Civil appeal record: Independent order and Stored court holding. These are fixture strings, not legal advice or a published case. No new wording or court content is authored.
 
 [Every frame/node ID and exact copy](evidence/moot-watch-nodes.json); [dimension, source-copy and PNG hash checks](evidence/moot-watch-checks.json). All page text comes from the production render; no new product wording. Both native Figma screenshots were compared with the browser reference.
+
+## Final inventory check
+
+30 Proposed screen frames: 15 built views at 1440 and 375. [Final IDs, sizes and canvas positions](evidence/final-frame-audit.json); [all 60 PNG hashes and register coverage](evidence/completion-checks.json). Screen pairs do not overlap. Six Autumbra root frames were repositioned on the canvas without content changes; their IDs are preserved. No application source or visible product wording changed.
+
+Protected data remains offline fixture evidence. Onboarding’s external account-provider widget is the outstanding visual-evidence gap; no account or credential was used to fill it. Undo shows the built missing-token state; weekly receipts uses the isolated authorized empty state. Billing and founder-only tools remain excluded.

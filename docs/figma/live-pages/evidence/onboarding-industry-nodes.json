@@ -533,5 +533,5 @@
     "641:101",
     "641:102"
   ],
-  "nativeConversionCorrection": "Field Set itemSpacing 8 to 0: the browser legend does not consume the flex gap. No wording changes."
+  "nativeConversionCorrection": "Field Set itemSpacing 8 to 0 and fixed height 136.5 to 128.5 on 640:34 and 641:34: browser legend does not consume a flex gap. No wording changes."
 }
