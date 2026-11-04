@@ -112,6 +112,20 @@
       "width": 1280,
       "height": 800,
       "sha256": "16388c109842b83d73ea3d54613aa4f920890e5f6c22120ce54d70b75b30d5ca"
+    },
+    {
+      "frame": "557:6211",
+      "file": "evidence/W08-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "34297cdc21728abf9960dfc736f8933cfa2f42e3168a2d7caade27d22c6b487c"
+    },
+    {
+      "frame": "557:6314",
+      "file": "evidence/W08-1280.png",
+      "width": 1280,
+      "height": 800,
+      "sha256": "2c15f793dd99e22b10cf16f58b311664d317ec5159b8b177b855b839e2c2e9de"
     }
   ]
 }
