@@ -22,6 +22,7 @@ const isPublic = createRouteMatcher([
   "/v1/bot/messages",
   // Meta webhooks authenticate their raw-body signature in Tank.
   "/v1/bot/whatsapp",
+  "/v1/bot/widget/(config|message|handover|poll)",
   // Self-hosted CLI release files (static, public/cli). SHA256SUMS has no dot, so the
   // matcher below does not skip it; list the release paths explicitly.
   "/cli/install.sh",

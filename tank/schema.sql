@@ -3055,6 +3055,10 @@ DO $$ BEGIN
  END IF;
 END $$;
 
+-- Trigger B2: existing tenant RLS and retention cover the console/widget fields.
+ALTER TABLE tank.trigger_bot_config ADD COLUMN IF NOT EXISTS settings jsonb NOT NULL DEFAULT '{}';
+ALTER TABLE tank.trigger_bot_messages ADD COLUMN IF NOT EXISTS person text;
+
 -- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
 CREATE SCHEMA IF NOT EXISTS agent_tank;
 CREATE TABLE IF NOT EXISTS agent_tank.memory_records (

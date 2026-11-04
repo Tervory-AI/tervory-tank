@@ -650,6 +650,10 @@ class Service:
             payload = {"kind": "product", "product": product}
         else:
             raise RigError("invalid", "A setup or a product is required.", 422)
+        # A visitor request is metadata, never an invented price or invoice.
+        request = {key: body[key] for key in ("title", "request", "quantity") if body.get(key) is not None}
+        if request:
+            payload["request"] = request
         wanted = ([part["product"]["id"] for part in payload["setup"]["parts"]]
                   if payload["kind"] == "setup" else [payload["product"]["id"]])
         private = []

@@ -53,6 +53,9 @@ class LinkIn(BaseModel):
 
 class QuoteIn(BaseModel):
     model_config = {"extra": "forbid"}
+    title: str | None = Field(default=None, max_length=200)
+    request: str | None = Field(default=None, max_length=2000)
+    quantity: int | None = Field(default=None, ge=1, le=100000)
     setup: dict[str, Any] | None = None
     product_id: str | None = None
     contact: dict[str, Any] = Field(default_factory=dict)
