@@ -1,0 +1,66 @@
+{
+  "06-ready-1440": [
+    {
+      "region": [
+        0,
+        0,
+        1440,
+        128
+      ],
+      "changed_pixel_fraction": 0.010617404513888888,
+      "mean_channel_error_255": 0.9961805555555555
+    },
+    {
+      "region": [
+        48,
+        128,
+        1392,
+        272
+      ],
+      "changed_pixel_fraction": 0.016152033730158732,
+      "mean_channel_error_255": 1.0365702849426808
+    },
+    {
+      "region": [
+        48,
+        628,
+        1008,
+        804
+      ],
+      "changed_pixel_fraction": 0.017637310606060608,
+      "mean_channel_error_255": 0.891015625
+    }
+  ],
+  "06-ready-375": [
+    {
+      "region": [
+        0,
+        0,
+        375,
+        96
+      ],
+      "changed_pixel_fraction": 0.041944444444444444,
+      "mean_channel_error_255": 3.3500092592592594
+    },
+    {
+      "region": [
+        16,
+        96,
+        359,
+        216
+      ],
+      "changed_pixel_fraction": 0.06593780369290574,
+      "mean_channel_error_255": 4.084782960803369
+    },
+    {
+      "region": [
+        16,
+        564,
+        359,
+        740
+      ],
+      "changed_pixel_fraction": 0.05984958918632388,
+      "mean_channel_error_255": 3.4378423447301
+    }
+  ]
+}
