@@ -21,6 +21,9 @@ trust this same issuer. There is no fallback or Workspace device approval page.
    `ops/trigger-signin/docker-compose.yml`. Use its pinned image digests and the
    existing Coolify proxy network, HTTPS certificate and h2c API transport.
    Do not create another server, attach a Tank database or delete old volumes.
+   The Boston database/bootstrap/login volumes retain their previous physical
+   names so renaming the resource cannot silently create an empty database.
+   Those storage names are not additional sign-in resources or issuers.
 3. Run Boston's `tervory-setup`. The reused #589 pattern creates one Tervory
    project, public PKCE Workspace app, native CLI device app and project roles.
    It reads existing tenants through both Tanks' capability-protected

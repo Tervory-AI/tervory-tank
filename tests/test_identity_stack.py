@@ -90,7 +90,7 @@ def test_stack_is_isolated_pinned_and_uses_only_existing_proxy():
         assert re.fullmatch(r'ghcr.io/zitadel/zitadel:v4\.20\.0@sha256:[a-f0-9]{64}', services[name]['image'])
     assert re.fullmatch(r'ghcr.io/zitadel/zitadel-login:v4\.20\.0@sha256:[a-f0-9]{64}', services['trigger-signin-login']['image'])
     assert re.fullmatch(r'postgres:16\.15@sha256:[a-f0-9]{64}', services['identity-postgres']['image'])
-    assert stack['volumes']['identity_database']['name'] == 'trigger-signin-postgres'
+    assert stack['volumes']['identity_database']['name'] == 'trigger-signin-us-postgres'
     assert services['identity-postgres']['networks'] == ['database']
     assert stack['networks']['database']['internal'] is True
     assert not any('traefik' in service.get('image', '') for service in services.values())

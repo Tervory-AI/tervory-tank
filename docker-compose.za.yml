@@ -188,7 +188,6 @@ services:
       litellm:
         condition: service_started
     networks:
-      - tervory-gw-trigger-signin
       - default
       - tervory-gw-zenas
     # Coolify attaches za.tervory.com to this service only.
@@ -281,9 +280,6 @@ volumes:
   za_litellm_chatgpt_token:
 
 networks:
-  tervory-gw-trigger-signin:
-    name: tervory-gw-trigger-signin
-    internal: true
   default:
     name: tervory-za
   tervory-gw-zenas:

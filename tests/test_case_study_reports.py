@@ -1,6 +1,7 @@
 """Offline case-study proof against real PostgreSQL and the actual Tank routes."""
 from __future__ import annotations
-from trigger_signin_fakes import set_founders
+from trigger_signin_fakes import set_founders, native_provider, ORG
+import identity_oidc as oidc
 
 import json
 import os
@@ -52,6 +53,14 @@ async def api(monkeypatch):
         monkeypatch.setattr(main, "box_region", lambda: "us-east")
         monkeypatch.setenv("TANK_API_KEY", "local-fixture")
         set_founders(monkeypatch, "fixture-founder")
+        provider = native_provider(monkeypatch, {ORG: str(A), '10002': str(B)})
+        original_headers = headers
+        def signed_headers(tenant=A, user='client-a'):
+            org = ORG if tenant == A else '10002'
+            roles = {'org_admin' if user == 'fixture-founder' else 'member': {org: 'Tervory'}}
+            return {**original_headers(tenant, user), 'x-trigger-signin-org': org,
+                    'x-trigger-signin-token': provider.token(sub=user, **{oidc.ORG_CLAIM: org, oidc.ROLES_CLAIM: roles})}
+        monkeypatch.setitem(globals(), 'headers', signed_headers)
         # All product reads for these reports are local; never contact a model.
         async def no_network(*args, **kwargs):
             raise AssertionError("Case-study reports must not call an external service")
@@ -166,7 +175,7 @@ async def test_tenant_and_founder_access_cannot_be_overridden_by_query_or_header
     all_clients = await client.get("/v1/case-studies/clients", headers=headers(A, "fixture-founder"))
     assert {row["tenant_id"] for row in all_clients.json()["clients"]} == {str(A), str(B)}
     for bad in ({"X-Tank-Key": ""}, {"X-Tervory-User": ""}, {"X-Tervory-Tenant": "invalid"}):
-        assert (await client.get("/v1/case-studies/base", headers=bad)).status_code in {401, 422}
+        assert (await client.get("/v1/case-studies/base", headers=bad)).status_code in {401, 403, 422}
     assert (await client.get("/v1/case-studies/base", headers={"X-Tervory-Home-Region": "za"})).status_code == 403
     assert (await client.get("/v1/case-studies/tiger")).status_code == 404
     assert (await client.get("/v1/case-studies/unknown")).status_code == 404

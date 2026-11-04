@@ -192,11 +192,11 @@ services:
         condition: service_healthy
 volumes:
   identity_login_token:
-    name: trigger-signin-login-token
+    name: trigger-signin-us-login-token
   identity_database:
-    name: trigger-signin-postgres
+    name: trigger-signin-us-postgres
   identity_bootstrap:
-    name: trigger-signin-bootstrap
+    name: trigger-signin-us-bootstrap
 networks:
   signin:
     external: true

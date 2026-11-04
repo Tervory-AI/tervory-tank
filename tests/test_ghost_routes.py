@@ -1,5 +1,5 @@
 """Actual Tank/room HTTP authentication, action boundaries and secret-safe errors."""
-from trigger_signin_fakes import set_founders
+from trigger_signin_fakes import set_founders, native_provider, ORG
 import asyncio
 import base64
 import os
@@ -46,6 +46,8 @@ def gateway(monkeypatch):
     monkeypatch.setenv("TANK_KEY_RADIX", "radix-test")
     monkeypatch.setenv("TANK_KEY_BASE", "base-test")
     set_founders(monkeypatch, "founder-test")
+    provider = native_provider(monkeypatch, {ORG: str(tank.PLATFORM_TENANT)})
+    conn.signin_headers = {'x-trigger-signin-token': provider.token(sub='founder-test'), 'x-trigger-signin-org': ORG}
     monkeypatch.setenv("TANK_REGION", "us-east")
     # Starlette State.__delattr__ raises KeyError if a test already removed it.
     monkeypatch.setitem(tank.app.state._state, "ghost_recovery_backend", None)
@@ -79,7 +81,7 @@ async def test_look_is_founder_only_and_reaches_room_without_tenant_override(gat
             body = {"target": "workspace", "signal": "health"}
             denied = await client.post("/v1/ghost/look", json=body, headers={"X-Tank-Key": "workspace-test"})
             assert denied.status_code == 404 and not seen
-            ok = await client.post("/v1/ghost/look", json=body, headers={"X-Tank-Key": "workspace-test", "X-Tervory-Admin": "founder-test"})
+            ok = await client.post("/v1/ghost/look", json=body, headers={"X-Tank-Key": "workspace-test", "X-Tervory-Admin": "founder-test", **gateway.signin_headers})
             assert ok.status_code == 200
     assert seen[0].url == "http://agent-ghost:8000/look"
     assert seen[0].headers["X-Tank-Key"] == "ghost-test"

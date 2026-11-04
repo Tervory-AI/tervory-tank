@@ -1,5 +1,6 @@
 """Offline router/model stubs; actual Tank handlers and disposable PostgreSQL."""
 import asyncio
+from trigger_signin_fakes import set_founders, native_provider, ORG
 from datetime import datetime, timezone
 from decimal import Decimal
 import json
@@ -63,6 +64,10 @@ async def real_tank(monkeypatch):
     monkeypatch.setattr(tank, "DATABASE_URL", target)
     monkeypatch.setattr(tank, "TANK_API_KEY", "local-routellm-test")
     monkeypatch.setattr(tank, "REDIS_URL", "redis://127.0.0.1:1/0")
+    set_founders(monkeypatch, 'local-founder')
+    signin = native_provider(monkeypatch, {ORG: str(tank.PLATFORM_TENANT)})
+    founder_headers = {'X-Tervory-Admin': 'local-founder', 'x-trigger-signin-org': ORG,
+                       'x-trigger-signin-token': signin.token(sub='local-founder')}
     state = SimpleNamespace(calls=[], score=.2, router_calls=0, weak_error=False, no_price=False, fallback=False)
 
     def provider(request):
@@ -102,7 +107,7 @@ async def real_tank(monkeypatch):
                     await conn.execute("""INSERT INTO tank.policy(tenant_id,task_type,model,shadow_rate,system_prompt)
                         VALUES($1,'routellm.proof','sol',1,'Answer the question.')""", tenant)
                 await conn.execute("UPDATE tank.policy SET model='luna' WHERE task_type='tank.judge'")
-            yield SimpleNamespace(tank=tank, pool=tank.pool(), client=client, tenants=tenants, state=state)
+            yield SimpleNamespace(tank=tank, pool=tank.pool(), client=client, tenants=tenants, state=state, founder_headers=founder_headers)
             if tank._background:
                 await asyncio.gather(*list(tank._background))
     finally:
@@ -133,7 +138,7 @@ async def test_real_tank_off_shadow_cost_judge_isolation_and_founder_gate(real_t
     body = {"tenant_id": str(a), "routellm_weak_model": "flash-lite", "routellm_threshold": .7}
     path = "/v1/policy/routellm.proof/routellm"
     assert (await b.client.put(path, json=body)).status_code == 404
-    assert (await b.client.put(path, json=body, headers={"X-Tervory-Admin": "local-founder"})).status_code == 200
+    assert (await b.client.put(path, json=body, headers=b.founder_headers)).status_code == 200
     row = await turn(b, a)
     assert row["routellm_model"] == "flash-lite" and row["routellm_score"] == .2
     assert row["routellm_status"] == "sampled"
@@ -146,7 +151,7 @@ async def test_real_tank_off_shadow_cost_judge_isolation_and_founder_gate(real_t
         assert shadow["routellm_sample_tenant"] == a and shadow["tenant_id"] == b.tank.PLATFORM_TENANT
         assert not await conn.fetchval("SELECT count(*) FROM tank.shadow WHERE tenant_id=$1", other)
         assert (await b.tank._load_evidence(conn, {"task_type": "routellm.proof", "candidate_model": "flash-lite"})).samples == 0
-    headers = {"X-Tervory-Admin": "local-founder"}
+    headers = b.founder_headers
     first = (await b.client.get("/v1/proof", params={"tenant_id": str(a)}, headers=headers)).json()
     pair = next(t for t in first["tasks"] if t["task_type"] == "routellm.proof")["shadow_pairs"][0]
     assert pair["primary_cost_usd"] == .02 and pair["could_have_cost_usd"] == .002 and pair["saved_usd"] == .018
@@ -190,7 +195,7 @@ async def test_failure_strong_selection_unsampled_and_unknown_cost_leave_answer_
     b.state.fallback = False
     b.state.no_price = True
     assert (await turn(b, a))["routellm_status"] == "sampled"
-    report = (await b.client.get("/v1/proof", params={"tenant_id": str(a)}, headers={"X-Tervory-Admin": "local-founder"})).json()
+    report = (await b.client.get("/v1/proof", params={"tenant_id": str(a)}, headers=b.founder_headers)).json()
     assert all(not task["shadow_pairs"] for task in report["tasks"])
     async with b.pool.acquire() as conn:
         await conn.execute("UPDATE tank.policy SET shadow_rate=.1 WHERE tenant_id=$1", a)

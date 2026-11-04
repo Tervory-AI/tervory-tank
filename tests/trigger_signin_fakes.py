@@ -38,6 +38,18 @@ def install_registry(monkeypatch, providers, bindings, *, workspace_client=None)
     monkeypatch.setattr(registry, 'refresh', refresh)
 
 
+def native_provider(monkeypatch, bindings):
+    import trigger_signin_config as registry
+    founders = registry._records.get('us-east', {}).get('founders', [])
+    provider = Provider('us-east')
+    install_registry(monkeypatch, [provider], bindings)
+    set_founders(monkeypatch, ','.join(founders))
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(oidc, 'http_client', lambda: original_client(transport=httpx.MockTransport(provider)))
+    oidc._cache.clear()
+    return provider
+
+
 class Provider:
     def __init__(self, region='za'):
         self.region = region
