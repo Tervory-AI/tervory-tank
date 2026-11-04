@@ -35,6 +35,7 @@ export default async function MootIndexPage({ searchParams }: { searchParams?: P
             {result.matches.map((row) => (
               <li key={row.matchId}>
                 <Link href={`/moot/${row.matchId}${region === "za" ? "?region=za" : ""}`}>{row.title}</Link>
+                <span>unverified</span>
               </li>
             ))}
           </ul>
