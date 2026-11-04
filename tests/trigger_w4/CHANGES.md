@@ -55,3 +55,16 @@ Branch: `codex/trigger-w4`; base: `55b2e224` from `origin/main`. The pushed fina
 | [workspace/public/trigger/widget.css](../../workspace/public/trigger/widget.css) | 1 | Approved client panel, fonts, bubbles, controls and responsive bounds. |
 | [workspace/public/trigger/widget.js](../../workspace/public/trigger/widget.js) | 1 | Client-only shadow-root embed, repeatable source chips, hand-over, contact/quote drafts and cross-origin font loading. |
 | [workspace/public/trigger/wordmark.png](../../workspace/public/trigger/wordmark.png) | binary | Original approved Figma wordmark asset, unchanged. |
+
+## PR #654 security follow-up
+
+| File/call | Lines | Change |
+|---|---|---|
+| `workspace/app/trigger/actions.ts` reads | 44, 75 | Constant route lookup; separately validated and encoded path/query UUIDs, before identity or fetch. |
+| `workspace/app/trigger/actions.ts` confirm/cancel | 91, 106 | Exact UUID validation for both identifiers and encoded card segment. |
+| `workspace/app/trigger/[[...segments]]/page.tsx` | 14, 28, 44 | Strict UUID/own-resource checks and structured action arguments replace raw upstream path assembly. |
+| `workspace/app/v1/bot/widget/[operation]/route.ts` | 42, 78 | Constant operation lookup and encoded literal segment. |
+| `tests/trigger_w4/ssrf.cjs` | 1 | Actual transport fetch-spy coverage of every malformed-value case at every caller. |
+| `tests/trigger_w4/test_wave4_workspace.py` | 15 | Run the SSRF contract in CI. |
+| `tests/trigger_w4/workspace.cjs` | 116 | Existing contract uses the structured read signature. |
+| `tests/trigger_w4/SSRF.md` | 1 | Full caller audit and validation evidence. |
