@@ -433,7 +433,9 @@ class _Conn:
             "cache_scope": "none",
         }
 
-    async def fetchval(self, sql: str, *_args: object, **_kwargs: object) -> str | bool:
+    async def fetchval(self, sql: str, *_args: object, **_kwargs: object) -> str | bool | None:
+        if "tank.tenants" in sql:
+            return None  # Legacy fixture: no founder onboarding record.
         if "tank.controls" in sql:
             return False  # Paid work is enabled in this routing fixture.
         return "candidate"
@@ -615,7 +617,9 @@ class _CourtPool:
             "cache_scope": "none",
         }
 
-    async def fetchval(self, sql: str, *_args: object) -> bool:
+    async def fetchval(self, sql: str, *_args: object) -> bool | None:
+        if "tank.tenants" in sql:
+            return None  # Legacy published-court fixture.
         assert "tank.controls" in sql
         return False
 
