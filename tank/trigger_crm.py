@@ -25,6 +25,8 @@ FIELDS = frozenset({"id", "title", "first_name", "last_name", "email", "phone", 
                     "invoice_number", "invoice_title", "due_date", "amount_due", "amount_paid", "is_overdue",
                     "reminder_enabled", "reminder_days_before", "reminder_days_after", "reminder_frequency",
                     "last_reminder_sent", "reminder_count", "account", "contact"})
+# Approved CRM field register (PR #642); credentials and public invoice links are excluded.
+FIELDS = FIELDS | {"payments"} | frozenset(['accepted_at', 'accepted_by_email', 'accepted_by_name', 'accepted_user_agent', 'account', 'address_line', 'amount_due', 'amount_paid', 'assigned_to', 'billing_address_line', 'billing_city', 'billing_country', 'billing_period', 'billing_postcode', 'billing_state', 'city', 'client_address_line', 'client_city', 'client_country', 'client_email', 'client_name', 'client_phone', 'client_postcode', 'client_state', 'close_date', 'company_name', 'contact', 'contacts', 'converted_to_invoice', 'country', 'created_at', 'created_by', 'currency', 'custom_fields', 'declined_at', 'department', 'deposit_invoice', 'deposit_percent', 'description', 'details', 'discount_amount', 'discount_type', 'discount_value', 'do_not_call', 'due_date', 'email', 'estimate_number', 'expiry_date', 'external_id', 'external_source', 'first_name', 'first_response_at', 'first_response_by', 'first_response_by_details', 'industry', 'introduction', 'invoice_number', 'invoice_title', 'is_active', 'is_expired', 'is_overdue', 'is_unanswered', 'issue_date', 'job_title', 'last_contacted', 'last_enquiry_at', 'last_name', 'last_outbound_at', 'last_reminder_sent', 'line_items', 'linked_accounts', 'linkedin_url', 'next_follow_up', 'notes', 'opportunity', 'opportunity_amount', 'organization', 'paid_at', 'payment_terms', 'phone', 'phone_e164', 'po_number', 'postcode', 'probability', 'project', 'project_billing_type', 'rating', 'reminder_count', 'reminder_days_after', 'reminder_days_before', 'reminder_enabled', 'reminder_frequency', 'salutation', 'sent_at', 'shipping_amount', 'source', 'source_detail', 'source_ref', 'stage', 'start_project', 'state', 'status', 'subtotal', 'tags', 'tax_amount', 'tax_rate', 'teams', 'template', 'terms', 'title', 'total_amount', 'updated_at', 'updated_by', 'viewed_at', 'waiting_since', 'website'])
 STATUSES = {"assigned", "closed", "converted", "in process", "recycled"}
 
 
@@ -146,8 +148,25 @@ def project(item: dict) -> dict:
         UUID(item["id"])
     except ValueError:
         raise HTTPException(502, "Invalid CRM response") from None
-    return {key: value for key, value in item.items() if key in FIELDS and
-            (value is None or isinstance(value, (str, bool, int, float)))}
+    return {key: projected({k: v for k, v in value.items() if k in {'id', 'name', 'first_name', 'last_name'}}
+                           if key in {'created_by', 'updated_by', 'first_response_by', 'first_response_by_details'} and isinstance(value, dict)
+                           else value) for key, value in item.items() if key in FIELDS}
+
+
+def projected(value, depth=0):
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value[:20000] if isinstance(value, str) else value
+    if depth >= 4:
+        return None
+    if isinstance(value, list):
+        return [projected(item, depth+1) for item in value[:200]]
+    if isinstance(value, dict):
+        safe = {'id', 'name', 'title', 'first_name', 'last_name', 'email', 'phone', 'company_name',
+                'description', 'quantity', 'unit_price', 'price', 'amount', 'total', 'subtotal',
+                'product_name', 'payment_date', 'payment_method', 'reference_number',
+                'tax_rate', 'tax_amount', 'discount', 'currency', 'product', 'sku', 'value', 'label'}
+        return {key: projected(item, depth+1) for key, item in value.items() if key in safe}
+    return None
 
 
 @router.get("/{resource}")
