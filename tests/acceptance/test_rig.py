@@ -296,6 +296,9 @@ row(API + '/search', 'Second-store profile: search lamps, shades, parts, shade t
 row(WIDGET, 'US: leave a second tenant in default quote mode; attempt cart add there; on the cart tenant send a signed paid callback whose read-back total is 1.00 instead of the saved total.', 'Default quote tenant returns cart_disabled; changed paid total raises order_mismatch; no supplier placement.', 'test_rig_cart.test_quote_default_tenant_isolation_and_total_verification', KEY)
 
 
+row('https://rig.tervory.com/', 'Sign in; open /?q=part and /admin?cart=orders.', 'Workspace rewrites to /rig?q=part and /rig/admin?cart=orders; signed-out visitors return to the same Rig URL.', 'test_rig_product_host.test_workspace_middleware_preserves_rig_authentication_and_query_strings')
+row('https://rig.tervory.com/widget/test', 'Load an existing issued embed and replay its API, asset and signed callback URLs through the shared host.', 'Every issued widget/store URL reaches agent-rig unchanged; root and admin reach Workspace.', 'test_rig_product_host.test_real_traefik_keeps_embed_store_urls_and_sends_app_paths_to_workspace')
+
 def _sheet_matches_rows():
     text = (REPO / 'docs/acceptance/rig.md').read_text()
     ids = re.findall(r'^\| (RIG-\d+) \|', text, flags=re.MULTILINE)

@@ -1,6 +1,6 @@
 # Rig founder acceptance sheet
 
-Baseline: `origin/main` at `475597ed`. The founder page URLs also require PR #653 and the register's shared-host domain cutover before testing. Use disposable acceptance tenants, synthetic
+The host split from merged PR #653 is included. Apply the register's shared-host domain cutover before founder browser testing. Use disposable acceptance tenants, synthetic
 contact details and test stores only. Each row has exactly one executable test
 named `test_RIG_NN` in `tests/acceptance/test_rig.py`; the final column identifies
 the production browser/handler contract that test executes. An acknowledgement
@@ -9,7 +9,7 @@ is transport acceptance/storage, not proof that the store has invoiced anyone.
 ## Settings and fixture preparation
 
 The settings names are from [FOUNDER-SETTINGS](https://github.com/Tervory-AI/tervory-tank/blob/272454b69c74982b8f0c8439f1a760d267a073a3/docs/ops/FOUNDER-SETTINGS.md), read
-from `origin/claude/founder-settings` (PR #657) while its merge is pending.
+from the repository settings register.
 `none` means no **additional** entry from that register. It does not mean an
 unauthenticated store or an unconfigured production deployment. Rig adds no
 setting in this acceptance PR. Keep `HF_JOBS_TOKEN` and `HF_JOBS_NAMESPACE` off;
@@ -167,18 +167,17 @@ payment, DNS/TLS cutover or external-service readiness.
 | RIG-79 | https://rig.tervory.com/v1/rig/search | Second-store profile: search lamps, shades, parts, shade to go with the lamp, then 2 pack lamps. | Focus SECOND-LAMP-01; shade/parts IDs SECOND-SHADE-01; message We list lamps separately.; no first-store vocabulary is pasted. | none | test_rig_l1.test_second_store_owns_categories_parts_and_sentences_without_fallback |
 | RIG-80 | https://rig.tervory.com/widget/test | US: leave a second tenant in default quote mode; attempt cart add there; on the cart tenant send a signed paid callback whose read-back total is 1.00 instead of the saved total. | Default quote tenant returns cart_disabled; changed paid total raises order_mismatch; no supplier placement. | RIG_WIDGET_PUBLISHABLE_KEY | test_rig_cart.test_quote_default_tenant_isolation_and_total_verification |
 
-**Row count: 80.** No row is conditionally skipped by the acceptance harness.
+| RIG-81 | https://rig.tervory.com/ | Sign in; open /?q=part and /admin?cart=orders. | Workspace rewrites to /rig?q=part and /rig/admin?cart=orders; signed-out visitors return to the same Rig URL. | none | test_rig_product_host.test_workspace_middleware_preserves_rig_authentication_and_query_strings |
+| RIG-82 | https://rig.tervory.com/widget/test | Load an existing issued embed and replay its API, asset and signed callback URLs through the shared host. | Every issued widget/store URL reaches agent-rig unchanged; root and admin reach Workspace. | none | test_rig_product_host.test_real_traefik_keeps_embed_store_urls_and_sends_app_paths_to_workspace |
+
+**Row count: 82.** No row is conditionally skipped by the acceptance harness.
 The real database and browser prerequisites must be present for its complete run.
 
-## Deployment gate outside this baseline
+## Deployment preparation
 
-The shared-host split is PR #653 (`codex/rig-w5`, `165f11ef`), not yet merged
-into this baseline. After it merges and the founder applies section C.1 of
-FOUNDER-SETTINGS, `https://rig.tervory.com/` must open Workspace `/rig` and
-`/admin` must reach `/rig/admin`, while existing issued embeds keep their paths.
-Its real Traefik and middleware proof is `tests/test_rig_product_host.py` on that
-PR. This sheet does not count an unmerged feature as passed on main. The existing
-API/widget rows above remain applicable before and after that host cutover.
+Attach rig.tervory.com to the Workspace application as well as agent-rig, following
+FOUNDER-SETTINGS section C.1 and PRODUCT-HOSTS. Rows RIG-81–82 prove the merged
+middleware and real Traefik split offline, including issued embed URLs.
 Frames 06–07 are still pending; GPU flags remain off. Odoo is retired. Custom
 Nation stays quote → the store's own invoice → EFT. US stores go to their store
 checkout. Rig never takes payment, holds a card or refunds.
@@ -189,16 +188,13 @@ Use the repository test runtime, Chromium and an explicitly disposable Postgres
 16 through `RIG_TEST_DATABASE_URL` (the existing test-only variable). Then:
 
 ```sh
-python -m pytest -q tests/acceptance/test_rig.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
+RIG_TRAEFIK_TEST_BINARY=/absolute/path/to/traefik python -m pytest -q tests/acceptance/test_rig.py --disable-socket --allow-unix-socket --allow-hosts=127.0.0.1,localhost,::1
 ```
 
 The tests use the same fixture implementations cited above; no live credentials
 are needed. Every row runs independently. A parity assertion in every case
-refuses a sheet whose row IDs differ from the executable registry. Validation: **80 passed, zero skipped, zero failures**, in 132.95 seconds,
-using Chromium, disposable Postgres 16 and socket blocking. Combined collection
-with the existing Rig tests: **876 tests**, no module/fixture conflicts. The
-first 69-row pass and subsequent 77-row pass also passed; the final complete
-80-row run is the acceptance result. Corrections were confined to the sheet/test
-harness (fixture registration, a parameter-name collision and exact UI wording);
-no production behavior changed. CI's exact Ruff command passed with
-**All checks passed!**. The temporary database container was removed afterwards.
+refuses a sheet whose row IDs differ from the executable registry. The original
+80-row baseline passed with disposable Postgres and Chromium. Gate 1 adds two
+merged-host proofs: both passed, including the real local Traefik proxy.
+Full current results are recorded with the gate validation, rather than implying
+that an earlier baseline run validates new rows.
