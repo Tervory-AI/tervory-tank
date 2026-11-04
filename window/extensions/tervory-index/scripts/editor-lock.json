@@ -1,0 +1,21 @@
+{
+  "version": "1.143.17232",
+  "assets": {
+    "linux-x64": {
+      "file": "VSCodium-linux-x64-1.143.17232.tar.gz",
+      "sha256": "ca1895aa040bd91a09c709d79eac7862d8c1aa0237fdc25b503deeb8bcd87efd"
+    },
+    "darwin-x64": {
+      "file": "VSCodium-darwin-x64-1.143.17232.zip",
+      "sha256": "6f11e188a16decf417623a94593370ee87fc40445d09c0ff49e30af57a5087f5"
+    },
+    "darwin-arm64": {
+      "file": "VSCodium-darwin-arm64-1.143.17232.zip",
+      "sha256": "ade8f5e0ebf47e5ea9e2478844f150c68e43def192b6f8be05d0329d25ec0917"
+    },
+    "win32-x64": {
+      "file": "VSCodium-win32-x64-1.143.17232.zip",
+      "sha256": "a1090868af8ac0ac04c22d79fdd02246fa115a78daf38a741d8db06df1753c1d"
+    }
+  }
+}

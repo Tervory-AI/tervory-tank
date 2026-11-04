@@ -7,7 +7,7 @@ const ready = (async () => {
   env.allowLocalModels = true;
   env.localModelPath = workerData.modelRoot;
   env.useBrowserCache = false;
-  return pipeline('feature-extraction','Xenova/all-MiniLM-L6-v2',{dtype:'q8',local_files_only:true,device:'cpu'});
+  return pipeline('feature-extraction','Xenova/all-MiniLM-L6-v2',{dtype:'q8',local_files_only:true,device:'cpu',session_options:{intraOpNumThreads:2,interOpNumThreads:1}});
 })();
 let queue = Promise.resolve();
 parentPort!.on('message', (m: {id:number;texts:string[]}) => {

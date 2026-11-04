@@ -15,7 +15,8 @@ export function chunks(file: string, text: string, symbols?: Span[]): Chunk[] {
     const visit = (node: ts.Node): void => {
       if (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isMethodDeclaration(node) ||
           ts.isInterfaceDeclaration(node) || ts.isVariableStatement(node)) {
-        starts.add(source.getLineAndCharacterOfPosition(node.getStart(source)).line);
+        const leading=ts.getLeadingCommentRanges(text,node.getFullStart());
+        starts.add(source.getLineAndCharacterOfPosition(leading?.[0]?.pos??node.getStart(source)).line);
         starts.add(source.getLineAndCharacterOfPosition(node.end).line + 1);
       }
       ts.forEachChild(node, visit);

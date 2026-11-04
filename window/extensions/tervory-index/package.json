@@ -27,6 +27,10 @@
       {
         "command": "tervory.index.rebuild",
         "title": "[Rebuild project index]"
+      },
+      {
+        "command": "tervory.index.search",
+        "title": "[Search project]"
       }
     ]
   },
