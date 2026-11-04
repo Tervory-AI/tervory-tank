@@ -456,7 +456,7 @@ def _short(text: str) -> str:
 def _quality_results(checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Use the existing card's result rows; never introduce a page or UI label."""
     return [{"name": c["name"], "ok": c["ok"], "summary": c.get("summary", "")}
-            for c in checks if c["name"] in {"accessibility", "lighthouse", "links", "secrets", "k6"}]
+            for c in checks if c["name"] in {"accessibility", "lighthouse", "links", "secrets", "k6", "radix.repo"}]
 
 
 async def _secret_check(project: Path, tenant_id: str | None, tank: Any = None) -> dict[str, Any]:

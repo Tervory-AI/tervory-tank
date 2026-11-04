@@ -73,11 +73,22 @@ def test_model_keys_reach_only_litellm_in_za() -> None:
 
 def test_za_zenas_room_is_its_own_resource_on_the_corridor() -> None:
     room = yaml.safe_load(ROOM_COMPOSE)
-    assert set(room["services"]) == {"agent-zenas", "pool-loader", "zenas-own-model"}
+    assert set(room["services"]) == {"agent-zenas", "pool-loader", "zenas-own-model", "zenas-brain", "zenas-sandbox"}
     assert room["networks"]["gw"] == {"external": True, "name": "tervory-gw-zenas"}
     # Contracts are assembled inside agent-zenas; no Docassemble network or resource.
-    assert set(room["networks"]) == {"gw", "own_model"}
+    # The optional brain (profile "brain", off by default) adds only its internal sandbox network;
+    # the owned model (profile "own-model") is reached only on its own external network.
+    assert set(room["networks"]) == {"gw", "sandbox", "own_model"}
+    assert room["networks"]["sandbox"] == {"internal": True}
     assert room["networks"]["own_model"] == {"external": True, "name": "tervory-own-zenas-za"}
+    brain, sandbox = room["services"]["zenas-brain"], room["services"]["zenas-sandbox"]
+    assert brain["profiles"] == ["brain"] and sandbox["profiles"] == ["brain"]
+    assert brain["networks"] == ["gw", "sandbox"] and sandbox["networks"] == ["sandbox"]
+    assert brain["environment"]["TANK_REGION"] == "za"
+    for name, service in (("zenas-brain", brain), ("zenas-sandbox", sandbox)):
+        assert "ports" not in service and "env_file" not in service, name
+        for banned in ("POSTGRES_PASSWORD", "POSTGRES_USER", "LITELLM_MASTER_KEY", "TANK_API_KEY", "QDRANT_API_KEY"):
+            assert banned not in (service.get("environment") or {}), (name, banned)
     for name in ("agent-zenas", "pool-loader"):
         service = room["services"][name]
         assert service["environment"]["TANK_REGION"] == "za", name
