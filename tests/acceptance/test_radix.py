@@ -581,6 +581,8 @@ def test_r58_legacy_fixed_host_header_check(monkeypatch):
 def test_sheet_has_exactly_one_fixture_case_per_row():
     sheet = (ROOT / 'docs/acceptance/radix.md').read_text()
     rows = re.findall(r'^\| (R\d\d)\b', sheet, flags=re.M)
+    positions = [i for i, line in enumerate(sheet.splitlines()) if re.match(r'^\| R\d\d\b', line)]
+    assert positions == list(range(positions[0], positions[-1] + 1)), 'Every row must render inside the acceptance table'
     cases = [match[1].upper() for name, value in globals().items()
              if callable(value) and (match := re.fullmatch(r'test_(r\d\d)_\w+', name))]
     names = re.findall(r'^\| R\d\d `([a-z0-9_]+)`', sheet, flags=re.M)
