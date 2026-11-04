@@ -111,16 +111,16 @@ ROWS = [
  ('A58', '/autumbra/receipts/weekly/' + A + '?token=expired', 'Open https://app.tervory.com/autumbra/receipts/weekly/' + A + '?token=expired.', 'Your Autumbra weekly update; This link is invalid or has expired.; no receipt rows', 'none'),
  ('A59', '/api/autumbra/undo', 'Tap the owner email Undo link for A; an extra body tenant_id=B must be ignored.', 'ok=true; queued=true; forwarded tenant_id=A and original receipt/rule only', UNDO),
  ('A60', 'Enforce /v1/drain-once', 'Queue one rate_limit proposal on /autumbra-check with a Free-plan fixture.', 'outcome=refused_plan; cloudflare_plan=free; applied=false; no edge write', EDGE),
- ('P01', '/ghost/autumbra/enforce/list', 'Probe live lifecycle list before #622 is deployed.', 'HTTP 404 on this main snapshot: unavailable, not a successful live-lifecycle test', 'AUTUMBRA_COOLIFY_URL, AUTUMBRA_COOLIFY_TOKEN, AUTUMBRA_COOLIFY_PROJECT_UUID, AUTUMBRA_COOLIFY_SERVER_UUID, AUTUMBRA_COOLIFY_ENVIRONMENT, AUTUMBRA_COOLIFY_GITHUB_APP_UUID, AUTUMBRA_LIFECYCLE_KEY'),
- ('P02', '/ghost/patch/fixes', 'Probe the Wave 3 stored-match fixes list before #622 is deployed.', 'HTTP 404: unavailable; do not invent a working /chats command', 'GHOST_GITHUB_TOKEN, GHOST_PATCH_PR_ENABLED'),
- ('P03', '/ghost/autumbra/blocks', 'Probe standing shared-block evidence before #622 is deployed.', 'HTTP 404: unavailable; no cross-client memory claim', 'none'),
+ ('P01', '/ghost/autumbra/enforce/list', 'GET the live lifecycle list with the Autumbra Coolify settings empty.', 'HTTP 422: Autumbra Coolify settings are not configured.; no Coolify call made', 'AUTUMBRA_COOLIFY_URL, AUTUMBRA_COOLIFY_TOKEN, AUTUMBRA_COOLIFY_PROJECT_UUID, AUTUMBRA_COOLIFY_SERVER_UUID, AUTUMBRA_COOLIFY_ENVIRONMENT, AUTUMBRA_COOLIFY_GITHUB_APP_UUID, AUTUMBRA_LIFECYCLE_KEY'),
+ ('P02', '/ghost/patch/fixes', 'GET the stored-match fixes list with no open matches.', 'HTTP 200: items is empty; no code fix dispatched', 'GHOST_GITHUB_TOKEN, GHOST_PATCH_PR_ENABLED'),
+ ('P03', '/ghost/autumbra/blocks', 'GET standing shared-block evidence without the required tenant_id query.', 'HTTP 422: required tenant_id query missing; no cross-client memory claim', 'none'),
  ('P04', '/v1/ghost/autumbra/blocks/share', 'Probe founder-only policy-checked publication before #622 is deployed.', 'HTTP 404: unavailable; no platform record published', 'none'),
  ('P05', '/v1/vaults/ghost.vault/autumbra/connect/cloudflare', 'POST {} without authentication to the named client-vault connection.', 'HTTP 401: authentication required; no client-vault connection created', 'CLOUDFLARE_API_TOKEN_ENFORCE'),
  ('P06', '/ghost/autumbra/connections/google_workspace', 'POST {} with the managed Watch key to the tenant-bound Alert Center connect route.', 'HTTP 422: Google connection was not understood.; no connection saved', 'AUTUMBRA_GOOGLE_PUSH_AUDIENCE, AUTUMBRA_GOOGLE_PUSH_SERVICE_ACCOUNT'),
  ('P07', '/v1/ghost/autumbra/enforce/create', 'Probe founder-confirmed live create before #622 is deployed.', 'HTTP 404: unavailable; no Coolify resource created', 'AUTUMBRA_COOLIFY_URL, AUTUMBRA_COOLIFY_TOKEN, AUTUMBRA_COOLIFY_PROJECT_UUID, AUTUMBRA_COOLIFY_SERVER_UUID, AUTUMBRA_COOLIFY_ENVIRONMENT, AUTUMBRA_COOLIFY_GITHUB_APP_UUID, AUTUMBRA_LIFECYCLE_KEY'),
  ('P08', '/v1/ghost/autumbra/enforce/destroy', 'Probe founder-confirmed live destroy before #622 is deployed.', 'HTTP 404: unavailable; no resource deleted', 'AUTUMBRA_COOLIFY_URL, AUTUMBRA_COOLIFY_TOKEN, AUTUMBRA_LIFECYCLE_KEY'),
  ('P09', '/v1/ghost/autumbra/fix/approve', 'Probe the Wave 3 one-tap stored-match fix command before #622 is deployed.', 'HTTP 404: unavailable; no code fix dispatched', 'GHOST_GITHUB_TOKEN, GHOST_PATCH_PR_ENABLED'),
- ('P10', '/v1/ghost/autumbra/blocks/withdraw', 'Probe platform-block withdrawal before #622 is deployed.', 'HTTP 404: unavailable; no memory record deleted', 'none'),
+ ('P10', '/v1/ghost/autumbra/blocks/withdraw', 'POST {} to platform-block withdrawal without the Ghost room credential.', 'HTTP 401: room credential required; no memory record deleted', 'none'),
  ('P11', '/v1/vaults/ghost.vault/autumbra/alerts', 'GET the tenant-bound Alert Center receipts URL without the required tenant_id query.', 'HTTP 422: required tenant_id query missing; no mailbox content exposed', 'AUTUMBRA_GOOGLE_PUSH_AUDIENCE, AUTUMBRA_GOOGLE_PUSH_SERVICE_ACCOUNT'),
 
 ]
@@ -561,8 +561,12 @@ async def test_founder_row(row, box):
         assert all(method == 'GET' for method, _ in api.calls)
     elif ident in {'P01', 'P02', 'P03', 'P06'}:
         response = await c.request('POST' if ident == 'P06' else 'GET', row[1], json={})
-        assert response.status_code == (422 if ident == 'P06' else 404)
-        if ident == 'P06':
+        assert response.status_code == {'P02': 200}.get(ident, 422)
+        if ident == 'P01':
+            assert response.json()['detail'] == 'Autumbra Coolify settings are not configured.'
+        elif ident == 'P02':
+            assert response.json() == {'items': []}
+        elif ident == 'P06':
             assert response.json()['detail'] == 'Google connection was not understood.'
     elif ident in {'P04', 'P05', 'P07', 'P08', 'P09', 'P10', 'P11'}:
         from fastapi import FastAPI
@@ -574,7 +578,7 @@ async def test_founder_row(row, box):
         app = FastAPI()
         app.include_router(router)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://tank:8000') as client:
-            assert (await client.request('GET' if ident == 'P11' else 'POST', row[1], json={})).status_code == ({'P05': 401, 'P11': 422}.get(ident, 404))
+            assert (await client.request('GET' if ident == 'P11' else 'POST', row[1], json={})).status_code == ({'P05': 401, 'P10': 401, 'P11': 422}.get(ident, 404))
     else:
         raise AssertionError('Row has no executable path: ' + ident)
 
