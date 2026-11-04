@@ -19,15 +19,10 @@ Fixed the flat-image fixture in `tests/test_base_engine_terms_approved.py`:
 with TMPDIR inside this checkout, default ancestor discovery found host skills.
 The child now uses the explicit image SKILLS_DIR, including when absent. No
 runtime skill selection changed. Initial baseline: 503 passed, this one failed.
-The local security precheck now bounds Semgrep jobs (default 2), passed into
-the same pinned container via its supported --jobs option, to avoid
-oversubscribing the shared test host. No
-rule, target, severity, exception or scanner requirement is changed. The first
-scans timed out at 900 seconds and are not counted as passes. Local scanner
-processes now have a 3600-second wall budget on the shared host; hosted GitHub CI
-keeps its 900-second budget. A complete clean report remains mandatory.
-The local scanner runs as the checkout user so its baseline checkout cannot
-restore root-owned source files. No security policy changes.
+Browser proof uses production React, standard 30-second locator waits and a
+bounded 240-second process budget on shared hosts. Timeout sends SIGTERM first
+so Playwright can close Chromium; assertions and external-service boundaries stay
+unchanged. Concurrent and heavily contended fixture timeouts are not passes.
 Claude can use this section at the top of the PR.
 
 ## Shipped surface and offline coverage
@@ -79,7 +74,7 @@ Claude can use this section at the top of the PR.
   assertions. Initial Semgrep wall timeouts are not passes.
 - The shared precheck also selects Tisan smoke cases: its existing pinned k6
   executable must be on PATH, as prepared by the CI workflow. No case is skipped.
-- Security precheck remains mandatory before every push, without any
-  gitleaks/Semgrep exception. CI and push results will be recorded after completion. The first job-cap attempt
-  used an environment variable unsupported by the pinned CLI; it was corrected to
-  its explicit --jobs option before the final precheck.
+- Founder instruction of 4 November: local precheck uses
+  `PRECHECK_SKIP_SEMGREP=1 scripts/precheck.sh`; Semgrep runs in CI security.
+  Local-only Semgrep runner/budget changes were removed. Gitleaks and OSV stay
+  enforced, with no exceptions. Earlier scan wall timeouts were not passes.

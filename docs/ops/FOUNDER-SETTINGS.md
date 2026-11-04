@@ -1,6 +1,6 @@
 # Everything the founder fills in, all at once (3 Nov 2026, 16:10 PT)
 
-This is the one list. Every name below is taken from `.env.example` on main or on an open PR branch; none is a guess. You type the values in Coolify, and Claude never sees them. Skip any name you have already filled. Flags marked "leave off" stay off until testing shows there is room.
+This is the one list. Every Coolify variable name below is taken from `.env.example` on main or on an open PR branch; none is a guess. You type the values in Coolify, and Claude never sees them. Skip any name you have already filled. Flags marked "leave off" stay off until testing shows there is room.
 
 ## A. Coolify settings, Boston (the main app unless noted)
 
@@ -58,3 +58,7 @@ This is the one list. Every name below is taken from `.env.example` on main or o
 2. Chat bot: the privacy notice and how long conversations are kept (decision 35; 12 months suggested).
 
 Nothing else needs you before testing. Any name a later PR adds is added to this file, not sent separately.
+
+## E. Existing Tank tool controls
+
+**Base Plugins:** base.vault (existing switch in `workspace/app/base/plugin-panel.ts`; off for the Plugins-off check, on for the API key, file, source link and MCP checks). Set this in Tank's existing tool controls.

@@ -38,7 +38,7 @@ const react = bundle(createRequire(path.join(template, 'package.json')).resolve(
 const client = bundle(createRequire(path.join(template, 'package.json')).resolve('react-dom/client'));
 const searchActions = bundle(path.join(root, 'workspace/app/base/search.ts'));
 const panelModel = bundle(path.join(root, 'workspace/app/base/plugin-panel.ts'));
-const script = `(()=>{const process={env:{NODE_ENV:'development'}};const table={${[...modules].map(([k,v])=>JSON.stringify(k)+':'+v).join(',')}};
+const script = `(()=>{const process={env:{NODE_ENV:'production'}};const table={${[...modules].map(([k,v])=>JSON.stringify(k)+':'+v).join(',')}};
 const cached={};window.calls=[];const panel={enabled:${!['B00','B41'].includes(row)},message:null,secrets:[],files:[],links:[],connections:[]};
 const tank={baseRecords:async(tenant,options)=>{
  window.calls.push({name:'baseRecords',tenant,options});
@@ -64,7 +64,7 @@ window.render=()=>app.render(React.createElement(BaseView,{plugins:panel.enabled
  const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
  try {
   const page=await browser.newPage({viewport:{width:1440,height:1000}});
-  page.setDefaultTimeout(10000);
+  page.setDefaultTimeout(30000);
   const requests=[];await page.route('**/*',route=>{requests.push(route.request().url());return route.abort();});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.setContent('<div id="root"></div>');

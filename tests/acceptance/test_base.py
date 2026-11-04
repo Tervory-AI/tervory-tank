@@ -8,6 +8,7 @@ import asyncio
 import json
 from pathlib import Path
 import re
+import signal
 import subprocess
 
 import pytest
@@ -48,10 +49,24 @@ report_api = reports.api
 
 def ui(ident):
     env = {**os.environ, 'BASE_ACCEPTANCE_ROW': ident}
-    run = subprocess.run(['node', 'tests/acceptance/base_ui.cjs'], cwd=ROOT,
-        env=env, text=True, capture_output=True, timeout=90)
-    assert run.returncode == 0, run.stdout + run.stderr
-    assert ident + ' passed' in run.stdout
+    with subprocess.Popen(['node', 'tests/acceptance/base_ui.cjs'], cwd=ROOT,
+            env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            start_new_session=True) as run:
+        try:
+            stdout, stderr = run.communicate(timeout=240)
+        except subprocess.TimeoutExpired:
+            # Playwright handles SIGTERM by closing its browser. SIGKILL from
+            # subprocess.run's timeout cannot run that cleanup.
+            run.terminate()
+            try:
+                run.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(run.pid, signal.SIGKILL)
+                run.communicate()
+            raise
+    assert run.returncode == 0, stdout + stderr
+    assert ident + ' passed' in stdout
+
 
 def test_b01_upload_status_and_batch_download():
     workflow.test_base_upload_status_download_and_two_tenants()

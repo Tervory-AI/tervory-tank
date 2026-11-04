@@ -20,9 +20,8 @@ Merged/code inventory and fixes: [ACCEPTANCE-INVENTORY](../base/ACCEPTANCE-INVEN
   operator session; deployment supplies the existing key privately. They are not
   public browser pages. Do not paste credentials into chat or this sheet.
 - Settings are exact names from [FOUNDER-SETTINGS](../ops/FOUNDER-SETTINGS.md).
-  `none` means no additional founder-filled setting. Base vault actions require
-  existing `base.vault` on except B41; this is an existing Tank switch, not a new
-  environment variable. External-service settings are entered only by the founder.
+  `none` means no additional founder-filled setting. Base vault actions use the existing `base.vault` switch in Tank: off for B41
+  and on for B42–B45. External-service settings are entered only by the founder.
 - To review an audit, run `base.audit.csv` with campaign_id/audit_id; Confirm and
   open Result. Check each sampled page/date. Fill verdict with correct/wrong/unsure;
   optional website_verdict, phone_verdict, email_verdict, socials_verdict apply only
@@ -78,11 +77,11 @@ Merged/code inventory and fixes: [ACCEPTANCE-INVENTORY](../base/ACCEPTANCE-INVEN
 | B38 | internal http://agent-base:8000/gold/candidates?limit=200 | **Public-source review candidates.** Through the existing authorized room operator session, GET the candidate URL after the nightly source job; inspect stored public official-list and matching site evidence. | Only current matching public evidence yields bounded candidates; copied input/private/untrusted/ambiguous records never become gold. Candidate output is not automatic approval. | none |
 | B39 | https://app.tervory.com/chats; record failure details | **Public-site block and identity.** Inspect a record whose public website returns blocked/login/challenge. Repeat lookup through the existing pipeline. | One truthful identity; public cookies are not forwarded. Block persists across GET/browser/future calls for that tenant, without archive bypass or retrying the blocked source. | none |
 | B40 | https://app.tervory.com/base | **Workspace tenant and origin boundary.** Open records/download in another organization; attempt the same action from an untrusted origin using the test session. | Own tenant is server-bound; untrusted origin and forged tenant scope cannot expose another organization or mutate Base. | none |
-| B41 | https://app.tervory.com/base | **Plugins off.** Click Plugins with base.vault off. | Plugins are off; This vault is off. Turn it on in Tank. No vault call. | none |
-| B42 | https://app.tervory.com/base | **Plugin key.** Plugins → API keys: enter founder tool/key privately; Save key; Remove. | Saved. The key is hidden and will not be shown again.; masked •••••••• metadata; Removed.; raw value absent. | none |
-| B43 | https://app.tervory.com/base | **Plugin file.** Plugins → Files: Choose files for founder CSV; Remove. | Saved.; filename metadata; Removed.; only active tenant Base vault. | none |
-| B44 | https://app.tervory.com/base | **Plugin source link.** Plugins → Source links: enter founder HTTPS Link and label, leave Daily; Add link; Remove. | Saved.; labeled link metadata; Removed.; no fetch merely to save. | none |
-| B45 | https://app.tervory.com/base | **Plugin MCP.** Plugins → MCP connections: enter Name, HTTPS Server URL and Token privately; Add connection; Remove. | Saved. A token is hidden and will not be shown again.; masked token metadata; Removed. | none |
+| B41 | https://app.tervory.com/base | **Plugins off.** Click Plugins with base.vault off. | Plugins are off; This vault is off. Turn it on in Tank. No vault call. | base.vault |
+| B42 | https://app.tervory.com/base | **Plugin key.** Plugins → API keys: enter founder tool/key privately; Save key; Remove. | Saved. The key is hidden and will not be shown again.; masked •••••••• metadata; Removed.; raw value absent. | base.vault |
+| B43 | https://app.tervory.com/base | **Plugin file.** Plugins → Files: Choose files for founder CSV; Remove. | Saved.; filename metadata; Removed.; only active tenant Base vault. | base.vault |
+| B44 | https://app.tervory.com/base | **Plugin source link.** Plugins → Source links: enter founder HTTPS Link and label, leave Daily; Add link; Remove. | Saved.; labeled link metadata; Removed.; no fetch merely to save. | base.vault |
+| B45 | https://app.tervory.com/base | **Plugin MCP.** Plugins → MCP connections: enter Name, HTTPS Server URL and Token privately; Add connection; Remove. | Saved. A token is hidden and will not be shown again.; masked token metadata; Removed. | base.vault |
 | B46 | https://app.tervory.com/base | **Search records.** Click Search, enter the founder test business name in Search Base records; click Search. Offline input: Founder Store. | Matching tenant records with Source link and Checked date; unknown fields say None found. Searches only read existing records. | none |
 | B47 | https://app.tervory.com/base | **Ask Base.** Click Ask Base; Type a request with the same business name and Send. Then send start a batch. | Existing-record answer with Sources; mutation request says I can only read records here. I can't start, re-run, restore or change anything from this box. No job or model call. | none |
 | B48 | https://app.tervory.com/base | **Sequential reference campaign.** Choose the founder test reference states, types and collector preference; click Start from reference. Inspect progress as states finish. | Smallest state first, one state request at a time; completed task collection precedes the next state. No duplicate active state batch. | none |
@@ -117,7 +116,8 @@ checkout's `.tmp`; set BASE_TEST_DATABASE_URL and POOL_SCHEMA_DATABASE_URL only
 to isolated loopback PostgreSQL test databases. Without these, DB cases skip and
 must not be called proof. Run `python -m pytest -q tests/acceptance/test_base.py`
 and the existing `tests/test_base*.py` regression suite. Before every push run
-`scripts/precheck.sh`, without gitleaks/Semgrep exceptions. All test containers use
+`PRECHECK_SKIP_SEMGREP=1 scripts/precheck.sh`; CI security runs Semgrep.
+No gitleaks exceptions. All test containers use
 `--rm --label tervory.test=1 --name codex-base-sheet-<purpose>`.
 
 CI and final verification results are recorded in the inventory; offline success
