@@ -41,6 +41,8 @@ class SourceRemove(Args):
 
 class Contact(Args):
     name: str = Field(min_length=1, max_length=100)
+    first_name: str | None = Field(default=None, max_length=100)
+    last_name: str | None = Field(default=None, max_length=100)
     email: str | None = Field(default=None, max_length=254)
     phone: str | None = Field(default=None, max_length=50)
 
@@ -59,6 +61,8 @@ class Ask(Args):
     text: str = Field(min_length=1, max_length=2000)
     contact: Contact | None = None
     quote_product_id: str | None = Field(default=None, max_length=64, pattern=r'^[A-Za-z0-9._-]+$')
+    quote_title: str | None = Field(default=None, max_length=200)
+    quote_quantity: int | None = Field(default=None, ge=1, le=100000)
     notice_version: str | None = Field(default=None, max_length=64)
 
 
@@ -93,3 +97,8 @@ class ConfirmDraft(Args):
 TOOLS = {'source.add': SourceAdd, 'source.remove': SourceRemove, 'sources': Args,
          'ask': Ask, 'faq.add': FAQ, 'feedback': Feedback, 'review': Args, 'stats': Args,
          'lead.confirm': ConfirmDraft, 'quote.confirm': ConfirmDraft}
+
+
+# B2 store controls retain the existing durable Command confirmation corridor.
+from trigger_console_contract import ConversationAction, Settings
+TOOLS.update({'settings': Settings, 'handover': ConversationAction, 'reply': ConversationAction})

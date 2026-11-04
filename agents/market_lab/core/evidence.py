@@ -78,6 +78,14 @@ async def document(ledger: Any, tenant_id: str, document_id: str, *, fixtures: b
                  if row["tenant_id"] == str(owner) and row["id"] == str(ident) and row["fixture"] == fixtures), None)
 
 
+def point_fact(doc: dict, index: int, point: dict) -> dict:
+    """The existing source-row wording, shared by answers and saved briefs."""
+    value = number_label(point["value"])
+    shown_value = point.get("display_value") or f'{value} {unit_label(point["value"], point["unit"])}'
+    text = f'{observation_label(point, doc.get("presentation"))}: {shown_value} ({period_label(point["date"], point.get("frequency", ""))}).'
+    return {"text": text, "href": f'/market-lab/sources/{doc["id"]}?row={index}#point-{index}', "name": doc["name"]}
+
+
 async def usable_points(ledger: Any, tenant_id: str, doc: dict) -> list[tuple[int, dict]]:
     ids = list({point["batch_id"] for point in doc["points"]})
     if not ids:
@@ -314,10 +322,7 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
                                  source_words, area_label(point["geo"], point["geo_level"], point["title"]) + " " + point["geo"], point["date"], point.get("frequency", ""), unit_label(point["value"], point["unit"]))
             if not score:
                 continue
-            value = number_label(point["value"])
-            shown_value = point.get("display_value") or f'{value} {unit_label(point["value"], point["unit"])}'
-            text = f'{observation_label(point, doc.get("presentation"))}: {shown_value} ({period_label(point["date"], point.get("frequency", ""))}).'
-            ranked.append((score, point["date"], {"text": text, "href": f'/market-lab/sources/{doc["id"]}?row={index}#point-{index}', "name": doc["name"]}))
+            ranked.append((score, point["date"], point_fact(doc, index, point)))
         for index, event in enumerate(doc["events"]):
             if counties and event["geo"] not in counties:
                 continue

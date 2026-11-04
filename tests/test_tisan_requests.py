@@ -43,6 +43,9 @@ def builder():
 @pytest.mark.parametrize('outcome', ['passed', 'failed', 'refused', 'exception'])
 async def test_each_build_has_one_private_measured_record(monkeypatch, outcome):
     b = builder()
+    # This test isolates memory; the actual R5 corridor has separate integration tests.
+    from agents.tisan import repo_scan
+    monkeypatch.setattr(repo_scan, 'attach', AsyncMock(side_effect=lambda result, tenant: result))
     source = {'slug': 'placeholder-site', 'ok': outcome == 'passed', 'build': 3,
               'checks': [{'name': 'placeholder check', 'ok': outcome == 'passed', 'detail': 'placeholder detail'}]}
     if outcome == 'passed':

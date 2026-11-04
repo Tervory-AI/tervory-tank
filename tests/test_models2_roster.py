@@ -44,12 +44,21 @@ def config(filename):
     return yaml.safe_load((ROOT / "litellm" / filename).read_text())
 
 
+def shared_models(data):
+    return [row for row in data["model_list"] if not (
+        (row.get("model_info") or {}).get("owned") is True
+        and (row.get("model_info") or {}).get("hosted_in") == "za"
+    )]
+
+
 @pytest.mark.parametrize("filename", ["config.yaml", "config.za.yaml"])
 def test_new_models_have_provider_ids_keys_prices_and_dated_sources(filename):
     raw = (ROOT / "litellm" / filename).read_text()
     data = config(filename)
-    models = {row["model_name"]: row for row in data["model_list"]}
-    assert len(models) == len(data["model_list"])
+    models = {row["model_name"]: row for row in reversed(data["model_list"])}
+    from collections import Counter
+    counts = Counter(row["model_name"] for row in data["model_list"])
+    assert {name: count for name, count in counts.items() if count > 1} == {"kimi": 2, "kimi-lite": 2}
     for name, (model, key, input_price, output_price) in NEW.items():
         row = models[name]
         assert row["litellm_params"]["model"] == model
@@ -64,13 +73,13 @@ def test_new_models_have_provider_ids_keys_prices_and_dated_sources(filename):
 def test_regions_serve_identical_rosters_and_fallbacks():
     us, za = config("config.yaml"), config("config.za.yaml")
     # Off-peak windows first, so drift there (as in #486) names the model and field.
-    offpeak = {region: {row["model_name"]: row["model_info"].get("offpeak") for row in data["model_list"]}
+    offpeak = {region: {row["model_name"]: row["model_info"].get("offpeak") for row in shared_models(data)}
                for region, data in (("us", us), ("za", za))}
     assert any(offpeak["us"].values()), "the US roster lost every off-peak window"
     for name in sorted(set(offpeak["us"]) | set(offpeak["za"])):
         assert offpeak["us"].get(name) == offpeak["za"].get(name), (
             f"{name}: model_info.offpeak differs between litellm/config.yaml and config.za.yaml")
-    assert us["model_list"] == za["model_list"]
+    assert shared_models(us) == shared_models(za)
     assert us["litellm_settings"]["fallbacks"] == za["litellm_settings"]["fallbacks"]
 
 

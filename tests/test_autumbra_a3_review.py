@@ -258,7 +258,7 @@ def test_post_apply_health_requires_new_result_then_undoes_on_timeout(monkeypatc
     clock = HealthClock()
     monkeypatch.setattr(health.time, 'monotonic', clock.monotonic)
     monkeypatch.setattr(health.time, 'sleep', clock.sleep)
-    control._fresh_health_probe = lambda after: health.read_health('tervory.com', after=after, wait_seconds=60)
+    control._fresh_health_probe = lambda after: health.read_health('tervory.com', after=after, wait_seconds=30)
     def publish():
         if clock.elapsed == 3 and arrival != 'never':
             signed_result(monkeypatch, tmp_path, checked_at=time.time(),
@@ -268,7 +268,7 @@ def test_post_apply_health_requires_new_result_then_undoes_on_timeout(monkeypatc
     if mode == ApplyMode.approve_each:
         receipt = approve_pending(payload(action='approve_shield', prior_receipt_id=receipt['id']),
                                   settings=settings(mode), control=control, data_dir=tmp_path)
-    assert clock.elapsed == (60 if arrival == 'never' else 3)
+    assert clock.elapsed == (30 if arrival == 'never' else 3)
     if arrival == 'fresh_ok':
         assert receipt['health_ok'] and receipt['applied']
         assert receipt['outcome'] == 'applied'
@@ -328,7 +328,7 @@ def test_shield_speed_excludes_post_apply_observation_but_reports_wait(monkeypat
     signed_result(monkeypatch, tmp_path, checked_at=time.time()-1)
     clock.on_sleep = lambda: signed_result(monkeypatch, tmp_path) if clock.elapsed == 15 else None
     control = edge(FakeCloudflare())
-    control._fresh_health_probe = lambda after: health.read_health('tervory.com', after=after, wait_seconds=60)
+    control._fresh_health_probe = lambda after: health.read_health('tervory.com', after=after, wait_seconds=30)
     queue = ThreatPayloadQueue(tmp_path/'queue')
     queue.put(payload())
     result = enforce_drain_once(queue, settings=settings(mode), control=control, data_dir=tmp_path)

@@ -5,9 +5,9 @@ Run on the US cloud box with `HF_TOKEN`, `HF_ORG`, `DATABASE_URL` and optionally
 job-specific virtual environment. Never pass credentials in command arguments.
 
 ```sh
-python jobs/train/run.py --minutes 120
-python jobs/train/run.py --minutes 120 --day 2026-10-20 --submit
-python jobs/train/run.py --receipt /private/path/final-hf-bill.json
+python tank/training_jobs/run.py --minutes 120
+python tank/training_jobs/run.py --minutes 120 --day 2026-10-20 --submit
+python tank/training_jobs/run.py --receipt /private/path/final-hf-bill.json
 ```
 
 The first command only quotes live A10G-small pricing. Submission sets a hard

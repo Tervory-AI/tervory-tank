@@ -2,8 +2,8 @@
 
 Per-store ``auto_order`` switch, off by default. Sandbox only: the supplier
 "email" is a file in a local outbox (RIG_LOCATE_OUTBOX_DIR); nothing is sent.
-The PO is Rig's own row (agent_rig.supplier_purchase_orders; Tervory no longer
-uses Odoo), addressed to the store-entered vendor name and order inbox.
+The PO is Rig's own row (agent_rig.supplier_purchase_orders), addressed to the
+store-entered vendor name and order inbox.
 Idempotent. Supplier safety rules apply after the store confirms receiving payment.
 """
 import email

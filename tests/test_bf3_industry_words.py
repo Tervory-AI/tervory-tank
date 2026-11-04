@@ -214,6 +214,8 @@ CANDIDATES = {
     # Base B1 (#585): unapproved until the founder approves them in /skala.
     ("base.contacts", "1.2.0"),
     ("base.verify", "1.2.0"),
+    # Base wave 4 (#647): phone checks, unapproved until the founder approves it in /skala.
+    ("base.contacts", "1.4.0"),
 }
 
 

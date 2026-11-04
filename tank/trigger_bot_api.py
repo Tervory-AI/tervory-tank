@@ -70,6 +70,9 @@ async def prepare(action, actor, state, conn=None):
     operation = action.tool.removeprefix('trigger.bot.')
     await authority(actor, operation, conn)
     values = dict(action.arguments)
+    if operation in {'settings', 'handover', 'reply'}:
+        from trigger_console import prepare as prepare_console
+        return await prepare_console(action, actor, conn)
     pool = conn if conn is not None else runtime().pool()
     if operation == 'source.add' and values['kind'] == 'document':
         attachments = [a for m in state['messages'] if m['role'] == 'user'
@@ -126,6 +129,9 @@ async def key_for_site(bot, tenant, url, source_id):
 async def execute(operation, args, actor, operation_id):
     bot, tenant = make_bot(), actor.tenant_id
     pool = bot.pool
+    if operation in {'settings', 'handover', 'reply'}:
+        from trigger_console import execute as execute_console
+        return await execute_console(operation, args, actor, operation_id)
     if operation == 'source.add':
         content = ''
         if args.kind == 'document':
@@ -203,7 +209,8 @@ async def execute(operation, args, actor, operation_id):
             count(*) FILTER(WHERE outcome='handed_over') AS handovers,
             count(*) FILTER(WHERE feedback='bad') AS bad_answers
             FROM tank.trigger_bot_messages WHERE tenant_id=$1 GROUP BY 1 ORDER BY 1 DESC LIMIT 52''', tenant)
-        return {'weeks': [dict(row) for row in rows]}
+        from trigger_whatsapp import reply_count
+        return {'weeks': [dict(row) for row in rows], 'count': await reply_count(pool, tenant)}
     if operation.endswith('.confirm'):
         return await confirm_draft(bot, actor, operation, args, operation_id)
     raise HTTPException(404)
@@ -211,6 +218,10 @@ async def execute(operation, args, actor, operation_id):
 
 async def ask(bot, tenant, args, **session):
     result = await bot.ask(tenant, args.text, contact=args.contact.model_dump(exclude_none=True) if args.contact else None, **session)
+    return await quote_draft(bot, tenant, args, result)
+
+
+async def quote_draft(bot, tenant, args, result):
     if args.quote_product_id and args.contact:
         active = await bot.pool.fetchval("SELECT 1 FROM tank.trigger_bot_sources WHERE tenant_id=$1 AND kind='rig' AND status='ready'", tenant)
         if active:
@@ -219,6 +230,8 @@ async def ask(bot, tenant, args, **session):
                 draft = uuid4()
                 data = {'product_id': args.quote_product_id, 'contact': args.contact.model_dump(exclude_none=True),
                         'notice_version': args.notice_version}
+                if args.quote_title is not None:
+                    data.update(title=args.quote_title, request=args.text, quantity=args.quote_quantity or 1)
                 await bot.pool.execute('''INSERT INTO tank.trigger_bot_drafts(tenant_id,id,conversation_id,kind,data)
                     VALUES($1,$2,$3,'quote',$4::jsonb)''', tenant, draft, UUID(result['conversation_id']), json.dumps(data))
                 result['quote_draft_id'] = str(draft)
@@ -331,3 +344,8 @@ async def public_message(request: Request):
     # No model name, raw retrieval text, peer address or internal draft data.
     result = {k: v for k, v in result.items() if k in {'state', 'answer', 'sources', 'message_id', 'conversation_id', 'visitor_id'}}
     return JSONResponse(result, headers={'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'Cache-Control': 'no-store'})
+
+
+# Public Meta corridor authenticates raw webhook signatures, independently of embed keys.
+from trigger_whatsapp import router as whatsapp_router
+router.include_router(whatsapp_router)

@@ -149,7 +149,8 @@ async def intel(ctx: JobContext) -> dict:
 
 async def alerts(ctx: JobContext) -> dict:
     from core.ml3 import deliver
-    return await deliver(ctx.tenant_id)
+    async with _ledger(memory=ctx.memory) as ledger:
+        return await deliver(ctx.tenant_id, ledger=ledger)
 
 
 class _SafeMemory:

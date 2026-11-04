@@ -1,0 +1,25 @@
+{
+  "branch": "codex/rig-3d",
+  "base": "e76ab7be",
+  "approved_design_source": "3e6306a46c77ce608be63d7ca1f9ae86df0fba3a",
+  "bundle": {
+    "file": "tervory-rig.f4f2c62890475ac0ba61d9e789a52e815bc82be6ded19b9e50e16f6051d9df7c.umd.js",
+    "integrity": "sha384-CPVh96cRzqrBUUORWYOSVezqqyGGExMfC9fWfFjNJASicTCTUICuBF+65jF7XYqu",
+    "gzip_bytes": 23493
+  },
+  "gzip_budget_bytes": 153600,
+  "backend_checks_passed": 65,
+  "hosting_checks_passed": 6,
+  "vitest_checks_passed": 36,
+  "existing_widget_playwright_checks_passed": 25,
+  "renderer_checks_passed": 4,
+  "export_comparisons_passed": 10,
+  "max_mean_channel_error_255": 6.225089589407191,
+  "ci_lint_command": "ruff check tank tests --select E9,F --per-file-ignores \"tank/skills/base.socials/1.0.0/run.py:F401\"",
+  "ci_lint_passed": true,
+  "clean_patch_rebuild_passed": true,
+  "production_fixture_models_packaged": false,
+  "gpu_generation_configuration_changed": false,
+  "figma_node_ids_changed": [],
+  "new_product_copy": []
+}

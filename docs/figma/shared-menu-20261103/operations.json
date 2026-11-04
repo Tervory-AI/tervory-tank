@@ -1,0 +1,732 @@
+{
+  "source": {
+    "propertyKey": "Product heading#508:0",
+    "definition": {
+      "type": "TEXT",
+      "defaultValue": "Trigger"
+    },
+    "mutatedNodeIds": [
+      "180:8549",
+      "180:8394",
+      "180:8476"
+    ],
+    "createdNodeIds": [],
+    "headings": [
+      {
+        "id": "180:8394",
+        "text": "Trigger",
+        "refs": {
+          "characters": "Product heading#508:0"
+        }
+      },
+      {
+        "id": "180:8476",
+        "text": "Trigger",
+        "refs": {
+          "characters": "Product heading#508:0"
+        }
+      }
+    ]
+  },
+  "instanceChanges": [
+    {
+      "mutatedNodeIds": [
+        "465:45832",
+        "I465:45832;180:8394",
+        "465:45919",
+        "465:46007",
+        "I465:46007;180:8394",
+        "465:46094",
+        "465:46183",
+        "I465:46183;180:8394",
+        "465:46270",
+        "465:46359",
+        "I465:46359;180:8394",
+        "465:46447",
+        "465:47228",
+        "I465:47228;180:8394",
+        "465:47318",
+        "465:47406",
+        "I465:47406;180:8394",
+        "465:47493",
+        "465:47581",
+        "I465:47581;180:8394",
+        "465:47668",
+        "465:47756",
+        "I465:47756;180:8394",
+        "465:47843",
+        "465:47931",
+        "I465:47931;180:8394",
+        "465:48018",
+        "465:48107",
+        "I465:48107;180:8394",
+        "465:48195",
+        "465:48286",
+        "I465:48286;180:8394",
+        "465:48376",
+        "465:48464",
+        "I465:48464;180:8394",
+        "465:48551",
+        "468:26351",
+        "I468:26351;180:8394",
+        "468:26459",
+        "468:26495",
+        "I468:26495;180:8394",
+        "468:26603",
+        "468:27702",
+        "I468:27702;180:8394",
+        "468:27808",
+        "I468:27808;180:8394",
+        "468:27923",
+        "468:27957",
+        "468:28000",
+        "I468:28000;180:8394",
+        "468:28106",
+        "I468:28106;180:8394",
+        "468:28221",
+        "468:28255"
+      ],
+      "createdNodeIds": [],
+      "headings": [
+        {
+          "id": "I465:45832;180:8394",
+          "text": "Rig",
+          "menu": "465:45832"
+        },
+        {
+          "id": "I465:46007;180:8394",
+          "text": "Rig",
+          "menu": "465:46007"
+        },
+        {
+          "id": "I465:46183;180:8394",
+          "text": "Rig",
+          "menu": "465:46183"
+        },
+        {
+          "id": "I465:46359;180:8394",
+          "text": "Rig",
+          "menu": "465:46359"
+        },
+        {
+          "id": "I465:47228;180:8394",
+          "text": "Rig",
+          "menu": "465:47228"
+        },
+        {
+          "id": "I465:47406;180:8394",
+          "text": "Rig",
+          "menu": "465:47406"
+        },
+        {
+          "id": "I465:47581;180:8394",
+          "text": "Tisan",
+          "menu": "465:47581"
+        },
+        {
+          "id": "I465:47756;180:8394",
+          "text": "Tisan",
+          "menu": "465:47756"
+        },
+        {
+          "id": "I465:47931;180:8394",
+          "text": "Tisan",
+          "menu": "465:47931"
+        },
+        {
+          "id": "I465:48107;180:8394",
+          "text": "Tisan",
+          "menu": "465:48107"
+        },
+        {
+          "id": "I465:48286;180:8394",
+          "text": "Tisan",
+          "menu": "465:48286"
+        },
+        {
+          "id": "I465:48464;180:8394",
+          "text": "Tisan",
+          "menu": "465:48464"
+        },
+        {
+          "id": "I468:26351;180:8394",
+          "text": "Rig",
+          "menu": "468:26351"
+        },
+        {
+          "id": "I468:26495;180:8394",
+          "text": "Tisan",
+          "menu": "468:26495"
+        },
+        {
+          "id": "I468:27702;180:8394",
+          "text": "Rig",
+          "menu": "468:27702"
+        },
+        {
+          "id": "I468:27808;180:8394",
+          "text": "Rig",
+          "menu": "468:27808"
+        },
+        {
+          "id": "I468:28000;180:8394",
+          "text": "Tisan",
+          "menu": "468:28000"
+        },
+        {
+          "id": "I468:28106;180:8394",
+          "text": "Tisan",
+          "menu": "468:28106"
+        }
+      ],
+      "assignments": [
+        {
+          "pageId": "230:9",
+          "menuId": "465:45832",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "231:11870",
+          "frameName": "Rig Plugins / MCP connections / Saved with a token / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:45919",
+          "mainId": "180:8467",
+          "product": "Rig",
+          "frame": "231:11900",
+          "frameName": "Rig Plugins / MCP connections / Saved with a token / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:46007",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "231:11930",
+          "frameName": "Rig Plugins / MCP connections / Needs sign-in / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:46094",
+          "mainId": "180:8467",
+          "product": "Rig",
+          "frame": "231:11958",
+          "frameName": "Rig Plugins / MCP connections / Needs sign-in / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:46183",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "231:11986",
+          "frameName": "Rig Plugins / MCP connections / Connected / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:46270",
+          "mainId": "180:8467",
+          "product": "Rig",
+          "frame": "231:12014",
+          "frameName": "Rig Plugins / MCP connections / Connected / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:46359",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "231:12042",
+          "frameName": "Rig Plugins / MCP connections / Sign-in failed / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:46447",
+          "mainId": "180:8467",
+          "product": "Rig",
+          "frame": "231:12070",
+          "frameName": "Rig Plugins / MCP connections / Sign-in failed / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:47228",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "231:12098",
+          "frameName": "Rig Plugins / MCP connections / Server not approved by Tervory / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:47318",
+          "mainId": "180:8467",
+          "product": "Rig",
+          "frame": "231:12124",
+          "frameName": "Rig Plugins / MCP connections / Server not approved by Tervory / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:47406",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "231:12150",
+          "frameName": "Rig Plugins / MCP connections / Expanded / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:47493",
+          "mainId": "180:8467",
+          "product": "Rig",
+          "frame": "231:12187",
+          "frameName": "Rig Plugins / MCP connections / Expanded / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:47581",
+          "mainId": "180:8387",
+          "product": "Tisan",
+          "frame": "231:12224",
+          "frameName": "Tisan Plugins / MCP connections / Saved with a token / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:47668",
+          "mainId": "180:8467",
+          "product": "Tisan",
+          "frame": "231:12254",
+          "frameName": "Tisan Plugins / MCP connections / Saved with a token / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:47756",
+          "mainId": "180:8387",
+          "product": "Tisan",
+          "frame": "231:12284",
+          "frameName": "Tisan Plugins / MCP connections / Needs sign-in / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:47843",
+          "mainId": "180:8467",
+          "product": "Tisan",
+          "frame": "231:12312",
+          "frameName": "Tisan Plugins / MCP connections / Needs sign-in / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:47931",
+          "mainId": "180:8387",
+          "product": "Tisan",
+          "frame": "231:12340",
+          "frameName": "Tisan Plugins / MCP connections / Connected / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:48018",
+          "mainId": "180:8467",
+          "product": "Tisan",
+          "frame": "231:12368",
+          "frameName": "Tisan Plugins / MCP connections / Connected / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:48107",
+          "mainId": "180:8387",
+          "product": "Tisan",
+          "frame": "231:12396",
+          "frameName": "Tisan Plugins / MCP connections / Sign-in failed / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:48195",
+          "mainId": "180:8467",
+          "product": "Tisan",
+          "frame": "231:12424",
+          "frameName": "Tisan Plugins / MCP connections / Sign-in failed / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:48286",
+          "mainId": "180:8387",
+          "product": "Tisan",
+          "frame": "231:12452",
+          "frameName": "Tisan Plugins / MCP connections / Server not approved by Tervory / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:48376",
+          "mainId": "180:8467",
+          "product": "Tisan",
+          "frame": "231:12478",
+          "frameName": "Tisan Plugins / MCP connections / Server not approved by Tervory / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:48464",
+          "mainId": "180:8387",
+          "product": "Tisan",
+          "frame": "231:12504",
+          "frameName": "Tisan Plugins / MCP connections / Expanded / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "465:48551",
+          "mainId": "180:8467",
+          "product": "Tisan",
+          "frame": "231:12541",
+          "frameName": "Tisan Plugins / MCP connections / Expanded / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "468:26351",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "468:26347",
+          "frameName": "Rig Plugins / Disconnect / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "468:26459",
+          "mainId": "180:8467",
+          "product": "Rig",
+          "frame": "468:26455",
+          "frameName": "Rig Plugins / Disconnect / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "468:26495",
+          "mainId": "180:8387",
+          "product": "Tisan",
+          "frame": "468:26491",
+          "frameName": "Tisan Plugins / Disconnect / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "468:26603",
+          "mainId": "180:8467",
+          "product": "Tisan",
+          "frame": "468:26599",
+          "frameName": "Tisan Plugins / Disconnect / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "468:27702",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "468:27698",
+          "frameName": "Rig Plugins / Add connection / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "468:27808",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "468:27804",
+          "frameName": "Rig Plugins / Empty / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "468:27923",
+          "mainId": "180:8467",
+          "product": "Rig",
+          "frame": "468:27919",
+          "frameName": "Rig Plugins / Add connection / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "468:27957",
+          "mainId": "180:8467",
+          "product": "Rig",
+          "frame": "468:27953",
+          "frameName": "Rig Plugins / Empty / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "468:28000",
+          "mainId": "180:8387",
+          "product": "Tisan",
+          "frame": "468:27996",
+          "frameName": "Tisan Plugins / Add connection / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "468:28106",
+          "mainId": "180:8387",
+          "product": "Tisan",
+          "frame": "468:28102",
+          "frameName": "Tisan Plugins / Empty / Desktop / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "468:28221",
+          "mainId": "180:8467",
+          "product": "Tisan",
+          "frame": "468:28217",
+          "frameName": "Tisan Plugins / Add connection / Mobile / Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "230:9",
+          "menuId": "468:28255",
+          "mainId": "180:8467",
+          "product": "Tisan",
+          "frame": "468:28251",
+          "frameName": "Tisan Plugins / Empty / Mobile / Changed after approval, awaiting founder"
+        }
+      ]
+    },
+    {
+      "mutatedNodeIds": [
+        "465:26693",
+        "I465:26693;180:8394",
+        "465:26776",
+        "I465:26776;180:8394",
+        "465:26859",
+        "I465:26859;180:8394",
+        "465:26942",
+        "I465:26942;180:8394",
+        "465:27025",
+        "I465:27025;180:8394"
+      ],
+      "createdNodeIds": [],
+      "headings": [
+        {
+          "id": "I465:26693;180:8394",
+          "text": "Tiger",
+          "menu": "465:26693"
+        },
+        {
+          "id": "I465:26776;180:8394",
+          "text": "Tiger",
+          "menu": "465:26776"
+        },
+        {
+          "id": "I465:26859;180:8394",
+          "text": "Tiger",
+          "menu": "465:26859"
+        },
+        {
+          "id": "I465:26942;180:8394",
+          "text": "Tiger",
+          "menu": "465:26942"
+        },
+        {
+          "id": "I465:27025;180:8394",
+          "text": "Tiger",
+          "menu": "465:27025"
+        }
+      ],
+      "assignments": [
+        {
+          "pageId": "256:9",
+          "menuId": "465:26693",
+          "mainId": "180:8387",
+          "product": "Tiger",
+          "frame": "256:10",
+          "frameName": "01 · Price position · 1440 · Approved 3 Nov · Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "256:9",
+          "menuId": "465:26776",
+          "mainId": "180:8387",
+          "product": "Tiger",
+          "frame": "256:283",
+          "frameName": "02 · Matches to review · 1440 · Approved 3 Nov · Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "256:9",
+          "menuId": "465:26859",
+          "mainId": "180:8387",
+          "product": "Tiger",
+          "frame": "256:471",
+          "frameName": "03 · Competitor sites · 1440 · Approved 3 Nov · Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "256:9",
+          "menuId": "465:26942",
+          "mainId": "180:8387",
+          "product": "Tiger",
+          "frame": "267:19232",
+          "frameName": "02 · Matches to review · 1440 · Empty · Approved 3 Nov · Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "256:9",
+          "menuId": "465:27025",
+          "mainId": "180:8387",
+          "product": "Tiger",
+          "frame": "267:19424",
+          "frameName": "03 · Competitor sites · 1440 · Empty · Approved 3 Nov · Changed after approval, awaiting founder"
+        }
+      ]
+    },
+    {
+      "mutatedNodeIds": [
+        "456:18492",
+        "I456:18492;180:8394",
+        "456:18598",
+        "I456:18598;180:8394",
+        "456:18691",
+        "I456:18691;180:8394",
+        "456:18784",
+        "I456:18784;180:8394",
+        "456:18877",
+        "I456:18877;180:8394",
+        "456:18970",
+        "I456:18970;180:8394",
+        "456:19063",
+        "I456:19063;180:8394",
+        "456:19156",
+        "I456:19156;180:8394",
+        "456:19249",
+        "I456:19249;180:8394",
+        "456:19342",
+        "I456:19342;180:8394",
+        "456:19435",
+        "I456:19435;180:8394"
+      ],
+      "createdNodeIds": [],
+      "headings": [
+        {
+          "id": "I456:18492;180:8394",
+          "text": "Rig",
+          "menu": "456:18492"
+        },
+        {
+          "id": "I456:18598;180:8394",
+          "text": "Rig",
+          "menu": "456:18598"
+        },
+        {
+          "id": "I456:18691;180:8394",
+          "text": "Rig",
+          "menu": "456:18691"
+        },
+        {
+          "id": "I456:18784;180:8394",
+          "text": "Rig",
+          "menu": "456:18784"
+        },
+        {
+          "id": "I456:18877;180:8394",
+          "text": "Rig",
+          "menu": "456:18877"
+        },
+        {
+          "id": "I456:18970;180:8394",
+          "text": "Rig",
+          "menu": "456:18970"
+        },
+        {
+          "id": "I456:19063;180:8394",
+          "text": "Rig",
+          "menu": "456:19063"
+        },
+        {
+          "id": "I456:19156;180:8394",
+          "text": "Rig",
+          "menu": "456:19156"
+        },
+        {
+          "id": "I456:19249;180:8394",
+          "text": "Rig",
+          "menu": "456:19249"
+        },
+        {
+          "id": "I456:19342;180:8394",
+          "text": "Rig",
+          "menu": "456:19342"
+        },
+        {
+          "id": "I456:19435;180:8394",
+          "text": "Rig",
+          "menu": "456:19435"
+        }
+      ],
+      "assignments": [
+        {
+          "pageId": "289:13919",
+          "menuId": "456:18492",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "291:8053",
+          "frameName": "A07-choose · Shop platform · not connected · 1440 · Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "289:13919",
+          "menuId": "456:18598",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "291:8097",
+          "frameName": "A07-shopify · Shopify · enter credentials · 1440 · Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "289:13919",
+          "menuId": "456:18691",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "291:8151",
+          "frameName": "A07-woo · WooCommerce · enter credentials · 1440 · Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "289:13919",
+          "menuId": "456:18784",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "291:8213",
+          "frameName": "A07-big · BigCommerce · enter credentials · 1440 · Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "289:13919",
+          "menuId": "456:18877",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "291:8267",
+          "frameName": "A07-testing · Shop platform · testing · 1440 · Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "289:13919",
+          "menuId": "456:18970",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "291:8309",
+          "frameName": "A07-connected · Shop platform · connected · 1440 · Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "289:13919",
+          "menuId": "456:19063",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "291:8357",
+          "frameName": "A07-failed · Shop platform · connection failed · 1440 · Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "289:13919",
+          "menuId": "456:19156",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "291:8405",
+          "frameName": "A08 · Orders · 1440 · Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "289:13919",
+          "menuId": "456:19249",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "291:8444",
+          "frameName": "A09 · Store delivery time · 1440 · Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "289:13919",
+          "menuId": "456:19342",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "321:6304",
+          "frameName": "A08-late · Order paid after window · 1440 · Changed after approval, awaiting founder"
+        },
+        {
+          "pageId": "289:13919",
+          "menuId": "456:19435",
+          "mainId": "180:8387",
+          "product": "Rig",
+          "frame": "321:6382",
+          "frameName": "A07-choose-open · Choose a platform · open · 1440 · Changed after approval, awaiting founder"
+        }
+      ]
+    }
+  ]
+}

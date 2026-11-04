@@ -257,7 +257,7 @@ async def test_put_policy_refuses_skill_and_cache_names(monkeypatch: pytest.Monk
 @pytest.mark.asyncio
 @pytest.mark.parametrize("name", ["skill:base.extract", "cache:semantic"])
 async def test_rollback_refuses_a_name_litellm_cannot_call(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
-    conn = _Conn(row={"model": "luna", "previous_model": name})
+    conn = _Conn(row={"model": "luna", "previous_model": name, "held_swap_id": None})
     monkeypatch.setattr(main, "pool", lambda: _Pool(conn))
     with pytest.raises(HTTPException) as caught:
         await main.rollback("tier0.answer", main.PromoteBody())
@@ -268,7 +268,7 @@ async def test_rollback_refuses_a_name_litellm_cannot_call(monkeypatch: pytest.M
 
 @pytest.mark.asyncio
 async def test_rollback_still_writes_a_real_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    conn = _Conn(row={"model": "haiku", "previous_model": "luna"})
+    conn = _Conn(row={"model": "haiku", "previous_model": "luna", "held_swap_id": None})
     monkeypatch.setattr(main, "pool", lambda: _Pool(conn))
     result = await main.rollback("tier0.answer", main.PromoteBody(by="founder"))
     assert result["model"] == "luna"

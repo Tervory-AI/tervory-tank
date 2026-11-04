@@ -23,6 +23,22 @@
 # Without these keys LiteLLM bills cached tokens at the full input rate in x-litellm-response-cost.
 
 model_list:
+  # Private ZA CPU route. Candidate only until the existing 0.99/200 founder gate promotes it.
+  - model_name: tervory-own-zenas-za
+    litellm_params:
+      model: openai/tervory-own-zenas-za
+      api_base: http://zenas-own-model:8080/v1
+      api_key: os.environ/ZENAS_OWN_MODEL_KEY
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      open_weights: true
+      host: tervory-za
+      hosted_in: za
+      owned: true
+
   # ---------- OpenAI (API key, Responses/Chat) ----------
   - model_name: luna            # cheap, fast workhorse: classify, extract, short drafts
     litellm_params:
@@ -173,8 +189,29 @@ model_list:
       input_cost_per_token: 0.000003
       output_cost_per_token: 0.000015
     model_info:
+      id: kimi-direct
       input_cost_per_token: 0.000003
       output_cost_per_token: 0.000015
+
+  # Same weights through the existing HF token; direct deployment remains first.
+  - model_name: kimi
+    litellm_params:
+      model: openai/moonshotai/Kimi-K3:baseten
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000030000
+      output_cost_per_token: 0.0000150000
+    model_info:
+      id: kimi-hf
+      input_cost_per_token: 0.0000030000
+      output_cost_per_token: 0.0000150000
+      open_weights: true
+      family: moonshot
+      size: flagship
+      host: baseten
+      hf_model_id: moonshotai/Kimi-K3
+      licence: Kimi K3 License
+      licence_url: https://huggingface.co/moonshotai/Kimi-K3/blob/main/LICENSE
 
   # ---------- Anthropic (returns after the top-up) ----------
   - model_name: haiku
@@ -303,8 +340,29 @@ model_list:
       input_cost_per_token: 0.0000009500
       output_cost_per_token: 0.0000040000
     model_info:
+      id: kimi-lite-direct
       input_cost_per_token: 0.0000009500
       output_cost_per_token: 0.0000040000
+
+  # Same weights through the existing HF token; direct deployment remains first.
+  - model_name: kimi-lite
+    litellm_params:
+      model: openai/moonshotai/Kimi-K2.6:novita
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000008000
+      output_cost_per_token: 0.0000034000
+    model_info:
+      id: kimi-lite-hf
+      input_cost_per_token: 0.0000008000
+      output_cost_per_token: 0.0000034000
+      open_weights: true
+      family: moonshot
+      size: small
+      host: novita
+      hf_model_id: moonshotai/Kimi-K2.6
+      licence: Modified MIT
+      licence_url: https://huggingface.co/moonshotai/Kimi-K2.6/blob/main/LICENSE
 
   # Price checked 2026-10-21: https://docs.x.ai/developers/pricing
   # USD per MTok: input $2, output $6. Standard short context; at >=200k input tokens all tokens cost $4/$12 per MTok.
@@ -803,8 +861,7 @@ litellm_settings:
     - glm-small: ["luna", "haiku", "flash-lite", "grok", "flash"]
 
 router_settings:
-  # Balance replicas of the same alias; do not change model groups or providers.
-  routing_strategy: simple-shuffle
+  routing_strategy: cost-based-routing
   allowed_fails: 1          # one refusal (no credit / bad key) and that model is skipped...
   cooldown_time: 300        # ...for five minutes, so empty providers do not slow every call
 

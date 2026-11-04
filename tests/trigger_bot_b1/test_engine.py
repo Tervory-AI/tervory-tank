@@ -139,10 +139,11 @@ async def test_abuse_limits_bound_clients_without_joinable_raw_addresses():
 
 
 @pytest.mark.parametrize('user,admin', [('member', False), ('admin', True)])
-def test_members_never_gain_bot_and_admins_never_gain_generic_crm(user, admin):
+def test_bot_and_crm_tools_require_admin(user, admin):
     tools = command.allowed_tools(command.Actor(A, user, False, frozenset(command.SQUADS), admin))
     assert ('trigger.bot.ask' in tools) == admin
-    assert 'trigger.crm.write' not in tools
+    for tool in ('trigger.crm.list', 'trigger.crm.get', 'trigger.crm.write'):
+        assert (tool in tools) == admin
 
 
 @pytest.mark.parametrize('text', ['', 'x' * 2001])

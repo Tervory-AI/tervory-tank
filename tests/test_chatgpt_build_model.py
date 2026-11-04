@@ -125,6 +125,18 @@ async def test_put_policy_allows_the_platform_tenant_row(monkeypatch: pytest.Mon
     written: list = []
 
     class _Conn:
+        def transaction(self):
+            return self
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return False
+
+        async def fetchval(self, *_):
+            return False  # No pending swap in this platform-row fixture.
+
         async def execute(self, *args):
             written.append(args)
 

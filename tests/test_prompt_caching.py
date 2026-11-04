@@ -61,7 +61,9 @@ def test_both_regions_carry_the_same_cache_settings():
         return {m["model_name"]: (m["litellm_params"].get("cache_control_injection_points"),
                                   m["model_info"].get("cache_read_input_token_cost"),
                                   m["model_info"].get("cache_creation_input_token_cost"))
-                for m in yaml.safe_load(path.read_text())["model_list"]}
+                for m in yaml.safe_load(path.read_text())["model_list"]
+                if not (m["model_info"].get("owned") is True
+                        and m["model_info"].get("hosted_in") == "za")}
     assert cache_view(CONFIGS[0]) == cache_view(CONFIGS[1])
 
 

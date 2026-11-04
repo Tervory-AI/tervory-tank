@@ -8,7 +8,7 @@ import pytest
 import skala
 
 from test_tank_tenant_boundaries import boundary  # noqa: F401
-from test_tank_ladder import ladder, policy, request  # noqa: F401
+from test_tank_ladder import ladder, policy, request, pass_policy_swaps  # noqa: F401
 
 
 @pytest.mark.asyncio
@@ -148,6 +148,14 @@ async def test_fresh_seeds_only_pin_approved_versions_and_preserve_overrides(lad
         await conn.execute("DELETE FROM tank.policy_seeds")
         await conn.execute("DELETE FROM tank.policy WHERE task_type='base.normalize' AND tenant_id IS NULL")
         await conn.execute(sql)
+        # Existing defaults wait for the affected approved skills; fresh rows
+        # can seed immediately because there is no serving model to replace.
+        for task, version in refs.items():
+            row = await conn.fetchrow("SELECT model,held_policy FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL", task)
+            target = json.loads(row["held_policy"])["model"] if row["held_policy"] else row["model"]
+            assert target == f"skill:{task}@{version}"
+    await pass_policy_swaps(b)
+    async with b.pool.acquire() as conn:
         for task, version in refs.items():
             assert await conn.fetchval("SELECT model FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL", task) == f"skill:{task}@{version}"
     for tenant in b.tenants:

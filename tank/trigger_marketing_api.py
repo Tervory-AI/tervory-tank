@@ -31,7 +31,7 @@ async def authority(actor, tool, conn=None):
 
 
 async def plan(actor, text):
-    match = re.fullmatch(r'\s*trigger\.((?:post|gbp)\.[a-z.]+|posts|calendar)\s*(?::\s*(.*))?\s*', text, re.DOTALL)
+    match = re.fullmatch(r'\s*trigger\.((?:post|gbp|meta)\.[a-z.]+|posts|calendar)\s*(?::\s*(.*))?\s*', text, re.DOTALL)
     if not match or match[1] not in TOOLS:
         return None
     await authority(actor, 'trigger.' + match[1])
@@ -60,8 +60,11 @@ async def prepare(action, actor, conn):
     if op.startswith('post.') and op != 'post.create':
         row = await store.post(actor.tenant_id, UUID(values['post_id']), conn=conn)
         values.update(expected_revision=row['revision'], brief_markdown=preview(row))
-        if op == 'post.approve' and row['channel'] == 'gbp':
-            binding = await conn.fetchrow("SELECT generation,location FROM tank.trigger_gbp_connections WHERE tenant_id=$1 AND status='connected'", actor.tenant_id)
+        if op == 'post.approve' and row['channel'] in {'gbp', 'facebook'}:
+            if row['channel'] == 'facebook':
+                binding = await conn.fetchrow("SELECT generation,page_id AS location FROM tank.trigger_meta_connections WHERE tenant_id=$1 AND status='connected'", actor.tenant_id)
+            else:
+                binding = await conn.fetchrow("SELECT generation,location FROM tank.trigger_gbp_connections WHERE tenant_id=$1 AND status='connected'", actor.tenant_id)
             if not binding or not binding['location']:
                 raise HTTPException(409)
             values.update(connection_generation=str(binding['generation']), location=binding['location'])
@@ -78,6 +81,18 @@ async def prepare(action, actor, conn):
         if not row:
             raise HTTPException(409)
         values.update(generation=str(row['generation']), brief_markdown=json.dumps({**dict(row), **({'location': values['location']} if op == 'gbp.location.select' else {})}, default=str))
+    elif op in {'meta.disconnect', 'meta.page.select'}:
+        row = await conn.fetchrow('SELECT generation,page_id,page_name FROM tank.trigger_meta_connections WHERE tenant_id=$1', actor.tenant_id)
+        if not row:
+            raise HTTPException(409)
+        selection = dict(row)
+        if op == 'meta.page.select':
+            choices = await store.meta._accounts(actor.tenant_id, conn=conn)
+            selected = next((page for page in choices if page['page_id'] == values['page_id']), None)
+            if selected is None:
+                raise HTTPException(404)
+            selection.update(selected)
+        values.update(generation=str(row['generation']), brief_markdown=json.dumps(selection, default=str))
     return command.validate_action(command.PlannedAction(tool=action.tool, arguments=values), actor)
 
 
@@ -92,6 +107,14 @@ async def execute(op, args, actor, operation):
         return await store.posts(tenant, args)
     if op == 'calendar':
         return await store.calendar(tenant, args)
+    if op == 'meta.connect':
+        return await store.meta.connect(actor)
+    if op == 'meta.pages':
+        return {'items': await store.meta.pages(tenant), 'cost_usd': 0, 'model_calls': 0}
+    if op == 'meta.page.select':
+        return await store.meta.select(tenant, args.page_id, args.generation)
+    if op == 'meta.disconnect':
+        return await store.meta.disconnect(tenant, args.generation)
     if op == 'gbp.connect':
         return await store.google.connect(actor)
     if op == 'gbp.disconnect':
@@ -186,4 +209,19 @@ async def callback(request: Request, actor: Annotated[command.Actor, Depends(com
         raise HTTPException(422) from None
     from trigger_routes import code_receipt
     await code_receipt(actor.tenant_id, 'trigger.gbp.connect')
+    return result
+
+
+@router.post('/v1/command/trigger-meta/oauth/callback')
+async def meta_callback(request: Request, actor: Annotated[command.Actor, Depends(command.identity)]):
+    actor = await authority(actor, 'trigger.meta.connect')
+    try:
+        data = Callback.model_validate(await body(request, 10000))
+        result = await service().meta.callback(actor, data.state, data.code, data.error)
+    except GoogleFailure:
+        raise HTTPException(409) from None
+    except ValueError:
+        raise HTTPException(422) from None
+    from trigger_routes import code_receipt
+    await code_receipt(actor.tenant_id, 'trigger.meta.connect')
     return result
