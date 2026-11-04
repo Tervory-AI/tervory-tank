@@ -39,7 +39,7 @@ from trigger_marketing_contract import TOOLS as MARKETING_TOOLS
 
 TOOLS = {
     "trigger": ["trigger.revise", "trigger.voice.learn", "trigger.write.batch", "trigger.scorecard", "trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
-    "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.products", "base.list.to_crm"],
+    "base": ["base.batch", "base.search", "base.find", "base.list.save", "base.lists", "base.list.show", "base.list.export", "base.list.products", "base.compare.apollo", "base.list.to_crm"],
     "tiger": ["tiger.watch", "tiger.read", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tiger.position", "tiger.alerts", "tiger.watches", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk"],
     "market_lab": ["market_lab.research", "market_lab.warnings", "market_lab.predictions", "market_lab.calibration", "market_lab.feeds", "market_lab.alerts.email", "market_lab.alerts.webhook", "market_lab.alerts.off"],
     "rig": ["rig.search", "rig.ask", "rig.quote.confirm_payment"],
@@ -49,7 +49,7 @@ TOOLS = {
 }
 TOOLS["trigger"] += ["trigger." + name for name in MARKETING_TOOLS]
 
-FOUNDER_TOOLS = ["tank.policy", "tank.policy.fallbacks", "base.audit.start", "base.audit.csv", "base.audit.review", "trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
+FOUNDER_TOOLS = ["tank.policy", "tank.policy.fallbacks", "base.campaign.start", "base.campaign.show", "base.campaign.csv", "base.audit.start", "base.audit.csv", "base.audit.review", "trigger.crm.write", "skala.list", "skala.evals", "skala.approve", "skala.retire",
                  "ledger.receipts", "ledger.savings", "tisan.build", "worker.build", "repo.prs", "repo.pr", "repo.file",
                  "mcp.servers.list", "mcp.servers.approve", "mcp.servers.remove",
                  "radix.domain.prove", "radix.passive.scan", "radix.findings"]
@@ -1431,6 +1431,9 @@ ADAPTERS = {
     "tisan.preview": Adapter("GET", "/v1/command/tisan/preview", TisanRequestIdArgs, "tisan.preview"),
     "tisan.feedback": Adapter("POST", "/v1/command/tisan/feedback", TisanFeedbackArgs, "tisan.feedback"),
     "tisan.handover": Adapter("POST", "/v1/command/tisan/handover", TisanRequestIdArgs, "tisan.handover"),
+    "base.campaign.start": Adapter("POST", "/v1/command/base/campaigns/start", __import__("base_campaign_commands").StartArgs, "base.campaign.start", True, "paid_run"),
+    "base.campaign.show": Adapter("GET", "/v1/command/base/campaigns/show", __import__("base_campaign_commands").CampaignArgs, "base.campaign.show"),
+    "base.campaign.csv": Adapter("GET", "/v1/command/base/campaigns/export", __import__("base_campaign_commands").CampaignArgs, "base.campaign.csv"),
     "base.audit.start": Adapter("POST", "/v1/command/base/audits/start", AuditStartArgs, "base.audit.start"),
     "base.audit.csv": Adapter("GET", "/v1/command/base/audits/export", AuditCsvArgs, "base.audit.csv"),
     "base.audit.review": Adapter("POST", "/v1/command/base/audits/review", AuditReviewArgs, "base.audit.review"),
@@ -1465,6 +1468,7 @@ ADAPTERS = {
     "base.lists": Adapter("GET", "/v1/command/base/lists", Body, "base.lists"),
     "base.list.show": Adapter("GET", "/v1/command/base/lists/show", ListArgs, "base.list.show"),
     "base.list.export": Adapter("GET", "/v1/command/base/lists/export", ListArgs, "base.list.export"),
+    "base.compare.apollo": Adapter("GET", "/v1/command/base/compare/apollo", __import__("base_compare").ApolloArgs, "base.compare.apollo"),
     "base.list.products": Adapter("GET", "/v1/command/base/lists/products", ListArgs, "base.list.products"),
     "base.list.to_crm": Adapter("POST", "/v1/command/base/lists/to-crm", SendArgs, "base.list.to_crm"),
     "tiger.watch": Adapter("POST", "/v1/tiger/watchlist", WatchArgs, "Start a price watch", True, "paid_run"),
@@ -1740,7 +1744,7 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         return adapter.method, path, {}, {**args, **scope}
     if action.tool == "rig.quote.confirm_payment":
         return adapter.method, path, {}, {"data": args}
-    if action.tool in {"base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.audit.start", "base.audit.review", *TISAN_CLIENT_TOOLS}:
+    if action.tool in {"base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", *TISAN_CLIENT_TOOLS}:
         if adapter.method == 'GET':
             return adapter.method, path, args, None
         return adapter.method, path, {}, args  # Actor headers supply identity, never body fields.
@@ -1960,7 +1964,7 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
                 from market_lab_ml3 import confirmed
                 status, result = 200, await confirmed(action, actor, thread_id, card_id)
                 once = result.pop("_once", None)
-            elif action.tool.startswith("trigger.") or action.tool in {"zenas.draft", "zenas.playbook.add", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
+            elif action.tool.startswith("trigger.") or action.tool in {"zenas.draft", "zenas.playbook.add", "rig.quote.confirm_payment", "base.list.save", "tiger.watch.pause", "tiger.watch.resume", "tiger.watch.remove", "tiger.watch.bulk", "base.list.to_crm", "base.campaign.start", "base.audit.start", "base.audit.review", "tiger.match", "tiger.match.confirm", "tiger.match.reject", "tisan.request", "tisan.feedback", "tisan.handover", "radix.repo.scan"}:
                 from trigger_commands import dispatch_confirmed
                 status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
             else:
@@ -2099,6 +2103,9 @@ def message_context(messages: list[dict]) -> list[dict]:
                 content += "\nAttachment " + attachment["name"] + ":\n" + attachment["text"]
             else:
                 content += "\nStored binary attachment " + attachment["name"] + ": content unavailable to the text router."
+                # The planner may hand an owned upload to a code reader without inspecting its bytes.
+                if attachment.get("attachment_id"):
+                    content += " " + dump({"attachment_id": attachment["attachment_id"]})
         result.append({"role": message["role"], "content": content})
     if len(dump(result).encode()) > 128000:
         raise HTTPException(413, "Conversation context is too large; start another thread or use shorter text attachments")

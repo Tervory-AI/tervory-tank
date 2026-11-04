@@ -32,6 +32,16 @@ export async function GET(request: Request): Promise<Response> {
     return new Response(upstream.body, { status: upstream.status, headers: { "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": products ? 'attachment; filename="base-products.csv"' : 'attachment; filename="base-list.csv"', "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
   }
+  const campaignId = new URL(request.url).searchParams.get("campaign_id");
+  if (campaignId !== null) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(campaignId)) return new Response(null, { status: 400 });
+    const upstream = await commandRequest(tenant, `base/campaigns/csv?${new URLSearchParams({ campaign_id: campaignId })}`, {}, { passThroughErrors: true });
+    if (!upstream.ok) return new Response(upstream.body, { status: upstream.status, headers: {
+      "Content-Type": upstream.headers.get("content-type") || "application/json", "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff" } });
+    return new Response(upstream.body, { status: upstream.status, headers: { "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": 'attachment; filename="base-campaign.csv"', "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
+  }
   const batch = new URL(request.url).searchParams.get("batch")?.trim();
   if (!batch || batch.length > 120) return new Response("Choose a batch from your list.", { status: 400 });
   const origin = workspaceOrigin(request);
