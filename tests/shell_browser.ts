@@ -345,7 +345,8 @@ async function main(): Promise<void> {
     return fixtureOrigin + path;
   }
   const profile = join(dir, "profile");
-  const startupDeadline = Date.now() + 15000;
+  // Busy CI runners can take more than 15 s to start Chrome; 60 s stops false failures.
+  const startupDeadline = Date.now() + 60000;
   const proc = spawn(executable, [
     "--headless=new",
     "--disable-gpu",
