@@ -7,23 +7,33 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hmac
 import logging
 import json
 import os
 import re
+import sys
 import uuid
 from contextlib import asynccontextmanager, suppress
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import httpx
 from storage import StorageError, archive_training_snapshot
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
 
 from gold import (PLATFORM_TENANT, Reviewer, add_candidate, encoded, input_hash,
                   obj, require_job, require_reviewer, runtime, is_holdout)
 
 log = logging.getLogger("tank.training")
+
+OFFICIAL_ZA_CASE_SOURCES = frozenset({
+    "concourt", "sca", "cac", "comptrib", "sars-taxcourt", "landcourt",
+    "ocj-highcourt", "labour-court", "labour-appeal", "special-tribunal",
+})
 
 
 def market_row(row: dict[str, Any]) -> bool:
@@ -211,8 +221,7 @@ async def collect_zenas(conn, tenant: uuid.UUID | None) -> None:
           AND d.state='released' AND r.decision='released' ORDER BY r.ts DESC LIMIT 1
         ) r ON true
         WHERE p.tenant_id IS NOT DISTINCT FROM $1::uuid AND p.region=$2
-        AND ((p.source='case' AND w.source='case' AND w.material_type='public_record')
-             OR (p.source='released' AND w.source='released' AND r.reviewer IS NOT NULL))
+        AND p.source='released' AND w.source='released' AND r.reviewer IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM tank.training_pairs t WHERE t.tenant_id=coalesce($1::uuid,$3)
           AND t.region=$2 AND t.source='zenas' AND t.source_ref=p.id::text)
         ORDER BY p.created_at LIMIT 500""", tenant, region, PLATFORM_TENANT,
@@ -232,7 +241,7 @@ async def collect_zenas(conn, tenant: uuid.UUID | None) -> None:
                         approved_by=row["reviewer"] or "decided case", source="zenas", ref=str(row["id"]),
                         gold_id=gold_id, holdout=is_holdout(scope, skill, value),
                         client_matter=row["source"] == "released",
-                        public=row["source"] == "case" and tenant is None)
+                        public=False)
 
 
 async def collect_fits(conn, tenant: uuid.UUID) -> None:
@@ -283,6 +292,10 @@ async def collect_once() -> None:
         if not await conn.fetchval("SELECT pg_try_advisory_lock(871222)"):
             return
         try:
+            # Previous case conversion used model-authored fields. Court-text pairs are the
+            # only public Zenas rows this collector leaves active now.
+            await conn.execute("""UPDATE tank.training_pairs SET active=false
+                WHERE region=$1 AND agent='zenas' AND source='zenas' AND public""", rt.box_region())
             if await conn.fetchval("SELECT to_regclass('agent_rig.training_events')"):
                 tenants = await conn.fetch("SELECT DISTINCT tenant_id FROM agent_rig.training_events WHERE region=$1", rt.box_region())
                 for row in tenants:
@@ -546,6 +559,226 @@ async def schedule_loop(operation: str) -> None:
 router = APIRouter(prefix="/v1/training", lifespan=lifespan)
 
 
+class CourtTextPair(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_id: str = Field(min_length=1, max_length=80)
+    document_id: str = Field(min_length=1, max_length=300)
+    version_id: str = Field(min_length=1, max_length=300)
+    status: str = Field(pattern="^(split|excluded)$")
+    reason: str = Field(default="", max_length=40)
+    input: dict[str, str] | None = None
+    output: dict[str, Any] | None = None
+
+
+class TrainingRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    agent: str = Field(pattern="^zenas$")
+    minutes: int = Field(ge=1, le=240)
+
+
+class TrainingReceiptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    job_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
+    billed_usd: Decimal = Field(ge=0)
+
+
+async def _training_readiness(conn: Any, body: TrainingRunRequest) -> dict[str, Any] | None:
+    ready = await conn.fetchval(
+        """SELECT count(*) FROM tank.training_pairs WHERE tenant_id=$1 AND agent=$2
+        AND active AND public AND NOT client_matter""",
+        PLATFORM_TENANT, body.agent,
+    )
+    holdout = await conn.fetchval(
+        """SELECT count(*) FROM tank.training_pairs WHERE tenant_id=$1 AND agent=$2
+        AND active AND public AND NOT client_matter AND holdout""",
+        PLATFORM_TENANT, body.agent,
+    )
+    if int(ready or 0) < 2000:
+        return {"status": "fewer than 2,000 public zenas training rows", "count": int(ready or 0)}
+    if int(holdout or 0) < 200:
+        return {"status": "fewer than 200 holdout rows", "count": int(holdout or 0)}
+    if await conn.fetchval(
+        "SELECT EXISTS (SELECT 1 FROM tank.training_jobs WHERE tenant_id=$1 AND ledger_id IS NULL)",
+        PLATFORM_TENANT,
+    ):
+        return {"status": "reconcile the previous training job"}
+    if not os.environ.get("HF_TOKEN") or not os.environ.get("HF_ORG"):
+        return {"status": "Hugging Face training is not configured"}
+    return None
+
+
+async def _training_quote(body: TrainingRunRequest) -> dict[str, Any]:
+    return await _training_subprocess("--agent", body.agent, "--minutes", str(body.minutes))
+
+
+async def _training_subprocess(*arguments: str) -> dict[str, Any]:
+    """Run the narrowly scoped HF client without changing Tank's offline environment."""
+    child_env = os.environ.copy()
+    child_env["HF_HUB_OFFLINE"] = "0"
+    script = Path(__file__).with_name("training_jobs") / "run.py"
+    process = await asyncio.create_subprocess_exec(
+        sys.executable, str(script), *arguments, "--json",
+        env=child_env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+    )
+    stdout, _ = await process.communicate()
+    if process.returncode != 0:
+        return {"status": "Training operation failed; check configuration, budget and provenance."}
+    try:
+        return json.loads(stdout.decode().strip().splitlines()[-1])
+    except (IndexError, UnicodeDecodeError, json.JSONDecodeError):
+        return {"status": "Training operation returned an invalid result."}
+
+
+@router.post("/run/plan")
+async def training_run_plan(
+    body: TrainingRunRequest, actor: Reviewer = Depends(require_reviewer),
+) -> dict[str, Any]:
+    if not actor.founder:
+        raise HTTPException(403, "Founder access required")
+    async with runtime().pool().acquire() as conn:
+        refusal = await _training_readiness(conn, body)
+    return refusal or await _training_quote(body)
+
+
+@router.post("/run")
+async def training_run(
+    body: TrainingRunRequest, actor: Reviewer = Depends(require_reviewer),
+) -> dict[str, Any]:
+    if not actor.founder:
+        raise HTTPException(403, "Founder access required")
+    async with runtime().pool().acquire() as conn:
+        refusal = await _training_readiness(conn, body)
+    if refusal:
+        return refusal
+    quote = await _training_quote(body)
+    if quote.get("status") != "ready":
+        return quote
+    return await _training_subprocess(
+        "--agent", body.agent, "--minutes", str(body.minutes), "--submit",
+        "--day", datetime.now(timezone.utc).date().isoformat(),
+    )
+
+
+@router.post("/receipt")
+async def training_receipt(
+    body: TrainingReceiptRequest, actor: Reviewer = Depends(require_reviewer),
+) -> dict[str, Any]:
+    if not actor.founder:
+        raise HTTPException(403, "Founder access required")
+    if not os.environ.get("HF_TOKEN") or not os.environ.get("HF_ORG"):
+        return {"status": "Hugging Face training is not configured"}
+    return await _training_subprocess(
+        "--job-id", body.job_id, "--billed-usd", str(body.billed_usd),
+    )
+
+
+@router.post("/zenas/court-text")
+async def save_court_text_pair(body: CourtTextPair, request: Request) -> dict[str, bool]:
+    """Accept only code-split official court text from the regional Zenas room."""
+    from main import TANK_API_KEY
+    supplied = request.headers.get("x-tank-key", "")
+    expected = TANK_API_KEY
+    if not supplied or not expected or not hmac.compare_digest(supplied, expected):
+        raise HTTPException(401, "Room authentication required")
+    if runtime().box_region() != "za" or body.source_id not in OFFICIAL_ZA_CASE_SOURCES:
+        raise HTTPException(403, "Not in scope")
+    if body.status == "split" and (body.input is None or body.output is None or body.reason):
+        raise HTTPException(422, "Invalid court text split")
+    if body.status == "excluded" and (body.input is not None or body.output is not None
+                                      or body.reason not in {"empty", "criminal", "headings", "order"}):
+        raise HTTPException(422, "Invalid court text exclusion")
+    ref = f"{body.source_id}:{body.version_id}"
+    async with runtime().pool().acquire() as conn:
+        async with conn.transaction():
+            if body.status == "split":
+                value, output = dict(body.input or {}), dict(body.output or {})
+                await save_pair(
+                    conn, tenant=PLATFORM_TENANT, agent="zenas", task="zenas.reasoning",
+                    value=value, output=output, approved_by="court decision", source="court_text",
+                    ref=ref, holdout=is_holdout(PLATFORM_TENANT, "zenas.reasoning", value),
+                    client_matter=False, public=True, region="za",
+                )
+            await conn.execute(
+                """INSERT INTO tank.judgment_splits(region,source_id,document_id,version_id,status,reason)
+                VALUES('za',$1,$2,$3,$4,$5) ON CONFLICT(region,version_id) DO NOTHING""",
+                body.source_id, body.document_id, body.version_id, body.status, body.reason,
+            )
+    return {"ok": True}
+
+
+@router.get("/status")
+async def training_status(actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]:
+    if not actor.founder:
+        raise HTTPException(403, "Founder access required")
+    region = runtime().box_region()
+    items: list[dict[str, Any]] = []
+    async with runtime().pool().acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT agent,
+              count(*) FILTER (WHERE active AND public AND NOT client_matter AND NOT holdout) AS ready,
+              count(*) FILTER (WHERE active AND public AND NOT client_matter AND holdout) AS holdout
+            FROM tank.training_pairs WHERE tenant_id=$1 AND region=$2 GROUP BY agent ORDER BY agent""",
+            PLATFORM_TENANT, region,
+        )
+        exports = {row["agent"]: row for row in await conn.fetch(
+            """SELECT DISTINCT ON (agent) agent,day,exported_at FROM tank.training_exports
+            WHERE region=$1 ORDER BY agent,day DESC""", region,
+        )}
+        for row in rows:
+            export = exports.get(row["agent"])
+            items.extend((
+                {"name": f"{row['agent']} pairs ready", "count": int(row["ready"]),
+                 "status": "ready"},
+                {"name": f"{row['agent']} holdout", "count": int(row["holdout"]),
+                 "status": "held out"},
+                {"name": f"{row['agent']} export", "count": int(row["ready"]),
+                 "status": f"complete {export['day']}" if export else "not exported"},
+            ))
+        job = await conn.fetchrow(
+            """SELECT id,model_repo,estimated_usd,actual_usd,created_at FROM tank.training_jobs
+            WHERE tenant_id=$1 AND region=$2 ORDER BY created_at DESC LIMIT 1""", PLATFORM_TENANT, region,
+        )
+        if job:
+            items.append({"name": str(job["model_repo"]), "count": 1,
+                          "status": "complete" if job["actual_usd"] is not None else "running",
+                          "cost_usd": job["actual_usd"] if job["actual_usd"] is not None else job["estimated_usd"]})
+        evaluation = await conn.fetchrow(
+            """SELECT count(*) AS n,avg(agreement) AS agreement FROM tank.shadow
+            WHERE task_type='zenas.reasoning' AND candidate_model='tervory-own-zenas-za'
+              AND method='exact_outcome'""",
+        )
+        if evaluation and int(evaluation["n"] or 0):
+            agreement = float(evaluation["agreement"] or 0)
+            items.append({"name": "Zenas own model holdout", "count": int(evaluation["n"]),
+                          "status": f"{agreement:.2%} agreement"})
+        if region == "za":
+            stored = {row["source_id"]: int(row["count"]) for row in await conn.fetch(
+                """SELECT source_id,count(DISTINCT document_id) AS count FROM zenas_pool.documents
+                WHERE jurisdiction='za' AND kind='case' AND effective_to IS NULL
+                  AND status IS DISTINCT FROM 'superseded' AND source_id=ANY($1::text[])
+                GROUP BY source_id""", sorted(OFFICIAL_ZA_CASE_SOURCES),
+            )}
+            split_rows = await conn.fetch(
+                """SELECT source_id,status,count(*) AS count FROM tank.judgment_splits
+                WHERE region='za' GROUP BY source_id,status""",
+            )
+            split = {(row["source_id"], row["status"]): int(row["count"]) for row in split_rows}
+            pairs = {row["source_id"]: int(row["count"]) for row in await conn.fetch(
+                """SELECT split_part(source_ref,':',1) AS source_id,count(*) AS count
+                FROM tank.training_pairs WHERE tenant_id=$1 AND region='za' AND agent='zenas'
+                  AND source='court_text' AND active AND public AND NOT client_matter AND NOT holdout
+                GROUP BY split_part(source_ref,':',1)""", PLATFORM_TENANT,
+            )}
+            for source in sorted(OFFICIAL_ZA_CASE_SOURCES):
+                items.extend((
+                    {"name": f"{source} judgments stored", "count": stored.get(source, 0), "status": "stored"},
+                    {"name": f"{source} split", "count": split.get((source, "split"), 0), "status": "split"},
+                    {"name": f"{source} excluded", "count": split.get((source, "excluded"), 0), "status": "excluded"},
+                    {"name": f"{source} pairs ready", "count": pairs.get(source, 0), "status": "ready"},
+                ))
+    return {"items": items}
+
+
 @router.post("/tiger/{observation_id}/confirm")
 async def confirm_tiger(observation_id: uuid.UUID, actor: Reviewer = Depends(require_reviewer)) -> dict[str, bool]:
     if not actor.founder:
@@ -573,13 +806,19 @@ def exportable(row: dict[str, Any]) -> bool:
             and row.get("tenant_id") == PLATFORM_TENANT)
 
 
-async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: str, rows: list[dict], region: str = "us-east") -> None:
+async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: str, rows: list[dict], region: str = "us-east",
+                         holdouts: list[dict] | None = None) -> None:
     # Validate again at the network boundary, before any request is sent.
     if region not in ("us-east", "za") or region != runtime().box_region() or any(
         row.get("scope") != "platform" or "tenant_id" in row or row.get("region") != region
         or not exportable({**row, "tenant_id": PLATFORM_TENANT}) for row in rows
     ):
         raise ValueError("Unsafe training export")
+    if any(row.get("scope") != "platform" or "tenant_id" in row or row.get("region") != region
+           or row.get("holdout") is not True or row.get("active") is not True
+           or row.get("public") is not True or row.get("client_matter") is not False
+           for row in (holdouts or [])):
+        raise ValueError("Unsafe holdout export")
     data = "\n".join(encoded(row) for row in rows) + "\n"
     await archive_training_snapshot(agent, day, data.encode(), region=region)
     name = f"tervory-public-{agent}"
@@ -597,6 +836,12 @@ async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: s
         {"key": "file", "value": {"path": f"snapshots/{region}/{day}.jsonl", "encoding": "base64",
                                   "content": base64.b64encode(data.encode()).decode()}},
     ]
+    if holdouts:
+        held = "\n".join(encoded(row) for row in holdouts) + "\n"
+        operations.append(
+            {"key": "file", "value": {"path": f"holdouts/{region}/{day}.jsonl", "encoding": "base64",
+                                        "content": base64.b64encode(held.encode()).decode()}},
+        )
     response = await client.post(f"https://huggingface.co/api/datasets/{repo}/commit/main",
                                  content="\n".join(encoded(op) for op in operations),
                                  headers={"Content-Type": "application/x-ndjson"})
@@ -630,6 +875,7 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
                     if done:
                         continue
                     payload = []
+                    holdouts = []
                     scopes = await conn.fetch(
                         "SELECT DISTINCT tenant_id FROM tank.training_pairs WHERE region=$2 AND agent=$1 AND tenant_id=$3 AND public AND NOT client_matter", agent, region, PLATFORM_TENANT,
                     )
@@ -654,10 +900,22 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
                                 if row["unit"]:
                                     item["unit"] = row["unit"]
                                 payload.append(item)
+                        held_rows = await conn.fetch(
+                            """SELECT p.* FROM tank.training_pairs p
+                            WHERE p.tenant_id=$1 AND p.region=$3 AND p.agent=$2 AND p.active AND p.holdout
+                              AND p.public AND NOT p.client_matter""",
+                            scope["tenant_id"], agent, region,
+                        )
+                        for row in held_rows:
+                            if row["tenant_id"] == PLATFORM_TENANT and not await _batch_removed(conn, scope["tenant_id"], row["batch_id"]):
+                                holdouts.append({"region": region, "public": True, "client_matter": False,
+                                                 "scope": "platform", "holdout": True, "active": True,
+                                                 "task_type": row["task_type"], "input": obj(row["input"]),
+                                                 "output": obj(row["output"])})
                     if not payload:
                         continue
                     try:
-                        await upload_dataset(client, org, agent, day.isoformat(), payload, region)
+                        await upload_dataset(client, org, agent, day.isoformat(), payload, region, holdouts)
                     except StorageError:
                         # Leave this agent unrecorded so the slot retries it,
                         # while independent rooms can still finish their exports.

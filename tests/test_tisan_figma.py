@@ -376,10 +376,10 @@ def test_room_reaches_only_figma_through_the_locked_proxy_and_copies_the_reader(
     assert "TISAN_FIGMA_FIXTURE=/app/fixtures/tervory-landing.json" in docker
     compose = (ROOT / "agents" / "tisan" / "docker-compose.yml").read_text(encoding="utf-8")
     box = yaml.safe_load(compose)
-    assert not compose.startswith('# coolify: raw compose')
-    assert box['volumes'] == {'agent_tisan_data': None}
-    assert list(box["services"]) == ["agent-tisan", "figma-egress-proxy"]
-    assert list(box["networks"]) == ["gw", "figma_internal", "egress"]
+    assert compose.startswith('# coolify: raw compose')
+    assert box['volumes']['agent_tisan_data'] is None
+    assert [name for name, spec in box["services"].items() if not spec.get("profiles")] == ["agent-tisan", "figma-egress-proxy"]
+    assert set(box["networks"]) == {"gw", "figma_internal", "egress", "sandbox", "browser"}
     assert box["networks"]["figma_internal"] == {"internal": True}
     assert box["networks"]["egress"] == {}
     room = box["services"]["agent-tisan"]

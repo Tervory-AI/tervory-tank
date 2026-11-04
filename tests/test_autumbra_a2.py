@@ -464,6 +464,7 @@ def test_existing_hmac_path_still_queues_the_verified_tenant(monkeypatch):
     from agents.ghost import app as watch_app
     from agents.ghost.webhooks import EDGE_WEBHOOK_SECRET_ENV, sign_body
     monkeypatch.setenv(EDGE_WEBHOOK_SECRET_ENV, 'placeholder-secret')
+    monkeypatch.setenv('TANK_KEY', 'placeholder-room-key')
     monkeypatch.setattr(watch_app, 'watch_queue_configured', lambda: True)
     calls = []
     def enqueue(**kwargs):
@@ -479,7 +480,68 @@ def test_existing_hmac_path_still_queues_the_verified_tenant(monkeypatch):
     from types import SimpleNamespace
     app = create_app()
     app.state.store = SimpleNamespace(get_state=lambda *args: None)
-    response = TestClient(app).post('/ghost/autumbra/webhooks/cloudflare', content=body,
-        headers={'x-autumbra-signature': signature, 'x-autumbra-timestamp': timestamp, 'x-autumbra-nonce': nonce})
+    response = TestClient(app).post('/ghost/autumbra/webhooks/edge', content=body,
+        headers={'x-tank-key': 'placeholder-room-key', 'x-autumbra-signature': signature, 'x-autumbra-timestamp': timestamp, 'x-autumbra-nonce': nonce})
     assert response.status_code == 200 and response.json()['queued'] is True
     assert len(calls) == 1 and calls[0]['tenant_id'] == payload['tenant_id']
+
+
+@pytest.mark.parametrize('provider', ['cloudflare', 'google', 'google_workspace'])
+def test_provider_urls_never_fall_back_to_internal_hmac(provider, monkeypatch):
+    from agents.ghost.webhooks import EDGE_WEBHOOK_SECRET_ENV, MAILBOX_WEBHOOK_SECRET_ENV, sign_body
+    monkeypatch.setenv(EDGE_WEBHOOK_SECRET_ENV, 'placeholder-internal-key')
+    monkeypatch.setenv(MAILBOX_WEBHOOK_SECRET_ENV, 'placeholder-internal-key')
+    body, timestamp = b'{}', str(int(time.time()))
+    signature = sign_body(secret='placeholder-internal-key', body=body, timestamp=timestamp, nonce=provider)
+    response = TestClient(create_app()).post('/ghost/autumbra/webhooks/' + provider, content=body,
+        headers={'x-autumbra-signature': signature, 'x-autumbra-timestamp': timestamp, 'x-autumbra-nonce': provider})
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_connected_google_alert_intake_uses_binding_not_body_tenant(signing, monkeypatch, tmp_path):
+    import base64
+    public, token = signing
+    tenant, other = '00000000-0000-0000-0000-000000000608', '00000000-0000-0000-0000-000000000609'
+    ident = '00000000-0000-0000-0000-000000000610'
+    monkeypatch.setenv('TANK_KEY', 'placeholder-room-key')
+    app = create_app()
+    app.state.store = Store(tmp_path / 'connections.sqlite3')
+    app.state.http = None
+    async def keys(*args, **kwargs):
+        return {'keys': [public]}
+    monkeypatch.setattr(Tank, 'call', keys)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://watch') as client:
+        binding = {'tenant_id': tenant, 'connection_id': ident,
+                   'audience': 'https://placeholder.example.test/push',
+                   'service_account': 'placeholder-push@placeholder.iam.gserviceaccount.com',
+                   'subscription': 'projects/placeholder/subscriptions/placeholder', 'customer_id': 'C-placeholder'}
+        configure = '/ghost/autumbra/connections/google_workspace'
+        assert (await client.post(configure, json=binding)).status_code == 404
+        assert (await client.post(configure, json=binding, headers={'X-Tank-Key': 'placeholder-room-key'})).status_code == 200
+        attack = {**binding, 'tenant_id': other}
+        assert (await client.post(configure, json=attack, headers={'X-Tank-Key': 'placeholder-room-key'})).status_code == 409
+        path = '/ghost/autumbra/webhooks/google_workspace/' + ident
+        def event(message_id, customer='C-placeholder', subscription=binding['subscription']):
+            alert = {'customerId': customer, 'alertId': 'placeholder-alert', 'type': 'Suspicious login',
+                     'source': 'Google Identity', 'data': {'email': 'private@example.test'}}
+            return {'tenant_id': other, 'subscription': subscription,
+                    'message': {'messageId': message_id, 'data': base64.b64encode(json.dumps(alert).encode()).decode(),
+                    'attributes': {'alertcenter_resource_type': 'ALERT', 'alertcenter_payload_format': 'JSON',
+                                   'alertcenter_resource_status': 'CREATED'}}}
+        headers = {'authorization': 'Bearer ' + token()}
+        assert (await client.post(path, json=event('placeholder-unsigned'))).status_code == 401
+        assert (await client.post(path, json=event('placeholder-wrong-sub', subscription='projects/other/subscriptions/other'), headers=headers)).status_code == 401
+        assert (await client.post(path, json=event('placeholder-wrong-customer', customer='C-other'), headers=headers)).status_code == 401
+        accepted = await client.post(path, json=event('placeholder-valid'), headers=headers)
+        assert accepted.status_code == 200
+        assert accepted.json()['receipt']['tenant_id'] == tenant
+        assert accepted.json()['queued'] is False
+        duplicate = await client.post(path, json=event('placeholder-valid'), headers=headers)
+        assert duplicate.status_code == 200 and duplicate.json()['duplicate'] is True
+        rows = app.state.store.get_state(tenant, 'autumbra_workspace_alerts', [])
+        assert len(rows) == 1
+        assert app.state.store.get_state(other, 'autumbra_workspace_alerts', []) == []
+        assert 'private@example.test' not in json.dumps(rows)
+        assert 'placeholder-alert' not in json.dumps(rows)
+        assert app.state.store.get_state(tenant, 'autumbra_client_settings')['google_workspace_connected'] is True

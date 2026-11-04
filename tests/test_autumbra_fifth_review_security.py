@@ -275,6 +275,7 @@ def test_5_auto_fix_paragraph_is_removed_even_with_real_pr():
         undo_fix_url="https://protect.tervory.com/autumbra/undo/r2?token=y",
     )
     assert "let us fix this kind of problem automatically" not in mail2["body"]
+    assert "approve fixes yourself" in mail2["body"]
     assert "patched versions" not in mail2["body"]
     assert "https://github.com/example/repo/pull/9" in mail2["body"]
 

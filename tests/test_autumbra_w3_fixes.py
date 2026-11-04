@@ -9,7 +9,6 @@ import uuid
 import httpx
 import pytest
 from fastapi import FastAPI
-from pydantic import ValidationError
 
 import command
 import ghost_routes
@@ -28,8 +27,8 @@ B = '22222222-2222-4222-8222-222222222222'
 def test_fix_mode_legacy_and_shield_modes():
     for mode in ApplyMode:
         assert ClientAutumbraSettings(tenant_id=A, shield_mode=mode).shield_mode == mode
-    with pytest.raises(ValidationError):
-        ClientAutumbraSettings(tenant_id=A, fix_mode=ApplyMode.auto_when_checks_pass)
+    normalized = ClientAutumbraSettings(tenant_id=A, fix_mode=ApplyMode.auto_when_checks_pass)
+    assert normalized.fix_mode == ApplyMode.approve_each
     legacy = {'fix_mode': ApplyMode.auto_when_checks_pass.value, 'shield_mode': ApplyMode.never.value}
     result = load_settings(SimpleNamespace(get_state=lambda *args: legacy), A)
     assert result.fix_mode == ApplyMode.approve_each and result.shield_mode == ApplyMode.never

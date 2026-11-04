@@ -48,6 +48,12 @@ class ClientAutumbraSettings(BaseModel):
     shopify_connected: bool = False
     host_firewall_connected: bool = False
 
+    @field_validator("fix_mode", mode="before")
+    @classmethod
+    def fixes_always_need_approval(cls, value):
+        # Read old automatic preferences safely; never carry them into execution.
+        return ApplyMode.approve_each if value == ApplyMode.auto_when_checks_pass else value
+
     @field_validator("watched_hosts")
     @classmethod
     def hosts_must_be_shaped(cls, values: list[str]) -> list[str]:

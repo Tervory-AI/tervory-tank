@@ -8,16 +8,18 @@ on:
   # before it lands, so branches no longer merge main to stay current.
   merge_group:
     types: [checks_requested]
-  push:
-    branches: [main]
+  # No push trigger on main (3 Nov, founder): the merge queue (merge method MERGE) already
+  # ran this whole workflow on the exact commit that lands, so a run on the push was a
+  # pure repeat. workflow_dispatch (above) still runs everything on main by hand:
+  # ci_scope.py gets no DIFF_BASE for a dispatch and selects the full suite.
 
 permissions:
   contents: read
 
 # Cancel superseded runs (CI-2). A newer push to the same pull request cancels the
-# older run. Runs on main are never cancelled: each main run gets its own group
-# (run_id), so it never waits behind or gets replaced by another main run. Since
-# 27 Oct the deploy no longer waits for them (deploy-on-merge runs on the push). (With a shared group, GitHub cancels a *pending*
+# older run. Merge-queue and manual runs are never cancelled: each gets its own group
+# (run_id), so it never waits behind or gets replaced by another run. Since
+# 27 Oct the deploy no longer waits for CI (deploy-on-merge runs on the push). (With a shared group, GitHub cancels a *pending*
 # run when a newer one queues, even with cancel-in-progress false.)
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -239,6 +241,33 @@ jobs:
       - name: Install workspace packages for offline billing and Node tests
         working-directory: workspace
         run: npm ci --no-audit --no-fund
+      - name: Prepare CLI acceptance fixtures
+        run: |
+          npm ci --prefix cli --ignore-scripts --no-audit --no-fund
+          # Setup may fetch pinned dependencies; the acceptance tests themselves stay offline.
+          node --input-type=module - <<'JS'
+          import { PLATFORMS } from './cli/scripts/build-release.mjs';
+          import { readFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const lock = JSON.parse(readFileSync('cli/package-lock.json'));
+          for (const platform of Object.keys(PLATFORMS)) {
+            const name = '@napi-rs/keyring-' + platform;
+            const version = lock.packages['node_modules/' + name].version;
+            execFileSync('npm', ['cache', 'add', name + '@' + version], { stdio: 'inherit' });
+          }
+          JS
+          if ! command -v bwrap >/dev/null; then
+            if [ "$RUNNER_ENVIRONMENT" != github-hosted ]; then
+              echo "Self-hosted CLI acceptance needs preinstalled Bubblewrap."
+              exit 1
+            fi
+            sudo apt-get update
+            sudo apt-get install -y bubblewrap
+          fi
+          # Kernel changes are restricted to disposable hosted runners.
+          if [ "$RUNNER_ENVIRONMENT" = github-hosted ] && test -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: Lint
         # F401 in base.socials/1.0.0/run.py is a pre-existing unused import.
         # This lane cannot edit an approved skill in place.

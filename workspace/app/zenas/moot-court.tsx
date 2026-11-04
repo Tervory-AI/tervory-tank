@@ -269,7 +269,7 @@ export function MootCourt() {
         {!hearing?.ruling ? <p>{MOOT_PARTS[2].empty}</p> : <><h3>{hearing.ruling.order}</h3><ol>{hearing.ruling.reasons.map((r, i) => <li key={i}>{r}</li>)}</ol><h3>What the court actually held</h3><p>{hearing.reveal ?? "The original holding will be revealed after both hearings close."}</p>
           <p>Cost: {hearing.cost_usd === null ? "unavailable" : `$${hearing.cost_usd.toFixed(6)}`}</p>
           {operator && !hearing.published && <button className="zn-primary" disabled={busy || Boolean(hearing.fairness_pair_id && (!fairness || fairness.status === "incomplete"))} onClick={() => void command("publish")}>{hearing.fairness_pair_id ? "Publish paired hearings" : "Publish"}</button>}
-          {hearing.published && <a href={`/moot/${hearing.id}`}>Public watch page</a>}
+          {hearing.published && <a href={`/moot/${hearing.id}${hearing.region === "za" ? "?region=za" : ""}`}>Public watch page</a>}
         </>}
       </article>
     </div>

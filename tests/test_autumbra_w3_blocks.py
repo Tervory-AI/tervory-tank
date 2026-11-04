@@ -216,6 +216,7 @@ def test_public_address_survives_but_inventory_identity_wins():
 
 @pytest.mark.asyncio
 async def test_signed_second_tenant_still_needs_own_log_and_mode(tmp_path, monkeypatch):
+    monkeypatch.setenv('TANK_KEY', 'placeholder-room-key')
     monkeypatch.setenv(CF_SECRET_ENV, 'placeholder-signing-secret')
     monkeypatch.setenv('THREAT_PAYLOAD_QUEUE_ROOT', str(tmp_path / 'placeholder-queues'))
     monkeypatch.setenv('DATA_DIR', str(tmp_path))
@@ -232,6 +233,7 @@ async def test_signed_second_tenant_still_needs_own_log_and_mode(tmp_path, monke
         timestamp, nonce = str(int(time.time())), 'placeholder-nonce-' + str(counter)
         signature = sign_body(secret='placeholder-signing-secret', body=body, timestamp=timestamp, nonce=nonce)
         return await client.post('/ghost/autumbra/webhooks/edge', content=body, headers={
+            'X-Tank-Key': 'placeholder-room-key',
             'X-Autumbra-Signature': signature, 'X-Autumbra-Timestamp': timestamp, 'X-Autumbra-Nonce': nonce})
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://placeholder') as client:

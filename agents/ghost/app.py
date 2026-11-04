@@ -891,6 +891,9 @@ def create_app() -> FastAPI:
             "client_visible_feed_list": False,
         }
 
+    from .provider_intake import register as register_provider_intake
+    register_provider_intake(app, require_tank, bounded_json, Tank)
+
     @app.post("/ghost/autumbra/webhooks/{provider}")
     async def autumbra_webhook(provider: str, request: Request):
         """Signature check FIRST — before any Tank auth that would 404.
@@ -912,6 +915,8 @@ def create_app() -> FastAPI:
                 {"accepted": False, "stored": False, "drops": drop_counts()},
                 status_code=401,
             )
+        if envelope.get("authenticated_by") == "hmac":
+            await require_tank(request.headers.get("x-tank-key", ""))
         if envelope.get("authenticated_by") != "hmac":
             # Provider authentication does not establish any client's authority.
             # Retain only the latest verified event metadata per native provider.

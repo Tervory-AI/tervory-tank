@@ -100,7 +100,7 @@ async def test_create_four_values_only_and_no_deploy_or_secret_leak(caplog):
     assert len(env) == 4
     assert TOKEN not in json.dumps(receipt) + caplog.text
     assert set(receipt['founder_fills']) == {'AUTUMBRA_EDGE_CREDENTIAL', 'AUTUMBRA_UNDO_TOKEN_SECRET',
-        'SITE_NAME', 'CLOUDFLARE_API_TOKEN_ENFORCE', 'AUTUMBRA_HEALTH_SECRET'}
+        'SITE_NAME', 'CLOUDFLARE_API_TOKEN_ENFORCE', 'AUTUMBRA_HEALTH_SECRET', 'AUTUMBRA_HEALTH_URL'}
 
 
 @pytest.mark.asyncio
