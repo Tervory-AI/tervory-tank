@@ -73,6 +73,7 @@ test("Base section links the real parts of the page", () => {
 
 test("workspace routes use the shared shell; auth and squad product roots use their own", () => {
   for (const path of SHELL_ROUTES) assert.equal(usesOwnShell(path), false, path);
+  assert.equal(usesOwnShell("/"), true);
   assert.equal(usesOwnShell("/sign-in"), true);
   assert.equal(usesOwnShell("/sign-up/verify"), true);
   for (const path of ["/base", "/tiger", "/market-lab", "/rig", "/tisan", "/radix", "/zenas", "/skala", "/tank"]) {

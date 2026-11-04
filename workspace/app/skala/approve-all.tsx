@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 
 type Preview = { token: string; items: { id: string; version: string; score: number; runs: number; model: boolean }[] };
 
-export function ApproveAllReady({ onApproved, className }: { onApproved?: () => Promise<void>; className?: string }) {
+export function ApproveAllReady({ onApproved, className, label = "Approve all ready" }: { label?: string; onApproved?: () => Promise<void>; className?: string }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
@@ -32,7 +32,7 @@ export function ApproveAllReady({ onApproved, className }: { onApproved?: () => 
     } finally { setBusy(false); }
   }
   return <div className="sk-bulk">
-    <button className={className} type="button" disabled={busy} onClick={() => request(false)}>{busy ? "Checking…" : "Approve all ready"}</button>
+    <button className={className} type="button" disabled={busy} onClick={() => request(false)}>{busy ? "Checking…" : label}</button>
     {message ? <p role="status">{message}</p> : null}
     <dialog ref={dialog} className="sk-dialog" style={{maxWidth: "min(850px, calc(100vw - 32px))", boxSizing: "border-box", border: "1px solid #B8BFD0", borderRadius: 8, padding: 24, color: "#001840"}} aria-label="Confirm ready versions">
       <h2>Approve these versions?</h2>
