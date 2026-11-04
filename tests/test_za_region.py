@@ -115,7 +115,7 @@ def test_za_compose_names_no_us_host_and_does_not_replicate() -> None:
 def test_za_roster_includes_the_gated_own_model() -> None:
     za_names = [item["model_name"] for item in ZA_CONFIG["model_list"]]
     us_names = [item["model_name"] for item in US_CONFIG["model_list"]]
-    assert za_names == us_names
+    assert set(za_names) == set(us_names) | {"tervory-own-zenas-za"}
     assert "za-local" not in za_names
     raw = (ROOT / "litellm" / "config.za.yaml").read_text(encoding="utf-8")
     assert "model_name: za-local" in raw
@@ -123,6 +123,7 @@ def test_za_roster_includes_the_gated_own_model() -> None:
     for item in ZA_CONFIG["model_list"]:
         if item["model_name"] == "tervory-own-zenas-za":
             assert item["litellm_params"]["api_base"] == "http://zenas-own-model:8080/v1"
+            assert item["litellm_params"]["api_key"] == "os.environ/ZENAS_OWN_MODEL_KEY"
             assert item["model_info"]["hosted_in"] == "za"
             continue
         # MODELS-3: the public Hugging Face router is the only api_base; it is not SA hosting.
