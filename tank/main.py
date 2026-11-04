@@ -1262,6 +1262,14 @@ async def run_route(
         # Empty, unknown, or the other region's text is not written.
         raise HTTPException(status_code=403, detail=foreign)
     client_text = "\n".join(m.content for m in req.messages)
+    # Only the authenticated Zenas court-read shape may consult the pool before
+    # the identifier decision. A matching stored judgment is a public record;
+    # every other caller is refused without a database read or provider call.
+    pool_read = False
+    if _pool_read_candidate(client_text, caller=caller, task_type=req.task_type, skill=req.skill):
+        pool_read = await zenas_pool_prompt(
+            client_text, caller=caller, task_type=req.task_type, skill=req.skill
+        )
     early = model_call_refusal(
         client_text,
         None,
@@ -1270,13 +1278,10 @@ async def run_route(
         task_type=req.task_type,
         caller=caller,
         skill=req.skill,
-        pool_read=False,
+        pool_read=pool_read,
     )
     if early:
         raise HTTPException(status_code=403, detail=early)
-    pool_read = await zenas_pool_prompt(
-        client_text, caller=caller, task_type=req.task_type, skill=req.skill
-    )
 
     seat = MOA_SEAT_TASK.fullmatch(req.task_type)
     if seat and model_override is None:
