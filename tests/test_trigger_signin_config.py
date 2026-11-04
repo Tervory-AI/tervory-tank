@@ -77,3 +77,20 @@ def test_founder_subjects_are_bound_to_verified_issuer(monkeypatch):
         assert registry.founders() == {'80001'}
     finally:
         registry._issuer.reset(context)
+
+
+@pytest.mark.asyncio
+async def test_setup_read_requires_capability_not_a_native_subject_name(monkeypatch):
+    from unittest.mock import AsyncMock
+    from starlette.requests import Request
+    import case_studies
+    from command import Actor
+    monkeypatch.setenv('TRIGGER_SIGNIN_SETUP_TOKEN', 'offline-setup-only')
+    claimed = Actor(TENANT, 'trigger-signin-setup', False)
+    monkeypatch.setattr(case_studies, 'identity', AsyncMock(return_value=claimed))
+    def request(value=''):
+        return Request({'type': 'http', 'headers': [(b'x-trigger-signin-setup', value.encode())]})
+    assert await case_studies.tenant_listing_identity(request()) is claimed
+    assert claimed is not case_studies._SETUP_TENANT_READER
+    assert await case_studies.tenant_listing_identity(request('wrong')) is claimed
+    assert await case_studies.tenant_listing_identity(request('offline-setup-only')) is case_studies._SETUP_TENANT_READER

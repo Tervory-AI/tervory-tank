@@ -89,16 +89,19 @@ async def ensure(actor: Actor = Depends(identity)) -> dict:
     return {"tenant_id": str(actor.tenant_id), "products": [r["product"] for r in rows]}
 
 
+_SETUP_TENANT_READER = Actor(uuid.UUID('00000000-0000-0000-0000-000000000001'), '', True)
+
+
 async def tenant_listing_identity(request: Request) -> Actor:
-    from trigger_signin_config import setup_authorized, PLATFORM
+    from trigger_signin_config import setup_authorized
     if setup_authorized(request):
-        return Actor(PLATFORM, 'trigger-signin-setup', True)
+        return _SETUP_TENANT_READER
     return await identity(request)
 
 
 @router.get("/clients")
 async def clients(response: Response, actor: Actor = Depends(tenant_listing_identity), offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)) -> dict:
-    if actor.user_id == 'trigger-signin-setup':
+    if actor is _SETUP_TENANT_READER:
         from tenant_db import tenant_scope
         with tenant_scope(actor.tenant_id, administrative=True):
             async with db().acquire() as conn:
