@@ -126,7 +126,7 @@ async def notify(tenant_id: uuid.UUID, title: str, body: str, link: str = "/chat
     counts = dict(sent=0, dead=0, failed=0, unavailable=0)
     with tenant_scope(message.tenant_id):
         async with store.acquire() as conn:
-            devices = await conn.fetch("SELECT d.user_id,d.token_hash,d.token,d.platform,d.session_hash FROM tank.mobile_devices d JOIN tank.mobile_sessions s ON s.tenant_id=d.tenant_id AND s.token_hash=d.session_hash AND s.user_id=d.user_id WHERE d.tenant_id=$1 AND ($2::text IS NULL OR d.user_id=$2) AND s.expires_at>now() AND NOT s.revoked", message.tenant_id, user_id)
+            devices = await conn.fetch("SELECT device.user_id,device.token_hash,device.token,device.platform,device.session_hash FROM tank.mobile_devices device JOIN tank.mobile_sessions mobile_session ON mobile_session.tenant_id=device.tenant_id AND mobile_session.token_hash=device.session_hash AND mobile_session.user_id=device.user_id WHERE device.tenant_id=$1 AND ($2::text IS NULL OR device.user_id=$2) AND mobile_session.expires_at>now() AND NOT mobile_session.revoked", message.tenant_id, user_id)
         async with httpx.AsyncClient(http2=True, timeout=15, follow_redirects=False, limits=httpx.Limits(max_connections=8)) as client:
             transport = provider if provider is not None else PushProviders(client)
             semaphore = asyncio.Semaphore(8)
