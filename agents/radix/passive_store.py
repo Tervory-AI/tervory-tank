@@ -98,6 +98,52 @@ DO $$ BEGIN
   END IF;
  END IF;
 END $$;
+
+CREATE TABLE IF NOT EXISTS agent_radix.weekly_domains (
+ tenant_id uuid NOT NULL, domain text NOT NULL, challenge text NOT NULL,
+ own boolean NOT NULL DEFAULT false, consent_id uuid, enabled boolean NOT NULL DEFAULT true,
+ next_run timestamptz NOT NULL DEFAULT now()+interval '7 days',
+ PRIMARY KEY(tenant_id,domain)
+);
+CREATE TABLE IF NOT EXISTS agent_radix.weekly_runs (
+ tenant_id uuid NOT NULL, domain text NOT NULL, period timestamptz NOT NULL,
+ kind text NOT NULL CHECK(kind IN ('passive','infra')), scan_id uuid NOT NULL,
+ PRIMARY KEY(tenant_id,domain,period,kind), UNIQUE(tenant_id,scan_id)
+);
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+  ALTER TABLE agent_radix.weekly_domains ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE agent_radix.weekly_domains FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.weekly_domains'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON agent_radix.weekly_domains FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.weekly_domains'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON agent_radix.weekly_domains AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE n.nspname='tank' AND c.relname='command_threads' AND c.relrowsecurity) THEN
+  ALTER TABLE agent_radix.weekly_runs ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE agent_radix.weekly_runs FORCE ROW LEVEL SECURITY;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.weekly_runs'::regclass AND polname='tenant_access') THEN
+   CREATE POLICY tenant_access ON agent_radix.weekly_runs FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid='agent_radix.weekly_runs'::regclass AND polname='tenant_boundary') THEN
+   CREATE POLICY tenant_boundary ON agent_radix.weekly_runs AS RESTRICTIVE FOR ALL TO PUBLIC
+    USING (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid)
+    WITH CHECK (tenant_id=NULLIF(current_setting('app.tenant_id',true),'')::uuid);
+  END IF;
+ END IF;
+END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS passive_one_running
  ON agent_radix.passive_scans ((true)) WHERE status='running';
 """
@@ -183,7 +229,7 @@ class Store:
     def __init__(self, pool):
         self.pool = pool
 
-    async def issue(self, tenant: UUID, domain: str) -> dict:
+    async def issue(self, tenant: UUID, domain: str, *, own=False) -> dict:
         domain = domain_name(domain)
         # Public DNS proof, not an authentication key. No cross-tenant default.
         challenge = 'tervory-' + secrets.token_hex(32)
@@ -191,14 +237,32 @@ class Store:
             row = await conn.fetchrow("""INSERT INTO agent_radix.passive_domains(tenant_id,domain,challenge)
               VALUES($1,$2,$3) ON CONFLICT(tenant_id,domain) DO UPDATE
               SET challenge=CASE WHEN EXISTS (SELECT 1 FROM agent_radix.passive_watches w
-                WHERE w.tenant_id=$1 AND w.domain=$2 AND w.status='active')
+                WHERE w.tenant_id=$1 AND w.domain=$2 AND w.status='active') OR EXISTS(
+                SELECT 1 FROM agent_radix.weekly_domains v WHERE v.tenant_id=$1 AND v.domain=$2 AND v.enabled)
                 THEN passive_domains.challenge ELSE $3 END,
               expires_at=CASE WHEN EXISTS (SELECT 1 FROM agent_radix.passive_watches w
                 WHERE w.tenant_id=$1 AND w.domain=$2 AND w.status='active')
                 THEN passive_domains.expires_at ELSE now()+interval '1 day' END
               RETURNING expires_at,challenge""", tenant, domain, challenge)
+        await self.enroll_weekly(tenant,domain,own=own)
         return {'tenant_id': str(tenant), 'domain': domain, 'name': '_tervory-verify.' + domain,
                 'value': row['challenge'], 'expires_at': row['expires_at'].isoformat()}
+
+    async def enroll_weekly(self,tenant,domain,*,own=False):
+        if own:
+            from active_policy import active_target
+            try:active_target('https://'+domain+'/')
+            except PermissionError:return
+        consent=await self.consent_id(tenant,domain)
+        if not own and consent is None:return
+        async with self.pool.acquire() as conn:
+            await conn.execute("""INSERT INTO agent_radix.weekly_domains(tenant_id,domain,challenge,own,consent_id)
+              SELECT tenant_id,domain,challenge,$3,$4 FROM agent_radix.passive_domains WHERE tenant_id=$1 AND domain=$2
+              ON CONFLICT(tenant_id,domain) DO UPDATE SET challenge=excluded.challenge,
+              own=weekly_domains.own OR excluded.own,consent_id=excluded.consent_id,enabled=true""",tenant,domain,own,consent)
+            await conn.execute("""UPDATE agent_radix.passive_watches SET next_run=(SELECT next_run
+              FROM agent_radix.weekly_domains WHERE tenant_id=$1 AND domain=$2)
+              WHERE tenant_id=$1 AND domain=$2 AND interval='weekly' AND status='active' AND next_run>now()""",tenant,domain)
 
     async def consent(self, tenant, domain, user, text):
         domain=domain_name(domain)
@@ -207,6 +271,7 @@ class Store:
         async with self.pool.acquire() as conn:
             row=await conn.fetchrow("""INSERT INTO agent_radix.active_consents(tenant_id,id,domain,granted_by,consent_text)
               VALUES($1,$2,$3,$4,$5) RETURNING id,domain,granted_by,granted_at""",tenant,uuid4(),domain,user,text)
+        await self.enroll_weekly(tenant,domain)
         return {**dict(row),'id':str(row['id']),'granted_at':row['granted_at'].isoformat()}
 
     async def withdraw_consent(self, tenant, domain, user):
@@ -214,6 +279,8 @@ class Store:
         async with self.pool.acquire() as conn:
             await conn.execute("""UPDATE agent_radix.active_consents SET withdrawn_by=$3,withdrawn_at=now()
               WHERE tenant_id=$1 AND domain=$2 AND withdrawn_at IS NULL""",tenant,domain,user)
+            await conn.execute('''UPDATE agent_radix.weekly_domains SET enabled=false
+              WHERE tenant_id=$1 AND domain=$2 AND NOT own''',tenant,domain)
         return {'domain':domain,'withdrawn':True}
 
     async def consent_id(self, tenant, domain):
@@ -243,7 +310,11 @@ class Store:
               WHERE d.tenant_id=$1 AND d.domain=$5 AND
               (($6=false AND d.expires_at>now()) OR (($6=true OR $7=true) AND EXISTS (
                 SELECT 1 FROM agent_radix.passive_watches w WHERE w.tenant_id=d.tenant_id
-                AND w.domain=d.domain AND w.status='active' AND w.challenge=d.challenge))) RETURNING id""",
+                AND w.domain=d.domain AND w.status='active' AND w.challenge=d.challenge)) OR ($7 AND EXISTS (
+                SELECT 1 FROM agent_radix.weekly_domains v WHERE v.tenant_id=d.tenant_id AND v.domain=d.domain
+                AND v.enabled AND v.challenge=d.challenge AND (v.own OR EXISTS(
+                  SELECT 1 FROM agent_radix.active_consents c WHERE c.tenant_id=v.tenant_id
+                    AND c.id=v.consent_id AND c.withdrawn_at IS NULL))))) RETURNING id""",
               tenant, ident, target, artifact, domain, watched, active, consent_id, infra)
         if row is None:
             raise PermissionError('domain proof required')
@@ -251,15 +322,26 @@ class Store:
 
     async def pending(self, tenant: UUID, ident: UUID):
         async with self.pool.acquire() as conn:
-            return await conn.fetchrow("""SELECT s.domain,d.challenge,s.active,s.active_consent_id,s.infra FROM agent_radix.passive_scans s
+            return await conn.fetchrow("""SELECT s.domain,d.challenge,s.active,s.active_consent_id,s.infra,
+              EXISTS(SELECT 1 FROM agent_radix.weekly_runs r WHERE r.tenant_id=s.tenant_id AND r.scan_id=s.id) AS weekly FROM agent_radix.passive_scans s
               JOIN agent_radix.passive_domains d ON d.tenant_id=s.tenant_id AND d.domain=s.domain
               WHERE s.tenant_id=$1 AND s.id=$2 AND s.status='pending' AND
               ((s.watched=false AND d.expires_at>now()) OR ((s.watched=true OR s.active=true) AND EXISTS (
                 SELECT 1 FROM agent_radix.passive_watches w WHERE w.tenant_id=s.tenant_id
-                AND w.domain=s.domain AND w.status='active' AND w.challenge=d.challenge)))
+                AND w.domain=s.domain AND w.status='active' AND w.challenge=d.challenge)) OR (s.active AND EXISTS (
+                SELECT 1 FROM agent_radix.weekly_domains v WHERE v.tenant_id=d.tenant_id AND v.domain=d.domain
+                AND v.enabled AND v.challenge=d.challenge AND (v.own OR EXISTS(
+                  SELECT 1 FROM agent_radix.active_consents c WHERE c.tenant_id=v.tenant_id
+                    AND c.id=v.consent_id AND c.withdrawn_at IS NULL)))) OR EXISTS (
+                SELECT 1 FROM agent_radix.weekly_runs r JOIN agent_radix.weekly_domains v
+                 ON v.tenant_id=r.tenant_id AND v.domain=r.domain
+                WHERE r.tenant_id=s.tenant_id AND r.scan_id=s.id AND v.enabled AND v.challenge=d.challenge
+                 AND (v.own OR EXISTS(SELECT 1 FROM agent_radix.active_consents c WHERE c.tenant_id=v.tenant_id
+                   AND c.id=v.consent_id AND c.withdrawn_at IS NULL))))
               AND (s.created_at>now()-interval '5 minutes' OR EXISTS (
                 SELECT 1 FROM agent_radix.regulation_runs r WHERE r.tenant_id=s.tenant_id
-                AND r.scan_id=s.id AND NOT r.settled))""", tenant, ident)
+                AND r.scan_id=s.id AND NOT r.settled) OR EXISTS (
+                SELECT 1 FROM agent_radix.weekly_runs v WHERE v.tenant_id=s.tenant_id AND v.scan_id=s.id))""", tenant, ident)
 
     async def running(self, tenant: UUID, ident: UUID) -> bool:
         async with self.pool.acquire() as conn:
@@ -377,6 +459,9 @@ class Store:
             await conn.execute("""UPDATE agent_radix.passive_watches w SET status='stopped',stop_reason=$3
               FROM agent_radix.passive_scans s WHERE s.tenant_id=$1 AND s.id=$2 AND s.watched
               AND w.tenant_id=s.tenant_id AND w.domain=s.domain AND w.status='active'""", tenant, ident, reason)
+            await conn.execute('''UPDATE agent_radix.weekly_domains w SET enabled=false
+              FROM agent_radix.passive_scans s WHERE s.tenant_id=$1 AND s.id=$2
+              AND w.tenant_id=s.tenant_id AND w.domain=s.domain''',tenant,ident)
 
     async def changes(self, tenant: UUID, domain: str) -> dict:
         domain = domain_name(domain)

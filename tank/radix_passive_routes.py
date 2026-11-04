@@ -78,6 +78,7 @@ def build_router(tank):
             response = await tank._http.request(method, 'http://agent-radix:8000/passive/' + operation,
                 json=body, params=params, timeout=1230 if operation in {'active','infra'} else 390 if operation == 'scans' else 15,
                 headers={'X-Tank-Key': key, 'X-Tervory-Tenant': str(tenant),
+                    'X-Tervory-Founder':str(request.headers.get('x-tervory-user','') in {v.strip() for v in os.environ.get('TERVORY_ADMIN_USER_IDS','').split(',') if v.strip()}).lower(),
                     **({'X-Tervory-Active-Authorized':'true','X-Tervory-User':request.headers['x-tervory-user'],
                         'X-Tervory-Active-Client':str(request.headers['x-tervory-user'] not in {v.strip() for v in os.environ.get('TERVORY_ADMIN_USER_IDS','').split(',')}).lower()}
                         if operation in {'active','infra','consent','consent-withdraw'} else {})}, follow_redirects=False)

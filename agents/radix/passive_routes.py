@@ -118,7 +118,7 @@ def attach(app):
     @router.post('/domains', status_code=201)
     async def issue(body: Domain, request: Request):
         identity(request, body.tenant_id)
-        return await Store(app.state.pool).issue(body.tenant_id, body.domain)
+        return await Store(app.state.pool).issue(body.tenant_id, body.domain,own=request.headers.get('x-tervory-founder')=='true')
 
     @router.post('/scans')
     async def scan(body: Scan, request: Request):
@@ -205,6 +205,8 @@ def attach(app):
             result = await Store(app.state.pool).watch(body.tenant_id, body.domain, body.interval, run_now=body.run_now)
         except PermissionError:
             raise HTTPException(403, 'domain proof required') from None
+        if request.headers.get('x-tervory-founder')=='true':
+            await Store(app.state.pool).enroll_weekly(body.tenant_id,body.domain,own=True)
         return {**result, 'queued': body.run_now}
 
     @router.post('/unwatch')

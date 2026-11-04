@@ -73,10 +73,10 @@ class Lease:
                 raise HTTPException(403, 'domain proof required')
             if bool(row.get('infra',False)) != infra or bool(row.get('active', False)) != active:
                 raise HTTPException(403, 'scan not authorized')
-            if active and row.get('active_consent_id') is not None:
+            if row.get('active_consent_id') is not None:
                 if not await self.store.consent_valid(tenant,row['domain'],row['active_consent_id']):
                     raise HTTPException(403,'scan not authorized')
-            elif active:
+            elif active or row.get('weekly'):
                 from active_policy import active_target
                 try:
                     active_target('https://' + row['domain'] + '/')

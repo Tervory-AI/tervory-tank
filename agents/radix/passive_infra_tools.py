@@ -88,7 +88,7 @@ async def collect(target,directory,*,run=command,transport=None,proxy_ip=None):
                 response=await client.get(PROXY+'/infra/status');response.raise_for_status();stats=response.json()
                 if set(stats.get('ports',[]))!=set(top_ports()) or stats.get('errors') or stats.get('refused'):
                     checks['nmap']={'status':'partial','reason':'coverage_unconfirmed'}
-                if set(stats.get('dns_names',[]))!=set(names) or stats.get('errors') or stats.get('refused'):
+                if {tuple(q) for q in stats.get('dns_questions',[])}!={(name,kind) for name in names for kind in (1,28)} or stats.get('errors') or stats.get('refused'):
                     checks['dnsx']={'status':'partial','reason':'coverage_unconfirmed'}
             except (httpx.HTTPError,ValueError):
                 checks={name:{'status':'partial','reason':'coverage_unconfirmed'} for name in ('nmap','dnsx')}

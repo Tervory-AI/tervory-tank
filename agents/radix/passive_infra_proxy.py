@@ -3,7 +3,6 @@ import errno
 import json
 from pathlib import Path
 import socket
-import select
 import time
 
 import dns.message
@@ -72,24 +71,12 @@ class InfraProxy(Proxy):
         self.dns_exchange=dns_exchange
         self.observed=set()
         self.dns_names=set()
+        self.dns_questions=set()
         self.refused=0
         self.errors=0
 
     def response(self,conn,status,body=b''):
         conn.sendall(f'HTTP/1.1 {status}\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n'.encode()+body)
-
-    def relay(self,client,upstream,deadline):
-        counts={client:0,upstream:0}
-        while self._active_lease() and time.monotonic()<deadline:
-            ready,_,_=select.select([client,upstream],[],[],min(.2,max(0,deadline-time.monotonic())))
-            for source in ready:
-                data=source.recv(min(16384,self._max_bytes-counts[source]+1))
-                if not data:return
-                counts[source]+=len(data)
-                if counts[source]>self._max_bytes:return
-                destination=upstream if source is client else client
-                destination.settimeout(max(.001,deadline-time.monotonic()))
-                destination.sendall(data)
 
     def handle(self,conn):
         deadline=time.monotonic()+self._max_duration
@@ -103,7 +90,7 @@ class InfraProxy(Proxy):
             method,path,*_=headers.split(b'\r\n',1)[0].decode('ascii').split()
             if method=='GET' and path=='/infra/status':
                 self.response(conn,'200 OK',json.dumps({'ports':sorted(self.observed),'dns_names':sorted(self.dns_names),
-                    'refused':self.refused,'errors':self.errors}).encode())
+                    'dns_questions':sorted(self.dns_questions),'refused':self.refused,'errors':self.errors}).encode())
                 return
             target=None
             if method=='CONNECT' and path.count(':')==1:
@@ -126,7 +113,8 @@ class InfraProxy(Proxy):
                     raise
                 self.observed.add(target[1])
                 self.response(conn,'200 Connection Established')
-                self.relay(conn,upstream,deadline)
+                # -sT measures connect only. Do not forward application payloads
+                # or remote banners through this infrastructure-only endpoint.
             else:
                 lengths=[line.split(b':',1)[1].strip() for line in headers.split(b'\r\n')[1:] if line.lower().startswith(b'content-length:')]
                 if len(lengths)!=1 or not lengths[0].isdigit() or not 0<int(lengths[0])<=4096:
@@ -138,10 +126,12 @@ class InfraProxy(Proxy):
                     if not chunk:raise ValueError('truncated DNS message')
                     body+=chunk
                 if len(body)!=length:raise ValueError('invalid DNS length')
-                _,name=dns_query(body,self._verified_host)  # Before any resolver request.
+                query,name=dns_query(body,self._verified_host)  # Before any resolver request.
+                if deadline-time.monotonic()<5:raise TimeoutError('DNS budget')
                 output=self.dns_exchange(body,self._verified_host)
                 if len(output)>self._max_bytes:raise ValueError('DNS output limit')
                 self.dns_names.add(name)
+                self.dns_questions.add((name,query.question[0].rdtype))
                 self.response(conn,'200 OK',output)
         except (OSError,ValueError,UnicodeError,ProxyError,dns.exception.DNSException):
             self.errors+=1

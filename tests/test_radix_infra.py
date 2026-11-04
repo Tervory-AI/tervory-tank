@@ -107,7 +107,8 @@ async def test_collector_flags_proxy_coverage_and_keeps_tool_findings(tmp_path,c
         return 0,json.dumps({'host':'www.'+DOMAIN,'a':['93.184.216.34'],'rcode':'NOERROR'}).encode(),b''
     async def peer(request):
         return httpx.Response(200,json={'ports':sorted(policy.top_ports()) if covered else [80],
-            'dns_names':['www.'+DOMAIN,'api.'+DOMAIN,'mail.'+DOMAIN] if covered else [],'errors':0,'refused':0})
+            'dns_names':['www.'+DOMAIN,'api.'+DOMAIN,'mail.'+DOMAIN] if covered else [],
+            'dns_questions':[[name,kind] for name in ['www.'+DOMAIN,'api.'+DOMAIN,'mail.'+DOMAIN] for kind in (1,28)] if covered else [],'errors':0,'refused':0})
     data=await tools.collect(TARGET,tmp_path,run=run,proxy_ip='127.0.0.1',transport=httpx.MockTransport(peer))
     assert data['checks']['active']['status']==('complete' if covered else 'partial')
     assert {f['tool'] for f in data['findings']}=={'nmap','dnsx'}
