@@ -179,27 +179,27 @@ def test_shards_cover_every_collected_file_exactly_once_and_stay_balanced():
     assert max(loads) - min(loads) <= max(counts.values())
 
 
-def test_ci_runs_six_shards_and_unsharded_runs_everything(monkeypatch):
+def test_ci_runs_ten_shards_and_unsharded_runs_everything(monkeypatch):
     suite = _suite()
     job = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]["tank"]
-    assert job["strategy"]["matrix"]["shard"] == [1, 2, 3, 4, 5, 6] and job["strategy"]["fail-fast"] is False
+    assert job["strategy"]["matrix"]["shard"] == list(range(1, 11)) and job["strategy"]["fail-fast"] is False
     step = next(s for s in job["steps"] if s.get("name") == "Full offline test suite")
     assert step["env"]["SUITE_SHARDS"] == len(job["strategy"]["matrix"]["shard"])
     monkeypatch.delenv("SUITE_SHARDS", raising=False)
     monkeypatch.delenv("SUITE_SHARD", raising=False)
     assert suite.shard_of() == (1, 1)
-    monkeypatch.setenv("SUITE_SHARDS", "6")
-    monkeypatch.setenv("SUITE_SHARD", "7")
+    monkeypatch.setenv("SUITE_SHARDS", "10")
+    monkeypatch.setenv("SUITE_SHARD", "11")
     with pytest.raises(SystemExit):
         suite.shard_of()
 
 
-@pytest.mark.parametrize("count", [1, 2, 3, 6])
+@pytest.mark.parametrize("count", [1, 2, 3, 6, 10])
 def test_each_alone_group_runs_on_exactly_one_shard(count):
     suite = _suite()
     owners = {p: [i for i in range(1, count + 1) if p in suite.alone_for(i, count)] for p in suite.ALONE}
     assert all(len(shards) == 1 for shards in owners.values()), owners
     if count >= len(suite.ALONE):
         assert len({shards[0] for shards in owners.values()}) == len(suite.ALONE)
-    if count == 6:
+    if count in (6, 10):
         assert owners == {"tests/tiger_g5": [1], "tests/zenas_regulation_alerts": [2]}
