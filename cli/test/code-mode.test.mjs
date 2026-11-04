@@ -226,7 +226,7 @@ test('git status and diff work without exposing secret-file contents', async () 
   assert(!diff.output.includes('old private file'));
 });
 
-test('cancelling at command approval stops execution and any following model turn', { skip: process.platform === 'win32' && 'Windows refuses commands before approval' }, async () => {
+test('cancelling at command approval stops execution and any following model turn', async () => {
   const f = await folder(); const controller = new AbortController(); let calls = 0;
   const token = 'tv1.us-east.' + '1'.repeat(32) + '.' + ('placeholder' + 'x'.repeat(43)).slice(0, 43);
   await assert.rejects(run(['code', f.root], { store: { get: async () => token },
@@ -610,16 +610,20 @@ test('sandbox confines outside writes, secret reads and network while echo succe
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
 
-test('Darwin never falls back when sandbox-exec is unavailable', async () => {
-  const f = await folder(); const descriptor = Object.getOwnPropertyDescriptor(process, 'platform');
-  const access = fsPromises.access;
+test('missing sandbox runs approved commands with restricted environment', async () => {
+  const f = await folder();
+  f.commandBackend = async () => 'host';
+  for (const answer of ['n', 'yes', '', null]) {
+    const result = await f.tool({ name: 'run_command', arguments: { command: 'echo wrong > marker' } }, io(answer));
+    assert.equal(result.ran, false); await assert.rejects(readFile(join(f.root, 'marker')));
+  }
+  const result = await f.tool({ name: 'run_command', arguments: { command: 'echo approved > marker' } }, io());
+  assert.equal(result.code, 0); assert.equal((await readFile(join(f.root, 'marker'), 'utf8')).trim(), 'approved');
+  process.env.TERVORY_PLACEHOLDER_PRIVATE = 'placeholder-private';
   try {
-    Object.defineProperty(process, 'platform', { value: 'darwin' });
-    fsPromises.access = async path => { if (path === '/usr/bin/sandbox-exec') throw Error('placeholder unavailable'); return access(path); };
-    syncBuiltinESMExports();
-    await assert.rejects(f.command('printf wrong > placeholder-marker', io(), 1000));
-    await assert.rejects(readFile(join(f.root, 'placeholder-marker')));
-  } finally { fsPromises.access = access; syncBuiltinESMExports(); Object.defineProperty(process, 'platform', descriptor); }
+    const env = await f.tool({ name: 'run_command', arguments: { command: `"${process.execPath}" -e "console.log(process.env.TERVORY_PLACEHOLDER_PRIVATE ?? 'absent')"` } }, io());
+    assert.equal(env.output.trim(), 'absent');
+  } finally { delete process.env.TERVORY_PLACEHOLDER_PRIVATE; }
 });
 
 test('Darwin refuses an invalid Seatbelt profile before running the command', { skip: process.platform !== 'darwin' }, async () => {
@@ -774,17 +778,12 @@ test('AWS assignments and complete or truncated PEM blocks are redacted', async 
   assert.equal(result.output, '[redacted]\n');
 });
 
-// Also runs on POSIX: a simulated Windows platform must never spawn a command.
-test('Windows refuses commands before approval and never creates a marker', async () => {
-  const f = await folder(); const descriptor = Object.getOwnPropertyDescriptor(process, 'platform');
-  let prompts = 0;
-  try {
-    Object.defineProperty(process, 'platform', { value: 'win32' });
-    await assert.rejects(f.tool({ name: 'run_command', arguments: { command: 'echo wrong > marker' } }, {
-      ...io(), prompt: async () => { prompts++; return 'y'; },
-    }), /Code tool refused/);
-    await assert.rejects(f.command('echo wrong > marker', io(), 1000), /Code tool refused/);
-    assert.equal(prompts, 0);
-    await assert.rejects(readFile(join(f.root, 'marker')));
-  } finally { Object.defineProperty(process, 'platform', descriptor); }
+test('approved commands execute on Windows and every host fallback', async () => {
+  const f = await folder(); f.commandBackend = async () => 'host';
+  const result = await f.tool({ name: 'run_command', arguments: { command: 'echo command-ok' } }, io());
+  assert.equal(result.ran, true); assert.equal(result.code, 0); assert.equal(result.output.trim(), 'command-ok');
+  const large = await f.tool({ name: 'run_command', arguments: { command: `"${process.execPath}" -e "console.log('x'.repeat(70000))"` } }, io());
+  assert(large.truncated); assert(Buffer.byteLength(large.output) <= LIMITS.outputBytes);
+  const timeout = await f.tool({ name: 'run_command', arguments: { command: `"${process.execPath}" -e "setTimeout(()=>{},10000)"` } }, io(), { timeoutMs: 100 });
+  assert(timeout.timed_out);
 });

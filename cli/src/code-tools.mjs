@@ -1,7 +1,7 @@
 import { seatbeltProfile } from './seatbelt.mjs';
 import { constants } from 'node:fs';
 import { lstat, stat, access, realpath, readlink, open, readdir, readFile, writeFile, rename, unlink, mkdtemp, rm } from 'node:fs/promises';
-import { resolve, relative, isAbsolute, sep, dirname, basename } from 'node:path';
+import { resolve, relative, isAbsolute, sep, dirname, basename, delimiter as pathDelimiter } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { Worker } from 'node:worker_threads';
@@ -36,7 +36,11 @@ export async function processOutput(command, args, { cwd, gitDirectory, gitWorkT
     let child; let timer; let killed = false; let size = 0; let total = 0; const chunks = [];
     const stop = () => {
       killed = true;
-      try { if (process.platform !== 'win32') process.kill(-child.pid, 'SIGKILL'); else child.kill('SIGKILL'); } catch { /* already ended */ }
+      try { if (process.platform !== 'win32') process.kill(-child.pid, 'SIGKILL'); else {
+        // taskkill owns the whole Windows process tree, including shell children.
+        const killer = spawn(resolve(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe'), ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+        killer.on('error', () => child.kill('SIGKILL'));
+      } } catch { /* already ended */ }
     };
     if (signal?.aborted) return reject(refused());
     try {
@@ -311,8 +315,7 @@ export class CodeFolder {
     return { applied: true };
   }
   async prepareCommand(command) {
-    // No Windows backend here provides the filesystem/network confinement of bwrap.
-    if (process.platform === 'win32') throw refused();
+    if (await this.commandBackend() === 'host') return { command, mounts: [] };
     const match = /^(?:'([^']+)'|"([^"]+)"|([^\s;|&<>]+))(?=\s|$)/.exec(command);
     if (!match) return { command, mounts: [] };
     const executable = match[1] ?? match[2] ?? match[3];
@@ -418,8 +421,31 @@ export class CodeFolder {
     const quoted = "'" + candidate.replaceAll("'", "'\"'\"'") + "'";
     return { command: quoted + command.slice(match[0].length), mounts, runners };
   }
-  async command(command, io, timeoutMs, mounts = []) {
+  async commandBackend() {
     if (process.platform === 'darwin') {
+      try { await access('/usr/bin/sandbox-exec', constants.X_OK); return 'seatbelt'; } catch { return 'host'; }
+    }
+    if (process.platform === 'linux') {
+      for (const directory of (process.env.PATH ?? '').split(pathDelimiter)) {
+        if (!isAbsolute(directory)) continue;
+        try { await access(resolve(directory, 'bwrap'), constants.X_OK); return 'bwrap'; } catch { /* next */ }
+      }
+    }
+    return 'host';
+  }
+  async command(command, io, timeoutMs = LIMITS.commandMs, mounts = []) {
+    timeoutMs = Math.min(timeoutMs, LIMITS.commandMs);
+    const backend = await this.commandBackend();
+    if (backend === 'host') {
+      const temp = await mkdtemp(resolve(this.root, '.tervory-command-'));
+      try {
+        const windows = process.platform === 'win32';
+        const shell = windows ? resolve(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe') : '/bin/sh';
+        return await processOutput(shell, windows ? ['/d', '/s', '/c', command] : ['-c', command],
+          { cwd: this.root, timeoutMs, signal: io.signal, temporaryDirectory: temp });
+      } finally { await rm(temp, { recursive: true, force: true }); }
+    }
+    if (backend === 'seatbelt') {
       await access('/usr/bin/sandbox-exec', constants.X_OK).catch(() => { throw refused(); });
       const profile = await seatbeltProfile(this.root, mounts);
       const temp = await mkdtemp(resolve(this.root, '.tervory-command-'));
@@ -430,10 +456,9 @@ export class CodeFolder {
         return await processOutput('/usr/bin/sandbox-exec', ['-p', profile, '/bin/sh', '-c', command], options);
       } finally { await rm(temp, { recursive: true, force: true }); }
     }
-    if (process.platform !== 'linux') throw refused();
     // A confirmed command must not bypass the folder/secret-file boundary by
     // reading an absolute host path, a symlink, .env or the user's environment.
-    // Use the worker's existing Bubblewrap; no unsandboxed fallback.
+    // Use Bubblewrap when installed; host fallback still requires Run approval.
     const masks = [];
     const scan = async (directory, prefix = '') => {
       for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -463,6 +488,7 @@ export class CodeFolder {
         if (typeof args.command !== 'string' || !args.command || args.command.length > 8000 || /[\x00-\x1f\x7f]/.test(args.command) || redactSecrets(args.command) !== args.command) throw refused();
         const prepared = await this.prepareCommand(args.command);
         io.write(prepared.command + '\n');
+        if (await this.commandBackend() === 'host') io.write('Command runs with your user permissions.\n');
         for (const root of prepared.runners ?? []) io.write(`Read-only runner: ${root}\n`);
         if (io.interactive !== true || (await io.prompt('Run [y/N] '))?.trim().toLowerCase() !== 'y') return { ran: false };
         const result = await this.command(prepared.command, io, timeoutMs, prepared.mounts);
