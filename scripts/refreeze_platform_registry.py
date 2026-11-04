@@ -4,6 +4,7 @@
 Use the test virtualenv's Python. Never pushes. Keep the printed backup branch.
 A new first commit freezes fetched main before replaying the existing move commits.
 Finish refuses every snapshot drift except the authorized teachers tool/route/DDL.
+The replay is linked to the original reviewed head, so publishing uses a normal push.
 """
 from __future__ import annotations
 
@@ -20,6 +21,9 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = 'tests/test_registry_frozen.py'
 GOLDEN = 'tests/registry_frozen.golden'
+STATE = Path(subprocess.check_output(['git', 'rev-parse', '--git-path', 'registry-refreeze.json'], cwd=ROOT, text=True).strip())
+if not STATE.is_absolute():
+    STATE = ROOT / STATE
 
 
 def git(*args, cwd=ROOT):
@@ -56,7 +60,7 @@ def without_teachers(registry):
 def finish():
     helper = (ROOT / HELPER).read_text()
     origin = re.search(r"ORIGIN_COMMIT = '([a-f0-9]+)'", helper).group(1)
-    first = git('log', '--reverse', '--format=%H', '--diff-filter=A', origin + '..HEAD', '--', HELPER).splitlines()[0]
+    first = git('log', '--first-parent', '--reverse', '--format=%H', '--diff-filter=A', origin + '..HEAD', '--', HELPER).splitlines()[0]
     baseline = json.loads(git('show', first + ':' + GOLDEN))
     assert baseline['origin_commit'] == origin
     current = capture(ROOT)
@@ -68,6 +72,15 @@ def finish():
     git('add', GOLDEN)
     if git('diff', '--cached', '--name-only'):
         git('commit', '-m', 'test: extend fresh main golden only for teachers read and provenance')
+    if STATE.exists():
+        original = json.loads(STATE.read_text())['original_head']
+        replay = git('rev-parse', 'HEAD')
+        if subprocess.run(['git', 'merge-base', '--is-ancestor', original, replay], cwd=ROOT).returncode:
+            assert not git('status', '--porcelain'), 'Commit resolved declarations before linking the reviewed history'
+            git('merge', '--no-ff', '-s', 'ours', original, '-m',
+                'Integrate current-main registry replay preserving reviewed branch history\n\n'
+                + 'Registry-Replay-Head: ' + replay)
+        STATE.unlink()
     print('Golden preserves current main plus the authorized teachers addition. Run focused regressions before pushing.')
 
 
@@ -77,7 +90,21 @@ def prepare():
     helper = (ROOT / HELPER).read_text()
     previous = re.search(r"ORIGIN_COMMIT = '([a-f0-9]+)'", helper).group(1)
     backup = 'codex/platform-registry-before-refreeze-' + str(int(time.time()))
-    git('branch', backup, 'HEAD')
+    original = git('rev-parse', 'HEAD')
+    git('branch', backup, original)
+    assert not STATE.exists(), 'Finish or recover the existing refreeze before preparing another'
+    STATE.write_text(json.dumps({'original_head': original, 'backup': backup}) + '\n')
+    # Exclude the already replayed second-parent history on subsequent refreezes.
+    links = git('log', '--first-parent', '--format=%H', '--grep=^Registry-Replay-Head:').splitlines()
+    if links:
+        link = links[0]
+        replay = re.search(r'^Registry-Replay-Head: ([a-f0-9]+)$', git('show', '-s', '--format=%B', link), re.M).group(1)
+        assert git('rev-parse', link + '^1') == replay
+        following = git('rev-list', '--first-parent', '--reverse', link + '..HEAD').splitlines()
+        git('reset', '--hard', replay)
+        for commit in following:
+            parents = git('rev-list', '--parents', '-n', '1', commit).split()
+            git('cherry-pick', *(['-m', '1'] if len(parents) > 2 else []), commit)
     git('fetch', 'origin', 'main')
     origin = git('rev-parse', 'origin/main')
     with tempfile.TemporaryDirectory(prefix='platform-refreeze-') as folder:

@@ -3,8 +3,8 @@ TOOLS = {'tiger': ['tiger.watch', 'tiger.read', 'tiger.match', 'tiger.match.conf
 FOUNDER_TOOLS = []
 TENANT_ADMIN_TOOLS = []
 ADMIN_ONLY_TOOLS = frozenset([])
-REQUEST_BODY_TOOLS = frozenset(['tiger.watch.pause', 'tiger.watch.resume', 'tiger.watch.remove', 'tiger.watch.bulk'])
-CONFIRMED = frozenset(['tiger.match', 'tiger.match.confirm', 'tiger.match.reject', 'tiger.watch.pause', 'tiger.watch.resume', 'tiger.watch.remove', 'tiger.watch.bulk'])
+REQUEST_BODY_TOOLS = frozenset(['tiger.watch.bulk', 'tiger.watch.pause', 'tiger.watch.remove', 'tiger.watch.resume'])
+CONFIRMED = frozenset(['tiger.match', 'tiger.match.confirm', 'tiger.match.reject', 'tiger.watch.bulk', 'tiger.watch.pause', 'tiger.watch.remove', 'tiger.watch.resume'])
 
 def adapters(command):
     return {
