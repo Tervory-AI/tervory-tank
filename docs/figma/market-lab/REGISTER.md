@@ -1,5 +1,7 @@
 # Market Lab briefs and calibration — H7
 
+**Approved 3 Nov 2026, 17:45 PT** (Claude, under the founder's 3 Nov 13:28 delegation): the eight Monthly briefs frames and their wording, at this commit. The illustrative values in the frames (titles, dates, counts) are Figma-only and never reach a live page. Brief detail and Calibration are not drawn yet and are not approved.
+
 **Status: Proposed — partial delivery.** Nothing in this register is Approved. Branch `codex/figma-market-lab` was created from `origin/main` at `8857cd3e`. Existing Figma pages, shared mains and production code were not modified. All new work is isolated on [11 · Market Lab · H7 · Proposed](https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=513-37050), page ID `513:37050`.
 
 ## Delivery status
