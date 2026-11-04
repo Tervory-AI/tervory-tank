@@ -312,6 +312,8 @@ async def test_r40_lead_capture(w4):
 @pytest.mark.asyncio
 async def test_r41_quote_capture(w4):
     await console.test_quote_title_quantity_request_are_captured_without_model_or_live_send(w4)
+    await engine.test_live_rig_price_wins_and_exact_record_link_is_returned()
+    await engine.test_no_live_rig_means_no_price_answer_from_old_page_or_faq()
 
 
 @pytest.mark.asyncio
