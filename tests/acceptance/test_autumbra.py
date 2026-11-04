@@ -115,13 +115,13 @@ ROWS = [
  ('P02', '/ghost/patch/fixes', 'Probe the Wave 3 stored-match fixes list before #622 is deployed.', 'HTTP 404: unavailable; do not invent a working /chats command', 'GHOST_GITHUB_TOKEN, GHOST_PATCH_PR_ENABLED'),
  ('P03', '/ghost/autumbra/blocks', 'Probe standing shared-block evidence before #622 is deployed.', 'HTTP 404: unavailable; no cross-client memory claim', 'none'),
  ('P04', '/v1/ghost/autumbra/blocks/share', 'Probe founder-only policy-checked publication before #622 is deployed.', 'HTTP 404: unavailable; no platform record published', 'none'),
- ('P05', '/v1/vaults/ghost.vault/autumbra/connect/cloudflare', 'Probe the Wave 4 named client-vault connection before #649 is deployed.', 'HTTP 404: unavailable; Cloudflare connect frames remain missing', 'CLOUDFLARE_API_TOKEN_ENFORCE'),
- ('P06', '/ghost/autumbra/connections/google_workspace', 'Probe the tenant-bound Alert Center connect route before #649 is deployed.', 'HTTP 404: unavailable; Google connect/waiting/verified frames remain missing', 'AUTUMBRA_GOOGLE_PUSH_AUDIENCE, AUTUMBRA_GOOGLE_PUSH_SERVICE_ACCOUNT'),
+ ('P05', '/v1/vaults/ghost.vault/autumbra/connect/cloudflare', 'POST {} without authentication to the named client-vault connection.', 'HTTP 401: authentication required; no client-vault connection created', 'CLOUDFLARE_API_TOKEN_ENFORCE'),
+ ('P06', '/ghost/autumbra/connections/google_workspace', 'POST {} with the managed Watch key to the tenant-bound Alert Center connect route.', 'HTTP 422: Google connection was not understood.; no connection saved', 'AUTUMBRA_GOOGLE_PUSH_AUDIENCE, AUTUMBRA_GOOGLE_PUSH_SERVICE_ACCOUNT'),
  ('P07', '/v1/ghost/autumbra/enforce/create', 'Probe founder-confirmed live create before #622 is deployed.', 'HTTP 404: unavailable; no Coolify resource created', 'AUTUMBRA_COOLIFY_URL, AUTUMBRA_COOLIFY_TOKEN, AUTUMBRA_COOLIFY_PROJECT_UUID, AUTUMBRA_COOLIFY_SERVER_UUID, AUTUMBRA_COOLIFY_ENVIRONMENT, AUTUMBRA_COOLIFY_GITHUB_APP_UUID, AUTUMBRA_LIFECYCLE_KEY'),
  ('P08', '/v1/ghost/autumbra/enforce/destroy', 'Probe founder-confirmed live destroy before #622 is deployed.', 'HTTP 404: unavailable; no resource deleted', 'AUTUMBRA_COOLIFY_URL, AUTUMBRA_COOLIFY_TOKEN, AUTUMBRA_LIFECYCLE_KEY'),
  ('P09', '/v1/ghost/autumbra/fix/approve', 'Probe the Wave 3 one-tap stored-match fix command before #622 is deployed.', 'HTTP 404: unavailable; no code fix dispatched', 'GHOST_GITHUB_TOKEN, GHOST_PATCH_PR_ENABLED'),
  ('P10', '/v1/ghost/autumbra/blocks/withdraw', 'Probe platform-block withdrawal before #622 is deployed.', 'HTTP 404: unavailable; no memory record deleted', 'none'),
- ('P11', '/v1/vaults/ghost.vault/autumbra/alerts', 'Probe tenant-bound Alert Center receipts before #649 is deployed.', 'HTTP 405: unavailable; no mailbox content exposed', 'AUTUMBRA_GOOGLE_PUSH_AUDIENCE, AUTUMBRA_GOOGLE_PUSH_SERVICE_ACCOUNT'),
+ ('P11', '/v1/vaults/ghost.vault/autumbra/alerts', 'GET the tenant-bound Alert Center receipts URL without the required tenant_id query.', 'HTTP 422: required tenant_id query missing; no mailbox content exposed', 'AUTUMBRA_GOOGLE_PUSH_AUDIENCE, AUTUMBRA_GOOGLE_PUSH_SERVICE_ACCOUNT'),
 
 ]
 
@@ -561,7 +561,9 @@ async def test_founder_row(row, box):
         assert all(method == 'GET' for method, _ in api.calls)
     elif ident in {'P01', 'P02', 'P03', 'P06'}:
         response = await c.request('POST' if ident == 'P06' else 'GET', row[1], json={})
-        assert response.status_code == 404
+        assert response.status_code == (422 if ident == 'P06' else 404)
+        if ident == 'P06':
+            assert response.json()['detail'] == 'Google connection was not understood.'
     elif ident in {'P04', 'P05', 'P07', 'P08', 'P09', 'P10', 'P11'}:
         from fastapi import FastAPI
         if ident != 'P05' and ident != 'P11':
@@ -572,7 +574,7 @@ async def test_founder_row(row, box):
         app = FastAPI()
         app.include_router(router)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://tank:8000') as client:
-            assert (await client.request('GET' if ident == 'P11' else 'POST', row[1], json={})).status_code == (405 if ident == 'P11' else 404)
+            assert (await client.request('GET' if ident == 'P11' else 'POST', row[1], json={})).status_code == ({'P05': 401, 'P11': 422}.get(ident, 404))
     else:
         raise AssertionError('Row has no executable path: ' + ident)
 

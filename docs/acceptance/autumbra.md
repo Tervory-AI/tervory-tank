@@ -1,12 +1,11 @@
 # Autumbra — founder testing sheet
 
-Baseline: `origin/main` at `475597ed` (acceptance branch starts here). Run after
-that reviewed build is deployed. A01–A60 are feature/safety checks in this build.
-P01–P11 are **unavailable-feature checks**, because #622 (Wave 3) and #649
-(Wave 4) are not on this main snapshot. Their expected 404/405 proves absence only;
-it is not functional acceptance of those PRs. Re-run and replace those checks
-with positive contracts after the corresponding implementations merge. No
-unmerged /chats command or missing connect screen is advertised as working.
+Baseline: acceptance branch rebased onto Claude's main merge `2e8b69c4`.
+A01–A60 are feature/safety checks. P05, P06 and P11 now check the Wave 4
+routes' authentication and input validation (401/422); these negative checks do
+not prove a successful connection or alert intake. Other P rows still check
+unavailable Wave 3 routes (404), not functional acceptance of #622. No unmerged
+/chats command or missing connect screen is advertised as working.
 
 Settings names were checked against
 `docs/ops/FOUNDER-SETTINGS.md` on `origin/claude/founder-settings` (PR #657),
@@ -144,13 +143,13 @@ lifecycle/owner-facing public doors each have their own documented authorization
 | P02 | http://agent-ghost:8000/ghost/patch/fixes | Probe the Wave 3 stored-match fixes list before #622 is deployed. | HTTP 404: unavailable; do not invent a working /chats command | GHOST_GITHUB_TOKEN, GHOST_PATCH_PR_ENABLED |
 | P03 | http://agent-ghost:8000/ghost/autumbra/blocks | Probe standing shared-block evidence before #622 is deployed. | HTTP 404: unavailable; no cross-client memory claim | none |
 | P04 | http://tank:8000/v1/ghost/autumbra/blocks/share | Probe founder-only policy-checked publication before #622 is deployed. | HTTP 404: unavailable; no platform record published | none |
-| P05 | http://tank:8000/v1/vaults/ghost.vault/autumbra/connect/cloudflare | Probe the Wave 4 named client-vault connection before #649 is deployed. | HTTP 404: unavailable; Cloudflare connect frames remain missing | CLOUDFLARE_API_TOKEN_ENFORCE |
-| P06 | http://agent-ghost:8000/ghost/autumbra/connections/google_workspace | Probe the tenant-bound Alert Center connect route before #649 is deployed. | HTTP 404: unavailable; Google connect/waiting/verified frames remain missing | AUTUMBRA_GOOGLE_PUSH_AUDIENCE, AUTUMBRA_GOOGLE_PUSH_SERVICE_ACCOUNT |
+| P05 | http://tank:8000/v1/vaults/ghost.vault/autumbra/connect/cloudflare | POST {} without authentication to the named client-vault connection. | HTTP 401: authentication required; no client-vault connection created | CLOUDFLARE_API_TOKEN_ENFORCE |
+| P06 | http://agent-ghost:8000/ghost/autumbra/connections/google_workspace | POST {} with the managed Watch key to the tenant-bound Alert Center connect route. | HTTP 422: Google connection was not understood.; no connection saved | AUTUMBRA_GOOGLE_PUSH_AUDIENCE, AUTUMBRA_GOOGLE_PUSH_SERVICE_ACCOUNT |
 | P07 | http://tank:8000/v1/ghost/autumbra/enforce/create | Probe founder-confirmed live create before #622 is deployed. | HTTP 404: unavailable; no Coolify resource created | AUTUMBRA_COOLIFY_URL, AUTUMBRA_COOLIFY_TOKEN, AUTUMBRA_COOLIFY_PROJECT_UUID, AUTUMBRA_COOLIFY_SERVER_UUID, AUTUMBRA_COOLIFY_ENVIRONMENT, AUTUMBRA_COOLIFY_GITHUB_APP_UUID, AUTUMBRA_LIFECYCLE_KEY |
 | P08 | http://tank:8000/v1/ghost/autumbra/enforce/destroy | Probe founder-confirmed live destroy before #622 is deployed. | HTTP 404: unavailable; no resource deleted | AUTUMBRA_COOLIFY_URL, AUTUMBRA_COOLIFY_TOKEN, AUTUMBRA_LIFECYCLE_KEY |
 | P09 | http://tank:8000/v1/ghost/autumbra/fix/approve | Probe the Wave 3 one-tap stored-match fix command before #622 is deployed. | HTTP 404: unavailable; no code fix dispatched | GHOST_GITHUB_TOKEN, GHOST_PATCH_PR_ENABLED |
 | P10 | http://tank:8000/v1/ghost/autumbra/blocks/withdraw | Probe platform-block withdrawal before #622 is deployed. | HTTP 404: unavailable; no memory record deleted | none |
-| P11 | http://tank:8000/v1/vaults/ghost.vault/autumbra/alerts | Probe tenant-bound Alert Center receipts before #649 is deployed. | HTTP 405: unavailable; no mailbox content exposed | AUTUMBRA_GOOGLE_PUSH_AUDIENCE, AUTUMBRA_GOOGLE_PUSH_SERVICE_ACCOUNT |
+| P11 | http://tank:8000/v1/vaults/ghost.vault/autumbra/alerts | GET the tenant-bound Alert Center receipts URL without the required tenant_id query. | HTTP 422: required tenant_id query missing; no mailbox content exposed | AUTUMBRA_GOOGLE_PUSH_AUDIENCE, AUTUMBRA_GOOGLE_PUSH_SERVICE_ACCOUNT |
 
 ## Offline proof and deployment gaps
 
@@ -169,12 +168,12 @@ python -m pytest -q tests/acceptance/test_autumbra.py \
 ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
 ```
 
-Unmerged Wave 3/4 capabilities remain a release hold, not a passed product claim:
+Wave 3 capabilities and positive Wave 4 connection acceptance remain unproved here:
 live lifecycle list/create/destroy and separate key; stored-match one-tap fixes;
 24-hour standing block evidence, founder policy-checked seven-day publication
-and source-Undo withdrawal; named single-zone client vault connection;
-tenant-bound Alert Center intake; configurable client health path and richer
-per-request budget summaries. Existing main provides real edge apply/owned Undo,
+and source-Undo withdrawal; successful named single-zone client vault connection and tenant-bound Alert
+Center intake. Wave 4 configurable client health paths and richer per-request
+budget summaries are on main; the existing A rows retain their narrower contracts. Existing main provides real edge apply/owned Undo,
 signed root-URL health observation, provider-native verification, raw-log air gap,
 measured numeric budgets and owner email paths, which the A rows exercise.
 
