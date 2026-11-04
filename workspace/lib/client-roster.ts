@@ -9,7 +9,7 @@ import "server-only";
 
 import { clerkClient } from "@clerk/nextjs/server";
 import { tenantIdFor, uuidFrom } from "./tenant";
-import { caseStudyRequest, readCommandSquads, setCommandSquad } from "./tank";
+import { caseStudyRequest, readStartupCommandSquads, setStartupCommandSquad } from "./tank";
 
 export const CLIENT_ROSTER: ReadonlyArray<{ name: string; products: ReadonlyArray<string> }> = [
   { name: "Custom Nation", products: ["rig", "tiger"] },
@@ -110,7 +110,7 @@ export async function reconcileClients(): Promise<void> {
       const response = await caseStudyRequest({ tenantId, userId: founder }, "ensure",
         new URLSearchParams(), AbortSignal.timeout(1500));
       if (!response.ok) throw new Error("Client registration failed");
-      const { grants, log } = await readCommandSquads(founder, tenantId);
+      const { grants, log } = await readStartupCommandSquads(founder, tenantId);
       for (const agent of client.products) {
         // Startup seeds missing products; it never undoes a founder's later removal.
         if (grants.some(grant => grant.agent === agent && grant.enabled)
@@ -118,7 +118,7 @@ export async function reconcileClients(): Promise<void> {
         // The existing read returns at most 20 history rows. An absent agent's
         // removal may be older: fail closed instead of restoring that entitlement.
         if (log.length >= 20) throw new Error("Client grant history is incomplete");
-        await setCommandSquad(founder, tenantId, agent, true);
+        await setStartupCommandSquad(founder, tenantId, agent);
       }
       console.info("client_reconciled", { client: client.name, orgId, tenantId });
     } catch (error) {

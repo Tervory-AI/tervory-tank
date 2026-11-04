@@ -219,6 +219,41 @@ const FOUNDER = 'user_placeholder_founder';
   assert.equal(logs.filter(line => line[0] === 'client_reconciled').length, 0);
   assert.equal(changes.length, 0);
 
+  // A first client's stalled fetch OR JSON cannot pin startup. Exercise both
+  // squad reads and the write, with an upstream that deliberately ignores abort.
+  for (const endpoint of ['/v1/command/squads', '/v1/command/squads/log', '/v1/command/squads/rig']) {
+    for (const phase of ['network', 'body']) {
+      reset();
+      const savedFetch = global.fetch;
+      const stalled = [];
+      global.fetch = async (url, init) => {
+        const identity = Object.fromEntries(Object.entries(init.headers ?? {}).map(([k, v]) => [k.toLowerCase(), v]));
+        if (new URL(url).pathname === endpoint && identity['x-tervory-tenant'] === tenant.tenantIdFor('org_placeholder1')) {
+          stalled.push(init.signal);
+          if (phase === 'network') return new Promise(() => {});
+          // An unfinished stream stalls response.json(), including after abort.
+          return new Response(new ReadableStream({start(controller) { controller.enqueue(new TextEncoder().encode('[')); }}));
+        }
+        return savedFetch(url, init);
+      };
+      roster = fresh();
+      require('../../workspace/lib/tank.ts').CLIENT_STARTUP_LIMITS.requestMs = 25;
+      let watchdog;
+      try {
+        await Promise.race([
+          roster.reconcileClients(),
+          new Promise((_, reject) => { watchdog = setTimeout(() => reject(new Error('placeholder startup stuck')), 1500); }),
+        ]);
+      } finally { clearTimeout(watchdog); global.fetch = savedFetch; }
+      assert.equal(stalled.length, 1, `${endpoint} ${phase}`);
+      assert.equal(stalled[0].aborted, true, 'deadline aborts the upstream request');
+      assert.deepEqual(logs.filter(line => line[0] === 'client_reconcile_failed').map(line => line[1].client), ['Custom Nation']);
+      assert.deepEqual(logs.filter(line => line[0] === 'client_reconciled').map(line => line[1].client), ['LOKD Security', 'AmmoSync', 'Shot Bonus', 'TNGO']);
+      assert.equal(changes.some(([id]) => id === tenant.tenantIdFor('org_placeholder1')), false);
+      assert.ok(!JSON.stringify(logs).includes(SECRETS[0]));
+    }
+  }
+
   // Empty TERVORY_ADMIN_USER_IDS: nothing at all, one fixed line.
   for (const value of ['', ' , ']) {
     reset();
