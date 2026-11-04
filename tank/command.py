@@ -42,6 +42,7 @@ from command_tools import build_tools, build_founder_tools, build_set, build_adm
 TOOLS = build_tools()
 TENANT_ADMIN_TOOLS = build_admin_tools()
 ADMIN_ONLY_TOOLS = build_set("ADMIN_ONLY_TOOLS")
+FOUNDER_ONLY_TOOLS = build_set("FOUNDER_ONLY_TOOLS")
 # REQUEST_BODY_TOOLS alone includes tisan.preview; CONFIRMED alone includes
 # rig.quote.confirm_payment, tiger.match* and radix.repo.scan.
 REQUEST_BODY_TOOLS = build_set("REQUEST_BODY_TOOLS")
@@ -115,7 +116,8 @@ def allowed_tools(actor: Actor) -> list[str]:
     client_tools = []  # Product tenant-admin declarations already include these tools.
     plugin_tools = (["plugins.list"] + (["plugins.install", "plugins.remove"] if actor.tenant_admin else [])) if not actor.founder and (actor.squads & SQUADS or actor.tenant_admin) else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]
-                   if tool not in ADMIN_ONLY_TOOLS or actor.tenant_admin or actor.founder]
+                   if (tool not in FOUNDER_ONLY_TOOLS or actor.founder)
+                   and (tool not in ADMIN_ONLY_TOOLS or actor.tenant_admin or actor.founder)]
                   + founder_tools + voice_tools + client_tools + plugin_tools + list(actor.mcp_tools))
 
 
